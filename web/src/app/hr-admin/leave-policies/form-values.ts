@@ -1,0 +1,136 @@
+import type { HrAdminLeavePolicy, HrAdminLeavePolicyWriteInput } from "@/lib/types";
+
+export function leavePolicyToFormValue(item: HrAdminLeavePolicy): HrAdminLeavePolicyWriteInput {
+  const baseValue = createEmptyLeavePolicyValue(item.status, item.accrual_frequency);
+  return {
+    leave_type_id: item.leave_type_id,
+    code: item.code,
+    name: item.name,
+    status: item.status,
+    effective_from: item.effective_from,
+    effective_to: item.effective_to,
+    accrual_frequency: item.accrual_frequency,
+    annual_entitlement: item.annual_entitlement,
+    max_carry_forward: item.max_carry_forward,
+    max_consecutive_days: item.max_consecutive_days,
+    min_days_per_request: item.min_days_per_request,
+    notice_days_required: item.notice_days_required,
+    allow_half_day: item.allow_half_day,
+    allow_backdated_application: item.allow_backdated_application,
+    allow_weekend_holiday_overlap: item.allow_weekend_holiday_overlap,
+    sandwich_rule_enabled: item.sandwich_rule_enabled,
+    is_probation_eligible: item.is_probation_eligible,
+    gender_restriction: item.gender_restriction,
+    marital_status_restriction: item.marital_status_restriction,
+    minimum_service_days: item.minimum_service_days,
+    config_snapshot: {
+      ...baseValue.config_snapshot,
+      ...item.config_snapshot,
+      approval: {
+        ...baseValue.config_snapshot.approval,
+        ...item.config_snapshot.approval,
+      },
+      evidence: {
+        ...baseValue.config_snapshot.evidence,
+        ...item.config_snapshot.evidence,
+      },
+      entitlement: {
+        ...baseValue.config_snapshot.entitlement,
+        ...item.config_snapshot.entitlement,
+      },
+      operations: {
+        ...baseValue.config_snapshot.operations,
+        ...item.config_snapshot.operations,
+      },
+      lifecycle: {
+        ...baseValue.config_snapshot.lifecycle,
+        ...item.config_snapshot.lifecycle,
+      },
+      holiday_governance: {
+        ...baseValue.config_snapshot.holiday_governance,
+        ...item.config_snapshot.holiday_governance,
+      },
+    },
+  };
+}
+
+export function createEmptyLeavePolicyValue(defaultStatus: string, defaultAccrual: string): HrAdminLeavePolicyWriteInput {
+  return {
+    leave_type_id: null,
+    code: "",
+    name: "",
+    status: defaultStatus,
+    effective_from: null,
+    effective_to: null,
+    accrual_frequency: defaultAccrual,
+    annual_entitlement: "0.00",
+    max_carry_forward: "0.00",
+    max_consecutive_days: null,
+    min_days_per_request: "0.50",
+    notice_days_required: 0,
+    allow_half_day: false,
+    allow_backdated_application: false,
+    allow_weekend_holiday_overlap: false,
+    sandwich_rule_enabled: false,
+    is_probation_eligible: true,
+    gender_restriction: "",
+    marital_status_restriction: "",
+    minimum_service_days: 0,
+    config_snapshot: {
+      version: 1,
+      approval: {
+        default_route: "manager_only",
+        escalation_route: null,
+        escalate_when_units_gte: null,
+        second_level_owner_employee_id: null,
+        hr_owner_employee_id: null,
+      },
+      evidence: {
+        attachment_required: false,
+        attachment_label: "supporting document",
+        required_when_units_gte: null,
+        medical_certificate_when_units_gte: null,
+        approval_route_when_evidence_required: null,
+      },
+      entitlement: {
+        grant_mode: "scheduled",
+        proration_mode: "none",
+        policy_year_start_month: 1,
+        policy_year_start_day: 1,
+        carry_forward_mode: "limited",
+        carry_forward_cap: null,
+        encashment_allowed: false,
+        encashment_cap: null,
+        probation_accrual_mode: "accrue",
+      },
+      operations: {
+        reviewer_employee_id: null,
+        approval_required_for_encashment: false,
+        approval_required_for_debit_adjustment: false,
+        credit_adjustment_requires_approval_over_units: null,
+        debit_adjustment_requires_approval_over_units: null,
+        encashment_requires_approval_over_units: null,
+      },
+      lifecycle: {
+        allow_employee_withdraw_pending: true,
+        withdraw_notice_hours_before_start: null,
+        withdraw_requires_attachment: false,
+        withdraw_attachment_label: "withdrawal evidence",
+        allow_employee_cancel_approved: false,
+        cancel_approved_requires_reapproval: false,
+        cancel_approval_route: null,
+        cancel_notice_hours_before_start: null,
+        cancel_requires_attachment: false,
+        cancel_attachment_label: "cancellation evidence",
+      },
+      holiday_governance: {
+        enabled: false,
+        allowed_holiday_types: [],
+        require_matching_holiday_dates: true,
+        max_paid_units_per_period: null,
+        count_pending_requests_towards_cap: true,
+        paid_cap_exhaustion_action: "block",
+      },
+    },
+  };
+}

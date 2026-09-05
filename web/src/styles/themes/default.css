@@ -1,0 +1,37 @@
+:root {
+  --color-bg-app: #eef2ff;
+  --color-bg-app-accent: #e5ebff;
+  --color-bg-surface: rgba(255, 255, 255, 0.82);
+  --color-bg-surface-strong: rgba(255, 255, 255, 0.94);
+  --color-bg-sidebar: rgba(249, 250, 255, 0.82);
+  --color-bg-soft: rgba(237, 241, 255, 0.82);
+
+  --color-text-primary: #171a2f;
+  --color-text-secondary: #6d7390;
+  --color-text-tertiary: #8f95af;
+
+  --color-border-soft: rgba(110, 121, 169, 0.14);
+  --color-border-strong: rgba(91, 102, 150, 0.22);
+
+  --color-accent-primary: #6c5cff;
+  --color-accent-secondary: #19c2ff;
+  --color-accent-success: #1fba7a;
+  --color-accent-warning: #ffb020;
+  --color-accent-danger: #f0526f;
+  --color-accent-ink: #ffffff;
+
+  --color-status-neutral-bg: rgba(98, 108, 145, 0.14);
+  --color-status-neutral-text: #5d6483;
+
+  --bg: var(--color-bg-app);
+  --surface: var(--color-bg-surface);
+  --surface-strong: var(--color-bg-surface-strong);
+  --text: var(--color-text-primary);
+  --muted: var(--color-text-secondary);
+  --line: var(--color-border-soft);
+  --accent: var(--color-accent-primary);
+  --accent-2: var(--color-accent-secondary);
+  --danger: var(--color-accent-danger);
+  --shadow: var(--shadow-sm);
+  --radius: var(--radius-lg);
+}

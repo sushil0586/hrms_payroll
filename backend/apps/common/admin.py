@@ -1,0 +1,1 @@
+"""Common app admin registrations."""

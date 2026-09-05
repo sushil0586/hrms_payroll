@@ -1,0 +1,31 @@
+{
+  "name": "@hrms/web",
+  "private": true,
+  "version": "0.1.0",
+  "dependencies": {
+    "next": "15.5.21",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "22.13.10",
+    "@types/react": "19.0.10",
+    "@types/react-dom": "19.0.4",
+    "eslint": "^9.31.0",
+    "eslint-config-next": "^16.2.9",
+    "typescript": "5.8.2"
+  },
+  "scripts": {
+    "dev": "NEXT_DIST_DIR=.next/dev next dev",
+    "build": "rm -rf .next/build && NEXT_DIST_DIR=.next/build next build",
+    "start": "NEXT_DIST_DIR=.next/build next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test tests/e2e",
+    "test:e2e:live": "playwright test --config playwright.live.config.ts",
+    "test:visual": "playwright test tests/visual",
+    "test:browser": "playwright test",
+    "test:browser:update": "playwright test --update-snapshots"
+  }
+}

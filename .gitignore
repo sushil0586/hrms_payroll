@@ -1,0 +1,45 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+*.sqlite3
+*.db
+backend/hrms
+/hrms
+
+# Node
+node_modules/
+.next/
+.expo/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+playwright-report/
+test-results/
+web/playwright-report/
+web/playwright-live-report/
+web/test-results/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Generated assets
+uploads/
+media/
+backend/media/
+tmp/

@@ -1,0 +1,35 @@
+:root {
+  --font-sans: "Avenir Next", "Plus Jakarta Sans", "Manrope", "Segoe UI", sans-serif;
+  --font-display: "Avenir Next", "Space Grotesk", "Plus Jakarta Sans", "Segoe UI", sans-serif;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 22px;
+  --space-7: 28px;
+  --space-8: 36px;
+  --space-9: 48px;
+
+  --radius-xs: 10px;
+  --radius-sm: 14px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --radius-pill: 999px;
+
+  --shadow-xs: 0 10px 25px rgba(15, 23, 42, 0.06);
+  --shadow-sm: 0 20px 50px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 28px 70px rgba(16, 24, 40, 0.12);
+
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 360ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --page-max-width: 1520px;
+  --page-shell-padding: 12px;
+  --topbar-height: 68px;
+  --sidebar-width: 244px;
+}
