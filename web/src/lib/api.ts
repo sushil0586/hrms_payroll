@@ -7698,11 +7698,111 @@ function getDemoData<T>(path: string): T {
             callback_verification_ref: connection.callback_verification_ref,
             retry_policy_ref: connection.retry_policy_ref,
             certification_profile_ref: connection.certification_profile_ref,
+            adapter_contract: {
+              contract_profile_ref: `payroll.provider_contract.${connection.provider_kind}.sandbox_adapter.v1`,
+              enforcement_mode: "warn",
+              expected_adapter_ref: connection.adapter_ref,
+              expected_provider_ref: connection.provider_ref,
+              response_snapshot_required_fields: ["adapter_ref", "response_schema_ref", "domain_contract_ref"],
+            },
           },
           onboarding_profile_ref: `payroll.provider_connection.${connection.provider_kind}.onboarding.v1`,
         },
         created_at: now,
         updated_at: now,
+      };
+    });
+    const certificationRuns = connections.map((connection, index) => {
+      const passed = connection.certification_status === "passed";
+      const scenarioCount = connection.provider_kind === "statutory" ? 3 : 2;
+      const scenarioResults = Array.from({ length: scenarioCount }, (_, scenarioIndex) => {
+        const scenarioRef = connection.provider_kind === "statutory"
+          ? ["statutory_return_upload", "statutory_challan_receipt", "statutory_callback_replay_guard"][scenarioIndex]
+          : connection.provider_kind === "accounting"
+            ? ["accounting_export_submission", "accounting_audit_acknowledgement"][scenarioIndex]
+            : ["bank_advice_submission", "bank_callback_contract"][scenarioIndex];
+        const scenarioPassed = passed || scenarioIndex < scenarioCount - 1;
+        return {
+          scenario_ref: scenarioRef,
+          label: scenarioRef.replaceAll("_", " ").replace(/\b\w/g, (match) => match.toUpperCase()),
+          status: scenarioPassed ? "passed" : "failed",
+          artifact_kind: connection.provider_kind === "bank" ? "bank_advice" : connection.provider_kind === "accounting" ? "accounting_export" : "statutory_report",
+          route_key: scenarioRef,
+          expected_provider_status: scenarioIndex === 1 ? "acknowledged" : "submitted",
+          provider_status: scenarioPassed ? (scenarioIndex === 1 ? "acknowledged" : "submitted") : "failed",
+          adapter_ref: connection.sandbox_adapter_ref,
+          channel_ref: connection.channel_ref,
+          adapter_contract_validation: {
+            request: {
+              contract_profile_ref: `payroll.provider_contract.${connection.provider_kind}.certification_adapter.v1`,
+              enforcement_mode: "strict",
+              status: "passed",
+              blocking_gate_refs: [],
+            },
+            result: {
+              contract_profile_ref: `payroll.provider_contract.${connection.provider_kind}.certification_adapter.v1`,
+              enforcement_mode: "strict",
+              status: scenarioPassed ? "passed" : "blocked",
+              blocking_gate_refs: scenarioPassed ? [] : ["provider_status_allowed"],
+            },
+          },
+          provider_batch_ref: `CERT-${connection.id}-${scenarioIndex + 1}`,
+          certification_evidence_refs: scenarioPassed ? [`sandbox://${connection.provider_kind}/${scenarioRef}`] : [],
+          failure_code: scenarioPassed ? "" : "sandbox_certification_contract_failed",
+          failure_reason: scenarioPassed ? "" : "Sandbox provider returned a non-matching certification status.",
+        };
+      });
+      const passedCount = scenarioResults.filter((item) => item.status === "passed").length;
+      const failedCount = scenarioResults.length - passedCount;
+      return {
+        id: `${connection.id}-cert-run-${index + 1}`,
+        provider_connection_id: connection.id,
+        provider_ref: connection.provider_ref,
+        provider_kind: connection.provider_kind,
+        provider_kind_label: connection.provider_kind_label,
+        environment_ref: connection.environment_ref,
+        run_profile_ref: "payroll.provider_connection.certification_run.sandbox.v1",
+        certification_profile_ref: connection.certification_profile_ref,
+        scenario_profile_ref: `payroll.provider_connection.${connection.provider_kind}.certification_scenarios.v1`,
+        status: failedCount === 0 ? "passed" : "failed",
+        status_label: failedCount === 0 ? "Passed" : "Failed",
+        scenario_count: scenarioResults.length,
+        passed_count: passedCount,
+        failed_count: failedCount,
+        blocker_count: failedCount,
+        started_at: connection.last_tested_at,
+        completed_at: connection.last_tested_at,
+        requested_by_name: "Nisha Rao",
+        executed_by_name: connection.last_tested_by_name,
+        request_snapshot: {
+          provider_ref: connection.provider_ref,
+          adapter_ref: connection.adapter_ref,
+          sandbox_adapter_ref: connection.sandbox_adapter_ref,
+          scenario_refs: scenarioResults.map((item) => item.scenario_ref),
+        },
+        response_snapshot: {
+          adapter_ref: connection.sandbox_adapter_ref,
+          scenario_count: scenarioResults.length,
+          passed_count: passedCount,
+          failed_count: failedCount,
+        },
+        evidence_snapshot: {
+          test_pack_ref: `payroll.provider_connection.${connection.provider_kind}.certification_pack.v1`,
+          provider_ref: connection.provider_ref,
+          sandbox_delivery_count: scenarioResults.length,
+          callback_verified: scenarioResults.some((item) => item.scenario_ref.includes("callback") && item.status === "passed"),
+          replay_guard_checked: scenarioResults.some((item) => item.scenario_ref.includes("replay") && item.status === "passed"),
+          scenario_results: scenarioResults,
+          evidence_refs: scenarioResults.flatMap((item) => item.certification_evidence_refs),
+        },
+        error_snapshot: failedCount
+          ? {
+              failed_scenario_refs: scenarioResults.filter((item) => item.status === "failed").map((item) => item.scenario_ref),
+            }
+          : {},
+        source_hash: `${connection.id}-cert-run-hash`,
+        created_at: connection.last_tested_at ?? now,
+        updated_at: connection.last_tested_at ?? now,
       };
     });
     return {
@@ -7714,11 +7814,15 @@ function getDemoData<T>(path: string): T {
         blocked_connection_count: connections.filter((item) => item.status === "blocked").length,
         credential_required_count: connections.filter((item) => item.credential_required).length,
         active_allowed_count: connections.filter((item) => item.readiness_snapshot.active_allowed).length,
+        certification_run_count: certificationRuns.length,
+        passed_certification_run_count: certificationRuns.filter((item) => item.status === "passed").length,
+        failed_certification_run_count: certificationRuns.filter((item) => item.status === "failed").length,
         bank_connection_count: connections.filter((item) => item.provider_kind === "bank").length,
         accounting_connection_count: connections.filter((item) => item.provider_kind === "accounting").length,
         statutory_connection_count: connections.filter((item) => item.provider_kind === "statutory").length,
       },
       connections,
+      certification_runs: certificationRuns,
       options: {
         provider_kinds: [
           { value: "bank", label: "Bank" },
@@ -7741,6 +7845,13 @@ function getDemoData<T>(path: string): T {
           { value: "passed", label: "Passed" },
           { value: "failed", label: "Failed" },
           { value: "expired", label: "Expired" },
+        ],
+        certification_run_statuses: [
+          { value: "queued", label: "Queued" },
+          { value: "running", label: "Running" },
+          { value: "passed", label: "Passed" },
+          { value: "failed", label: "Failed" },
+          { value: "skipped", label: "Skipped" },
         ],
       },
     };
@@ -8202,6 +8313,13 @@ function getDemoData<T>(path: string): T {
       const artifactSubtype = typeof artifact.config_snapshot.artifact_subtype === "string" ? artifact.config_snapshot.artifact_subtype : "";
       const routeKey = artifactSubtype ? `${artifact.kind}:${artifactSubtype}` : artifact.kind;
       const route = deliveryRoutes[routeKey] ?? deliveryRoutes[artifact.kind] ?? deliveryRoutes.accounting_export;
+      const providerKind = String(route.provider_ref).includes("bank")
+        ? "bank"
+        : String(route.provider_ref).includes("accounting") || String(route.provider_ref).includes("tally")
+          ? "accounting"
+          : String(route.provider_ref).includes("statutory") || String(route.provider_ref).includes("clear")
+            ? "statutory"
+            : "provider";
       const providerConnectionGate = {
         policy_ref: "payroll.provider_connection.policy.default.v1",
         enforcement_mode: routeKey === "statutory_report:statutory_challan" ? "certified" : "warn",
@@ -8238,6 +8356,19 @@ function getDemoData<T>(path: string): T {
         response_schema_ref: String(route.response_schema_ref),
         callback_profile_ref: String(route.callback_profile_ref),
         callback_verification_ref: String(route.callback_verification_ref),
+        callback_security_policy: {
+          security_policy_ref: `payroll.callback_security.${providerKind}.standard.v1`,
+          enforcement_mode: "warn",
+          signature_algorithm_ref: "payroll.callback.signature.sha256.v1",
+          secret_rotation_ref: `payroll.callback_secret_rotation.${providerKind}.standard.v1`,
+          replay_window_seconds: 900,
+          timestamp_required: false,
+          source_ip_required: false,
+          allowed_ip_refs: [`payroll.provider_ip_allowlist.${providerKind}.managed.v1`],
+          rate_limit_policy_ref: `payroll.callback_rate_limit.${providerKind}.standard.v1`,
+          rate_limit_window_seconds: 60,
+          rate_limit_max_events: 60,
+        },
         certification_profile_ref: String(route.certification_profile_ref),
         certification_required: certificationRequired,
         provider_connection_gate: providerConnectionGate,
@@ -8337,6 +8468,46 @@ function getDemoData<T>(path: string): T {
       .map((delivery, index) => {
         const contract = delivery.request_snapshot.submission_contract;
         const payloadChecksum = `cb77118811bb22cc33dd44ee55ff6600112233445566778899aabbccddeeff0${index}`;
+        const callbackSecurity = {
+          security_policy_ref: contract.callback_security_policy.security_policy_ref,
+          enforcement_mode: contract.callback_security_policy.enforcement_mode,
+          received_at: now,
+          source_ip: "203.0.113.10",
+          passed: true,
+          blocking_gate_refs: [],
+          gates: [
+            {
+              ref: "callback_signature_matched",
+              passed: true,
+              algorithm_ref: contract.callback_security_policy.signature_algorithm_ref,
+              callback_verification_ref: contract.callback_verification_ref,
+            },
+            {
+              ref: "callback_replay_window",
+              passed: true,
+              mode: "bounded",
+              replay_window_seconds: contract.callback_security_policy.replay_window_seconds,
+              event_timestamp: now,
+              event_age_seconds: 4,
+            },
+            {
+              ref: "callback_source_policy",
+              passed: true,
+              mode: "referenced_policy",
+              source_ip: "203.0.113.10",
+              allowed_ip_refs: contract.callback_security_policy.allowed_ip_refs,
+              configured: true,
+            },
+            {
+              ref: "callback_rate_limit",
+              passed: true,
+              rate_limit_policy_ref: contract.callback_security_policy.rate_limit_policy_ref,
+              window_seconds: contract.callback_security_policy.rate_limit_window_seconds,
+              max_events: contract.callback_security_policy.rate_limit_max_events,
+              observed_events: 1,
+            },
+          ],
+        };
         return {
           id: `paycallback-${delivery.id}`,
           provider_delivery_id: delivery.id,
@@ -8359,6 +8530,7 @@ function getDemoData<T>(path: string): T {
             signature_valid: true,
             verification_mode: "deterministic_contract_signature",
             callback_verification_ref: contract.callback_verification_ref,
+            callback_security: callbackSecurity,
           },
           payload_snapshot: {
             provider_batch_ref: "CLEAR-PT-AUG-2026",

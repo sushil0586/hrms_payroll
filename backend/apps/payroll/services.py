@@ -8,7 +8,7 @@ import hashlib
 import json
 import secrets
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from io import StringIO
 from typing import Any
@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 from django.db import transaction
 from django.db.models import Max, Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.notifications.models import NotificationChannel, NotificationStatus
 from apps.notifications.services import trigger_notification_event
@@ -51,6 +52,8 @@ from apps.payroll.models import (
     PayrollProviderCallbackEvent,
     PayrollProviderCallbackEventStatus,
     PayrollProviderCertificationStatus,
+    PayrollProviderCertificationRun,
+    PayrollProviderCertificationRunStatus,
     PayrollProviderConnection,
     PayrollProviderConnectionKind,
     PayrollProviderConnectionStatus,
@@ -90,9 +93,12 @@ from apps.payroll.models import (
 )
 from apps.payroll.providers import (
     PayrollProviderAdapterError,
+    PayrollProviderSubmissionRequest,
     PayrollProviderSubmissionResult,
     get_payroll_provider_adapter,
     normalize_payroll_provider_submission_request,
+    validate_payroll_provider_adapter_request_contract,
+    validate_payroll_provider_adapter_result_contract,
     validate_payroll_provider_route_config,
 )
 from apps.payroll.storage import (
@@ -229,6 +235,78 @@ DEFAULT_PAYROLL_PROVIDER_CONNECTION_BLUEPRINTS = [
     },
 ]
 
+DEFAULT_PAYROLL_PROVIDER_CERTIFICATION_SCENARIOS = {
+    PayrollProviderConnectionKind.BANK: [
+        {
+            "scenario_ref": "bank_advice_submission",
+            "label": "Bank advice submission",
+            "artifact_kind": PayrollOutputArtifactKind.BANK_ADVICE,
+            "route_key": "bank_advice",
+            "request_schema_ref": "payroll.provider_certification.bank_advice.request.v1",
+            "response_schema_ref": "payroll.provider_certification.bank_advice.response.v1",
+            "expected_provider_status": "submitted",
+        },
+        {
+            "scenario_ref": "bank_callback_contract",
+            "label": "Bank callback contract",
+            "artifact_kind": PayrollOutputArtifactKind.BANK_ADVICE,
+            "route_key": "bank_advice:callback",
+            "request_schema_ref": "payroll.provider_certification.bank_callback.request.v1",
+            "response_schema_ref": "payroll.provider_certification.bank_callback.response.v1",
+            "expected_provider_status": "acknowledged",
+        },
+    ],
+    PayrollProviderConnectionKind.ACCOUNTING: [
+        {
+            "scenario_ref": "accounting_export_submission",
+            "label": "Accounting export submission",
+            "artifact_kind": PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
+            "route_key": "accounting_export",
+            "request_schema_ref": "payroll.provider_certification.accounting_export.request.v1",
+            "response_schema_ref": "payroll.provider_certification.accounting_export.response.v1",
+            "expected_provider_status": "submitted",
+        },
+        {
+            "scenario_ref": "accounting_audit_acknowledgement",
+            "label": "Accounting audit acknowledgement",
+            "artifact_kind": PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
+            "route_key": "accounting_export:audit",
+            "request_schema_ref": "payroll.provider_certification.accounting_audit.request.v1",
+            "response_schema_ref": "payroll.provider_certification.accounting_audit.response.v1",
+            "expected_provider_status": "acknowledged",
+        },
+    ],
+    PayrollProviderConnectionKind.STATUTORY: [
+        {
+            "scenario_ref": "statutory_return_upload",
+            "label": "Statutory return upload",
+            "artifact_kind": PayrollOutputArtifactKind.STATUTORY_REPORT,
+            "route_key": "statutory_report:statutory_return",
+            "request_schema_ref": "payroll.provider_certification.statutory_return.request.v1",
+            "response_schema_ref": "payroll.provider_certification.statutory_return.response.v1",
+            "expected_provider_status": "submitted",
+        },
+        {
+            "scenario_ref": "statutory_challan_receipt",
+            "label": "Statutory challan receipt",
+            "artifact_kind": PayrollOutputArtifactKind.STATUTORY_REPORT,
+            "route_key": "statutory_report:statutory_challan",
+            "request_schema_ref": "payroll.provider_certification.statutory_challan.request.v1",
+            "response_schema_ref": "payroll.provider_certification.statutory_challan.response.v1",
+            "expected_provider_status": "reconciled",
+        },
+        {
+            "scenario_ref": "statutory_callback_replay_guard",
+            "label": "Callback replay guard",
+            "artifact_kind": PayrollOutputArtifactKind.STATUTORY_REPORT,
+            "route_key": "statutory_report:callback_replay",
+            "request_schema_ref": "payroll.provider_certification.statutory_callback.request.v1",
+            "response_schema_ref": "payroll.provider_certification.statutory_callback.response.v1",
+            "expected_provider_status": "acknowledged",
+        },
+    ],
+}
+
 
 def payroll_provider_connection_readiness_snapshot(connection: PayrollProviderConnection) -> dict[str, Any]:
     """Build deterministic onboarding gates for a provider connection."""
@@ -328,6 +406,7 @@ def record_payroll_provider_connection_certification(
             PayrollProviderConnectionStatus.DRAFT,
             PayrollProviderConnectionStatus.CONFIGURED,
             PayrollProviderConnectionStatus.SANDBOX_READY,
+            PayrollProviderConnectionStatus.BLOCKED,
         }:
             connection.status = PayrollProviderConnectionStatus.CERTIFIED
     elif certification_status == PayrollProviderCertificationStatus.FAILED:
@@ -347,6 +426,376 @@ def record_payroll_provider_connection_certification(
     connection.readiness_snapshot = payroll_provider_connection_readiness_snapshot(connection)
     connection.save()
     return connection
+
+
+def payroll_provider_connection_certification_scenarios(connection: PayrollProviderConnection) -> list[dict[str, Any]]:
+    """Resolve certification scenarios from tenant config with provider-kind defaults."""
+
+    config = connection.config_snapshot if isinstance(connection.config_snapshot, dict) else {}
+    configured = config.get("certification_scenarios")
+    if isinstance(configured, list) and configured:
+        scenarios = configured
+    else:
+        scenarios = DEFAULT_PAYROLL_PROVIDER_CERTIFICATION_SCENARIOS.get(
+            connection.provider_kind,
+            DEFAULT_PAYROLL_PROVIDER_CERTIFICATION_SCENARIOS[PayrollProviderConnectionKind.BANK],
+        )
+    normalized: list[dict[str, Any]] = []
+    for index, scenario in enumerate(scenarios, start=1):
+        if not isinstance(scenario, dict):
+            continue
+        scenario_ref = str(scenario.get("scenario_ref") or f"scenario_{index}")
+        artifact_kind = str(scenario.get("artifact_kind") or _default_certification_artifact_kind(connection))
+        normalized.append(
+            {
+                **scenario,
+                "scenario_ref": scenario_ref,
+                "label": str(scenario.get("label") or scenario_ref.replace("_", " ").title()),
+                "artifact_kind": artifact_kind,
+                "route_key": str(scenario.get("route_key") or artifact_kind),
+                "request_schema_ref": str(
+                    scenario.get("request_schema_ref") or f"payroll.provider_certification.{scenario_ref}.request.v1"
+                ),
+                "response_schema_ref": str(
+                    scenario.get("response_schema_ref") or f"payroll.provider_certification.{scenario_ref}.response.v1"
+                ),
+                "expected_provider_status": str(scenario.get("expected_provider_status") or "submitted"),
+                "submission_profile_ref": str(scenario.get("submission_profile_ref") or connection.certification_profile_ref),
+            }
+        )
+    return normalized
+
+
+def _default_certification_artifact_kind(connection: PayrollProviderConnection) -> str:
+    if connection.provider_kind == PayrollProviderConnectionKind.ACCOUNTING:
+        return PayrollOutputArtifactKind.ACCOUNTING_EXPORT
+    if connection.provider_kind == PayrollProviderConnectionKind.STATUTORY:
+        return PayrollOutputArtifactKind.STATUTORY_REPORT
+    return PayrollOutputArtifactKind.BANK_ADVICE
+
+
+def _certification_preflight_blockers(connection: PayrollProviderConnection) -> list[dict[str, Any]]:
+    readiness = payroll_provider_connection_readiness_snapshot(connection)
+    blockers = []
+    for gate in readiness.get("gates", []):
+        if isinstance(gate, dict) and gate.get("ref") != "certification_passed" and not gate.get("passed"):
+            blockers.append(
+                {
+                    "ref": gate.get("ref"),
+                    "label": gate.get("label"),
+                    "value": gate.get("value"),
+                }
+            )
+    adapter_ref = connection.sandbox_adapter_ref or connection.adapter_ref
+    if not adapter_ref:
+        blockers.append({"ref": "sandbox_adapter_required", "label": "Sandbox adapter required", "value": ""})
+    return blockers
+
+
+def _certification_payload_checksum(connection: PayrollProviderConnection, scenario: dict[str, Any]) -> str:
+    payload = {
+        "tenant_id": str(connection.tenant_id),
+        "provider_ref": connection.provider_ref,
+        "provider_kind": connection.provider_kind,
+        "environment_ref": connection.environment_ref,
+        "scenario_ref": scenario["scenario_ref"],
+        "artifact_kind": scenario["artifact_kind"],
+        "route_key": scenario["route_key"],
+        "certification_profile_ref": connection.certification_profile_ref,
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+def _build_certification_submission_request(
+    connection: PayrollProviderConnection,
+    run: PayrollProviderCertificationRun,
+    scenario: dict[str, Any],
+) -> PayrollProviderSubmissionRequest:
+    adapter_ref = connection.sandbox_adapter_ref or connection.adapter_ref
+    checksum = _certification_payload_checksum(connection, scenario)
+    scenario_ref = scenario["scenario_ref"]
+    sandbox_response = scenario.get("sandbox_response") if isinstance(scenario.get("sandbox_response"), dict) else {}
+    provider_status = str(sandbox_response.get("provider_status") or scenario["expected_provider_status"])
+    route_snapshot = {
+        "route_key": scenario["route_key"],
+        "provider_ref": connection.provider_ref,
+        "provider_kind": connection.provider_kind,
+        "adapter_ref": adapter_ref,
+        "channel_ref": connection.channel_ref,
+        "credential_ref": connection.credential_ref,
+        "credential_required": connection.credential_required,
+        "credential_profile_ref": connection.credential_profile_ref,
+        "callback_profile_ref": connection.callback_profile_ref,
+        "callback_verification_ref": connection.callback_verification_ref,
+        "retry_policy_ref": connection.retry_policy_ref,
+        "certification_profile_ref": connection.certification_profile_ref,
+        "certification_run_id": str(run.id),
+        "certification_scenario_ref": scenario_ref,
+        "adapter_contract": {
+            **(scenario.get("adapter_contract") if isinstance(scenario.get("adapter_contract"), dict) else {}),
+            "contract_profile_ref": str(
+                (scenario.get("adapter_contract") if isinstance(scenario.get("adapter_contract"), dict) else {}).get("contract_profile_ref")
+                or f"payroll.provider_contract.{scenario['artifact_kind']}.certification_adapter.v1"
+            ),
+            "enforcement_mode": str(
+                (scenario.get("adapter_contract") if isinstance(scenario.get("adapter_contract"), dict) else {}).get("enforcement_mode")
+                or "strict"
+            ),
+            "expected_adapter_ref": adapter_ref,
+            "expected_provider_ref": connection.provider_ref,
+            "response_snapshot_required_fields": (
+                (scenario.get("adapter_contract") if isinstance(scenario.get("adapter_contract"), dict) else {}).get("response_snapshot_required_fields")
+                or ["adapter_ref", "response_schema_ref", "domain_contract_ref"]
+            ),
+        },
+        "sandbox_response": {
+            "provider_status": provider_status,
+            "provider_batch_ref": str(sandbox_response.get("provider_batch_ref") or f"CERT-{checksum[:16]}"),
+            "external_reference": str(sandbox_response.get("external_reference") or f"CERT-{scenario_ref}-{checksum[:10]}"),
+            "certification_evidence_refs": sandbox_response.get(
+                "certification_evidence_refs",
+                [f"sandbox://{connection.provider_kind}/{scenario_ref}/{checksum[:12]}"],
+            ),
+            "failure_code": str(sandbox_response.get("failure_code") or ""),
+            "failure_reason": str(sandbox_response.get("failure_reason") or ""),
+            "retryable": bool(sandbox_response.get("retryable", False)),
+        },
+    }
+    validate_payroll_provider_route_config(route_snapshot)
+    return PayrollProviderSubmissionRequest(
+        tenant_id=str(connection.tenant_id),
+        delivery_id=f"certification:{run.id}:{scenario_ref}",
+        handoff_id="",
+        output_artifact_id="",
+        artifact_kind=scenario["artifact_kind"],
+        provider_ref=connection.provider_ref,
+        channel_ref=connection.channel_ref,
+        adapter_ref=adapter_ref,
+        submission_mode="sandbox_certification",
+        submission_profile_ref=scenario["submission_profile_ref"],
+        request_schema_ref=scenario["request_schema_ref"],
+        response_schema_ref=scenario["response_schema_ref"],
+        callback_profile_ref=connection.callback_profile_ref,
+        callback_verification_ref=connection.callback_verification_ref,
+        idempotency_key=hashlib.sha256(f"{run.id}:{scenario_ref}:{checksum}".encode("utf-8")).hexdigest(),
+        external_reference=f"CERT-{scenario_ref}-{checksum[:10]}",
+        payload_checksum_sha256=checksum,
+        artifact_snapshot={
+            "file_name": f"{scenario_ref}.{ARTIFACT_FILE_EXTENSIONS.get(ARTIFACT_MIME_TYPES.get(scenario['artifact_kind'], 'text/csv'), 'csv')}",
+            "storage_provider_ref": "payroll.certification.synthetic.v1",
+            "storage_key": f"certification/{connection.provider_ref}/{scenario_ref}",
+            "storage_object_version": "synthetic-v1",
+            "download_strategy_ref": "payroll.certification.synthetic_download.v1",
+            "mime_type": ARTIFACT_MIME_TYPES.get(scenario["artifact_kind"], "text/csv"),
+            "file_size_bytes": 0,
+            "checksum_sha256": checksum,
+        },
+        route_snapshot=route_snapshot,
+        credential_snapshot={
+            "credential_ref": connection.credential_ref,
+            "credential_profile_ref": connection.credential_profile_ref,
+            "provider_ref": connection.provider_ref,
+            "required": connection.credential_required,
+            "resolved": bool(connection.credential_ref),
+            "source_ref": "payroll_provider_connection",
+        },
+    )
+
+
+def run_payroll_provider_connection_certification(
+    connection: PayrollProviderConnection,
+    *,
+    requested_by=None,
+    executed_by=None,
+    scenario_refs: list[str] | None = None,
+) -> PayrollProviderCertificationRun:
+    """Execute configured sandbox certification scenarios and update connection evidence."""
+
+    connection = sync_payroll_provider_connection_readiness(connection)
+    requested_refs = {str(item) for item in scenario_refs or [] if str(item).strip()}
+    scenarios = payroll_provider_connection_certification_scenarios(connection)
+    if requested_refs:
+        scenarios = [scenario for scenario in scenarios if scenario["scenario_ref"] in requested_refs]
+    if not scenarios:
+        raise PayrollProviderConnectionError("No provider certification scenarios are configured for this connection.")
+
+    config = connection.config_snapshot if isinstance(connection.config_snapshot, dict) else {}
+    run = PayrollProviderCertificationRun.objects.create(
+        tenant=connection.tenant,
+        provider_connection=connection,
+        provider_ref=connection.provider_ref,
+        provider_kind=connection.provider_kind,
+        environment_ref=connection.environment_ref,
+        run_profile_ref=str(config.get("certification_run_profile_ref") or "payroll.provider_connection.certification_run.sandbox.v1"),
+        certification_profile_ref=connection.certification_profile_ref,
+        scenario_profile_ref=str(
+            config.get("certification_scenario_profile_ref")
+            or f"payroll.provider_connection.{connection.provider_kind}.certification_scenarios.v1"
+        ),
+        status=PayrollProviderCertificationRunStatus.RUNNING,
+        scenario_count=len(scenarios),
+        requested_by=requested_by,
+        executed_by=executed_by or requested_by,
+        started_at=timezone.now(),
+        request_snapshot={
+            "provider_ref": connection.provider_ref,
+            "adapter_ref": connection.adapter_ref,
+            "sandbox_adapter_ref": connection.sandbox_adapter_ref,
+            "channel_ref": connection.channel_ref,
+            "credential_ref": connection.credential_ref,
+            "credential_required": connection.credential_required,
+            "certification_profile_ref": connection.certification_profile_ref,
+            "scenario_refs": [scenario["scenario_ref"] for scenario in scenarios],
+        },
+    )
+
+    preflight_blockers = _certification_preflight_blockers(connection)
+    scenario_results: list[dict[str, Any]] = []
+    if preflight_blockers:
+        run.status = PayrollProviderCertificationRunStatus.FAILED
+        run.failed_count = len(scenarios)
+        run.blocker_count = len(preflight_blockers)
+        run.completed_at = timezone.now()
+        run.error_snapshot = {"preflight_blockers": preflight_blockers}
+        run.evidence_snapshot = {
+            "test_pack_ref": run.scenario_profile_ref,
+            "provider_ref": connection.provider_ref,
+            "scenario_results": scenario_results,
+            "blocking_gate_refs": [item["ref"] for item in preflight_blockers],
+        }
+        run.save()
+        record_payroll_provider_connection_certification(
+            connection,
+            certification_status=PayrollProviderCertificationStatus.FAILED,
+            evidence_snapshot={**run.evidence_snapshot, "certification_run_id": str(run.id)},
+            tested_by=run.executed_by,
+        )
+        return run
+
+    adapter_ref = connection.sandbox_adapter_ref or connection.adapter_ref
+    adapter = get_payroll_provider_adapter(adapter_ref)
+    for scenario in scenarios:
+        try:
+            request = _build_certification_submission_request(connection, run, scenario)
+            request_contract_validation = validate_payroll_provider_adapter_request_contract(request)
+            result = adapter.submit(request)
+            result_contract_validation = validate_payroll_provider_adapter_result_contract(request, result)
+            expected_status = scenario["expected_provider_status"]
+            passed = result.provider_status == expected_status
+            scenario_results.append(
+                {
+                    "scenario_ref": scenario["scenario_ref"],
+                    "label": scenario["label"],
+                    "status": "passed" if passed else "failed",
+                    "artifact_kind": scenario["artifact_kind"],
+                    "route_key": scenario["route_key"],
+                    "expected_provider_status": expected_status,
+                    "provider_status": result.provider_status,
+                    "adapter_ref": request.adapter_ref,
+                    "channel_ref": request.channel_ref,
+                    "request_schema_ref": request.request_schema_ref,
+                    "response_schema_ref": request.response_schema_ref,
+                    "adapter_contract_validation": {
+                        "request": request_contract_validation,
+                        "result": result_contract_validation,
+                    },
+                    "payload_checksum_sha256": request.payload_checksum_sha256,
+                    "provider_batch_ref": result.provider_batch_ref,
+                    "external_reference": result.external_reference,
+                    "certification_evidence_refs": result.certification_evidence_refs,
+                    "response_snapshot": result.response_snapshot,
+                    "failure_code": result.failure_code,
+                    "failure_reason": result.failure_reason,
+                    "retryable": result.retryable,
+                }
+            )
+        except PayrollProviderAdapterError as exc:
+            scenario_results.append(
+                {
+                    "scenario_ref": scenario["scenario_ref"],
+                    "label": scenario["label"],
+                    "status": "failed",
+                    "artifact_kind": scenario["artifact_kind"],
+                    "route_key": scenario["route_key"],
+                    "expected_provider_status": scenario["expected_provider_status"],
+                    "provider_status": "adapter_error",
+                    "adapter_ref": adapter_ref,
+                    "failure_code": exc.code,
+                    "failure_reason": str(exc),
+                    "retryable": exc.retryable,
+                }
+            )
+
+    passed_count = sum(1 for item in scenario_results if item["status"] == "passed")
+    failed_count = len(scenario_results) - passed_count
+    completed_at = timezone.now()
+    final_status = (
+        PayrollProviderCertificationRunStatus.PASSED
+        if failed_count == 0 and passed_count == len(scenarios)
+        else PayrollProviderCertificationRunStatus.FAILED
+    )
+    evidence_refs = [
+        ref
+        for item in scenario_results
+        for ref in item.get("certification_evidence_refs", [])
+        if ref
+    ]
+    run.status = final_status
+    run.passed_count = passed_count
+    run.failed_count = failed_count
+    run.blocker_count = failed_count
+    run.completed_at = completed_at
+    run.response_snapshot = {
+        "adapter_ref": adapter_ref,
+        "provider_ref": connection.provider_ref,
+        "scenario_count": len(scenario_results),
+        "passed_count": passed_count,
+        "failed_count": failed_count,
+    }
+    run.evidence_snapshot = {
+        "test_pack_ref": run.scenario_profile_ref,
+        "provider_ref": connection.provider_ref,
+        "provider_kind": connection.provider_kind,
+        "environment_ref": connection.environment_ref,
+        "certification_profile_ref": connection.certification_profile_ref,
+        "sandbox_delivery_count": len(scenario_results),
+        "callback_verified": any(
+            "callback" in item["scenario_ref"] and item["status"] == "passed"
+            for item in scenario_results
+        ),
+        "replay_guard_checked": any(
+            "replay" in item["scenario_ref"] and item["status"] == "passed"
+            for item in scenario_results
+        ),
+        "scenario_results": scenario_results,
+        "evidence_refs": evidence_refs,
+        "certification_run_id": str(run.id),
+        "executed_at": completed_at.isoformat(),
+    }
+    if failed_count:
+        run.error_snapshot = {
+            "failed_scenario_refs": [item["scenario_ref"] for item in scenario_results if item["status"] == "failed"],
+            "failure_reasons": [
+                {
+                    "scenario_ref": item["scenario_ref"],
+                    "failure_code": item.get("failure_code", ""),
+                    "failure_reason": item.get("failure_reason", ""),
+                    "provider_status": item.get("provider_status", ""),
+                }
+                for item in scenario_results
+                if item["status"] == "failed"
+            ],
+        }
+    run.save()
+    record_payroll_provider_connection_certification(
+        connection,
+        certification_status=PayrollProviderCertificationStatus.PASSED
+        if final_status == PayrollProviderCertificationRunStatus.PASSED
+        else PayrollProviderCertificationStatus.FAILED,
+        evidence_snapshot=run.evidence_snapshot,
+        tested_by=run.executed_by,
+    )
+    return run
 
 
 def ensure_default_payroll_provider_connections(tenant, *, created_by=None) -> list[PayrollProviderConnection]:
@@ -370,8 +819,28 @@ def ensure_default_payroll_provider_connections(tenant, *, created_by=None) -> l
                         "credential_profile_ref": blueprint["credential_profile_ref"],
                         "callback_profile_ref": blueprint["callback_profile_ref"],
                         "callback_verification_ref": blueprint["callback_verification_ref"],
+                        "callback_security_policy": {
+                            "security_policy_ref": f"payroll.callback_security.{blueprint['provider_kind']}.standard.v1",
+                            "enforcement_mode": "warn",
+                            "signature_algorithm_ref": "payroll.callback.signature.sha256.v1",
+                            "secret_rotation_ref": f"payroll.callback_secret_rotation.{blueprint['provider_kind']}.standard.v1",
+                            "replay_window_seconds": 900,
+                            "timestamp_required": False,
+                            "source_ip_required": False,
+                            "allowed_ip_refs": [f"payroll.provider_ip_allowlist.{blueprint['provider_kind']}.managed.v1"],
+                            "rate_limit_policy_ref": f"payroll.callback_rate_limit.{blueprint['provider_kind']}.standard.v1",
+                            "rate_limit_window_seconds": 60,
+                            "rate_limit_max_events": 60,
+                        },
                         "retry_policy_ref": blueprint["retry_policy_ref"],
                         "certification_profile_ref": blueprint["certification_profile_ref"],
+                        "adapter_contract": {
+                            "contract_profile_ref": f"payroll.provider_contract.{blueprint['provider_kind']}.sandbox_adapter.v1",
+                            "enforcement_mode": "warn",
+                            "expected_adapter_ref": blueprint["adapter_ref"],
+                            "expected_provider_ref": blueprint["provider_ref"],
+                            "response_snapshot_required_fields": ["adapter_ref", "response_schema_ref", "domain_contract_ref"],
+                        },
                     },
                 },
                 "created_by": created_by,
@@ -4588,6 +5057,62 @@ def _provider_connection_policy(profile: dict[str, Any], route: dict[str, Any]) 
     }
 
 
+def _provider_adapter_contract(profile: dict[str, Any], route: dict[str, Any], *, artifact_kind: str, adapter_ref: str, provider_ref: str) -> dict[str, Any]:
+    profile_contract = profile.get("adapter_contract") if isinstance(profile.get("adapter_contract"), dict) else {}
+    route_contract = route.get("adapter_contract") if isinstance(route.get("adapter_contract"), dict) else {}
+    contract = {**profile_contract, **route_contract}
+    enforcement_mode = str(contract.get("enforcement_mode") or "warn").strip().lower()
+    if enforcement_mode not in {"disabled", "warn", "strict"}:
+        enforcement_mode = "warn"
+    return {
+        **contract,
+        "contract_profile_ref": str(
+            contract.get("contract_profile_ref")
+            or f"payroll.provider_contract.{artifact_kind}.adapter.v1"
+        ),
+        "enforcement_mode": enforcement_mode,
+        "expected_adapter_ref": str(contract.get("expected_adapter_ref") or adapter_ref),
+        "expected_provider_ref": str(contract.get("expected_provider_ref") or provider_ref),
+        "request_required_fields": contract.get(
+            "request_required_fields",
+            [
+                "tenant_id",
+                "delivery_id",
+                "artifact_kind",
+                "provider_ref",
+                "channel_ref",
+                "adapter_ref",
+                "submission_mode",
+                "submission_profile_ref",
+                "request_schema_ref",
+                "response_schema_ref",
+                "idempotency_key",
+                "payload_checksum_sha256",
+                "artifact_snapshot.checksum_sha256",
+            ],
+        ),
+        "result_required_fields": contract.get(
+            "result_required_fields",
+            ["provider_status", "external_reference", "provider_batch_ref"],
+        ),
+        "response_snapshot_required_fields": contract.get(
+            "response_snapshot_required_fields",
+            ["adapter_ref", "response_schema_ref"],
+        ),
+        "allowed_provider_statuses": contract.get(
+            "allowed_provider_statuses",
+            [
+                PayrollProviderDeliveryStatus.SUBMITTED,
+                PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+                PayrollProviderDeliveryStatus.RECONCILED,
+                PayrollProviderDeliveryStatus.REJECTED,
+                PayrollProviderDeliveryStatus.FAILED,
+            ],
+        ),
+        "require_credential_resolution": bool(contract.get("require_credential_resolution", False)),
+    }
+
+
 def _provider_connection_for_route(artifact: PayrollOutputArtifact, provider_ref: str) -> PayrollProviderConnection | None:
     connection = PayrollProviderConnection.objects.filter(
         tenant=artifact.tenant,
@@ -4672,6 +5197,42 @@ def _provider_connection_gate(
     return gate
 
 
+def _positive_int(value: Any, default: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return number if number > 0 else default
+
+
+def _provider_callback_security_policy_config(
+    *,
+    profile: dict[str, Any],
+    route: dict[str, Any],
+    callback_verification_ref: str,
+) -> dict[str, Any]:
+    profile_policy = profile.get("callback_security_policy") if isinstance(profile.get("callback_security_policy"), dict) else {}
+    route_policy = route.get("callback_security_policy") if isinstance(route.get("callback_security_policy"), dict) else {}
+    policy = {**profile_policy, **route_policy}
+    allowed_ip_refs = policy.get("allowed_ip_refs") if isinstance(policy.get("allowed_ip_refs"), list) else []
+    allowed_source_ips = policy.get("allowed_source_ips") if isinstance(policy.get("allowed_source_ips"), list) else []
+    return {
+        "security_policy_ref": policy.get("security_policy_ref") or "payroll.callback.security.standard.v1",
+        "enforcement_mode": policy.get("enforcement_mode") or "warn",
+        "signature_algorithm_ref": policy.get("signature_algorithm_ref") or "payroll.callback.signature.sha256.v1",
+        "callback_verification_ref": callback_verification_ref,
+        "secret_rotation_ref": policy.get("secret_rotation_ref") or "payroll.callback.secret_rotation.configured.v1",
+        "replay_window_seconds": _positive_int(policy.get("replay_window_seconds"), 900),
+        "timestamp_required": bool(policy.get("timestamp_required", False)),
+        "source_ip_required": bool(policy.get("source_ip_required", False)),
+        "allowed_ip_refs": [str(item) for item in allowed_ip_refs if str(item or "").strip()],
+        "allowed_source_ips": [str(item) for item in allowed_source_ips if str(item or "").strip()],
+        "rate_limit_policy_ref": policy.get("rate_limit_policy_ref") or "payroll.callback.rate_limit.standard.v1",
+        "rate_limit_window_seconds": _positive_int(policy.get("rate_limit_window_seconds"), 60),
+        "rate_limit_max_events": _positive_int(policy.get("rate_limit_max_events"), 60),
+    }
+
+
 def _provider_delivery_route(profile: dict[str, Any], artifact: PayrollOutputArtifact) -> dict[str, Any]:
     routes = profile.get("provider_routes") if isinstance(profile, dict) else {}
     route: dict[str, Any] = {}
@@ -4726,6 +5287,11 @@ def _provider_delivery_route(profile: dict[str, Any], artifact: PayrollOutputArt
         "response_schema_ref": route.get("response_schema_ref") or f"{submission_profile_ref}.response",
         "callback_profile_ref": callback_profile_ref,
         "callback_verification_ref": callback_verification_ref,
+        "callback_security_policy": _provider_callback_security_policy_config(
+            profile=profile,
+            route=route,
+            callback_verification_ref=callback_verification_ref,
+        ),
         "credential_ref": credential_ref,
         "credential_required": credential_required,
         "credential_profile_ref": credential_profile_ref,
@@ -4733,6 +5299,13 @@ def _provider_delivery_route(profile: dict[str, Any], artifact: PayrollOutputArt
         "execution_adapter": route.get("execution_adapter") if isinstance(route.get("execution_adapter"), dict) else {},
         "sandbox_response": route.get("sandbox_response") if isinstance(route.get("sandbox_response"), dict) else {},
         "provider_connection_gate": provider_connection_gate,
+        "adapter_contract": _provider_adapter_contract(
+            profile,
+            route,
+            artifact_kind=artifact.kind,
+            adapter_ref=adapter_ref,
+            provider_ref=provider_ref,
+        ),
         "certification_profile_ref": certification_profile_ref,
         "certification_required": bool(certification_required),
     }
@@ -4763,11 +5336,13 @@ def _provider_submission_contract(
         "response_schema_ref": route["response_schema_ref"],
         "callback_profile_ref": route["callback_profile_ref"],
         "callback_verification_ref": route["callback_verification_ref"],
+        "callback_security_policy": route.get("callback_security_policy", {}),
         "certification_profile_ref": route["certification_profile_ref"],
         "certification_required": route["certification_required"],
         "credential_ref": route.get("credential_ref", ""),
         "credential_profile_ref": route.get("credential_profile_ref", ""),
         "provider_connection_gate": route.get("provider_connection_gate", {}),
+        "adapter_contract": route.get("adapter_contract", {}),
         "idempotency_key": hashlib.sha256(idempotency_material.encode("utf-8")).hexdigest(),
     }
     if artifact.kind == PayrollOutputArtifactKind.STATUTORY_REPORT:
@@ -5154,6 +5729,145 @@ def expected_provider_callback_signature(
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+def _coerce_callback_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        parsed = parse_datetime(value.strip())
+    else:
+        parsed = None
+    if not parsed:
+        return None
+    if timezone.is_naive(parsed):
+        return timezone.make_aware(parsed, timezone.get_current_timezone())
+    return parsed
+
+
+def _callback_security_gate(ref: str, passed: bool, **evidence: Any) -> dict[str, Any]:
+    return {"ref": ref, "passed": bool(passed), **evidence}
+
+
+def _provider_callback_security_policy(delivery: PayrollProviderDelivery) -> dict[str, Any]:
+    config = delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}
+    contract = config.get("submission_contract") if isinstance(config.get("submission_contract"), dict) else {}
+    policy = contract.get("callback_security_policy") if isinstance(contract.get("callback_security_policy"), dict) else {}
+    callback_verification_ref = contract.get("callback_verification_ref") or "payroll.callback.verification.manual.v1"
+    return {
+        "security_policy_ref": policy.get("security_policy_ref") or "payroll.callback.security.standard.v1",
+        "enforcement_mode": policy.get("enforcement_mode") or "warn",
+        "signature_algorithm_ref": policy.get("signature_algorithm_ref") or "payroll.callback.signature.sha256.v1",
+        "callback_verification_ref": callback_verification_ref,
+        "secret_rotation_ref": policy.get("secret_rotation_ref") or "payroll.callback.secret_rotation.configured.v1",
+        "replay_window_seconds": _positive_int(policy.get("replay_window_seconds"), 900),
+        "timestamp_required": bool(policy.get("timestamp_required", False)),
+        "source_ip_required": bool(policy.get("source_ip_required", False)),
+        "allowed_ip_refs": policy.get("allowed_ip_refs") if isinstance(policy.get("allowed_ip_refs"), list) else [],
+        "allowed_source_ips": policy.get("allowed_source_ips") if isinstance(policy.get("allowed_source_ips"), list) else [],
+        "rate_limit_policy_ref": policy.get("rate_limit_policy_ref") or "payroll.callback.rate_limit.standard.v1",
+        "rate_limit_window_seconds": _positive_int(policy.get("rate_limit_window_seconds"), 60),
+        "rate_limit_max_events": _positive_int(policy.get("rate_limit_max_events"), 60),
+    }
+
+
+def _validate_provider_callback_security(
+    *,
+    delivery: PayrollProviderDelivery,
+    signature_valid: bool,
+    source_ip: str,
+    received_at: datetime,
+    event_timestamp: datetime | None,
+    idempotency_key: str,
+) -> dict[str, Any]:
+    policy = _provider_callback_security_policy(delivery)
+    allowed_source_ips = [str(item) for item in policy.get("allowed_source_ips", []) if str(item or "").strip()]
+    allowed_ip_refs = [str(item) for item in policy.get("allowed_ip_refs", []) if str(item or "").strip()]
+    replay_window_seconds = _positive_int(policy.get("replay_window_seconds"), 900)
+    event_age_seconds = abs((received_at - event_timestamp).total_seconds()) if event_timestamp else None
+    rate_limit_window_seconds = _positive_int(policy.get("rate_limit_window_seconds"), 60)
+    rate_limit_max_events = _positive_int(policy.get("rate_limit_max_events"), 60)
+    observed_events = PayrollProviderCallbackEvent.objects.filter(
+        tenant=delivery.tenant,
+        provider_ref=delivery.provider_ref,
+        received_at__gte=received_at - timedelta(seconds=rate_limit_window_seconds),
+    ).count()
+    source_ip = str(source_ip or "").strip()
+    source_ip_configured = bool(allowed_source_ips or allowed_ip_refs)
+    source_ip_passed = True
+    source_ip_mode = "not_configured"
+    if allowed_source_ips:
+        source_ip_passed = source_ip in allowed_source_ips
+        source_ip_mode = "literal_allowlist"
+    elif allowed_ip_refs:
+        source_ip_passed = bool(source_ip) or not policy.get("source_ip_required")
+        source_ip_mode = "referenced_policy"
+    elif policy.get("source_ip_required"):
+        source_ip_passed = bool(source_ip)
+        source_ip_mode = "required"
+
+    timestamp_passed = True
+    timestamp_mode = "not_required"
+    if event_timestamp:
+        timestamp_passed = bool(event_age_seconds is not None and event_age_seconds <= replay_window_seconds)
+        timestamp_mode = "bounded"
+    elif policy.get("timestamp_required"):
+        timestamp_passed = False
+        timestamp_mode = "required"
+
+    gates = [
+        _callback_security_gate(
+            "callback_signature_matched",
+            signature_valid,
+            algorithm_ref=policy["signature_algorithm_ref"],
+            callback_verification_ref=policy["callback_verification_ref"],
+        ),
+        _callback_security_gate(
+            "callback_secret_rotation_ref",
+            bool(policy.get("secret_rotation_ref")),
+            secret_rotation_ref=policy.get("secret_rotation_ref", ""),
+        ),
+        _callback_security_gate(
+            "callback_replay_window",
+            timestamp_passed,
+            mode=timestamp_mode,
+            replay_window_seconds=replay_window_seconds,
+            event_timestamp=event_timestamp.isoformat() if event_timestamp else "",
+            event_age_seconds=event_age_seconds,
+        ),
+        _callback_security_gate(
+            "callback_source_policy",
+            source_ip_passed,
+            mode=source_ip_mode,
+            source_ip=source_ip,
+            allowed_ip_refs=allowed_ip_refs,
+            literal_allowlist_configured=bool(allowed_source_ips),
+            configured=source_ip_configured,
+        ),
+        _callback_security_gate(
+            "callback_rate_limit",
+            observed_events < rate_limit_max_events,
+            rate_limit_policy_ref=policy["rate_limit_policy_ref"],
+            window_seconds=rate_limit_window_seconds,
+            max_events=rate_limit_max_events,
+            observed_events=observed_events,
+        ),
+        _callback_security_gate(
+            "callback_idempotency_replay_guard",
+            not PayrollProviderCallbackEvent.objects.filter(provider_ref=delivery.provider_ref, idempotency_key=idempotency_key).exists(),
+            idempotency_key=idempotency_key,
+        ),
+    ]
+    blocking_gate_refs = [gate["ref"] for gate in gates if not gate["passed"]]
+    return {
+        "security_policy_ref": policy["security_policy_ref"],
+        "enforcement_mode": policy["enforcement_mode"],
+        "received_at": received_at.isoformat(),
+        "source_ip": source_ip,
+        "passed": not blocking_gate_refs,
+        "blocking_gate_refs": blocking_gate_refs,
+        "gates": gates,
+    }
+
+
 def _find_provider_callback_delivery(
     *,
     provider_ref: str,
@@ -5183,6 +5897,8 @@ def ingest_payroll_provider_callback(
     external_reference: str = "",
     external_event_id: str = "",
     provider_delivery_id: str = "",
+    source_ip: str = "",
+    event_timestamp: datetime | str | None = None,
 ) -> tuple[PayrollProviderCallbackEvent, bool]:
     """Verify and record a provider callback, then update the matching delivery."""
 
@@ -5220,6 +5936,17 @@ def ingest_payroll_provider_callback(
     )
     signature_valid = secrets.compare_digest(str(signature or ""), expected_signature)
     received_at = timezone.now()
+    callback_event_timestamp = _coerce_callback_datetime(event_timestamp) or _coerce_callback_datetime(payload_snapshot.get("event_timestamp")) or _coerce_callback_datetime(payload_snapshot.get("sent_at"))
+    security_snapshot = _validate_provider_callback_security(
+        delivery=delivery,
+        signature_valid=signature_valid,
+        source_ip=source_ip,
+        received_at=received_at,
+        event_timestamp=callback_event_timestamp,
+        idempotency_key=idempotency_key,
+    )
+    security_blocked = security_snapshot["enforcement_mode"] == "strict" and not security_snapshot["passed"]
+    accepted = signature_valid and not security_blocked
 
     with transaction.atomic():
         event = PayrollProviderCallbackEvent.objects.create(
@@ -5233,7 +5960,7 @@ def ingest_payroll_provider_callback(
             idempotency_key=idempotency_key,
             callback_profile_ref=callback_profile_ref,
             callback_verification_ref=callback_verification_ref,
-            status=PayrollProviderCallbackEventStatus.RECEIVED if signature_valid else PayrollProviderCallbackEventStatus.REJECTED,
+            status=PayrollProviderCallbackEventStatus.RECEIVED if accepted else PayrollProviderCallbackEventStatus.REJECTED,
             provider_status=provider_status,
             payload_checksum_sha256=payload_checksum,
             signature=signature,
@@ -5243,14 +5970,19 @@ def ingest_payroll_provider_callback(
                 "expected_signature": expected_signature,
                 "signature_valid": signature_valid,
                 "verification_mode": "deterministic_contract_signature",
+                "callback_security": security_snapshot,
                 "received_at": received_at.isoformat(),
             },
             payload_snapshot=payload_snapshot,
-            failure_code="" if signature_valid else "signature_verification_failed",
-            failure_reason="" if signature_valid else "Provider callback signature did not match the delivery contract.",
+            failure_code="" if accepted else ("signature_verification_failed" if not signature_valid else "callback_security_policy_failed"),
+            failure_reason="" if accepted else (
+                "Provider callback signature did not match the delivery contract."
+                if not signature_valid
+                else "Provider callback failed the configured webhook security policy."
+            ),
             received_at=received_at,
         )
-        if not signature_valid:
+        if not accepted:
             return event, False
 
         delivery.status = provider_status
@@ -5273,6 +6005,7 @@ def ingest_payroll_provider_callback(
             "callback_profile_ref": callback_profile_ref,
             "callback_verification_ref": callback_verification_ref,
             "payload_checksum_sha256": payload_checksum,
+            "callback_security": security_snapshot,
             "received_at": received_at.isoformat(),
             "payload": payload_snapshot,
         }
@@ -5539,15 +6272,29 @@ def submit_payroll_provider_delivery(
 ) -> PayrollProviderDelivery:
     """Submit a provider delivery through the configured adapter boundary."""
 
+    request_contract_validation: dict[str, Any] = {}
+    result_contract_validation: dict[str, Any] = {}
     try:
         request = normalize_payroll_provider_submission_request(delivery)
+        request_contract_validation = validate_payroll_provider_adapter_request_contract(request)
         adapter = get_payroll_provider_adapter(request.adapter_ref)
         result = adapter.submit(request)
-        request_snapshot = request.snapshot()
+        result_contract_validation = validate_payroll_provider_adapter_result_contract(request, result)
+        request_snapshot = {
+            **request.snapshot(),
+            "adapter_contract_validation": {
+                "request": request_contract_validation,
+                "result": result_contract_validation,
+            },
+        }
     except PayrollProviderAdapterError as exc:
         request_snapshot = {
             "delivery_id": str(delivery.id),
             "provider_ref": delivery.provider_ref,
+            "adapter_contract_validation": {
+                "request": request_contract_validation,
+                "result": result_contract_validation,
+            },
             "adapter_error": {
                 "code": exc.code,
                 "message": str(exc),

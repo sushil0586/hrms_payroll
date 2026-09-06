@@ -15,6 +15,7 @@ from apps.payroll.models import (
     PayrollCalculationLine,
     PayrollFinanceHandoff,
     PayrollProviderCallbackEvent,
+    PayrollProviderCertificationRun,
     PayrollProviderConnection,
     PayrollProviderDelivery,
     PayrollProviderRetryEvent,
@@ -316,3 +317,10 @@ class PayrollProviderConnectionAdmin(admin.ModelAdmin):
     list_display = ("provider_name", "tenant", "provider_kind", "environment_ref", "status", "certification_status", "adapter_ref")
     list_filter = ("provider_kind", "environment_ref", "status", "certification_status")
     search_fields = ("provider_name", "provider_ref", "tenant__name", "adapter_ref", "channel_ref", "credential_ref")
+
+
+@admin.register(PayrollProviderCertificationRun)
+class PayrollProviderCertificationRunAdmin(admin.ModelAdmin):
+    list_display = ("provider_connection", "tenant", "status", "scenario_count", "passed_count", "failed_count", "started_at", "completed_at")
+    list_filter = ("status", "provider_kind", "environment_ref", "certification_profile_ref")
+    search_fields = ("provider_connection__provider_name", "provider_ref", "run_profile_ref", "scenario_profile_ref", "source_hash")

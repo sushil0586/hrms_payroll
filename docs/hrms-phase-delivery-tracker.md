@@ -1412,7 +1412,114 @@ Still open:
 - production bank/accounting/statutory SDK or portal automation adapters
 - production queue integration for recurring retry workers
 - production webhook hardening: secret rotation, provider IP allowlists, provider-specific signature algorithms, and rate limits
-- automatic certification test execution against real provider sandboxes
+- automatic certification test execution against real provider sandboxes is started through Phase 5S deterministic sandbox certification runs; the remaining gap is real external sandbox execution.
+
+## Payroll Phase 5S: Automated Provider Sandbox Certification Execution
+
+Objective:
+
+Execute provider certification scenarios from tenant/provider configuration, persist scenario evidence, and update provider connection certification state without relying only on manual evidence recording.
+
+Completed:
+
+- Added tenant-scoped `PayrollProviderCertificationRun` records linked to provider connections.
+- Added certification run statuses, scenario/pass/fail/blocker counts, run/profile refs, request snapshots, response snapshots, evidence snapshots, error snapshots, source hashes, requested-by, and executed-by lineage.
+- Added configurable certification scenario resolution through connection `config_snapshot.certification_scenarios`, with provider-kind defaults for bank, accounting, and statutory sandbox certification.
+- Added automated sandbox execution that builds provider submission requests, calls the configured sandbox adapter, verifies expected provider statuses, records scenario evidence refs, and stores failure reasons.
+- Successful runs update `PayrollProviderConnection.certification_status` to passed and move launch-ready connections to certified; failed runs update certification state to failed and block the connection.
+- Added HR-admin run-certification API at `/api/v1/hr-admin/payroll-provider-connections/<id>/run-certification/`.
+- Provider setup payload now includes recent certification runs and run summary counts.
+- `/hr-admin/payroll-providers` now exposes the run-certification action, latest run evidence, scenario results, and certification run ledger.
+- Backend and Playwright coverage prove successful automated certification, failed scenario blocking, provider-page visibility, and no-horizontal-overflow stability.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "provider_connection"`
+- `npm run typecheck` from `web`
+- `npx playwright test tests/e2e/payroll-providers-flows.spec.ts` from `web`
+- `npx playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-providers"` from `web`
+
+Still open:
+
+- real bank/accounting/statutory SDK or portal automation adapters
+- production queue integration for recurring certification and retry workers
+- production webhook hardening: secret rotation, provider IP allowlists, provider-specific signature algorithms, and rate limits
+- automatic certification execution against real external provider sandboxes instead of deterministic local sandbox adapters
+
+## Payroll Phase 5T: Production Provider Adapter Contract Hardening
+
+Objective:
+
+Make provider adapter requests and results enforceable through configurable production contracts so bank, accounting, and statutory providers cannot silently accept incomplete schemas, missing idempotency evidence, or mismatched adapter refs.
+
+Completed:
+
+- Added reusable provider adapter request/result contract validators in the provider boundary.
+- Adapter contracts now support configurable `disabled`, `warn`, and `strict` enforcement modes.
+- Request validation checks required request fields, provider refs, adapter refs, idempotency keys, checksums, schema refs, and optional credential-resolution evidence.
+- Result validation checks required result fields, allowed provider statuses, and required response snapshot fields such as `domain_contract_ref`.
+- Finance handoff route snapshots now carry `adapter_contract` evidence, and submission contracts persist the selected adapter contract profile.
+- Provider delivery submission now stamps request/result contract validation into adapter submission evidence.
+- Strict contract failures turn the provider delivery into a failed delivery with deterministic failure codes and preserved request-validation evidence.
+- Automated certification scenarios now run through the same strict adapter contract validation path.
+- Default provider connection blueprints and demo data expose adapter contract refs without raw credentials.
+- `/hr-admin/payroll-providers` now shows adapter contract profile, enforcement mode, expected adapter, and latest request/result validation status.
+- Backend and Playwright coverage prove successful contract evidence and strict contract failure behavior.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "provider_adapter_boundary or provider_specific_sandbox_adapters or provider_connection or provider_retry_worker or provider_delivery_retry or provider_callback_endpoint"`
+- `npm run typecheck` from `web`
+- `npx playwright test tests/e2e/payroll-providers-flows.spec.ts` from `web`
+- `npx playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-providers"` from `web`
+
+Still open:
+
+- production bank/accounting/statutory SDK or portal automation adapters
+- production queue integration for recurring certification and retry workers
+- provider-specific signature algorithm implementations beyond the standard deterministic SHA-256 contract
+- provider-specific schema transformation/mapping packs for real external provider payloads
+
+## Payroll Phase 5U: Production Webhook Security Hardening
+
+Objective:
+
+Make provider callbacks SaaS-ready through configurable webhook security policy evidence so tenants can enforce replay windows, source policy, rate limits, signature refs, and secret rotation refs without hardcoded provider rules.
+
+Completed:
+
+- Finance handoff route resolution now includes a configurable `callback_security_policy` block in provider delivery submission contracts.
+- Callback security policies carry policy refs, enforcement mode, signature algorithm refs, secret rotation refs, replay windows, timestamp/source requirements, provider IP allowlist refs, and rate-limit refs.
+- Public provider callback ingestion accepts optional event timestamp and source IP metadata, with request-source fallback for audit evidence.
+- Callback verification snapshots now include gate-level webhook security evidence for signature match, secret rotation ref, replay window, source policy, rate limit, and idempotency replay guard.
+- Strict policy mode rejects callbacks with deterministic `callback_security_policy_failed` evidence while leaving the delivery state unchanged.
+- Existing signed callback behavior remains compatible in warn mode, preserving current provider callback flows while surfacing production readiness evidence.
+- Default provider connection blueprints and demo handoff data expose callback security refs without embedding provider secrets or unchangeable IP assumptions.
+- `/hr-admin/payroll-handoff` now shows webhook security policy and gate evidence inside provider callback cards.
+- Backend and Playwright coverage prove successful security evidence, strict policy rejection, and visible gate refs.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "provider_callback_endpoint or provider_adapter_boundary or provider_specific_sandbox_adapters or provider_connection or provider_retry_worker or provider_delivery_retry"`
+- `npm run typecheck` from `web`
+- `npx playwright test tests/e2e/payroll-handoff-flows.spec.ts` from `web`
+- `npx playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-handoff"` from `web`
+
+Still open:
+
+- provider-specific signature algorithm adapters for real provider payload formats
+- production queue integration for callback/retry/certification workers
+- production bank/accounting/statutory SDK or portal automation adapters
+- provider-specific schema transformation/mapping packs for real external provider payloads
 
 ## Phase 1: HR Admin Backbone
 

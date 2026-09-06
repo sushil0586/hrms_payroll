@@ -217,6 +217,14 @@ class PayrollProviderCertificationStatus(models.TextChoices):
     EXPIRED = "expired", "Expired"
 
 
+class PayrollProviderCertificationRunStatus(models.TextChoices):
+    QUEUED = "queued", "Queued"
+    RUNNING = "running", "Running"
+    PASSED = "passed", "Passed"
+    FAILED = "failed", "Failed"
+    SKIPPED = "skipped", "Skipped"
+
+
 class PayrollArtifactAccessEventType(models.TextChoices):
     PUBLISHED = "published", "Published"
     NOTIFIED = "notified", "Notified"
@@ -3968,3 +3976,121 @@ class PayrollProviderConnection(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.provider_name}:{self.provider_ref}:{self.status}"
+
+
+class PayrollProviderCertificationRun(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Automated provider sandbox certification run with scenario evidence."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="payroll_provider_certification_runs")
+    provider_connection = models.ForeignKey(
+        PayrollProviderConnection,
+        on_delete=models.CASCADE,
+        related_name="certification_runs",
+    )
+    provider_ref = models.CharField(max_length=160)
+    provider_kind = models.CharField(
+        max_length=24,
+        choices=PayrollProviderConnectionKind.choices,
+        default=PayrollProviderConnectionKind.OTHER,
+    )
+    environment_ref = models.CharField(max_length=80, default="sandbox")
+    run_profile_ref = models.CharField(max_length=180, default="payroll.provider_connection.certification_run.sandbox.v1")
+    certification_profile_ref = models.CharField(max_length=180, blank=True)
+    scenario_profile_ref = models.CharField(max_length=180, blank=True)
+    status = models.CharField(
+        max_length=24,
+        choices=PayrollProviderCertificationRunStatus.choices,
+        default=PayrollProviderCertificationRunStatus.QUEUED,
+    )
+    scenario_count = models.PositiveIntegerField(default=0)
+    passed_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    blocker_count = models.PositiveIntegerField(default=0)
+    started_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="requested_payroll_provider_certification_runs",
+        blank=True,
+        null=True,
+    )
+    executed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="executed_payroll_provider_certification_runs",
+        blank=True,
+        null=True,
+    )
+    request_snapshot = models.JSONField(default=dict, blank=True)
+    response_snapshot = models.JSONField(default=dict, blank=True)
+    evidence_snapshot = models.JSONField(default=dict, blank=True)
+    error_snapshot = models.JSONField(default=dict, blank=True)
+    source_hash = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "provider_ref"]),
+            models.Index(fields=["tenant", "status"]),
+            models.Index(fields=["tenant", "provider_kind"]),
+        ]
+        verbose_name = "Payroll Provider Certification Run"
+        verbose_name_plural = "Payroll Provider Certification Runs"
+
+    def _run_digest(self) -> str:
+        payload = {
+            "provider_connection_id": str(self.provider_connection_id or ""),
+            "provider_ref": self.provider_ref,
+            "provider_kind": self.provider_kind,
+            "environment_ref": self.environment_ref,
+            "run_profile_ref": self.run_profile_ref,
+            "certification_profile_ref": self.certification_profile_ref,
+            "scenario_profile_ref": self.scenario_profile_ref,
+            "status": self.status,
+            "scenario_count": self.scenario_count,
+            "passed_count": self.passed_count,
+            "failed_count": self.failed_count,
+            "blocker_count": self.blocker_count,
+            "request_snapshot": self.request_snapshot,
+            "response_snapshot": self.response_snapshot,
+            "evidence_snapshot": self.evidence_snapshot,
+            "error_snapshot": self.error_snapshot,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+    def clean(self):
+        errors = {}
+        if self.provider_connection_id and self.tenant_id and self.provider_connection.tenant_id != self.tenant_id:
+            errors["provider_connection"] = "Provider connection must belong to the same tenant."
+        for field_name in ("request_snapshot", "response_snapshot", "evidence_snapshot", "error_snapshot"):
+            value = getattr(self, field_name)
+            if isinstance(value, dict):
+                try:
+                    validate_payroll_provider_route_config(value)
+                except PayrollProviderAdapterError as exc:
+                    errors[field_name] = str(exc)
+        if self.status in {
+            PayrollProviderCertificationRunStatus.PASSED,
+            PayrollProviderCertificationRunStatus.FAILED,
+            PayrollProviderCertificationRunStatus.SKIPPED,
+        } and not self.completed_at:
+            errors["completed_at"] = "Completed timestamp is required for terminal certification runs."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.provider_connection_id and not self.tenant_id:
+            self.tenant = self.provider_connection.tenant
+        self.provider_ref = self.provider_ref or (self.provider_connection.provider_ref if self.provider_connection_id else "")
+        self.provider_kind = self.provider_kind or (self.provider_connection.provider_kind if self.provider_connection_id else PayrollProviderConnectionKind.OTHER)
+        self.environment_ref = self.environment_ref or (self.provider_connection.environment_ref if self.provider_connection_id else "sandbox")
+        self.certification_profile_ref = self.certification_profile_ref or (
+            self.provider_connection.certification_profile_ref if self.provider_connection_id else ""
+        )
+        self.source_hash = self._run_digest()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.provider_ref}:{self.status}:{self.created_at}"

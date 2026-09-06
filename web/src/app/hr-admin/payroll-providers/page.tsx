@@ -3,7 +3,9 @@ import Link from "next/link";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollProviderConnectionSetup } from "@/lib/api";
-import type { HrAdminPayrollProviderConnection } from "@/lib/types";
+import type { HrAdminPayrollProviderCertificationRun, HrAdminPayrollProviderConnection } from "@/lib/types";
+
+import { ProviderCertificationActions } from "./provider-certification-actions";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -59,6 +61,14 @@ function snapshotRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function scenarioResults(run: HrAdminPayrollProviderCertificationRun | null): Record<string, unknown>[] {
+  const evidence = snapshotRecord(run?.evidence_snapshot);
+  const results = evidence.scenario_results;
+  return Array.isArray(results)
+    ? results.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+    : [];
+}
+
 function ProviderRail({
   connections,
   selectedConnection,
@@ -99,7 +109,13 @@ function ProviderRail({
   );
 }
 
-function ConnectionDetail({ connection }: { connection: HrAdminPayrollProviderConnection | null }) {
+function ConnectionDetail({
+  connection,
+  certificationRuns,
+}: {
+  connection: HrAdminPayrollProviderConnection | null;
+  certificationRuns: HrAdminPayrollProviderCertificationRun[];
+}) {
   if (!connection) {
     return (
       <aside className="payroll-setup-detail-panel payroll-provider-detail-panel">
@@ -114,6 +130,13 @@ function ConnectionDetail({ connection }: { connection: HrAdminPayrollProviderCo
   const gates = readinessGates(connection);
   const certification = snapshotRecord(connection.certification_snapshot);
   const evidence = snapshotRecord(certification.evidence_snapshot);
+  const providerRoute = snapshotRecord(connection.config_snapshot.provider_route);
+  const adapterContract = snapshotRecord(providerRoute.adapter_contract);
+  const latestRun = certificationRuns[0] ?? null;
+  const latestScenarioResults = scenarioResults(latestRun);
+  const latestScenarioValidation = snapshotRecord(latestScenarioResults[0]?.adapter_contract_validation);
+  const latestRequestValidation = snapshotRecord(latestScenarioValidation.request);
+  const latestResultValidation = snapshotRecord(latestScenarioValidation.result);
 
   return (
     <aside className="payroll-setup-detail-panel payroll-provider-detail-panel" aria-label={`${connection.provider_name} provider detail`}>
@@ -131,7 +154,45 @@ function ConnectionDetail({ connection }: { connection: HrAdminPayrollProviderCo
         <strong>{connection.certification_status_label}</strong>
         <span>{connection.certification_profile_ref}</span>
         <span>{formatDate(connection.last_tested_at)} / {connection.last_tested_by_name ?? "Pending"}</span>
+        <ProviderCertificationActions connectionId={connection.id} disabled={!connection.sandbox_adapter_ref && !connection.adapter_ref} />
       </div>
+
+      <section className="payroll-rule-source-card payroll-provider-run-card">
+        <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+          <div>
+            <span className="workspace-card__eyebrow">Latest run</span>
+            <h2>{latestRun?.status_label ?? "No run"}</h2>
+          </div>
+          {latestRun ? <StatusBadge status={latestRun.status} label={`${latestRun.passed_count}/${latestRun.scenario_count}`} /> : null}
+        </div>
+        <div className="detail-grid">
+          <div className="detail-row"><span className="detail-label">Scenario profile</span><span className="detail-value">{latestRun?.scenario_profile_ref ?? "Pending"}</span></div>
+          <div className="detail-row"><span className="detail-label">Executed</span><span className="detail-value">{formatDate(latestRun?.completed_at ?? null)} / {latestRun?.executed_by_name ?? "Pending"}</span></div>
+          <div className="detail-row"><span className="detail-label">Source hash</span><span className="detail-value">{latestRun?.source_hash || "Pending"}</span></div>
+        </div>
+        <div className="payroll-provider-scenario-list">
+          {latestScenarioResults.slice(0, 4).map((scenario) => (
+            <article className="payroll-provider-scenario-row" key={String(scenario.scenario_ref ?? scenario.label)}>
+              <div>
+                <strong>{String(scenario.label ?? scenario.scenario_ref ?? "Scenario")}</strong>
+                <span>{String(scenario.route_key ?? scenario.artifact_kind ?? "")}</span>
+              </div>
+              <StatusBadge status={String(scenario.status ?? "pending")} />
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="payroll-rule-source-card">
+        <span className="workspace-card__eyebrow">Adapter contract</span>
+        <div className="detail-grid">
+          <div className="detail-row"><span className="detail-label">Profile</span><span className="detail-value">{String(adapterContract.contract_profile_ref ?? "payroll.provider_contract.default.v1")}</span></div>
+          <div className="detail-row"><span className="detail-label">Mode</span><span className="detail-value">{titleCase(String(adapterContract.enforcement_mode ?? "warn"))}</span></div>
+          <div className="detail-row"><span className="detail-label">Expected adapter</span><span className="detail-value">{String(adapterContract.expected_adapter_ref ?? connection.adapter_ref)}</span></div>
+          <div className="detail-row"><span className="detail-label">Latest request</span><span className="detail-value">{titleCase(String(latestRequestValidation.status ?? "pending"))}</span></div>
+          <div className="detail-row"><span className="detail-label">Latest result</span><span className="detail-value">{titleCase(String(latestResultValidation.status ?? "pending"))}</span></div>
+        </div>
+      </section>
 
       <section className="payroll-rule-source-card">
         <span className="workspace-card__eyebrow">Runtime refs</span>
@@ -186,6 +247,10 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
   const result = await getHrAdminPayrollProviderConnectionSetup();
   const setup = result.data;
   const selectedConnection = setup.connections.find((item) => item.id === selectedConnectionId) ?? setup.connections[0] ?? null;
+  const selectedCertificationRuns = selectedConnection
+    ? setup.certification_runs.filter((item) => item.provider_connection_id === selectedConnection.id)
+    : [];
+  const latestSelectedRun = selectedCertificationRuns[0] ?? null;
   const selectedGates = selectedConnection ? readinessGates(selectedConnection) : [];
   const selectedReadyCount = selectedGates.filter((gate) => gate.passed).length;
 
@@ -220,6 +285,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
           <MetricTile className="metric-tile-soft" label="Connections" value={setup.summary.connection_count} trend={`${setup.summary.active_connection_count} active`} />
           <MetricTile className="metric-tile-soft" label="Certified" value={setup.summary.certified_connection_count} trend={`${setup.summary.active_allowed_count} launch ready`} />
           <MetricTile className="metric-tile-soft" label="Sandbox ready" value={setup.summary.sandbox_ready_connection_count} trend={`${setup.summary.blocked_connection_count} blocked`} />
+          <MetricTile className="metric-tile-soft" label="Cert runs" value={setup.summary.certification_run_count} trend={`${setup.summary.failed_certification_run_count} failed`} />
           <MetricTile className="metric-tile-soft" label="Credential refs" value={setup.summary.credential_required_count} trend="No raw secrets" />
           <MetricTile className="metric-tile-soft" label="Bank lanes" value={setup.summary.bank_connection_count} trend="Payout providers" />
           <MetricTile className="metric-tile-soft" label="Statutory lanes" value={setup.summary.statutory_connection_count} trend="Return and challan" />
@@ -257,6 +323,10 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 <span>Credential</span>
                 <strong>{selectedConnection?.credential_required ? "Required" : "Optional"}</strong>
               </article>
+              <article>
+                <span>Last run</span>
+                <strong>{latestSelectedRun?.status_label ?? "Pending"}</strong>
+              </article>
             </div>
 
             <section className="payroll-setup-assignment-panel payroll-provider-readiness-panel">
@@ -284,6 +354,43 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
             <section className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
+                  <span className="workspace-card__eyebrow">Certification ledger</span>
+                  <h2>Scenario evidence</h2>
+                </div>
+                <span className="payroll-setup-count">{selectedCertificationRuns.length} runs</span>
+              </div>
+              <div className="payroll-table-scroll">
+                <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
+                  <thead>
+                    <tr>
+                      <th>Run</th>
+                      <th>Status</th>
+                      <th>Scenarios</th>
+                      <th>Profile</th>
+                      <th>Completed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedCertificationRuns.map((run) => (
+                      <tr key={run.id}>
+                        <td>
+                          <strong>{run.run_profile_ref}</strong>
+                          <span>{run.source_hash}</span>
+                        </td>
+                        <td><StatusBadge status={run.status} label={run.status_label} /></td>
+                        <td>{run.passed_count}/{run.scenario_count} passed</td>
+                        <td><code>{run.scenario_profile_ref}</code></td>
+                        <td>{formatDate(run.completed_at)} / {run.executed_by_name ?? "Pending"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="payroll-setup-assignment-panel">
+              <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+                <div>
                   <span className="workspace-card__eyebrow">Provider register</span>
                   <h2>Vertical coverage</h2>
                 </div>
@@ -297,8 +404,9 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                       <th>Kind</th>
                       <th>Adapter</th>
                       <th>Credential</th>
-                      <th>Certification</th>
-                      <th>Status</th>
+                        <th>Certification</th>
+                        <th>Latest run</th>
+                        <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -315,6 +423,14 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                         <td><code>{connection.adapter_ref}</code></td>
                         <td><code>{connection.credential_ref || "not_required"}</code></td>
                         <td><StatusBadge status={connection.certification_status} label={connection.certification_status_label} /></td>
+                        <td>
+                          {setup.certification_runs.find((run) => run.provider_connection_id === connection.id)
+                            ? <StatusBadge
+                                status={setup.certification_runs.find((run) => run.provider_connection_id === connection.id)?.status ?? "pending"}
+                                label={setup.certification_runs.find((run) => run.provider_connection_id === connection.id)?.status_label ?? "Pending"}
+                              />
+                            : "Pending"}
+                        </td>
                         <td><StatusBadge status={connection.status} label={connection.status_label} /></td>
                       </tr>
                     ))}
@@ -324,7 +440,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
             </section>
           </div>
 
-          <ConnectionDetail connection={selectedConnection} />
+          <ConnectionDetail connection={selectedConnection} certificationRuns={selectedCertificationRuns} />
         </div>
       </section>
     </main>

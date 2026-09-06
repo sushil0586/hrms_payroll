@@ -147,6 +147,211 @@ class PayrollProviderAdapter(Protocol):
         ...
 
 
+PROVIDER_ADAPTER_CONTRACT_REQUIRED_REQUEST_FIELDS = [
+    "tenant_id",
+    "delivery_id",
+    "artifact_kind",
+    "provider_ref",
+    "channel_ref",
+    "adapter_ref",
+    "submission_mode",
+    "submission_profile_ref",
+    "request_schema_ref",
+    "response_schema_ref",
+    "idempotency_key",
+    "payload_checksum_sha256",
+]
+
+PROVIDER_ADAPTER_CONTRACT_REQUIRED_RESULT_FIELDS = [
+    "provider_status",
+    "external_reference",
+    "provider_batch_ref",
+]
+
+PROVIDER_ADAPTER_CONTRACT_ALLOWED_STATUSES = [
+    "submitted",
+    "acknowledged",
+    "reconciled",
+    "rejected",
+    "failed",
+]
+
+
+def _snapshot_path_value(payload: dict[str, Any], path: str) -> Any:
+    value: Any = payload
+    for part in str(path).split("."):
+        if isinstance(value, dict) and part in value:
+            value = value[part]
+        else:
+            return None
+    return value
+
+
+def _contract_config(request: PayrollProviderSubmissionRequest) -> dict[str, Any]:
+    configured = request.route_snapshot.get("adapter_contract")
+    configured_contract = configured if isinstance(configured, dict) else {}
+    enforcement_mode = str(configured_contract.get("enforcement_mode") or "warn").strip().lower()
+    if enforcement_mode not in {"disabled", "warn", "strict"}:
+        enforcement_mode = "warn"
+    return {
+        "contract_profile_ref": str(
+            configured_contract.get("contract_profile_ref")
+            or f"payroll.provider_contract.{request.artifact_kind}.adapter.v1"
+        ),
+        "enforcement_mode": enforcement_mode,
+        "request_required_fields": configured_contract.get(
+            "request_required_fields",
+            PROVIDER_ADAPTER_CONTRACT_REQUIRED_REQUEST_FIELDS,
+        ),
+        "result_required_fields": configured_contract.get(
+            "result_required_fields",
+            PROVIDER_ADAPTER_CONTRACT_REQUIRED_RESULT_FIELDS,
+        ),
+        "response_snapshot_required_fields": configured_contract.get("response_snapshot_required_fields", []),
+        "allowed_provider_statuses": configured_contract.get(
+            "allowed_provider_statuses",
+            PROVIDER_ADAPTER_CONTRACT_ALLOWED_STATUSES,
+        ),
+        "expected_adapter_ref": str(configured_contract.get("expected_adapter_ref") or request.adapter_ref),
+        "expected_provider_ref": str(configured_contract.get("expected_provider_ref") or request.provider_ref),
+        "require_credential_resolution": bool(configured_contract.get("require_credential_resolution", False)),
+        "configured": configured_contract,
+    }
+
+
+def _contract_gate(ref: str, label: str, passed: bool, value: Any = "") -> dict[str, Any]:
+    return {
+        "ref": ref,
+        "label": label,
+        "passed": bool(passed),
+        "value": "" if value is None else str(value),
+    }
+
+
+def validate_payroll_provider_adapter_request_contract(request: PayrollProviderSubmissionRequest) -> dict[str, Any]:
+    """Validate the outbound provider adapter request against a configurable contract."""
+
+    contract = _contract_config(request)
+    if contract["enforcement_mode"] == "disabled":
+        return {
+            "contract_profile_ref": contract["contract_profile_ref"],
+            "enforcement_mode": contract["enforcement_mode"],
+            "status": "disabled",
+            "gates": [],
+            "blocking_gate_refs": [],
+        }
+
+    request_snapshot = request.snapshot()
+    required_fields = [
+        str(item)
+        for item in contract["request_required_fields"]
+        if str(item).strip()
+    ] if isinstance(contract["request_required_fields"], list) else PROVIDER_ADAPTER_CONTRACT_REQUIRED_REQUEST_FIELDS
+    gates = [
+        _contract_gate(f"request_field:{field}", f"Request field {field}", _snapshot_path_value(request_snapshot, field) not in {None, ""}, field)
+        for field in required_fields
+    ]
+    gates.extend(
+        [
+            _contract_gate("adapter_ref_match", "Adapter ref matches contract", request.adapter_ref == contract["expected_adapter_ref"], request.adapter_ref),
+            _contract_gate("provider_ref_match", "Provider ref matches contract", request.provider_ref == contract["expected_provider_ref"], request.provider_ref),
+        ]
+    )
+    if contract["require_credential_resolution"]:
+        gates.append(
+            _contract_gate(
+                "credential_resolved",
+                "Credential resolved",
+                bool(request.credential_snapshot.get("resolved")),
+                request.credential_snapshot.get("credential_ref", ""),
+            )
+        )
+    blocking = [gate["ref"] for gate in gates if not gate["passed"]]
+    snapshot = {
+        "contract_profile_ref": contract["contract_profile_ref"],
+        "enforcement_mode": contract["enforcement_mode"],
+        "status": "passed" if not blocking else "blocked",
+        "phase": "request",
+        "gates": gates,
+        "blocking_gate_refs": blocking,
+    }
+    if blocking and contract["enforcement_mode"] == "strict":
+        raise PayrollProviderAdapterError(
+            "Payroll provider adapter request failed strict contract validation: " + ", ".join(blocking),
+            code="provider_adapter_request_contract_failed",
+            provider_ref=request.provider_ref,
+            retryable=False,
+        )
+    return snapshot
+
+
+def validate_payroll_provider_adapter_result_contract(
+    request: PayrollProviderSubmissionRequest,
+    result: PayrollProviderSubmissionResult,
+) -> dict[str, Any]:
+    """Validate a provider adapter result against a configurable production contract."""
+
+    contract = _contract_config(request)
+    if contract["enforcement_mode"] == "disabled":
+        return {
+            "contract_profile_ref": contract["contract_profile_ref"],
+            "enforcement_mode": contract["enforcement_mode"],
+            "status": "disabled",
+            "gates": [],
+            "blocking_gate_refs": [],
+        }
+
+    result_snapshot = result.snapshot()
+    required_fields = [
+        str(item)
+        for item in contract["result_required_fields"]
+        if str(item).strip()
+    ] if isinstance(contract["result_required_fields"], list) else PROVIDER_ADAPTER_CONTRACT_REQUIRED_RESULT_FIELDS
+    response_required_fields = [
+        str(item)
+        for item in contract["response_snapshot_required_fields"]
+        if str(item).strip()
+    ] if isinstance(contract["response_snapshot_required_fields"], list) else []
+    allowed_statuses = {
+        str(item)
+        for item in contract["allowed_provider_statuses"]
+        if str(item).strip()
+    } if isinstance(contract["allowed_provider_statuses"], list) else set(PROVIDER_ADAPTER_CONTRACT_ALLOWED_STATUSES)
+    gates = [
+        _contract_gate(f"result_field:{field}", f"Result field {field}", _snapshot_path_value(result_snapshot, field) not in {None, ""}, field)
+        for field in required_fields
+    ]
+    gates.append(
+        _contract_gate("provider_status_allowed", "Provider status allowed", result.provider_status in allowed_statuses, result.provider_status)
+    )
+    gates.extend(
+        _contract_gate(
+            f"response_snapshot:{field}",
+            f"Response snapshot {field}",
+            _snapshot_path_value(result.response_snapshot, field) not in {None, ""},
+            field,
+        )
+        for field in response_required_fields
+    )
+    blocking = [gate["ref"] for gate in gates if not gate["passed"]]
+    snapshot = {
+        "contract_profile_ref": contract["contract_profile_ref"],
+        "enforcement_mode": contract["enforcement_mode"],
+        "status": "passed" if not blocking else "blocked",
+        "phase": "result",
+        "gates": gates,
+        "blocking_gate_refs": blocking,
+    }
+    if blocking and contract["enforcement_mode"] == "strict":
+        raise PayrollProviderAdapterError(
+            "Payroll provider adapter result failed strict contract validation: " + ", ".join(blocking),
+            code="provider_adapter_result_contract_failed",
+            provider_ref=request.provider_ref,
+            retryable=False,
+        )
+    return snapshot
+
+
 def _has_raw_provider_credential_key(value: Any) -> bool:
     if isinstance(value, dict):
         for key, nested_value in value.items():

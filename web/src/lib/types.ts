@@ -3653,6 +3653,35 @@ export type HrAdminPayrollProviderConnection = {
   updated_at: string;
 };
 
+export type HrAdminPayrollProviderCertificationRun = {
+  id: string;
+  provider_connection_id: string;
+  provider_ref: string;
+  provider_kind: string;
+  provider_kind_label: string;
+  environment_ref: string;
+  run_profile_ref: string;
+  certification_profile_ref: string;
+  scenario_profile_ref: string;
+  status: string;
+  status_label: string;
+  scenario_count: number;
+  passed_count: number;
+  failed_count: number;
+  blocker_count: number;
+  started_at: string | null;
+  completed_at: string | null;
+  requested_by_name: string | null;
+  executed_by_name: string | null;
+  request_snapshot: Record<string, unknown>;
+  response_snapshot: Record<string, unknown>;
+  evidence_snapshot: Record<string, unknown>;
+  error_snapshot: Record<string, unknown>;
+  source_hash: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type HrAdminPayrollProviderConnectionSetupResponse = {
   summary: {
     connection_count: number;
@@ -3662,15 +3691,20 @@ export type HrAdminPayrollProviderConnectionSetupResponse = {
     blocked_connection_count: number;
     credential_required_count: number;
     active_allowed_count: number;
+    certification_run_count: number;
+    passed_certification_run_count: number;
+    failed_certification_run_count: number;
     bank_connection_count: number;
     accounting_connection_count: number;
     statutory_connection_count: number;
   };
   connections: HrAdminPayrollProviderConnection[];
+  certification_runs: HrAdminPayrollProviderCertificationRun[];
   options: {
     provider_kinds: HrAdminEnumOption[];
     connection_statuses: HrAdminEnumOption[];
     certification_statuses: HrAdminEnumOption[];
+    certification_run_statuses: HrAdminEnumOption[];
   };
 };
 

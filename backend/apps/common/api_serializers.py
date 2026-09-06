@@ -35,6 +35,7 @@ from apps.payroll.models import (
     PayrollOutputBatchStatus,
     PayrollProviderCallbackEventStatus,
     PayrollProviderCertificationStatus,
+    PayrollProviderCertificationRunStatus,
     PayrollProviderConnectionKind,
     PayrollProviderConnectionStatus,
     PayrollProviderDeliveryStatus,
@@ -2400,6 +2401,8 @@ class PayrollProviderCallbackRequestSerializer(serializers.Serializer):
     external_reference = serializers.CharField(max_length=180, required=False, allow_blank=True)
     external_event_id = serializers.CharField(max_length=180, required=False, allow_blank=True)
     idempotency_key = serializers.CharField(max_length=180)
+    event_timestamp = serializers.DateTimeField(required=False, allow_null=True)
+    source_ip = serializers.CharField(max_length=80, required=False, allow_blank=True)
     provider_status = serializers.ChoiceField(choices=[
         PayrollProviderDeliveryStatus.ACKNOWLEDGED,
         PayrollProviderDeliveryStatus.RECONCILED,
@@ -2466,6 +2469,35 @@ class HrAdminPayrollProviderConnectionSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField()
 
 
+class HrAdminPayrollProviderCertificationRunSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    provider_connection_id = serializers.UUIDField()
+    provider_ref = serializers.CharField()
+    provider_kind = serializers.CharField()
+    provider_kind_label = serializers.CharField()
+    environment_ref = serializers.CharField()
+    run_profile_ref = serializers.CharField()
+    certification_profile_ref = serializers.CharField(allow_blank=True)
+    scenario_profile_ref = serializers.CharField(allow_blank=True)
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    scenario_count = serializers.IntegerField()
+    passed_count = serializers.IntegerField()
+    failed_count = serializers.IntegerField()
+    blocker_count = serializers.IntegerField()
+    started_at = serializers.DateTimeField(allow_null=True)
+    completed_at = serializers.DateTimeField(allow_null=True)
+    requested_by_name = serializers.CharField(allow_null=True)
+    executed_by_name = serializers.CharField(allow_null=True)
+    request_snapshot = serializers.JSONField()
+    response_snapshot = serializers.JSONField()
+    evidence_snapshot = serializers.JSONField()
+    error_snapshot = serializers.JSONField()
+    source_hash = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
 class HrAdminPayrollProviderConnectionWriteSerializer(serializers.Serializer):
     provider_ref = serializers.CharField(max_length=160, required=False)
     provider_name = serializers.CharField(max_length=160, required=False)
@@ -2490,20 +2522,32 @@ class HrAdminPayrollProviderConnectionCertificationRequestSerializer(serializers
     evidence_snapshot = serializers.JSONField(required=False)
 
 
+class HrAdminPayrollProviderCertificationRunRequestSerializer(serializers.Serializer):
+    scenario_refs = serializers.ListField(child=serializers.CharField(max_length=120), required=False, allow_empty=True)
+
+
 class HrAdminPayrollProviderConnectionOptionsSerializer(serializers.Serializer):
     provider_kinds = HrAdminEnumOptionSerializer(many=True)
     connection_statuses = HrAdminEnumOptionSerializer(many=True)
     certification_statuses = HrAdminEnumOptionSerializer(many=True)
+    certification_run_statuses = HrAdminEnumOptionSerializer(many=True)
 
 
 class HrAdminPayrollProviderConnectionSetupSerializer(serializers.Serializer):
     summary = serializers.JSONField()
     connections = HrAdminPayrollProviderConnectionSerializer(many=True)
+    certification_runs = HrAdminPayrollProviderCertificationRunSerializer(many=True)
     options = HrAdminPayrollProviderConnectionOptionsSerializer()
 
 
 class HrAdminPayrollProviderConnectionActionResultSerializer(serializers.Serializer):
     connection = HrAdminPayrollProviderConnectionSerializer()
+    detail = serializers.CharField()
+
+
+class HrAdminPayrollProviderCertificationRunActionResultSerializer(serializers.Serializer):
+    connection = HrAdminPayrollProviderConnectionSerializer()
+    certification_run = HrAdminPayrollProviderCertificationRunSerializer()
     detail = serializers.CharField()
 
 

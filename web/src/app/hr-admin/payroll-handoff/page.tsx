@@ -111,6 +111,14 @@ function snapshotRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function snapshotList(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
+}
+
+function callbackSecuritySnapshot(event: HrAdminPayrollProviderCallbackEvent) {
+  return snapshotRecord(event.verification_snapshot.callback_security);
+}
+
 function filingSubtypeLabel(artifact: HrAdminPayrollOutputArtifact) {
   const subtype = snapshotText(artifact.config_snapshot, "artifact_subtype", artifact.kind);
   return titleCase(subtype.replace("statutory_", ""));
@@ -356,20 +364,38 @@ function DeliveryLedger({
           <span className="payroll-setup-count">{visibleEvents.length} events</span>
         </div>
         <div className="payroll-output-handoff-grid payroll-handoff-delivery-grid">
-          {visibleEvents.map((event) => (
-            <article key={event.id}>
-              <div className="payroll-delivery-card-heading">
-                <strong>{event.status_label}</strong>
-                <StatusBadge status={event.provider_status} />
-              </div>
-              <span>{event.output_artifact_title}</span>
-              <code>{event.callback_verification_ref}</code>
-              <div className="payroll-input-run-card__counts">
-                <span>{event.external_event_id || event.external_reference}</span>
-                <span>{formatDate(event.processed_at)}</span>
-              </div>
-            </article>
-          ))}
+          {visibleEvents.map((event) => {
+            const security = callbackSecuritySnapshot(event);
+            const securityGates = snapshotList(security.gates);
+            const blockingGateRefs = Array.isArray(security.blocking_gate_refs) ? security.blocking_gate_refs : [];
+            return (
+              <article className="payroll-handoff-callback-card" key={event.id}>
+                <div className="payroll-delivery-card-heading">
+                  <strong>{event.status_label}</strong>
+                  <StatusBadge status={event.provider_status} />
+                </div>
+                <span>{event.output_artifact_title}</span>
+                <code>{event.callback_verification_ref}</code>
+                <div className="payroll-handoff-security-strip">
+                  <span>Webhook security</span>
+                  <strong>{snapshotText(security, "security_policy_ref", "Policy pending")}</strong>
+                  <em>{titleCase(snapshotText(security, "enforcement_mode", "warn"))}</em>
+                </div>
+                <div className="payroll-handoff-gate-list">
+                  {securityGates.slice(0, 4).map((gate) => (
+                    <span className={gate.passed ? "is-passed" : "is-blocked"} key={String(gate.ref)}>
+                      {String(gate.ref)}
+                    </span>
+                  ))}
+                  {blockingGateRefs.length > 0 ? <span className="is-blocked">{blockingGateRefs.length} blockers</span> : null}
+                </div>
+                <div className="payroll-input-run-card__counts">
+                  <span>{event.external_event_id || event.external_reference}</span>
+                  <span>{formatDate(event.processed_at)}</span>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
     </>

@@ -173,6 +173,9 @@ from apps.common.api_serializers import (
     HrAdminPayrollProviderConnectionSerializer,
     HrAdminPayrollProviderConnectionSetupSerializer,
     HrAdminPayrollProviderConnectionWriteSerializer,
+    HrAdminPayrollProviderCertificationRunActionResultSerializer,
+    HrAdminPayrollProviderCertificationRunRequestSerializer,
+    HrAdminPayrollProviderCertificationRunSerializer,
     PayrollArtifactSignedAccessGrantIssueRequestSerializer,
     PayrollArtifactSignedAccessGrantIssueResultSerializer,
     PayrollArtifactSignedAccessGrantRevokeRequestSerializer,
@@ -311,6 +314,8 @@ from apps.payroll.models import (
     PayrollProviderCallbackEvent,
     PayrollProviderCallbackEventStatus,
     PayrollProviderCertificationStatus,
+    PayrollProviderCertificationRun,
+    PayrollProviderCertificationRunStatus,
     PayrollProviderConnection,
     PayrollProviderConnectionKind,
     PayrollProviderConnectionStatus,
@@ -470,6 +475,7 @@ from apps.payroll.services import (
     reject_payroll_settlement,
     requeue_payroll_provider_delivery,
     revoke_payroll_artifact_signed_access_grant,
+    run_payroll_provider_connection_certification,
     schedule_payroll_provider_delivery_retry,
     sync_payroll_provider_connection_readiness,
     submit_payroll_adjustment,
@@ -10953,6 +10959,37 @@ def build_hr_admin_payroll_provider_connection_payload(item: PayrollProviderConn
     }
 
 
+def build_hr_admin_payroll_provider_certification_run_payload(item: PayrollProviderCertificationRun) -> dict:
+    return {
+        "id": item.id,
+        "provider_connection_id": item.provider_connection_id,
+        "provider_ref": item.provider_ref,
+        "provider_kind": item.provider_kind,
+        "provider_kind_label": item.get_provider_kind_display(),
+        "environment_ref": item.environment_ref,
+        "run_profile_ref": item.run_profile_ref,
+        "certification_profile_ref": item.certification_profile_ref,
+        "scenario_profile_ref": item.scenario_profile_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "scenario_count": item.scenario_count,
+        "passed_count": item.passed_count,
+        "failed_count": item.failed_count,
+        "blocker_count": item.blocker_count,
+        "started_at": item.started_at,
+        "completed_at": item.completed_at,
+        "requested_by_name": str(item.requested_by) if item.requested_by else None,
+        "executed_by_name": str(item.executed_by) if item.executed_by else None,
+        "request_snapshot": item.request_snapshot,
+        "response_snapshot": item.response_snapshot,
+        "evidence_snapshot": item.evidence_snapshot,
+        "error_snapshot": item.error_snapshot,
+        "source_hash": item.source_hash,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
 def get_hr_admin_payroll_provider_connection_setup_payload(actor) -> dict:
     tenant = actor.tenant
     ensure_default_payroll_provider_connections(tenant, created_by=getattr(actor, "user", None))
@@ -10963,6 +11000,13 @@ def get_hr_admin_payroll_provider_connection_setup_payload(actor) -> dict:
             "provider_name",
             "provider_ref",
         )
+    )
+    certification_run_queryset = PayrollProviderCertificationRun.objects.filter(tenant=tenant)
+    certification_runs = list(
+        certification_run_queryset.select_related("provider_connection", "requested_by", "executed_by").order_by(
+            "-created_at",
+            "-started_at",
+        )[:50]
     )
     active_allowed_count = sum(
         1 for item in connections
@@ -10977,15 +11021,20 @@ def get_hr_admin_payroll_provider_connection_setup_payload(actor) -> dict:
             "blocked_connection_count": queryset.filter(status=PayrollProviderConnectionStatus.BLOCKED).count(),
             "credential_required_count": queryset.filter(credential_required=True).count(),
             "active_allowed_count": active_allowed_count,
+            "certification_run_count": certification_run_queryset.count(),
+            "passed_certification_run_count": certification_run_queryset.filter(status=PayrollProviderCertificationRunStatus.PASSED).count(),
+            "failed_certification_run_count": certification_run_queryset.filter(status=PayrollProviderCertificationRunStatus.FAILED).count(),
             "bank_connection_count": queryset.filter(provider_kind=PayrollProviderConnectionKind.BANK).count(),
             "accounting_connection_count": queryset.filter(provider_kind=PayrollProviderConnectionKind.ACCOUNTING).count(),
             "statutory_connection_count": queryset.filter(provider_kind=PayrollProviderConnectionKind.STATUTORY).count(),
         },
         "connections": [build_hr_admin_payroll_provider_connection_payload(item) for item in connections],
+        "certification_runs": [build_hr_admin_payroll_provider_certification_run_payload(item) for item in certification_runs],
         "options": {
             "provider_kinds": [{"value": value, "label": label} for value, label in PayrollProviderConnectionKind.choices],
             "connection_statuses": [{"value": value, "label": label} for value, label in PayrollProviderConnectionStatus.choices],
             "certification_statuses": [{"value": value, "label": label} for value, label in PayrollProviderCertificationStatus.choices],
+            "certification_run_statuses": [{"value": value, "label": label} for value, label in PayrollProviderCertificationRunStatus.choices],
         },
     }
 
@@ -11245,6 +11294,34 @@ class HrAdminPayrollProviderConnectionCertifyView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminPayrollProviderConnectionActionResultSerializer(payload).data)
 
 
+class HrAdminPayrollProviderConnectionRunCertificationView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollProviderConnection.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Payroll provider connection not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderCertificationRunRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            certification_run = run_payroll_provider_connection_certification(
+                item,
+                requested_by=request.user,
+                executed_by=request.user,
+                scenario_refs=serializer.validated_data.get("scenario_refs") or None,
+            )
+        except PayrollProviderConnectionError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        item.refresh_from_db()
+        payload = {
+            "connection": build_hr_admin_payroll_provider_connection_payload(item),
+            "certification_run": build_hr_admin_payroll_provider_certification_run_payload(certification_run),
+            "detail": "Payroll provider certification run completed.",
+        }
+        return response.Response(HrAdminPayrollProviderCertificationRunActionResultSerializer(payload).data)
+
+
 class HrAdminPayrollOutputBatchGenerateFinanceHandoffView(HrAdminContextMixin, APIView):
     def post(self, request, item_id):
         employee = self.get_employee()
@@ -11336,6 +11413,8 @@ class PayrollProviderCallbackView(APIView):
     def post(self, request):
         serializer = PayrollProviderCallbackRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        request_source_ip = forwarded_for.split(",")[0].strip() if forwarded_for else request.META.get("REMOTE_ADDR", "")
         try:
             event, replayed = ingest_payroll_provider_callback(
                 provider_delivery_id=str(serializer.validated_data.get("provider_delivery_id") or ""),
@@ -11343,6 +11422,8 @@ class PayrollProviderCallbackView(APIView):
                 external_reference=serializer.validated_data.get("external_reference") or "",
                 external_event_id=serializer.validated_data.get("external_event_id") or "",
                 idempotency_key=serializer.validated_data["idempotency_key"],
+                event_timestamp=serializer.validated_data.get("event_timestamp"),
+                source_ip=serializer.validated_data.get("source_ip") or request_source_ip,
                 provider_status=serializer.validated_data["provider_status"],
                 payload_snapshot=serializer.validated_data.get("payload_snapshot") or {},
                 signature=serializer.validated_data["signature"],

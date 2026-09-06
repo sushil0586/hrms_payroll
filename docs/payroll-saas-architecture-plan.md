@@ -537,6 +537,39 @@ Phase 5R implementation status:
 - `/hr-admin/payroll-handoff` surfaces provider connection gate mode, connection status, and blocking gate refs next to provider acknowledgement evidence.
 - The remaining architecture gap is production SDK/portal adapter implementation, production queue scheduling, production webhook hardening, and automated certification test execution.
 
+Phase 5S implementation status:
+
+- `PayrollProviderCertificationRun` now stores tenant-scoped automated provider certification execution history linked to provider connections.
+- Certification runs carry run/profile refs, scenario counts, pass/fail/blocker counts, request snapshots, response snapshots, evidence snapshots, error snapshots, source hashes, and requested/executed actor lineage.
+- Certification scenarios resolve from connection `config_snapshot.certification_scenarios`, with provider-kind defaults for bank, accounting, and statutory sandbox certification.
+- The runner builds provider submission requests, calls the configured sandbox adapter, verifies expected provider statuses, records scenario evidence refs, and persists failure reasons without storing raw provider credentials.
+- Successful runs update connection certification to passed and can restore a previously blocked connection to certified; failed runs mark the connection failed/blocked with scenario-level evidence.
+- HR-admin APIs and `/hr-admin/payroll-providers` expose run execution, latest scenario evidence, run summaries, and the certification ledger.
+- The remaining architecture gap is production SDK/portal adapter implementation, production queue scheduling for recurring certification, production webhook hardening, and execution against real external provider sandboxes.
+
+Phase 5T implementation status:
+
+- Provider adapter requests and results now pass through reusable contract validators in `apps.payroll.providers`.
+- Adapter contracts are configuration-driven and support `disabled`, `warn`, and `strict` enforcement modes.
+- Request validation checks required request fields, provider refs, adapter refs, idempotency keys, checksums, schema refs, and optional credential-resolution evidence.
+- Result validation checks provider statuses, required result fields, and required response snapshot fields such as provider domain contract refs.
+- Finance handoff routes and submission contracts now carry `adapter_contract` snapshots for audit.
+- Strict adapter contract failures fail the provider delivery deterministically while preserving request-validation evidence.
+- Automated provider certification runs use the same strict adapter contract validation path.
+- `/hr-admin/payroll-providers` exposes adapter contract profile, enforcement mode, expected adapter, and latest request/result validation state.
+- The remaining architecture gap is real production SDK/portal adapters, recurring queue execution, provider-specific webhook signature adapters, and provider-specific schema mapping packs.
+
+Phase 5U implementation status:
+
+- Provider delivery submission contracts now carry a configurable `callback_security_policy` block with policy refs, enforcement mode, signature algorithm refs, secret rotation refs, replay windows, source policy, and rate-limit refs.
+- Public provider callback ingestion records optional event timestamp and source IP metadata, with request-source fallback for audit.
+- Callback verification snapshots now persist gate evidence for signature matching, secret rotation refs, replay-window checks, source policy, rate-limit checks, and idempotency replay guard.
+- Strict webhook security enforcement can reject callbacks with `callback_security_policy_failed` while keeping the provider delivery unchanged.
+- Warn-mode defaults preserve existing callback compatibility and make production security gaps visible before tenant-specific enforcement is enabled.
+- Default provider blueprints and demo handoff data expose callback security policy refs without hardcoded secrets.
+- `/hr-admin/payroll-handoff` shows webhook security policy and gate status in provider callback cards.
+- The remaining architecture gap is real production SDK/portal adapters, recurring queue execution, provider-specific webhook signature adapters, and schema mapping packs.
+
 ---
 
 ## 5. Configuration-First Component Design

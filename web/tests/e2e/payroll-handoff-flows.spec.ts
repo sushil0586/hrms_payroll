@@ -29,6 +29,10 @@ test.describe("HR admin payroll handoff flows", () => {
     await expect(page.getByText("Attempt 3").first()).toBeVisible();
     await expect(page.getByText("evt-clear-aug-2026-01").first()).toBeVisible();
     await expect(page.getByText("clear-statutory.callback.hmac.v1").first()).toBeVisible();
+    await expect(page.getByText("Webhook security").first()).toBeVisible();
+    await expect(page.getByText("callback_signature_matched").first()).toBeVisible();
+    await expect(page.getByText("callback_replay_window").first()).toBeVisible();
+    await expect(page.getByText("callback_rate_limit").first()).toBeVisible();
     await expect(page.getByText("Reconciled").first()).toBeVisible();
 
     await page.getByRole("link", { name: /Accounting Export - August 2026 Core Payroll/ }).click();

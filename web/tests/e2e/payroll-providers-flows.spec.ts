@@ -10,6 +10,14 @@ test.describe("HR admin payroll provider connection flows", () => {
     await expect(page.getByRole("heading", { name: "Connections" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Bank payout sandbox" }).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Certification checklist" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Run certification" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Scenario evidence" })).toBeVisible();
+    await expect(page.getByText("Adapter contract").first()).toBeVisible();
+    await expect(page.getByText("payroll.provider_contract.bank.sandbox_adapter.v1").first()).toBeVisible();
+    await expect(page.getByText("Latest request").first()).toBeVisible();
+    await expect(page.getByText("Latest result").first()).toBeVisible();
+    await expect(page.getByText("bank_advice_submission").first()).toBeVisible();
+    await expect(page.getByText("payroll.provider_connection.bank.certification_scenarios.v1").first()).toBeVisible();
     await expect(page.getByText("payroll.provider.bank.sandbox.v1").first()).toBeVisible();
     await expect(page.getByText("payroll.provider_adapter.bank.sandbox.v1").first()).toBeVisible();
     await expect(page.getByText("bank-sandbox-credential").first()).toBeVisible();
@@ -27,6 +35,8 @@ test.describe("HR admin payroll provider connection flows", () => {
     await expect(page.getByText("clear-statutory.callback.hmac.v1").first()).toBeVisible();
     await expect(page.getByText("clear-statutory.pt.challan.receipt.v1").first()).toBeVisible();
     await expect(page.getByText("certification_passed").first()).toBeVisible();
+    await expect(page.getByText("statutory_challan_receipt").first()).toBeVisible();
+    await expect(page.getByText("statutory_callback_replay_guard").first()).toBeVisible();
     await expect(page.getByText("Pending").first()).toBeVisible();
 
     await expectNoHorizontalOverflow(page);

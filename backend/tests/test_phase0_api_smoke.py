@@ -87,6 +87,8 @@ from apps.payroll.models import (
     PayrollProviderCallbackEvent,
     PayrollProviderCallbackEventStatus,
     PayrollProviderCertificationStatus,
+    PayrollProviderCertificationRun,
+    PayrollProviderCertificationRunStatus,
     PayrollProviderConnection,
     PayrollProviderConnectionStatus,
     PayrollProviderDelivery,
@@ -132,7 +134,10 @@ from apps.payroll.models import (
     SalaryStructureComponent,
     SalaryStructureVersion,
 )
-from apps.payroll.providers import PayrollProviderAdapterError, validate_payroll_provider_route_config
+from apps.payroll.providers import (
+    PayrollProviderAdapterError,
+    validate_payroll_provider_route_config,
+)
 from apps.payroll.services import expected_provider_callback_signature
 from apps.platform_config.models import ConfigCategory, ConfigDataType, ConfigStatus, ConfigurationDefinition, TenantConfiguration
 from apps.workflows.models import WorkflowAction, WorkflowActionLog, WorkflowActorType, WorkflowAssignment, WorkflowInstance, WorkflowInstanceStatus, WorkflowStep, WorkflowStepInstance, WorkflowStatus, WorkflowTemplate
@@ -3942,6 +3947,8 @@ def test_payroll_provider_callback_endpoint_verifies_idempotent_delivery_updates
     assert callback_payload["replayed"] is False
     assert callback_payload["callback_event"]["status"] == PayrollProviderCallbackEventStatus.PROCESSED
     assert callback_payload["callback_event"]["verification_snapshot"]["signature_valid"] is True
+    assert callback_payload["callback_event"]["verification_snapshot"]["callback_security"]["passed"] is True
+    assert callback_payload["callback_event"]["verification_snapshot"]["callback_security"]["gates"][0]["ref"] == "callback_signature_matched"
     assert callback_payload["callback_event"]["payload_checksum_sha256"] == payload_checksum
     assert callback_payload["delivery"]["status"] == PayrollProviderDeliveryStatus.RECONCILED
     assert callback_payload["delivery"]["response_snapshot"]["external_event_id"] == "evt-bank-aug-2026-001"
@@ -3983,6 +3990,7 @@ def test_payroll_provider_callback_endpoint_verifies_idempotent_delivery_updates
     assert rejected_response.status_code == 400, rejected_response.json()
     assert rejected_response.json()["callback_event"]["status"] == PayrollProviderCallbackEventStatus.REJECTED
     assert rejected_response.json()["callback_event"]["verification_snapshot"]["signature_valid"] is False
+    assert "callback_signature_matched" in rejected_response.json()["callback_event"]["verification_snapshot"]["callback_security"]["blocking_gate_refs"]
     assert rejected_response.json()["delivery"]["status"] == PayrollProviderDeliveryStatus.RECONCILED
 
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -3991,6 +3999,88 @@ def test_payroll_provider_callback_endpoint_verifies_idempotent_delivery_updates
     assert setup_response.json()["summary"]["provider_callback_event_count"] == 2
     assert setup_response.json()["summary"]["processed_provider_callback_event_count"] == 1
     assert setup_response.json()["summary"]["rejected_provider_callback_event_count"] == 1
+
+
+def test_payroll_provider_callback_endpoint_enforces_strict_security_policy(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(api_client, tenant=tenant, employee=employee)
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/",
+        {"handoff_profile_ref": "india.monthly.finance.handoff.v1"},
+        format="json",
+    )
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.STATUTORY_REPORT)
+    config_snapshot = delivery.config_snapshot
+    config_snapshot["submission_contract"]["callback_security_policy"] = {
+        "security_policy_ref": "tenant.callback_security.strict.v1",
+        "enforcement_mode": "strict",
+        "signature_algorithm_ref": "payroll.callback.signature.sha256.v1",
+        "secret_rotation_ref": "tenant.callback_secret_rotation.quarterly.v1",
+        "replay_window_seconds": 60,
+        "timestamp_required": True,
+        "source_ip_required": True,
+        "allowed_source_ips": ["203.0.113.10"],
+        "rate_limit_policy_ref": "tenant.callback_rate_limit.strict.v1",
+        "rate_limit_window_seconds": 60,
+        "rate_limit_max_events": 10,
+    }
+    delivery.config_snapshot = config_snapshot
+    delivery.save()
+
+    payload_snapshot = {
+        "provider_batch_ref": "PT-CALLBACK-2026-08",
+        "certification_evidence_refs": ["clear://certificates/pt-aug-2026.pdf"],
+    }
+    payload_checksum = hashlib.sha256(json.dumps(payload_snapshot, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+    idempotency_key = "statutory-callback-aug-2026-strict"
+    signature = expected_provider_callback_signature(
+        delivery,
+        idempotency_key=idempotency_key,
+        payload_checksum_sha256=payload_checksum,
+    )
+    api_client.credentials()
+    rejected_response = api_client.post(
+        "/api/v1/payroll-provider-callbacks/",
+        {
+            "provider_delivery_id": str(delivery.id),
+            "provider_ref": delivery.provider_ref,
+            "external_reference": delivery.external_reference,
+            "external_event_id": "evt-pt-aug-2026-strict",
+            "idempotency_key": idempotency_key,
+            "event_timestamp": (timezone.now() - timedelta(minutes=5)).isoformat(),
+            "source_ip": "198.51.100.50",
+            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+            "payload_snapshot": payload_snapshot,
+            "signature": signature,
+        },
+        format="json",
+    )
+    assert rejected_response.status_code == 400, rejected_response.json()
+    callback_event = rejected_response.json()["callback_event"]
+    assert callback_event["status"] == PayrollProviderCallbackEventStatus.REJECTED
+    assert callback_event["failure_code"] == "callback_security_policy_failed"
+    callback_security = callback_event["verification_snapshot"]["callback_security"]
+    assert callback_security["security_policy_ref"] == "tenant.callback_security.strict.v1"
+    assert "callback_replay_window" in callback_security["blocking_gate_refs"]
+    assert "callback_source_policy" in callback_security["blocking_gate_refs"]
+    assert rejected_response.json()["delivery"]["status"] == PayrollProviderDeliveryStatus.SUBMITTED
 
 
 def test_hr_admin_payroll_provider_delivery_retry_and_dead_letter_contract(api_client: APIClient, bootstrapped_workspace):
@@ -4276,6 +4366,67 @@ def test_payroll_provider_adapter_boundary_resolves_sandbox_credentials(api_clie
     assert "super-secret-provider-key" not in json.dumps(delivery.request_snapshot)
     assert "super-secret-provider-key" not in json.dumps(delivery.response_snapshot)
     assert "super-secret-provider-key" not in json.dumps(delivery.config_snapshot)
+    contract_validation = adapter_submission["request"]["adapter_contract_validation"]
+    assert contract_validation["request"]["status"] == "passed"
+    assert contract_validation["result"]["status"] == "passed"
+
+
+def test_payroll_provider_adapter_strict_contract_blocks_invalid_result(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "payroll.provider.bank.strict-contract.v1",
+                        "channel_ref": "payroll.channel.bank.strict-contract.v1",
+                        "adapter_ref": "payroll.provider_adapter.manual.v1",
+                        "submission_mode": "api",
+                        "submission_profile_ref": "bank.strict-contract.submit.v1",
+                        "request_schema_ref": "bank.strict-contract.request.v1",
+                        "response_schema_ref": "bank.strict-contract.response.v1",
+                        "callback_profile_ref": "bank.strict-contract.callback.v1",
+                        "callback_verification_ref": "bank.strict-contract.callback.hmac.v1",
+                        "adapter_contract": {
+                            "contract_profile_ref": "bank.strict-contract.adapter.v1",
+                            "enforcement_mode": "strict",
+                            "expected_adapter_ref": "payroll.provider_adapter.manual.v1",
+                            "expected_provider_ref": "payroll.provider.bank.strict-contract.v1",
+                            "response_snapshot_required_fields": ["domain_contract_ref"],
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+    assert delivery.status == PayrollProviderDeliveryStatus.FAILED
+    assert delivery.failure_code == "provider_adapter_result_contract_failed"
+    assert delivery.request_snapshot["provider_submission_request"]["adapter_contract_validation"]["request"]["status"] == "passed"
+    assert "response_snapshot:domain_contract_ref" in delivery.failure_reason
+    assert delivery.config_snapshot["submission_contract"]["adapter_contract"]["enforcement_mode"] == "strict"
 
 
 def test_payroll_provider_specific_sandbox_adapters_stamp_domain_contracts(api_client: APIClient, bootstrapped_workspace):
@@ -4480,6 +4631,101 @@ def test_hr_admin_payroll_provider_connection_setup_certification_and_activation
     )
     assert activate_response.status_code == 200, activate_response.json()
     assert activate_response.json()["connection"]["status"] == PayrollProviderConnectionStatus.ACTIVE
+
+
+def test_hr_admin_payroll_provider_connection_runs_automated_certification(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-provider-connection-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    accounting_connection = PayrollProviderConnection.objects.get(
+        tenant=tenant,
+        provider_ref="payroll.provider.accounting.sandbox.v1",
+    )
+
+    run_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-connections/{accounting_connection.id}/run-certification/",
+        {},
+        format="json",
+    )
+    assert run_response.status_code == 200, run_response.json()
+    payload = run_response.json()
+    run_payload = payload["certification_run"]
+    assert run_payload["status"] == PayrollProviderCertificationRunStatus.PASSED
+    assert run_payload["scenario_count"] == 2
+    assert run_payload["passed_count"] == 2
+    assert run_payload["failed_count"] == 0
+    assert run_payload["evidence_snapshot"]["scenario_results"][0]["adapter_ref"] == "payroll.provider_adapter.accounting.sandbox.v1"
+    assert run_payload["evidence_snapshot"]["sandbox_delivery_count"] == 2
+    assert payload["connection"]["certification_status"] == PayrollProviderCertificationStatus.PASSED
+    assert payload["connection"]["status"] == PayrollProviderConnectionStatus.CERTIFIED
+    assert payload["connection"]["readiness_snapshot"]["active_allowed"] is True
+
+    setup_after_run = api_client.get("/api/v1/hr-admin/payroll-provider-connection-setup/")
+    assert setup_after_run.status_code == 200, setup_after_run.json()
+    assert setup_after_run.json()["summary"]["certification_run_count"] >= 1
+    assert any(
+        item["id"] == run_payload["id"]
+        for item in setup_after_run.json()["certification_runs"]
+    )
+
+
+def test_hr_admin_payroll_provider_connection_failed_certification_blocks_connection(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    connection = PayrollProviderConnection.objects.create(
+        tenant=tenant,
+        provider_ref="failing.bank.provider.v1",
+        provider_name="Failing Bank Provider",
+        provider_kind="bank",
+        environment_ref="sandbox",
+        status=PayrollProviderConnectionStatus.SANDBOX_READY,
+        adapter_ref="payroll.provider_adapter.bank.sandbox.v1",
+        sandbox_adapter_ref="payroll.provider_adapter.bank.sandbox.v1",
+        channel_ref="bank.sftp.channel.failing.v1",
+        credential_required=False,
+        callback_profile_ref="bank.sftp.callback.v1",
+        callback_verification_ref="bank.sftp.callback.hmac.v1",
+        retry_policy_ref="payroll.delivery.retry.bank.v1",
+        certification_status=PayrollProviderCertificationStatus.PENDING,
+        certification_profile_ref="bank.neft.certification.v1",
+        config_snapshot={
+            "certification_scenarios": [
+                {
+                    "scenario_ref": "bank_rejection_simulation",
+                    "label": "Bank rejection simulation",
+                    "artifact_kind": PayrollOutputArtifactKind.BANK_ADVICE,
+                    "route_key": "bank_advice:rejection",
+                    "expected_provider_status": "submitted",
+                    "sandbox_response": {
+                        "provider_status": "rejected",
+                        "failure_code": "sandbox_rejected",
+                        "failure_reason": "Simulated certification rejection.",
+                    },
+                }
+            ],
+        },
+    )
+
+    run_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-connections/{connection.id}/run-certification/",
+        {},
+        format="json",
+    )
+    assert run_response.status_code == 200, run_response.json()
+    payload = run_response.json()
+    assert payload["certification_run"]["status"] == PayrollProviderCertificationRunStatus.FAILED
+    assert payload["certification_run"]["failed_count"] == 1
+    assert payload["certification_run"]["error_snapshot"]["failed_scenario_refs"] == ["bank_rejection_simulation"]
+    assert payload["connection"]["certification_status"] == PayrollProviderCertificationStatus.FAILED
+    assert payload["connection"]["status"] == PayrollProviderConnectionStatus.BLOCKED
+
+    connection.refresh_from_db()
+    assert PayrollProviderCertificationRun.objects.filter(provider_connection=connection, status=PayrollProviderCertificationRunStatus.FAILED).exists()
+    assert connection.certification_snapshot["evidence_snapshot"]["scenario_results"][0]["failure_code"] == "sandbox_rejected"
 
 
 def test_payroll_finance_handoff_blocks_uncertified_provider_connection(api_client: APIClient, bootstrapped_workspace):
