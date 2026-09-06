@@ -33,9 +33,24 @@ from apps.payroll.models import (
     PayrollOutputArtifactKind,
     PayrollOutputArtifactStatus,
     PayrollOutputBatchStatus,
+    PayrollProviderCallbackEventStatus,
+    PayrollProviderCertificationStatus,
+    PayrollProviderConnectionKind,
+    PayrollProviderConnectionStatus,
+    PayrollProviderDeliveryStatus,
+    PayrollProviderRetryEventStatus,
     PayrollReviewStatus,
     PayrollSettlementLineKind,
     PayrollSettlementStatus,
+    PayrollStatutoryCalculationMethod,
+    PayrollStatutoryComponentKind,
+    PayrollStatutoryContributionOwner,
+    PayrollStatutoryDeclarationItemKind,
+    PayrollStatutoryDeclarationStatus,
+    PayrollStatutoryFilingStatus,
+    PayrollStatutoryProofStatus,
+    PayrollTaxRegime,
+    PayrollDeclarationStatus,
     PayrollValidationCategory,
     PayrollValidationIssueStatus,
     PayrollValidationSeverity,
@@ -997,6 +1012,635 @@ class HrAdminSalarySetupSerializer(serializers.Serializer):
     options = HrAdminSalarySetupOptionsSerializer()
 
 
+class HrAdminPayrollStatutoryPackSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    country_code = serializers.CharField()
+    jurisdiction_ref = serializers.CharField()
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    effective_from = serializers.DateField()
+    effective_to = serializers.DateField(allow_null=True)
+    currency_code = serializers.CharField()
+    statutory_profile_ref = serializers.CharField()
+    validation_profile_ref = serializers.CharField()
+    config_snapshot = serializers.JSONField()
+    component_count = serializers.IntegerField()
+    active_component_count = serializers.IntegerField()
+    employee_profile_count = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollStatutoryPackWriteSerializer(serializers.Serializer):
+    code = serializers.SlugField(max_length=100, required=False)
+    name = serializers.CharField(max_length=255, required=False)
+    country_code = serializers.CharField(max_length=2, required=False)
+    jurisdiction_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    status = serializers.ChoiceField(choices=PayrollConfigStatus.values, required=False)
+    effective_from = serializers.DateField(required=False)
+    effective_to = serializers.DateField(required=False, allow_null=True)
+    currency_code = serializers.CharField(max_length=3, required=False)
+    statutory_profile_ref = serializers.CharField(max_length=160, required=False)
+    validation_profile_ref = serializers.CharField(max_length=160, required=False)
+    config_snapshot = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        if not self.partial:
+            missing = [field for field in ["code", "name", "effective_from"] if field not in attrs]
+            if missing:
+                raise serializers.ValidationError({field: "This field is required." for field in missing})
+        return attrs
+
+
+class HrAdminPayrollStatutoryComponentSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    statutory_pack_id = serializers.UUIDField()
+    statutory_pack_name = serializers.CharField()
+    salary_component_id = serializers.UUIDField(allow_null=True)
+    salary_component_name = serializers.CharField(allow_null=True)
+    code = serializers.CharField()
+    name = serializers.CharField()
+    statutory_type = serializers.CharField()
+    statutory_type_label = serializers.CharField()
+    contribution_owner = serializers.CharField()
+    contribution_owner_label = serializers.CharField()
+    calculation_method = serializers.CharField()
+    calculation_method_label = serializers.CharField()
+    wage_base_ref = serializers.CharField()
+    statutory_treatment_ref = serializers.CharField()
+    registration_ref = serializers.CharField(allow_blank=True)
+    applicability_profile_ref = serializers.CharField(allow_blank=True)
+    rounding_rule_ref = serializers.CharField(allow_blank=True)
+    formula_ref = serializers.CharField(allow_blank=True)
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    config_snapshot = serializers.JSONField()
+    slab_count = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollStatutoryComponentWriteSerializer(serializers.Serializer):
+    statutory_pack_id = serializers.UUIDField(required=False)
+    salary_component_id = serializers.UUIDField(required=False, allow_null=True)
+    code = serializers.SlugField(max_length=100, required=False)
+    name = serializers.CharField(max_length=255, required=False)
+    statutory_type = serializers.ChoiceField(choices=PayrollStatutoryComponentKind.values, required=False)
+    contribution_owner = serializers.ChoiceField(choices=PayrollStatutoryContributionOwner.values, required=False)
+    calculation_method = serializers.ChoiceField(choices=PayrollStatutoryCalculationMethod.values, required=False)
+    wage_base_ref = serializers.CharField(max_length=160, required=False)
+    statutory_treatment_ref = serializers.CharField(max_length=160, required=False)
+    registration_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    applicability_profile_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    rounding_rule_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    formula_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    status = serializers.ChoiceField(choices=PayrollConfigStatus.values, required=False)
+    config_snapshot = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        if not self.partial:
+            missing = [field for field in ["statutory_pack_id", "code", "name", "statutory_type", "statutory_treatment_ref"] if field not in attrs]
+            if missing:
+                raise serializers.ValidationError({field: "This field is required." for field in missing})
+        return attrs
+
+
+class HrAdminPayrollStatutorySlabSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    statutory_component_id = serializers.UUIDField()
+    statutory_component_name = serializers.CharField()
+    statutory_type = serializers.CharField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    slab_order = serializers.IntegerField()
+    effective_from = serializers.DateField()
+    effective_to = serializers.DateField(allow_null=True)
+    min_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    max_amount = serializers.DecimalField(max_digits=14, decimal_places=2, allow_null=True)
+    employee_rate_percent = serializers.DecimalField(max_digits=7, decimal_places=4)
+    employer_rate_percent = serializers.DecimalField(max_digits=7, decimal_places=4)
+    fixed_employee_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    fixed_employer_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    wage_ceiling_amount = serializers.DecimalField(max_digits=14, decimal_places=2, allow_null=True)
+    state_code = serializers.CharField(allow_blank=True)
+    applicability_profile_ref = serializers.CharField(allow_blank=True)
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    config_snapshot = serializers.JSONField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollStatutorySlabWriteSerializer(serializers.Serializer):
+    statutory_component_id = serializers.UUIDField(required=False)
+    code = serializers.SlugField(max_length=100, required=False)
+    name = serializers.CharField(max_length=255, required=False)
+    slab_order = serializers.IntegerField(min_value=1, required=False)
+    effective_from = serializers.DateField(required=False)
+    effective_to = serializers.DateField(required=False, allow_null=True)
+    min_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    max_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False, allow_null=True)
+    employee_rate_percent = serializers.DecimalField(max_digits=7, decimal_places=4, min_value=Decimal("0"), required=False)
+    employer_rate_percent = serializers.DecimalField(max_digits=7, decimal_places=4, min_value=Decimal("0"), required=False)
+    fixed_employee_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    fixed_employer_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    wage_ceiling_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False, allow_null=True)
+    state_code = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    applicability_profile_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    status = serializers.ChoiceField(choices=PayrollConfigStatus.values, required=False)
+    config_snapshot = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        if not self.partial:
+            missing = [field for field in ["statutory_component_id", "code", "name", "effective_from"] if field not in attrs]
+            if missing:
+                raise serializers.ValidationError({field: "This field is required." for field in missing})
+        return attrs
+
+
+class HrAdminPayrollStatutoryEmployerRegistrationSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    statutory_pack_id = serializers.UUIDField()
+    statutory_pack_name = serializers.CharField()
+    statutory_component_id = serializers.UUIDField(allow_null=True)
+    statutory_component_name = serializers.CharField(allow_null=True)
+    statutory_type = serializers.CharField(allow_blank=True)
+    legal_entity_id = serializers.UUIDField(allow_null=True)
+    legal_entity_name = serializers.CharField(allow_null=True)
+    branch_id = serializers.UUIDField(allow_null=True)
+    branch_name = serializers.CharField(allow_null=True)
+    location_id = serializers.UUIDField(allow_null=True)
+    location_name = serializers.CharField(allow_null=True)
+    code = serializers.CharField()
+    name = serializers.CharField()
+    registration_type_ref = serializers.CharField()
+    registration_number = serializers.CharField()
+    employer_identifier = serializers.CharField(allow_blank=True)
+    jurisdiction_ref = serializers.CharField(allow_blank=True)
+    filing_authority_ref = serializers.CharField(allow_blank=True)
+    provider_ref = serializers.CharField(allow_blank=True)
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    effective_from = serializers.DateField()
+    effective_to = serializers.DateField(allow_null=True)
+    source_ref = serializers.CharField(allow_blank=True)
+    source_hash = serializers.CharField(allow_blank=True)
+    config_snapshot = serializers.JSONField()
+    filing_calendar_count = serializers.IntegerField()
+    open_filing_calendar_count = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollStatutoryEmployerRegistrationWriteSerializer(serializers.Serializer):
+    statutory_pack_id = serializers.UUIDField(required=False)
+    statutory_component_id = serializers.UUIDField(required=False, allow_null=True)
+    legal_entity_id = serializers.UUIDField(required=False, allow_null=True)
+    branch_id = serializers.UUIDField(required=False, allow_null=True)
+    location_id = serializers.UUIDField(required=False, allow_null=True)
+    code = serializers.SlugField(max_length=100, required=False)
+    name = serializers.CharField(max_length=255, required=False)
+    registration_type_ref = serializers.CharField(max_length=160, required=False)
+    registration_number = serializers.CharField(max_length=120, required=False)
+    employer_identifier = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    jurisdiction_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    filing_authority_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    provider_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    status = serializers.ChoiceField(choices=PayrollConfigStatus.values, required=False)
+    effective_from = serializers.DateField(required=False)
+    effective_to = serializers.DateField(required=False, allow_null=True)
+    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    config_snapshot = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        if not self.partial:
+            missing = [field for field in ["statutory_pack_id", "code", "name", "registration_type_ref", "registration_number", "effective_from"] if field not in attrs]
+            if missing:
+                raise serializers.ValidationError({field: "This field is required." for field in missing})
+        return attrs
+
+
+class HrAdminPayrollStatutoryFilingCalendarSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    statutory_pack_id = serializers.UUIDField()
+    statutory_pack_name = serializers.CharField()
+    statutory_component_id = serializers.UUIDField(allow_null=True)
+    statutory_component_name = serializers.CharField(allow_null=True)
+    statutory_type = serializers.CharField(allow_blank=True)
+    employer_registration_id = serializers.UUIDField(allow_null=True)
+    employer_registration_name = serializers.CharField(allow_null=True)
+    employer_registration_number = serializers.CharField(allow_blank=True)
+    code = serializers.CharField()
+    name = serializers.CharField()
+    filing_type_ref = serializers.CharField()
+    filing_frequency = serializers.CharField()
+    filing_frequency_label = serializers.CharField()
+    period_start = serializers.DateField()
+    period_end = serializers.DateField()
+    due_date = serializers.DateField()
+    grace_due_date = serializers.DateField(allow_null=True)
+    filing_window_start = serializers.DateField(allow_null=True)
+    filing_window_end = serializers.DateField(allow_null=True)
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    filing_authority_ref = serializers.CharField(allow_blank=True)
+    provider_ref = serializers.CharField(allow_blank=True)
+    output_profile_ref = serializers.CharField(allow_blank=True)
+    source_ref = serializers.CharField(allow_blank=True)
+    source_hash = serializers.CharField(allow_blank=True)
+    config_snapshot = serializers.JSONField()
+    days_until_due = serializers.IntegerField(allow_null=True)
+    is_due = serializers.BooleanField()
+    is_overdue = serializers.BooleanField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollStatutoryFilingCalendarWriteSerializer(serializers.Serializer):
+    statutory_pack_id = serializers.UUIDField(required=False)
+    statutory_component_id = serializers.UUIDField(required=False, allow_null=True)
+    employer_registration_id = serializers.UUIDField(required=False, allow_null=True)
+    code = serializers.SlugField(max_length=120, required=False)
+    name = serializers.CharField(max_length=255, required=False)
+    filing_type_ref = serializers.CharField(max_length=160, required=False)
+    filing_frequency = serializers.ChoiceField(choices=PayrollFrequency.values, required=False)
+    period_start = serializers.DateField(required=False)
+    period_end = serializers.DateField(required=False)
+    due_date = serializers.DateField(required=False)
+    grace_due_date = serializers.DateField(required=False, allow_null=True)
+    filing_window_start = serializers.DateField(required=False, allow_null=True)
+    filing_window_end = serializers.DateField(required=False, allow_null=True)
+    status = serializers.ChoiceField(choices=PayrollStatutoryFilingStatus.values, required=False)
+    filing_authority_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    provider_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    output_profile_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    config_snapshot = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        if not self.partial:
+            missing = [field for field in ["code", "name", "filing_type_ref", "period_start", "period_end", "due_date"] if field not in attrs]
+            if "statutory_pack_id" not in attrs and "employer_registration_id" not in attrs:
+                missing.append("statutory_pack_id")
+            if missing:
+                raise serializers.ValidationError({field: "This field is required." for field in missing})
+        return attrs
+
+
+class HrAdminEmployeeStatutoryProfileSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    employee_id = serializers.UUIDField()
+    employee_name = serializers.CharField()
+    employee_code = serializers.CharField()
+    statutory_pack_id = serializers.UUIDField(allow_null=True)
+    statutory_pack_name = serializers.CharField(allow_null=True)
+    profile_ref = serializers.CharField()
+    effective_from = serializers.DateField()
+    effective_to = serializers.DateField(allow_null=True)
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    pan_number = serializers.CharField(allow_blank=True)
+    uan_number = serializers.CharField(allow_blank=True)
+    pf_number = serializers.CharField(allow_blank=True)
+    esi_number = serializers.CharField(allow_blank=True)
+    pf_applicable = serializers.BooleanField()
+    esi_applicable = serializers.BooleanField()
+    professional_tax_state = serializers.CharField(allow_blank=True)
+    lwf_state = serializers.CharField(allow_blank=True)
+    tax_regime = serializers.CharField()
+    tax_regime_label = serializers.CharField()
+    declaration_status = serializers.CharField()
+    declaration_status_label = serializers.CharField()
+    previous_employment_income = serializers.DecimalField(max_digits=14, decimal_places=2)
+    previous_employment_tax_deducted = serializers.DecimalField(max_digits=14, decimal_places=2)
+    source_ref = serializers.CharField(allow_blank=True)
+    source_hash = serializers.CharField(allow_blank=True)
+    config_snapshot = serializers.JSONField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminEmployeeStatutoryProfileWriteSerializer(serializers.Serializer):
+    employee_id = serializers.UUIDField(required=False)
+    statutory_pack_id = serializers.UUIDField(required=False, allow_null=True)
+    profile_ref = serializers.CharField(max_length=160, required=False)
+    effective_from = serializers.DateField(required=False)
+    effective_to = serializers.DateField(required=False, allow_null=True)
+    status = serializers.ChoiceField(choices=PayrollConfigStatus.values, required=False)
+    pan_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    uan_number = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    pf_number = serializers.CharField(max_length=40, required=False, allow_blank=True)
+    esi_number = serializers.CharField(max_length=40, required=False, allow_blank=True)
+    pf_applicable = serializers.BooleanField(required=False)
+    esi_applicable = serializers.BooleanField(required=False)
+    professional_tax_state = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    lwf_state = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    tax_regime = serializers.ChoiceField(choices=PayrollTaxRegime.values, required=False)
+    declaration_status = serializers.ChoiceField(choices=PayrollDeclarationStatus.values, required=False)
+    previous_employment_income = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    previous_employment_tax_deducted = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    config_snapshot = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        if not self.partial:
+            missing = [field for field in ["employee_id", "effective_from"] if field not in attrs]
+            if missing:
+                raise serializers.ValidationError({field: "This field is required." for field in missing})
+        return attrs
+
+
+class HrAdminEmployeeStatutoryDeclarationSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    employee_id = serializers.UUIDField()
+    employee_name = serializers.CharField()
+    employee_code = serializers.CharField()
+    employee_statutory_profile_id = serializers.UUIDField()
+    statutory_pack_id = serializers.UUIDField(allow_null=True)
+    statutory_pack_name = serializers.CharField(allow_null=True)
+    financial_year_code = serializers.CharField()
+    declaration_profile_ref = serializers.CharField()
+    proof_window_ref = serializers.CharField(allow_blank=True)
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    tax_regime = serializers.CharField()
+    tax_regime_label = serializers.CharField()
+    declared_total_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    verified_total_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    submitted_at = serializers.DateTimeField(allow_null=True)
+    submitted_by_name = serializers.CharField(allow_null=True)
+    verified_at = serializers.DateTimeField(allow_null=True)
+    verified_by_name = serializers.CharField(allow_null=True)
+    rejected_at = serializers.DateTimeField(allow_null=True)
+    rejected_by_name = serializers.CharField(allow_null=True)
+    locked_at = serializers.DateTimeField(allow_null=True)
+    locked_by_name = serializers.CharField(allow_null=True)
+    rejection_reason = serializers.CharField(allow_blank=True)
+    source_ref = serializers.CharField(allow_blank=True)
+    source_hash = serializers.CharField(allow_blank=True)
+    config_snapshot = serializers.JSONField()
+    item_count = serializers.IntegerField()
+    submitted_item_count = serializers.IntegerField()
+    verified_item_count = serializers.IntegerField()
+    rejected_item_count = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminEmployeeStatutoryDeclarationWriteSerializer(serializers.Serializer):
+    employee_id = serializers.UUIDField(required=False)
+    employee_statutory_profile_id = serializers.UUIDField(required=False)
+    statutory_pack_id = serializers.UUIDField(required=False, allow_null=True)
+    financial_year_code = serializers.CharField(max_length=40, required=False)
+    declaration_profile_ref = serializers.CharField(max_length=160, required=False)
+    proof_window_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    status = serializers.ChoiceField(choices=PayrollStatutoryDeclarationStatus.values, required=False)
+    tax_regime = serializers.ChoiceField(choices=PayrollTaxRegime.values, required=False)
+    declared_total_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    verified_total_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    rejection_reason = serializers.CharField(required=False, allow_blank=True)
+    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    config_snapshot = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        if not self.partial:
+            missing = [field for field in ["employee_id", "employee_statutory_profile_id", "financial_year_code"] if field not in attrs]
+            if missing:
+                raise serializers.ValidationError({field: "This field is required." for field in missing})
+        return attrs
+
+
+class HrAdminEmployeeStatutoryDeclarationItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    declaration_id = serializers.UUIDField()
+    employee_id = serializers.UUIDField()
+    employee_name = serializers.CharField()
+    employee_code = serializers.CharField()
+    financial_year_code = serializers.CharField()
+    item_kind = serializers.CharField()
+    item_kind_label = serializers.CharField()
+    section_code = serializers.CharField()
+    component_code = serializers.CharField(allow_blank=True)
+    name = serializers.CharField()
+    declared_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    verified_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    proof_status = serializers.CharField()
+    proof_status_label = serializers.CharField()
+    proof_document_ref = serializers.CharField(allow_blank=True)
+    proof_artifact_key = serializers.CharField(allow_blank=True)
+    proof_submitted_at = serializers.DateTimeField(allow_null=True)
+    verified_at = serializers.DateTimeField(allow_null=True)
+    verified_by_name = serializers.CharField(allow_null=True)
+    rejected_at = serializers.DateTimeField(allow_null=True)
+    rejected_by_name = serializers.CharField(allow_null=True)
+    rejection_reason = serializers.CharField(allow_blank=True)
+    source_ref = serializers.CharField(allow_blank=True)
+    source_hash = serializers.CharField(allow_blank=True)
+    config_snapshot = serializers.JSONField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminEmployeeStatutoryDeclarationItemWriteSerializer(serializers.Serializer):
+    item_kind = serializers.ChoiceField(choices=PayrollStatutoryDeclarationItemKind.values, required=False)
+    section_code = serializers.CharField(max_length=80, required=False)
+    component_code = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    name = serializers.CharField(max_length=255, required=False)
+    declared_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    verified_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    proof_status = serializers.ChoiceField(choices=PayrollStatutoryProofStatus.values, required=False)
+    proof_document_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    proof_artifact_key = serializers.CharField(max_length=240, required=False, allow_blank=True)
+    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    config_snapshot = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        if not self.partial:
+            missing = [field for field in ["section_code", "name", "declared_amount"] if field not in attrs]
+            if missing:
+                raise serializers.ValidationError({field: "This field is required." for field in missing})
+        return attrs
+
+
+class HrAdminEmployeeStatutoryDeclarationRejectSerializer(serializers.Serializer):
+    reason = serializers.CharField()
+
+
+class HrAdminEmployeeStatutoryDeclarationItemVerifySerializer(serializers.Serializer):
+    verified_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    proof_status = serializers.ChoiceField(choices=[PayrollStatutoryProofStatus.VERIFIED, PayrollStatutoryProofStatus.REJECTED], required=False)
+    rejection_reason = serializers.CharField(required=False, allow_blank=True)
+
+
+class HrAdminPayrollStatutoryOptionsSerializer(serializers.Serializer):
+    config_statuses = HrAdminEnumOptionSerializer(many=True)
+    statutory_component_types = HrAdminEnumOptionSerializer(many=True)
+    contribution_owners = HrAdminEnumOptionSerializer(many=True)
+    calculation_methods = HrAdminEnumOptionSerializer(many=True)
+    payroll_frequencies = HrAdminEnumOptionSerializer(many=True)
+    tax_regimes = HrAdminEnumOptionSerializer(many=True)
+    declaration_statuses = HrAdminEnumOptionSerializer(many=True)
+    statutory_declaration_statuses = HrAdminEnumOptionSerializer(many=True)
+    statutory_declaration_item_kinds = HrAdminEnumOptionSerializer(many=True)
+    statutory_proof_statuses = HrAdminEnumOptionSerializer(many=True)
+    statutory_filing_statuses = HrAdminEnumOptionSerializer(many=True)
+    salary_components = serializers.JSONField()
+    employees = serializers.JSONField()
+    legal_entities = serializers.JSONField()
+    branches = serializers.JSONField()
+    locations = serializers.JSONField()
+
+
+class HrAdminPayrollStatutorySetupSerializer(serializers.Serializer):
+    summary = serializers.JSONField()
+    packs = HrAdminPayrollStatutoryPackSerializer(many=True)
+    statutory_components = HrAdminPayrollStatutoryComponentSerializer(many=True)
+    slabs = HrAdminPayrollStatutorySlabSerializer(many=True)
+    employer_registrations = HrAdminPayrollStatutoryEmployerRegistrationSerializer(many=True)
+    filing_calendars = HrAdminPayrollStatutoryFilingCalendarSerializer(many=True)
+    employee_profiles = HrAdminEmployeeStatutoryProfileSerializer(many=True)
+    declarations = HrAdminEmployeeStatutoryDeclarationSerializer(many=True)
+    declaration_items = HrAdminEmployeeStatutoryDeclarationItemSerializer(many=True)
+    options = HrAdminPayrollStatutoryOptionsSerializer()
+
+
+class MeStatutoryDeclarationItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    declaration_id = serializers.UUIDField()
+    financial_year_code = serializers.CharField()
+    item_kind = serializers.CharField()
+    item_kind_label = serializers.CharField()
+    section_code = serializers.CharField()
+    component_code = serializers.CharField(allow_blank=True)
+    name = serializers.CharField()
+    declared_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    verified_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    proof_status = serializers.CharField()
+    proof_status_label = serializers.CharField()
+    proof_document_ref = serializers.CharField(allow_blank=True)
+    proof_artifact_key = serializers.CharField(allow_blank=True)
+    proof_submitted_at = serializers.DateTimeField(allow_null=True)
+    verified_at = serializers.DateTimeField(allow_null=True)
+    rejected_at = serializers.DateTimeField(allow_null=True)
+    rejection_reason = serializers.CharField(allow_blank=True)
+    source_ref = serializers.CharField(allow_blank=True)
+    source_hash = serializers.CharField(allow_blank=True)
+    config_snapshot = serializers.JSONField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class MeStatutoryDeclarationSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    employee_statutory_profile_id = serializers.UUIDField()
+    statutory_pack_id = serializers.UUIDField(allow_null=True)
+    statutory_pack_name = serializers.CharField(allow_null=True)
+    financial_year_code = serializers.CharField()
+    declaration_profile_ref = serializers.CharField()
+    proof_window_ref = serializers.CharField(allow_blank=True)
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    tax_regime = serializers.CharField()
+    tax_regime_label = serializers.CharField()
+    declared_total_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    verified_total_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    submitted_at = serializers.DateTimeField(allow_null=True)
+    verified_at = serializers.DateTimeField(allow_null=True)
+    rejected_at = serializers.DateTimeField(allow_null=True)
+    locked_at = serializers.DateTimeField(allow_null=True)
+    rejection_reason = serializers.CharField(allow_blank=True)
+    source_ref = serializers.CharField(allow_blank=True)
+    source_hash = serializers.CharField(allow_blank=True)
+    config_snapshot = serializers.JSONField()
+    items = MeStatutoryDeclarationItemSerializer(many=True)
+    item_count = serializers.IntegerField()
+    submitted_item_count = serializers.IntegerField()
+    verified_item_count = serializers.IntegerField()
+    rejected_item_count = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class MeStatutoryDeclarationListSerializer(serializers.Serializer):
+    summary = serializers.JSONField()
+    profile = HrAdminEmployeeStatutoryProfileSerializer(allow_null=True)
+    items = MeStatutoryDeclarationSerializer(many=True)
+    total_count = serializers.IntegerField()
+    page = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    has_next = serializers.BooleanField()
+    has_previous = serializers.BooleanField()
+    options = serializers.JSONField()
+
+
+class MeStatutoryDeclarationWriteSerializer(serializers.Serializer):
+    employee_statutory_profile_id = serializers.UUIDField(required=False)
+    statutory_pack_id = serializers.UUIDField(required=False, allow_null=True)
+    financial_year_code = serializers.CharField(max_length=40, required=False)
+    declaration_profile_ref = serializers.CharField(max_length=160, required=False)
+    proof_window_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    tax_regime = serializers.ChoiceField(choices=PayrollTaxRegime.values, required=False)
+    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    config_snapshot = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        if not self.partial and "financial_year_code" not in attrs:
+            raise serializers.ValidationError({"financial_year_code": "This field is required."})
+        return attrs
+
+
+class MeStatutoryDeclarationItemWriteSerializer(serializers.Serializer):
+    item_kind = serializers.ChoiceField(choices=PayrollStatutoryDeclarationItemKind.values, required=False)
+    section_code = serializers.CharField(max_length=80, required=False)
+    component_code = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    name = serializers.CharField(max_length=255, required=False)
+    declared_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    proof_status = serializers.ChoiceField(
+        choices=[
+            PayrollStatutoryProofStatus.NOT_REQUIRED,
+            PayrollStatutoryProofStatus.PENDING,
+            PayrollStatutoryProofStatus.SUBMITTED,
+        ],
+        required=False,
+    )
+    proof_document_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    proof_artifact_key = serializers.CharField(max_length=240, required=False, allow_blank=True)
+    source_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    config_snapshot = serializers.JSONField(required=False)
+
+    def validate(self, attrs):
+        if not self.partial:
+            missing = [field for field in ["section_code", "name", "declared_amount"] if field not in attrs]
+            if missing:
+                raise serializers.ValidationError({field: "This field is required." for field in missing})
+        return attrs
+
+
+class MeStatutoryDeclarationProofUploadSerializer(serializers.Serializer):
+    category_id = serializers.UUIDField()
+    replace_document_id = serializers.UUIDField(required=False, allow_null=True)
+    item_id = serializers.UUIDField(required=False, allow_null=True)
+    item_kind = serializers.ChoiceField(choices=PayrollStatutoryDeclarationItemKind.values, required=False)
+    section_code = serializers.CharField(max_length=80, required=False)
+    component_code = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    name = serializers.CharField(max_length=255, required=False)
+    declared_amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal("0"), required=False)
+    title = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    document_number = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    issued_on = serializers.DateField(required=False, allow_null=True)
+    expires_on = serializers.DateField(required=False, allow_null=True)
+    file = serializers.FileField()
+
+    def validate(self, attrs):
+        if not attrs.get("item_id"):
+            missing = [field for field in ["section_code", "name", "declared_amount"] if field not in attrs]
+            if missing:
+                raise serializers.ValidationError({field: "This field is required when item_id is not provided." for field in missing})
+        return attrs
+
+
 class HrAdminPayrollRunSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     period_id = serializers.UUIDField()
@@ -1535,21 +2179,71 @@ class HrAdminPayrollOutputArtifactSerializer(serializers.Serializer):
     content_type = serializers.CharField()
     storage_provider_ref = serializers.CharField()
     storage_key = serializers.CharField(allow_blank=True)
+    storage_object_version = serializers.CharField(allow_blank=True)
     mime_type = serializers.CharField()
     file_size_bytes = serializers.IntegerField()
     checksum_sha256 = serializers.CharField(allow_blank=True)
     is_downloadable = serializers.BooleanField()
+    download_strategy_ref = serializers.CharField()
+    supports_signed_url = serializers.BooleanField()
+    signed_url_expires_in_seconds = serializers.IntegerField()
     retention_policy_ref = serializers.CharField()
     download_url = serializers.CharField(allow_null=True)
+    signed_download_url = serializers.CharField(allow_null=True)
+    signed_download_expires_at = serializers.DateTimeField(allow_null=True)
     output_profile_ref = serializers.CharField()
     totals_snapshot = serializers.JSONField()
     line_snapshot = serializers.JSONField()
+    access_summary = serializers.JSONField()
+    access_events = serializers.JSONField()
     source_hash = serializers.CharField(allow_blank=True)
     published_at = serializers.DateTimeField(allow_null=True)
     published_by_name = serializers.CharField(allow_null=True)
     config_snapshot = serializers.JSONField()
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
+
+
+class PayrollArtifactSignedAccessGrantSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    output_artifact_id = serializers.UUIDField()
+    status = serializers.CharField()
+    permission_scope = serializers.CharField()
+    grant_profile_ref = serializers.CharField()
+    source_channel_ref = serializers.CharField()
+    issued_to_membership_id = serializers.UUIDField(allow_null=True)
+    issued_to_membership_name = serializers.CharField(allow_null=True)
+    issued_by_name = serializers.CharField(allow_null=True)
+    token_prefix = serializers.CharField(allow_blank=True)
+    signed_url = serializers.CharField(allow_blank=True)
+    expires_at = serializers.DateTimeField()
+    revoked_at = serializers.DateTimeField(allow_null=True)
+    revocation_reason = serializers.CharField(allow_blank=True)
+    access_count = serializers.IntegerField()
+    max_access_count = serializers.IntegerField(allow_null=True)
+    storage_provider_ref = serializers.CharField(allow_blank=True)
+    storage_object_version = serializers.CharField(allow_blank=True)
+    download_strategy_ref = serializers.CharField(allow_blank=True)
+    checksum_sha256 = serializers.CharField(allow_blank=True)
+    metadata_snapshot = serializers.JSONField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class PayrollArtifactSignedAccessGrantIssueRequestSerializer(serializers.Serializer):
+    expires_in_seconds = serializers.IntegerField(min_value=60, max_value=86400, required=False)
+    max_access_count = serializers.IntegerField(min_value=1, max_value=100, required=False)
+    permission_scope = serializers.CharField(max_length=80, required=False, allow_blank=True)
+
+
+class PayrollArtifactSignedAccessGrantIssueResultSerializer(serializers.Serializer):
+    grant = PayrollArtifactSignedAccessGrantSerializer()
+    signed_url = serializers.CharField()
+    expires_at = serializers.DateTimeField()
+
+
+class PayrollArtifactSignedAccessGrantRevokeRequestSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=255)
 
 
 class HrAdminPayrollGenerateOutputsRequestSerializer(serializers.Serializer):
@@ -1603,6 +2297,216 @@ class HrAdminPayrollFinanceHandoffSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField()
 
 
+class HrAdminPayrollProviderDeliverySerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    handoff_id = serializers.UUIDField()
+    output_artifact_id = serializers.UUIDField()
+    output_artifact_title = serializers.CharField()
+    output_batch_id = serializers.UUIDField()
+    payroll_run_id = serializers.UUIDField()
+    review_id = serializers.UUIDField()
+    artifact_kind = serializers.CharField()
+    artifact_kind_label = serializers.CharField()
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    provider_ref = serializers.CharField()
+    channel_ref = serializers.CharField()
+    external_reference = serializers.CharField(allow_blank=True)
+    retry_policy_ref = serializers.CharField()
+    attempt_count = serializers.IntegerField()
+    submitted_at = serializers.DateTimeField(allow_null=True)
+    submitted_by_name = serializers.CharField(allow_null=True)
+    acknowledged_at = serializers.DateTimeField(allow_null=True)
+    acknowledged_by_name = serializers.CharField(allow_null=True)
+    reconciled_at = serializers.DateTimeField(allow_null=True)
+    reconciled_by_name = serializers.CharField(allow_null=True)
+    failure_code = serializers.CharField(allow_blank=True)
+    failure_reason = serializers.CharField(allow_blank=True)
+    payload_checksum_sha256 = serializers.CharField(allow_blank=True)
+    request_snapshot = serializers.JSONField()
+    response_snapshot = serializers.JSONField()
+    reconciliation_snapshot = serializers.JSONField()
+    config_snapshot = serializers.JSONField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollProviderCallbackEventSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    provider_delivery_id = serializers.UUIDField()
+    handoff_id = serializers.UUIDField()
+    output_artifact_id = serializers.UUIDField()
+    output_artifact_title = serializers.CharField()
+    provider_ref = serializers.CharField()
+    external_reference = serializers.CharField(allow_blank=True)
+    external_event_id = serializers.CharField(allow_blank=True)
+    idempotency_key = serializers.CharField()
+    callback_profile_ref = serializers.CharField()
+    callback_verification_ref = serializers.CharField()
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    provider_status = serializers.CharField()
+    provider_status_label = serializers.CharField()
+    payload_checksum_sha256 = serializers.CharField()
+    signature = serializers.CharField(allow_blank=True)
+    verification_snapshot = serializers.JSONField()
+    payload_snapshot = serializers.JSONField()
+    processing_snapshot = serializers.JSONField()
+    received_at = serializers.DateTimeField(allow_null=True)
+    processed_at = serializers.DateTimeField(allow_null=True)
+    failure_code = serializers.CharField(allow_blank=True)
+    failure_reason = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollProviderRetryEventSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    provider_delivery_id = serializers.UUIDField()
+    handoff_id = serializers.UUIDField()
+    output_artifact_id = serializers.UUIDField()
+    output_artifact_title = serializers.CharField()
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    retry_policy_ref = serializers.CharField()
+    failure_taxonomy_ref = serializers.CharField()
+    failure_category_ref = serializers.CharField(allow_blank=True)
+    retry_reason = serializers.CharField(allow_blank=True)
+    attempt_number = serializers.IntegerField()
+    scheduled_for = serializers.DateTimeField(allow_null=True)
+    executed_at = serializers.DateTimeField(allow_null=True)
+    requested_by_name = serializers.CharField(allow_null=True)
+    executed_by_name = serializers.CharField(allow_null=True)
+    decision_snapshot = serializers.JSONField()
+    request_snapshot = serializers.JSONField()
+    response_snapshot = serializers.JSONField()
+    failure_code = serializers.CharField(allow_blank=True)
+    failure_reason = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollFinanceHandoffAcknowledgeRequestSerializer(serializers.Serializer):
+    acknowledgement_profile_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    provider_status = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    failure_code = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    failure_reason = serializers.CharField(required=False, allow_blank=True)
+    response_snapshot = serializers.JSONField(required=False)
+
+
+class PayrollProviderCallbackRequestSerializer(serializers.Serializer):
+    provider_delivery_id = serializers.UUIDField(required=False)
+    provider_ref = serializers.CharField(max_length=160)
+    external_reference = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    external_event_id = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    idempotency_key = serializers.CharField(max_length=180)
+    provider_status = serializers.ChoiceField(choices=[
+        PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+        PayrollProviderDeliveryStatus.RECONCILED,
+        PayrollProviderDeliveryStatus.REJECTED,
+        PayrollProviderDeliveryStatus.FAILED,
+    ])
+    payload_snapshot = serializers.JSONField(required=False)
+    signature = serializers.CharField(max_length=160)
+
+
+class PayrollProviderCallbackResultSerializer(serializers.Serializer):
+    callback_event = HrAdminPayrollProviderCallbackEventSerializer()
+    delivery = HrAdminPayrollProviderDeliverySerializer()
+    replayed = serializers.BooleanField()
+    detail = serializers.CharField()
+
+
+class HrAdminPayrollProviderRetryScheduleRequestSerializer(serializers.Serializer):
+    retry_reason = serializers.CharField(required=False, allow_blank=True)
+    scheduled_for = serializers.DateTimeField(required=False, allow_null=True)
+
+
+class HrAdminPayrollProviderRetryRequeueRequestSerializer(serializers.Serializer):
+    retry_event_id = serializers.UUIDField(required=False)
+
+
+class HrAdminPayrollProviderRetryActionResultSerializer(serializers.Serializer):
+    retry_event = HrAdminPayrollProviderRetryEventSerializer()
+    delivery = HrAdminPayrollProviderDeliverySerializer()
+    detail = serializers.CharField()
+
+
+class HrAdminPayrollProviderConnectionSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    provider_ref = serializers.CharField()
+    provider_name = serializers.CharField()
+    provider_kind = serializers.CharField()
+    provider_kind_label = serializers.CharField()
+    environment_ref = serializers.CharField()
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    adapter_ref = serializers.CharField(allow_blank=True)
+    sandbox_adapter_ref = serializers.CharField(allow_blank=True)
+    channel_ref = serializers.CharField(allow_blank=True)
+    credential_ref = serializers.CharField(allow_blank=True)
+    credential_profile_ref = serializers.CharField(allow_blank=True)
+    credential_required = serializers.BooleanField()
+    callback_profile_ref = serializers.CharField(allow_blank=True)
+    callback_verification_ref = serializers.CharField(allow_blank=True)
+    retry_policy_ref = serializers.CharField(allow_blank=True)
+    certification_status = serializers.CharField()
+    certification_status_label = serializers.CharField()
+    certification_profile_ref = serializers.CharField(allow_blank=True)
+    certified_at = serializers.DateTimeField(allow_null=True)
+    certified_by_name = serializers.CharField(allow_null=True)
+    last_tested_at = serializers.DateTimeField(allow_null=True)
+    last_tested_by_name = serializers.CharField(allow_null=True)
+    readiness_snapshot = serializers.JSONField()
+    certification_snapshot = serializers.JSONField()
+    config_snapshot = serializers.JSONField()
+    created_by_name = serializers.CharField(allow_null=True)
+    updated_by_name = serializers.CharField(allow_null=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollProviderConnectionWriteSerializer(serializers.Serializer):
+    provider_ref = serializers.CharField(max_length=160, required=False)
+    provider_name = serializers.CharField(max_length=160, required=False)
+    provider_kind = serializers.ChoiceField(choices=PayrollProviderConnectionKind.choices, required=False)
+    environment_ref = serializers.CharField(max_length=80, required=False)
+    status = serializers.ChoiceField(choices=PayrollProviderConnectionStatus.choices, required=False)
+    adapter_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    sandbox_adapter_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    channel_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    credential_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    credential_profile_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    credential_required = serializers.BooleanField(required=False)
+    callback_profile_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    callback_verification_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    retry_policy_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    certification_profile_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    config_snapshot = serializers.JSONField(required=False)
+
+
+class HrAdminPayrollProviderConnectionCertificationRequestSerializer(serializers.Serializer):
+    certification_status = serializers.ChoiceField(choices=PayrollProviderCertificationStatus.choices)
+    evidence_snapshot = serializers.JSONField(required=False)
+
+
+class HrAdminPayrollProviderConnectionOptionsSerializer(serializers.Serializer):
+    provider_kinds = HrAdminEnumOptionSerializer(many=True)
+    connection_statuses = HrAdminEnumOptionSerializer(many=True)
+    certification_statuses = HrAdminEnumOptionSerializer(many=True)
+
+
+class HrAdminPayrollProviderConnectionSetupSerializer(serializers.Serializer):
+    summary = serializers.JSONField()
+    connections = HrAdminPayrollProviderConnectionSerializer(many=True)
+    options = HrAdminPayrollProviderConnectionOptionsSerializer()
+
+
+class HrAdminPayrollProviderConnectionActionResultSerializer(serializers.Serializer):
+    connection = HrAdminPayrollProviderConnectionSerializer()
+    detail = serializers.CharField()
+
+
 class HrAdminPayrollGenerateFinanceHandoffRequestSerializer(serializers.Serializer):
     handoff_profile_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
 
@@ -1610,6 +2514,9 @@ class HrAdminPayrollGenerateFinanceHandoffRequestSerializer(serializers.Serializ
 class HrAdminPayrollFinanceHandoffActionResultSerializer(serializers.Serializer):
     handoff = HrAdminPayrollFinanceHandoffSerializer()
     artifacts = HrAdminPayrollOutputArtifactSerializer(many=True)
+    deliveries = HrAdminPayrollProviderDeliverySerializer(many=True)
+    callback_events = HrAdminPayrollProviderCallbackEventSerializer(many=True, required=False)
+    retry_events = HrAdminPayrollProviderRetryEventSerializer(many=True, required=False)
     detail = serializers.CharField()
 
 
@@ -1617,6 +2524,9 @@ class HrAdminPayrollFinanceHandoffOptionsSerializer(serializers.Serializer):
     handoff_statuses = HrAdminEnumOptionSerializer(many=True)
     output_artifact_kinds = HrAdminEnumOptionSerializer(many=True)
     output_artifact_statuses = HrAdminEnumOptionSerializer(many=True)
+    provider_delivery_statuses = HrAdminEnumOptionSerializer(many=True)
+    provider_callback_event_statuses = HrAdminEnumOptionSerializer(many=True)
+    provider_retry_event_statuses = HrAdminEnumOptionSerializer(many=True)
 
 
 class HrAdminPayrollFinanceHandoffSetupSerializer(serializers.Serializer):
@@ -1624,6 +2534,9 @@ class HrAdminPayrollFinanceHandoffSetupSerializer(serializers.Serializer):
     output_batches = HrAdminPayrollOutputBatchSerializer(many=True)
     handoffs = HrAdminPayrollFinanceHandoffSerializer(many=True)
     artifacts = HrAdminPayrollOutputArtifactSerializer(many=True)
+    deliveries = HrAdminPayrollProviderDeliverySerializer(many=True)
+    callback_events = HrAdminPayrollProviderCallbackEventSerializer(many=True)
+    retry_events = HrAdminPayrollProviderRetryEventSerializer(many=True)
     options = HrAdminPayrollFinanceHandoffOptionsSerializer()
 
 
@@ -4130,6 +5043,49 @@ class EmployeeDashboardSerializer(serializers.Serializer):
     profile = EmployeeProfileSerializer()
     leave = LeaveSummarySerializer()
     attendance = AttendanceSummarySerializer()
+
+
+class MePayrollPayslipSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    payroll_run_id = serializers.UUIDField()
+    payroll_run_name = serializers.CharField()
+    period_name = serializers.CharField()
+    period_start_date = serializers.DateField(allow_null=True)
+    period_end_date = serializers.DateField(allow_null=True)
+    pay_date = serializers.DateField(allow_null=True)
+    title = serializers.CharField()
+    file_name = serializers.CharField(allow_blank=True)
+    mime_type = serializers.CharField()
+    file_size_bytes = serializers.IntegerField()
+    checksum_sha256 = serializers.CharField(allow_blank=True)
+    storage_provider_ref = serializers.CharField()
+    storage_object_version = serializers.CharField(allow_blank=True)
+    download_strategy_ref = serializers.CharField()
+    supports_signed_url = serializers.BooleanField()
+    signed_url_expires_in_seconds = serializers.IntegerField()
+    retention_policy_ref = serializers.CharField()
+    download_url = serializers.CharField(allow_null=True)
+    signed_download_url = serializers.CharField(allow_null=True)
+    signed_download_expires_at = serializers.DateTimeField(allow_null=True)
+    totals_snapshot = serializers.JSONField()
+    line_snapshot = serializers.JSONField()
+    access_summary = serializers.JSONField()
+    access_events = serializers.JSONField()
+    source_hash = serializers.CharField(allow_blank=True)
+    published_at = serializers.DateTimeField(allow_null=True)
+    published_by_name = serializers.CharField(allow_null=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class MePayrollPayslipListSerializer(serializers.Serializer):
+    summary = serializers.JSONField()
+    items = MePayrollPayslipSerializer(many=True)
+    total_count = serializers.IntegerField()
+    page = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    has_next = serializers.BooleanField()
+    has_previous = serializers.BooleanField()
 
 
 class ManagerApprovalEmployeeSerializer(serializers.Serializer):

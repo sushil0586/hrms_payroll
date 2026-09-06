@@ -744,6 +744,13 @@ PayrollOutputBatch
   -> PayrollOutputArtifact
     -> optional Employee
     -> optional PayrollInputSnapshot
+    -> PayrollArtifactSignedAccessGrant
+    -> PayrollArtifactAccessEvent
+      -> optional PayrollArtifactSignedAccessGrant
+      -> optional Notification
+  -> PayrollFinanceHandoff
+    -> PayrollProviderDelivery
+      -> PayrollOutputArtifact
 ```
 
 The artifact record stores:
@@ -752,15 +759,161 @@ The artifact record stores:
 - kind/status keys for payslip, register, bank advice, accounting export, and statutory report outputs
 - output profile and template/config snapshots
 - totals, line snapshots, and source hash evidence
-- file name, MIME type, storage provider reference, storage key, file size, SHA-256 checksum, downloadable flag, retention policy reference, and generated local payload
+- file name, MIME type, storage provider reference, storage key, object version, file size, SHA-256 checksum, downloadable flag, download strategy reference, signed URL capability, signed URL expiry seconds, retention policy reference, and generated local payload
 
-Published artifact fields are immutable, including file metadata and payload. HR admin downloads are tenant-scoped and allowed only for published downloadable artifacts whose checksum verifies.
+Published artifact fields are immutable, including file metadata and payload. HR admin downloads are tenant-scoped and allowed only for published downloadable artifacts whose checksum verifies. Employee self-service payslip downloads use the same artifact record and storage adapter contract, but are additionally constrained to the signed-in employee, `payslip` kind, published status, and tenant context.
+
+Payroll artifact access events now record:
+
+- publish, notification, download, read acknowledgement, and revocation-style event types
+- actor user, actor membership, actor identifier, request identifier, IP address, and user-agent context where available
+- storage provider, storage key, object version, download strategy, and checksum evidence captured at the time of access
+- optional notification linkage so payslip read acknowledgement can update in-app notification read state
+- optional signed access grant linkage so signed URL issuance, download usage, and revocation stay tied to the same permission record
+- configurable event profile, source channel, metadata, and config snapshots
+
+Payroll signed access grants now record:
+
+- artifact, batch, run, review, employee, issuer, target user/membership, permission scope, grant profile, and source channel
+- token hash and token prefix rather than storing the raw token
+- signed URL path preview, expiry timestamp, max access count, access count, and last accessed timestamp
+- revocation timestamp, revoking actor, and required revocation reason
+- storage provider, storage key, object version, download strategy, and checksum evidence at issuance time
+- metadata/config snapshots for tenant-defined signed-access behavior
+
+Payroll artifact storage now goes through an adapter contract:
+
+- local generated payload storage is represented by `payroll.storage.local.generated.v1`
+- signed URL capable storage can expose signed download metadata without changing the artifact API shape
+- S3, GCS, and Azure object-store provider families now have validated profile contracts behind the same store/read/signed-url methods
+- object-store profiles require provider-specific metadata and a tenant-scoped `credential_ref` rather than raw credentials
+- raw credential keys are rejected recursively before artifact metadata snapshots are persisted
+- generated artifacts retain sanitized `storage_profile` snapshots for auditability without storing secrets
+- runtime credential resolution supports settings/env-backed credential refs and sanitized credential descriptors
+- SDK-backed S3/GCS/Azure runtime adapters can upload, read, and sign files behind the existing contract while leaving object-store payloads outside the artifact row
+- configurable storage policies can allowlist provider refs, credential refs, buckets/containers, retention refs, encryption refs, endpoint hosts, storage-key prefixes, signed URL expiry bounds, file-size limits, and lifecycle/malware-scan/durability refs
+- local/dev, contract-mode, and SDK-backed storage paths apply the same policy checks before storage reads, writes, or signed URL generation
+- download responses include checksum, provider, object version, download strategy, and retention headers
+- employee payslip list/download APIs expose only published employee-scoped payslip artifacts while preserving the same storage metadata, source hash, totals, line snapshots, access summaries, and recent access events
+- signed access issue/revoke/download flows preserve immutable artifact output while allowing permission-bound download grants to expire, count usage, and be revoked
+
+Finance handoff delivery now adds:
+
+- provider delivery rows linked to handoff, output artifact, output batch, payroll run, and review lineage
+- provider/channel/retry/acknowledgement profile references resolved from configuration snapshots
+- submitted, acknowledged, failed, rejected, and reconciled delivery states
+- external reference, attempt count, request/response/reconciliation snapshots, and checksum evidence
+- failure evidence requirements before failed or rejected outcomes can be recorded
 
 ---
 
-## 10. Current Technical Observations
+## 10. Payroll Statutory Configuration Contract
 
-## 10.1 Strengths
+Current payroll depth now includes tenant-owned statutory configuration records.
+
+```text
+PayrollStatutoryPack
+  -> PayrollStatutoryComponent
+    -> optional SalaryComponent
+    -> PayrollStatutorySlab
+    -> PayrollStatutoryEmployerRegistration
+    -> PayrollStatutoryFilingCalendar
+  -> PayrollStatutoryEmployerRegistration
+    -> optional LegalEntity / Branch / Location
+    -> PayrollStatutoryFilingCalendar
+  -> EmployeeStatutoryProfile
+    -> Employee
+    -> EmployeeStatutoryDeclaration
+      -> EmployeeStatutoryDeclarationItem
+  -> PayrollCalculationLine
+    -> PayrollInputSnapshot
+  -> PayrollOutputArtifact
+    -> PayrollFinanceHandoff
+      -> PayrollProviderDelivery
+        -> PayrollProviderCallbackEvent
+```
+
+The statutory configuration records store:
+
+- country and jurisdiction pack identity, effective dates, profile refs, validation refs, and config snapshots
+- component kind for PF, ESI, PT, LWF, TDS, gratuity, and other tenant-defined statutory behavior
+- contribution owner, calculation method, wage-base refs, statutory-treatment refs, registration refs, applicability refs, rounding refs, and formula refs
+- slab ordering, amount bounds, wage ceilings, employee/employer rates, fixed employee/employer amounts, state codes, and effective dates
+- employer statutory account numbers, employer identifiers, legal-entity/branch/location scope, jurisdiction refs, filing authority refs, provider refs, effective dates, source refs, source hashes, and config snapshots
+- statutory filing obligations with filing type, frequency, period range, due dates, grace dates, filing windows, filing status, authority/provider refs, output profile refs, source refs, source hashes, and config snapshots
+- employee PAN, UAN, PF/ESI identifiers, applicability flags, PT/LWF state, tax regime, declaration status, previous employment values, source refs, and source hashes
+- financial-year employee declarations with declaration profile refs, proof window refs, submitted/verified/rejected/locked actor timestamps, declared totals, verified totals, rejection reasons, and source hashes
+- declaration proof items with section/component keys, declared amounts, verified amounts, proof refs, proof status, verifier/rejector evidence, rejection reasons, and source hashes
+
+The current contract is intentionally configuration-first. Statutory calculation code consumes these records and their refs instead of embedding India-specific formulas directly in application branches.
+
+Draft payroll calculation now consumes this contract:
+
+- `PayrollCalculationLine.line_source = statutory` identifies statutory-generated lines separately from formula/rule and one-time adjustment lines
+- calculation profiles select statutory packs and components by pack code, statutory pack ref, component code, statutory type, and exclusion lists
+- wage bases are resolved from configured context paths such as rule-produced salary output paths
+- generated statutory lines store statutory pack/component/slab identifiers, statutory treatment refs, employee statutory profile hashes, wage-base evidence, TDS annualization/declaration cap/regime comparison evidence where configured, source hashes, trace snapshots, and config snapshots
+- validation raises statutory setup blockers before calculation when required statutory components, employee statutory profiles, wage-base paths, or slabs are missing
+- employer registration and filing calendar APIs validate tenant ownership, pack/component/registration alignment, organization scope ownership, active registration overlap, period dates, grace dates, and filing windows
+
+Statutory declarations now add:
+
+- annual declaration packages under employee statutory profiles
+- proof item records for investments, exemptions, deductions, previous employment, rental declarations, and other configurable sections
+- HR-admin submit, verify, reject, and lock state transitions
+- employee-scoped declaration read/create/update/submit APIs for ESS statutory workspaces
+- employee proof-item create/update APIs that link declaration rows to document/artifact references
+- direct ESS statutory proof uploads that create canonical employee document records and link their artifact evidence
+- declaration totals and proof-item source hashes for audit evidence
+
+Statutory filing output generation now adds:
+
+- configured statutory return and challan artifacts through the finance handoff pipeline
+- artifact metadata that links output files back to filing calendars, employer registrations, statutory pack/component refs, authority/provider refs, output profile refs, and source hashes
+- filing-calendar `config_snapshot.latest_generation` evidence for generated artifact IDs, totals, handoff lineage, output batch lineage, and generated timestamps
+
+Provider submission contracts now add:
+
+- provider route selection by artifact key, output profile ref, filing type ref, artifact kind, and statutory filing subtype
+- delivery request snapshots with adapter refs, submission mode refs, request/response schema refs, callback refs, callback verification refs, certification refs, and idempotency keys
+- statutory filing context inside delivery contracts for filing calendar, filing type, authority, employer registration, and output profile traceability
+- certification evidence state in delivery config snapshots and reconciliation snapshots
+
+Provider callback ingestion now adds:
+
+- durable `PayrollProviderCallbackEvent` records linked to tenant, provider delivery, handoff, and output artifact lineage
+- provider/idempotency uniqueness for replay protection
+- callback profile, callback verification, payload checksum, signature, verification snapshot, payload snapshot, processing snapshot, and failure evidence storage
+- delivery and handoff state updates from verified callback events
+
+Provider retry/dead-letter handling now adds:
+
+- durable `PayrollProviderRetryEvent` records linked to tenant, provider delivery, handoff, output artifact, output batch, payroll run, and final-locked review lineage
+- retry policy refs, failure taxonomy/category refs, retry reasons, attempt numbers, scheduled/executed timestamps, decision snapshots, request snapshots, response snapshots, and failure evidence storage
+- route-level retry policy snapshots for max attempts, backoff timing, taxonomy refs, and provider-specific failure category mappings
+- delivery requeue state transitions that preserve retry context while clearing stale acknowledgement/reconciliation evidence
+- dead-letter records when a failed/rejected delivery exhausts its configured attempts
+- route-level execution adapter snapshots for worker profiles, adapter refs, execution modes, dispatch modes, schema refs, callback refs, and idempotency keys
+- worker processing that executes due retries, records adapter execution evidence, and skips stale retry events with failure evidence
+
+Provider adapter boundary now adds:
+
+- normalized provider submission request/result snapshots for bank, accounting, statutory return, and statutory challan delivery records
+- credential-ref-only provider configuration with runtime credential resolution from environment-owned settings
+- sanitized credential descriptors in delivery snapshots without storing secret material
+- raw provider credential key rejection before route snapshots are persisted
+- manual and sandbox adapter implementations behind a provider adapter protocol and configurable registry
+- adapter result state normalization across submitted, acknowledged, reconciled, rejected, and failed delivery states
+- provider-specific bank, accounting, and statutory sandbox adapter scaffolds with artifact-kind validation and domain contract evidence snapshots
+- tenant-owned `PayrollProviderConnection` onboarding records for provider refs, adapter refs, channel refs, credential refs, callback verification refs, retry policy refs, certification refs, readiness gates, and certification evidence
+- activation validation that requires complete refs and passed certification before a provider connection can become active
+- raw credential rejection in provider connection snapshots so database records keep refs rather than secret material
+
+---
+
+## 11. Current Technical Observations
+
+## 11.1 Strengths
 
 - strong tenant-scoped consistency
 - clean separation between access identity and business employee record
@@ -768,25 +921,27 @@ Published artifact fields are immutable, including file metadata and payload. HR
 - generic workflow and notification runtime models
 - organization masters are modeled as reusable dimensions instead of hardcoded fields
 
-## 10.2 Current Limitations
+## 11.2 Current Limitations
 
 - many generic references are string-based rather than true foreign keys
 - tenant consistency across related foreign keys depends heavily on application logic
 - there are relatively few explicit database-level constraints to enforce valid scope combinations
-- payroll-specific structures are now present through readiness, setup, rules, calculations, review, outputs, adjustments, settlements, and handoff
-- external payroll storage/provider integration models are not yet present
-- the schema is ready for operational HRMS and payroll foundation work, but not yet fully hardened for production-grade external provider reconciliation
+- payroll-specific structures are now present through readiness, setup, rules, calculations, review, outputs, adjustments, settlements, handoff, storage governance, and statutory configuration
+- external payroll provider delivery state, provider submission contracts, provider adapter request/result snapshots, provider credential refs, provider connection onboarding/certification records, provider-specific sandbox adapter scaffolds, callback event records, retry/dead-letter records, retry-worker shell execution, callback verification refs, certification evidence refs, and payroll artifact storage adapter state are now modeled, but production secret-manager wiring, provider-side storage policy verification, production webhook hardening, production queue scheduling, certified-connection route gating, and production provider SDK adapters are not yet present
+- statutory configuration, employer registrations, filing calendars, declaration/proof workflow records, employee declaration submission, direct statutory proof upload, proof reference linkage, ESS declaration UI, HR-admin statutory review UI, calculation-line consumption, statutory return/challan artifact generation, statutory provider submission contracts, signed provider callback ingestion, and retry/dead-letter contracts are modeled, but live statutory provider execution is not yet present
+- the schema is ready for operational HRMS and payroll foundation work, but not yet fully hardened for production-grade statutory and external provider integration operations
 
-## 10.3 Areas Likely To Matter In Future Refactors
+## 11.3 Areas Likely To Matter In Future Refactors
 
 - stronger tenant-consistency validation across related objects
 - more explicit domain-level constraint enforcement for scoped assignment records
 - workflow and notification references that may later benefit from typed subject registries
-- object-storage adapters and external provider acknowledgement/reconciliation models for payroll files
+- provider-specific response taxonomies and certification automation records
+- production secret-manager wiring, provider-side storage policy verification, external provider callback verification, production retry queue scheduling, and provider-specific failure taxonomies for payroll files
 
 ---
 
-## 11. Summary
+## 12. Summary
 
 The current backend model structure is centered on four big design ideas:
 

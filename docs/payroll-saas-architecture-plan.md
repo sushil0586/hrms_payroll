@@ -215,7 +215,7 @@ Phase 4E implementation status:
 - Required component and output-path checks let tenant close-readiness profiles define mandatory payroll outputs without hardcoding component names in the engine.
 - `/hr-admin/payroll-calculations` groups visible validation issues by category and shows source-data plus statutory demo examples.
 - Backend and Playwright tests cover component, statutory, dependency-order, category grouping, and browser visibility.
-- The next depth steps are external provider acknowledgement hardening and object-storage adapterization.
+- The next depth steps are external provider acknowledgement hardening and payroll artifact storage adapterization.
 
 Phase 4F implementation status:
 
@@ -224,7 +224,92 @@ Phase 4F implementation status:
 - Output and finance profiles can override MIME types, storage provider refs, storage key prefixes, and retention policy refs without changing engine code.
 - HR admin downloads are gated by tenant, artifact publish status, payload availability, and checksum verification.
 - Download URLs are exposed only for published downloadable artifacts.
-- The remaining architecture gap is replacing the local generated payload with a pluggable object-storage backend and adding external provider acknowledgement/reconciliation state.
+- The remaining architecture gap is adding SDK-backed object-store runtime implementations and connecting real external providers.
+
+Phase 4G implementation status:
+
+- `PayrollProviderDelivery` now records provider-facing delivery state for finance handoff artifacts.
+- Delivery records link tenant, finance handoff, output artifact, output batch, payroll run, and final-locked review lineage.
+- Provider routing is expressed through configurable provider, channel, retry policy, acknowledgement profile, request/response/reconciliation snapshots, and config snapshots.
+- Finance handoff transmission creates submitted delivery records for bank advice, accounting export, statutory summary, statutory return, and statutory challan artifacts.
+- Reconciliation can mark deliveries acknowledged, reconciled, rejected, or failed with evidence and checksum/file metadata snapshots.
+- Accepted handoff state is now driven by reconciled provider delivery evidence instead of a hardcoded local-only assumption.
+- HR admin APIs and `/hr-admin/payroll-handoff` expose delivery ledger, external references, retry policy, attempts, and reconciliation counts.
+- The remaining architecture gap is real provider adapters, webhook callback verification, background retry workers, and SDK-backed object-store runtime implementations.
+
+Phase 4H implementation status:
+
+- Payroll artifact storage now goes through a configurable adapter contract for store, read, and signed-url behavior.
+- The local generated-payload adapter preserves dev/test behavior while making storage behavior explicit through `payroll.storage.local.generated.v1`.
+- A signed-url-capable placeholder adapter proves the API/UI contract for signed download strategies before real object storage is installed.
+- `PayrollOutputArtifact` now stores object version, download strategy ref, signed-url support, signed-url expiry seconds, storage key, checksum, MIME type, file size, and retention policy ref as one coherent file contract.
+- HR admin downloads read through the adapter layer and return checksum, storage provider, object version, download strategy, and retention headers.
+- HR admin APIs expose signed download URL metadata when the selected adapter supports it.
+- Finance provider delivery request snapshots include storage strategy evidence so reconciliation remains auditable.
+- The remaining architecture gap is production secret-manager wiring and provider-side storage policy verification; employee download audit, revocation, signed-access binding, SDK-backed runtime storage, and configurable storage policy enforcement are handled in later Phase 4I-4N work.
+
+Phase 4I implementation status:
+
+- Published payslip artifacts are now available through employee-scoped ESS APIs.
+- `/api/v1/me/payroll-payslips/` lists only published payslips for the signed-in employee and tenant context.
+- `/api/v1/me/payroll-payslips/<id>/download/` reads through the same storage adapter layer as HR admin downloads and verifies checksum before streaming.
+- Employee payslip payloads expose run, period, pay date, file metadata, storage provider ref, object version, download strategy ref, signed URL readiness, retention policy ref, totals, calculation lines, source hash, and publisher metadata.
+- `/ess/payslips` gives employees a compact payroll history, payment summary, download action, storage governance panel, source hash, and line-level calculation evidence.
+- The remaining architecture gap is production secret-manager wiring, real provider adapters, and broader locked output audit exports; signed URL permission binding, revocation, and SDK-backed runtime storage are handled in later Phase 4K-4M work.
+
+Phase 4J implementation status:
+
+- `PayrollArtifactAccessEvent` now records an append-only tenant-scoped ledger for payslip publish, notification, download, read acknowledgement, and revocation-style access events.
+- Publishing payroll output batches records payslip published events and triggers configurable payslip publish notifications using the notification engine.
+- Employee and HR admin downloads record access events with actor, channel, request, storage provider, object version, download strategy, checksum, IP/user-agent, and metadata snapshots.
+- `/api/v1/me/payroll-payslips/<id>/read/` lets employees acknowledge a published payslip and marks the linked in-app notification as read.
+- ESS payslip payloads and HR admin output artifact payloads expose access summaries and recent access events.
+- `/ess/payslips` now shows access trail, notification count, download count, read receipt state, and recent access events beside the existing storage governance and calculation evidence.
+- Demo notification data now includes a payroll payslip notification so employee inbox filtering reflects the live payroll publish path.
+- The remaining architecture gap is production secret-manager wiring, webhook callback verification, background retry workers, real bank/accounting/statutory providers, and broader auditor-facing review tooling.
+
+Phase 4K implementation status:
+
+- `PayrollArtifactSignedAccessGrant` now records permission-bound signed access grants for payroll artifact downloads.
+- Signed grants are linked to tenant, artifact, output batch, payroll run, review, employee, issuing actor, target user/membership, storage evidence, expiry, access counts, and revocation metadata.
+- Grant tokens are stored as SHA-256 hashes with a short prefix; the raw token appears only in the issued URL response.
+- HR admin and ESS APIs can issue signed access grants only for published downloadable artifacts whose storage strategy supports signed URL behavior.
+- Download endpoints validate grant id, token hash, expiry, max access count, user binding, and membership binding before marking signed access usage.
+- HR admin APIs can revoke signed access grants with a required reason and append a revocation event to the artifact access ledger.
+- HR admin artifact payloads expose signed grant counts through the access summary, and `/hr-admin/payroll-outputs` shows access governance plus an artifact access audit export link.
+- `/api/v1/hr-admin/payroll-output-artifacts/<id>/access-audit-export/` exports event and signed-grant evidence as CSV.
+- The remaining architecture gap is production secret-manager wiring, external provider webhooks/retries, real bank/accounting/statutory integrations, auditor drilldown UX, and public audit pack packaging.
+
+Phase 4L implementation status:
+
+- Payroll artifact storage profiles are now normalized and sanitized before file metadata is persisted.
+- Local, placeholder signed URL, S3, GCS, and Azure provider families have explicit storage contract handling.
+- S3/GCS/Azure profiles require provider-specific storage metadata plus a tenant-scoped `credential_ref`; raw credential keys are rejected recursively from configuration snapshots.
+- Generated payslip, payroll register, and finance handoff artifacts now retain a sanitized `storage_profile` snapshot for auditability without persisting secrets.
+- Unknown storage provider refs fail clearly instead of silently falling back to local generated storage.
+- Object-store contract adapters can generate provider-style signed URL metadata in test/contract mode while making production runtime installation explicit.
+- Backend tests cover incomplete object-store profiles, S3 contract-profile generation/publish/download, sanitized credential refs, and raw credential rejection.
+- The remaining architecture gap is production secret-manager wiring, KMS/lifecycle/scanning policy enforcement, external provider webhooks/retries, real bank/accounting/statutory integrations, auditor drilldown UX, and public audit pack packaging.
+
+Phase 4M implementation status:
+
+- Payroll artifact storage credentials now resolve at runtime from `PAYROLL_ARTIFACT_STORAGE_CREDENTIALS` or `HRMS_PAYROLL_ARTIFACT_STORAGE_CREDENTIALS_JSON` using artifact-safe `credential_ref` values.
+- Credential resolution validates missing, disabled, provider-mismatched, and incomplete credential entries before any object-store operation runs.
+- Runtime credential descriptors expose only reference/source/metadata evidence and never persist secret material on payroll artifacts.
+- `PAYROLL_ARTIFACT_STORAGE_CLIENT_FACTORIES` allows deployments and tests to inject provider clients while keeping cloud SDK imports optional and lazy.
+- Object-store runtime adapters now support S3, GCS, and Azure upload/read/signed URL methods behind the existing storage contract.
+- S3 runtime coverage proves bytes are written to object storage, artifacts retain blank DB payloads, downloads read back through the storage adapter, checksums verify, and signed URL metadata comes from the runtime provider client.
+- The remaining architecture gap is production secret-manager wiring, cloud IAM/bucket/container policy configuration, KMS/customer-managed key enforcement, lifecycle retention checks, malware scanning, multi-region durability controls, external provider webhooks/retries, real bank/accounting/statutory integrations, auditor drilldown UX, and public audit pack packaging.
+
+Phase 4N implementation status:
+
+- Payroll artifact storage policies now resolve from `PAYROLL_ARTIFACT_STORAGE_POLICIES` or `HRMS_PAYROLL_ARTIFACT_STORAGE_POLICIES_JSON`.
+- Storage profiles now carry configurable storage, lifecycle, malware-scan, and durability policy refs in their sanitized artifact snapshots.
+- Policy enforcement can allowlist provider families, provider refs, credential refs, bucket/container names, retention refs, encryption refs, and endpoint hosts.
+- Policy enforcement can require encryption refs, private endpoints, runtime credential resolution, storage-key prefixes, minimum/maximum signed URL expiry, maximum file size, lifecycle profile refs, malware-scan profile refs, and durability profile refs.
+- Local/dev, contract-mode object-store, and SDK-backed runtime store/read/signed URL paths all apply the same policy contract.
+- Backend tests cover missing policy refs, strict encryption policy rejection, and strict S3 runtime policy success with lifecycle, malware-scan, and durability refs.
+- The remaining architecture gap is production secret-manager adapter wiring, cloud IAM/bucket/container policy verification against provider APIs, actual KMS/lifecycle/scanning service integration, external provider webhooks/retries, real bank/accounting/statutory integrations, auditor drilldown UX, and public audit pack packaging.
 
 Runs and snapshots:
 
@@ -257,15 +342,200 @@ Outputs:
 - `AccountingExport`
 - `StatutoryReport`
 - `PayrollOutputArtifact`
+- `PayrollFinanceHandoff`
+- `PayrollProviderDelivery`
 
 Compliance:
 
-- `CountryPayrollPack`
-- `StatutoryRuleSet`
-- `StatutoryRuleVersion`
-- `StatutorySlab`
-- `StatutoryDeclaration`
+- `PayrollStatutoryPack`
+- `PayrollStatutoryComponent`
+- `PayrollStatutorySlab`
+- `PayrollStatutoryEmployerRegistration`
+- `PayrollStatutoryFilingCalendar`
 - `EmployeeStatutoryProfile`
+- `StatutoryDeclaration`
+
+Phase 5A implementation status:
+
+- `PayrollStatutoryPack`, `PayrollStatutoryComponent`, `PayrollStatutorySlab`, and `EmployeeStatutoryProfile` now exist as tenant-scoped statutory configuration models.
+- The India pack foundation supports PF, ESI, PT, LWF, TDS, gratuity, and other statutory component kinds without hardcoded country logic in payroll calculation code.
+- Statutory components resolve behavior through wage-base refs, statutory-treatment refs, registration refs, applicability refs, rounding refs, formula refs, and config snapshots.
+- Statutory slabs support effective dates, state codes, wage ceilings, percentage rates, fixed employee/employer amounts, and applicability refs.
+- Employee statutory profiles store PAN, UAN, PF/ESI identifiers, applicability flags, PT/LWF state, tax regime, declaration status, previous employment values, source refs, and deterministic source hashes.
+- HR admin APIs can create, update, list, and inspect statutory packs, components, slabs, and employee statutory profiles.
+- Later Phase 5 slices add declaration/proof workflows and statutory declaration workspaces; the remaining architecture gap is challan/return generation and statutory provider integrations.
+
+Phase 5B implementation status:
+
+- Draft payroll calculation now consumes selected active statutory packs/components/slabs and employee statutory profiles from tenant configuration.
+- `PayrollCalculationLineSource` now includes `statutory`, so statutory-generated lines are distinguishable from rule-generated and adjustment-generated lines.
+- Statutory calculation selection is controlled by the run calculation profile through pack codes, statutory pack refs, component codes, excluded components, and statutory types.
+- Statutory wage bases resolve through component-level `wage_base_path` configuration or calculation-profile wage-base mappings.
+- Slab, percentage, and fixed-amount statutory methods generate employee deduction, employer contribution, both-sided, or informational lines without embedding country rates in Python.
+- Statutory line traces store wage-base path/value, statutory pack/component/slab refs, employee statutory profile hash, and deterministic source hashes.
+- Validation now recognizes statutory-produced component codes and raises statutory setup blockers for missing active components, missing employee profiles, missing wage-base configuration, unavailable wage-base paths, and missing active slabs.
+- Later Phase 5 slices add declaration/proof workflows and statutory declaration workspaces; the remaining architecture gap is richer TDS annualization, investment/exemption cap logic, challan/return generation, and statutory provider integrations.
+
+Phase 5C implementation status:
+
+- `EmployeeStatutoryDeclaration` now stores financial-year declaration packages linked to employees, employee statutory profiles, and optional statutory packs.
+- `EmployeeStatutoryDeclarationItem` now stores section/component-level declared amounts, verified amounts, proof refs, proof status, rejection evidence, config snapshots, and source hashes.
+- Declaration statuses now cover draft, submitted, verified, rejected, and locked lifecycle states.
+- Proof statuses now cover not required, pending, submitted, verified, and rejected states.
+- HR-admin APIs can create/update declarations, create/update proof items, submit declarations, verify declarations, reject declarations, lock declarations, and verify/reject individual proof items.
+- Submission, verification, rejection, and lock transitions update the linked employee statutory profile declaration state.
+- Payroll statutory setup payload now exposes declaration summaries, declaration records, proof item records, and declaration/proof option catalogs.
+- The remaining architecture gap is TDS annualization, investment/exemption cap logic, challan/return generation, and provider integrations.
+
+Phase 5D implementation status:
+
+- Employee-scoped statutory declaration API now exists at `/api/v1/me/statutory-declarations/`.
+- ESS declaration payloads expose the current employee's statutory profile, financial-year declarations, proof items, summary totals, available years, option catalogs, source refs, and source hashes.
+- `/hr-admin/payroll-statutory` provides a browser-tested HR-admin statutory review workspace for packs, components, profiles, declarations, proof evidence, verification state, lock state, and source trace.
+- `/ess/statutory-declarations` provides a browser-tested employee statutory workspace for tax profile, proof state, declared/verified totals, payroll consumption refs, and declaration source trail.
+- Playwright e2e, tier-one smoke, and laptop/mobile operational visual baselines now cover both statutory declaration workspaces.
+- The remaining architecture gap is TDS annualization, investment/exemption cap logic, challan/return generation, and provider integrations.
+
+Phase 5E implementation status:
+
+- Employee-scoped statutory create/update APIs now allow employees to manage their own draft or rejected declarations.
+- Employee-scoped proof item APIs now allow employees to create/update declared proof rows and link proof document/artifact references.
+- Employee proof writes are restricted to not-required, pending, or submitted states; HR-admin remains responsible for proof verification/rejection and declaration locking.
+- Employee declaration submission refreshes totals, records the submitting user, and advances the employee statutory profile to proofs pending.
+- `/ess/statutory-declarations` now includes a browser-tested action panel for declaration metadata, tax regime selection, proof item refs, and submit action.
+- The remaining architecture gap is richer TDS annualization, investment/exemption cap logic, challan/return generation, and provider integrations.
+
+Phase 5F implementation status:
+
+- Employee statutory proof uploads now use `/api/v1/me/statutory-declarations/<id>/proof-upload/`.
+- The upload workflow creates an employee document via the existing self-service document service and links the document/artifact refs to the statutory declaration item.
+- Proof upload categories are sourced from tenant-configured self-upload document categories, preferring tax/statutory-marked categories.
+- ESS statutory declaration actions now support direct file attachment as well as existing proof-reference entry.
+- Backend and Playwright coverage prove the upload linkage and browser control availability.
+- The remaining architecture gap is statutory provider submission, webhook verification, background retry workers, and certification flows.
+
+Phase 5G implementation status:
+
+- TDS can now run as a configured statutory component inside the existing draft payroll calculation pipeline.
+- Annualization behavior is component/profile-driven: financial year, annual multiplier, remaining periods, output code/name/type, tax method, declaration statuses, proof statuses, declaration profile refs, and cap rules are configurable.
+- Verified or locked employee statutory declarations can reduce taxable annual income through configured cap rules matched by section, component, item kind, and tax regime.
+- Progressive slab calculation uses active effective-dated `PayrollStatutorySlab` records, and period TDS is derived from annual tax less prior deducted tax spread across configured remaining periods.
+- Statutory TDS lines carry annual wage, declaration adjustment, taxable annual amount, slab trace, period tax, source hash, and consumed declaration cap evidence for payroll review.
+- The HR payroll calculation workspace now shows TDS annualization details in the line trace panel, with Playwright and visual coverage.
+- The remaining architecture gap is challan/return generation and provider integrations.
+
+Phase 5H implementation status:
+
+- TDS annualization can now calculate side-by-side tax regime projections from configured candidate regimes.
+- Each projection independently applies declaration cap rules and effective-dated statutory slabs for its candidate regime.
+- The selected payroll line amount stays profile/config-selected by default, with a configurable lowest-tax selection mode for tenants that want automated regime choice.
+- TDS line trace/config snapshots now include selected regime, selection mode, projected declaration adjustments, taxable annual amounts, annual tax, remaining tax, period tax, selected flags, and deltas.
+- `/hr-admin/payroll-calculations` displays the comparison matrix in the TDS annualization trace panel, backed by Playwright and visual coverage.
+- The remaining architecture gap is challan/return generation and provider integrations.
+
+Phase 5I implementation status:
+
+- `PayrollStatutoryEmployerRegistration` now stores tenant-scoped statutory account numbers and employer identifiers by statutory pack, optional component, legal entity, branch, location, jurisdiction, filing authority, provider, effective dates, source refs, source hashes, and config snapshots.
+- `PayrollStatutoryFilingCalendar` now stores tenant-scoped filing obligations by statutory pack, optional component, optional employer registration, filing type, frequency, period, due/grace/window dates, status, authority/provider refs, output profile refs, source refs, source hashes, and config snapshots.
+- HR-admin APIs and the payroll statutory setup payload now expose registration and filing records, summary counts, due/overdue filing signals, legal entity/branch/location option catalogs, payroll frequencies, and filing status catalogs.
+- `/hr-admin/payroll-statutory` now shows registration coverage and upcoming filing obligations in the same browser-tested workspace as statutory packs, components, declarations, proof evidence, and source trails.
+- The remaining architecture gap is live statutory provider execution, webhook endpoints, background retry workers, and certification-flow automation.
+
+Phase 5J implementation status:
+
+- Finance handoff generation now creates configured statutory return and challan artifacts from eligible filing calendars and employer registrations.
+- `PayrollOutputArtifact` carries filing artifacts as `kind = statutory_report` with `artifact_subtype` values for return and challan, keeping file generation metadata-driven.
+- Generated return/challan artifacts include filing calendar refs, filing type refs, output profile refs, authority/provider refs, employer registration refs, payable totals, source hashes, and line evidence.
+- Filing calendars record latest generation evidence in their config snapshot, including handoff, output batch, generated artifact IDs, totals, and generated timestamp.
+- `/hr-admin/payroll-handoff` now exposes statutory filing files beside bank advice, accounting export, statutory summary, provider delivery, and reconciliation evidence.
+- The remaining architecture gap is live statutory provider execution, webhook endpoints, background retry workers, and certification-flow automation.
+
+Phase 5K implementation status:
+
+- Provider route resolution now supports artifact-specific, output-profile, filing-type, artifact-kind, and statutory filing subtype keys such as `statutory_report:statutory_return`.
+- Delivery request snapshots now include a normalized submission contract with adapter refs, submission modes, submission/request/response schema refs, callback refs, callback verification refs, certification refs, certification-required flags, and idempotency keys.
+- Statutory filing delivery contracts carry filing calendar, filing type, authority, employer registration, and output profile context.
+- Delivery config snapshots retain selected provider routes, submission contracts, and certification evidence state.
+- Reconciliation snapshots now record callback verification and certification profile evidence alongside checksum and line-count evidence.
+- `/hr-admin/payroll-handoff` exposes adapter, submission profile, callback verification, certification profile, and certification evidence state.
+- The remaining architecture gap is live bank/accounting/statutory provider execution, production webhook hardening, background retry workers, and certification-flow automation.
+
+Phase 5L implementation status:
+
+- `PayrollProviderCallbackEvent` now stores signed inbound provider callback events linked to tenant, delivery, handoff, and output artifact lineage.
+- Callback events store provider refs, external refs, idempotency keys, callback profile refs, verification refs, payload checksums, signatures, payload snapshots, verification snapshots, processing snapshots, timestamps, and failure evidence.
+- `/api/v1/payroll-provider-callbacks/` ingests provider callbacks without HR-admin session coupling.
+- Callback delivery resolution is controlled by provider ref plus delivery ID or external reference.
+- Deterministic contract signatures verify callbacks against delivery submission contracts, callback verification refs, payload checksums, and artifact checksums.
+- Provider/idempotency uniqueness prevents replayed callbacks from creating duplicate events or mutating delivery state again.
+- Valid callbacks update delivery response/reconciliation snapshots, certification evidence, handoff summaries, and accepted/failed state where applicable.
+- `/hr-admin/payroll-handoff` now displays callback events and callback verification refs beside provider delivery acknowledgements.
+- The remaining architecture gap is live provider execution adapters, production webhook hardening, background retry-worker execution, and automated certification lifecycle handling.
+
+Phase 5M implementation status:
+
+- `PayrollProviderRetryEvent` now stores tenant-scoped retry/dead-letter records linked to provider delivery, finance handoff, output artifact, output batch, payroll run, and final-locked review lineage.
+- Retry events carry scheduled/executed/dead-letter/skipped state, retry policy refs, failure taxonomy/category refs, retry reasons, attempt numbers, request snapshots, decision snapshots, response snapshots, and failure evidence.
+- Provider delivery snapshots now retain nested retry policy config from the selected provider route.
+- Retry decisions are configurable through route-level max attempts, backoff seconds, taxonomy refs, and provider-specific failure category mappings.
+- HR-admin schedule-retry and requeue APIs provide the execution contract for failed/rejected deliveries while blocking mutation of reconciled deliveries.
+- Dead-letter records are created when configured attempts are exhausted, preserving why the delivery can no longer be automatically retried.
+- `/hr-admin/payroll-handoff` now displays retry metrics, provider retry events, failed-delivery retry state, and schedule/requeue command surfaces.
+- The remaining architecture gap is live provider execution adapters, background retry-worker runtime, production queue integration, production webhook hardening, and automated certification lifecycle handling.
+
+Phase 5N implementation status:
+
+- Scheduled retry events can now be processed by `process_due_payroll_provider_retries`, filtered by tenant, due timestamp, and limit.
+- `execute_payroll_provider_retry_event` provides the provider-agnostic adapter execution shell for one retry event.
+- Route-level `execution_adapter` snapshots carry worker profile refs, adapter refs, execution modes, execution strategy refs, dispatch modes, schema refs, callback refs, and idempotency keys.
+- The default execution shell is manual requeue: it moves failed/rejected deliveries back to submitted state and leaves final outcome handling to the existing provider callback or acknowledgement path.
+- Stale scheduled retries are safely skipped with failure evidence when the delivery was already reconciled or is no longer retryable.
+- `process_payroll_provider_retries` gives operations a command/scheduler entrypoint without binding the domain model to a specific queue provider.
+- `/hr-admin/payroll-handoff` now exposes retry worker profile refs for failed-delivery recovery.
+- The remaining architecture gap is production queue scheduling, provider-specific bank/accounting/statutory SDK adapters, production webhook hardening, and automated certification lifecycle handling.
+
+Phase 5O implementation status:
+
+- `backend/apps/payroll/providers.py` defines the provider adapter boundary with submission request/result dataclasses, an adapter protocol, raw-secret route validation, runtime credential resolution, a manual adapter, and a sandbox adapter.
+- Provider credentials resolve by `credential_ref` from `PAYROLL_PROVIDER_CREDENTIALS` or `HRMS_PAYROLL_PROVIDER_CREDENTIALS_JSON`; persisted snapshots contain sanitized descriptors, never credential material.
+- Provider routes can now configure credential refs, credential profile refs, credential-required flags, sandbox responses, retry policies, and execution adapter config without hardcoded provider behavior in payroll core.
+- Finance handoff transmission runs newly created provider deliveries through the adapter boundary and stores normalized request/result evidence with provider batch refs, schema refs, callback refs, credential descriptors, and certification evidence refs.
+- Adapter results can move deliveries to submitted, acknowledged, reconciled, rejected, or failed states while preserving handoff summary consistency.
+- Retry worker execution reuses the same submission boundary after requeue, so initial provider submission and retry submission share the same contract.
+- `PAYROLL_PROVIDER_ADAPTERS` gives production deployments a registry hook for provider-specific bank, accounting, and statutory SDK adapters.
+- `/hr-admin/payroll-handoff` exposes credential refs and credential profile refs for failed-delivery recovery without exposing secrets.
+- The remaining architecture gap is production SDK/portal adapter implementation, production queue scheduling, production webhook hardening, and automated certification lifecycle handling.
+
+Phase 5P implementation status:
+
+- Provider-specific sandbox scaffolds now exist for bank, accounting, and statutory delivery domains behind the provider adapter protocol.
+- Each scaffold validates supported artifact kinds before submission to catch wrong adapter/artifact pairings early.
+- Bank responses stamp bank payment instruction contract evidence, including payment file name and checksum.
+- Accounting responses stamp accounting journal import contract evidence, including ledger file name and checksum.
+- Statutory responses stamp statutory filing upload contract evidence, including filing file name, checksum, filing context, and certification evidence refs.
+- The adapter registry resolves bank/accounting/statutory sandbox refs without custom settings, while still allowing production overrides through `PAYROLL_PROVIDER_ADAPTERS`.
+- `/hr-admin/payroll-handoff` demo data now surfaces the statutory sandbox adapter ref for failed challan recovery.
+- The remaining architecture gap is production bank/accounting/statutory SDK or portal automation adapters, production queue scheduling, production webhook hardening, and automated certification lifecycle handling.
+
+Phase 5Q implementation status:
+
+- `PayrollProviderConnection` now stores tenant-owned provider onboarding state for bank, accounting, and statutory provider families.
+- Provider connection records hold provider refs, environment refs, adapter refs, sandbox adapter refs, channel refs, credential refs, credential profile refs, callback profile refs, callback verification refs, retry policy refs, certification profile refs, readiness snapshots, and certification snapshots.
+- Active provider connections are blocked until required runtime refs are present and certification has passed.
+- Raw provider credential keys are rejected from connection config/evidence snapshots, preserving credential-ref-only SaaS configuration.
+- Default bank, accounting, and statutory sandbox connection blueprints give tenants a configurable starting point without binding payroll core to a provider implementation.
+- HR-admin provider connection setup, list/create, detail/update, and certify APIs now expose the onboarding contract.
+- `/hr-admin/payroll-providers` adds a provider launch-control workspace with readiness gates, certification evidence, credential boundaries, and vertical provider coverage.
+- The remaining architecture gap is connecting certified provider connections into finance handoff route selection, production SDK/portal adapter implementation, production queue scheduling, production webhook hardening, and automated certification test execution.
+
+Phase 5R implementation status:
+
+- Finance handoff provider routes can now enforce provider connection policy through `disabled`, `warn`, `certified`, or `active` modes.
+- Route resolution can inherit adapter refs, channel refs, credential refs, credential profile refs, callback refs, retry policy refs, and certification refs from the tenant-owned `PayrollProviderConnection`.
+- Strict certified/active enforcement blocks transmission when the connection is missing, uncertified, inactive, not readiness-complete, or mismatched with explicit route refs.
+- Delivery route snapshots and submission contracts carry provider connection gate evidence for audit and support.
+- `/hr-admin/payroll-handoff` surfaces provider connection gate mode, connection status, and blocking gate refs next to provider acknowledgement evidence.
+- The remaining architecture gap is production SDK/portal adapter implementation, production queue scheduling, production webhook hardening, and automated certification test execution.
 
 ---
 
@@ -578,16 +848,22 @@ Boundary:
 
 ### Payroll Phase 4: Payslips And Registers
 
-- Add payslip preview and publish.
-- Add employee payslip access.
-- Add payroll register.
-- Add CSV exports.
+- Add payslip preview and publish. Completed through published output artifacts.
+- Add employee payslip access. Completed through Phase 4I ESS APIs and `/ess/payslips`.
+- Add payslip access audit, read receipts, and publish notifications. Completed through Phase 4J access events and notification integration.
+- Add signed URL permission binding, revocation history, and artifact access audit export. Completed through Phase 4K signed access grants and CSV export.
+- Harden object-storage profile contracts so S3/GCS/Azure storage can be configured without hardcoded secrets. Completed through Phase 4L contract validation and sanitized storage snapshots.
+- Add runtime credential resolution and SDK-backed object storage. Completed through Phase 4M optional S3/GCS/Azure runtime adapters and injected-client coverage.
+- Add configurable storage policy enforcement. Completed through Phase 4N policy refs, allowlists, encryption/retention/endpoint/size gates, and strict runtime tests.
+- Add payroll register. Completed through published register artifacts.
+- Add CSV exports. Completed for payroll register and finance handoff artifacts; provider-specific production export adapters remain open.
 
 ### Payroll Phase 5: India Compliance Pack V1
 
-- Add PF, ESI, PT, LWF, TDS, gratuity, and bonus foundations.
-- Add statutory profiles and declarations.
-- Add statutory reports.
+- Add PF, ESI, PT, LWF, TDS, gratuity, and bonus foundations. Started through Phase 5A statutory packs, components, slabs, and employee statutory profiles.
+- Add statutory profiles and declarations. Employee statutory profiles, HR-admin declaration/proof workflow APIs, employee create/update/submit APIs, direct statutory proof upload, HR-admin statutory review UI, and ESS statutory declaration UI/actions are implemented.
+- Add statutory calculations that consume effective-dated statutory packs, components, slabs, wage-base refs, applicability refs, and employee statutory profiles. Started through Phase 5B statutory-generated calculation lines.
+- Add statutory reports, challans, returns, and filing evidence. Statutory summary, return, challan artifact generation, provider submission contracts, signed callback ingestion, callback verification refs, and certification evidence refs now exist through the finance handoff pipeline; live statutory provider execution remains deferred.
 
 ### Payroll Phase 6: Finance And Payments
 

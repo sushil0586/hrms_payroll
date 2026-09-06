@@ -1,6 +1,5 @@
 """Views for the first ESS/MSS API slice."""
 
-import hashlib
 from datetime import date, datetime, timedelta
 import csv
 import re
@@ -12,7 +11,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
 from django.http import FileResponse, HttpResponse
 from django.db import transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.text import slugify
@@ -128,6 +127,25 @@ from apps.common.api_serializers import (
     HrAdminPayrollSettlementSerializer,
     HrAdminPayrollSettlementSetupSerializer,
     HrAdminPayrollSettlementWriteSerializer,
+    HrAdminEmployeeStatutoryDeclarationItemSerializer,
+    HrAdminEmployeeStatutoryDeclarationItemVerifySerializer,
+    HrAdminEmployeeStatutoryDeclarationItemWriteSerializer,
+    HrAdminEmployeeStatutoryDeclarationRejectSerializer,
+    HrAdminEmployeeStatutoryDeclarationSerializer,
+    HrAdminEmployeeStatutoryDeclarationWriteSerializer,
+    HrAdminEmployeeStatutoryProfileSerializer,
+    HrAdminEmployeeStatutoryProfileWriteSerializer,
+    HrAdminPayrollStatutoryComponentSerializer,
+    HrAdminPayrollStatutoryComponentWriteSerializer,
+    HrAdminPayrollStatutoryEmployerRegistrationSerializer,
+    HrAdminPayrollStatutoryEmployerRegistrationWriteSerializer,
+    HrAdminPayrollStatutoryFilingCalendarSerializer,
+    HrAdminPayrollStatutoryFilingCalendarWriteSerializer,
+    HrAdminPayrollStatutoryPackSerializer,
+    HrAdminPayrollStatutoryPackWriteSerializer,
+    HrAdminPayrollStatutorySetupSerializer,
+    HrAdminPayrollStatutorySlabSerializer,
+    HrAdminPayrollStatutorySlabWriteSerializer,
     HrAdminPayrollCalculationLineSerializer,
     HrAdminPayrollCalculationSetupSerializer,
     HrAdminPayrollCalendarSerializer,
@@ -140,6 +158,7 @@ from apps.common.api_serializers import (
     HrAdminPayrollInputSnapshotSerializer,
     HrAdminPayrollInputSnapshotSetupSerializer,
     HrAdminPayrollInputSnapshotWriteSerializer,
+    HrAdminPayrollFinanceHandoffAcknowledgeRequestSerializer,
     HrAdminPayrollFinanceHandoffActionResultSerializer,
     HrAdminPayrollFinanceHandoffSetupSerializer,
     HrAdminPayrollGenerateFinanceHandoffRequestSerializer,
@@ -149,6 +168,20 @@ from apps.common.api_serializers import (
     HrAdminPayrollOutputArtifactSerializer,
     HrAdminPayrollOutputBatchSerializer,
     HrAdminPayrollOutputSetupSerializer,
+    HrAdminPayrollProviderConnectionActionResultSerializer,
+    HrAdminPayrollProviderConnectionCertificationRequestSerializer,
+    HrAdminPayrollProviderConnectionSerializer,
+    HrAdminPayrollProviderConnectionSetupSerializer,
+    HrAdminPayrollProviderConnectionWriteSerializer,
+    PayrollArtifactSignedAccessGrantIssueRequestSerializer,
+    PayrollArtifactSignedAccessGrantIssueResultSerializer,
+    PayrollArtifactSignedAccessGrantRevokeRequestSerializer,
+    PayrollArtifactSignedAccessGrantSerializer,
+    PayrollProviderCallbackRequestSerializer,
+    PayrollProviderCallbackResultSerializer,
+    HrAdminPayrollProviderRetryActionResultSerializer,
+    HrAdminPayrollProviderRetryRequeueRequestSerializer,
+    HrAdminPayrollProviderRetryScheduleRequestSerializer,
     HrAdminPayrollPeriodSerializer,
     HrAdminPayrollPeriodWriteSerializer,
     HrAdminPayrollReadinessListSerializer,
@@ -182,6 +215,14 @@ from apps.common.api_serializers import (
     MeDocumentSummarySerializer,
     MeDocumentRequirementItemSerializer,
     MeEmployeeDocumentCreateSerializer,
+    MePayrollPayslipSerializer,
+    MePayrollPayslipListSerializer,
+    MeStatutoryDeclarationItemSerializer,
+    MeStatutoryDeclarationItemWriteSerializer,
+    MeStatutoryDeclarationListSerializer,
+    MeStatutoryDeclarationProofUploadSerializer,
+    MeStatutoryDeclarationSerializer,
+    MeStatutoryDeclarationWriteSerializer,
     HrAdminExitSerializer,
     HrAdminExitWriteSerializer,
     HrAdminHolidayCalendarSerializer,
@@ -236,6 +277,9 @@ from apps.iam.models import MembershipRole, MembershipStatus, Role, ScopeType, T
 from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, EmploymentType, Grade, LegalEntity, Location
 from apps.payroll.models import (
     EmployeeSalaryAssignment,
+    EmployeeStatutoryDeclaration,
+    EmployeeStatutoryDeclarationItem,
+    EmployeeStatutoryProfile,
     PayGroup,
     PayGroupAssignment,
     PayGroupStatus,
@@ -255,11 +299,25 @@ from apps.payroll.models import (
     PayrollInputSnapshot,
     PayrollInputSnapshotStatus,
     PayrollExpressionLanguage,
+    PayrollArtifactAccessEvent,
+    PayrollArtifactAccessEventType,
+    PayrollArtifactSignedAccessGrant,
+    PayrollArtifactSignedAccessGrantStatus,
     PayrollOutputArtifact,
     PayrollOutputArtifactKind,
     PayrollOutputArtifactStatus,
     PayrollOutputBatch,
     PayrollOutputBatchStatus,
+    PayrollProviderCallbackEvent,
+    PayrollProviderCallbackEventStatus,
+    PayrollProviderCertificationStatus,
+    PayrollProviderConnection,
+    PayrollProviderConnectionKind,
+    PayrollProviderConnectionStatus,
+    PayrollProviderDelivery,
+    PayrollProviderDeliveryStatus,
+    PayrollProviderRetryEvent,
+    PayrollProviderRetryEventStatus,
     PayrollCalendar,
     PayrollConfigStatus,
     PayrollFrequency,
@@ -281,6 +339,20 @@ from apps.payroll.models import (
     PayrollSettlementLine,
     PayrollSettlementLineKind,
     PayrollSettlementStatus,
+    PayrollStatutoryCalculationMethod,
+    PayrollStatutoryComponent,
+    PayrollStatutoryComponentKind,
+    PayrollStatutoryContributionOwner,
+    PayrollStatutoryDeclarationItemKind,
+    PayrollStatutoryDeclarationStatus,
+    PayrollStatutoryEmployerRegistration,
+    PayrollStatutoryFilingCalendar,
+    PayrollStatutoryFilingStatus,
+    PayrollStatutoryPack,
+    PayrollStatutoryProofStatus,
+    PayrollStatutorySlab,
+    PayrollTaxRegime,
+    PayrollDeclarationStatus,
     PayrollValidationCategory,
     PayrollValidationIssue,
     PayrollValidationIssueStatus,
@@ -361,6 +433,9 @@ from apps.payroll.services import (
     PayrollCalculationError,
     PayrollFinanceHandoffError,
     PayrollOutputError,
+    PayrollProviderCallbackError,
+    PayrollProviderConnectionError,
+    PayrollProviderRetryError,
     PayrollReviewError,
     PayrollRuleEvaluationError,
     PayrollSettlementError,
@@ -372,6 +447,7 @@ from apps.payroll.services import (
     build_payroll_rule_context_from_snapshot,
     calculate_draft_payroll_run,
     create_payroll_adjustment,
+    create_payroll_artifact_access_event,
     create_payroll_settlement,
     create_payroll_settlement_line,
     create_payroll_run_exception,
@@ -379,16 +455,33 @@ from apps.payroll.services import (
     evaluate_payroll_rule_version,
     generate_payroll_finance_handoff,
     generate_payroll_outputs,
+    ensure_default_payroll_provider_connections,
+    ingest_payroll_provider_callback,
+    issue_payroll_artifact_signed_access_grant,
     lock_approved_payroll_run_review,
+    mark_payroll_artifact_signed_access_grant_used,
     open_payroll_run_review,
+    payroll_artifact_access_audit_rows,
     publish_payroll_output_batch,
+    reconcile_payroll_finance_handoff,
+    record_payroll_provider_connection_certification,
     reject_payroll_adjustment,
     reject_payroll_run_review,
     reject_payroll_settlement,
+    requeue_payroll_provider_delivery,
+    revoke_payroll_artifact_signed_access_grant,
+    schedule_payroll_provider_delivery_retry,
+    sync_payroll_provider_connection_readiness,
     submit_payroll_adjustment,
     submit_payroll_run_review,
     submit_payroll_settlement,
     transmit_payroll_finance_handoff,
+    validate_payroll_artifact_signed_access_grant,
+)
+from apps.payroll.storage import (
+    PayrollArtifactStorageError,
+    get_payroll_artifact_signed_url,
+    read_payroll_artifact_payload,
 )
 from apps.leave_management.models import (
     AccrualFrequency,
@@ -6227,6 +6320,848 @@ class MeEmployeeDocumentDownloadView(EmployeeContextMixin, APIView):
         return response_file
 
 
+def _payroll_access_event_payload(event: PayrollArtifactAccessEvent) -> dict:
+    return {
+        "id": event.id,
+        "event_type": event.event_type,
+        "status": event.status,
+        "event_profile_ref": event.event_profile_ref,
+        "source_channel_ref": event.source_channel_ref,
+        "actor_identifier": event.actor_identifier,
+        "notification_id": event.notification_id,
+        "signed_access_grant_id": event.signed_access_grant_id,
+        "request_identifier": event.request_identifier,
+        "storage_provider_ref": event.storage_provider_ref,
+        "storage_object_version": event.storage_object_version,
+        "download_strategy_ref": event.download_strategy_ref,
+        "checksum_sha256": event.checksum_sha256,
+        "read_at": event.read_at,
+        "created_at": event.created_at,
+        "metadata_snapshot": event.metadata_snapshot,
+    }
+
+
+def _payroll_signed_access_grant_payload(grant: PayrollArtifactSignedAccessGrant, *, signed_url: str | None = None) -> dict:
+    issued_to_membership = grant.issued_to_membership
+    return {
+        "id": grant.id,
+        "output_artifact_id": grant.output_artifact_id,
+        "status": grant.status,
+        "permission_scope": grant.permission_scope,
+        "grant_profile_ref": grant.grant_profile_ref,
+        "source_channel_ref": grant.source_channel_ref,
+        "issued_to_membership_id": grant.issued_to_membership_id,
+        "issued_to_membership_name": str(issued_to_membership) if issued_to_membership else None,
+        "issued_by_name": str(grant.issued_by_user) if grant.issued_by_user else None,
+        "token_prefix": grant.token_prefix,
+        "signed_url": signed_url if signed_url is not None else grant.signed_url,
+        "expires_at": grant.expires_at,
+        "revoked_at": grant.revoked_at,
+        "revocation_reason": grant.revocation_reason,
+        "access_count": grant.access_count,
+        "max_access_count": grant.max_access_count,
+        "storage_provider_ref": grant.storage_provider_ref,
+        "storage_object_version": grant.storage_object_version,
+        "download_strategy_ref": grant.download_strategy_ref,
+        "checksum_sha256": grant.checksum_sha256,
+        "metadata_snapshot": grant.metadata_snapshot,
+        "created_at": grant.created_at,
+        "updated_at": grant.updated_at,
+    }
+
+
+def _payroll_artifact_access_summary(artifact: PayrollOutputArtifact) -> dict:
+    events = artifact.access_events.all()
+    grants = artifact.signed_access_grants.all()
+    now = timezone.now()
+    latest_download = events.filter(event_type=PayrollArtifactAccessEventType.DOWNLOADED).order_by("-created_at").first()
+    first_read = events.filter(event_type=PayrollArtifactAccessEventType.READ_ACKNOWLEDGED).order_by("read_at", "created_at").first()
+    latest_notification = events.filter(event_type=PayrollArtifactAccessEventType.NOTIFIED).order_by("-created_at").first()
+    latest_signed_grant = grants.order_by("-created_at").first()
+    latest_revoked_grant = grants.filter(status=PayrollArtifactSignedAccessGrantStatus.REVOKED).order_by("-revoked_at", "-created_at").first()
+    return {
+        "published_event_count": events.filter(event_type=PayrollArtifactAccessEventType.PUBLISHED).count(),
+        "notification_count": events.filter(event_type=PayrollArtifactAccessEventType.NOTIFIED).count(),
+        "signed_url_issued_count": events.filter(event_type=PayrollArtifactAccessEventType.SIGNED_URL_ISSUED).count(),
+        "download_count": events.filter(event_type=PayrollArtifactAccessEventType.DOWNLOADED).count(),
+        "read_acknowledgement_count": events.filter(event_type=PayrollArtifactAccessEventType.READ_ACKNOWLEDGED).count(),
+        "revoked_event_count": events.filter(event_type=PayrollArtifactAccessEventType.REVOKED).count(),
+        "active_signed_grant_count": grants.filter(status=PayrollArtifactSignedAccessGrantStatus.ACTIVE, expires_at__gt=now).count(),
+        "revoked_signed_grant_count": grants.filter(status=PayrollArtifactSignedAccessGrantStatus.REVOKED).count(),
+        "expired_signed_grant_count": grants.filter(Q(status=PayrollArtifactSignedAccessGrantStatus.EXPIRED) | Q(status=PayrollArtifactSignedAccessGrantStatus.ACTIVE, expires_at__lte=now)).count(),
+        "latest_downloaded_at": latest_download.created_at if latest_download else None,
+        "first_read_at": first_read.read_at if first_read else None,
+        "latest_notification_at": latest_notification.created_at if latest_notification else None,
+        "latest_signed_grant_expires_at": latest_signed_grant.expires_at if latest_signed_grant else None,
+        "latest_revoked_at": latest_revoked_grant.revoked_at if latest_revoked_grant else None,
+        "is_read_acknowledged": first_read is not None,
+    }
+
+
+def _payroll_request_metadata(request) -> dict:
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    ip_address = (forwarded_for.split(",")[0].strip() if forwarded_for else request.META.get("REMOTE_ADDR", "")) or ""
+    return {
+        "request_identifier": request.META.get("HTTP_X_REQUEST_ID", "") or request.META.get("HTTP_X_CORRELATION_ID", ""),
+        "ip_address": ip_address,
+        "user_agent": request.META.get("HTTP_USER_AGENT", ""),
+    }
+
+
+def _payroll_signed_access_grant_from_request(artifact: PayrollOutputArtifact, request, *, actor_membership=None):
+    grant_id = (request.query_params.get("grant_id") or "").strip()
+    token = (request.query_params.get("token") or "").strip()
+    if not grant_id and not token:
+        return None
+    grant = validate_payroll_artifact_signed_access_grant(
+        artifact,
+        grant_id=grant_id,
+        token=token,
+        actor_user=request.user,
+        actor_membership=actor_membership,
+    )
+    return mark_payroll_artifact_signed_access_grant_used(grant)
+
+
+def build_me_statutory_declaration_item_payload(item: EmployeeStatutoryDeclarationItem) -> dict:
+    return {
+        "id": item.id,
+        "declaration_id": item.declaration_id,
+        "financial_year_code": item.declaration.financial_year_code,
+        "item_kind": item.item_kind,
+        "item_kind_label": item.get_item_kind_display(),
+        "section_code": item.section_code,
+        "component_code": item.component_code,
+        "name": item.name,
+        "declared_amount": item.declared_amount,
+        "verified_amount": item.verified_amount,
+        "proof_status": item.proof_status,
+        "proof_status_label": item.get_proof_status_display(),
+        "proof_document_ref": item.proof_document_ref,
+        "proof_artifact_key": item.proof_artifact_key,
+        "proof_submitted_at": item.proof_submitted_at,
+        "verified_at": item.verified_at,
+        "rejected_at": item.rejected_at,
+        "rejection_reason": item.rejection_reason,
+        "source_ref": item.source_ref,
+        "source_hash": item.source_hash,
+        "config_snapshot": item.config_snapshot,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_me_statutory_declaration_payload(item: EmployeeStatutoryDeclaration) -> dict:
+    declaration_items = item.items.all()
+    return {
+        "id": item.id,
+        "employee_statutory_profile_id": item.employee_statutory_profile_id,
+        "statutory_pack_id": item.statutory_pack_id,
+        "statutory_pack_name": item.statutory_pack.name if item.statutory_pack else None,
+        "financial_year_code": item.financial_year_code,
+        "declaration_profile_ref": item.declaration_profile_ref,
+        "proof_window_ref": item.proof_window_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "tax_regime": item.tax_regime,
+        "tax_regime_label": item.get_tax_regime_display(),
+        "declared_total_amount": item.declared_total_amount,
+        "verified_total_amount": item.verified_total_amount,
+        "submitted_at": item.submitted_at,
+        "verified_at": item.verified_at,
+        "rejected_at": item.rejected_at,
+        "locked_at": item.locked_at,
+        "rejection_reason": item.rejection_reason,
+        "source_ref": item.source_ref,
+        "source_hash": item.source_hash,
+        "config_snapshot": item.config_snapshot,
+        "items": [build_me_statutory_declaration_item_payload(child) for child in declaration_items.order_by("section_code", "component_code")],
+        "item_count": declaration_items.count(),
+        "submitted_item_count": declaration_items.filter(proof_status=PayrollStatutoryProofStatus.SUBMITTED).count(),
+        "verified_item_count": declaration_items.filter(proof_status=PayrollStatutoryProofStatus.VERIFIED).count(),
+        "rejected_item_count": declaration_items.filter(proof_status=PayrollStatutoryProofStatus.REJECTED).count(),
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def _build_me_statutory_declaration_list_payload(employee: Employee, request) -> dict:
+    page, page_size = _get_page_params(request)
+    search_value = (request.query_params.get("q") or "").strip()
+    status_value = (request.query_params.get("status") or "").strip()
+    financial_year_value = (request.query_params.get("financial_year") or "").strip().upper()
+    declarations = EmployeeStatutoryDeclaration.objects.filter(
+        tenant=employee.tenant,
+        employee=employee,
+    ).select_related(
+        "employee_statutory_profile",
+        "statutory_pack",
+    ).prefetch_related("items")
+    if search_value:
+        declarations = declarations.filter(
+            Q(financial_year_code__icontains=search_value)
+            | Q(declaration_profile_ref__icontains=search_value)
+            | Q(proof_window_ref__icontains=search_value)
+            | Q(items__name__icontains=search_value)
+            | Q(items__section_code__icontains=search_value)
+        ).distinct()
+    if status_value:
+        declarations = declarations.filter(status=status_value)
+    if financial_year_value:
+        declarations = declarations.filter(financial_year_code=financial_year_value)
+
+    all_declarations = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, employee=employee).prefetch_related("items")
+    latest_profile = EmployeeStatutoryProfile.objects.filter(tenant=employee.tenant, employee=employee).select_related("statutory_pack").order_by("-effective_from", "-created_at").first()
+    total_count = declarations.count()
+    offset = (page - 1) * page_size
+    items = list(declarations.order_by("-financial_year_code", "-submitted_at", "-created_at")[offset : offset + page_size])
+    all_declaration_items = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, employee=employee)
+    declared_total = all_declarations.aggregate(total=Sum("declared_total_amount"))["total"] or Decimal("0.00")
+    verified_total = all_declarations.aggregate(total=Sum("verified_total_amount"))["total"] or Decimal("0.00")
+    available_years = list(
+        all_declarations.order_by("-financial_year_code").values_list("financial_year_code", flat=True).distinct()
+    )
+    profile_payload = build_hr_admin_employee_statutory_profile_payload(latest_profile) if latest_profile else None
+    proof_upload_categories = DocumentCategory.objects.filter(
+        tenant=employee.tenant,
+        is_active=True,
+        allow_employee_upload=True,
+    ).order_by("name")
+    preferred_proof_categories = proof_upload_categories.filter(
+        Q(category_type=DocumentCategoryType.TAX)
+        | Q(visibility_rules__statutory_proof=True)
+    )
+    if preferred_proof_categories.exists():
+        proof_upload_categories = preferred_proof_categories
+    active_document_category_ids = set(
+        EmployeeDocument.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            status=EmployeeDocumentStatus.ACTIVE,
+        ).values_list("category_id", flat=True)
+    )
+    proof_upload_category_options = [
+        {"id": item.id, "name": item.name}
+        for item in proof_upload_categories
+        if item.allow_multiple_files or item.id not in active_document_category_ids
+    ]
+    return {
+        "summary": {
+            "declaration_count": all_declarations.count(),
+            "draft_declaration_count": all_declarations.filter(status=PayrollStatutoryDeclarationStatus.DRAFT).count(),
+            "submitted_declaration_count": all_declarations.filter(status=PayrollStatutoryDeclarationStatus.SUBMITTED).count(),
+            "verified_declaration_count": all_declarations.filter(status=PayrollStatutoryDeclarationStatus.VERIFIED).count(),
+            "locked_declaration_count": all_declarations.filter(status=PayrollStatutoryDeclarationStatus.LOCKED).count(),
+            "declaration_item_count": all_declaration_items.count(),
+            "submitted_item_count": all_declaration_items.filter(proof_status=PayrollStatutoryProofStatus.SUBMITTED).count(),
+            "verified_item_count": all_declaration_items.filter(proof_status=PayrollStatutoryProofStatus.VERIFIED).count(),
+            "rejected_item_count": all_declaration_items.filter(proof_status=PayrollStatutoryProofStatus.REJECTED).count(),
+            "declared_total_amount": str(declared_total.quantize(Decimal("0.01"))),
+            "verified_total_amount": str(verified_total.quantize(Decimal("0.01"))),
+            "available_financial_years": available_years,
+        },
+        "profile": profile_payload,
+        "items": [build_me_statutory_declaration_payload(item) for item in items],
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "has_next": offset + page_size < total_count,
+        "has_previous": page > 1,
+        "options": {
+            "statutory_declaration_statuses": [{"value": value, "label": label} for value, label in PayrollStatutoryDeclarationStatus.choices],
+            "statutory_declaration_item_kinds": [{"value": value, "label": label} for value, label in PayrollStatutoryDeclarationItemKind.choices],
+            "statutory_proof_statuses": [{"value": value, "label": label} for value, label in PayrollStatutoryProofStatus.choices],
+            "tax_regimes": [{"value": value, "label": label} for value, label in PayrollTaxRegime.choices],
+            "proof_upload_categories": proof_upload_category_options,
+        },
+    }
+
+
+def _get_me_statutory_profile(employee: Employee, profile_id=None) -> EmployeeStatutoryProfile | None:
+    profiles = EmployeeStatutoryProfile.objects.filter(tenant=employee.tenant, employee=employee).select_related("statutory_pack")
+    if profile_id:
+        return profiles.filter(id=profile_id).first()
+    return profiles.order_by("-effective_from", "-created_at").first()
+
+
+def _assert_employee_statutory_declaration_editable(declaration: EmployeeStatutoryDeclaration):
+    if declaration.status not in {PayrollStatutoryDeclarationStatus.DRAFT, PayrollStatutoryDeclarationStatus.REJECTED}:
+        raise serializers.ValidationError({"status": "Only draft or rejected statutory declarations can be edited by employees."})
+
+
+def save_me_statutory_declaration(employee: Employee, validated_data, *, item=None) -> EmployeeStatutoryDeclaration:
+    if item is not None:
+        _assert_employee_statutory_declaration_editable(item)
+    profile = None
+    if "employee_statutory_profile_id" in validated_data:
+        profile = _get_me_statutory_profile(employee, validated_data["employee_statutory_profile_id"])
+        if not profile:
+            raise serializers.ValidationError({"employee_statutory_profile_id": "Invalid selection."})
+    elif item is None:
+        profile = _get_me_statutory_profile(employee)
+        if not profile:
+            raise serializers.ValidationError({"employee_statutory_profile_id": "No active employee statutory profile found."})
+
+    if item is None:
+        item = EmployeeStatutoryDeclaration(tenant=employee.tenant, employee=employee, employee_statutory_profile=profile)
+        if profile and profile.statutory_pack_id:
+            item.statutory_pack = profile.statutory_pack
+        item.tax_regime = profile.tax_regime if profile else PayrollTaxRegime.NOT_DECLARED
+    elif profile is not None:
+        item.employee_statutory_profile = profile
+        item.statutory_pack = profile.statutory_pack
+
+    if "statutory_pack_id" in validated_data:
+        statutory_pack = PayrollStatutoryPack.objects.filter(tenant=employee.tenant, id=validated_data["statutory_pack_id"]).first() if validated_data["statutory_pack_id"] else None
+        if validated_data["statutory_pack_id"] and not statutory_pack:
+            raise serializers.ValidationError({"statutory_pack_id": "Invalid selection."})
+        item.statutory_pack = statutory_pack
+
+    for field in [
+        "financial_year_code",
+        "declaration_profile_ref",
+        "proof_window_ref",
+        "tax_regime",
+        "source_ref",
+        "config_snapshot",
+    ]:
+        if field in validated_data:
+            setattr(item, field, validated_data[field])
+
+    if not item.source_ref:
+        item.source_ref = f"employee.statutory.declaration:{employee.employee_code}:{item.financial_year_code}"
+    if item.status == PayrollStatutoryDeclarationStatus.REJECTED:
+        item.status = PayrollStatutoryDeclarationStatus.DRAFT
+        item.rejected_at = None
+        item.rejected_by = None
+        item.rejection_reason = ""
+        item.verified_at = None
+        item.verified_by = None
+    item.employee = employee
+    item.tenant = employee.tenant
+    item.save()
+    return item
+
+
+def save_me_statutory_declaration_item(employee: Employee, declaration: EmployeeStatutoryDeclaration, validated_data, *, item=None) -> EmployeeStatutoryDeclarationItem:
+    if declaration.employee_id != employee.id or declaration.tenant_id != employee.tenant_id:
+        raise serializers.ValidationError({"declaration": "Invalid selection."})
+    _assert_employee_statutory_declaration_editable(declaration)
+    if item is None:
+        item = EmployeeStatutoryDeclarationItem(tenant=employee.tenant, declaration=declaration, employee=employee)
+    for field in [
+        "item_kind",
+        "section_code",
+        "component_code",
+        "name",
+        "declared_amount",
+        "proof_document_ref",
+        "proof_artifact_key",
+        "source_ref",
+        "config_snapshot",
+    ]:
+        if field in validated_data:
+            setattr(item, field, validated_data[field])
+
+    if "proof_status" in validated_data:
+        item.proof_status = validated_data["proof_status"]
+    elif item.proof_status in {PayrollStatutoryProofStatus.VERIFIED, PayrollStatutoryProofStatus.REJECTED}:
+        item.proof_status = PayrollStatutoryProofStatus.PENDING
+
+    if (item.proof_document_ref or item.proof_artifact_key) and item.proof_status == PayrollStatutoryProofStatus.PENDING:
+        item.proof_status = PayrollStatutoryProofStatus.SUBMITTED
+    if item.proof_status == PayrollStatutoryProofStatus.SUBMITTED and not item.proof_submitted_at:
+        item.proof_submitted_at = timezone.now()
+    if item.proof_status != PayrollStatutoryProofStatus.SUBMITTED:
+        item.proof_submitted_at = None
+
+    item.verified_amount = Decimal("0.00")
+    item.verified_at = None
+    item.verified_by = None
+    item.rejected_at = None
+    item.rejected_by = None
+    item.rejection_reason = ""
+    item.tenant = employee.tenant
+    item.employee = employee
+    item.declaration = declaration
+    if not item.source_ref:
+        item.source_ref = f"employee.statutory.proof:{employee.employee_code}:{declaration.financial_year_code}:{item.section_code}"
+    item.save()
+    _refresh_statutory_declaration_totals(declaration)
+    return item
+
+
+def upload_me_statutory_declaration_proof(employee: Employee, declaration: EmployeeStatutoryDeclaration, validated_data) -> tuple[EmployeeStatutoryDeclarationItem, EmployeeDocument]:
+    if declaration.employee_id != employee.id or declaration.tenant_id != employee.tenant_id:
+        raise serializers.ValidationError({"declaration": "Invalid selection."})
+    _assert_employee_statutory_declaration_editable(declaration)
+
+    with transaction.atomic():
+        document = create_self_service_employee_document(
+            employee,
+            {
+                "category_id": validated_data["category_id"],
+                "replace_document_id": validated_data.get("replace_document_id"),
+                "title": validated_data.get("title", ""),
+                "document_number": validated_data.get("document_number", ""),
+                "issued_on": validated_data.get("issued_on"),
+                "expires_on": validated_data.get("expires_on"),
+                "file": validated_data["file"],
+            },
+        )
+        item = None
+        if validated_data.get("item_id"):
+            item = EmployeeStatutoryDeclarationItem.objects.filter(
+                tenant=employee.tenant,
+                employee=employee,
+                declaration=declaration,
+                id=validated_data["item_id"],
+            ).first()
+            if not item:
+                raise serializers.ValidationError({"item_id": "Declaration item not found."})
+
+        item_data = {
+            "proof_status": PayrollStatutoryProofStatus.SUBMITTED,
+            "proof_document_ref": f"employee-document:{document.id}",
+            "proof_artifact_key": str(document.artifact_id or ""),
+            "config_snapshot": {
+                **(item.config_snapshot if item and isinstance(item.config_snapshot, dict) else {}),
+                "proof_document_id": str(document.id),
+                "proof_artifact_id": str(document.artifact_id or ""),
+                "proof_category_id": str(document.category_id),
+                "proof_upload_surface_ref": "ess.statutory-declarations",
+            },
+        }
+        for field in ["item_kind", "section_code", "component_code", "name", "declared_amount"]:
+            if field in validated_data:
+                item_data[field] = validated_data[field]
+        item = save_me_statutory_declaration_item(employee, declaration, item_data, item=item)
+    return item, document
+
+
+class MeStatutoryDeclarationListView(EmployeeContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        payload = _build_me_statutory_declaration_list_payload(employee, request)
+        return response.Response(MeStatutoryDeclarationListSerializer(payload).data)
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = MeStatutoryDeclarationWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_me_statutory_declaration(employee, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(MeStatutoryDeclarationSerializer(build_me_statutory_declaration_payload(item)).data, status=status.HTTP_201_CREATED)
+
+
+class MeStatutoryDeclarationDetailView(EmployeeContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclaration.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            id=item_id,
+        ).select_related("employee_statutory_profile", "statutory_pack").prefetch_related("items").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(MeStatutoryDeclarationSerializer(build_me_statutory_declaration_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, employee=employee, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = MeStatutoryDeclarationWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_me_statutory_declaration(employee, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(MeStatutoryDeclarationSerializer(build_me_statutory_declaration_payload(item)).data)
+
+
+class MeStatutoryDeclarationSubmitView(EmployeeContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclaration.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            id=item_id,
+        ).select_related("employee_statutory_profile", "statutory_pack").prefetch_related("items").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            item = submit_hr_admin_employee_statutory_declaration(item, submitted_by=request.user)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(MeStatutoryDeclarationSerializer(build_me_statutory_declaration_payload(item)).data)
+
+
+class MeStatutoryDeclarationProofUploadView(EmployeeContextMixin, APIView):
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        declaration = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, employee=employee, id=item_id).first()
+        if not declaration:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = MeStatutoryDeclarationProofUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item, document = upload_me_statutory_declaration_proof(employee, declaration, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        document = EmployeeDocument.objects.select_related("employee", "category", "artifact").get(id=document.id)
+        return response.Response(
+            {
+                "item": MeStatutoryDeclarationItemSerializer(build_me_statutory_declaration_item_payload(item)).data,
+                "document": HrAdminEmployeeDocumentSerializer(build_hr_admin_employee_document_payload(document)).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MeStatutoryDeclarationItemListCreateView(EmployeeContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        declaration = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, employee=employee, id=item_id).first()
+        if not declaration:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        items = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, employee=employee, declaration=declaration).order_by("section_code", "component_code")
+        return response.Response(MeStatutoryDeclarationItemSerializer([build_me_statutory_declaration_item_payload(item) for item in items], many=True).data)
+
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        declaration = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, employee=employee, id=item_id).first()
+        if not declaration:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = MeStatutoryDeclarationItemWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_me_statutory_declaration_item(employee, declaration, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(MeStatutoryDeclarationItemSerializer(build_me_statutory_declaration_item_payload(item)).data, status=status.HTTP_201_CREATED)
+
+
+class MeStatutoryDeclarationItemDetailView(EmployeeContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, employee=employee, id=item_id).select_related("declaration").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration item not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(MeStatutoryDeclarationItemSerializer(build_me_statutory_declaration_item_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, employee=employee, id=item_id).select_related("declaration").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration item not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = MeStatutoryDeclarationItemWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_me_statutory_declaration_item(employee, item.declaration, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(MeStatutoryDeclarationItemSerializer(build_me_statutory_declaration_item_payload(item)).data)
+
+
+def build_me_payroll_payslip_payload(item: PayrollOutputArtifact) -> dict:
+    can_download = item.status == PayrollOutputArtifactStatus.PUBLISHED and item.is_downloadable
+    signed_url = get_payroll_artifact_signed_url(item) if can_download else None
+    period = item.payroll_run.period if item.payroll_run_id else None
+    recent_events = list(item.access_events.order_by("-created_at")[:8])
+    return {
+        "id": item.id,
+        "payroll_run_id": item.payroll_run_id,
+        "payroll_run_name": item.payroll_run.name,
+        "period_name": period.name if period else "",
+        "period_start_date": period.start_date if period else None,
+        "period_end_date": period.end_date if period else None,
+        "pay_date": period.pay_date if period else None,
+        "title": item.title,
+        "file_name": item.file_name,
+        "mime_type": item.mime_type or item.content_type,
+        "file_size_bytes": item.file_size_bytes,
+        "checksum_sha256": item.checksum_sha256,
+        "storage_provider_ref": item.storage_provider_ref,
+        "storage_object_version": item.storage_object_version,
+        "download_strategy_ref": item.download_strategy_ref,
+        "supports_signed_url": item.supports_signed_url,
+        "signed_url_expires_in_seconds": item.signed_url_expires_in_seconds,
+        "retention_policy_ref": item.retention_policy_ref,
+        "download_url": f"/api/v1/me/payroll-payslips/{item.id}/download/" if can_download else None,
+        "signed_download_url": signed_url.url if signed_url else None,
+        "signed_download_expires_at": signed_url.expires_at if signed_url else None,
+        "totals_snapshot": item.totals_snapshot,
+        "line_snapshot": item.line_snapshot,
+        "access_summary": _payroll_artifact_access_summary(item),
+        "access_events": [_payroll_access_event_payload(event) for event in recent_events],
+        "source_hash": item.source_hash,
+        "published_at": item.published_at,
+        "published_by_name": str(item.published_by) if item.published_by else None,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def _build_me_payroll_payslip_list_payload(employee: Employee, request) -> dict:
+    page, page_size = _get_page_params(request)
+    search_value = (request.query_params.get("q") or "").strip()
+    year_value = (request.query_params.get("year") or "").strip()
+    queryset = PayrollOutputArtifact.objects.filter(
+        tenant=employee.tenant,
+        employee=employee,
+        kind=PayrollOutputArtifactKind.PAYSLIP,
+        status=PayrollOutputArtifactStatus.PUBLISHED,
+    ).select_related("payroll_run", "payroll_run__period", "published_by")
+    if search_value:
+        queryset = queryset.filter(
+            Q(title__icontains=search_value)
+            | Q(file_name__icontains=search_value)
+            | Q(payroll_run__name__icontains=search_value)
+            | Q(payroll_run__period__name__icontains=search_value)
+        )
+    if year_value:
+        if year_value.isdigit():
+            queryset = queryset.filter(payroll_run__period__pay_date__year=int(year_value))
+        else:
+            queryset = queryset.none()
+
+    all_payslips = PayrollOutputArtifact.objects.filter(
+        tenant=employee.tenant,
+        employee=employee,
+        kind=PayrollOutputArtifactKind.PAYSLIP,
+        status=PayrollOutputArtifactStatus.PUBLISHED,
+    ).select_related("payroll_run", "payroll_run__period")
+    total_count = queryset.count()
+    offset = (page - 1) * page_size
+    items = list(queryset.order_by("-payroll_run__period__pay_date", "-published_at", "-created_at")[offset : offset + page_size])
+    latest = all_payslips.order_by("-payroll_run__period__pay_date", "-published_at", "-created_at").first()
+    latest_net_pay = Decimal("0.00")
+    if latest:
+        try:
+            latest_net_pay = Decimal(str((latest.totals_snapshot or {}).get("net_pay") or "0.00"))
+        except (ArithmeticError, ValueError):
+            latest_net_pay = Decimal("0.00")
+    years = sorted(
+        {
+            item.payroll_run.period.pay_date.year
+            for item in all_payslips
+            if item.payroll_run_id and item.payroll_run.period_id and item.payroll_run.period.pay_date
+        },
+        reverse=True,
+    )
+    return {
+        "summary": {
+            "published_payslip_count": all_payslips.count(),
+            "downloadable_payslip_count": all_payslips.filter(is_downloadable=True).count(),
+            "latest_net_pay": str(latest_net_pay.quantize(Decimal("0.01")) if latest else Decimal("0.00")),
+            "latest_pay_date": latest.payroll_run.period.pay_date if latest and latest.payroll_run.period_id else None,
+            "latest_period_name": latest.payroll_run.period.name if latest and latest.payroll_run.period_id else "",
+            "available_years": years,
+        },
+        "items": [build_me_payroll_payslip_payload(item) for item in items],
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "has_next": offset + page_size < total_count,
+        "has_previous": page > 1,
+    }
+
+
+class MePayrollPayslipListView(EmployeeContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        payload = _build_me_payroll_payslip_list_payload(employee, request)
+        return response.Response(MePayrollPayslipListSerializer(payload).data)
+
+
+class MePayrollPayslipDownloadView(EmployeeContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        artifact = PayrollOutputArtifact.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            id=item_id,
+            kind=PayrollOutputArtifactKind.PAYSLIP,
+            status=PayrollOutputArtifactStatus.PUBLISHED,
+        ).select_related("payroll_run", "review").first()
+        if not artifact:
+            return response.Response({"detail": "Published payroll payslip not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not artifact.is_downloadable:
+            return response.Response({"detail": "Payroll payslip file is not available for download."}, status=status.HTTP_400_BAD_REQUEST)
+        actor_membership = getattr(employee, "membership", None)
+        try:
+            signed_access_grant = _payroll_signed_access_grant_from_request(artifact, request, actor_membership=actor_membership)
+        except PayrollOutputError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            stored_payload = read_payroll_artifact_payload(artifact)
+        except PayrollArtifactStorageError as exc:
+            http_status = status.HTTP_409_CONFLICT if "checksum" in str(exc).lower() else status.HTTP_400_BAD_REQUEST
+            return response.Response({"detail": str(exc)}, status=http_status)
+        request_metadata = _payroll_request_metadata(request)
+        create_payroll_artifact_access_event(
+            artifact,
+            event_type=PayrollArtifactAccessEventType.DOWNLOADED,
+            actor_user=request.user,
+            actor_membership=actor_membership,
+            actor_identifier=employee.employee_code,
+            signed_access_grant=signed_access_grant,
+            request_identifier=request_metadata["request_identifier"],
+            ip_address=request_metadata["ip_address"],
+            user_agent=request_metadata["user_agent"],
+            metadata_snapshot={
+                "content_type": stored_payload.content_type,
+                "file_name": stored_payload.file_name,
+                "file_size_bytes": len(stored_payload.payload),
+                "download_surface": "ess",
+                "signed_access_grant_id": str(signed_access_grant.id) if signed_access_grant else "",
+            },
+        )
+        file_name = re.sub(r"[^A-Za-z0-9._-]+", "-", artifact.file_name or f"{artifact.artifact_key}.html").strip("-")
+        download_response = HttpResponse(stored_payload.payload, content_type=stored_payload.content_type)
+        download_response["Content-Disposition"] = f'attachment; filename="{file_name or "payroll-payslip.html"}"'
+        download_response["X-Payroll-Artifact-Checksum"] = artifact.checksum_sha256 or stored_payload.checksum_sha256
+        download_response["X-Payroll-Storage-Key"] = artifact.storage_key
+        download_response["X-Payroll-Storage-Provider"] = artifact.storage_provider_ref
+        download_response["X-Payroll-Storage-Version"] = artifact.storage_object_version
+        download_response["X-Payroll-Download-Strategy"] = artifact.download_strategy_ref
+        download_response["X-Payroll-Retention-Policy"] = artifact.retention_policy_ref
+        return download_response
+
+
+class MePayrollPayslipReadView(EmployeeContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        artifact = PayrollOutputArtifact.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            id=item_id,
+            kind=PayrollOutputArtifactKind.PAYSLIP,
+            status=PayrollOutputArtifactStatus.PUBLISHED,
+        ).select_related("output_batch", "payroll_run", "payroll_run__period", "review", "employee", "published_by").first()
+        if not artifact:
+            return response.Response({"detail": "Published payroll payslip not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        membership = getattr(employee, "membership", None)
+        read_time = timezone.now()
+        notification = Notification.objects.filter(
+            tenant=employee.tenant,
+            subject_type="payroll_payslip",
+            subject_identifier=str(artifact.id),
+            recipient_membership=membership,
+        ).order_by("-created_at").first()
+        if notification:
+            notification.status = NotificationStatus.READ
+            notification.read_at = notification.read_at or read_time
+            notification.save(update_fields=["status", "read_at", "updated_at"])
+
+        request_metadata = _payroll_request_metadata(request)
+        create_payroll_artifact_access_event(
+            artifact,
+            event_type=PayrollArtifactAccessEventType.READ_ACKNOWLEDGED,
+            actor_user=request.user,
+            actor_membership=membership,
+            actor_identifier=employee.employee_code,
+            notification=notification,
+            request_identifier=request_metadata["request_identifier"],
+            ip_address=request_metadata["ip_address"],
+            user_agent=request_metadata["user_agent"],
+            read_at=read_time,
+            metadata_snapshot={
+                "read_surface": "ess",
+                "notification_id": str(notification.id) if notification else "",
+            },
+        )
+        return response.Response(MePayrollPayslipSerializer(build_me_payroll_payslip_payload(artifact)).data)
+
+
+class MePayrollPayslipSignedAccessIssueView(EmployeeContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        artifact = PayrollOutputArtifact.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            id=item_id,
+            kind=PayrollOutputArtifactKind.PAYSLIP,
+            status=PayrollOutputArtifactStatus.PUBLISHED,
+        ).select_related("output_batch", "payroll_run", "review", "employee").first()
+        if not artifact:
+            return response.Response({"detail": "Published payroll payslip not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = PayrollArtifactSignedAccessGrantIssueRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        request_metadata = _payroll_request_metadata(request)
+        try:
+            issue = issue_payroll_artifact_signed_access_grant(
+                artifact,
+                issued_by_user=request.user,
+                issued_by_membership=getattr(employee, "membership", None),
+                issued_to_user=request.user,
+                issued_to_membership=getattr(employee, "membership", None),
+                actor_identifier=employee.employee_code,
+                source_channel_ref="employee.portal.v1",
+                request_identifier=request_metadata["request_identifier"],
+                ip_address=request_metadata["ip_address"],
+                user_agent=request_metadata["user_agent"],
+                expires_in_seconds=serializer.validated_data.get("expires_in_seconds"),
+                max_access_count=serializer.validated_data.get("max_access_count"),
+                permission_scope=serializer.validated_data.get("permission_scope") or "download",
+                metadata_snapshot={"issue_surface": "ess"},
+            )
+        except PayrollOutputError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(
+            PayrollArtifactSignedAccessGrantIssueResultSerializer({
+                "grant": _payroll_signed_access_grant_payload(issue.grant),
+                "signed_url": issue.signed_url,
+                "expires_at": issue.grant.expires_at,
+            }).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class ManagerTeamSummaryView(EmployeeContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
@@ -6949,6 +7884,818 @@ def save_hr_admin_employee_salary_assignment(actor, validated_data, *, item=None
     if item.structure_version_id is None:
         raise serializers.ValidationError({"structure_version_id": "This field is required."})
     item.save()
+    return item
+
+
+def build_hr_admin_payroll_statutory_pack_payload(item: PayrollStatutoryPack) -> dict:
+    return {
+        "id": item.id,
+        "code": item.code,
+        "name": item.name,
+        "country_code": item.country_code,
+        "jurisdiction_ref": item.jurisdiction_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "effective_from": item.effective_from,
+        "effective_to": item.effective_to,
+        "currency_code": item.currency_code,
+        "statutory_profile_ref": item.statutory_profile_ref,
+        "validation_profile_ref": item.validation_profile_ref,
+        "config_snapshot": item.config_snapshot,
+        "component_count": item.components.count(),
+        "active_component_count": item.components.filter(status=PayrollConfigStatus.ACTIVE).count(),
+        "employee_profile_count": item.employee_profiles.count(),
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_payroll_statutory_component_payload(item: PayrollStatutoryComponent) -> dict:
+    return {
+        "id": item.id,
+        "statutory_pack_id": item.statutory_pack_id,
+        "statutory_pack_name": item.statutory_pack.name,
+        "salary_component_id": item.salary_component_id,
+        "salary_component_name": item.salary_component.name if item.salary_component else None,
+        "code": item.code,
+        "name": item.name,
+        "statutory_type": item.statutory_type,
+        "statutory_type_label": item.get_statutory_type_display(),
+        "contribution_owner": item.contribution_owner,
+        "contribution_owner_label": item.get_contribution_owner_display(),
+        "calculation_method": item.calculation_method,
+        "calculation_method_label": item.get_calculation_method_display(),
+        "wage_base_ref": item.wage_base_ref,
+        "statutory_treatment_ref": item.statutory_treatment_ref,
+        "registration_ref": item.registration_ref,
+        "applicability_profile_ref": item.applicability_profile_ref,
+        "rounding_rule_ref": item.rounding_rule_ref,
+        "formula_ref": item.formula_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "config_snapshot": item.config_snapshot,
+        "slab_count": item.slabs.count(),
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_payroll_statutory_slab_payload(item: PayrollStatutorySlab) -> dict:
+    return {
+        "id": item.id,
+        "statutory_component_id": item.statutory_component_id,
+        "statutory_component_name": item.statutory_component.name,
+        "statutory_type": item.statutory_component.statutory_type,
+        "code": item.code,
+        "name": item.name,
+        "slab_order": item.slab_order,
+        "effective_from": item.effective_from,
+        "effective_to": item.effective_to,
+        "min_amount": item.min_amount,
+        "max_amount": item.max_amount,
+        "employee_rate_percent": item.employee_rate_percent,
+        "employer_rate_percent": item.employer_rate_percent,
+        "fixed_employee_amount": item.fixed_employee_amount,
+        "fixed_employer_amount": item.fixed_employer_amount,
+        "wage_ceiling_amount": item.wage_ceiling_amount,
+        "state_code": item.state_code,
+        "applicability_profile_ref": item.applicability_profile_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "config_snapshot": item.config_snapshot,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_payroll_statutory_employer_registration_payload(item: PayrollStatutoryEmployerRegistration) -> dict:
+    closed_statuses = [
+        PayrollStatutoryFilingStatus.FILED,
+        PayrollStatutoryFilingStatus.ACKNOWLEDGED,
+        PayrollStatutoryFilingStatus.WAIVED,
+    ]
+    return {
+        "id": item.id,
+        "statutory_pack_id": item.statutory_pack_id,
+        "statutory_pack_name": item.statutory_pack.name,
+        "statutory_component_id": item.statutory_component_id,
+        "statutory_component_name": item.statutory_component.name if item.statutory_component else None,
+        "statutory_type": item.statutory_component.statutory_type if item.statutory_component else "",
+        "legal_entity_id": item.legal_entity_id,
+        "legal_entity_name": item.legal_entity.name if item.legal_entity else None,
+        "branch_id": item.branch_id,
+        "branch_name": item.branch.name if item.branch else None,
+        "location_id": item.location_id,
+        "location_name": item.location.name if item.location else None,
+        "code": item.code,
+        "name": item.name,
+        "registration_type_ref": item.registration_type_ref,
+        "registration_number": item.registration_number,
+        "employer_identifier": item.employer_identifier,
+        "jurisdiction_ref": item.jurisdiction_ref,
+        "filing_authority_ref": item.filing_authority_ref,
+        "provider_ref": item.provider_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "effective_from": item.effective_from,
+        "effective_to": item.effective_to,
+        "source_ref": item.source_ref,
+        "source_hash": item.source_hash,
+        "config_snapshot": item.config_snapshot,
+        "filing_calendar_count": item.filing_calendars.count(),
+        "open_filing_calendar_count": item.filing_calendars.exclude(status__in=closed_statuses).count(),
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_payroll_statutory_filing_calendar_payload(item: PayrollStatutoryFilingCalendar) -> dict:
+    today = timezone.localdate()
+    due_basis = item.grace_due_date or item.due_date
+    days_until_due = (due_basis - today).days if due_basis else None
+    is_closed = item.status in {
+        PayrollStatutoryFilingStatus.FILED,
+        PayrollStatutoryFilingStatus.ACKNOWLEDGED,
+        PayrollStatutoryFilingStatus.WAIVED,
+    }
+    is_overdue = item.status == PayrollStatutoryFilingStatus.OVERDUE or (
+        bool(due_basis) and due_basis < today and not is_closed
+    )
+    is_due = item.status == PayrollStatutoryFilingStatus.DUE or (
+        bool(item.due_date) and item.due_date <= today and not is_closed
+    )
+    return {
+        "id": item.id,
+        "statutory_pack_id": item.statutory_pack_id,
+        "statutory_pack_name": item.statutory_pack.name,
+        "statutory_component_id": item.statutory_component_id,
+        "statutory_component_name": item.statutory_component.name if item.statutory_component else None,
+        "statutory_type": item.statutory_component.statutory_type if item.statutory_component else "",
+        "employer_registration_id": item.employer_registration_id,
+        "employer_registration_name": item.employer_registration.name if item.employer_registration else None,
+        "employer_registration_number": item.employer_registration.registration_number if item.employer_registration else "",
+        "code": item.code,
+        "name": item.name,
+        "filing_type_ref": item.filing_type_ref,
+        "filing_frequency": item.filing_frequency,
+        "filing_frequency_label": item.get_filing_frequency_display(),
+        "period_start": item.period_start,
+        "period_end": item.period_end,
+        "due_date": item.due_date,
+        "grace_due_date": item.grace_due_date,
+        "filing_window_start": item.filing_window_start,
+        "filing_window_end": item.filing_window_end,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "filing_authority_ref": item.filing_authority_ref,
+        "provider_ref": item.provider_ref,
+        "output_profile_ref": item.output_profile_ref,
+        "source_ref": item.source_ref,
+        "source_hash": item.source_hash,
+        "config_snapshot": item.config_snapshot,
+        "days_until_due": days_until_due,
+        "is_due": is_due,
+        "is_overdue": is_overdue,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_employee_statutory_profile_payload(item: EmployeeStatutoryProfile) -> dict:
+    return {
+        "id": item.id,
+        "employee_id": item.employee_id,
+        "employee_name": _employee_display_name(item.employee),
+        "employee_code": item.employee.employee_code,
+        "statutory_pack_id": item.statutory_pack_id,
+        "statutory_pack_name": item.statutory_pack.name if item.statutory_pack else None,
+        "profile_ref": item.profile_ref,
+        "effective_from": item.effective_from,
+        "effective_to": item.effective_to,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "pan_number": item.pan_number,
+        "uan_number": item.uan_number,
+        "pf_number": item.pf_number,
+        "esi_number": item.esi_number,
+        "pf_applicable": item.pf_applicable,
+        "esi_applicable": item.esi_applicable,
+        "professional_tax_state": item.professional_tax_state,
+        "lwf_state": item.lwf_state,
+        "tax_regime": item.tax_regime,
+        "tax_regime_label": item.get_tax_regime_display(),
+        "declaration_status": item.declaration_status,
+        "declaration_status_label": item.get_declaration_status_display(),
+        "previous_employment_income": item.previous_employment_income,
+        "previous_employment_tax_deducted": item.previous_employment_tax_deducted,
+        "source_ref": item.source_ref,
+        "source_hash": item.source_hash,
+        "config_snapshot": item.config_snapshot,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_employee_statutory_declaration_payload(item: EmployeeStatutoryDeclaration) -> dict:
+    declaration_items = item.items.all()
+    return {
+        "id": item.id,
+        "employee_id": item.employee_id,
+        "employee_name": _employee_display_name(item.employee),
+        "employee_code": item.employee.employee_code,
+        "employee_statutory_profile_id": item.employee_statutory_profile_id,
+        "statutory_pack_id": item.statutory_pack_id,
+        "statutory_pack_name": item.statutory_pack.name if item.statutory_pack else None,
+        "financial_year_code": item.financial_year_code,
+        "declaration_profile_ref": item.declaration_profile_ref,
+        "proof_window_ref": item.proof_window_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "tax_regime": item.tax_regime,
+        "tax_regime_label": item.get_tax_regime_display(),
+        "declared_total_amount": item.declared_total_amount,
+        "verified_total_amount": item.verified_total_amount,
+        "submitted_at": item.submitted_at,
+        "submitted_by_name": str(item.submitted_by) if item.submitted_by else None,
+        "verified_at": item.verified_at,
+        "verified_by_name": str(item.verified_by) if item.verified_by else None,
+        "rejected_at": item.rejected_at,
+        "rejected_by_name": str(item.rejected_by) if item.rejected_by else None,
+        "locked_at": item.locked_at,
+        "locked_by_name": str(item.locked_by) if item.locked_by else None,
+        "rejection_reason": item.rejection_reason,
+        "source_ref": item.source_ref,
+        "source_hash": item.source_hash,
+        "config_snapshot": item.config_snapshot,
+        "item_count": declaration_items.count(),
+        "submitted_item_count": declaration_items.filter(proof_status=PayrollStatutoryProofStatus.SUBMITTED).count(),
+        "verified_item_count": declaration_items.filter(proof_status=PayrollStatutoryProofStatus.VERIFIED).count(),
+        "rejected_item_count": declaration_items.filter(proof_status=PayrollStatutoryProofStatus.REJECTED).count(),
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_employee_statutory_declaration_item_payload(item: EmployeeStatutoryDeclarationItem) -> dict:
+    return {
+        "id": item.id,
+        "declaration_id": item.declaration_id,
+        "employee_id": item.employee_id,
+        "employee_name": _employee_display_name(item.employee),
+        "employee_code": item.employee.employee_code,
+        "financial_year_code": item.declaration.financial_year_code,
+        "item_kind": item.item_kind,
+        "item_kind_label": item.get_item_kind_display(),
+        "section_code": item.section_code,
+        "component_code": item.component_code,
+        "name": item.name,
+        "declared_amount": item.declared_amount,
+        "verified_amount": item.verified_amount,
+        "proof_status": item.proof_status,
+        "proof_status_label": item.get_proof_status_display(),
+        "proof_document_ref": item.proof_document_ref,
+        "proof_artifact_key": item.proof_artifact_key,
+        "proof_submitted_at": item.proof_submitted_at,
+        "verified_at": item.verified_at,
+        "verified_by_name": str(item.verified_by) if item.verified_by else None,
+        "rejected_at": item.rejected_at,
+        "rejected_by_name": str(item.rejected_by) if item.rejected_by else None,
+        "rejection_reason": item.rejection_reason,
+        "source_ref": item.source_ref,
+        "source_hash": item.source_hash,
+        "config_snapshot": item.config_snapshot,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def get_hr_admin_payroll_statutory_setup_payload(actor) -> dict:
+    tenant = actor.tenant
+    packs = PayrollStatutoryPack.objects.filter(tenant=tenant).order_by("country_code", "name", "-effective_from")
+    statutory_components = PayrollStatutoryComponent.objects.filter(tenant=tenant).select_related(
+        "statutory_pack", "salary_component"
+    ).order_by("statutory_pack__name", "statutory_type", "name")
+    slabs = PayrollStatutorySlab.objects.filter(tenant=tenant).select_related(
+        "statutory_component"
+    ).order_by("statutory_component__code", "slab_order", "min_amount")
+    employer_registrations = PayrollStatutoryEmployerRegistration.objects.filter(tenant=tenant).select_related(
+        "statutory_pack", "statutory_component", "legal_entity", "branch", "location"
+    ).order_by("statutory_pack__name", "registration_type_ref", "name")
+    filing_calendars = PayrollStatutoryFilingCalendar.objects.filter(tenant=tenant).select_related(
+        "statutory_pack", "statutory_component", "employer_registration"
+    ).order_by("due_date", "statutory_pack__name", "filing_type_ref")
+    employee_profiles = EmployeeStatutoryProfile.objects.filter(tenant=tenant).select_related(
+        "employee", "statutory_pack"
+    ).order_by("employee__employee_code", "-effective_from")
+    declarations = EmployeeStatutoryDeclaration.objects.filter(tenant=tenant).select_related(
+        "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
+    ).prefetch_related("items").order_by("employee__employee_code", "-financial_year_code")
+    declaration_items = EmployeeStatutoryDeclarationItem.objects.filter(tenant=tenant).select_related(
+        "declaration", "employee", "verified_by", "rejected_by"
+    ).order_by("declaration__financial_year_code", "employee__employee_code", "section_code", "component_code")
+    employees = Employee.objects.filter(tenant=tenant).order_by("employee_code")
+    salary_components = SalaryComponent.objects.filter(tenant=tenant).order_by("component_type", "name")
+    active_profiles = employee_profiles.filter(status=PayrollConfigStatus.ACTIVE)
+    today = timezone.localdate()
+    closed_filing_statuses = [
+        PayrollStatutoryFilingStatus.FILED,
+        PayrollStatutoryFilingStatus.ACKNOWLEDGED,
+        PayrollStatutoryFilingStatus.WAIVED,
+    ]
+
+    return {
+        "summary": {
+            "pack_count": packs.count(),
+            "active_pack_count": packs.filter(status=PayrollConfigStatus.ACTIVE).count(),
+            "statutory_component_count": statutory_components.count(),
+            "active_statutory_component_count": statutory_components.filter(status=PayrollConfigStatus.ACTIVE).count(),
+            "slab_count": slabs.count(),
+            "employee_profile_count": employee_profiles.count(),
+            "active_employee_profile_count": active_profiles.count(),
+            "pf_applicable_employee_count": active_profiles.filter(pf_applicable=True).count(),
+            "esi_applicable_employee_count": active_profiles.filter(esi_applicable=True).count(),
+            "declared_tax_profile_count": active_profiles.exclude(tax_regime=PayrollTaxRegime.NOT_DECLARED).count(),
+            "declaration_count": declarations.count(),
+            "submitted_declaration_count": declarations.filter(status=PayrollStatutoryDeclarationStatus.SUBMITTED).count(),
+            "verified_declaration_count": declarations.filter(status=PayrollStatutoryDeclarationStatus.VERIFIED).count(),
+            "locked_declaration_count": declarations.filter(status=PayrollStatutoryDeclarationStatus.LOCKED).count(),
+            "declaration_item_count": declaration_items.count(),
+            "verified_declaration_item_count": declaration_items.filter(proof_status=PayrollStatutoryProofStatus.VERIFIED).count(),
+            "employer_registration_count": employer_registrations.count(),
+            "active_employer_registration_count": employer_registrations.filter(status=PayrollConfigStatus.ACTIVE).count(),
+            "filing_calendar_count": filing_calendars.count(),
+            "due_filing_calendar_count": filing_calendars.filter(status=PayrollStatutoryFilingStatus.DUE).count()
+            + filing_calendars.filter(status=PayrollStatutoryFilingStatus.UPCOMING, due_date__lte=today).count(),
+            "overdue_filing_calendar_count": filing_calendars.filter(status=PayrollStatutoryFilingStatus.OVERDUE).count()
+            + filing_calendars.exclude(status__in=closed_filing_statuses + [PayrollStatutoryFilingStatus.OVERDUE]).filter(
+                Q(grace_due_date__lt=today) | Q(grace_due_date__isnull=True, due_date__lt=today)
+            ).count(),
+            "acknowledged_filing_calendar_count": filing_calendars.filter(status=PayrollStatutoryFilingStatus.ACKNOWLEDGED).count(),
+        },
+        "packs": [build_hr_admin_payroll_statutory_pack_payload(item) for item in packs],
+        "statutory_components": [build_hr_admin_payroll_statutory_component_payload(item) for item in statutory_components],
+        "slabs": [build_hr_admin_payroll_statutory_slab_payload(item) for item in slabs[:200]],
+        "employer_registrations": [build_hr_admin_payroll_statutory_employer_registration_payload(item) for item in employer_registrations[:200]],
+        "filing_calendars": [build_hr_admin_payroll_statutory_filing_calendar_payload(item) for item in filing_calendars[:300]],
+        "employee_profiles": [build_hr_admin_employee_statutory_profile_payload(item) for item in employee_profiles[:200]],
+        "declarations": [build_hr_admin_employee_statutory_declaration_payload(item) for item in declarations[:200]],
+        "declaration_items": [build_hr_admin_employee_statutory_declaration_item_payload(item) for item in declaration_items[:300]],
+        "options": {
+            "config_statuses": [{"value": value, "label": label} for value, label in PayrollConfigStatus.choices],
+            "statutory_component_types": [{"value": value, "label": label} for value, label in PayrollStatutoryComponentKind.choices],
+            "contribution_owners": [{"value": value, "label": label} for value, label in PayrollStatutoryContributionOwner.choices],
+            "calculation_methods": [{"value": value, "label": label} for value, label in PayrollStatutoryCalculationMethod.choices],
+            "payroll_frequencies": [{"value": value, "label": label} for value, label in PayrollFrequency.choices],
+            "tax_regimes": [{"value": value, "label": label} for value, label in PayrollTaxRegime.choices],
+            "declaration_statuses": [{"value": value, "label": label} for value, label in PayrollDeclarationStatus.choices],
+            "statutory_declaration_statuses": [{"value": value, "label": label} for value, label in PayrollStatutoryDeclarationStatus.choices],
+            "statutory_declaration_item_kinds": [{"value": value, "label": label} for value, label in PayrollStatutoryDeclarationItemKind.choices],
+            "statutory_proof_statuses": [{"value": value, "label": label} for value, label in PayrollStatutoryProofStatus.choices],
+            "statutory_filing_statuses": [{"value": value, "label": label} for value, label in PayrollStatutoryFilingStatus.choices],
+            "salary_components": [{"id": item.id, "code": item.code, "name": item.name, "component_type": item.component_type} for item in salary_components],
+            "employees": [{"id": item.id, "name": _employee_display_name(item), "employee_code": item.employee_code} for item in employees],
+            "legal_entities": [{"id": item.id, "name": item.name} for item in LegalEntity.objects.filter(tenant=tenant, is_active=True).order_by("name")],
+            "branches": [{"id": item.id, "name": item.name} for item in Branch.objects.filter(tenant=tenant, is_active=True).order_by("name")],
+            "locations": [{"id": item.id, "name": item.name} for item in Location.objects.filter(tenant=tenant, is_active=True).order_by("name")],
+        },
+    }
+
+
+def save_hr_admin_payroll_statutory_pack(actor, validated_data, *, item=None):
+    if item is None:
+        item = PayrollStatutoryPack(tenant=actor.tenant)
+    for field in [
+        "code",
+        "name",
+        "country_code",
+        "jurisdiction_ref",
+        "status",
+        "effective_from",
+        "effective_to",
+        "currency_code",
+        "statutory_profile_ref",
+        "validation_profile_ref",
+        "config_snapshot",
+    ]:
+        if field in validated_data:
+            setattr(item, field, validated_data[field])
+    item.save()
+    return item
+
+
+def save_hr_admin_payroll_statutory_component(actor, validated_data, *, item=None):
+    if item is None:
+        item = PayrollStatutoryComponent(tenant=actor.tenant)
+    if "statutory_pack_id" in validated_data:
+        statutory_pack = PayrollStatutoryPack.objects.filter(tenant=actor.tenant, id=validated_data["statutory_pack_id"]).first()
+        if not statutory_pack:
+            raise serializers.ValidationError({"statutory_pack_id": "Invalid selection."})
+        item.statutory_pack = statutory_pack
+        item.tenant = actor.tenant
+    if "salary_component_id" in validated_data:
+        salary_component = SalaryComponent.objects.filter(tenant=actor.tenant, id=validated_data["salary_component_id"]).first() if validated_data["salary_component_id"] else None
+        if validated_data["salary_component_id"] and not salary_component:
+            raise serializers.ValidationError({"salary_component_id": "Invalid selection."})
+        item.salary_component = salary_component
+    for field in [
+        "code",
+        "name",
+        "statutory_type",
+        "contribution_owner",
+        "calculation_method",
+        "wage_base_ref",
+        "statutory_treatment_ref",
+        "registration_ref",
+        "applicability_profile_ref",
+        "rounding_rule_ref",
+        "formula_ref",
+        "status",
+        "config_snapshot",
+    ]:
+        if field in validated_data:
+            setattr(item, field, validated_data[field])
+    if item.statutory_pack_id is None:
+        raise serializers.ValidationError({"statutory_pack_id": "This field is required."})
+    item.save()
+    return item
+
+
+def save_hr_admin_payroll_statutory_slab(actor, validated_data, *, item=None):
+    if item is None:
+        item = PayrollStatutorySlab(tenant=actor.tenant)
+    if "statutory_component_id" in validated_data:
+        statutory_component = PayrollStatutoryComponent.objects.filter(tenant=actor.tenant, id=validated_data["statutory_component_id"]).first()
+        if not statutory_component:
+            raise serializers.ValidationError({"statutory_component_id": "Invalid selection."})
+        item.statutory_component = statutory_component
+        item.tenant = actor.tenant
+    for field in [
+        "code",
+        "name",
+        "slab_order",
+        "effective_from",
+        "effective_to",
+        "min_amount",
+        "max_amount",
+        "employee_rate_percent",
+        "employer_rate_percent",
+        "fixed_employee_amount",
+        "fixed_employer_amount",
+        "wage_ceiling_amount",
+        "state_code",
+        "applicability_profile_ref",
+        "status",
+        "config_snapshot",
+    ]:
+        if field in validated_data:
+            setattr(item, field, validated_data[field])
+    if item.statutory_component_id is None:
+        raise serializers.ValidationError({"statutory_component_id": "This field is required."})
+    item.save()
+    return item
+
+
+def save_hr_admin_payroll_statutory_employer_registration(actor, validated_data, *, item=None):
+    if item is None:
+        item = PayrollStatutoryEmployerRegistration(tenant=actor.tenant)
+    if "statutory_pack_id" in validated_data:
+        statutory_pack = PayrollStatutoryPack.objects.filter(tenant=actor.tenant, id=validated_data["statutory_pack_id"]).first()
+        if not statutory_pack:
+            raise serializers.ValidationError({"statutory_pack_id": "Invalid selection."})
+        item.statutory_pack = statutory_pack
+        item.tenant = actor.tenant
+    if "statutory_component_id" in validated_data:
+        statutory_component = PayrollStatutoryComponent.objects.filter(tenant=actor.tenant, id=validated_data["statutory_component_id"]).first() if validated_data["statutory_component_id"] else None
+        if validated_data["statutory_component_id"] and not statutory_component:
+            raise serializers.ValidationError({"statutory_component_id": "Invalid selection."})
+        item.statutory_component = statutory_component
+    if "legal_entity_id" in validated_data:
+        legal_entity = LegalEntity.objects.filter(tenant=actor.tenant, id=validated_data["legal_entity_id"]).first() if validated_data["legal_entity_id"] else None
+        if validated_data["legal_entity_id"] and not legal_entity:
+            raise serializers.ValidationError({"legal_entity_id": "Invalid selection."})
+        item.legal_entity = legal_entity
+    if "branch_id" in validated_data:
+        branch = Branch.objects.filter(tenant=actor.tenant, id=validated_data["branch_id"]).first() if validated_data["branch_id"] else None
+        if validated_data["branch_id"] and not branch:
+            raise serializers.ValidationError({"branch_id": "Invalid selection."})
+        item.branch = branch
+    if "location_id" in validated_data:
+        location = Location.objects.filter(tenant=actor.tenant, id=validated_data["location_id"]).first() if validated_data["location_id"] else None
+        if validated_data["location_id"] and not location:
+            raise serializers.ValidationError({"location_id": "Invalid selection."})
+        item.location = location
+    for field in [
+        "code",
+        "name",
+        "registration_type_ref",
+        "registration_number",
+        "employer_identifier",
+        "jurisdiction_ref",
+        "filing_authority_ref",
+        "provider_ref",
+        "status",
+        "effective_from",
+        "effective_to",
+        "source_ref",
+        "config_snapshot",
+    ]:
+        if field in validated_data:
+            setattr(item, field, validated_data[field])
+    if item.statutory_pack_id is None:
+        raise serializers.ValidationError({"statutory_pack_id": "This field is required."})
+    item.save()
+    return item
+
+
+def save_hr_admin_payroll_statutory_filing_calendar(actor, validated_data, *, item=None):
+    if item is None:
+        item = PayrollStatutoryFilingCalendar(tenant=actor.tenant)
+    registration = None
+    if "employer_registration_id" in validated_data:
+        registration = PayrollStatutoryEmployerRegistration.objects.filter(
+            tenant=actor.tenant,
+            id=validated_data["employer_registration_id"],
+        ).first() if validated_data["employer_registration_id"] else None
+        if validated_data["employer_registration_id"] and not registration:
+            raise serializers.ValidationError({"employer_registration_id": "Invalid selection."})
+        item.employer_registration = registration
+        if registration and "statutory_pack_id" not in validated_data:
+            item.statutory_pack = registration.statutory_pack
+        if registration and "statutory_component_id" not in validated_data and registration.statutory_component_id:
+            item.statutory_component = registration.statutory_component
+    if "statutory_pack_id" in validated_data:
+        statutory_pack = PayrollStatutoryPack.objects.filter(tenant=actor.tenant, id=validated_data["statutory_pack_id"]).first()
+        if not statutory_pack:
+            raise serializers.ValidationError({"statutory_pack_id": "Invalid selection."})
+        item.statutory_pack = statutory_pack
+        item.tenant = actor.tenant
+    if "statutory_component_id" in validated_data:
+        statutory_component = PayrollStatutoryComponent.objects.filter(tenant=actor.tenant, id=validated_data["statutory_component_id"]).first() if validated_data["statutory_component_id"] else None
+        if validated_data["statutory_component_id"] and not statutory_component:
+            raise serializers.ValidationError({"statutory_component_id": "Invalid selection."})
+        item.statutory_component = statutory_component
+    for field in [
+        "code",
+        "name",
+        "filing_type_ref",
+        "filing_frequency",
+        "period_start",
+        "period_end",
+        "due_date",
+        "grace_due_date",
+        "filing_window_start",
+        "filing_window_end",
+        "status",
+        "filing_authority_ref",
+        "provider_ref",
+        "output_profile_ref",
+        "source_ref",
+        "config_snapshot",
+    ]:
+        if field in validated_data:
+            setattr(item, field, validated_data[field])
+    if item.statutory_pack_id is None:
+        raise serializers.ValidationError({"statutory_pack_id": "This field is required."})
+    item.save()
+    return item
+
+
+def save_hr_admin_employee_statutory_profile(actor, validated_data, *, item=None):
+    if item is None:
+        item = EmployeeStatutoryProfile(tenant=actor.tenant)
+    if "employee_id" in validated_data:
+        target_employee = Employee.objects.filter(tenant=actor.tenant, id=validated_data["employee_id"]).first()
+        if not target_employee:
+            raise serializers.ValidationError({"employee_id": "Invalid selection."})
+        item.employee = target_employee
+        item.tenant = actor.tenant
+    if "statutory_pack_id" in validated_data:
+        statutory_pack = PayrollStatutoryPack.objects.filter(tenant=actor.tenant, id=validated_data["statutory_pack_id"]).first() if validated_data["statutory_pack_id"] else None
+        if validated_data["statutory_pack_id"] and not statutory_pack:
+            raise serializers.ValidationError({"statutory_pack_id": "Invalid selection."})
+        item.statutory_pack = statutory_pack
+    for field in [
+        "profile_ref",
+        "effective_from",
+        "effective_to",
+        "status",
+        "pan_number",
+        "uan_number",
+        "pf_number",
+        "esi_number",
+        "pf_applicable",
+        "esi_applicable",
+        "professional_tax_state",
+        "lwf_state",
+        "tax_regime",
+        "declaration_status",
+        "previous_employment_income",
+        "previous_employment_tax_deducted",
+        "source_ref",
+        "config_snapshot",
+    ]:
+        if field in validated_data:
+            setattr(item, field, validated_data[field])
+    if item.employee_id is None:
+        raise serializers.ValidationError({"employee_id": "This field is required."})
+    item.save()
+    return item
+
+
+def _refresh_statutory_declaration_totals(declaration: EmployeeStatutoryDeclaration) -> EmployeeStatutoryDeclaration:
+    totals = declaration.items.aggregate(
+        declared_total=Sum("declared_amount"),
+        verified_total=Sum("verified_amount"),
+    )
+    declaration.declared_total_amount = totals["declared_total"] or Decimal("0.00")
+    declaration.verified_total_amount = totals["verified_total"] or Decimal("0.00")
+    declaration.save()
+    return declaration
+
+
+def save_hr_admin_employee_statutory_declaration(actor, validated_data, *, item=None):
+    if item is not None and item.status == PayrollStatutoryDeclarationStatus.LOCKED:
+        raise serializers.ValidationError({"status": "Locked statutory declarations cannot be edited."})
+    if item is None:
+        item = EmployeeStatutoryDeclaration(tenant=actor.tenant)
+    if "employee_id" in validated_data:
+        target_employee = Employee.objects.filter(tenant=actor.tenant, id=validated_data["employee_id"]).first()
+        if not target_employee:
+            raise serializers.ValidationError({"employee_id": "Invalid selection."})
+        item.employee = target_employee
+        item.tenant = actor.tenant
+    if "employee_statutory_profile_id" in validated_data:
+        profile = EmployeeStatutoryProfile.objects.filter(tenant=actor.tenant, id=validated_data["employee_statutory_profile_id"]).first()
+        if not profile:
+            raise serializers.ValidationError({"employee_statutory_profile_id": "Invalid selection."})
+        item.employee_statutory_profile = profile
+        item.employee = profile.employee
+        item.tenant = actor.tenant
+        if not item.statutory_pack_id:
+            item.statutory_pack = profile.statutory_pack
+    if "statutory_pack_id" in validated_data:
+        statutory_pack = PayrollStatutoryPack.objects.filter(tenant=actor.tenant, id=validated_data["statutory_pack_id"]).first() if validated_data["statutory_pack_id"] else None
+        if validated_data["statutory_pack_id"] and not statutory_pack:
+            raise serializers.ValidationError({"statutory_pack_id": "Invalid selection."})
+        item.statutory_pack = statutory_pack
+    for field in [
+        "financial_year_code",
+        "declaration_profile_ref",
+        "proof_window_ref",
+        "status",
+        "tax_regime",
+        "declared_total_amount",
+        "verified_total_amount",
+        "rejection_reason",
+        "source_ref",
+        "config_snapshot",
+    ]:
+        if field in validated_data:
+            setattr(item, field, validated_data[field])
+    if item.employee_id is None:
+        raise serializers.ValidationError({"employee_id": "This field is required."})
+    if item.employee_statutory_profile_id is None:
+        raise serializers.ValidationError({"employee_statutory_profile_id": "This field is required."})
+    item.save()
+    return item
+
+
+def save_hr_admin_employee_statutory_declaration_item(actor, declaration: EmployeeStatutoryDeclaration, validated_data, *, item=None):
+    if declaration.status == PayrollStatutoryDeclarationStatus.LOCKED:
+        raise serializers.ValidationError({"declaration": "Locked statutory declarations cannot be edited."})
+    if item is None:
+        item = EmployeeStatutoryDeclarationItem(tenant=actor.tenant, declaration=declaration, employee=declaration.employee)
+    for field in [
+        "item_kind",
+        "section_code",
+        "component_code",
+        "name",
+        "declared_amount",
+        "verified_amount",
+        "proof_status",
+        "proof_document_ref",
+        "proof_artifact_key",
+        "source_ref",
+        "config_snapshot",
+    ]:
+        if field in validated_data:
+            setattr(item, field, validated_data[field])
+    if item.proof_status in {PayrollStatutoryProofStatus.SUBMITTED, PayrollStatutoryProofStatus.VERIFIED} and not item.proof_submitted_at:
+        item.proof_submitted_at = timezone.now()
+    item.save()
+    _refresh_statutory_declaration_totals(declaration)
+    return item
+
+
+def submit_hr_admin_employee_statutory_declaration(declaration: EmployeeStatutoryDeclaration, *, submitted_by=None) -> EmployeeStatutoryDeclaration:
+    if declaration.status not in {PayrollStatutoryDeclarationStatus.DRAFT, PayrollStatutoryDeclarationStatus.REJECTED}:
+        raise serializers.ValidationError({"status": "Only draft or rejected statutory declarations can be submitted."})
+    _refresh_statutory_declaration_totals(declaration)
+    if not declaration.items.exists():
+        raise serializers.ValidationError({"items": "At least one declaration item is required before submission."})
+    declaration.status = PayrollStatutoryDeclarationStatus.SUBMITTED
+    declaration.submitted_at = timezone.now()
+    declaration.submitted_by = submitted_by
+    declaration.rejected_at = None
+    declaration.rejected_by = None
+    declaration.rejection_reason = ""
+    declaration.save()
+    profile = declaration.employee_statutory_profile
+    profile.declaration_status = PayrollDeclarationStatus.PROOFS_PENDING
+    profile.tax_regime = declaration.tax_regime
+    profile.save()
+    return declaration
+
+
+def verify_hr_admin_employee_statutory_declaration(declaration: EmployeeStatutoryDeclaration, *, verified_by=None) -> EmployeeStatutoryDeclaration:
+    if declaration.status != PayrollStatutoryDeclarationStatus.SUBMITTED:
+        raise serializers.ValidationError({"status": "Only submitted statutory declarations can be verified."})
+    rejected_items = declaration.items.filter(proof_status=PayrollStatutoryProofStatus.REJECTED)
+    if rejected_items.exists():
+        raise serializers.ValidationError({"items": "Rejected proof items must be resolved before declaration verification."})
+    now = timezone.now()
+    for declaration_item in declaration.items.filter(proof_status__in=[PayrollStatutoryProofStatus.PENDING, PayrollStatutoryProofStatus.SUBMITTED]):
+        if not (declaration_item.proof_document_ref or declaration_item.proof_artifact_key):
+            raise serializers.ValidationError({"items": "Pending proof items require a proof reference before declaration verification."})
+        declaration_item.proof_status = PayrollStatutoryProofStatus.VERIFIED
+        if declaration_item.verified_amount == Decimal("0.00"):
+            declaration_item.verified_amount = declaration_item.declared_amount
+        declaration_item.verified_at = now
+        declaration_item.verified_by = verified_by
+        if not declaration_item.proof_submitted_at:
+            declaration_item.proof_submitted_at = now
+        declaration_item.save()
+    _refresh_statutory_declaration_totals(declaration)
+    declaration.status = PayrollStatutoryDeclarationStatus.VERIFIED
+    declaration.verified_at = now
+    declaration.verified_by = verified_by
+    declaration.save()
+    profile = declaration.employee_statutory_profile
+    profile.declaration_status = PayrollDeclarationStatus.VERIFIED
+    profile.tax_regime = declaration.tax_regime
+    profile.save()
+    return declaration
+
+
+def reject_hr_admin_employee_statutory_declaration(declaration: EmployeeStatutoryDeclaration, *, rejected_by=None, reason: str = "") -> EmployeeStatutoryDeclaration:
+    if declaration.status not in {PayrollStatutoryDeclarationStatus.SUBMITTED, PayrollStatutoryDeclarationStatus.VERIFIED}:
+        raise serializers.ValidationError({"status": "Only submitted or verified statutory declarations can be rejected."})
+    if not reason:
+        raise serializers.ValidationError({"reason": "Rejection reason is required."})
+    declaration.status = PayrollStatutoryDeclarationStatus.REJECTED
+    declaration.rejected_at = timezone.now()
+    declaration.rejected_by = rejected_by
+    declaration.rejection_reason = reason
+    declaration.verified_at = None
+    declaration.verified_by = None
+    declaration.save()
+    profile = declaration.employee_statutory_profile
+    profile.declaration_status = PayrollDeclarationStatus.PROOFS_PENDING
+    profile.save()
+    return declaration
+
+
+def lock_hr_admin_employee_statutory_declaration(declaration: EmployeeStatutoryDeclaration, *, locked_by=None) -> EmployeeStatutoryDeclaration:
+    if declaration.status != PayrollStatutoryDeclarationStatus.VERIFIED:
+        raise serializers.ValidationError({"status": "Only verified statutory declarations can be locked."})
+    declaration.status = PayrollStatutoryDeclarationStatus.LOCKED
+    declaration.locked_at = timezone.now()
+    declaration.locked_by = locked_by
+    declaration.save()
+    profile = declaration.employee_statutory_profile
+    profile.declaration_status = PayrollDeclarationStatus.LOCKED
+    profile.save()
+    return declaration
+
+
+def verify_hr_admin_employee_statutory_declaration_item(item: EmployeeStatutoryDeclarationItem, validated_data, *, verified_by=None):
+    if item.declaration.status == PayrollStatutoryDeclarationStatus.LOCKED:
+        raise serializers.ValidationError({"declaration": "Locked statutory declarations cannot be edited."})
+    proof_status = validated_data.get("proof_status") or PayrollStatutoryProofStatus.VERIFIED
+    if proof_status == PayrollStatutoryProofStatus.REJECTED:
+        reason = validated_data.get("rejection_reason") or ""
+        if not reason:
+            raise serializers.ValidationError({"rejection_reason": "Rejection reason is required."})
+        item.proof_status = PayrollStatutoryProofStatus.REJECTED
+        item.rejection_reason = reason
+        item.rejected_at = timezone.now()
+        item.rejected_by = verified_by
+        item.verified_at = None
+        item.verified_by = None
+        if "verified_amount" in validated_data:
+            item.verified_amount = validated_data["verified_amount"]
+    else:
+        item.proof_status = PayrollStatutoryProofStatus.VERIFIED
+        item.verified_amount = validated_data.get("verified_amount", item.declared_amount)
+        item.verified_at = timezone.now()
+        item.verified_by = verified_by
+        item.rejected_at = None
+        item.rejected_by = None
+        item.rejection_reason = ""
+        if not item.proof_submitted_at:
+            item.proof_submitted_at = timezone.now()
+    item.save()
+    _refresh_statutory_declaration_totals(item.declaration)
     return item
 
 
@@ -8699,6 +10446,8 @@ def build_hr_admin_payroll_output_batch_payload(item: PayrollOutputBatch) -> dic
 def build_hr_admin_payroll_output_artifact_payload(item: PayrollOutputArtifact) -> dict:
     employee = item.employee
     can_download = item.status == PayrollOutputArtifactStatus.PUBLISHED and item.is_downloadable
+    signed_url = get_payroll_artifact_signed_url(item) if can_download else None
+    recent_events = list(item.access_events.order_by("-created_at")[:8])
     return {
         "id": item.id,
         "output_batch_id": item.output_batch_id,
@@ -8718,15 +10467,23 @@ def build_hr_admin_payroll_output_artifact_payload(item: PayrollOutputArtifact) 
         "content_type": item.content_type,
         "storage_provider_ref": item.storage_provider_ref,
         "storage_key": item.storage_key,
+        "storage_object_version": item.storage_object_version,
         "mime_type": item.mime_type,
         "file_size_bytes": item.file_size_bytes,
         "checksum_sha256": item.checksum_sha256,
         "is_downloadable": item.is_downloadable,
+        "download_strategy_ref": item.download_strategy_ref,
+        "supports_signed_url": item.supports_signed_url,
+        "signed_url_expires_in_seconds": item.signed_url_expires_in_seconds,
         "retention_policy_ref": item.retention_policy_ref,
         "download_url": f"/api/v1/hr-admin/payroll-output-artifacts/{item.id}/download/" if can_download else None,
+        "signed_download_url": signed_url.url if signed_url else None,
+        "signed_download_expires_at": signed_url.expires_at if signed_url else None,
         "output_profile_ref": item.output_profile_ref,
         "totals_snapshot": item.totals_snapshot,
         "line_snapshot": item.line_snapshot,
+        "access_summary": _payroll_artifact_access_summary(item),
+        "access_events": [_payroll_access_event_payload(event) for event in recent_events],
         "source_hash": item.source_hash,
         "published_at": item.published_at,
         "published_by_name": str(item.published_by) if item.published_by else None,
@@ -8842,6 +10599,136 @@ class HrAdminPayrollOutputBatchPublishView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminPayrollOutputActionResultSerializer(build_hr_admin_payroll_output_action_payload(batch, "Payroll outputs published.")).data)
 
 
+class HrAdminPayrollOutputArtifactSignedAccessIssueView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        artifact = PayrollOutputArtifact.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "output_batch",
+            "payroll_run",
+            "review",
+            "employee",
+            "employee__membership",
+        ).first()
+        if not artifact:
+            return response.Response({"detail": "Payroll output artifact not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = PayrollArtifactSignedAccessGrantIssueRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        request_metadata = _payroll_request_metadata(request)
+        try:
+            issue = issue_payroll_artifact_signed_access_grant(
+                artifact,
+                issued_by_user=request.user,
+                issued_by_membership=getattr(employee, "membership", None),
+                issued_to_user=request.user,
+                issued_to_membership=getattr(employee, "membership", None),
+                actor_identifier=employee.employee_code,
+                source_channel_ref="hr_admin.payroll_outputs.v1",
+                request_identifier=request_metadata["request_identifier"],
+                ip_address=request_metadata["ip_address"],
+                user_agent=request_metadata["user_agent"],
+                expires_in_seconds=serializer.validated_data.get("expires_in_seconds"),
+                max_access_count=serializer.validated_data.get("max_access_count"),
+                permission_scope=serializer.validated_data.get("permission_scope") or "download",
+                metadata_snapshot={"issue_surface": "hr_admin"},
+            )
+        except PayrollOutputError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(
+            PayrollArtifactSignedAccessGrantIssueResultSerializer({
+                "grant": _payroll_signed_access_grant_payload(issue.grant),
+                "signed_url": issue.signed_url,
+                "expires_at": issue.grant.expires_at,
+            }).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class HrAdminPayrollArtifactSignedAccessGrantRevokeView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        grant = PayrollArtifactSignedAccessGrant.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "output_artifact",
+            "output_batch",
+            "payroll_run",
+            "review",
+            "employee",
+            "issued_to_membership",
+            "issued_by_user",
+        ).first()
+        if not grant:
+            return response.Response({"detail": "Payroll signed access grant not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = PayrollArtifactSignedAccessGrantRevokeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        request_metadata = _payroll_request_metadata(request)
+        try:
+            grant = revoke_payroll_artifact_signed_access_grant(
+                grant,
+                revoked_by_user=request.user,
+                revoked_by_membership=getattr(employee, "membership", None),
+                actor_identifier=employee.employee_code,
+                reason=serializer.validated_data["reason"],
+                request_identifier=request_metadata["request_identifier"],
+                ip_address=request_metadata["ip_address"],
+                user_agent=request_metadata["user_agent"],
+            )
+        except PayrollOutputError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(PayrollArtifactSignedAccessGrantSerializer(_payroll_signed_access_grant_payload(grant)).data)
+
+
+class HrAdminPayrollOutputArtifactAccessAuditExportView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        artifact = PayrollOutputArtifact.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "output_batch",
+            "payroll_run",
+            "review",
+            "employee",
+        ).first()
+        if not artifact:
+            return response.Response({"detail": "Payroll output artifact not found."}, status=status.HTTP_404_NOT_FOUND)
+        rows = payroll_artifact_access_audit_rows(artifact)
+        fieldnames = [
+            "row_type",
+            "artifact_id",
+            "artifact_key",
+            "event_or_grant_id",
+            "event_type",
+            "status",
+            "source_channel_ref",
+            "actor_identifier",
+            "request_identifier",
+            "signed_access_grant_id",
+            "notification_id",
+            "storage_provider_ref",
+            "storage_object_version",
+            "download_strategy_ref",
+            "checksum_sha256",
+            "occurred_at",
+            "expires_at",
+            "revoked_at",
+            "access_count",
+            "metadata_snapshot",
+        ]
+        csv_buffer = StringIO()
+        writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+        file_name = re.sub(r"[^A-Za-z0-9._-]+", "-", artifact.artifact_key or str(artifact.id)).strip("-")
+        export_response = HttpResponse(csv_buffer.getvalue(), content_type="text/csv")
+        export_response["Content-Disposition"] = f'attachment; filename="{file_name or "payroll-artifact"}-access-audit.csv"'
+        export_response["X-Payroll-Artifact-Checksum"] = artifact.checksum_sha256
+        export_response["X-Payroll-Access-Audit-Row-Count"] = str(len(rows))
+        return export_response
+
+
 class HrAdminPayrollOutputArtifactDownloadView(HrAdminContextMixin, APIView):
     def get(self, request, item_id):
         employee = self.get_employee()
@@ -8856,17 +10743,46 @@ class HrAdminPayrollOutputArtifactDownloadView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "Payroll output artifact not found."}, status=status.HTTP_404_NOT_FOUND)
         if artifact.status != PayrollOutputArtifactStatus.PUBLISHED:
             return response.Response({"detail": "Only published payroll artifacts can be downloaded."}, status=status.HTTP_400_BAD_REQUEST)
-        if not artifact.is_downloadable or not artifact.file_payload:
+        if not artifact.is_downloadable:
             return response.Response({"detail": "Payroll artifact file is not available for download."}, status=status.HTTP_400_BAD_REQUEST)
-        payload = artifact.file_payload.encode("utf-8")
-        checksum = hashlib.sha256(payload).hexdigest()
-        if artifact.checksum_sha256 and checksum != artifact.checksum_sha256:
-            return response.Response({"detail": "Payroll artifact checksum verification failed."}, status=status.HTTP_409_CONFLICT)
+        actor_membership = getattr(employee, "membership", None)
+        try:
+            signed_access_grant = _payroll_signed_access_grant_from_request(artifact, request, actor_membership=actor_membership)
+        except PayrollOutputError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            stored_payload = read_payroll_artifact_payload(artifact)
+        except PayrollArtifactStorageError as exc:
+            http_status = status.HTTP_409_CONFLICT if "checksum" in str(exc).lower() else status.HTTP_400_BAD_REQUEST
+            return response.Response({"detail": str(exc)}, status=http_status)
+        request_metadata = _payroll_request_metadata(request)
+        create_payroll_artifact_access_event(
+            artifact,
+            event_type=PayrollArtifactAccessEventType.DOWNLOADED,
+            actor_user=request.user,
+            actor_membership=actor_membership,
+            actor_identifier=employee.employee_code,
+            signed_access_grant=signed_access_grant,
+            request_identifier=request_metadata["request_identifier"],
+            ip_address=request_metadata["ip_address"],
+            user_agent=request_metadata["user_agent"],
+            source_channel_ref="hr_admin.payroll_outputs.v1",
+            metadata_snapshot={
+                "content_type": stored_payload.content_type,
+                "file_name": stored_payload.file_name,
+                "file_size_bytes": len(stored_payload.payload),
+                "download_surface": "hr_admin",
+                "signed_access_grant_id": str(signed_access_grant.id) if signed_access_grant else "",
+            },
+        )
         file_name = re.sub(r"[^A-Za-z0-9._-]+", "-", artifact.file_name or f"{artifact.artifact_key}.txt").strip("-")
-        download_response = HttpResponse(payload, content_type=artifact.mime_type or artifact.content_type or "application/octet-stream")
+        download_response = HttpResponse(stored_payload.payload, content_type=stored_payload.content_type)
         download_response["Content-Disposition"] = f'attachment; filename="{file_name or "payroll-artifact.txt"}"'
-        download_response["X-Payroll-Artifact-Checksum"] = artifact.checksum_sha256 or checksum
+        download_response["X-Payroll-Artifact-Checksum"] = artifact.checksum_sha256 or stored_payload.checksum_sha256
         download_response["X-Payroll-Storage-Key"] = artifact.storage_key
+        download_response["X-Payroll-Storage-Provider"] = artifact.storage_provider_ref
+        download_response["X-Payroll-Storage-Version"] = artifact.storage_object_version
+        download_response["X-Payroll-Download-Strategy"] = artifact.download_strategy_ref
         download_response["X-Payroll-Retention-Policy"] = artifact.retention_policy_ref
         return download_response
 
@@ -8906,6 +10822,205 @@ def build_hr_admin_payroll_finance_handoff_payload(item: PayrollFinanceHandoff) 
     }
 
 
+def build_hr_admin_payroll_provider_delivery_payload(item: PayrollProviderDelivery) -> dict:
+    return {
+        "id": item.id,
+        "handoff_id": item.handoff_id,
+        "output_artifact_id": item.output_artifact_id,
+        "output_artifact_title": item.output_artifact.title,
+        "output_batch_id": item.output_batch_id,
+        "payroll_run_id": item.payroll_run_id,
+        "review_id": item.review_id,
+        "artifact_kind": item.artifact_kind,
+        "artifact_kind_label": item.get_artifact_kind_display(),
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "provider_ref": item.provider_ref,
+        "channel_ref": item.channel_ref,
+        "external_reference": item.external_reference,
+        "retry_policy_ref": item.retry_policy_ref,
+        "attempt_count": item.attempt_count,
+        "submitted_at": item.submitted_at,
+        "submitted_by_name": str(item.submitted_by) if item.submitted_by else None,
+        "acknowledged_at": item.acknowledged_at,
+        "acknowledged_by_name": str(item.acknowledged_by) if item.acknowledged_by else None,
+        "reconciled_at": item.reconciled_at,
+        "reconciled_by_name": str(item.reconciled_by) if item.reconciled_by else None,
+        "failure_code": item.failure_code,
+        "failure_reason": item.failure_reason,
+        "payload_checksum_sha256": item.payload_checksum_sha256,
+        "request_snapshot": item.request_snapshot,
+        "response_snapshot": item.response_snapshot,
+        "reconciliation_snapshot": item.reconciliation_snapshot,
+        "config_snapshot": item.config_snapshot,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_payroll_provider_callback_event_payload(item: PayrollProviderCallbackEvent) -> dict:
+    return {
+        "id": item.id,
+        "provider_delivery_id": item.provider_delivery_id,
+        "handoff_id": item.handoff_id,
+        "output_artifact_id": item.output_artifact_id,
+        "output_artifact_title": item.output_artifact.title,
+        "provider_ref": item.provider_ref,
+        "external_reference": item.external_reference,
+        "external_event_id": item.external_event_id,
+        "idempotency_key": item.idempotency_key,
+        "callback_profile_ref": item.callback_profile_ref,
+        "callback_verification_ref": item.callback_verification_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "provider_status": item.provider_status,
+        "provider_status_label": item.get_provider_status_display(),
+        "payload_checksum_sha256": item.payload_checksum_sha256,
+        "signature": item.signature,
+        "verification_snapshot": item.verification_snapshot,
+        "payload_snapshot": item.payload_snapshot,
+        "processing_snapshot": item.processing_snapshot,
+        "received_at": item.received_at,
+        "processed_at": item.processed_at,
+        "failure_code": item.failure_code,
+        "failure_reason": item.failure_reason,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_payroll_provider_retry_event_payload(item: PayrollProviderRetryEvent) -> dict:
+    return {
+        "id": item.id,
+        "provider_delivery_id": item.provider_delivery_id,
+        "handoff_id": item.handoff_id,
+        "output_artifact_id": item.output_artifact_id,
+        "output_artifact_title": item.output_artifact.title,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "retry_policy_ref": item.retry_policy_ref,
+        "failure_taxonomy_ref": item.failure_taxonomy_ref,
+        "failure_category_ref": item.failure_category_ref,
+        "retry_reason": item.retry_reason,
+        "attempt_number": item.attempt_number,
+        "scheduled_for": item.scheduled_for,
+        "executed_at": item.executed_at,
+        "requested_by_name": str(item.requested_by) if item.requested_by else None,
+        "executed_by_name": str(item.executed_by) if item.executed_by else None,
+        "decision_snapshot": item.decision_snapshot,
+        "request_snapshot": item.request_snapshot,
+        "response_snapshot": item.response_snapshot,
+        "failure_code": item.failure_code,
+        "failure_reason": item.failure_reason,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_payroll_provider_connection_payload(item: PayrollProviderConnection) -> dict:
+    return {
+        "id": item.id,
+        "provider_ref": item.provider_ref,
+        "provider_name": item.provider_name,
+        "provider_kind": item.provider_kind,
+        "provider_kind_label": item.get_provider_kind_display(),
+        "environment_ref": item.environment_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "adapter_ref": item.adapter_ref,
+        "sandbox_adapter_ref": item.sandbox_adapter_ref,
+        "channel_ref": item.channel_ref,
+        "credential_ref": item.credential_ref,
+        "credential_profile_ref": item.credential_profile_ref,
+        "credential_required": item.credential_required,
+        "callback_profile_ref": item.callback_profile_ref,
+        "callback_verification_ref": item.callback_verification_ref,
+        "retry_policy_ref": item.retry_policy_ref,
+        "certification_status": item.certification_status,
+        "certification_status_label": item.get_certification_status_display(),
+        "certification_profile_ref": item.certification_profile_ref,
+        "certified_at": item.certified_at,
+        "certified_by_name": str(item.certified_by) if item.certified_by else None,
+        "last_tested_at": item.last_tested_at,
+        "last_tested_by_name": str(item.last_tested_by) if item.last_tested_by else None,
+        "readiness_snapshot": item.readiness_snapshot,
+        "certification_snapshot": item.certification_snapshot,
+        "config_snapshot": item.config_snapshot,
+        "created_by_name": str(item.created_by) if item.created_by else None,
+        "updated_by_name": str(item.updated_by) if item.updated_by else None,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def get_hr_admin_payroll_provider_connection_setup_payload(actor) -> dict:
+    tenant = actor.tenant
+    ensure_default_payroll_provider_connections(tenant, created_by=getattr(actor, "user", None))
+    queryset = PayrollProviderConnection.objects.filter(tenant=tenant)
+    connections = list(
+        queryset.select_related("certified_by", "last_tested_by", "created_by", "updated_by").order_by(
+            "provider_kind",
+            "provider_name",
+            "provider_ref",
+        )
+    )
+    active_allowed_count = sum(
+        1 for item in connections
+        if isinstance(item.readiness_snapshot, dict) and item.readiness_snapshot.get("active_allowed")
+    )
+    return {
+        "summary": {
+            "connection_count": len(connections),
+            "active_connection_count": queryset.filter(status=PayrollProviderConnectionStatus.ACTIVE).count(),
+            "certified_connection_count": queryset.filter(certification_status=PayrollProviderCertificationStatus.PASSED).count(),
+            "sandbox_ready_connection_count": queryset.filter(status=PayrollProviderConnectionStatus.SANDBOX_READY).count(),
+            "blocked_connection_count": queryset.filter(status=PayrollProviderConnectionStatus.BLOCKED).count(),
+            "credential_required_count": queryset.filter(credential_required=True).count(),
+            "active_allowed_count": active_allowed_count,
+            "bank_connection_count": queryset.filter(provider_kind=PayrollProviderConnectionKind.BANK).count(),
+            "accounting_connection_count": queryset.filter(provider_kind=PayrollProviderConnectionKind.ACCOUNTING).count(),
+            "statutory_connection_count": queryset.filter(provider_kind=PayrollProviderConnectionKind.STATUTORY).count(),
+        },
+        "connections": [build_hr_admin_payroll_provider_connection_payload(item) for item in connections],
+        "options": {
+            "provider_kinds": [{"value": value, "label": label} for value, label in PayrollProviderConnectionKind.choices],
+            "connection_statuses": [{"value": value, "label": label} for value, label in PayrollProviderConnectionStatus.choices],
+            "certification_statuses": [{"value": value, "label": label} for value, label in PayrollProviderCertificationStatus.choices],
+        },
+    }
+
+
+def save_hr_admin_payroll_provider_connection(actor, data: dict, item: PayrollProviderConnection | None = None) -> PayrollProviderConnection:
+    create = item is None
+    if create:
+        if not data.get("provider_ref") or not data.get("provider_name"):
+            raise DjangoValidationError({"provider_ref": "Provider ref and name are required."})
+        item = PayrollProviderConnection(tenant=actor.tenant, created_by=getattr(actor, "user", None))
+    for field_name in [
+        "provider_ref",
+        "provider_name",
+        "provider_kind",
+        "environment_ref",
+        "status",
+        "adapter_ref",
+        "sandbox_adapter_ref",
+        "channel_ref",
+        "credential_ref",
+        "credential_profile_ref",
+        "credential_required",
+        "callback_profile_ref",
+        "callback_verification_ref",
+        "retry_policy_ref",
+        "certification_profile_ref",
+        "config_snapshot",
+    ]:
+        if field_name in data:
+            setattr(item, field_name, data[field_name])
+    item.updated_by = getattr(actor, "user", None)
+    item.save()
+    return sync_payroll_provider_connection_readiness(item)
+
+
 def build_hr_admin_payroll_finance_handoff_action_payload(handoff: PayrollFinanceHandoff, detail: str) -> dict:
     artifacts = PayrollOutputArtifact.objects.filter(
         output_batch=handoff.output_batch,
@@ -8915,9 +11030,20 @@ def build_hr_admin_payroll_finance_handoff_action_payload(handoff: PayrollFinanc
             PayrollOutputArtifactKind.STATUTORY_REPORT,
         ],
     ).select_related("employee", "input_snapshot", "published_by")
+    deliveries = PayrollProviderDelivery.objects.filter(handoff=handoff).select_related(
+        "output_artifact",
+        "submitted_by",
+        "acknowledged_by",
+        "reconciled_by",
+    )
+    callback_events = PayrollProviderCallbackEvent.objects.filter(handoff=handoff).select_related("provider_delivery", "output_artifact")[:100]
+    retry_events = PayrollProviderRetryEvent.objects.filter(handoff=handoff).select_related("provider_delivery", "output_artifact", "requested_by", "executed_by")[:100]
     return {
         "handoff": build_hr_admin_payroll_finance_handoff_payload(handoff),
         "artifacts": [build_hr_admin_payroll_output_artifact_payload(item) for item in artifacts],
+        "deliveries": [build_hr_admin_payroll_provider_delivery_payload(item) for item in deliveries],
+        "callback_events": [build_hr_admin_payroll_provider_callback_event_payload(item) for item in callback_events],
+        "retry_events": [build_hr_admin_payroll_provider_retry_event_payload(item) for item in retry_events],
         "detail": detail,
     }
 
@@ -8953,6 +11079,18 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
         "input_snapshot",
         "published_by",
     ).order_by("kind", "artifact_key")[:200]
+    delivery_queryset = PayrollProviderDelivery.objects.filter(tenant=tenant)
+    deliveries = delivery_queryset.select_related(
+        "handoff",
+        "output_artifact",
+        "submitted_by",
+        "acknowledged_by",
+        "reconciled_by",
+    ).order_by("artifact_kind", "provider_ref")[:200]
+    callback_event_queryset = PayrollProviderCallbackEvent.objects.filter(tenant=tenant)
+    callback_events = callback_event_queryset.select_related("provider_delivery", "output_artifact").order_by("-received_at", "-created_at")[:200]
+    retry_event_queryset = PayrollProviderRetryEvent.objects.filter(tenant=tenant)
+    retry_events = retry_event_queryset.select_related("provider_delivery", "output_artifact", "requested_by", "executed_by").order_by("-scheduled_for", "-created_at")[:200]
     latest_handoff = handoffs.first()
     return {
         "summary": {
@@ -8961,6 +11099,17 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
             "generated_handoff_count": handoffs.filter(status=PayrollFinanceHandoffStatus.GENERATED).count(),
             "transmitted_handoff_count": handoffs.filter(status=PayrollFinanceHandoffStatus.TRANSMITTED).count(),
             "accepted_handoff_count": handoffs.filter(status=PayrollFinanceHandoffStatus.ACCEPTED).count(),
+            "submitted_delivery_count": delivery_queryset.filter(status=PayrollProviderDeliveryStatus.SUBMITTED).count(),
+            "reconciled_delivery_count": delivery_queryset.filter(status=PayrollProviderDeliveryStatus.RECONCILED).count(),
+            "failed_delivery_count": delivery_queryset.filter(status=PayrollProviderDeliveryStatus.FAILED).count(),
+            "rejected_delivery_count": delivery_queryset.filter(status=PayrollProviderDeliveryStatus.REJECTED).count(),
+            "provider_callback_event_count": callback_event_queryset.count(),
+            "processed_provider_callback_event_count": callback_event_queryset.filter(status=PayrollProviderCallbackEventStatus.PROCESSED).count(),
+            "rejected_provider_callback_event_count": callback_event_queryset.filter(status=PayrollProviderCallbackEventStatus.REJECTED).count(),
+            "provider_retry_event_count": retry_event_queryset.count(),
+            "scheduled_provider_retry_event_count": retry_event_queryset.filter(status=PayrollProviderRetryEventStatus.SCHEDULED).count(),
+            "executed_provider_retry_event_count": retry_event_queryset.filter(status=PayrollProviderRetryEventStatus.EXECUTED).count(),
+            "dead_lettered_provider_retry_event_count": retry_event_queryset.filter(status=PayrollProviderRetryEventStatus.DEAD_LETTERED).count(),
             "finance_artifact_count": PayrollOutputArtifact.objects.filter(
                 tenant=tenant,
                 kind__in=[
@@ -8974,10 +11123,16 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
         "output_batches": [build_hr_admin_payroll_output_batch_payload(item) for item in batches[:50]],
         "handoffs": [build_hr_admin_payroll_finance_handoff_payload(item) for item in handoffs[:50]],
         "artifacts": [build_hr_admin_payroll_output_artifact_payload(item) for item in artifacts],
+        "deliveries": [build_hr_admin_payroll_provider_delivery_payload(item) for item in deliveries],
+        "callback_events": [build_hr_admin_payroll_provider_callback_event_payload(item) for item in callback_events],
+        "retry_events": [build_hr_admin_payroll_provider_retry_event_payload(item) for item in retry_events],
         "options": {
             "handoff_statuses": [{"value": value, "label": label} for value, label in PayrollFinanceHandoffStatus.choices],
             "output_artifact_kinds": [{"value": value, "label": label} for value, label in PayrollOutputArtifactKind.choices],
             "output_artifact_statuses": [{"value": value, "label": label} for value, label in PayrollOutputArtifactStatus.choices],
+            "provider_delivery_statuses": [{"value": value, "label": label} for value, label in PayrollProviderDeliveryStatus.choices],
+            "provider_callback_event_statuses": [{"value": value, "label": label} for value, label in PayrollProviderCallbackEventStatus.choices],
+            "provider_retry_event_statuses": [{"value": value, "label": label} for value, label in PayrollProviderRetryEventStatus.choices],
         },
     }
 
@@ -8988,6 +11143,106 @@ class HrAdminPayrollFinanceHandoffSetupView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         return response.Response(HrAdminPayrollFinanceHandoffSetupSerializer(get_hr_admin_payroll_finance_handoff_setup_payload(employee)).data)
+
+
+class HrAdminPayrollProviderConnectionSetupView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminPayrollProviderConnectionSetupSerializer(get_hr_admin_payroll_provider_connection_setup_payload(employee)).data)
+
+
+class HrAdminPayrollProviderConnectionListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        connections = PayrollProviderConnection.objects.filter(tenant=employee.tenant).select_related(
+            "certified_by",
+            "last_tested_by",
+            "created_by",
+            "updated_by",
+        )
+        payload = [build_hr_admin_payroll_provider_connection_payload(item) for item in connections]
+        return response.Response(HrAdminPayrollProviderConnectionSerializer(payload, many=True).data)
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderConnectionWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_provider_connection(employee, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        payload = {
+            "connection": build_hr_admin_payroll_provider_connection_payload(item),
+            "detail": "Payroll provider connection created.",
+        }
+        return response.Response(HrAdminPayrollProviderConnectionActionResultSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminPayrollProviderConnectionDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollProviderConnection.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "certified_by",
+            "last_tested_by",
+            "created_by",
+            "updated_by",
+        ).first()
+        if not item:
+            return response.Response({"detail": "Payroll provider connection not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminPayrollProviderConnectionSerializer(build_hr_admin_payroll_provider_connection_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollProviderConnection.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Payroll provider connection not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderConnectionWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_provider_connection(employee, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        payload = {
+            "connection": build_hr_admin_payroll_provider_connection_payload(item),
+            "detail": "Payroll provider connection updated.",
+        }
+        return response.Response(HrAdminPayrollProviderConnectionActionResultSerializer(payload).data)
+
+
+class HrAdminPayrollProviderConnectionCertifyView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollProviderConnection.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Payroll provider connection not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderConnectionCertificationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = record_payroll_provider_connection_certification(
+                item,
+                certification_status=serializer.validated_data["certification_status"],
+                evidence_snapshot=serializer.validated_data.get("evidence_snapshot") or {},
+                tested_by=request.user,
+            )
+        except PayrollProviderConnectionError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payload = {
+            "connection": build_hr_admin_payroll_provider_connection_payload(item),
+            "detail": "Payroll provider connection certification recorded.",
+        }
+        return response.Response(HrAdminPayrollProviderConnectionActionResultSerializer(payload).data)
 
 
 class HrAdminPayrollOutputBatchGenerateFinanceHandoffView(HrAdminContextMixin, APIView):
@@ -9040,6 +11295,685 @@ class HrAdminPayrollFinanceHandoffTransmitView(HrAdminContextMixin, APIView):
             "accepted_by",
         ).get(id=handoff.id)
         return response.Response(HrAdminPayrollFinanceHandoffActionResultSerializer(build_hr_admin_payroll_finance_handoff_action_payload(handoff, "Payroll finance handoff transmitted.")).data)
+
+
+class HrAdminPayrollFinanceHandoffAcknowledgeView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        handoff = PayrollFinanceHandoff.objects.filter(tenant=employee.tenant, id=item_id).select_related("output_batch", "payroll_run", "review", "transmitted_by").first()
+        if not handoff:
+            return response.Response({"detail": "Payroll finance handoff not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollFinanceHandoffAcknowledgeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            handoff = reconcile_payroll_finance_handoff(
+                handoff,
+                reconciled_by=request.user,
+                acknowledgement_profile_ref=serializer.validated_data.get("acknowledgement_profile_ref") or None,
+                provider_status=serializer.validated_data.get("provider_status") or PayrollProviderDeliveryStatus.RECONCILED,
+                failure_code=serializer.validated_data.get("failure_code") or "",
+                failure_reason=serializer.validated_data.get("failure_reason") or "",
+                response_snapshot=serializer.validated_data.get("response_snapshot") or None,
+            )
+        except PayrollFinanceHandoffError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        handoff = PayrollFinanceHandoff.objects.select_related(
+            "output_batch",
+            "payroll_run",
+            "review",
+            "generated_by",
+            "transmitted_by",
+            "accepted_by",
+        ).get(id=handoff.id)
+        return response.Response(HrAdminPayrollFinanceHandoffActionResultSerializer(build_hr_admin_payroll_finance_handoff_action_payload(handoff, "Payroll finance handoff acknowledgement recorded.")).data)
+
+
+class PayrollProviderCallbackView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = PayrollProviderCallbackRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            event, replayed = ingest_payroll_provider_callback(
+                provider_delivery_id=str(serializer.validated_data.get("provider_delivery_id") or ""),
+                provider_ref=serializer.validated_data["provider_ref"],
+                external_reference=serializer.validated_data.get("external_reference") or "",
+                external_event_id=serializer.validated_data.get("external_event_id") or "",
+                idempotency_key=serializer.validated_data["idempotency_key"],
+                provider_status=serializer.validated_data["provider_status"],
+                payload_snapshot=serializer.validated_data.get("payload_snapshot") or {},
+                signature=serializer.validated_data["signature"],
+            )
+        except PayrollProviderCallbackError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        event = PayrollProviderCallbackEvent.objects.select_related("provider_delivery", "output_artifact").get(id=event.id)
+        payload = {
+            "callback_event": build_hr_admin_payroll_provider_callback_event_payload(event),
+            "delivery": build_hr_admin_payroll_provider_delivery_payload(event.provider_delivery),
+            "replayed": replayed,
+            "detail": "Provider callback replay ignored." if replayed else "Provider callback processed.",
+        }
+        response_status = status.HTTP_200_OK
+        if event.status == PayrollProviderCallbackEventStatus.REJECTED:
+            payload["detail"] = event.failure_reason or "Provider callback rejected."
+            response_status = status.HTTP_400_BAD_REQUEST
+        return response.Response(PayrollProviderCallbackResultSerializer(payload).data, status=response_status)
+
+
+class HrAdminPayrollProviderDeliveryScheduleRetryView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        delivery = PayrollProviderDelivery.objects.filter(tenant=employee.tenant, id=item_id).select_related("handoff", "output_artifact").first()
+        if not delivery:
+            return response.Response({"detail": "Payroll provider delivery not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderRetryScheduleRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            retry_event = schedule_payroll_provider_delivery_retry(
+                delivery,
+                requested_by=request.user,
+                retry_reason=serializer.validated_data.get("retry_reason") or "",
+                scheduled_for=serializer.validated_data.get("scheduled_for"),
+            )
+        except PayrollProviderRetryError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        retry_event = PayrollProviderRetryEvent.objects.select_related("provider_delivery", "output_artifact", "requested_by", "executed_by").get(id=retry_event.id)
+        payload = {
+            "retry_event": build_hr_admin_payroll_provider_retry_event_payload(retry_event),
+            "delivery": build_hr_admin_payroll_provider_delivery_payload(retry_event.provider_delivery),
+            "detail": "Payroll provider delivery retry scheduled." if retry_event.status == PayrollProviderRetryEventStatus.SCHEDULED else "Payroll provider delivery moved to dead letter.",
+        }
+        return response.Response(HrAdminPayrollProviderRetryActionResultSerializer(payload).data)
+
+
+class HrAdminPayrollProviderDeliveryRequeueView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        delivery = PayrollProviderDelivery.objects.filter(tenant=employee.tenant, id=item_id).select_related("handoff", "output_artifact").first()
+        if not delivery:
+            return response.Response({"detail": "Payroll provider delivery not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderRetryRequeueRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        retry_event = None
+        if serializer.validated_data.get("retry_event_id"):
+            retry_event = PayrollProviderRetryEvent.objects.filter(
+                tenant=employee.tenant,
+                id=serializer.validated_data["retry_event_id"],
+                provider_delivery=delivery,
+            ).select_related("provider_delivery", "output_artifact").first()
+            if not retry_event:
+                return response.Response({"detail": "Payroll provider retry event not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            retry_event = requeue_payroll_provider_delivery(delivery, executed_by=request.user, retry_event=retry_event)
+        except PayrollProviderRetryError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        retry_event = PayrollProviderRetryEvent.objects.select_related("provider_delivery", "output_artifact", "requested_by", "executed_by").get(id=retry_event.id)
+        payload = {
+            "retry_event": build_hr_admin_payroll_provider_retry_event_payload(retry_event),
+            "delivery": build_hr_admin_payroll_provider_delivery_payload(retry_event.provider_delivery),
+            "detail": "Payroll provider delivery requeued.",
+        }
+        return response.Response(HrAdminPayrollProviderRetryActionResultSerializer(payload).data)
+
+
+class HrAdminPayrollStatutorySetupView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminPayrollStatutorySetupSerializer(get_hr_admin_payroll_statutory_setup_payload(employee)).data)
+
+
+class HrAdminPayrollStatutoryPackListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        items = PayrollStatutoryPack.objects.filter(tenant=employee.tenant).order_by("country_code", "name", "-effective_from")
+        return response.Response(HrAdminPayrollStatutoryPackSerializer([build_hr_admin_payroll_statutory_pack_payload(item) for item in items], many=True).data)
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollStatutoryPackWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_statutory_pack(employee, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminPayrollStatutoryPackSerializer(build_hr_admin_payroll_statutory_pack_payload(item)).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminPayrollStatutoryPackDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollStatutoryPack.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Payroll statutory pack not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminPayrollStatutoryPackSerializer(build_hr_admin_payroll_statutory_pack_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollStatutoryPack.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Payroll statutory pack not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollStatutoryPackWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_statutory_pack(employee, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminPayrollStatutoryPackSerializer(build_hr_admin_payroll_statutory_pack_payload(item)).data)
+
+
+class HrAdminPayrollStatutoryComponentListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        items = PayrollStatutoryComponent.objects.filter(tenant=employee.tenant).select_related(
+            "statutory_pack", "salary_component"
+        ).order_by("statutory_pack__name", "statutory_type", "name")
+        return response.Response(HrAdminPayrollStatutoryComponentSerializer([build_hr_admin_payroll_statutory_component_payload(item) for item in items], many=True).data)
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollStatutoryComponentWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_statutory_component(employee, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminPayrollStatutoryComponentSerializer(build_hr_admin_payroll_statutory_component_payload(item)).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminPayrollStatutoryComponentDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollStatutoryComponent.objects.filter(tenant=employee.tenant, id=item_id).select_related("statutory_pack", "salary_component").first()
+        if not item:
+            return response.Response({"detail": "Payroll statutory component not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminPayrollStatutoryComponentSerializer(build_hr_admin_payroll_statutory_component_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollStatutoryComponent.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Payroll statutory component not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollStatutoryComponentWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_statutory_component(employee, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminPayrollStatutoryComponentSerializer(build_hr_admin_payroll_statutory_component_payload(item)).data)
+
+
+class HrAdminPayrollStatutorySlabListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        items = PayrollStatutorySlab.objects.filter(tenant=employee.tenant).select_related(
+            "statutory_component"
+        ).order_by("statutory_component__code", "slab_order", "min_amount")
+        return response.Response(HrAdminPayrollStatutorySlabSerializer([build_hr_admin_payroll_statutory_slab_payload(item) for item in items], many=True).data)
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollStatutorySlabWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_statutory_slab(employee, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminPayrollStatutorySlabSerializer(build_hr_admin_payroll_statutory_slab_payload(item)).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminPayrollStatutorySlabDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollStatutorySlab.objects.filter(tenant=employee.tenant, id=item_id).select_related("statutory_component").first()
+        if not item:
+            return response.Response({"detail": "Payroll statutory slab not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminPayrollStatutorySlabSerializer(build_hr_admin_payroll_statutory_slab_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollStatutorySlab.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Payroll statutory slab not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollStatutorySlabWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_statutory_slab(employee, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminPayrollStatutorySlabSerializer(build_hr_admin_payroll_statutory_slab_payload(item)).data)
+
+
+class HrAdminPayrollStatutoryEmployerRegistrationListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        items = PayrollStatutoryEmployerRegistration.objects.filter(tenant=employee.tenant).select_related(
+            "statutory_pack", "statutory_component", "legal_entity", "branch", "location"
+        ).order_by("statutory_pack__name", "registration_type_ref", "name")
+        return response.Response(
+            HrAdminPayrollStatutoryEmployerRegistrationSerializer(
+                [build_hr_admin_payroll_statutory_employer_registration_payload(item) for item in items],
+                many=True,
+            ).data
+        )
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollStatutoryEmployerRegistrationWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_statutory_employer_registration(employee, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(
+            HrAdminPayrollStatutoryEmployerRegistrationSerializer(
+                build_hr_admin_payroll_statutory_employer_registration_payload(item)
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class HrAdminPayrollStatutoryEmployerRegistrationDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollStatutoryEmployerRegistration.objects.filter(
+            tenant=employee.tenant,
+            id=item_id,
+        ).select_related("statutory_pack", "statutory_component", "legal_entity", "branch", "location").first()
+        if not item:
+            return response.Response({"detail": "Payroll statutory employer registration not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminPayrollStatutoryEmployerRegistrationSerializer(build_hr_admin_payroll_statutory_employer_registration_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollStatutoryEmployerRegistration.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Payroll statutory employer registration not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollStatutoryEmployerRegistrationWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_statutory_employer_registration(employee, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminPayrollStatutoryEmployerRegistrationSerializer(build_hr_admin_payroll_statutory_employer_registration_payload(item)).data)
+
+
+class HrAdminPayrollStatutoryFilingCalendarListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        items = PayrollStatutoryFilingCalendar.objects.filter(tenant=employee.tenant).select_related(
+            "statutory_pack", "statutory_component", "employer_registration"
+        ).order_by("due_date", "statutory_pack__name", "filing_type_ref")
+        return response.Response(
+            HrAdminPayrollStatutoryFilingCalendarSerializer(
+                [build_hr_admin_payroll_statutory_filing_calendar_payload(item) for item in items],
+                many=True,
+            ).data
+        )
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollStatutoryFilingCalendarWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_statutory_filing_calendar(employee, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(
+            HrAdminPayrollStatutoryFilingCalendarSerializer(
+                build_hr_admin_payroll_statutory_filing_calendar_payload(item)
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class HrAdminPayrollStatutoryFilingCalendarDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollStatutoryFilingCalendar.objects.filter(
+            tenant=employee.tenant,
+            id=item_id,
+        ).select_related("statutory_pack", "statutory_component", "employer_registration").first()
+        if not item:
+            return response.Response({"detail": "Payroll statutory filing calendar not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminPayrollStatutoryFilingCalendarSerializer(build_hr_admin_payroll_statutory_filing_calendar_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = PayrollStatutoryFilingCalendar.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Payroll statutory filing calendar not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollStatutoryFilingCalendarWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_payroll_statutory_filing_calendar(employee, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminPayrollStatutoryFilingCalendarSerializer(build_hr_admin_payroll_statutory_filing_calendar_payload(item)).data)
+
+
+class HrAdminEmployeeStatutoryProfileListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        items = EmployeeStatutoryProfile.objects.filter(tenant=employee.tenant).select_related(
+            "employee", "statutory_pack"
+        ).order_by("employee__employee_code", "-effective_from")
+        return response.Response(HrAdminEmployeeStatutoryProfileSerializer([build_hr_admin_employee_statutory_profile_payload(item) for item in items], many=True).data)
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminEmployeeStatutoryProfileWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_employee_statutory_profile(employee, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryProfileSerializer(build_hr_admin_employee_statutory_profile_payload(item)).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminEmployeeStatutoryProfileDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryProfile.objects.filter(tenant=employee.tenant, id=item_id).select_related("employee", "statutory_pack").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory profile not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminEmployeeStatutoryProfileSerializer(build_hr_admin_employee_statutory_profile_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryProfile.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Employee statutory profile not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminEmployeeStatutoryProfileWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_employee_statutory_profile(employee, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryProfileSerializer(build_hr_admin_employee_statutory_profile_payload(item)).data)
+
+
+class HrAdminEmployeeStatutoryDeclarationListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        items = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant).select_related(
+            "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
+        ).prefetch_related("items").order_by("employee__employee_code", "-financial_year_code")
+        return response.Response(HrAdminEmployeeStatutoryDeclarationSerializer([build_hr_admin_employee_statutory_declaration_payload(item) for item in items], many=True).data)
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminEmployeeStatutoryDeclarationWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_employee_statutory_declaration(employee, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationSerializer(build_hr_admin_employee_statutory_declaration_payload(item)).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminEmployeeStatutoryDeclarationDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
+        ).prefetch_related("items").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationSerializer(build_hr_admin_employee_statutory_declaration_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminEmployeeStatutoryDeclarationWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_employee_statutory_declaration(employee, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationSerializer(build_hr_admin_employee_statutory_declaration_payload(item)).data)
+
+
+class HrAdminEmployeeStatutoryDeclarationSubmitView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
+        ).prefetch_related("items").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            item = submit_hr_admin_employee_statutory_declaration(item, submitted_by=request.user)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationSerializer(build_hr_admin_employee_statutory_declaration_payload(item)).data)
+
+
+class HrAdminEmployeeStatutoryDeclarationVerifyView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
+        ).prefetch_related("items").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            item = verify_hr_admin_employee_statutory_declaration(item, verified_by=request.user)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationSerializer(build_hr_admin_employee_statutory_declaration_payload(item)).data)
+
+
+class HrAdminEmployeeStatutoryDeclarationRejectView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
+        ).prefetch_related("items").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminEmployeeStatutoryDeclarationRejectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = reject_hr_admin_employee_statutory_declaration(item, rejected_by=request.user, reason=serializer.validated_data["reason"])
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationSerializer(build_hr_admin_employee_statutory_declaration_payload(item)).data)
+
+
+class HrAdminEmployeeStatutoryDeclarationLockView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
+        ).prefetch_related("items").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            item = lock_hr_admin_employee_statutory_declaration(item, locked_by=request.user)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationSerializer(build_hr_admin_employee_statutory_declaration_payload(item)).data)
+
+
+class HrAdminEmployeeStatutoryDeclarationItemListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        declaration = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not declaration:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        items = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, declaration=declaration).select_related(
+            "declaration", "employee", "verified_by", "rejected_by"
+        ).order_by("section_code", "component_code")
+        return response.Response(HrAdminEmployeeStatutoryDeclarationItemSerializer([build_hr_admin_employee_statutory_declaration_item_payload(item) for item in items], many=True).data)
+
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        declaration = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related("employee").first()
+        if not declaration:
+            return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminEmployeeStatutoryDeclarationItemWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_employee_statutory_declaration_item(employee, declaration, serializer.validated_data)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationItemSerializer(build_hr_admin_employee_statutory_declaration_item_payload(item)).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminEmployeeStatutoryDeclarationItemDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "declaration", "employee", "verified_by", "rejected_by"
+        ).first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration item not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationItemSerializer(build_hr_admin_employee_statutory_declaration_item_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, id=item_id).select_related("declaration", "employee").first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration item not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminEmployeeStatutoryDeclarationItemWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_hr_admin_employee_statutory_declaration_item(employee, item.declaration, serializer.validated_data, item=item)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationItemSerializer(build_hr_admin_employee_statutory_declaration_item_payload(item)).data)
+
+
+class HrAdminEmployeeStatutoryDeclarationItemVerifyView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "declaration", "employee", "verified_by", "rejected_by"
+        ).first()
+        if not item:
+            return response.Response({"detail": "Employee statutory declaration item not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminEmployeeStatutoryDeclarationItemVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = verify_hr_admin_employee_statutory_declaration_item(item, serializer.validated_data, verified_by=request.user)
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminEmployeeStatutoryDeclarationItemSerializer(build_hr_admin_employee_statutory_declaration_item_payload(item)).data)
 
 
 class HrAdminSalarySetupView(HrAdminContextMixin, APIView):

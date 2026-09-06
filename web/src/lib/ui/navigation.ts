@@ -20,6 +20,8 @@ export const hrAdminNavigation: HrAdminNavGroup[] = [
       { href: "/hr-admin/employee-documents", label: "Documents", shortLabel: "DO", blurb: "Verification backlog" },
       { href: "/hr-admin/reports", label: "Reports", shortLabel: "RP", blurb: "Operational insights" },
       { href: "/hr-admin/payroll-readiness", label: "Payroll", shortLabel: "PY", blurb: "Source readiness" },
+      { href: "/hr-admin/payroll-statutory", label: "Statutory", shortLabel: "ST", blurb: "Tax proof review" },
+      { href: "/hr-admin/payroll-providers", label: "Providers", shortLabel: "PV", blurb: "Payroll integrations" },
     ],
   },
   {

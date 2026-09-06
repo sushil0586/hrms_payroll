@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timedelta
 from decimal import Decimal
+from io import StringIO
 from uuid import uuid4
 
 import pytest
 from django.core import mail
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -43,6 +48,9 @@ from apps.notifications.models import (
 from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, Grade, LegalEntity, Location
 from apps.payroll.models import (
     EmployeeSalaryAssignment,
+    EmployeeStatutoryDeclaration,
+    EmployeeStatutoryDeclarationItem,
+    EmployeeStatutoryProfile,
     PayGroup,
     PayGroupAssignment,
     PayGroupStatus,
@@ -50,6 +58,10 @@ from apps.payroll.models import (
     PayrollAdjustmentDirection,
     PayrollAdjustmentKind,
     PayrollAdjustmentStatus,
+    PayrollArtifactAccessEvent,
+    PayrollArtifactAccessEventType,
+    PayrollArtifactSignedAccessGrant,
+    PayrollArtifactSignedAccessGrantStatus,
     PayrollCalculationLine,
     PayrollCalculationLineSource,
     PayrollCalculationStatus,
@@ -72,6 +84,15 @@ from apps.payroll.models import (
     PayrollOutputBatchStatus,
     PayrollPeriod,
     PayrollPeriodStatus,
+    PayrollProviderCallbackEvent,
+    PayrollProviderCallbackEventStatus,
+    PayrollProviderCertificationStatus,
+    PayrollProviderConnection,
+    PayrollProviderConnectionStatus,
+    PayrollProviderDelivery,
+    PayrollProviderDeliveryStatus,
+    PayrollProviderRetryEvent,
+    PayrollProviderRetryEventStatus,
     PayrollReviewStatus,
     PayrollRuleDefinition,
     PayrollRuleEvaluation,
@@ -86,6 +107,20 @@ from apps.payroll.models import (
     PayrollSettlement,
     PayrollSettlementLine,
     PayrollSettlementStatus,
+    PayrollStatutoryCalculationMethod,
+    PayrollStatutoryComponent,
+    PayrollStatutoryComponentKind,
+    PayrollStatutoryContributionOwner,
+    PayrollStatutoryDeclarationItemKind,
+    PayrollStatutoryDeclarationStatus,
+    PayrollStatutoryEmployerRegistration,
+    PayrollStatutoryFilingCalendar,
+    PayrollStatutoryFilingStatus,
+    PayrollStatutoryPack,
+    PayrollStatutoryProofStatus,
+    PayrollStatutorySlab,
+    PayrollTaxRegime,
+    PayrollDeclarationStatus,
     PayrollValidationCategory,
     PayrollValidationIssue,
     PayrollValidationIssueStatus,
@@ -97,6 +132,8 @@ from apps.payroll.models import (
     SalaryStructureComponent,
     SalaryStructureVersion,
 )
+from apps.payroll.providers import PayrollProviderAdapterError, validate_payroll_provider_route_config
+from apps.payroll.services import expected_provider_callback_signature
 from apps.platform_config.models import ConfigCategory, ConfigDataType, ConfigStatus, ConfigurationDefinition, TenantConfiguration
 from apps.workflows.models import WorkflowAction, WorkflowActionLog, WorkflowActorType, WorkflowAssignment, WorkflowInstance, WorkflowInstanceStatus, WorkflowStep, WorkflowStepInstance, WorkflowStatus, WorkflowTemplate
 
@@ -784,6 +821,791 @@ def test_hr_admin_employee_salary_assignment_blocks_active_overlap(api_client: A
     assert "already has an active salary assignment" in str(second_response.json())
 
 
+def test_hr_admin_payroll_statutory_setup_supports_india_pack_component_slab_and_employee_profile(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    pf_salary_component = SalaryComponent.objects.create(
+        tenant=tenant,
+        code="pf-employee",
+        name="PF Employee",
+        component_type=SalaryComponentType.DEDUCTION,
+        value_type=SalaryComponentValueType.FORMULA,
+        formula_ref="india.pf.employee.v1",
+        statutory_treatment_ref="india.epf.employee.v1",
+        status=PayrollConfigStatus.ACTIVE,
+    )
+
+    pack_response = api_client.post(
+        "/api/v1/hr-admin/payroll-statutory-packs/",
+        {
+            "code": "india-fy-2026",
+            "name": "India FY 2026 Statutory Pack",
+            "country_code": "in",
+            "jurisdiction_ref": "country:IN",
+            "status": PayrollConfigStatus.ACTIVE,
+            "effective_from": "2026-04-01",
+            "effective_to": "2027-03-31",
+            "currency_code": "INR",
+            "statutory_profile_ref": "payroll.statutory.india.fy2026.v1",
+            "validation_profile_ref": "payroll.statutory.validation.india.fy2026.v1",
+            "config_snapshot": {"country_pack": "india", "financial_year": "2026-27"},
+        },
+        format="json",
+    )
+    assert pack_response.status_code == 201, pack_response.json()
+    pack_payload = pack_response.json()
+    assert pack_payload["country_code"] == "IN"
+    assert pack_payload["status"] == PayrollConfigStatus.ACTIVE
+
+    component_response = api_client.post(
+        "/api/v1/hr-admin/payroll-statutory-components/",
+        {
+            "statutory_pack_id": pack_payload["id"],
+            "salary_component_id": str(pf_salary_component.id),
+            "code": "epf-employee",
+            "name": "Employee Provident Fund",
+            "statutory_type": PayrollStatutoryComponentKind.PROVIDENT_FUND,
+            "contribution_owner": PayrollStatutoryContributionOwner.EMPLOYEE,
+            "calculation_method": PayrollStatutoryCalculationMethod.PERCENTAGE,
+            "wage_base_ref": "payroll.wage_base.pf_basic.v1",
+            "statutory_treatment_ref": "india.epf.employee.v1",
+            "registration_ref": "india.epfo.establishment.default.v1",
+            "rounding_rule_ref": "payroll.rounding.nearest_rupee.v1",
+            "status": PayrollConfigStatus.ACTIVE,
+        },
+        format="json",
+    )
+    assert component_response.status_code == 201, component_response.json()
+    component_payload = component_response.json()
+    assert component_payload["statutory_type"] == PayrollStatutoryComponentKind.PROVIDENT_FUND
+    assert component_payload["salary_component_name"] == "PF Employee"
+
+    slab_response = api_client.post(
+        "/api/v1/hr-admin/payroll-statutory-slabs/",
+        {
+            "statutory_component_id": component_payload["id"],
+            "code": "pf-12-percent-ceiling",
+            "name": "PF 12 Percent With Wage Ceiling",
+            "slab_order": 10,
+            "effective_from": "2026-04-01",
+            "min_amount": "0.00",
+            "max_amount": None,
+            "employee_rate_percent": "12.0000",
+            "employer_rate_percent": "12.0000",
+            "wage_ceiling_amount": "15000.00",
+            "state_code": "mh",
+            "applicability_profile_ref": "india.epf.standard.v1",
+            "status": PayrollConfigStatus.ACTIVE,
+        },
+        format="json",
+    )
+    assert slab_response.status_code == 201, slab_response.json()
+    slab_payload = slab_response.json()
+    assert slab_payload["state_code"] == "MH"
+    assert slab_payload["employee_rate_percent"] == "12.0000"
+    assert slab_payload["wage_ceiling_amount"] == "15000.00"
+
+    employee_profile_response = api_client.post(
+        "/api/v1/hr-admin/employee-statutory-profiles/",
+        {
+            "employee_id": str(employee.id),
+            "statutory_pack_id": pack_payload["id"],
+            "profile_ref": "payroll.employee_statutory.india.standard.v1",
+            "effective_from": "2026-09-01",
+            "pan_number": "abcde1234f",
+            "uan_number": "123456789012",
+            "pf_number": "MH/BAN/12345/678",
+            "pf_applicable": True,
+            "esi_applicable": False,
+            "professional_tax_state": "mh",
+            "lwf_state": "mh",
+            "tax_regime": PayrollTaxRegime.NEW,
+            "declaration_status": PayrollDeclarationStatus.DECLARED,
+            "previous_employment_income": "120000.00",
+            "previous_employment_tax_deducted": "8000.00",
+            "source_ref": "employee.tax.declaration:2026",
+            "config_snapshot": {"proof_window_ref": "india.tax.proofs.fy2026.v1"},
+        },
+        format="json",
+    )
+    assert employee_profile_response.status_code == 201, employee_profile_response.json()
+    employee_profile_payload = employee_profile_response.json()
+    assert employee_profile_payload["employee_code"] == "EMP-0042"
+    assert employee_profile_payload["pan_number"] == "ABCDE1234F"
+    assert employee_profile_payload["professional_tax_state"] == "MH"
+    assert employee_profile_payload["tax_regime"] == PayrollTaxRegime.NEW
+    assert len(employee_profile_payload["source_hash"]) == 64
+
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-statutory-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    setup_payload = setup_response.json()
+    assert setup_payload["summary"]["pack_count"] == 1
+    assert setup_payload["summary"]["active_statutory_component_count"] == 1
+    assert setup_payload["summary"]["slab_count"] == 1
+    assert setup_payload["summary"]["pf_applicable_employee_count"] == 1
+    assert setup_payload["packs"][0]["component_count"] == 1
+    assert setup_payload["statutory_components"][0]["slab_count"] == 1
+    assert setup_payload["employee_profiles"][0]["config_snapshot"]["proof_window_ref"] == "india.tax.proofs.fy2026.v1"
+    assert setup_payload["options"]["statutory_component_types"][0]["value"] == PayrollStatutoryComponentKind.PROVIDENT_FUND
+
+    assert PayrollStatutoryPack.objects.filter(tenant=tenant, code="india-fy-2026").exists()
+    assert PayrollStatutoryComponent.objects.filter(tenant=tenant, code="epf-employee").exists()
+    assert PayrollStatutorySlab.objects.filter(tenant=tenant, code="pf-12-percent-ceiling").exists()
+    assert EmployeeStatutoryProfile.objects.filter(tenant=tenant, employee=employee, pan_number="ABCDE1234F").exists()
+
+
+def test_hr_admin_payroll_statutory_setup_supports_employer_registrations_and_filing_calendar(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    legal_entity = LegalEntity.objects.filter(tenant=tenant).first()
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-registration-pack-2026",
+        name="India Registration Pack 2026",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+        jurisdiction_ref="country:IN/state:MH",
+    )
+    component = PayrollStatutoryComponent.objects.create(
+        tenant=tenant,
+        statutory_pack=pack,
+        code="pt-mh-registration",
+        name="Maharashtra Professional Tax",
+        statutory_type=PayrollStatutoryComponentKind.PROFESSIONAL_TAX,
+        contribution_owner=PayrollStatutoryContributionOwner.EMPLOYEE,
+        calculation_method=PayrollStatutoryCalculationMethod.SLAB,
+        wage_base_ref="payroll.wage_base.gross_monthly.v1",
+        statutory_treatment_ref="india.professional_tax.mh.v1",
+        status=PayrollConfigStatus.ACTIVE,
+    )
+
+    registration_response = api_client.post(
+        "/api/v1/hr-admin/payroll-statutory-employer-registrations/",
+        {
+            "statutory_pack_id": str(pack.id),
+            "statutory_component_id": str(component.id),
+            "legal_entity_id": str(legal_entity.id) if legal_entity else None,
+            "code": "mh-pt-main-registration",
+            "name": "Maharashtra PT Main Registration",
+            "registration_type_ref": "india.professional_tax.maharashtra.ptrc",
+            "registration_number": "ptrc/mah/99881",
+            "employer_identifier": "tan-mum-4455",
+            "filing_authority_ref": "maharashtra-pt-department",
+            "provider_ref": "clear-statutory",
+            "effective_from": "2026-04-01",
+            "source_ref": "tenant-onboarding:statutory-registration",
+            "config_snapshot": {"portal_profile_ref": "mh.pt.portal.default.v1"},
+        },
+        format="json",
+    )
+    assert registration_response.status_code == 201, registration_response.json()
+    registration_payload = registration_response.json()
+    assert registration_payload["registration_number"] == "PTRC/MAH/99881"
+    assert registration_payload["employer_identifier"] == "TAN-MUM-4455"
+    assert registration_payload["jurisdiction_ref"] == "country:IN/state:MH"
+    assert registration_payload["filing_authority_ref"] == "maharashtra-pt-department"
+    assert len(registration_payload["source_hash"]) == 64
+
+    filing_response = api_client.post(
+        "/api/v1/hr-admin/payroll-statutory-filing-calendars/",
+        {
+            "employer_registration_id": registration_payload["id"],
+            "code": "mh-pt-aug-2026-return",
+            "name": "Maharashtra PT August 2026 Return",
+            "filing_type_ref": "india.professional_tax.maharashtra.monthly_return",
+            "filing_frequency": PayrollFrequency.MONTHLY,
+            "period_start": "2026-08-01",
+            "period_end": "2026-08-31",
+            "due_date": "2026-09-20",
+            "grace_due_date": "2026-09-25",
+            "filing_window_start": "2026-09-01",
+            "filing_window_end": "2026-09-25",
+            "status": PayrollStatutoryFilingStatus.UPCOMING,
+            "output_profile_ref": "india.pt.mh.return.file.v1",
+            "source_ref": "statutory-calendar-seed:fy2026",
+            "config_snapshot": {"challan_profile_ref": "india.pt.mh.challan.v1"},
+        },
+        format="json",
+    )
+    assert filing_response.status_code == 201, filing_response.json()
+    filing_payload = filing_response.json()
+    assert filing_payload["statutory_pack_id"] == str(pack.id)
+    assert filing_payload["statutory_component_id"] == str(component.id)
+    assert filing_payload["employer_registration_number"] == "PTRC/MAH/99881"
+    assert filing_payload["filing_authority_ref"] == "maharashtra-pt-department"
+    assert filing_payload["provider_ref"] == "clear-statutory"
+    assert filing_payload["days_until_due"] is not None
+    assert filing_payload["is_due"] is False
+
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-statutory-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    setup_payload = setup_response.json()
+    assert setup_payload["summary"]["employer_registration_count"] == 1
+    assert setup_payload["summary"]["active_employer_registration_count"] == 1
+    assert setup_payload["summary"]["filing_calendar_count"] == 1
+    assert setup_payload["summary"]["acknowledged_filing_calendar_count"] == 0
+    assert setup_payload["employer_registrations"][0]["open_filing_calendar_count"] == 1
+    assert setup_payload["filing_calendars"][0]["output_profile_ref"] == "india.pt.mh.return.file.v1"
+    assert setup_payload["options"]["statutory_filing_statuses"][0]["value"] == PayrollStatutoryFilingStatus.DRAFT
+    assert setup_payload["options"]["payroll_frequencies"][0]["value"] == PayrollFrequency.MONTHLY
+    assert setup_payload["options"]["legal_entities"]
+
+    assert PayrollStatutoryEmployerRegistration.objects.filter(tenant=tenant, code="mh-pt-main-registration").exists()
+    assert PayrollStatutoryFilingCalendar.objects.filter(tenant=tenant, code="mh-pt-aug-2026-return").exists()
+
+
+def test_hr_admin_employee_statutory_profile_requires_uan_when_pf_applicable(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+
+    response = api_client.post(
+        "/api/v1/hr-admin/employee-statutory-profiles/",
+        {
+            "employee_id": str(employee.id),
+            "effective_from": "2026-09-01",
+            "pan_number": "ABCDE1234F",
+            "pf_applicable": True,
+            "tax_regime": PayrollTaxRegime.NEW,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "UAN number is required" in str(response.json())
+    assert EmployeeStatutoryProfile.objects.count() == 0
+
+
+def test_employee_cannot_access_hr_admin_payroll_statutory_setup(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/payroll-statutory-setup/")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "You do not have access to this workspace."
+
+
+def test_hr_admin_employee_statutory_declaration_proof_workflow(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-tax-declaration-2026",
+        name="India Tax Declaration 2026",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2026-04-01",
+        pan_number="ABCDE1234F",
+        tax_regime=PayrollTaxRegime.OLD,
+    )
+
+    declaration_response = api_client.post(
+        "/api/v1/hr-admin/employee-statutory-declarations/",
+        {
+            "employee_id": str(employee.id),
+            "employee_statutory_profile_id": str(profile.id),
+            "financial_year_code": "fy2026-27",
+            "declaration_profile_ref": "india.tax.declaration.fy2026.v1",
+            "proof_window_ref": "india.tax.proof-window.fy2026.v1",
+            "tax_regime": PayrollTaxRegime.OLD,
+            "source_ref": "employee.tax.declaration:EMP-0042:fy2026",
+            "config_snapshot": {"submission_channel_ref": "hr_admin.seeded.v1"},
+        },
+        format="json",
+    )
+    assert declaration_response.status_code == 201, declaration_response.json()
+    declaration_payload = declaration_response.json()
+    declaration_id = declaration_payload["id"]
+    assert declaration_payload["financial_year_code"] == "FY2026-27"
+    assert declaration_payload["status"] == PayrollStatutoryDeclarationStatus.DRAFT
+    assert len(declaration_payload["source_hash"]) == 64
+
+    item_response = api_client.post(
+        f"/api/v1/hr-admin/employee-statutory-declarations/{declaration_id}/items/",
+        {
+            "item_kind": PayrollStatutoryDeclarationItemKind.INVESTMENT,
+            "section_code": "80c",
+            "component_code": "lic",
+            "name": "Life Insurance Premium",
+            "declared_amount": "60000.00",
+            "proof_status": PayrollStatutoryProofStatus.SUBMITTED,
+            "proof_document_ref": "employee-document:lic-premium-fy2026",
+            "source_ref": "tax-proof:EMP-0042:lic",
+            "config_snapshot": {"proof_type_ref": "insurance.receipt.v1"},
+        },
+        format="json",
+    )
+    assert item_response.status_code == 201, item_response.json()
+    item_payload = item_response.json()
+    item_id = item_payload["id"]
+    assert item_payload["section_code"] == "80C"
+    assert item_payload["component_code"] == "LIC"
+    assert item_payload["proof_status"] == PayrollStatutoryProofStatus.SUBMITTED
+    assert item_payload["proof_submitted_at"] is not None
+    assert len(item_payload["source_hash"]) == 64
+
+    exemption_response = api_client.post(
+        f"/api/v1/hr-admin/employee-statutory-declarations/{declaration_id}/items/",
+        {
+            "item_kind": PayrollStatutoryDeclarationItemKind.EXEMPTION,
+            "section_code": "hra",
+            "component_code": "rent",
+            "name": "House Rent Exemption",
+            "declared_amount": "120000.00",
+            "verified_amount": "120000.00",
+            "proof_status": PayrollStatutoryProofStatus.NOT_REQUIRED,
+            "source_ref": "tax-proof:EMP-0042:rent",
+        },
+        format="json",
+    )
+    assert exemption_response.status_code == 201, exemption_response.json()
+
+    item_verify_response = api_client.post(
+        f"/api/v1/hr-admin/employee-statutory-declaration-items/{item_id}/verify/",
+        {"verified_amount": "55000.00"},
+        format="json",
+    )
+    assert item_verify_response.status_code == 200, item_verify_response.json()
+    assert item_verify_response.json()["proof_status"] == PayrollStatutoryProofStatus.VERIFIED
+    assert item_verify_response.json()["verified_amount"] == "55000.00"
+
+    submit_response = api_client.post(f"/api/v1/hr-admin/employee-statutory-declarations/{declaration_id}/submit/", {}, format="json")
+    assert submit_response.status_code == 200, submit_response.json()
+    assert submit_response.json()["status"] == PayrollStatutoryDeclarationStatus.SUBMITTED
+    assert submit_response.json()["declared_total_amount"] == "180000.00"
+    profile.refresh_from_db()
+    assert profile.declaration_status == PayrollDeclarationStatus.PROOFS_PENDING
+
+    verify_response = api_client.post(f"/api/v1/hr-admin/employee-statutory-declarations/{declaration_id}/verify/", {}, format="json")
+    assert verify_response.status_code == 200, verify_response.json()
+    assert verify_response.json()["status"] == PayrollStatutoryDeclarationStatus.VERIFIED
+    assert verify_response.json()["verified_total_amount"] == "175000.00"
+    profile.refresh_from_db()
+    assert profile.declaration_status == PayrollDeclarationStatus.VERIFIED
+
+    lock_response = api_client.post(f"/api/v1/hr-admin/employee-statutory-declarations/{declaration_id}/lock/", {}, format="json")
+    assert lock_response.status_code == 200, lock_response.json()
+    assert lock_response.json()["status"] == PayrollStatutoryDeclarationStatus.LOCKED
+    profile.refresh_from_db()
+    assert profile.declaration_status == PayrollDeclarationStatus.LOCKED
+
+    locked_edit_response = api_client.patch(
+        f"/api/v1/hr-admin/employee-statutory-declaration-items/{item_id}/",
+        {"declared_amount": "70000.00"},
+        format="json",
+    )
+    assert locked_edit_response.status_code == 400
+    assert "Locked statutory declarations cannot be edited" in str(locked_edit_response.json())
+
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-statutory-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    setup_payload = setup_response.json()
+    assert setup_payload["summary"]["declaration_count"] == 1
+    assert setup_payload["summary"]["locked_declaration_count"] == 1
+    assert setup_payload["summary"]["declaration_item_count"] == 2
+    assert setup_payload["declarations"][0]["verified_total_amount"] == "175000.00"
+    assert setup_payload["declaration_items"][0]["employee_code"] == "EMP-0042"
+    assert setup_payload["options"]["statutory_proof_statuses"][0]["value"] == PayrollStatutoryProofStatus.NOT_REQUIRED
+    assert EmployeeStatutoryDeclaration.objects.filter(tenant=tenant, employee=employee, status=PayrollStatutoryDeclarationStatus.LOCKED).exists()
+    assert EmployeeStatutoryDeclarationItem.objects.filter(tenant=tenant, declaration_id=declaration_id).count() == 2
+
+
+def test_employee_statutory_declarations_returns_only_current_employee(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    other_employee = Employee.objects.filter(tenant=tenant).exclude(id=employee.id).order_by("employee_code").first()
+    assert other_employee is not None
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-tax-declarations-fy2026",
+        name="India Tax Declarations FY2026",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2026-04-01",
+        pan_number="ABCDE1234F",
+        tax_regime=PayrollTaxRegime.OLD,
+        declaration_status=PayrollDeclarationStatus.VERIFIED,
+        source_ref="employee.tax.profile:EMP-0042:fy2026",
+    )
+    other_profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=other_employee,
+        statutory_pack=pack,
+        effective_from="2026-04-01",
+        pan_number="PQRST1234F",
+        tax_regime=PayrollTaxRegime.NEW,
+        declaration_status=PayrollDeclarationStatus.DECLARED,
+    )
+    declaration = EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=employee,
+        employee_statutory_profile=profile,
+        statutory_pack=pack,
+        financial_year_code="FY2026-27",
+        declaration_profile_ref="india.tax.declaration.fy2026.v1",
+        proof_window_ref="india.tax.proof-window.fy2026.v1",
+        status=PayrollStatutoryDeclarationStatus.VERIFIED,
+        tax_regime=PayrollTaxRegime.OLD,
+        declared_total_amount=Decimal("180000.00"),
+        verified_total_amount=Decimal("175000.00"),
+        submitted_at=timezone.now() - timedelta(days=2),
+        verified_at=timezone.now() - timedelta(days=1),
+        source_ref="employee.tax.declaration:EMP-0042:fy2026",
+    )
+    EmployeeStatutoryDeclarationItem.objects.create(
+        tenant=tenant,
+        declaration=declaration,
+        employee=employee,
+        item_kind=PayrollStatutoryDeclarationItemKind.INVESTMENT,
+        section_code="80c",
+        component_code="lic",
+        name="Life Insurance Premium",
+        declared_amount=Decimal("60000.00"),
+        verified_amount=Decimal("55000.00"),
+        proof_status=PayrollStatutoryProofStatus.VERIFIED,
+        proof_document_ref="employee-document:lic-premium-fy2026",
+        proof_submitted_at=timezone.now() - timedelta(days=2),
+        verified_at=timezone.now() - timedelta(days=1),
+        source_ref="tax-proof:EMP-0042:lic",
+    )
+    other_declaration = EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=other_employee,
+        employee_statutory_profile=other_profile,
+        statutory_pack=pack,
+        financial_year_code="FY2026-27",
+        status=PayrollStatutoryDeclarationStatus.SUBMITTED,
+        tax_regime=PayrollTaxRegime.NEW,
+        declared_total_amount=Decimal("50000.00"),
+        submitted_at=timezone.now() - timedelta(days=1),
+        source_ref=f"employee.tax.declaration:{other_employee.employee_code}:fy2026",
+    )
+    EmployeeStatutoryDeclarationItem.objects.create(
+        tenant=tenant,
+        declaration=other_declaration,
+        employee=other_employee,
+        section_code="80c",
+        name="Other Employee Proof",
+        declared_amount=Decimal("50000.00"),
+        proof_status=PayrollStatutoryProofStatus.SUBMITTED,
+        proof_document_ref="employee-document:other-proof-fy2026",
+    )
+
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    response = api_client.get("/api/v1/me/statutory-declarations/?q=Life&page=1&page_size=5")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["summary"]["declaration_count"] == 1
+    assert payload["summary"]["verified_declaration_count"] == 1
+    assert payload["summary"]["verified_item_count"] == 1
+    assert payload["summary"]["declared_total_amount"] == "180000.00"
+    assert payload["profile"]["employee_code"] == "EMP-0042"
+    assert payload["items"][0]["financial_year_code"] == "FY2026-27"
+    assert payload["items"][0]["items"][0]["name"] == "Life Insurance Premium"
+    assert "Other Employee Proof" not in str(payload)
+
+
+def test_employee_can_create_update_and_submit_own_statutory_declaration(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-tax-ess-fy2027",
+        name="India Tax ESS FY2027",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2027-04-01",
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2027-04-01",
+        pan_number="ABCDE1234F",
+        tax_regime=PayrollTaxRegime.OLD,
+        source_ref="employee.tax.profile:EMP-0042:fy2027",
+    )
+
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    create_response = api_client.post(
+        "/api/v1/me/statutory-declarations/",
+        {
+            "employee_statutory_profile_id": str(profile.id),
+            "financial_year_code": "fy2027-28",
+            "declaration_profile_ref": "india.tax.declaration.employee-editable.v1",
+            "proof_window_ref": "tenant.proof-window.fy2027.q4",
+            "tax_regime": PayrollTaxRegime.OLD,
+            "config_snapshot": {"submission_policy_ref": "employee.tax.proof.self-service.v1"},
+        },
+        format="json",
+    )
+    assert create_response.status_code == 201, create_response.json()
+    declaration_payload = create_response.json()
+    assert declaration_payload["financial_year_code"] == "FY2027-28"
+    assert declaration_payload["status"] == PayrollStatutoryDeclarationStatus.DRAFT
+    declaration_id = declaration_payload["id"]
+
+    item_response = api_client.post(
+        f"/api/v1/me/statutory-declarations/{declaration_id}/items/",
+        {
+            "item_kind": PayrollStatutoryDeclarationItemKind.INVESTMENT,
+            "section_code": "80c",
+            "component_code": "lic",
+            "name": "Life Insurance Premium",
+            "declared_amount": "60000.00",
+            "proof_document_ref": "employee-document:lic-premium-fy2027",
+            "config_snapshot": {"proof_category_ref": "tax.investment.80c"},
+        },
+        format="json",
+    )
+    assert item_response.status_code == 201, item_response.json()
+    item_payload = item_response.json()
+    assert item_payload["proof_status"] == PayrollStatutoryProofStatus.SUBMITTED
+    assert item_payload["proof_submitted_at"] is not None
+    assert item_payload["section_code"] == "80C"
+    item_id = item_payload["id"]
+
+    patch_response = api_client.patch(
+        f"/api/v1/me/statutory-declaration-items/{item_id}/",
+        {"declared_amount": "65000.00"},
+        format="json",
+    )
+    assert patch_response.status_code == 200, patch_response.json()
+    assert patch_response.json()["declared_amount"] == "65000.00"
+    assert patch_response.json()["verified_amount"] == "0.00"
+
+    submit_response = api_client.post(f"/api/v1/me/statutory-declarations/{declaration_id}/submit/", {}, format="json")
+    assert submit_response.status_code == 200, submit_response.json()
+    submitted_payload = submit_response.json()
+    assert submitted_payload["status"] == PayrollStatutoryDeclarationStatus.SUBMITTED
+    assert submitted_payload["declared_total_amount"] == "65000.00"
+    profile.refresh_from_db()
+    assert profile.declaration_status == PayrollDeclarationStatus.PROOFS_PENDING
+    declaration = EmployeeStatutoryDeclaration.objects.get(id=declaration_id)
+    assert declaration.submitted_by.username == "riya.sharma"
+
+
+def test_employee_statutory_declaration_proof_upload_creates_document_and_links_item(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    category = DocumentCategory.objects.create(
+        tenant=tenant,
+        code="employee-statutory-proof-upload",
+        name="Employee Statutory Proof Upload",
+        category_type=DocumentCategoryType.TAX,
+        requires_verification=True,
+        allow_employee_upload=True,
+        allow_multiple_files=True,
+        is_active=True,
+        visibility_rules={"statutory_proof": True},
+    )
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-tax-upload-fy2027",
+        name="India Tax Upload FY2027",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2027-04-01",
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2027-04-01",
+        pan_number="ABCDE1234F",
+        tax_regime=PayrollTaxRegime.OLD,
+    )
+    declaration = EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=employee,
+        employee_statutory_profile=profile,
+        statutory_pack=pack,
+        financial_year_code="FY2027-28",
+        tax_regime=PayrollTaxRegime.OLD,
+    )
+
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    response = api_client.post(
+        f"/api/v1/me/statutory-declarations/{declaration.id}/proof-upload/",
+        {
+            "category_id": str(category.id),
+            "item_kind": PayrollStatutoryDeclarationItemKind.INVESTMENT,
+            "section_code": "80c",
+            "component_code": "elss",
+            "name": "ELSS Investment",
+            "declared_amount": "70000.00",
+            "file": SimpleUploadedFile("elss-proof.pdf", b"%PDF-1.4 statutory proof upload\n", content_type="application/pdf"),
+        },
+        format="multipart",
+    )
+
+    assert response.status_code == 201, response.json()
+    payload = response.json()
+    item_payload = payload["item"]
+    document_payload = payload["document"]
+    document = EmployeeDocument.objects.get(id=document_payload["id"])
+    declaration_item = EmployeeStatutoryDeclarationItem.objects.get(id=item_payload["id"])
+
+    assert document.employee == employee
+    assert document.category == category
+    assert document.artifact_id
+    assert document_payload["verification_status"] == VerificationStatus.PENDING
+    assert item_payload["proof_status"] == PayrollStatutoryProofStatus.SUBMITTED
+    assert item_payload["proof_document_ref"] == f"employee-document:{document.id}"
+    assert item_payload["proof_artifact_key"] == str(document.artifact_id)
+    assert declaration_item.proof_document_ref == f"employee-document:{document.id}"
+    assert declaration_item.config_snapshot["proof_upload_surface_ref"] == "ess.statutory-declarations"
+
+
+def test_employee_statutory_declaration_write_scope_and_lock_guards(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    other_employee = Employee.objects.filter(tenant=tenant).exclude(id=employee.id).order_by("employee_code").first()
+    assert other_employee is not None
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-tax-ess-guard-fy2027",
+        name="India Tax ESS Guard FY2027",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2027-04-01",
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2027-04-01",
+        pan_number="ABCDE1234F",
+        tax_regime=PayrollTaxRegime.OLD,
+    )
+    other_profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=other_employee,
+        statutory_pack=pack,
+        effective_from="2027-04-01",
+        pan_number="PQRST1234F",
+        tax_regime=PayrollTaxRegime.NEW,
+    )
+    other_declaration = EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=other_employee,
+        employee_statutory_profile=other_profile,
+        statutory_pack=pack,
+        financial_year_code="FY2027-28",
+        tax_regime=PayrollTaxRegime.NEW,
+    )
+    locked_declaration = EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=employee,
+        employee_statutory_profile=profile,
+        statutory_pack=pack,
+        financial_year_code="FY2027-28",
+        declaration_profile_ref="employee.locked.guard.v1",
+        status=PayrollStatutoryDeclarationStatus.LOCKED,
+        tax_regime=PayrollTaxRegime.OLD,
+        submitted_at=timezone.now() - timedelta(days=3),
+        verified_at=timezone.now() - timedelta(days=2),
+        locked_at=timezone.now() - timedelta(days=1),
+    )
+
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    other_patch = api_client.patch(
+        f"/api/v1/me/statutory-declarations/{other_declaration.id}/",
+        {"tax_regime": PayrollTaxRegime.OLD},
+        format="json",
+    )
+    assert other_patch.status_code == 404
+
+    locked_patch = api_client.patch(
+        f"/api/v1/me/statutory-declarations/{locked_declaration.id}/",
+        {"tax_regime": PayrollTaxRegime.NEW},
+        format="json",
+    )
+    assert locked_patch.status_code == 400
+    assert "Only draft or rejected statutory declarations can be edited by employees" in str(locked_patch.json())
+
+
+def test_hr_admin_employee_statutory_declaration_rejection_requires_reason(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-tax-reject-2026",
+        name="India Tax Reject 2026",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2026-04-01",
+        pan_number="ABCDE1234F",
+        tax_regime=PayrollTaxRegime.NEW,
+    )
+    declaration = EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=employee,
+        employee_statutory_profile=profile,
+        statutory_pack=pack,
+        financial_year_code="FY2026-27",
+        tax_regime=PayrollTaxRegime.NEW,
+    )
+    EmployeeStatutoryDeclarationItem.objects.create(
+        tenant=tenant,
+        declaration=declaration,
+        employee=employee,
+        item_kind=PayrollStatutoryDeclarationItemKind.DEDUCTION,
+        section_code="80D",
+        component_code="MEDICAL",
+        name="Medical Insurance",
+        declared_amount="25000.00",
+        proof_status=PayrollStatutoryProofStatus.SUBMITTED,
+        proof_document_ref="employee-document:medical-fy2026",
+    )
+    submit_response = api_client.post(f"/api/v1/hr-admin/employee-statutory-declarations/{declaration.id}/submit/", {}, format="json")
+    assert submit_response.status_code == 200, submit_response.json()
+
+    missing_reason_response = api_client.post(
+        f"/api/v1/hr-admin/employee-statutory-declarations/{declaration.id}/reject/",
+        {"reason": ""},
+        format="json",
+    )
+    assert missing_reason_response.status_code == 400
+
+    reject_response = api_client.post(
+        f"/api/v1/hr-admin/employee-statutory-declarations/{declaration.id}/reject/",
+        {"reason": "Medical insurance proof is not readable."},
+        format="json",
+    )
+    assert reject_response.status_code == 200, reject_response.json()
+    assert reject_response.json()["status"] == PayrollStatutoryDeclarationStatus.REJECTED
+    assert reject_response.json()["rejection_reason"] == "Medical insurance proof is not readable."
+    profile.refresh_from_db()
+    assert profile.declaration_status == PayrollDeclarationStatus.PROOFS_PENDING
+
+
 def test_employee_cannot_access_hr_admin_payroll_input_snapshot_setup(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "riya.sharma")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -1308,6 +2130,325 @@ def test_hr_admin_payroll_draft_calculation_creates_lines_and_trace(api_client: 
     assert setup_payload["summary"]["calculation_count"] == 1
     assert setup_payload["summary"]["latest_net_pay"] == "28200.00"
     assert setup_payload["lines"][0]["employee_code"] == "EMP-0042"
+
+
+def test_hr_admin_payroll_draft_calculation_consumes_configured_statutory_components(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    payroll_run, _snapshot = create_calculable_payroll_run(tenant=tenant, employee=employee)
+    payroll_run.config_snapshot["calculation_profile"] = {
+        "rule_codes": ["calc-basic", "calc-hra"],
+        "statutory_profile": {
+            "enabled": True,
+            "pack_codes": ["india-statutory-calc-2026"],
+            "component_codes": ["epf-calc"],
+            "require_statutory_components": True,
+            "require_employee_statutory_profile": True,
+        },
+    }
+    payroll_run.save()
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-statutory-calc-2026",
+        name="India Statutory Calc 2026",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+        statutory_profile_ref="india.payroll.statutory.calc.fy2026.v1",
+    )
+    component = PayrollStatutoryComponent.objects.create(
+        tenant=tenant,
+        statutory_pack=pack,
+        code="epf-calc",
+        name="Employee Provident Fund",
+        statutory_type=PayrollStatutoryComponentKind.PROVIDENT_FUND,
+        contribution_owner=PayrollStatutoryContributionOwner.BOTH,
+        calculation_method=PayrollStatutoryCalculationMethod.SLAB,
+        wage_base_ref="payroll.wage_base.basic_monthly.v1",
+        statutory_treatment_ref="india.epf.standard.v1",
+        status=PayrollConfigStatus.ACTIVE,
+        config_snapshot={
+            "wage_base_path": "salary.basic_monthly",
+            "employee_profile_applicability_path": "pf_applicable",
+            "employee_component_code": "PF_EMPLOYEE",
+            "employer_component_code": "PF_EMPLOYER",
+            "calculation_order": 40,
+        },
+    )
+    PayrollStatutorySlab.objects.create(
+        tenant=tenant,
+        statutory_component=component,
+        code="epf-12-ceiling",
+        name="EPF 12 Percent Ceiling",
+        effective_from="2026-04-01",
+        min_amount="0.00",
+        employee_rate_percent="12.0000",
+        employer_rate_percent="12.0000",
+        wage_ceiling_amount="15000.00",
+        status=PayrollConfigStatus.ACTIVE,
+    )
+    EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2026-04-01",
+        pan_number="ABCDE1234F",
+        uan_number="123456789012",
+        pf_applicable=True,
+        tax_regime=PayrollTaxRegime.NEW,
+        declaration_status=PayrollDeclarationStatus.VERIFIED,
+    )
+
+    response = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", {}, format="json")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["calculation"]["totals_snapshot"]["gross_earnings"] == "30000.00"
+    assert payload["calculation"]["totals_snapshot"]["employee_deductions"] == "1800.00"
+    assert payload["calculation"]["totals_snapshot"]["employer_contributions"] == "1800.00"
+    assert payload["calculation"]["totals_snapshot"]["net_pay"] == "28200.00"
+    assert payload["calculation"]["error_snapshot"]["statutory_component_count"] == 1
+    assert payload["calculation"]["error_snapshot"]["statutory_line_count"] == 2
+    statutory_lines = [item for item in payload["lines"] if item["line_source"] == PayrollCalculationLineSource.STATUTORY]
+    assert {item["component_code"] for item in statutory_lines} == {"PF_EMPLOYEE", "PF_EMPLOYER"}
+    employee_pf_line = next(item for item in statutory_lines if item["component_code"] == "PF_EMPLOYEE")
+    assert employee_pf_line["amount"] == "1800.00"
+    assert employee_pf_line["config_snapshot"]["statutory_component_code"] == "epf-calc"
+    assert employee_pf_line["config_snapshot"]["statutory_slab_code"] == "epf-12-ceiling"
+    assert employee_pf_line["config_snapshot"]["employee_statutory_profile_hash"]
+    assert "salary.basic_monthly" in employee_pf_line["trace_snapshot"]["dependencies"]
+
+
+def test_hr_admin_payroll_draft_calculation_annualizes_tds_with_verified_declaration_caps(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    payroll_run, _snapshot = create_calculable_payroll_run(tenant=tenant, employee=employee)
+    payroll_run.config_snapshot["calculation_profile"] = {
+        "rule_codes": ["calc-basic", "calc-hra"],
+        "statutory_profile": {
+            "enabled": True,
+            "pack_codes": ["india-tds-annualized-fy2026"],
+            "component_codes": ["tds-annualized"],
+            "require_statutory_components": True,
+            "require_employee_statutory_profile": True,
+        },
+    }
+    payroll_run.save()
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-tds-annualized-fy2026",
+        name="India TDS Annualized FY2026",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+        statutory_profile_ref="india.payroll.statutory.tds.fy2026.v1",
+    )
+    component = PayrollStatutoryComponent.objects.create(
+        tenant=tenant,
+        statutory_pack=pack,
+        code="tds-annualized",
+        name="Tax Deducted At Source",
+        statutory_type=PayrollStatutoryComponentKind.TAX_DEDUCTED_AT_SOURCE,
+        contribution_owner=PayrollStatutoryContributionOwner.EMPLOYEE,
+        calculation_method=PayrollStatutoryCalculationMethod.SLAB,
+        wage_base_ref="payroll.wage_base.basic_monthly.v1",
+        statutory_treatment_ref="india.tds.annualized.v1",
+        status=PayrollConfigStatus.ACTIVE,
+        config_snapshot={
+            "wage_base_path": "salary.basic_monthly",
+            "employee_component_code": "TDS",
+            "employee_line_type": "tax",
+            "calculation_order": 45,
+            "annualization_profile": {
+                "enabled": True,
+                "financial_year_code": "FY2026-27",
+                "annualization_multiplier": "12",
+                "remaining_period_count": "8",
+                "tax_method": "progressive_slabs",
+                "compare_tax_regimes": True,
+                "tax_regime_selection_mode": "profile",
+                "tax_regime_candidates": [PayrollTaxRegime.OLD, PayrollTaxRegime.NEW],
+                "declaration_cap_rules": [
+                    {
+                        "cap_ref": "old-regime-section-80c",
+                        "section_code": "80C",
+                        "item_kind": PayrollStatutoryDeclarationItemKind.INVESTMENT,
+                        "tax_regimes": [PayrollTaxRegime.OLD],
+                        "max_amount": "50000.00",
+                    }
+                ],
+            },
+        },
+    )
+    PayrollStatutorySlab.objects.create(
+        tenant=tenant,
+        statutory_component=component,
+        code="tds-zero-band",
+        name="TDS Zero Band",
+        slab_order=10,
+        effective_from="2026-04-01",
+        min_amount="0.00",
+        max_amount="150000.00",
+        employee_rate_percent="0.0000",
+        status=PayrollConfigStatus.ACTIVE,
+        config_snapshot={"tax_regimes": [PayrollTaxRegime.OLD]},
+    )
+    PayrollStatutorySlab.objects.create(
+        tenant=tenant,
+        statutory_component=component,
+        code="tds-ten-percent-band",
+        name="TDS Ten Percent Band",
+        slab_order=20,
+        effective_from="2026-04-01",
+        min_amount="150000.00",
+        employee_rate_percent="10.0000",
+        status=PayrollConfigStatus.ACTIVE,
+        config_snapshot={"tax_regimes": [PayrollTaxRegime.OLD]},
+    )
+    PayrollStatutorySlab.objects.create(
+        tenant=tenant,
+        statutory_component=component,
+        code="tds-new-zero-band",
+        name="TDS New Regime Zero Band",
+        slab_order=30,
+        effective_from="2026-04-01",
+        min_amount="0.00",
+        max_amount="250000.00",
+        employee_rate_percent="0.0000",
+        status=PayrollConfigStatus.ACTIVE,
+        config_snapshot={"tax_regimes": [PayrollTaxRegime.NEW]},
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2026-04-01",
+        pan_number="ABCDE1234F",
+        tax_regime=PayrollTaxRegime.OLD,
+        declaration_status=PayrollDeclarationStatus.VERIFIED,
+    )
+    verified_at = timezone.now()
+    declaration = EmployeeStatutoryDeclaration.objects.create(
+        tenant=tenant,
+        employee=employee,
+        employee_statutory_profile=profile,
+        statutory_pack=pack,
+        financial_year_code="FY2026-27",
+        declaration_profile_ref="india.employee.tax.declaration.fy2026.v1",
+        status=PayrollStatutoryDeclarationStatus.VERIFIED,
+        tax_regime=PayrollTaxRegime.OLD,
+        declared_total_amount="75000.00",
+        verified_total_amount="75000.00",
+        submitted_at=verified_at,
+        verified_at=verified_at,
+    )
+    EmployeeStatutoryDeclarationItem.objects.create(
+        tenant=tenant,
+        declaration=declaration,
+        employee=employee,
+        item_kind=PayrollStatutoryDeclarationItemKind.INVESTMENT,
+        section_code="80C",
+        component_code="ELSS",
+        name="ELSS Mutual Fund",
+        declared_amount="75000.00",
+        verified_amount="75000.00",
+        proof_status=PayrollStatutoryProofStatus.VERIFIED,
+        proof_document_ref="employee-document:elss-proof",
+        verified_at=verified_at,
+    )
+
+    response = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", {}, format="json")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["calculation"]["totals_snapshot"]["gross_earnings"] == "30000.00"
+    assert payload["calculation"]["totals_snapshot"]["employee_deductions"] == "500.00"
+    assert payload["calculation"]["totals_snapshot"]["net_pay"] == "29500.00"
+    tds_line = next(item for item in payload["lines"] if item["component_code"] == "TDS")
+    annualization = tds_line["config_snapshot"]["annualization"]
+    assert tds_line["line_source"] == PayrollCalculationLineSource.STATUTORY
+    assert tds_line["line_type"] == "tax"
+    assert tds_line["amount"] == "500.00"
+    assert annualization["annualized_wage_base"] == "240000.00"
+    assert annualization["declaration_adjustment"] == "50000.00"
+    assert annualization["taxable_annual_amount"] == "190000.00"
+    assert annualization["annual_tax"] == "4000.00"
+    assert annualization["remaining_period_count"] == "8"
+    assert annualization["selected_tax_regime"] == PayrollTaxRegime.OLD
+    assert annualization["tax_regime_selection_mode"] == "profile"
+    assert annualization["declaration_cap_evidence"][0]["raw_amount"] == "75000.00"
+    assert annualization["declaration_cap_evidence"][0]["capped_amount"] == "50000.00"
+    comparison_by_regime = {item["tax_regime"]: item for item in annualization["regime_comparisons"]}
+    assert comparison_by_regime[PayrollTaxRegime.OLD]["period_tax_amount"] == "500.00"
+    assert comparison_by_regime[PayrollTaxRegime.OLD]["is_selected"] is True
+    assert comparison_by_regime[PayrollTaxRegime.NEW]["declaration_adjustment"] == "0.00"
+    assert comparison_by_regime[PayrollTaxRegime.NEW]["period_tax_amount"] == "0.00"
+    assert comparison_by_regime[PayrollTaxRegime.NEW]["period_tax_delta"] == "-500.00"
+    assert tds_line["trace_snapshot"]["dependencies"] == [
+        "salary.basic_monthly",
+        "employee_statutory_profile",
+        "employee_statutory_declarations",
+    ]
+
+
+def test_hr_admin_payroll_draft_calculation_blocks_missing_employee_statutory_profile(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    payroll_run, _snapshot = create_calculable_payroll_run(tenant=tenant, employee=employee)
+    payroll_run.config_snapshot["calculation_profile"] = {
+        "rule_codes": ["calc-basic", "calc-hra"],
+        "statutory_profile": {
+            "enabled": True,
+            "pack_codes": ["india-missing-profile-calc"],
+            "component_codes": ["missing-profile-epf"],
+            "require_employee_statutory_profile": True,
+        },
+    }
+    payroll_run.save()
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-missing-profile-calc",
+        name="India Missing Profile Calc",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+    )
+    component = PayrollStatutoryComponent.objects.create(
+        tenant=tenant,
+        statutory_pack=pack,
+        code="missing-profile-epf",
+        name="Missing Profile EPF",
+        statutory_type=PayrollStatutoryComponentKind.PROVIDENT_FUND,
+        contribution_owner=PayrollStatutoryContributionOwner.EMPLOYEE,
+        calculation_method=PayrollStatutoryCalculationMethod.SLAB,
+        wage_base_ref="payroll.wage_base.basic_monthly.v1",
+        statutory_treatment_ref="india.epf.standard.v1",
+        status=PayrollConfigStatus.ACTIVE,
+        config_snapshot={"wage_base_path": "salary.basic_monthly", "employee_component_code": "PF_EMPLOYEE"},
+    )
+    PayrollStatutorySlab.objects.create(
+        tenant=tenant,
+        statutory_component=component,
+        code="missing-profile-epf-slab",
+        name="Missing Profile EPF Slab",
+        effective_from="2026-04-01",
+        employee_rate_percent="12.0000",
+        wage_ceiling_amount="15000.00",
+        status=PayrollConfigStatus.ACTIVE,
+    )
+
+    response = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", {}, format="json")
+
+    assert response.status_code == 400
+    assert "blocker validation issue" in response.json()["detail"]
+    issue = PayrollValidationIssue.objects.get(payroll_run=payroll_run, issue_code="MISSING_EMPLOYEE_STATUTORY_PROFILE")
+    assert issue.severity == PayrollValidationSeverity.BLOCKER
+    assert issue.category == PayrollValidationCategory.STATUTORY_SETUP
+    assert issue.employee == employee
+    assert PayrollCalculationLine.objects.filter(payroll_run=payroll_run, line_source=PayrollCalculationLineSource.STATUTORY).count() == 0
 
 
 def test_hr_admin_payroll_draft_calculation_persists_validation_warnings(api_client: APIClient, bootstrapped_workspace):
@@ -1901,8 +3042,11 @@ def test_hr_admin_payroll_review_setup_returns_review_register(api_client: APICl
     assert PayrollRunReview.objects.filter(payroll_run=payroll_run).count() == 1
 
 
-def create_locked_payroll_review(api_client: APIClient, *, tenant, employee):
+def create_locked_payroll_review(api_client: APIClient, *, tenant, employee, run_config: dict | None = None):
     payroll_run, _snapshot = create_calculable_payroll_run(tenant=tenant, employee=employee)
+    if run_config:
+        payroll_run.config_snapshot = {**payroll_run.config_snapshot, **run_config}
+        payroll_run.save()
     calculate_response = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", {}, format="json")
     assert calculate_response.status_code == 200, calculate_response.json()
     open_response = api_client.post(
@@ -1948,11 +3092,17 @@ def test_hr_admin_payroll_outputs_generate_and_publish_locked_review(api_client:
     assert payslip["mime_type"] == "text/html"
     assert payslip["storage_provider_ref"] == "payroll.storage.local.generated.v1"
     assert payslip["storage_key"]
+    assert payslip["storage_object_version"]
     assert payslip["file_size_bytes"] > 0
     assert len(payslip["checksum_sha256"]) == 64
     assert payslip["is_downloadable"] is True
+    assert payslip["download_strategy_ref"] == "payroll.download.stream.local.v1"
+    assert payslip["supports_signed_url"] is False
+    assert payslip["signed_url_expires_in_seconds"] == 900
     assert payslip["retention_policy_ref"] == "payroll.retention.7y.v1"
     assert payslip["download_url"] is None
+    assert payslip["signed_download_url"] is None
+    assert payslip["signed_download_expires_at"] is None
 
     blocked_download_response = api_client.get(f"/api/v1/hr-admin/payroll-output-artifacts/{payslip['id']}/download/")
     assert blocked_download_response.status_code == 400
@@ -1972,6 +3122,9 @@ def test_hr_admin_payroll_outputs_generate_and_publish_locked_review(api_client:
     assert download_response["Content-Type"].startswith("text/html")
     assert "attachment;" in download_response["Content-Disposition"]
     assert download_response["X-Payroll-Artifact-Checksum"] == published_payslip["checksum_sha256"]
+    assert download_response["X-Payroll-Storage-Provider"] == "payroll.storage.local.generated.v1"
+    assert download_response["X-Payroll-Storage-Version"] == published_payslip["storage_object_version"]
+    assert download_response["X-Payroll-Download-Strategy"] == "payroll.download.stream.local.v1"
     assert b"Payslip" in download_response.content
     assert b"EMP-0042" in download_response.content
 
@@ -1984,6 +3137,623 @@ def test_hr_admin_payroll_outputs_generate_and_publish_locked_review(api_client:
     assert setup_payload["summary"]["latest_net_pay"] == "28200.00"
     assert PayrollOutputBatch.objects.filter(id=batch_id, status=PayrollOutputBatchStatus.PUBLISHED).exists()
     assert PayrollOutputArtifact.objects.filter(output_batch_id=batch_id, status=PayrollOutputArtifactStatus.PUBLISHED).count() == 2
+
+
+def test_hr_admin_payroll_outputs_support_configured_signed_url_storage_strategy(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "output_profile": {
+                "storage_profile": {
+                    "provider_ref": "payroll.storage.signed_url.placeholder.v1",
+                    "download_strategy_ref": "payroll.download.signed_url.v1",
+                    "signed_url_expires_in_seconds": 300,
+                    "key_prefix": "signed-payroll",
+                    "retention_policy_ref": "payroll.retention.10y.v1",
+                }
+            }
+        },
+    )
+
+    generate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.signed.output.profile.v1"},
+        format="json",
+    )
+    assert generate_response.status_code == 200, generate_response.json()
+    batch_id = generate_response.json()["output_batch"]["id"]
+    generated_payslip = next(item for item in generate_response.json()["artifacts"] if item["kind"] == PayrollOutputArtifactKind.PAYSLIP)
+    assert generated_payslip["storage_provider_ref"] == "payroll.storage.signed_url.placeholder.v1"
+    assert generated_payslip["storage_key"].startswith("signed-payroll/")
+    assert generated_payslip["download_strategy_ref"] == "payroll.download.signed_url.v1"
+    assert generated_payslip["supports_signed_url"] is True
+    assert generated_payslip["signed_url_expires_in_seconds"] == 300
+    assert generated_payslip["signed_download_url"] is None
+    assert generated_payslip["retention_policy_ref"] == "payroll.retention.10y.v1"
+
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    published_payslip = next(item for item in publish_response.json()["artifacts"] if item["kind"] == PayrollOutputArtifactKind.PAYSLIP)
+    assert published_payslip["signed_download_url"]
+    assert published_payslip["signed_download_expires_at"]
+    assert "signature=placeholder" in published_payslip["signed_download_url"]
+
+    download_response = api_client.get(published_payslip["download_url"])
+    assert download_response.status_code == 200
+    assert download_response["X-Payroll-Storage-Provider"] == "payroll.storage.signed_url.placeholder.v1"
+    assert download_response["X-Payroll-Download-Strategy"] == "payroll.download.signed_url.v1"
+    assert download_response["X-Payroll-Retention-Policy"] == "payroll.retention.10y.v1"
+    assert b"EMP-0042" in download_response.content
+
+    signed_issue_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-artifacts/{published_payslip['id']}/signed-access/",
+        {"expires_in_seconds": 120, "max_access_count": 1},
+        format="json",
+        HTTP_X_REQUEST_ID="signed-grant-test-1",
+    )
+    assert signed_issue_response.status_code == 201, signed_issue_response.json()
+    signed_issue_payload = signed_issue_response.json()
+    assert "grant_id=" in signed_issue_payload["signed_url"]
+    assert "token=" in signed_issue_payload["signed_url"]
+    assert signed_issue_payload["grant"]["status"] == PayrollArtifactSignedAccessGrantStatus.ACTIVE
+    assert signed_issue_payload["grant"]["access_count"] == 0
+    assert signed_issue_payload["grant"]["max_access_count"] == 1
+    grant = PayrollArtifactSignedAccessGrant.objects.get(id=signed_issue_payload["grant"]["id"])
+    assert grant.token_hash
+    assert grant.token_prefix
+    assert grant.signed_url.endswith("...")
+    assert signed_issue_payload["signed_url"] != grant.signed_url
+    assert PayrollArtifactAccessEvent.objects.filter(
+        output_artifact_id=published_payslip["id"],
+        signed_access_grant=grant,
+        event_type=PayrollArtifactAccessEventType.SIGNED_URL_ISSUED,
+    ).exists()
+
+    signed_download_response = api_client.get(signed_issue_payload["signed_url"], HTTP_X_REQUEST_ID="signed-grant-test-download")
+    assert signed_download_response.status_code == 200
+    assert signed_download_response["X-Payroll-Download-Strategy"] == "payroll.download.signed_url.v1"
+    grant.refresh_from_db()
+    assert grant.access_count == 1
+    assert grant.last_accessed_at is not None
+    assert PayrollArtifactAccessEvent.objects.filter(
+        output_artifact_id=published_payslip["id"],
+        signed_access_grant=grant,
+        event_type=PayrollArtifactAccessEventType.DOWNLOADED,
+        request_identifier="signed-grant-test-download",
+    ).exists()
+
+    second_signed_download_response = api_client.get(signed_issue_payload["signed_url"])
+    assert second_signed_download_response.status_code == 403
+    assert "access limit" in second_signed_download_response.json()["detail"]
+
+    revoke_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-signed-access-grants/{grant.id}/revoke/",
+        {"reason": "Payroll close audit test revocation."},
+        format="json",
+    )
+    assert revoke_response.status_code == 200, revoke_response.json()
+    assert revoke_response.json()["status"] == PayrollArtifactSignedAccessGrantStatus.REVOKED
+    assert revoke_response.json()["revocation_reason"] == "Payroll close audit test revocation."
+    assert PayrollArtifactAccessEvent.objects.filter(
+        output_artifact_id=published_payslip["id"],
+        signed_access_grant=grant,
+        event_type=PayrollArtifactAccessEventType.REVOKED,
+    ).exists()
+
+    audit_export_response = api_client.get(f"/api/v1/hr-admin/payroll-output-artifacts/{published_payslip['id']}/access-audit-export/")
+    assert audit_export_response.status_code == 200
+    assert audit_export_response["Content-Type"].startswith("text/csv")
+    audit_csv = audit_export_response.content.decode("utf-8")
+    assert "signed_url_issued" in audit_csv
+    assert "signed_access_grant" in audit_csv
+    assert "Payroll close audit test revocation." in audit_csv
+
+
+def test_hr_admin_payroll_outputs_reject_uninstalled_object_storage_adapter(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "output_profile": {
+                "storage_profile": {
+                    "provider_ref": "payroll.storage.s3.private.v1",
+                    "key_prefix": "tenant-payroll",
+                }
+            }
+        },
+    )
+
+    generate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {},
+        format="json",
+    )
+    assert generate_response.status_code == 400
+    assert "missing required field" in generate_response.json()["detail"]
+    assert PayrollOutputBatch.objects.count() == 0
+
+
+def test_hr_admin_payroll_outputs_support_s3_object_storage_contract_profile(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "output_profile": {
+                "storage_profile": {
+                    "provider_ref": "payroll.storage.s3.private.v1",
+                    "bucket_name": "tenant-payroll-private",
+                    "region": "ap-south-1",
+                    "credential_ref": "tenant:northstar:secret/payroll-s3-writer",
+                    "key_prefix": "tenant-payroll",
+                    "retention_policy_ref": "payroll.retention.10y.v1",
+                    "signed_url_expires_in_seconds": 240,
+                    "encryption_ref": "tenant-managed-kms/payroll",
+                    "contract_test_mode": True,
+                }
+            }
+        },
+    )
+
+    generate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.s3.output.profile.v1"},
+        format="json",
+    )
+    assert generate_response.status_code == 200, generate_response.json()
+    batch_id = generate_response.json()["output_batch"]["id"]
+    generated_payslip = next(item for item in generate_response.json()["artifacts"] if item["kind"] == PayrollOutputArtifactKind.PAYSLIP)
+    assert generated_payslip["storage_provider_ref"] == "payroll.storage.s3.private.v1"
+    assert generated_payslip["storage_key"].startswith("tenant-payroll/")
+    assert generated_payslip["storage_object_version"].startswith("s3-")
+    assert generated_payslip["download_strategy_ref"] == "payroll.download.s3.signed_url.v1"
+    assert generated_payslip["supports_signed_url"] is True
+    assert generated_payslip["signed_url_expires_in_seconds"] == 240
+    assert generated_payslip["config_snapshot"]["storage_profile"]["credential_ref"] == "tenant:northstar:secret/payroll-s3-writer"
+    assert "secret_key" not in generated_payslip["config_snapshot"]["storage_profile"]
+
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    published_payslip = next(item for item in publish_response.json()["artifacts"] if item["kind"] == PayrollOutputArtifactKind.PAYSLIP)
+    assert "tenant-payroll-private.s3.ap-south-1.amazonaws.com" in published_payslip["signed_download_url"]
+    assert "X-Amz-Expires=240" in published_payslip["signed_download_url"]
+    assert "tenant%3Anorthstar%3Asecret/payroll-s3-writer" in published_payslip["signed_download_url"]
+
+    download_response = api_client.get(published_payslip["download_url"])
+    assert download_response.status_code == 200
+    assert download_response["X-Payroll-Storage-Provider"] == "payroll.storage.s3.private.v1"
+    assert download_response["X-Payroll-Download-Strategy"] == "payroll.download.s3.signed_url.v1"
+    assert download_response["X-Payroll-Retention-Policy"] == "payroll.retention.10y.v1"
+
+
+def test_hr_admin_payroll_outputs_reject_raw_object_storage_credentials(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "output_profile": {
+                "storage_profile": {
+                    "provider_ref": "payroll.storage.s3.private.v1",
+                    "bucket_name": "tenant-payroll-private",
+                    "region": "ap-south-1",
+                    "credential_ref": "tenant:northstar:secret/payroll-s3-writer",
+                    "secret_key": "should-not-be-in-config",
+                    "contract_test_mode": True,
+                }
+            }
+        },
+    )
+
+    generate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {},
+        format="json",
+    )
+    assert generate_response.status_code == 400
+    assert "raw credentials are not allowed" in generate_response.json()["detail"]
+    assert PayrollOutputBatch.objects.count() == 0
+
+
+def test_hr_admin_payroll_outputs_reject_missing_storage_policy_ref(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "output_profile": {
+                "storage_profile": {
+                    "provider_ref": "payroll.storage.s3.private.v1",
+                    "bucket_name": "tenant-payroll-private",
+                    "region": "ap-south-1",
+                    "credential_ref": "tenant:northstar:secret/payroll-s3-writer",
+                    "storage_policy_ref": "payroll.storage.policy.strict.missing.v1",
+                    "contract_test_mode": True,
+                }
+            }
+        },
+    )
+
+    generate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {},
+        format="json",
+    )
+    assert generate_response.status_code == 400
+    assert "storage policy payroll.storage.policy.strict.missing.v1 is not configured" in generate_response.json()["detail"]
+    assert PayrollOutputBatch.objects.count() == 0
+
+
+def test_hr_admin_payroll_outputs_enforce_storage_policy_encryption(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "output_profile": {
+                "storage_profile": {
+                    "provider_ref": "payroll.storage.s3.private.v1",
+                    "bucket_name": "tenant-payroll-private",
+                    "region": "ap-south-1",
+                    "credential_ref": "tenant:northstar:secret/payroll-s3-writer",
+                    "key_prefix": "tenant-payroll",
+                    "storage_policy_ref": "payroll.storage.policy.strict.v1",
+                    "contract_test_mode": True,
+                }
+            }
+        },
+    )
+
+    with override_settings(
+        PAYROLL_ARTIFACT_STORAGE_POLICIES={
+            "payroll.storage.policy.strict.v1": {
+                "allowed_provider_families": ["s3"],
+                "allowed_bucket_names": ["tenant-payroll-private"],
+                "allowed_credential_refs": ["tenant:northstar:secret/payroll-s3-writer"],
+                "allowed_retention_policy_refs": ["payroll.retention.7y.v1"],
+                "required_key_prefix": "tenant-payroll",
+                "require_encryption_ref": True,
+                "max_signed_url_expires_in_seconds": 300,
+            }
+        },
+    ):
+        generate_response = api_client.post(
+            f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+            {},
+            format="json",
+        )
+    assert generate_response.status_code == 400
+    assert "requires encryption_ref" in generate_response.json()["detail"]
+    assert PayrollOutputBatch.objects.count() == 0
+
+
+def test_hr_admin_payroll_outputs_reject_unresolved_object_storage_credential_ref(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "output_profile": {
+                "storage_profile": {
+                    "provider_ref": "payroll.storage.s3.private.v1",
+                    "bucket_name": "tenant-payroll-private",
+                    "region": "ap-south-1",
+                    "credential_ref": "tenant:northstar:secret/missing-payroll-s3-writer",
+                    "key_prefix": "tenant-payroll",
+                    "retention_policy_ref": "payroll.retention.10y.v1",
+                }
+            }
+        },
+    )
+
+    generate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {},
+        format="json",
+    )
+    assert generate_response.status_code == 400
+    assert "is not configured in the runtime credential resolver" in generate_response.json()["detail"]
+    assert PayrollOutputBatch.objects.count() == 0
+
+
+class _FakePayrollS3Body:
+    def __init__(self, payload: bytes):
+        self.payload = payload
+
+    def read(self) -> bytes:
+        return self.payload
+
+
+class _FakePayrollS3Client:
+    def __init__(self):
+        self.objects: dict[tuple[str, str], dict[str, object]] = {}
+
+    def put_object(self, *, Bucket: str, Key: str, Body: bytes, ContentType: str, Metadata: dict[str, str]):
+        version = f"runtime-{len(self.objects) + 1}"
+        self.objects[(Bucket, Key)] = {
+            "body": Body,
+            "content_type": ContentType,
+            "metadata": Metadata,
+            "version": version,
+        }
+        return {"VersionId": version}
+
+    def get_object(self, *, Bucket: str, Key: str):
+        stored = self.objects[(Bucket, Key)]
+        return {
+            "Body": _FakePayrollS3Body(stored["body"]),
+            "ContentType": stored["content_type"],
+        }
+
+    def generate_presigned_url(self, operation_name: str, *, Params: dict[str, str], ExpiresIn: int):
+        assert operation_name == "get_object"
+        return (
+            f"https://{Params['Bucket']}.s3.ap-south-1.amazonaws.com/{Params['Key']}"
+            f"?runtime-signature=fake&expires={ExpiresIn}"
+        )
+
+
+def test_hr_admin_payroll_outputs_store_read_and_sign_with_s3_sdk_runtime(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    fake_client = _FakePayrollS3Client()
+
+    def fake_s3_factory(*, profile, credential):
+        assert profile.provider_family == "s3"
+        assert credential.credential_ref == "tenant:northstar:secret/payroll-s3-runtime"
+        assert credential.snapshot()["metadata"]["rotation_policy_ref"] == "payroll.secret.rotation.90d.v1"
+        return fake_client
+
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "output_profile": {
+                "storage_profile": {
+                    "provider_ref": "payroll.storage.s3.private.v1",
+                    "bucket_name": "tenant-payroll-private",
+                    "region": "ap-south-1",
+                    "credential_ref": "tenant:northstar:secret/payroll-s3-runtime",
+                    "key_prefix": "tenant-payroll",
+                    "retention_policy_ref": "payroll.retention.10y.v1",
+                    "signed_url_expires_in_seconds": 180,
+                    "encryption_ref": "tenant-managed-kms/payroll",
+                    "storage_policy_ref": "payroll.storage.policy.strict-runtime.v1",
+                    "lifecycle_policy_ref": "payroll.lifecycle.retention.10y.v1",
+                    "malware_scan_profile_ref": "payroll.malware.scan.sync.v1",
+                    "durability_policy_ref": "payroll.durability.multi-region.v1",
+                }
+            }
+        },
+    )
+
+    with override_settings(
+        PAYROLL_ARTIFACT_STORAGE_CREDENTIALS={
+            "tenant:northstar:secret/payroll-s3-runtime": {
+                "provider_family": "s3",
+                "source_ref": "unit-test-secret-resolver",
+                "metadata": {"rotation_policy_ref": "payroll.secret.rotation.90d.v1"},
+                "credentials": {
+                    "access_key_id": "runtime-access-key",
+                    "secret_access_key": "runtime-secret-key",
+                },
+            }
+        },
+        PAYROLL_ARTIFACT_STORAGE_CLIENT_FACTORIES={"s3": fake_s3_factory},
+        PAYROLL_ARTIFACT_STORAGE_POLICIES={
+            "payroll.storage.policy.strict-runtime.v1": {
+                "allowed_provider_families": ["s3"],
+                "allowed_provider_refs": ["payroll.storage.s3.private.v1"],
+                "allowed_credential_refs": ["tenant:northstar:secret/payroll-s3-runtime"],
+                "allowed_bucket_names": ["tenant-payroll-private"],
+                "allowed_retention_policy_refs": ["payroll.retention.10y.v1"],
+                "allowed_encryption_refs": ["tenant-managed-kms/payroll"],
+                "required_key_prefix": "tenant-payroll",
+                "require_encryption_ref": True,
+                "require_runtime_credentials": True,
+                "max_signed_url_expires_in_seconds": 180,
+                "max_file_size_bytes": 100000,
+                "lifecycle_policy_ref": "payroll.lifecycle.retention.10y.v1",
+                "malware_scan_profile_ref": "payroll.malware.scan.sync.v1",
+                "durability_policy_ref": "payroll.durability.multi-region.v1",
+            }
+        },
+    ):
+        generate_response = api_client.post(
+            f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+            {"output_profile_ref": "india.s3.runtime.output.profile.v1"},
+            format="json",
+        )
+        assert generate_response.status_code == 200, generate_response.json()
+        batch_id = generate_response.json()["output_batch"]["id"]
+        generated_payslip = next(item for item in generate_response.json()["artifacts"] if item["kind"] == PayrollOutputArtifactKind.PAYSLIP)
+        stored_payslip = PayrollOutputArtifact.objects.get(id=generated_payslip["id"])
+        assert stored_payslip.file_payload == ""
+        assert stored_payslip.storage_object_version.startswith("s3-runtime-")
+        assert stored_payslip.supports_signed_url is True
+        assert stored_payslip.signed_url_expires_in_seconds == 180
+        assert stored_payslip.config_snapshot["storage_profile"]["credential_ref"] == "tenant:northstar:secret/payroll-s3-runtime"
+        assert stored_payslip.config_snapshot["storage_profile"]["storage_policy_ref"] == "payroll.storage.policy.strict-runtime.v1"
+        assert stored_payslip.config_snapshot["storage_profile"]["lifecycle_policy_ref"] == "payroll.lifecycle.retention.10y.v1"
+        assert stored_payslip.config_snapshot["storage_profile"]["malware_scan_profile_ref"] == "payroll.malware.scan.sync.v1"
+        assert stored_payslip.config_snapshot["storage_profile"]["durability_policy_ref"] == "payroll.durability.multi-region.v1"
+        assert "secret_access_key" not in stored_payslip.config_snapshot["storage_profile"]
+        assert ("tenant-payroll-private", stored_payslip.storage_key) in fake_client.objects
+        assert fake_client.objects[("tenant-payroll-private", stored_payslip.storage_key)]["metadata"]["checksum-sha256"] == stored_payslip.checksum_sha256
+
+        publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+        assert publish_response.status_code == 200, publish_response.json()
+        published_payslip = next(item for item in publish_response.json()["artifacts"] if item["kind"] == PayrollOutputArtifactKind.PAYSLIP)
+        assert "runtime-signature=fake" in published_payslip["signed_download_url"]
+        assert "expires=180" in published_payslip["signed_download_url"]
+
+        download_response = api_client.get(published_payslip["download_url"])
+        assert download_response.status_code == 200
+        assert download_response["X-Payroll-Storage-Provider"] == "payroll.storage.s3.private.v1"
+        assert download_response["X-Payroll-Download-Strategy"] == "payroll.download.s3.signed_url.v1"
+        assert download_response["X-Payroll-Artifact-Checksum"] == stored_payslip.checksum_sha256
+        assert b"EMP-0042" in download_response.content
+
+
+def test_employee_can_list_and_download_published_payroll_payslip(api_client: APIClient, bootstrapped_workspace):
+    hr_token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {hr_token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(api_client, tenant=tenant, employee=employee)
+    generate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_response.status_code == 200, generate_response.json()
+    batch_id = generate_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    published_artifact = PayrollOutputArtifact.objects.get(
+        output_batch_id=batch_id,
+        kind=PayrollOutputArtifactKind.PAYSLIP,
+        employee__employee_code="EMP-0042",
+    )
+    assert PayrollArtifactAccessEvent.objects.filter(
+        output_artifact=published_artifact,
+        event_type=PayrollArtifactAccessEventType.PUBLISHED,
+    ).count() == 1
+    assert PayrollArtifactAccessEvent.objects.filter(
+        output_artifact=published_artifact,
+        event_type=PayrollArtifactAccessEventType.NOTIFIED,
+    ).count() == 1
+    publish_notification = Notification.objects.filter(
+        tenant=tenant,
+        subject_type="payroll_payslip",
+        subject_identifier=str(published_artifact.id),
+        recipient_membership=employee.membership,
+    ).first()
+    assert publish_notification is not None
+    assert publish_notification.status == NotificationStatus.DELIVERED
+    assert publish_notification.payload["download_strategy_ref"] == "payroll.download.stream.local.v1"
+
+    employee_token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {employee_token}")
+    list_response = api_client.get("/api/v1/me/payroll-payslips/")
+    assert list_response.status_code == 200, list_response.json()
+    payload = list_response.json()
+    assert payload["summary"]["published_payslip_count"] == 1
+    assert payload["summary"]["downloadable_payslip_count"] == 1
+    assert payload["summary"]["latest_net_pay"] == "28200.00"
+    assert payload["items"][0]["payroll_run_name"] == "Calculation Run September 2026"
+    assert payload["items"][0]["period_name"] == "Calculation September 2026"
+    assert payload["items"][0]["download_url"].endswith(f"/me/payroll-payslips/{payload['items'][0]['id']}/download/")
+    assert payload["items"][0]["storage_object_version"]
+    assert payload["items"][0]["download_strategy_ref"] == "payroll.download.stream.local.v1"
+    assert payload["items"][0]["supports_signed_url"] is False
+    assert payload["items"][0]["line_snapshot"][0]["component_code"] == "BASIC"
+    assert payload["items"][0]["access_summary"]["published_event_count"] == 1
+    assert payload["items"][0]["access_summary"]["notification_count"] == 1
+    assert payload["items"][0]["access_summary"]["download_count"] == 0
+    assert payload["items"][0]["access_summary"]["is_read_acknowledged"] is False
+    assert {item["event_type"] for item in payload["items"][0]["access_events"]} >= {
+        PayrollArtifactAccessEventType.PUBLISHED,
+        PayrollArtifactAccessEventType.NOTIFIED,
+    }
+
+    invalid_year_response = api_client.get("/api/v1/me/payroll-payslips/?year=not-a-year")
+    assert invalid_year_response.status_code == 200, invalid_year_response.json()
+    assert invalid_year_response.json()["total_count"] == 0
+
+    download_response = api_client.get(payload["items"][0]["download_url"])
+    assert download_response.status_code == 200
+    assert download_response["Content-Type"].startswith("text/html")
+    assert download_response["X-Payroll-Artifact-Checksum"] == payload["items"][0]["checksum_sha256"]
+    assert download_response["X-Payroll-Storage-Version"] == payload["items"][0]["storage_object_version"]
+    assert b"EMP-0042" in download_response.content
+    assert PayrollArtifactAccessEvent.objects.filter(
+        output_artifact=published_artifact,
+        event_type=PayrollArtifactAccessEventType.DOWNLOADED,
+        source_channel_ref="employee.portal.v1",
+    ).count() == 1
+
+    read_response = api_client.post(f"/api/v1/me/payroll-payslips/{payload['items'][0]['id']}/read/", {}, format="json")
+    assert read_response.status_code == 200, read_response.json()
+    assert read_response.json()["access_summary"]["is_read_acknowledged"] is True
+    assert read_response.json()["access_summary"]["read_acknowledgement_count"] == 1
+    publish_notification.refresh_from_db()
+    assert publish_notification.status == NotificationStatus.READ
+    assert publish_notification.read_at is not None
+    read_event = PayrollArtifactAccessEvent.objects.get(
+        output_artifact=published_artifact,
+        event_type=PayrollArtifactAccessEventType.READ_ACKNOWLEDGED,
+    )
+    read_event.actor_identifier = "tampered-actor"
+    with pytest.raises(ValidationError, match="append-only"):
+        read_event.save()
+
+    manager_token = login(api_client, "karan.mehta")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {manager_token}")
+    denied_response = api_client.get(payload["items"][0]["download_url"])
+    assert denied_response.status_code == 404
+    denied_read_response = api_client.post(f"/api/v1/me/payroll-payslips/{payload['items'][0]['id']}/read/", {}, format="json")
+    assert denied_read_response.status_code == 404
+    manager_list_response = api_client.get("/api/v1/me/payroll-payslips/")
+    assert manager_list_response.status_code == 200, manager_list_response.json()
+    assert manager_list_response.json()["summary"]["published_payslip_count"] == 0
+
+
+def test_employee_payroll_payslips_hide_unpublished_artifacts(api_client: APIClient, bootstrapped_workspace):
+    hr_token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {hr_token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(api_client, tenant=tenant, employee=employee)
+    generate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {},
+        format="json",
+    )
+    assert generate_response.status_code == 200, generate_response.json()
+    generated_payslip = next(item for item in generate_response.json()["artifacts"] if item["kind"] == PayrollOutputArtifactKind.PAYSLIP)
+
+    employee_token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {employee_token}")
+    list_response = api_client.get("/api/v1/me/payroll-payslips/")
+    assert list_response.status_code == 200, list_response.json()
+    assert list_response.json()["summary"]["published_payslip_count"] == 0
+    download_response = api_client.get(f"/api/v1/me/payroll-payslips/{generated_payslip['id']}/download/")
+    assert download_response.status_code == 404
 
 
 def test_hr_admin_payroll_outputs_require_final_locked_review(api_client: APIClient, bootstrapped_workspace):
@@ -2059,7 +3829,13 @@ def test_hr_admin_payroll_finance_handoff_generate_and_transmit(api_client: APIC
     transmit_payload = transmit_response.json()
     assert transmit_payload["handoff"]["status"] == PayrollFinanceHandoffStatus.TRANSMITTED
     assert transmit_payload["handoff"]["handoff_summary_snapshot"]["published_count"] == 3
+    assert transmit_payload["handoff"]["handoff_summary_snapshot"]["delivery_count"] == 3
+    assert transmit_payload["handoff"]["handoff_summary_snapshot"]["submitted_delivery_count"] == 3
     assert all(item["status"] == PayrollOutputArtifactStatus.PUBLISHED for item in transmit_payload["artifacts"])
+    assert len(transmit_payload["deliveries"]) == 3
+    assert {item["status"] for item in transmit_payload["deliveries"]} == {PayrollProviderDeliveryStatus.SUBMITTED}
+    assert all(item["provider_ref"].startswith("payroll.provider.") for item in transmit_payload["deliveries"])
+    assert all(item["payload_checksum_sha256"] for item in transmit_payload["deliveries"])
     transmitted_bank_advice = next(item for item in transmit_payload["artifacts"] if item["kind"] == PayrollOutputArtifactKind.BANK_ADVICE)
     assert transmitted_bank_advice["download_url"]
 
@@ -2067,16 +3843,983 @@ def test_hr_admin_payroll_finance_handoff_generate_and_transmit(api_client: APIC
     assert finance_download_response.status_code == 200
     assert finance_download_response["Content-Type"].startswith("text/csv")
     assert finance_download_response["X-Payroll-Artifact-Checksum"] == transmitted_bank_advice["checksum_sha256"]
+    assert finance_download_response["X-Payroll-Storage-Version"] == transmitted_bank_advice["storage_object_version"]
+    assert finance_download_response["X-Payroll-Download-Strategy"] == transmitted_bank_advice["download_strategy_ref"]
     assert b"employee_code" in finance_download_response.content
     assert b"EMP-0042" in finance_download_response.content
+
+    acknowledge_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/acknowledge/",
+        {
+            "acknowledgement_profile_ref": "india.monthly.provider.ack.v1",
+            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+            "response_snapshot": {"provider_batch_ref": "BANK-ACK-2026-08"},
+        },
+        format="json",
+    )
+    assert acknowledge_response.status_code == 200, acknowledge_response.json()
+    acknowledge_payload = acknowledge_response.json()
+    assert acknowledge_payload["handoff"]["status"] == PayrollFinanceHandoffStatus.ACCEPTED
+    assert acknowledge_payload["handoff"]["handoff_summary_snapshot"]["reconciled_delivery_count"] == 3
+    assert len(acknowledge_payload["deliveries"]) == 3
+    assert {item["status"] for item in acknowledge_payload["deliveries"]} == {PayrollProviderDeliveryStatus.RECONCILED}
+    bank_delivery = next(item for item in acknowledge_payload["deliveries"] if item["artifact_kind"] == PayrollOutputArtifactKind.BANK_ADVICE)
+    assert bank_delivery["response_snapshot"]["provider_batch_ref"] == "BANK-ACK-2026-08"
+    assert bank_delivery["request_snapshot"]["storage_object_version"] == transmitted_bank_advice["storage_object_version"]
+    assert bank_delivery["request_snapshot"]["download_strategy_ref"] == transmitted_bank_advice["download_strategy_ref"]
+    assert bank_delivery["reconciliation_snapshot"]["checksum_matched"] is True
+    assert bank_delivery["reconciled_by_name"]
 
     setup_response = api_client.get("/api/v1/hr-admin/payroll-finance-handoff-setup/")
     assert setup_response.status_code == 200, setup_response.json()
     setup_payload = setup_response.json()
     assert setup_payload["summary"]["handoff_count"] == 1
-    assert setup_payload["summary"]["transmitted_handoff_count"] == 1
+    assert setup_payload["summary"]["transmitted_handoff_count"] == 0
+    assert setup_payload["summary"]["accepted_handoff_count"] == 1
+    assert setup_payload["summary"]["reconciled_delivery_count"] == 3
     assert setup_payload["summary"]["finance_artifact_count"] == 3
-    assert PayrollFinanceHandoff.objects.filter(id=handoff_id, status=PayrollFinanceHandoffStatus.TRANSMITTED).exists()
+    assert PayrollFinanceHandoff.objects.filter(id=handoff_id, status=PayrollFinanceHandoffStatus.ACCEPTED).exists()
+    assert PayrollProviderDelivery.objects.filter(handoff_id=handoff_id, status=PayrollProviderDeliveryStatus.RECONCILED).count() == 3
+
+
+def test_payroll_provider_callback_endpoint_verifies_idempotent_delivery_updates(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(api_client, tenant=tenant, employee=employee)
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/",
+        {"handoff_profile_ref": "india.monthly.finance.handoff.v1"},
+        format="json",
+    )
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+    assert delivery.request_snapshot["submission_contract"]["idempotency_key"]
+
+    payload_snapshot = {
+        "provider_batch_ref": "BANK-CALLBACK-2026-08",
+        "settlement_reference": "UTR-4488122",
+        "line_count": delivery.request_snapshot["line_count"],
+    }
+    payload_checksum = hashlib.sha256(json.dumps(payload_snapshot, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+    idempotency_key = "bank-callback-aug-2026-001"
+    signature = expected_provider_callback_signature(
+        delivery,
+        idempotency_key=idempotency_key,
+        payload_checksum_sha256=payload_checksum,
+    )
+    api_client.credentials()
+    callback_response = api_client.post(
+        "/api/v1/payroll-provider-callbacks/",
+        {
+            "provider_delivery_id": str(delivery.id),
+            "provider_ref": delivery.provider_ref,
+            "external_reference": delivery.external_reference,
+            "external_event_id": "evt-bank-aug-2026-001",
+            "idempotency_key": idempotency_key,
+            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+            "payload_snapshot": payload_snapshot,
+            "signature": signature,
+        },
+        format="json",
+    )
+    assert callback_response.status_code == 200, callback_response.json()
+    callback_payload = callback_response.json()
+    assert callback_payload["replayed"] is False
+    assert callback_payload["callback_event"]["status"] == PayrollProviderCallbackEventStatus.PROCESSED
+    assert callback_payload["callback_event"]["verification_snapshot"]["signature_valid"] is True
+    assert callback_payload["callback_event"]["payload_checksum_sha256"] == payload_checksum
+    assert callback_payload["delivery"]["status"] == PayrollProviderDeliveryStatus.RECONCILED
+    assert callback_payload["delivery"]["response_snapshot"]["external_event_id"] == "evt-bank-aug-2026-001"
+    assert callback_payload["delivery"]["reconciliation_snapshot"]["callback_event_id"] == callback_payload["callback_event"]["id"]
+    assert PayrollProviderCallbackEvent.objects.filter(provider_ref=delivery.provider_ref, idempotency_key=idempotency_key).count() == 1
+
+    replay_response = api_client.post(
+        "/api/v1/payroll-provider-callbacks/",
+        {
+            "provider_delivery_id": str(delivery.id),
+            "provider_ref": delivery.provider_ref,
+            "external_reference": delivery.external_reference,
+            "external_event_id": "evt-bank-aug-2026-001",
+            "idempotency_key": idempotency_key,
+            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+            "payload_snapshot": payload_snapshot,
+            "signature": signature,
+        },
+        format="json",
+    )
+    assert replay_response.status_code == 200, replay_response.json()
+    assert replay_response.json()["replayed"] is True
+    assert PayrollProviderCallbackEvent.objects.filter(provider_ref=delivery.provider_ref, idempotency_key=idempotency_key).count() == 1
+
+    rejected_response = api_client.post(
+        "/api/v1/payroll-provider-callbacks/",
+        {
+            "provider_delivery_id": str(delivery.id),
+            "provider_ref": delivery.provider_ref,
+            "external_reference": delivery.external_reference,
+            "external_event_id": "evt-bank-aug-2026-bad-signature",
+            "idempotency_key": "bank-callback-aug-2026-bad-signature",
+            "provider_status": PayrollProviderDeliveryStatus.FAILED,
+            "payload_snapshot": {"failure_code": "bad_signature_probe"},
+            "signature": "invalid-signature",
+        },
+        format="json",
+    )
+    assert rejected_response.status_code == 400, rejected_response.json()
+    assert rejected_response.json()["callback_event"]["status"] == PayrollProviderCallbackEventStatus.REJECTED
+    assert rejected_response.json()["callback_event"]["verification_snapshot"]["signature_valid"] is False
+    assert rejected_response.json()["delivery"]["status"] == PayrollProviderDeliveryStatus.RECONCILED
+
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-finance-handoff-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    assert setup_response.json()["summary"]["provider_callback_event_count"] == 2
+    assert setup_response.json()["summary"]["processed_provider_callback_event_count"] == 1
+    assert setup_response.json()["summary"]["rejected_provider_callback_event_count"] == 1
+
+
+def test_hr_admin_payroll_provider_delivery_retry_and_dead_letter_contract(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "payroll.provider.bank.manual.v1",
+                        "retry_policy_ref": "bank.retry.short.v1",
+                        "retry_policy": {
+                            "max_attempts": 3,
+                            "backoff_seconds": 60,
+                            "failure_taxonomy_ref": "bank.failure.taxonomy.v1",
+                            "failure_categories": {"BANK_TIMEOUT": "transient_network"},
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+    failure_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/acknowledge/",
+        {
+            "provider_status": PayrollProviderDeliveryStatus.FAILED,
+            "failure_code": "BANK_TIMEOUT",
+            "failure_reason": "Bank SFTP timed out.",
+        },
+        format="json",
+    )
+    assert failure_response.status_code == 200, failure_response.json()
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+    assert delivery.status == PayrollProviderDeliveryStatus.FAILED
+
+    schedule_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-deliveries/{delivery.id}/schedule-retry/",
+        {"retry_reason": "Transient bank timeout."},
+        format="json",
+    )
+    assert schedule_response.status_code == 200, schedule_response.json()
+    schedule_payload = schedule_response.json()
+    assert schedule_payload["retry_event"]["status"] == PayrollProviderRetryEventStatus.SCHEDULED
+    assert schedule_payload["retry_event"]["attempt_number"] == 2
+    assert schedule_payload["retry_event"]["failure_taxonomy_ref"] == "bank.failure.taxonomy.v1"
+    assert schedule_payload["retry_event"]["failure_category_ref"] == "transient_network"
+    assert schedule_payload["delivery"]["config_snapshot"]["retry_state"]["eligible"] is True
+
+    requeue_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-deliveries/{delivery.id}/requeue/",
+        {"retry_event_id": schedule_payload["retry_event"]["id"]},
+        format="json",
+    )
+    assert requeue_response.status_code == 200, requeue_response.json()
+    requeue_payload = requeue_response.json()
+    assert requeue_payload["retry_event"]["status"] == PayrollProviderRetryEventStatus.EXECUTED
+    assert requeue_payload["delivery"]["status"] == PayrollProviderDeliveryStatus.SUBMITTED
+    assert requeue_payload["delivery"]["attempt_count"] == 2
+    assert requeue_payload["delivery"]["request_snapshot"]["retry_context"]["state"] == "requeued"
+
+    delivery.refresh_from_db()
+    delivery.status = PayrollProviderDeliveryStatus.FAILED
+    delivery.failure_code = "BANK_TIMEOUT"
+    delivery.failure_reason = "Bank SFTP timed out after retries."
+    delivery.attempt_count = 3
+    delivery.save()
+    dead_letter_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-deliveries/{delivery.id}/schedule-retry/",
+        {"retry_reason": "Retry budget exhausted."},
+        format="json",
+    )
+    assert dead_letter_response.status_code == 200, dead_letter_response.json()
+    dead_letter_payload = dead_letter_response.json()
+    assert dead_letter_payload["retry_event"]["status"] == PayrollProviderRetryEventStatus.DEAD_LETTERED
+    assert dead_letter_payload["retry_event"]["failure_code"] == "retry_exhausted"
+    assert dead_letter_payload["delivery"]["config_snapshot"]["retry_state"]["state"] == "dead_lettered"
+    assert PayrollProviderRetryEvent.objects.filter(provider_delivery=delivery).count() == 2
+
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-finance-handoff-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    assert setup_response.json()["summary"]["provider_retry_event_count"] == 2
+    assert setup_response.json()["summary"]["executed_provider_retry_event_count"] == 1
+    assert setup_response.json()["summary"]["dead_lettered_provider_retry_event_count"] == 1
+
+
+def test_payroll_provider_retry_worker_processes_due_events(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "payroll.provider.bank.manual.v1",
+                        "retry_policy_ref": "bank.retry.worker.v1",
+                        "retry_policy": {
+                            "max_attempts": 3,
+                            "backoff_seconds": 60,
+                            "failure_taxonomy_ref": "bank.failure.taxonomy.v1",
+                            "failure_categories": {"BANK_TIMEOUT": "transient_network"},
+                        },
+                        "execution_adapter": {
+                            "worker_profile_ref": "bank.retry.worker.manual.v1",
+                            "adapter_ref": "bank-neft.manual.adapter.v1",
+                            "execution_mode": "manual_requeue",
+                            "execution_strategy_ref": "bank.sftp.retry.manual.v1",
+                            "dispatch_mode": "submitted_then_callback",
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+    failure_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/acknowledge/",
+        {
+            "provider_status": PayrollProviderDeliveryStatus.FAILED,
+            "failure_code": "BANK_TIMEOUT",
+            "failure_reason": "Bank SFTP timed out.",
+        },
+        format="json",
+    )
+    assert failure_response.status_code == 200, failure_response.json()
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+    due_at = timezone.now() - timedelta(minutes=5)
+    schedule_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-deliveries/{delivery.id}/schedule-retry/",
+        {"retry_reason": "Worker should pick this up.", "scheduled_for": due_at.isoformat()},
+        format="json",
+    )
+    assert schedule_response.status_code == 200, schedule_response.json()
+    retry_event_id = schedule_response.json()["retry_event"]["id"]
+
+    stdout = StringIO()
+    call_command("process_payroll_provider_retries", tenant_code=tenant.code, limit=5, stdout=stdout)
+    assert "1 executed, 0 skipped" in stdout.getvalue()
+
+    retry_event = PayrollProviderRetryEvent.objects.get(id=retry_event_id)
+    delivery.refresh_from_db()
+    assert retry_event.status == PayrollProviderRetryEventStatus.EXECUTED
+    assert retry_event.response_snapshot["adapter_execution"]["worker_profile_ref"] == "bank.retry.worker.manual.v1"
+    assert retry_event.response_snapshot["adapter_execution"]["adapter_ref"] == "bank-neft.manual.adapter.v1"
+    assert retry_event.response_snapshot["adapter_execution"]["execution_strategy_ref"] == "bank.sftp.retry.manual.v1"
+    assert delivery.status == PayrollProviderDeliveryStatus.SUBMITTED
+    assert delivery.attempt_count == 2
+    assert delivery.request_snapshot["retry_context"]["state"] == "requeued"
+
+    stale_event = PayrollProviderRetryEvent.objects.create(
+        tenant=tenant,
+        provider_delivery=delivery,
+        handoff=delivery.handoff,
+        output_artifact=delivery.output_artifact,
+        status=PayrollProviderRetryEventStatus.SCHEDULED,
+        retry_policy_ref=delivery.retry_policy_ref,
+        failure_taxonomy_ref="bank.failure.taxonomy.v1",
+        failure_category_ref="transient_network",
+        retry_reason="Delivery already requeued.",
+        attempt_number=3,
+        scheduled_for=timezone.now() - timedelta(minutes=1),
+    )
+    stdout = StringIO()
+    call_command("process_payroll_provider_retries", tenant_code=tenant.code, limit=5, stdout=stdout)
+    assert "0 executed, 1 skipped" in stdout.getvalue()
+    stale_event.refresh_from_db()
+    assert stale_event.status == PayrollProviderRetryEventStatus.SKIPPED
+    assert stale_event.failure_code == "delivery_not_retryable"
+
+
+@override_settings(
+    PAYROLL_PROVIDER_CREDENTIALS={
+        "bank-sandbox-credential": {
+            "provider_ref": "payroll.provider.bank.manual.v1",
+            "use_sandbox": True,
+            "credentials": {"api_key": "super-secret-provider-key"},
+            "metadata": {"environment": "sandbox", "owner": "payroll-ops"},
+        },
+    },
+)
+def test_payroll_provider_adapter_boundary_resolves_sandbox_credentials(api_client: APIClient, bootstrapped_workspace):
+    with pytest.raises(PayrollProviderAdapterError):
+        validate_payroll_provider_route_config({"execution_adapter": {"api_key": "do-not-store"}})
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "payroll.provider.bank.manual.v1",
+                        "channel_ref": "payroll.channel.bank.sandbox.v1",
+                        "adapter_ref": "payroll.provider_adapter.sandbox.v1",
+                        "submission_mode": "sandbox_api",
+                        "submission_profile_ref": "bank-neft.sandbox.submit.v1",
+                        "request_schema_ref": "bank-neft.sandbox.request.v1",
+                        "response_schema_ref": "bank-neft.sandbox.response.v1",
+                        "callback_profile_ref": "bank-neft.sandbox.callback.v1",
+                        "callback_verification_ref": "bank-neft.sandbox.callback.hmac.v1",
+                        "credential_ref": "bank-sandbox-credential",
+                        "credential_required": True,
+                        "sandbox_response": {
+                            "provider_status": PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+                            "provider_batch_ref": "BANK-SANDBOX-ACK-2026-08",
+                            "external_reference": "BANK-SANDBOX-EXT-2026-08",
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+    assert delivery.status == PayrollProviderDeliveryStatus.ACKNOWLEDGED
+    assert delivery.external_reference == "BANK-SANDBOX-EXT-2026-08"
+    adapter_submission = delivery.response_snapshot["adapter_submission"]
+    credential_snapshot = adapter_submission["request"]["credential_snapshot"]
+    assert credential_snapshot["credential_ref"] == "bank-sandbox-credential"
+    assert credential_snapshot["resolved"] is True
+    assert credential_snapshot["metadata"] == {"environment": "sandbox", "owner": "payroll-ops"}
+    assert delivery.response_snapshot["provider_batch_ref"] == "BANK-SANDBOX-ACK-2026-08"
+    assert delivery.response_snapshot["response_schema_ref"] == "bank-neft.sandbox.response.v1"
+    assert "super-secret-provider-key" not in json.dumps(delivery.request_snapshot)
+    assert "super-secret-provider-key" not in json.dumps(delivery.response_snapshot)
+    assert "super-secret-provider-key" not in json.dumps(delivery.config_snapshot)
+
+
+def test_payroll_provider_specific_sandbox_adapters_stamp_domain_contracts(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "payroll.provider.bank.sandbox.v1",
+                        "channel_ref": "payroll.channel.bank.sandbox.v1",
+                        "adapter_ref": "payroll.provider_adapter.bank.sandbox.v1",
+                        "submission_mode": "sandbox_api",
+                        "submission_profile_ref": "bank-neft.sandbox.submit.v1",
+                        "request_schema_ref": "bank-neft.sandbox.request.v1",
+                        "response_schema_ref": "bank-neft.sandbox.response.v1",
+                        "sandbox_response": {
+                            "provider_status": PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+                            "provider_batch_ref": "BANK-DOMAIN-SANDBOX",
+                        },
+                    },
+                    "accounting_export": {
+                        "provider_ref": "payroll.provider.accounting.sandbox.v1",
+                        "channel_ref": "payroll.channel.accounting.sandbox.v1",
+                        "adapter_ref": "payroll.provider_adapter.accounting.sandbox.v1",
+                        "submission_mode": "sandbox_api",
+                        "submission_profile_ref": "accounting-journal.sandbox.submit.v1",
+                        "request_schema_ref": "accounting-journal.sandbox.request.v1",
+                        "response_schema_ref": "accounting-journal.sandbox.response.v1",
+                        "sandbox_response": {
+                            "provider_status": PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+                            "provider_batch_ref": "LEDGER-DOMAIN-SANDBOX",
+                        },
+                    },
+                    "statutory_report": {
+                        "provider_ref": "payroll.provider.statutory.sandbox.v1",
+                        "channel_ref": "payroll.channel.statutory.sandbox.v1",
+                        "adapter_ref": "payroll.provider_adapter.statutory.sandbox.v1",
+                        "submission_mode": "sandbox_api",
+                        "submission_profile_ref": "statutory-filing.sandbox.submit.v1",
+                        "request_schema_ref": "statutory-filing.sandbox.request.v1",
+                        "response_schema_ref": "statutory-filing.sandbox.response.v1",
+                        "sandbox_response": {
+                            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+                            "provider_batch_ref": "STAT-DOMAIN-SANDBOX",
+                            "certification_evidence_refs": ["sandbox://statutory/receipt/aug-2026"],
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+
+    deliveries = {
+        item.artifact_kind: item
+        for item in PayrollProviderDelivery.objects.filter(handoff_id=handoff_id).select_related("output_artifact")
+    }
+    bank_delivery = deliveries[PayrollOutputArtifactKind.BANK_ADVICE]
+    accounting_delivery = deliveries[PayrollOutputArtifactKind.ACCOUNTING_EXPORT]
+    statutory_delivery = deliveries[PayrollOutputArtifactKind.STATUTORY_REPORT]
+
+    assert bank_delivery.response_snapshot["adapter_family"] == "bank"
+    assert bank_delivery.response_snapshot["domain_contract_ref"] == "payroll.provider_contract.bank_payment_instruction.v1"
+    assert bank_delivery.response_snapshot["payment_file_name"].endswith("bank-advice.csv")
+    assert bank_delivery.response_snapshot["provider_batch_ref"] == "BANK-DOMAIN-SANDBOX"
+
+    assert accounting_delivery.response_snapshot["adapter_family"] == "accounting"
+    assert accounting_delivery.response_snapshot["domain_contract_ref"] == "payroll.provider_contract.accounting_journal_import.v1"
+    assert accounting_delivery.response_snapshot["ledger_file_name"].endswith("accounting-export.csv")
+    assert accounting_delivery.response_snapshot["provider_batch_ref"] == "LEDGER-DOMAIN-SANDBOX"
+
+    assert statutory_delivery.status == PayrollProviderDeliveryStatus.RECONCILED
+    assert statutory_delivery.response_snapshot["adapter_family"] == "statutory"
+    assert statutory_delivery.response_snapshot["domain_contract_ref"] == "payroll.provider_contract.statutory_filing_upload.v1"
+    assert statutory_delivery.response_snapshot["filing_file_name"].endswith("statutory-summary.csv")
+    assert statutory_delivery.config_snapshot["certification_evidence"]["evidence_refs"] == ["sandbox://statutory/receipt/aug-2026"]
+
+
+def test_hr_admin_payroll_provider_connection_setup_certification_and_activation(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-provider-connection-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    setup_payload = setup_response.json()
+    assert setup_payload["summary"]["connection_count"] >= 3
+    assert "clear-statutory.portal.v1" in {item["provider_ref"] for item in setup_payload["connections"]}
+    assert PayrollProviderConnection.objects.filter(tenant=tenant, provider_ref="clear-statutory.portal.v1").exists()
+
+    raw_secret_response = api_client.post(
+        "/api/v1/hr-admin/payroll-provider-connections/",
+        {
+            "provider_ref": "unsafe.provider.v1",
+            "provider_name": "Unsafe provider",
+            "provider_kind": "bank",
+            "credential_required": True,
+            "config_snapshot": {"provider_route": {"api_key": "do-not-store"}},
+        },
+        format="json",
+    )
+    assert raw_secret_response.status_code == 400
+    assert "raw credentials" in json.dumps(raw_secret_response.json()).lower()
+
+    invalid_active_response = api_client.post(
+        "/api/v1/hr-admin/payroll-provider-connections/",
+        {
+            "provider_ref": "custom.bank.provider.v1",
+            "provider_name": "Custom Bank Provider",
+            "provider_kind": "bank",
+            "environment_ref": "sandbox",
+            "status": PayrollProviderConnectionStatus.ACTIVE,
+            "adapter_ref": "payroll.provider_adapter.bank.sandbox.v1",
+            "sandbox_adapter_ref": "payroll.provider_adapter.bank.sandbox.v1",
+            "channel_ref": "bank.sftp.channel.custom.v1",
+            "credential_ref": "custom-bank-sandbox-credential",
+            "credential_profile_ref": "bank.credentials.sandbox.v1",
+            "credential_required": True,
+            "callback_profile_ref": "bank.sftp.callback.v1",
+            "callback_verification_ref": "bank.sftp.callback.hmac.v1",
+            "retry_policy_ref": "payroll.delivery.retry.bank.v1",
+            "certification_profile_ref": "bank.neft.certification.v1",
+        },
+        format="json",
+    )
+    assert invalid_active_response.status_code == 400
+    assert "passed certification" in json.dumps(invalid_active_response.json()).lower()
+
+    create_response = api_client.post(
+        "/api/v1/hr-admin/payroll-provider-connections/",
+        {
+            "provider_ref": "custom.bank.provider.v1",
+            "provider_name": "Custom Bank Provider",
+            "provider_kind": "bank",
+            "environment_ref": "sandbox",
+            "status": PayrollProviderConnectionStatus.CONFIGURED,
+            "adapter_ref": "payroll.provider_adapter.bank.sandbox.v1",
+            "sandbox_adapter_ref": "payroll.provider_adapter.bank.sandbox.v1",
+            "channel_ref": "bank.sftp.channel.custom.v1",
+            "credential_ref": "custom-bank-sandbox-credential",
+            "credential_profile_ref": "bank.credentials.sandbox.v1",
+            "credential_required": True,
+            "callback_profile_ref": "bank.sftp.callback.v1",
+            "callback_verification_ref": "bank.sftp.callback.hmac.v1",
+            "retry_policy_ref": "payroll.delivery.retry.bank.v1",
+            "certification_profile_ref": "bank.neft.certification.v1",
+            "config_snapshot": {"provider_route": {"credential_ref": "custom-bank-sandbox-credential"}},
+        },
+        format="json",
+    )
+    assert create_response.status_code == 201, create_response.json()
+    connection_payload = create_response.json()["connection"]
+    assert connection_payload["status"] == PayrollProviderConnectionStatus.SANDBOX_READY
+    assert connection_payload["readiness_snapshot"]["ready_gate_count"] == 5
+    assert connection_payload["readiness_snapshot"]["active_allowed"] is False
+
+    connection_id = connection_payload["id"]
+    certify_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-connections/{connection_id}/certify/",
+        {
+            "certification_status": PayrollProviderCertificationStatus.PASSED,
+            "evidence_snapshot": {
+                "test_pack_ref": "bank.neft.certification_pack.v1",
+                "sandbox_delivery_count": 3,
+                "callback_verified": True,
+            },
+        },
+        format="json",
+    )
+    assert certify_response.status_code == 200, certify_response.json()
+    certified_payload = certify_response.json()["connection"]
+    assert certified_payload["certification_status"] == PayrollProviderCertificationStatus.PASSED
+    assert certified_payload["status"] == PayrollProviderConnectionStatus.CERTIFIED
+    assert certified_payload["readiness_snapshot"]["active_allowed"] is True
+    assert certified_payload["certification_snapshot"]["evidence_hash"]
+
+    activate_response = api_client.patch(
+        f"/api/v1/hr-admin/payroll-provider-connections/{connection_id}/",
+        {"status": PayrollProviderConnectionStatus.ACTIVE},
+        format="json",
+    )
+    assert activate_response.status_code == 200, activate_response.json()
+    assert activate_response.json()["connection"]["status"] == PayrollProviderConnectionStatus.ACTIVE
+
+
+def test_payroll_finance_handoff_blocks_uncertified_provider_connection(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    PayrollProviderConnection.objects.create(
+        tenant=tenant,
+        provider_ref="blocked.bank.provider.v1",
+        provider_name="Blocked Bank Provider",
+        provider_kind="bank",
+        environment_ref="sandbox",
+        status=PayrollProviderConnectionStatus.SANDBOX_READY,
+        adapter_ref="payroll.provider_adapter.bank.sandbox.v1",
+        sandbox_adapter_ref="payroll.provider_adapter.bank.sandbox.v1",
+        channel_ref="bank.sftp.channel.blocked.v1",
+        credential_required=False,
+        callback_profile_ref="bank.sftp.callback.v1",
+        callback_verification_ref="bank.sftp.callback.hmac.v1",
+        retry_policy_ref="payroll.delivery.retry.bank.v1",
+        certification_status=PayrollProviderCertificationStatus.PENDING,
+        certification_profile_ref="bank.neft.certification.v1",
+    )
+    blocked_review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "blocked.bank.provider.v1",
+                        "provider_connection_policy": {"enforcement_mode": "certified"},
+                    },
+                },
+            },
+        },
+    )
+    blocked_outputs = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{blocked_review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert blocked_outputs.status_code == 200, blocked_outputs.json()
+    blocked_batch_id = blocked_outputs.json()["output_batch"]["id"]
+    blocked_publish = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{blocked_batch_id}/publish/", {}, format="json")
+    assert blocked_publish.status_code == 200, blocked_publish.json()
+    blocked_handoff = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{blocked_batch_id}/generate-finance-handoff/", {}, format="json")
+    assert blocked_handoff.status_code == 200, blocked_handoff.json()
+    blocked_transmit = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{blocked_handoff.json()['handoff']['id']}/transmit/",
+        {},
+        format="json",
+    )
+    assert blocked_transmit.status_code == 400
+    assert "must pass certification" in blocked_transmit.json()["detail"]
+
+
+def test_payroll_finance_handoff_resolves_active_provider_connection_refs(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    active_connection = PayrollProviderConnection.objects.create(
+        tenant=tenant,
+        provider_ref="active.bank.provider.v1",
+        provider_name="Active Bank Provider",
+        provider_kind="bank",
+        environment_ref="sandbox",
+        status=PayrollProviderConnectionStatus.ACTIVE,
+        adapter_ref="payroll.provider_adapter.bank.sandbox.v1",
+        sandbox_adapter_ref="payroll.provider_adapter.bank.sandbox.v1",
+        channel_ref="bank.sftp.channel.active.v1",
+        credential_required=False,
+        callback_profile_ref="bank.sftp.callback.v1",
+        callback_verification_ref="bank.sftp.callback.hmac.v1",
+        retry_policy_ref="payroll.delivery.retry.bank.v1",
+        certification_status=PayrollProviderCertificationStatus.PASSED,
+        certification_profile_ref="bank.neft.certification.v1",
+    )
+
+    active_review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "active.bank.provider.v1",
+                        "provider_connection_policy": {"enforcement_mode": "active"},
+                        "sandbox_response": {
+                            "provider_status": PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+                            "provider_batch_ref": "ACTIVE-CONNECTION-BATCH",
+                        },
+                    },
+                },
+            },
+        },
+    )
+    active_outputs = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{active_review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert active_outputs.status_code == 200, active_outputs.json()
+    active_batch_id = active_outputs.json()["output_batch"]["id"]
+    active_publish = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{active_batch_id}/publish/", {}, format="json")
+    assert active_publish.status_code == 200, active_publish.json()
+    active_handoff = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{active_batch_id}/generate-finance-handoff/", {}, format="json")
+    assert active_handoff.status_code == 200, active_handoff.json()
+    active_transmit = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{active_handoff.json()['handoff']['id']}/transmit/",
+        {},
+        format="json",
+    )
+    assert active_transmit.status_code == 200, active_transmit.json()
+    delivery = PayrollProviderDelivery.objects.get(
+        handoff_id=active_handoff.json()["handoff"]["id"],
+        artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE,
+    )
+    provider_route = delivery.config_snapshot["provider_route"]
+    provider_gate = provider_route["provider_connection_gate"]
+    assert provider_route["adapter_ref"] == active_connection.adapter_ref
+    assert provider_route["channel_ref"] == active_connection.channel_ref
+    assert provider_route["callback_verification_ref"] == active_connection.callback_verification_ref
+    assert provider_route["retry_policy_ref"] == active_connection.retry_policy_ref
+    assert provider_gate["enforcement_mode"] == "active"
+    assert provider_gate["provider_connection_id"] == str(active_connection.id)
+    assert provider_gate["active_allowed"] is True
+    assert delivery.response_snapshot["provider_batch_ref"] == "ACTIVE-CONNECTION-BATCH"
+
+
+def test_hr_admin_payroll_finance_handoff_generates_statutory_filing_artifacts(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    pack = PayrollStatutoryPack.objects.create(
+        tenant=tenant,
+        code="india-filing-output-pack-2026",
+        name="India Filing Output Pack 2026",
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from="2026-04-01",
+        jurisdiction_ref="country:IN/state:MH",
+    )
+    component = PayrollStatutoryComponent.objects.create(
+        tenant=tenant,
+        statutory_pack=pack,
+        code="pt-mh-filing-output",
+        name="Maharashtra Professional Tax",
+        statutory_type=PayrollStatutoryComponentKind.PROFESSIONAL_TAX,
+        contribution_owner=PayrollStatutoryContributionOwner.EMPLOYEE,
+        calculation_method=PayrollStatutoryCalculationMethod.FIXED_AMOUNT,
+        wage_base_ref="payroll.wage_base.basic_monthly.v1",
+        statutory_treatment_ref="india.professional_tax.mh.v1",
+        status=PayrollConfigStatus.ACTIVE,
+        config_snapshot={
+            "wage_base_path": "salary.basic_monthly",
+            "employee_component_code": "PT_MH",
+            "fixed_employee_amount": "200.00",
+            "calculation_order": 44,
+        },
+    )
+    profile = EmployeeStatutoryProfile.objects.create(
+        tenant=tenant,
+        employee=employee,
+        statutory_pack=pack,
+        effective_from="2026-04-01",
+        pan_number="ABCDE1234F",
+        professional_tax_state="MH",
+        tax_regime=PayrollTaxRegime.NEW,
+        declaration_status=PayrollDeclarationStatus.VERIFIED,
+    )
+    registration = PayrollStatutoryEmployerRegistration.objects.create(
+        tenant=tenant,
+        statutory_pack=pack,
+        statutory_component=component,
+        code="mh-pt-filing-output-registration",
+        name="Maharashtra PT Filing Registration",
+        registration_type_ref="india.professional_tax.maharashtra.ptrc",
+        registration_number="ptrc/mah/99881",
+        employer_identifier="tan-mum-4455",
+        filing_authority_ref="maharashtra-pt-department",
+        provider_ref="clear-statutory",
+        effective_from="2026-04-01",
+    )
+    filing = PayrollStatutoryFilingCalendar.objects.create(
+        tenant=tenant,
+        statutory_pack=pack,
+        statutory_component=component,
+        employer_registration=registration,
+        code="mh-pt-sep-2026-return",
+        name="Maharashtra PT September 2026 Return",
+        filing_type_ref="india.professional_tax.maharashtra.monthly_return",
+        filing_frequency=PayrollFrequency.MONTHLY,
+        period_start="2026-09-01",
+        period_end="2026-09-30",
+        due_date="2026-10-20",
+        grace_due_date="2026-10-25",
+        status=PayrollStatutoryFilingStatus.DUE,
+        output_profile_ref="india.pt.mh.return.file.v1",
+    )
+
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "calculation_profile": {
+                "rule_codes": ["calc-basic", "calc-hra"],
+                "statutory_profile": {
+                    "enabled": True,
+                    "pack_codes": [pack.code],
+                    "component_codes": [component.code],
+                    "require_employee_statutory_profile": True,
+                },
+            },
+            "finance_handoff_profile": {
+                "statutory_pack_ref": "india.statutory.filing.output.v1",
+                "provider_routes": {
+                    "statutory_report:statutory_return": {
+                        "provider_ref": "clear-statutory",
+                        "channel_ref": "clear-statutory.api.return.v1",
+                        "adapter_ref": "clear-statutory.return.adapter.v1",
+                        "submission_mode": "api",
+                        "submission_profile_ref": "clear-statutory.pt.return.submit.v1",
+                        "request_schema_ref": "clear-statutory.pt.return.request.v1",
+                        "response_schema_ref": "clear-statutory.pt.return.response.v1",
+                        "callback_profile_ref": "clear-statutory.callback.v1",
+                        "callback_verification_ref": "clear-statutory.callback.hmac.v1",
+                        "certification_profile_ref": "clear-statutory.pt.return.certificate.v1",
+                        "certification_required": True,
+                    },
+                    "statutory_report:statutory_challan": {
+                        "provider_ref": "clear-statutory",
+                        "channel_ref": "clear-statutory.api.challan.v1",
+                        "adapter_ref": "clear-statutory.challan.adapter.v1",
+                        "submission_mode": "api",
+                        "submission_profile_ref": "clear-statutory.pt.challan.submit.v1",
+                        "callback_profile_ref": "clear-statutory.callback.v1",
+                        "callback_verification_ref": "clear-statutory.callback.hmac.v1",
+                        "certification_profile_ref": "clear-statutory.pt.challan.receipt.v1",
+                        "certification_required": True,
+                    },
+                },
+                "statutory_filing_profile": {
+                    "enabled": True,
+                    "generate_return_artifacts": True,
+                    "generate_challan_artifacts": True,
+                    "statutory_component_codes": [component.code],
+                },
+            },
+        },
+    )
+    profile.refresh_from_db()
+    assert profile.source_hash
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+
+    handoff_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/",
+        {"handoff_profile_ref": "india.monthly.finance.handoff.v1"},
+        format="json",
+    )
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_payload = handoff_response.json()
+    statutory_artifacts = [item for item in handoff_payload["artifacts"] if item["kind"] == PayrollOutputArtifactKind.STATUTORY_REPORT]
+    filing_artifacts = [item for item in statutory_artifacts if item["config_snapshot"].get("statutory_filing_calendar_id") == str(filing.id)]
+    return_artifact = next(item for item in filing_artifacts if item["config_snapshot"]["artifact_subtype"] == "statutory_return")
+    challan_artifact = next(item for item in filing_artifacts if item["config_snapshot"]["artifact_subtype"] == "statutory_challan")
+
+    assert handoff_payload["handoff"]["artifact_count"] == 5
+    assert handoff_payload["handoff"]["totals_snapshot"]["statutory_total"] == "200.00"
+    assert handoff_payload["handoff"]["totals_snapshot"]["statutory_filing_count"] == 1
+    assert handoff_payload["handoff"]["handoff_summary_snapshot"]["statutory_filing_artifact_count"] == 2
+    assert return_artifact["title"].endswith("Return")
+    assert return_artifact["output_profile_ref"] == "india.pt.mh.return.file.v1"
+    assert return_artifact["totals_snapshot"]["statutory_total"] == "200.00"
+    assert return_artifact["line_snapshot"][0]["employee_code"] == "EMP-0042"
+    assert return_artifact["line_snapshot"][0]["statutory_component_code"] == component.code
+    assert return_artifact["line_snapshot"][0]["registration_number"] == "PTRC/MAH/99881"
+    assert return_artifact["config_snapshot"]["filing_authority_ref"] == "maharashtra-pt-department"
+    assert return_artifact["config_snapshot"]["provider_ref"] == "clear-statutory"
+    assert challan_artifact["title"].endswith("Challan")
+    assert challan_artifact["totals_snapshot"]["payable_amount"] == "200.00"
+    assert challan_artifact["line_snapshot"][0]["payable_amount"] == "200.00"
+    assert challan_artifact["line_snapshot"][0]["source_row_count"] == 1
+
+    filing.refresh_from_db()
+    assert filing.config_snapshot["latest_generation"]["statutory_total"] == "200.00"
+    assert set(filing.config_snapshot["latest_generation"]["artifact_ids"]) == {return_artifact["id"], challan_artifact["id"]}
+
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_payload['handoff']['id']}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+    transmit_payload = transmit_response.json()
+    assert transmit_payload["handoff"]["handoff_summary_snapshot"]["delivery_count"] == 5
+    filing_delivery = next(item for item in transmit_payload["deliveries"] if item["output_artifact_id"] == return_artifact["id"])
+    assert filing_delivery["status"] == PayrollProviderDeliveryStatus.SUBMITTED
+    assert filing_delivery["provider_ref"] == "clear-statutory"
+    assert filing_delivery["channel_ref"] == "clear-statutory.api.return.v1"
+    submission_contract = filing_delivery["request_snapshot"]["submission_contract"]
+    assert submission_contract["adapter_ref"] == "clear-statutory.return.adapter.v1"
+    assert submission_contract["submission_mode"] == "api"
+    assert submission_contract["submission_profile_ref"] == "clear-statutory.pt.return.submit.v1"
+    assert submission_contract["request_schema_ref"] == "clear-statutory.pt.return.request.v1"
+    assert submission_contract["response_schema_ref"] == "clear-statutory.pt.return.response.v1"
+    assert submission_contract["callback_verification_ref"] == "clear-statutory.callback.hmac.v1"
+    assert submission_contract["certification_profile_ref"] == "clear-statutory.pt.return.certificate.v1"
+    assert submission_contract["certification_required"] is True
+    assert submission_contract["statutory_context"]["statutory_filing_calendar_id"] == str(filing.id)
+    assert filing_delivery["config_snapshot"]["certification_evidence"]["status"] == "pending"
+
+    acknowledge_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_payload['handoff']['id']}/acknowledge/",
+        {
+            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+            "response_snapshot": {
+                "provider_batch_ref": "CLEAR-PT-SEP-2026",
+                "certification_evidence_refs": ["clear://certificates/pt/sep-2026/receipt.pdf"],
+            },
+        },
+        format="json",
+    )
+    assert acknowledge_response.status_code == 200, acknowledge_response.json()
+    acknowledged_delivery = next(item for item in acknowledge_response.json()["deliveries"] if item["output_artifact_id"] == return_artifact["id"])
+    assert acknowledged_delivery["response_snapshot"]["callback_verification_ref"] == "clear-statutory.callback.hmac.v1"
+    assert acknowledged_delivery["reconciliation_snapshot"]["certification_profile_ref"] == "clear-statutory.pt.return.certificate.v1"
+    assert acknowledged_delivery["config_snapshot"]["certification_evidence"]["status"] == "recorded"
+    assert acknowledged_delivery["config_snapshot"]["certification_evidence"]["evidence_refs"] == ["clear://certificates/pt/sep-2026/receipt.pdf"]
+    assert filing_delivery["request_snapshot"]["totals_snapshot"]["statutory_total"] == "200.00"
 
 
 def test_hr_admin_payroll_finance_handoff_requires_published_output_batch(api_client: APIClient, bootstrapped_workspace):
@@ -2102,6 +4845,56 @@ def test_hr_admin_payroll_finance_handoff_requires_published_output_batch(api_cl
     assert handoff_response.status_code == 400
     assert "published payroll output batch" in handoff_response.json()["detail"]
     assert PayrollFinanceHandoff.objects.count() == 0
+
+
+def test_hr_admin_payroll_finance_handoff_failure_acknowledgement_requires_evidence(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(api_client, tenant=tenant, employee=employee)
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/",
+        {},
+        format="json",
+    )
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+
+    invalid_failure_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/acknowledge/",
+        {"provider_status": PayrollProviderDeliveryStatus.FAILED},
+        format="json",
+    )
+    assert invalid_failure_response.status_code == 400
+    assert "failure evidence" in invalid_failure_response.json()["detail"]
+
+    failure_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/acknowledge/",
+        {
+            "provider_status": PayrollProviderDeliveryStatus.FAILED,
+            "failure_code": "BANK_FILE_REJECTED",
+            "failure_reason": "Provider rejected the checksum envelope.",
+        },
+        format="json",
+    )
+    assert failure_response.status_code == 200, failure_response.json()
+    failure_payload = failure_response.json()
+    assert failure_payload["handoff"]["status"] == PayrollFinanceHandoffStatus.FAILED
+    assert failure_payload["handoff"]["handoff_summary_snapshot"]["failed_delivery_count"] == 3
+    assert {item["failure_code"] for item in failure_payload["deliveries"]} == {"BANK_FILE_REJECTED"}
 
 
 @pytest.mark.django_db

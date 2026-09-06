@@ -38,6 +38,24 @@ function formatMoney(value: unknown, currency = "INR") {
   }).format(Number.isFinite(numericValue) ? numericValue : 0);
 }
 
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function annualizationSnapshot(line: HrAdminPayrollCalculationLine) {
+  return recordValue(line.config_snapshot.annualization);
+}
+
+function snapshotText(value: unknown) {
+  if (Array.isArray(value)) {
+    return `${value.length} items`;
+  }
+  if (value && typeof value === "object") {
+    return "Configured";
+  }
+  return String(value ?? "None");
+}
+
 function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
 }
@@ -45,6 +63,9 @@ function StatusBadge({ status }: { status: string }) {
 function lineSourceDetail(line: HrAdminPayrollCalculationLine) {
   if (line.line_source === "adjustment") {
     return line.config_snapshot.source_ref ? String(line.config_snapshot.source_ref) : "Applied payroll adjustment";
+  }
+  if (line.line_source === "statutory") {
+    return String(line.config_snapshot.statutory_treatment_ref ?? line.config_snapshot.statutory_component_code ?? "Configured statutory component");
   }
 
   return line.rule_version ? `${line.rule_code} v${line.rule_version}` : line.rule_code;
@@ -54,8 +75,21 @@ function lineExpressionDetail(line: HrAdminPayrollCalculationLine) {
   if (line.line_source === "adjustment") {
     return String(line.config_snapshot.calculation_consumption_ref ?? line.config_snapshot.source_ref ?? line.source_hash);
   }
+  if (line.line_source === "statutory") {
+    return String(line.config_snapshot.wage_base_path ?? line.config_snapshot.statutory_treatment_ref ?? line.source_hash);
+  }
 
   return line.expression;
+}
+
+function sourceBlockLabel(line: HrAdminPayrollCalculationLine) {
+  if (line.line_source === "adjustment") {
+    return "Adjustment source";
+  }
+  if (line.line_source === "statutory") {
+    return "Statutory basis";
+  }
+  return "Formula used";
 }
 
 function RunRail({ runs, selectedRun }: { runs: HrAdminPayrollRun[]; selectedRun: HrAdminPayrollRun | null }) {
@@ -105,6 +139,13 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLine | nul
 
   const dependencies = line.trace_snapshot.dependencies;
   const dependencyList = Array.isArray(dependencies) ? dependencies.map(String) : [];
+  const annualization = annualizationSnapshot(line);
+  const capEvidence = Array.isArray(annualization?.declaration_cap_evidence)
+    ? annualization.declaration_cap_evidence
+    : [];
+  const regimeComparisons = Array.isArray(annualization?.regime_comparisons)
+    ? annualization.regime_comparisons.map(recordValue).filter((item): item is Record<string, unknown> => Boolean(item))
+    : [];
 
   return (
     <aside className="payroll-setup-detail-panel payroll-calc-detail-panel" aria-label={`${line.component_name} calculation trace`}>
@@ -124,7 +165,7 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLine | nul
       </div>
 
       <div className="payroll-rule-expression-block">
-        <span className="workspace-card__eyebrow">{line.line_source === "adjustment" ? "Adjustment source" : "Formula used"}</span>
+        <span className="workspace-card__eyebrow">{sourceBlockLabel(line)}</span>
         <code>{lineExpressionDetail(line)}</code>
       </div>
 
@@ -135,6 +176,36 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLine | nul
         <div className="detail-row"><span className="detail-label">Source</span><span className="detail-value"><code>{line.source_hash.slice(0, 16)}</code></span></div>
         <div className="detail-row"><span className="detail-label">Result</span><span className="detail-value">{String(line.result_snapshot.result ?? line.amount)}</span></div>
       </div>
+
+      {annualization ? (
+        <section className="payroll-calc-annualization-card">
+          <span className="workspace-card__eyebrow">TDS annualization</span>
+          <div className="payroll-calc-annualization-grid">
+            <div><span>FY</span><strong>{snapshotText(annualization.financial_year_code)}</strong></div>
+            <div><span>Annual wage</span><strong>{formatMoney(annualization.annualized_wage_base, line.currency_code)}</strong></div>
+            <div><span>Declarations</span><strong>{formatMoney(annualization.declaration_adjustment, line.currency_code)}</strong></div>
+            <div><span>Taxable</span><strong>{formatMoney(annualization.taxable_annual_amount, line.currency_code)}</strong></div>
+            <div><span>Annual tax</span><strong>{formatMoney(annualization.annual_tax, line.currency_code)}</strong></div>
+            <div><span>Periods</span><strong>{snapshotText(annualization.remaining_period_count)}</strong></div>
+          </div>
+          <div className="payroll-calc-cap-row">
+            <span>{capEvidence.length} cap rules consumed</span>
+            <code>{snapshotText(annualization.selected_tax_regime ?? annualization.tax_regime)}</code>
+          </div>
+          {regimeComparisons.length ? (
+            <div className="payroll-calc-regime-list">
+              <span className="workspace-card__eyebrow">Regime comparison</span>
+              {regimeComparisons.map((projection) => (
+                <div className={projection.is_selected ? "is-selected" : ""} key={String(projection.tax_regime ?? "")}>
+                  <span>{titleCase(String(projection.tax_regime ?? "regime"))}</span>
+                  <strong>{formatMoney(projection.period_tax_amount, line.currency_code)}</strong>
+                  <code>{snapshotText(projection.period_tax_delta)}</code>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="payroll-rule-source-card">
         <span className="workspace-card__eyebrow">Dependencies</span>
@@ -149,7 +220,7 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLine | nul
           {Object.entries(line.config_snapshot).slice(0, 5).map(([key, value]) => (
             <div className="detail-row" key={key}>
               <span className="detail-label">{titleCase(key)}</span>
-              <span className="detail-value">{String(value ?? "None")}</span>
+              <span className="detail-value">{snapshotText(value)}</span>
             </div>
           ))}
         </div>
@@ -227,7 +298,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
   const visibleLines = selectedCalculation
     ? setup.lines.filter((item) => item.calculation_id === selectedCalculation.id)
     : setup.lines;
-  const selectedLine = visibleLines.find((item) => item.id === selectedLineId) ?? visibleLines[0] ?? null;
+  const selectedLine = visibleLines.find((item) => item.id === selectedLineId) ?? visibleLines.find((item) => item.component_code === "TDS") ?? visibleLines[0] ?? null;
   const totals = selectedCalculation?.totals_snapshot ?? {};
   const visibleValidationIssues = setup.validation_issues.filter((issue) => {
     if (issue.status !== "open") {

@@ -4,26 +4,39 @@ from __future__ import annotations
 
 import ast
 import csv
+import hashlib
 import json
+import secrets
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from io import StringIO
 from typing import Any
+from urllib.parse import urlencode
 
 from django.db import transaction
 from django.db.models import Max, Q
 from django.utils import timezone
 
+from apps.notifications.models import NotificationChannel, NotificationStatus
+from apps.notifications.services import trigger_notification_event
 from apps.payroll.models import (
+    EmployeeStatutoryDeclaration,
+    EmployeeStatutoryDeclarationItem,
     PayrollCalculationLine,
     PayrollCalculationLineSource,
     PayrollCalculationLineStatus,
     PayrollCalculationStatus,
+    PayrollConfigStatus,
     PayrollAdjustment,
     PayrollAdjustmentDirection,
     PayrollAdjustmentStatus,
     PayrollApprovalStatus,
+    PayrollArtifactAccessEvent,
+    PayrollArtifactAccessEventStatus,
+    PayrollArtifactAccessEventType,
+    PayrollArtifactSignedAccessGrant,
+    PayrollArtifactSignedAccessGrantStatus,
     PayrollExceptionSeverity,
     PayrollExceptionStatus,
     PayrollFinanceHandoff,
@@ -35,7 +48,18 @@ from apps.payroll.models import (
     PayrollOutputArtifactStatus,
     PayrollOutputBatch,
     PayrollOutputBatchStatus,
+    PayrollProviderCallbackEvent,
+    PayrollProviderCallbackEventStatus,
+    PayrollProviderCertificationStatus,
+    PayrollProviderConnection,
+    PayrollProviderConnectionKind,
+    PayrollProviderConnectionStatus,
+    PayrollProviderDelivery,
+    PayrollProviderDeliveryStatus,
+    PayrollProviderRetryEvent,
+    PayrollProviderRetryEventStatus,
     PayrollReviewStatus,
+    EmployeeStatutoryProfile,
     PayrollRuleVersion,
     PayrollRuleVersionStatus,
     PayrollRun,
@@ -48,10 +72,33 @@ from apps.payroll.models import (
     PayrollSettlementLine,
     PayrollSettlementLineKind,
     PayrollSettlementStatus,
+    PayrollStatutoryCalculationMethod,
+    PayrollStatutoryComponent,
+    PayrollStatutoryComponentKind,
+    PayrollStatutoryContributionOwner,
+    PayrollStatutoryDeclarationStatus,
+    PayrollStatutoryFilingCalendar,
+    PayrollStatutoryFilingStatus,
+    PayrollStatutoryPack,
+    PayrollStatutoryProofStatus,
+    PayrollStatutorySlab,
+    PayrollTaxRegime,
     PayrollValidationCategory,
     PayrollValidationIssue,
     PayrollValidationIssueStatus,
     PayrollValidationSeverity,
+)
+from apps.payroll.providers import (
+    PayrollProviderAdapterError,
+    PayrollProviderSubmissionResult,
+    get_payroll_provider_adapter,
+    normalize_payroll_provider_submission_request,
+    validate_payroll_provider_route_config,
+)
+from apps.payroll.storage import (
+    PayrollArtifactStorageError,
+    normalize_payroll_artifact_storage_profile,
+    store_payroll_artifact_payload,
 )
 
 
@@ -83,6 +130,32 @@ class PayrollFinanceHandoffError(ValueError):
     """Raised when payroll finance handoff generation or transmission is not allowed."""
 
 
+class PayrollProviderCallbackError(ValueError):
+    """Raised when provider callback ingestion fails validation or verification."""
+
+
+class PayrollProviderRetryError(ValueError):
+    """Raised when provider delivery retry planning or execution is not allowed."""
+
+
+class PayrollProviderConnectionError(ValueError):
+    """Raised when provider onboarding or certification cannot be updated."""
+
+
+@dataclass(frozen=True)
+class PayrollProviderRetryWorkerResult:
+    processed_events: list[PayrollProviderRetryEvent]
+    executed_count: int
+    skipped_count: int
+
+
+@dataclass(frozen=True)
+class PayrollArtifactSignedAccessGrantIssue:
+    grant: PayrollArtifactSignedAccessGrant
+    signed_url: str
+    token: str
+
+
 ARTIFACT_MIME_TYPES = {
     PayrollOutputArtifactKind.PAYSLIP: "text/html",
     PayrollOutputArtifactKind.REGISTER: "text/csv",
@@ -96,6 +169,224 @@ ARTIFACT_FILE_EXTENSIONS = {
     "text/csv": "csv",
     "text/html": "html",
 }
+
+FINANCE_ARTIFACT_KINDS = {
+    PayrollOutputArtifactKind.BANK_ADVICE,
+    PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
+    PayrollOutputArtifactKind.STATUTORY_REPORT,
+}
+DEFAULT_ARTIFACT_ACCESS_PROFILE_REF = "payroll.artifact_access.profile.default.v1"
+
+
+DEFAULT_PAYROLL_PROVIDER_CONNECTION_BLUEPRINTS = [
+    {
+        "provider_ref": "payroll.provider.bank.sandbox.v1",
+        "provider_name": "Bank payout sandbox",
+        "provider_kind": PayrollProviderConnectionKind.BANK,
+        "environment_ref": "sandbox",
+        "adapter_ref": "payroll.provider_adapter.bank.sandbox.v1",
+        "sandbox_adapter_ref": "payroll.provider_adapter.bank.sandbox.v1",
+        "channel_ref": "bank.sftp.channel.primary.v1",
+        "credential_ref": "bank-sandbox-credential",
+        "credential_profile_ref": "bank.credentials.sandbox.v1",
+        "credential_required": True,
+        "callback_profile_ref": "bank.sftp.callback.v1",
+        "callback_verification_ref": "bank.sftp.callback.hmac.v1",
+        "retry_policy_ref": "payroll.delivery.retry.bank.v1",
+        "certification_profile_ref": "bank.neft.certification.v1",
+    },
+    {
+        "provider_ref": "payroll.provider.accounting.sandbox.v1",
+        "provider_name": "Accounting ledger sandbox",
+        "provider_kind": PayrollProviderConnectionKind.ACCOUNTING,
+        "environment_ref": "sandbox",
+        "adapter_ref": "payroll.provider_adapter.accounting.sandbox.v1",
+        "sandbox_adapter_ref": "payroll.provider_adapter.accounting.sandbox.v1",
+        "channel_ref": "tally.import.channel.v1",
+        "credential_ref": "",
+        "credential_profile_ref": "tally.credentials.sandbox.v1",
+        "credential_required": False,
+        "callback_profile_ref": "tally.import.callback.manual.v1",
+        "callback_verification_ref": "tally.import.audit.v1",
+        "retry_policy_ref": "payroll.delivery.retry.standard.v1",
+        "certification_profile_ref": "tally.import.certification.v1",
+    },
+    {
+        "provider_ref": "clear-statutory.portal.v1",
+        "provider_name": "Clear statutory sandbox",
+        "provider_kind": PayrollProviderConnectionKind.STATUTORY,
+        "environment_ref": "sandbox",
+        "adapter_ref": "payroll.provider_adapter.statutory.sandbox.v1",
+        "sandbox_adapter_ref": "payroll.provider_adapter.statutory.sandbox.v1",
+        "channel_ref": "clear-statutory.api.challan.v1",
+        "credential_ref": "clear-statutory-sandbox-credential",
+        "credential_profile_ref": "clear-statutory.credentials.sandbox.v1",
+        "credential_required": True,
+        "callback_profile_ref": "clear-statutory.callback.v1",
+        "callback_verification_ref": "clear-statutory.callback.hmac.v1",
+        "retry_policy_ref": "payroll.delivery.retry.statutory.v1",
+        "certification_profile_ref": "clear-statutory.pt.challan.receipt.v1",
+    },
+]
+
+
+def payroll_provider_connection_readiness_snapshot(connection: PayrollProviderConnection) -> dict[str, Any]:
+    """Build deterministic onboarding gates for a provider connection."""
+
+    certification_passed = connection.certification_status == PayrollProviderCertificationStatus.PASSED
+    gates = [
+        {
+            "ref": "adapter_configured",
+            "label": "Adapter configured",
+            "passed": bool(connection.adapter_ref),
+            "value": connection.adapter_ref,
+        },
+        {
+            "ref": "channel_configured",
+            "label": "Channel configured",
+            "passed": bool(connection.channel_ref),
+            "value": connection.channel_ref,
+        },
+        {
+            "ref": "credential_reference_configured",
+            "label": "Credential reference configured",
+            "passed": bool(connection.credential_ref) if connection.credential_required else True,
+            "value": connection.credential_ref or "not_required",
+        },
+        {
+            "ref": "callback_contract_configured",
+            "label": "Callback contract configured",
+            "passed": bool(connection.callback_profile_ref and connection.callback_verification_ref),
+            "value": connection.callback_verification_ref,
+        },
+        {
+            "ref": "retry_policy_configured",
+            "label": "Retry policy configured",
+            "passed": bool(connection.retry_policy_ref),
+            "value": connection.retry_policy_ref,
+        },
+        {
+            "ref": "certification_passed",
+            "label": "Certification passed",
+            "passed": certification_passed,
+            "value": connection.certification_status,
+        },
+    ]
+    total = len(gates)
+    passed = sum(1 for gate in gates if gate["passed"])
+    active_allowed = passed == total
+    return {
+        "provider_ref": connection.provider_ref,
+        "provider_kind": connection.provider_kind,
+        "environment_ref": connection.environment_ref,
+        "readiness_profile_ref": f"payroll.provider_connection.{connection.provider_kind}.readiness.v1",
+        "gates": gates,
+        "ready_gate_count": passed,
+        "total_gate_count": total,
+        "blocking_gate_refs": [gate["ref"] for gate in gates if not gate["passed"]],
+        "active_allowed": active_allowed,
+        "credential_required": connection.credential_required,
+        "uses_credential_ref": bool(connection.credential_ref),
+        "updated_at": timezone.now().isoformat(),
+    }
+
+
+def sync_payroll_provider_connection_readiness(connection: PayrollProviderConnection) -> PayrollProviderConnection:
+    connection.readiness_snapshot = payroll_provider_connection_readiness_snapshot(connection)
+    if connection.status == PayrollProviderConnectionStatus.DRAFT and connection.readiness_snapshot["ready_gate_count"] >= 4:
+        connection.status = PayrollProviderConnectionStatus.CONFIGURED
+    if connection.status == PayrollProviderConnectionStatus.CONFIGURED and connection.sandbox_adapter_ref:
+        connection.status = PayrollProviderConnectionStatus.SANDBOX_READY
+    if (
+        connection.status == PayrollProviderConnectionStatus.SANDBOX_READY
+        and connection.certification_status == PayrollProviderCertificationStatus.PASSED
+    ):
+        connection.status = PayrollProviderConnectionStatus.CERTIFIED
+    connection.save(update_fields=["status", "readiness_snapshot", "updated_at"])
+    return connection
+
+
+def record_payroll_provider_connection_certification(
+    connection: PayrollProviderConnection,
+    *,
+    certification_status: str,
+    evidence_snapshot: dict[str, Any] | None = None,
+    tested_by=None,
+) -> PayrollProviderConnection:
+    if certification_status not in PayrollProviderCertificationStatus.values:
+        raise PayrollProviderConnectionError("Unsupported payroll provider certification status.")
+    evidence = evidence_snapshot if isinstance(evidence_snapshot, dict) else {}
+    now = timezone.now()
+    material = json.dumps(evidence, sort_keys=True, default=str)
+    connection.certification_status = certification_status
+    connection.last_tested_at = now
+    connection.last_tested_by = tested_by
+    if certification_status == PayrollProviderCertificationStatus.PASSED:
+        connection.certified_at = now
+        connection.certified_by = tested_by
+        if connection.status in {
+            PayrollProviderConnectionStatus.DRAFT,
+            PayrollProviderConnectionStatus.CONFIGURED,
+            PayrollProviderConnectionStatus.SANDBOX_READY,
+        }:
+            connection.status = PayrollProviderConnectionStatus.CERTIFIED
+    elif certification_status == PayrollProviderCertificationStatus.FAILED:
+        connection.status = PayrollProviderConnectionStatus.BLOCKED
+    connection.certification_snapshot = {
+        **(connection.certification_snapshot if isinstance(connection.certification_snapshot, dict) else {}),
+        "latest_result": certification_status,
+        "certification_profile_ref": connection.certification_profile_ref,
+        "provider_ref": connection.provider_ref,
+        "adapter_ref": connection.adapter_ref,
+        "channel_ref": connection.channel_ref,
+        "tested_at": now.isoformat(),
+        "tested_by": str(tested_by) if tested_by else "",
+        "evidence_snapshot": evidence,
+        "evidence_hash": hashlib.sha256(material.encode("utf-8")).hexdigest(),
+    }
+    connection.readiness_snapshot = payroll_provider_connection_readiness_snapshot(connection)
+    connection.save()
+    return connection
+
+
+def ensure_default_payroll_provider_connections(tenant, *, created_by=None) -> list[PayrollProviderConnection]:
+    connections: list[PayrollProviderConnection] = []
+    for blueprint in DEFAULT_PAYROLL_PROVIDER_CONNECTION_BLUEPRINTS:
+        connection, created = PayrollProviderConnection.objects.get_or_create(
+            tenant=tenant,
+            provider_ref=blueprint["provider_ref"],
+            defaults={
+                **blueprint,
+                "status": PayrollProviderConnectionStatus.SANDBOX_READY,
+                "certification_status": PayrollProviderCertificationStatus.PENDING,
+                "config_snapshot": {
+                    "source": "payroll_provider_connection_blueprint.v1",
+                    "provider_route": {
+                        "provider_ref": blueprint["provider_ref"],
+                        "adapter_ref": blueprint["adapter_ref"],
+                        "channel_ref": blueprint["channel_ref"],
+                        "credential_ref": blueprint["credential_ref"],
+                        "credential_required": blueprint["credential_required"],
+                        "credential_profile_ref": blueprint["credential_profile_ref"],
+                        "callback_profile_ref": blueprint["callback_profile_ref"],
+                        "callback_verification_ref": blueprint["callback_verification_ref"],
+                        "retry_policy_ref": blueprint["retry_policy_ref"],
+                        "certification_profile_ref": blueprint["certification_profile_ref"],
+                    },
+                },
+                "created_by": created_by,
+                "updated_by": created_by,
+            },
+        )
+        if created or not isinstance(connection.readiness_snapshot, dict) or not connection.readiness_snapshot:
+            connection = sync_payroll_provider_connection_readiness(connection)
+        connections.append(connection)
+    return connections
+DEFAULT_SIGNED_ACCESS_GRANT_PROFILE_REF = "payroll.signed_access.profile.default.v1"
+DEFAULT_EMPLOYEE_PORTAL_CHANNEL_REF = "employee.portal.v1"
+DEFAULT_HR_ADMIN_CHANNEL_REF = "hr_admin.payroll_outputs.v1"
+DEFAULT_PAYSLIP_PUBLISH_NOTIFICATION_TRIGGER_KEY = "payroll_payslip_published"
+DEFAULT_SIGNED_ACCESS_PERMISSION_SCOPE = "download"
 
 
 def _to_decimal(value: Any) -> Decimal:
@@ -385,6 +676,17 @@ def _set_context_path(context: dict[str, Any], path: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
+def _get_context_path(context: dict[str, Any], path: str) -> Any:
+    if not _valid_context_path(path):
+        return None
+    current: Any = context
+    for part in path.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    return current
+
+
 def _selected_rule_versions(payroll_run: PayrollRun) -> list[PayrollRuleVersion]:
     profile = payroll_run.config_snapshot.get("calculation_profile", {}) if isinstance(payroll_run.config_snapshot, dict) else {}
     selected_rule_codes = {str(value) for value in profile.get("rule_codes", []) if str(value)} if isinstance(profile, dict) else set()
@@ -467,6 +769,1061 @@ def _applied_adjustments_by_snapshot(payroll_run: PayrollRun, snapshots: list[Pa
             raise PayrollCalculationError("Applied payroll adjustments require locked input snapshots for the same payroll run.")
         grouped.setdefault(str(snapshot.id), []).append(adjustment)
     return grouped
+
+
+def _statutory_calculation_profile(payroll_run: PayrollRun) -> dict[str, Any]:
+    config = payroll_run.config_snapshot if isinstance(payroll_run.config_snapshot, dict) else {}
+    calculation_profile = config.get("calculation_profile", {})
+    if not isinstance(calculation_profile, dict):
+        return {}
+    statutory_profile = calculation_profile.get("statutory_profile", {})
+    return statutory_profile if isinstance(statutory_profile, dict) else {}
+
+
+def _statutory_calculation_enabled(payroll_run: PayrollRun) -> bool:
+    profile = _statutory_calculation_profile(payroll_run)
+    if not profile:
+        return False
+    return _profile_flag(profile, "enabled", False) or bool(
+        _profile_list(profile, "pack_codes")
+        or _profile_list(profile, "statutory_pack_refs")
+        or _profile_list(profile, "component_codes")
+    )
+
+
+def _selected_statutory_components(payroll_run: PayrollRun) -> list[PayrollStatutoryComponent]:
+    if not _statutory_calculation_enabled(payroll_run):
+        return []
+
+    profile = _statutory_calculation_profile(payroll_run)
+    pack_codes = set(_profile_list(profile, "pack_codes"))
+    pack_refs = set(_profile_list(profile, "statutory_pack_refs"))
+    component_codes = set(_profile_list(profile, "component_codes"))
+    excluded_component_codes = set(_profile_list(profile, "excluded_component_codes"))
+    statutory_types = set(_profile_list(profile, "statutory_types"))
+
+    packs = PayrollStatutoryPack.objects.filter(
+        tenant=payroll_run.tenant,
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from__lte=payroll_run.period.end_date,
+    ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=payroll_run.period.start_date))
+    if pack_codes:
+        packs = packs.filter(code__in=pack_codes)
+    if pack_refs:
+        packs = packs.filter(statutory_profile_ref__in=pack_refs)
+
+    components = PayrollStatutoryComponent.objects.filter(
+        tenant=payroll_run.tenant,
+        statutory_pack__in=packs,
+        status=PayrollConfigStatus.ACTIVE,
+    ).select_related("statutory_pack", "salary_component").prefetch_related("slabs")
+    if component_codes:
+        components = components.filter(code__in=component_codes)
+    if excluded_component_codes:
+        components = components.exclude(code__in=excluded_component_codes)
+    if statutory_types:
+        components = components.filter(statutory_type__in=statutory_types)
+
+    return sorted(
+        components,
+        key=lambda item: (
+            _statutory_calculation_order(item),
+            item.statutory_pack.code,
+            item.statutory_type,
+            item.code,
+        ),
+    )
+
+
+def _employee_statutory_profiles_by_employee(
+    payroll_run: PayrollRun,
+    snapshots: list[PayrollInputSnapshot],
+    components: list[PayrollStatutoryComponent],
+) -> dict[str, EmployeeStatutoryProfile]:
+    if not components:
+        return {}
+
+    selected_pack_ids = {component.statutory_pack_id for component in components}
+    employee_ids = [snapshot.employee_id for snapshot in snapshots]
+    profiles = EmployeeStatutoryProfile.objects.filter(
+        tenant=payroll_run.tenant,
+        employee_id__in=employee_ids,
+        status=PayrollConfigStatus.ACTIVE,
+        effective_from__lte=payroll_run.period.end_date,
+    ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=payroll_run.period.start_date)).select_related("employee", "statutory_pack").order_by(
+        "employee_id",
+        "-effective_from",
+    )
+
+    grouped: dict[str, EmployeeStatutoryProfile] = {}
+    for profile in profiles:
+        employee_key = str(profile.employee_id)
+        if employee_key in grouped:
+            continue
+        if profile.statutory_pack_id and selected_pack_ids and profile.statutory_pack_id not in selected_pack_ids:
+            continue
+        grouped[employee_key] = profile
+    return grouped
+
+
+def _statutory_component_config(component: PayrollStatutoryComponent) -> dict[str, Any]:
+    return component.config_snapshot if isinstance(component.config_snapshot, dict) else {}
+
+
+def _statutory_slab_config(slab: PayrollStatutorySlab | None) -> dict[str, Any]:
+    return slab.config_snapshot if slab and isinstance(slab.config_snapshot, dict) else {}
+
+
+def _statutory_calculation_order(component: PayrollStatutoryComponent) -> int:
+    config = _statutory_component_config(component)
+    try:
+        return int(config.get("calculation_order", 700))
+    except (TypeError, ValueError):
+        return 700
+
+
+def _statutory_profile_payload(profile: EmployeeStatutoryProfile | None) -> dict[str, Any]:
+    if profile is None:
+        return {}
+    return {
+        "profile_id": str(profile.id),
+        "profile_ref": profile.profile_ref,
+        "statutory_pack_id": str(profile.statutory_pack_id or ""),
+        "statutory_pack_code": profile.statutory_pack.code if profile.statutory_pack_id else "",
+        "pan_number": profile.pan_number,
+        "uan_number": profile.uan_number,
+        "pf_applicable": profile.pf_applicable,
+        "esi_applicable": profile.esi_applicable,
+        "professional_tax_state": profile.professional_tax_state,
+        "lwf_state": profile.lwf_state,
+        "tax_regime": profile.tax_regime,
+        "declaration_status": profile.declaration_status,
+        "previous_employment_income": str(profile.previous_employment_income),
+        "previous_employment_tax_deducted": str(profile.previous_employment_tax_deducted),
+        "source_ref": profile.source_ref,
+        "source_hash": profile.source_hash,
+        "config_snapshot": profile.config_snapshot,
+    }
+
+
+def _employee_statutory_profile_value(profile: EmployeeStatutoryProfile | None, path: str) -> Any:
+    if profile is None:
+        return None
+    normalized_path = str(path or "").removeprefix("statutory_profile.").strip(".")
+    if not normalized_path:
+        return None
+    if "." not in normalized_path and hasattr(profile, normalized_path):
+        return getattr(profile, normalized_path)
+    return _get_context_path(_statutory_profile_payload(profile), normalized_path)
+
+
+def _statutory_component_is_applicable(
+    component: PayrollStatutoryComponent,
+    employee_profile: EmployeeStatutoryProfile | None,
+    statutory_profile: dict[str, Any],
+) -> bool:
+    config = _statutory_component_config(component)
+    if config.get("applicable") is False:
+        return False
+
+    applicability_paths = statutory_profile.get("applicability_paths", {})
+    if not isinstance(applicability_paths, dict):
+        applicability_paths = {}
+    applicability_path = (
+        config.get("employee_profile_applicability_path")
+        or applicability_paths.get(component.code)
+        or applicability_paths.get(component.statutory_type)
+    )
+    if applicability_path:
+        return bool(_employee_statutory_profile_value(employee_profile, str(applicability_path)))
+
+    required_values = config.get("required_employee_profile_values", {})
+    if isinstance(required_values, dict):
+        for path, expected in required_values.items():
+            if _employee_statutory_profile_value(employee_profile, str(path)) != expected:
+                return False
+
+    return True
+
+
+def _statutory_wage_base_path(component: PayrollStatutoryComponent, statutory_profile: dict[str, Any]) -> str:
+    config = _statutory_component_config(component)
+    wage_base_paths = statutory_profile.get("wage_base_paths", {})
+    if not isinstance(wage_base_paths, dict):
+        wage_base_paths = {}
+    return str(
+        config.get("wage_base_path")
+        or wage_base_paths.get(component.code)
+        or wage_base_paths.get(component.wage_base_ref)
+        or wage_base_paths.get(component.statutory_type)
+        or ""
+    )
+
+
+def _statutory_state_value(
+    component: PayrollStatutoryComponent,
+    slab: PayrollStatutorySlab,
+    employee_profile: EmployeeStatutoryProfile | None,
+    statutory_profile: dict[str, Any],
+) -> str:
+    component_config = _statutory_component_config(component)
+    slab_config = _statutory_slab_config(slab)
+    state_profile_fields = statutory_profile.get("state_profile_fields", {})
+    if not isinstance(state_profile_fields, dict):
+        state_profile_fields = {}
+    state_path = (
+        slab_config.get("employee_profile_state_path")
+        or component_config.get("employee_profile_state_path")
+        or state_profile_fields.get(component.code)
+        or state_profile_fields.get(component.statutory_type)
+    )
+    return str(_employee_statutory_profile_value(employee_profile, str(state_path)) or "").upper() if state_path else ""
+
+
+def _active_statutory_slab(
+    component: PayrollStatutoryComponent,
+    payroll_run: PayrollRun,
+    employee_profile: EmployeeStatutoryProfile | None,
+    statutory_profile: dict[str, Any],
+    wage_base: Decimal,
+) -> PayrollStatutorySlab | None:
+    slabs = [
+        slab
+        for slab in component.slabs.all()
+        if slab.status == PayrollConfigStatus.ACTIVE
+        and slab.effective_from <= payroll_run.period.end_date
+        and (slab.effective_to is None or slab.effective_to >= payroll_run.period.start_date)
+    ]
+    for slab in sorted(slabs, key=lambda item: (item.slab_order, item.min_amount)):
+        if slab.state_code and _statutory_state_value(component, slab, employee_profile, statutory_profile) != slab.state_code.upper():
+            continue
+        if slab.min_amount is not None and wage_base < slab.min_amount:
+            continue
+        if slab.max_amount is not None and wage_base > slab.max_amount:
+            continue
+        return slab
+    return None
+
+
+def _decimal_from_config(config: dict[str, Any], key: str, default: str = "0") -> Decimal:
+    return _to_decimal(config.get(key, default) or default)
+
+
+def _statutory_owner_line_specs(
+    component: PayrollStatutoryComponent,
+    slab: PayrollStatutorySlab | None,
+    wage_base: Decimal,
+    statutory_profile: dict[str, Any],
+) -> list[dict[str, Any]]:
+    component_config = _statutory_component_config(component)
+    slab_config = _statutory_slab_config(slab)
+    source_config = {**component_config, **slab_config}
+    method = component.calculation_method
+    rate_base = wage_base
+    wage_ceiling = slab.wage_ceiling_amount if slab and slab.wage_ceiling_amount is not None else source_config.get("wage_ceiling_amount")
+    if wage_ceiling is not None and wage_ceiling != "":
+        rate_base = min(rate_base, _to_decimal(wage_ceiling))
+
+    employee_rate = slab.employee_rate_percent if slab else _decimal_from_config(source_config, "employee_rate_percent")
+    employer_rate = slab.employer_rate_percent if slab else _decimal_from_config(source_config, "employer_rate_percent")
+    fixed_employee = slab.fixed_employee_amount if slab else _decimal_from_config(source_config, "fixed_employee_amount")
+    fixed_employer = slab.fixed_employer_amount if slab else _decimal_from_config(source_config, "fixed_employer_amount")
+
+    if method == PayrollStatutoryCalculationMethod.FIXED_AMOUNT:
+        employee_amount = fixed_employee
+        employer_amount = fixed_employer
+    elif method in {PayrollStatutoryCalculationMethod.PERCENTAGE, PayrollStatutoryCalculationMethod.SLAB}:
+        employee_amount = fixed_employee + (rate_base * employee_rate / Decimal("100"))
+        employer_amount = fixed_employer + (rate_base * employer_rate / Decimal("100"))
+    else:
+        return []
+
+    emit_zero_lines = _profile_flag(statutory_profile, "emit_zero_statutory_lines", False) or bool(component_config.get("emit_zero_lines"))
+    default_code = component.code.upper().replace("-", "_")
+    owner_specs = {
+        PayrollStatutoryContributionOwner.EMPLOYEE: [
+            {
+                "owner": PayrollStatutoryContributionOwner.EMPLOYEE,
+                "amount": employee_amount,
+                "component_code": source_config.get("employee_component_code") or default_code,
+                "component_name": source_config.get("employee_component_name") or component.name,
+                "line_type": source_config.get("employee_line_type") or "deduction",
+            }
+        ],
+        PayrollStatutoryContributionOwner.EMPLOYER: [
+            {
+                "owner": PayrollStatutoryContributionOwner.EMPLOYER,
+                "amount": employer_amount,
+                "component_code": source_config.get("employer_component_code") or f"{default_code}_EMPLOYER",
+                "component_name": source_config.get("employer_component_name") or f"{component.name} Employer",
+                "line_type": source_config.get("employer_line_type") or "employer_contribution",
+            }
+        ],
+        PayrollStatutoryContributionOwner.BOTH: [
+            {
+                "owner": PayrollStatutoryContributionOwner.EMPLOYEE,
+                "amount": employee_amount,
+                "component_code": source_config.get("employee_component_code") or f"{default_code}_EMPLOYEE",
+                "component_name": source_config.get("employee_component_name") or f"{component.name} Employee",
+                "line_type": source_config.get("employee_line_type") or "deduction",
+            },
+            {
+                "owner": PayrollStatutoryContributionOwner.EMPLOYER,
+                "amount": employer_amount,
+                "component_code": source_config.get("employer_component_code") or f"{default_code}_EMPLOYER",
+                "component_name": source_config.get("employer_component_name") or f"{component.name} Employer",
+                "line_type": source_config.get("employer_line_type") or "employer_contribution",
+            },
+        ],
+        PayrollStatutoryContributionOwner.INFORMATIONAL: [
+            {
+                "owner": PayrollStatutoryContributionOwner.INFORMATIONAL,
+                "amount": employee_amount or employer_amount,
+                "component_code": source_config.get("informational_component_code") or default_code,
+                "component_name": source_config.get("informational_component_name") or component.name,
+                "line_type": source_config.get("informational_line_type") or "informational",
+            }
+        ],
+    }
+    return [
+        {**item, "amount": _round_decimal(item["amount"], 2)}
+        for item in owner_specs.get(component.contribution_owner, [])
+        if emit_zero_lines or _round_decimal(item["amount"], 2) != Decimal("0.00")
+    ]
+
+
+def _statutory_annualization_config(
+    component: PayrollStatutoryComponent,
+    statutory_profile: dict[str, Any],
+) -> dict[str, Any]:
+    component_config = _statutory_component_config(component)
+    profile_config = statutory_profile.get("annualization_profile", {})
+    component_annualization = component_config.get("annualization_profile", {})
+    if not isinstance(profile_config, dict):
+        profile_config = {}
+    if not isinstance(component_annualization, dict):
+        component_annualization = {}
+
+    merged = {**profile_config, **component_annualization}
+    passthrough_keys = [
+        "enabled",
+        "financial_year_code",
+        "annualization_multiplier",
+        "annual_period_count",
+        "remaining_period_count",
+        "tax_method",
+        "tax_regime_candidates",
+        "comparison_tax_regimes",
+        "selected_tax_regime",
+        "tax_regime_selection_mode",
+        "compare_tax_regimes",
+        "declaration_cap_rules",
+        "declaration_statuses",
+        "declaration_profile_refs",
+        "proof_statuses",
+        "allow_declared_when_unverified",
+        "allow_declared_amount_for_not_required",
+        "employee_component_code",
+        "employee_component_name",
+        "employee_line_type",
+        "calculation_order",
+        "emit_zero_lines",
+    ]
+    for key in passthrough_keys:
+        if key in component_config:
+            merged[key] = component_config[key]
+        elif key in statutory_profile:
+            merged.setdefault(key, statutory_profile[key])
+    return merged
+
+
+def _tds_annualization_enabled(component: PayrollStatutoryComponent, statutory_profile: dict[str, Any]) -> bool:
+    if component.statutory_type != PayrollStatutoryComponentKind.TAX_DEDUCTED_AT_SOURCE:
+        return False
+    annualization_config = _statutory_annualization_config(component, statutory_profile)
+    return _profile_flag(annualization_config, "enabled", False) or _profile_flag(statutory_profile, "tds_annualization_enabled", False)
+
+
+def _effective_statutory_slabs(
+    component: PayrollStatutoryComponent,
+    payroll_run: PayrollRun,
+    employee_profile: EmployeeStatutoryProfile | None,
+    statutory_profile: dict[str, Any],
+) -> list[PayrollStatutorySlab]:
+    slabs = [
+        slab
+        for slab in component.slabs.all()
+        if slab.status == PayrollConfigStatus.ACTIVE
+        and slab.effective_from <= payroll_run.period.end_date
+        and (slab.effective_to is None or slab.effective_to >= payroll_run.period.start_date)
+    ]
+    return [
+        slab
+        for slab in sorted(slabs, key=lambda item: (item.slab_order, item.min_amount))
+        if not slab.state_code or _statutory_state_value(component, slab, employee_profile, statutory_profile) == slab.state_code.upper()
+    ]
+
+
+def _payroll_financial_year_code(payroll_run: PayrollRun, annualization_config: dict[str, Any]) -> str:
+    run_config = payroll_run.config_snapshot if isinstance(payroll_run.config_snapshot, dict) else {}
+    calculation_profile = run_config.get("calculation_profile", {})
+    if not isinstance(calculation_profile, dict):
+        calculation_profile = {}
+    return str(
+        annualization_config.get("financial_year_code")
+        or calculation_profile.get("financial_year_code")
+        or run_config.get("financial_year_code")
+        or ""
+    ).strip().upper()
+
+
+def _code_value(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _declaration_rule_matches(
+    item: EmployeeStatutoryDeclarationItem,
+    rule: dict[str, Any],
+    *,
+    tax_regime: str,
+) -> bool:
+    section_codes = {_code_value(value) for value in _profile_list(rule, "section_codes")}
+    section_code = _code_value(rule.get("section_code"))
+    if section_code:
+        section_codes.add(section_code)
+    if section_codes and _code_value(item.section_code) not in section_codes:
+        return False
+
+    component_codes = {_code_value(value) for value in _profile_list(rule, "component_codes")}
+    component_code = _code_value(rule.get("component_code"))
+    if component_code:
+        component_codes.add(component_code)
+    if component_codes and _code_value(item.component_code) not in component_codes:
+        return False
+
+    item_kinds = {str(value).strip().lower() for value in _profile_list(rule, "item_kinds")}
+    item_kind = str(rule.get("item_kind") or "").strip().lower()
+    if item_kind:
+        item_kinds.add(item_kind)
+    if item_kinds and str(item.item_kind).lower() not in item_kinds:
+        return False
+
+    tax_regimes = {str(value).strip().lower() for value in _profile_list(rule, "tax_regimes")}
+    if tax_regimes and str(tax_regime or PayrollTaxRegime.NOT_DECLARED).lower() not in tax_regimes:
+        return False
+
+    return True
+
+
+def _declaration_item_amount(item: EmployeeStatutoryDeclarationItem, annualization_config: dict[str, Any]) -> Decimal:
+    if item.proof_status == PayrollStatutoryProofStatus.VERIFIED:
+        return _round_decimal(item.verified_amount, 2)
+    if item.proof_status == PayrollStatutoryProofStatus.NOT_REQUIRED and _profile_flag(
+        annualization_config,
+        "allow_declared_amount_for_not_required",
+        True,
+    ):
+        return _round_decimal(item.verified_amount or item.declared_amount, 2)
+    if _profile_flag(annualization_config, "allow_declared_when_unverified", False):
+        return _round_decimal(item.declared_amount, 2)
+    return Decimal("0.00")
+
+
+def _tds_declaration_cap_adjustments(
+    *,
+    payroll_run: PayrollRun,
+    employee_profile: EmployeeStatutoryProfile | None,
+    annualization_config: dict[str, Any],
+    tax_regime_override: str | None = None,
+) -> tuple[Decimal, list[dict[str, Any]]]:
+    if employee_profile is None:
+        return Decimal("0.00"), []
+
+    financial_year_code = _payroll_financial_year_code(payroll_run, annualization_config)
+    if not financial_year_code:
+        return Decimal("0.00"), []
+
+    declaration_statuses = _profile_list(annualization_config, "declaration_statuses") or [
+        PayrollStatutoryDeclarationStatus.VERIFIED,
+        PayrollStatutoryDeclarationStatus.LOCKED,
+    ]
+    proof_statuses = _profile_list(annualization_config, "proof_statuses") or [
+        PayrollStatutoryProofStatus.VERIFIED,
+        PayrollStatutoryProofStatus.NOT_REQUIRED,
+    ]
+    declaration_profile_refs = set(_profile_list(annualization_config, "declaration_profile_refs"))
+    cap_rules = annualization_config.get("declaration_cap_rules", [])
+    if not isinstance(cap_rules, list):
+        cap_rules = []
+
+    declarations = EmployeeStatutoryDeclaration.objects.filter(
+        tenant=payroll_run.tenant,
+        employee=employee_profile.employee,
+        employee_statutory_profile=employee_profile,
+        financial_year_code=financial_year_code,
+        status__in=declaration_statuses,
+    ).prefetch_related("items")
+    if declaration_profile_refs:
+        declarations = declarations.filter(declaration_profile_ref__in=declaration_profile_refs)
+
+    candidate_items = [
+        item
+        for declaration in declarations
+        for item in declaration.items.all()
+        if item.proof_status in proof_statuses
+    ]
+
+    tax_regime = str(tax_regime_override or employee_profile.tax_regime or PayrollTaxRegime.NOT_DECLARED)
+    consumed_item_ids: set[str] = set()
+    total_adjustment = Decimal("0.00")
+    evidence: list[dict[str, Any]] = []
+    for index, raw_rule in enumerate(cap_rules):
+        if not isinstance(raw_rule, dict):
+            continue
+        matched_items = [
+            item
+            for item in candidate_items
+            if str(item.id) not in consumed_item_ids and _declaration_rule_matches(item, raw_rule, tax_regime=tax_regime)
+        ]
+        if not matched_items:
+            continue
+        raw_total = sum((_declaration_item_amount(item, annualization_config) for item in matched_items), Decimal("0.00"))
+        max_amount = raw_rule.get("max_amount")
+        capped_amount = min(raw_total, _to_decimal(max_amount)) if max_amount not in {None, ""} else raw_total
+        capped_amount = _round_decimal(max(capped_amount, Decimal("0.00")), 2)
+        for item in matched_items:
+            consumed_item_ids.add(str(item.id))
+        total_adjustment += capped_amount
+        evidence.append({
+            "rule_index": index,
+            "cap_ref": raw_rule.get("cap_ref") or raw_rule.get("section_code") or raw_rule.get("component_code") or f"cap_rule:{index}",
+            "raw_amount": str(_round_decimal(raw_total, 2)),
+            "capped_amount": str(capped_amount),
+            "max_amount": str(max_amount or ""),
+            "item_ids": [str(item.id) for item in matched_items],
+            "section_codes": sorted({_code_value(item.section_code) for item in matched_items if item.section_code}),
+            "component_codes": sorted({_code_value(item.component_code) for item in matched_items if item.component_code}),
+        })
+
+    return _round_decimal(total_adjustment, 2), evidence
+
+
+def _progressive_tds_annual_tax(
+    *,
+    component: PayrollStatutoryComponent,
+    payroll_run: PayrollRun,
+    employee_profile: EmployeeStatutoryProfile | None,
+    statutory_profile: dict[str, Any],
+    taxable_annual_amount: Decimal,
+    tax_regime_override: str | None = None,
+) -> tuple[Decimal, list[dict[str, Any]]]:
+    annual_tax = Decimal("0.00")
+    slab_trace: list[dict[str, Any]] = []
+    tax_regime = str(tax_regime_override or (employee_profile.tax_regime if employee_profile else PayrollTaxRegime.NOT_DECLARED))
+    for slab in _effective_statutory_slabs(component, payroll_run, employee_profile, statutory_profile):
+        slab_config = _statutory_slab_config(slab)
+        tax_regimes = {str(value).strip().lower() for value in _profile_list(slab_config, "tax_regimes")}
+        if tax_regimes and str(tax_regime).lower() not in tax_regimes:
+            continue
+        lower_bound = slab.min_amount or Decimal("0.00")
+        upper_bound = slab.max_amount
+        if taxable_annual_amount <= lower_bound:
+            continue
+        band_limit = min(taxable_annual_amount, upper_bound) if upper_bound is not None else taxable_annual_amount
+        band_amount = max(band_limit - lower_bound, Decimal("0.00"))
+        if band_amount == Decimal("0.00"):
+            continue
+        tax_amount = _round_decimal(slab.fixed_employee_amount + (band_amount * slab.employee_rate_percent / Decimal("100")), 2)
+        annual_tax += tax_amount
+        slab_trace.append({
+            "slab_id": str(slab.id),
+            "slab_code": slab.code,
+            "min_amount": str(lower_bound),
+            "max_amount": str(upper_bound or ""),
+            "taxable_band_amount": str(_round_decimal(band_amount, 2)),
+            "employee_rate_percent": str(slab.employee_rate_percent),
+            "fixed_employee_amount": str(slab.fixed_employee_amount),
+            "tax_amount": str(tax_amount),
+        })
+    return _round_decimal(annual_tax, 2), slab_trace
+
+
+def _single_slab_tds_annual_tax(
+    *,
+    component: PayrollStatutoryComponent,
+    payroll_run: PayrollRun,
+    employee_profile: EmployeeStatutoryProfile | None,
+    statutory_profile: dict[str, Any],
+    taxable_annual_amount: Decimal,
+    tax_regime_override: str | None = None,
+) -> tuple[Decimal, list[dict[str, Any]]]:
+    tax_regime = str(tax_regime_override or (employee_profile.tax_regime if employee_profile else PayrollTaxRegime.NOT_DECLARED))
+    slab = next(
+        (
+            item
+            for item in _effective_statutory_slabs(component, payroll_run, employee_profile, statutory_profile)
+            if (item.min_amount is None or taxable_annual_amount >= item.min_amount)
+            and (item.max_amount is None or taxable_annual_amount <= item.max_amount)
+            and (
+                not _profile_list(_statutory_slab_config(item), "tax_regimes")
+                or tax_regime.lower() in {str(value).strip().lower() for value in _profile_list(_statutory_slab_config(item), "tax_regimes")}
+            )
+        ),
+        None,
+    )
+    if component.calculation_method == PayrollStatutoryCalculationMethod.SLAB and slab is None:
+        return Decimal("0.00"), []
+    source_config = {**_statutory_component_config(component), **_statutory_slab_config(slab)}
+    employee_rate = slab.employee_rate_percent if slab else _decimal_from_config(source_config, "employee_rate_percent")
+    fixed_employee = slab.fixed_employee_amount if slab else _decimal_from_config(source_config, "fixed_employee_amount")
+    annual_tax = _round_decimal(fixed_employee + (taxable_annual_amount * employee_rate / Decimal("100")), 2)
+    return annual_tax, [{
+        "slab_id": str(slab.id) if slab else "",
+        "slab_code": slab.code if slab else "",
+        "taxable_amount": str(_round_decimal(taxable_annual_amount, 2)),
+        "tax_regime": tax_regime,
+        "employee_rate_percent": str(employee_rate),
+        "fixed_employee_amount": str(fixed_employee),
+        "tax_amount": str(annual_tax),
+    }]
+
+
+def _selected_tds_tax_regime(employee_profile: EmployeeStatutoryProfile | None, annualization_config: dict[str, Any]) -> str:
+    return str(
+        annualization_config.get("selected_tax_regime")
+        or (employee_profile.tax_regime if employee_profile else "")
+        or PayrollTaxRegime.NOT_DECLARED
+    )
+
+
+def _tds_regime_projection(
+    *,
+    component: PayrollStatutoryComponent,
+    payroll_run: PayrollRun,
+    employee_profile: EmployeeStatutoryProfile | None,
+    statutory_profile: dict[str, Any],
+    annualization_config: dict[str, Any],
+    tax_regime: str,
+    wage_base_path: str,
+    wage_base: Decimal,
+    annualized_wage_base: Decimal,
+    previous_income: Decimal,
+    previous_tax_deducted: Decimal,
+    annualization_multiplier: Decimal,
+    remaining_period_count: Decimal,
+) -> dict[str, Any]:
+    declaration_adjustment, declaration_evidence = _tds_declaration_cap_adjustments(
+        payroll_run=payroll_run,
+        employee_profile=employee_profile,
+        annualization_config=annualization_config,
+        tax_regime_override=tax_regime,
+    )
+    taxable_annual_amount = _round_decimal(max(annualized_wage_base + previous_income - declaration_adjustment, Decimal("0.00")), 2)
+    if str(annualization_config.get("tax_method") or "").lower() == "progressive_slabs":
+        annual_tax, slab_trace = _progressive_tds_annual_tax(
+            component=component,
+            payroll_run=payroll_run,
+            employee_profile=employee_profile,
+            statutory_profile=statutory_profile,
+            taxable_annual_amount=taxable_annual_amount,
+            tax_regime_override=tax_regime,
+        )
+    else:
+        annual_tax, slab_trace = _single_slab_tds_annual_tax(
+            component=component,
+            payroll_run=payroll_run,
+            employee_profile=employee_profile,
+            statutory_profile=statutory_profile,
+            taxable_annual_amount=taxable_annual_amount,
+            tax_regime_override=tax_regime,
+        )
+
+    remaining_tax = _round_decimal(max(annual_tax - previous_tax_deducted, Decimal("0.00")), 2)
+    period_tax_amount = _round_decimal(remaining_tax / remaining_period_count, 2)
+    return {
+        "financial_year_code": _payroll_financial_year_code(payroll_run, annualization_config),
+        "tax_regime": tax_regime,
+        "wage_base_path": wage_base_path,
+        "period_wage_base": str(_round_decimal(wage_base, 2)),
+        "annualization_multiplier": str(annualization_multiplier),
+        "annualized_wage_base": str(annualized_wage_base),
+        "previous_employment_income": str(previous_income),
+        "declaration_adjustment": str(declaration_adjustment),
+        "taxable_annual_amount": str(taxable_annual_amount),
+        "annual_tax": str(annual_tax),
+        "previous_employment_tax_deducted": str(previous_tax_deducted),
+        "remaining_tax": str(remaining_tax),
+        "remaining_period_count": str(remaining_period_count),
+        "period_tax_amount": str(period_tax_amount),
+        "declaration_cap_evidence": declaration_evidence,
+        "slab_trace": slab_trace,
+    }
+
+
+def _tds_regime_projection_amount(projection: dict[str, Any]) -> Decimal:
+    return _to_decimal(projection.get("period_tax_amount") or "0")
+
+
+def _tds_regime_comparisons(
+    *,
+    component: PayrollStatutoryComponent,
+    payroll_run: PayrollRun,
+    employee_profile: EmployeeStatutoryProfile | None,
+    statutory_profile: dict[str, Any],
+    annualization_config: dict[str, Any],
+    selected_tax_regime: str,
+    wage_base_path: str,
+    wage_base: Decimal,
+    annualized_wage_base: Decimal,
+    previous_income: Decimal,
+    previous_tax_deducted: Decimal,
+    annualization_multiplier: Decimal,
+    remaining_period_count: Decimal,
+) -> list[dict[str, Any]]:
+    if not _profile_flag(annualization_config, "compare_tax_regimes", False):
+        return []
+
+    candidate_regimes = _profile_list(annualization_config, "tax_regime_candidates") or _profile_list(annualization_config, "comparison_tax_regimes")
+    if selected_tax_regime and selected_tax_regime not in candidate_regimes:
+        candidate_regimes.insert(0, selected_tax_regime)
+
+    projections: list[dict[str, Any]] = []
+    seen_regimes: set[str] = set()
+    for candidate_regime in candidate_regimes:
+        normalized_regime = str(candidate_regime or "").strip()
+        if not normalized_regime or normalized_regime.lower() in seen_regimes:
+            continue
+        seen_regimes.add(normalized_regime.lower())
+        projections.append(_tds_regime_projection(
+            component=component,
+            payroll_run=payroll_run,
+            employee_profile=employee_profile,
+            statutory_profile=statutory_profile,
+            annualization_config=annualization_config,
+            tax_regime=normalized_regime,
+            wage_base_path=wage_base_path,
+            wage_base=wage_base,
+            annualized_wage_base=annualized_wage_base,
+            previous_income=previous_income,
+            previous_tax_deducted=previous_tax_deducted,
+            annualization_multiplier=annualization_multiplier,
+            remaining_period_count=remaining_period_count,
+        ))
+    return projections
+
+
+def _tds_annualized_line_specs(
+    *,
+    component: PayrollStatutoryComponent,
+    payroll_run: PayrollRun,
+    snapshot: PayrollInputSnapshot,
+    employee_profile: EmployeeStatutoryProfile | None,
+    statutory_profile: dict[str, Any],
+    wage_base_path: str,
+    wage_base: Decimal,
+) -> list[dict[str, Any]]:
+    annualization_config = _statutory_annualization_config(component, statutory_profile)
+    annualization_multiplier = _to_decimal(annualization_config.get("annualization_multiplier") or annualization_config.get("annual_period_count") or "1")
+    remaining_period_count = _to_decimal(
+        annualization_config.get("remaining_period_count")
+        or annualization_config.get("annual_period_count")
+        or annualization_multiplier
+        or "1"
+    )
+    if remaining_period_count <= 0:
+        remaining_period_count = Decimal("1")
+
+    previous_income = _round_decimal(employee_profile.previous_employment_income, 2) if employee_profile else Decimal("0.00")
+    previous_tax_deducted = _round_decimal(employee_profile.previous_employment_tax_deducted, 2) if employee_profile else Decimal("0.00")
+    annualized_wage_base = _round_decimal(wage_base * annualization_multiplier, 2)
+    selected_tax_regime = _selected_tds_tax_regime(employee_profile, annualization_config)
+    selected_projection = _tds_regime_projection(
+        component=component,
+        payroll_run=payroll_run,
+        employee_profile=employee_profile,
+        statutory_profile=statutory_profile,
+        annualization_config=annualization_config,
+        tax_regime=selected_tax_regime,
+        wage_base_path=wage_base_path,
+        wage_base=wage_base,
+        annualized_wage_base=annualized_wage_base,
+        previous_income=previous_income,
+        previous_tax_deducted=previous_tax_deducted,
+        annualization_multiplier=annualization_multiplier,
+        remaining_period_count=remaining_period_count,
+    )
+    regime_comparisons = _tds_regime_comparisons(
+        component=component,
+        payroll_run=payroll_run,
+        employee_profile=employee_profile,
+        statutory_profile=statutory_profile,
+        annualization_config=annualization_config,
+        selected_tax_regime=selected_tax_regime,
+        wage_base_path=wage_base_path,
+        wage_base=wage_base,
+        annualized_wage_base=annualized_wage_base,
+        previous_income=previous_income,
+        previous_tax_deducted=previous_tax_deducted,
+        annualization_multiplier=annualization_multiplier,
+        remaining_period_count=remaining_period_count,
+    )
+    if str(annualization_config.get("tax_regime_selection_mode") or "").lower() == "lowest_tax" and regime_comparisons:
+        selected_projection = min(regime_comparisons, key=_tds_regime_projection_amount)
+        selected_tax_regime = str(selected_projection.get("tax_regime") or selected_tax_regime)
+
+    amount = _tds_regime_projection_amount(selected_projection)
+    comparison_baseline_amount = amount
+    regime_comparison_payload = [
+        {
+            **projection,
+            "is_selected": str(projection.get("tax_regime") or "").lower() == selected_tax_regime.lower(),
+            "period_tax_delta": str(_round_decimal(_tds_regime_projection_amount(projection) - comparison_baseline_amount, 2)),
+        }
+        for projection in regime_comparisons
+    ]
+    emit_zero_lines = _profile_flag(statutory_profile, "emit_zero_statutory_lines", False) or _profile_flag(annualization_config, "emit_zero_lines", False)
+    if amount == Decimal("0.00") and not emit_zero_lines:
+        return []
+
+    default_code = component.code.upper().replace("-", "_")
+    trace_payload = {
+        **selected_projection,
+        "selected_tax_regime": selected_tax_regime,
+        "tax_regime_selection_mode": str(annualization_config.get("tax_regime_selection_mode") or "profile"),
+        "regime_comparisons": regime_comparison_payload,
+    }
+    source_hash_payload = {
+        **trace_payload,
+        "employee_statutory_profile_hash": employee_profile.source_hash if employee_profile else "",
+            "declaration_item_ids": [
+                item_id
+                for cap in selected_projection.get("declaration_cap_evidence", [])
+                for item_id in cap.get("item_ids", [])
+            ],
+        }
+    return [{
+        "owner": PayrollStatutoryContributionOwner.EMPLOYEE,
+        "amount": amount,
+        "component_code": annualization_config.get("employee_component_code") or default_code,
+        "component_name": annualization_config.get("employee_component_name") or component.name,
+        "line_type": annualization_config.get("employee_line_type") or "tax",
+        "context_snapshot": {
+            "wage_base_path": wage_base_path,
+            "wage_base": wage_base,
+            "statutory_profile": _statutory_profile_payload(employee_profile),
+            "annualization": trace_payload,
+            "source_snapshot_hash": snapshot.source_hash,
+        },
+        "trace_snapshot": {
+            "dependencies": [wage_base_path, "employee_statutory_profile", "employee_statutory_declarations"],
+            "trace": [{
+                "source": "payroll_statutory_tds_annualization",
+                "statutory_pack_code": component.statutory_pack.code,
+                "statutory_component_code": component.code,
+                **trace_payload,
+            }],
+            "employee_statutory_profile_hash": employee_profile.source_hash if employee_profile else "",
+        },
+        "config_snapshot": {
+            "annualization": trace_payload,
+        },
+        "source_hash_payload": source_hash_payload,
+    }]
+
+
+def _statutory_source_hash(
+    *,
+    snapshot: PayrollInputSnapshot,
+    employee_profile: EmployeeStatutoryProfile | None,
+    component: PayrollStatutoryComponent,
+    slab: PayrollStatutorySlab | None,
+    owner: str,
+    amount: Decimal,
+    extra_payload: dict[str, Any] | None = None,
+) -> str:
+    payload = {
+        "snapshot_hash": snapshot.source_hash,
+        "employee_statutory_profile_hash": employee_profile.source_hash if employee_profile else "",
+        "statutory_pack_id": str(component.statutory_pack_id),
+        "statutory_component_id": str(component.id),
+        "statutory_component_updated_at": component.updated_at.isoformat() if component.updated_at else "",
+        "statutory_slab_id": str(slab.id) if slab else "",
+        "statutory_slab_updated_at": slab.updated_at.isoformat() if slab and slab.updated_at else "",
+        "owner": owner,
+        "amount": str(amount),
+    }
+    if extra_payload:
+        payload["extra_payload"] = _json_safe(extra_payload)
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+def _statutory_component_catalog(
+    components: list[PayrollStatutoryComponent],
+    statutory_profile: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    statutory_profile = statutory_profile or {}
+    catalog = []
+    for component in components:
+        component_config = _statutory_component_config(component)
+        default_code = component.code.upper().replace("-", "_")
+        codes = []
+        if component.contribution_owner == PayrollStatutoryContributionOwner.BOTH:
+            codes.extend([
+                str(component_config.get("employee_component_code") or f"{default_code}_EMPLOYEE"),
+                str(component_config.get("employer_component_code") or f"{default_code}_EMPLOYER"),
+            ])
+        elif component.contribution_owner == PayrollStatutoryContributionOwner.EMPLOYER:
+            codes.append(str(component_config.get("employer_component_code") or f"{default_code}_EMPLOYER"))
+        elif component.contribution_owner == PayrollStatutoryContributionOwner.INFORMATIONAL:
+            codes.append(str(component_config.get("informational_component_code") or default_code))
+        else:
+            codes.append(str(component_config.get("employee_component_code") or default_code))
+        catalog.append({
+            "statutory_pack_code": component.statutory_pack.code,
+            "statutory_pack_ref": component.statutory_pack.statutory_profile_ref,
+            "statutory_component_code": component.code,
+            "statutory_type": component.statutory_type,
+            "component_codes": codes,
+            "calculation_method": component.calculation_method,
+            "contribution_owner": component.contribution_owner,
+            "calculation_order": _statutory_calculation_order(component),
+            "wage_base_ref": component.wage_base_ref,
+            "wage_base_path": _statutory_wage_base_path(component, statutory_profile),
+            "statutory_treatment_ref": component.statutory_treatment_ref,
+            "config": component_config,
+        })
+    return catalog
+
+
+def _create_statutory_calculation_lines(
+    *,
+    payroll_run: PayrollRun,
+    calculation: PayrollRunCalculation,
+    snapshot: PayrollInputSnapshot,
+    context: dict[str, Any],
+    employee_totals: dict[str, Decimal],
+    total_values: dict[str, Decimal],
+    components: list[PayrollStatutoryComponent],
+    employee_profiles: dict[str, EmployeeStatutoryProfile],
+    statutory_profile: dict[str, Any],
+) -> int:
+    employee_profile = employee_profiles.get(str(snapshot.employee_id))
+    context["statutory_profile"] = _statutory_profile_payload(employee_profile)
+    created_count = 0
+
+    for component_index, component in enumerate(components):
+        if not _statutory_component_is_applicable(component, employee_profile, statutory_profile):
+            continue
+        wage_base_path = _statutory_wage_base_path(component, statutory_profile)
+        if not wage_base_path:
+            continue
+        wage_base_value = _get_context_path(context, wage_base_path)
+        if wage_base_value is None or wage_base_value == "":
+            continue
+        wage_base = _to_decimal(wage_base_value)
+        if _tds_annualization_enabled(component, statutory_profile):
+            slab = None
+            line_specs = _tds_annualized_line_specs(
+                component=component,
+                payroll_run=payroll_run,
+                snapshot=snapshot,
+                employee_profile=employee_profile,
+                statutory_profile=statutory_profile,
+                wage_base_path=wage_base_path,
+                wage_base=wage_base,
+            )
+        else:
+            slab = _active_statutory_slab(component, payroll_run, employee_profile, statutory_profile, wage_base)
+            if component.calculation_method == PayrollStatutoryCalculationMethod.SLAB and slab is None:
+                continue
+            line_specs = _statutory_owner_line_specs(component, slab, wage_base, statutory_profile)
+
+        for owner_index, line_spec in enumerate(line_specs):
+            amount = line_spec["amount"]
+            line_type = str(line_spec["line_type"])
+            line_slab = line_spec.get("slab") or slab
+            _apply_line_to_totals(employee_totals, line_type, amount)
+            _apply_line_to_totals(total_values, line_type, amount)
+            context["components"][_normalized_key(str(line_spec["component_code"]))] = amount
+            source_hash = _statutory_source_hash(
+                snapshot=snapshot,
+                employee_profile=employee_profile,
+                component=component,
+                slab=line_slab,
+                owner=str(line_spec["owner"]),
+                amount=amount,
+                extra_payload=line_spec.get("source_hash_payload"),
+            )
+            context_snapshot = line_spec.get("context_snapshot") or {
+                "wage_base_path": wage_base_path,
+                "wage_base": wage_base,
+                "statutory_profile": _statutory_profile_payload(employee_profile),
+                "source_snapshot_hash": snapshot.source_hash,
+            }
+            trace_snapshot = line_spec.get("trace_snapshot") or {
+                "dependencies": [wage_base_path, "employee_statutory_profile"],
+                "trace": [
+                    {
+                        "source": "payroll_statutory_component",
+                        "statutory_pack_code": component.statutory_pack.code,
+                        "statutory_component_code": component.code,
+                        "statutory_slab_code": line_slab.code if line_slab else "",
+                        "wage_base": str(wage_base),
+                        "amount": str(amount),
+                        "owner": line_spec["owner"],
+                    }
+                ],
+                "employee_statutory_profile_hash": employee_profile.source_hash if employee_profile else "",
+            }
+            trace_snapshot = {**trace_snapshot, "source_hash": source_hash}
+            line_config_snapshot = {
+                **_statutory_component_config(component),
+                **_statutory_slab_config(line_slab),
+                **(line_spec.get("config_snapshot") or {}),
+            }
+            PayrollCalculationLine.objects.create(
+                tenant=payroll_run.tenant,
+                calculation=calculation,
+                payroll_run=payroll_run,
+                input_snapshot=snapshot,
+                employee=snapshot.employee,
+                line_source=PayrollCalculationLineSource.STATUTORY,
+                component_code=str(line_spec["component_code"]),
+                component_name=str(line_spec["component_name"]),
+                line_type=line_type,
+                calculation_order=_statutory_calculation_order(component) + component_index + owner_index,
+                amount=amount,
+                currency_code=component.statutory_pack.currency_code,
+                status=PayrollCalculationLineStatus.CALCULATED,
+                expression="",
+                source_hash=source_hash,
+                context_snapshot=_json_safe(context_snapshot),
+                result_snapshot={"result": str(amount)},
+                trace_snapshot=_json_safe(trace_snapshot),
+                error_message="",
+                config_snapshot={
+                    **line_config_snapshot,
+                    "line_source": PayrollCalculationLineSource.STATUTORY,
+                    "statutory_pack_id": str(component.statutory_pack_id),
+                    "statutory_pack_code": component.statutory_pack.code,
+                    "statutory_pack_ref": component.statutory_pack.statutory_profile_ref,
+                    "statutory_component_id": str(component.id),
+                    "statutory_component_code": component.code,
+                    "statutory_type": component.statutory_type,
+                    "statutory_treatment_ref": component.statutory_treatment_ref,
+                    "statutory_slab_id": str(line_slab.id) if line_slab else "",
+                    "statutory_slab_code": line_slab.code if line_slab else "",
+                    "wage_base_ref": component.wage_base_ref,
+                    "wage_base_path": wage_base_path,
+                    "contribution_owner": component.contribution_owner,
+                    "calculation_method": component.calculation_method,
+                    "employee_statutory_profile_id": str(employee_profile.id) if employee_profile else "",
+                    "employee_statutory_profile_hash": employee_profile.source_hash if employee_profile else "",
+                },
+            )
+            created_count += 1
+
+    return created_count
 
 
 def _validation_profile(payroll_run: PayrollRun) -> dict[str, Any]:
@@ -756,7 +2113,11 @@ def validate_payroll_run_for_calculation(
         )
 
     catalog = _rule_catalog(rule_versions)
+    statutory_profile = _statutory_calculation_profile(payroll_run)
+    statutory_components = _selected_statutory_components(payroll_run)
+    statutory_catalog = _statutory_component_catalog(statutory_components, statutory_profile)
     component_codes = {str(item["component_code"]) for item in catalog}
+    component_codes.update(str(component_code) for item in statutory_catalog for component_code in item["component_codes"])
     output_paths_by_rule = {
         output_path: item
         for item in catalog
@@ -825,6 +2186,78 @@ def validate_payroll_run_for_calculation(
                 context_snapshot={"invalid_lines": invalid_lines, "allowed_line_types": sorted(allowed_line_types)},
             )
 
+    if _statutory_calculation_enabled(payroll_run):
+        if _profile_flag(statutory_profile, "require_statutory_components", False) and not statutory_components:
+            add_issue(
+                severity=_profile_severity(statutory_profile, "missing_component_severity", PayrollValidationSeverity.BLOCKER),
+                category=PayrollValidationCategory.STATUTORY_SETUP,
+                issue_code="NO_ACTIVE_STATUTORY_COMPONENTS",
+                title="No active statutory components matched the run",
+                detail="Activate effective-dated statutory packs/components or update the calculation profile filters.",
+                source_ref=f"payroll_run:{payroll_run.code}:statutory_components",
+                context_snapshot={"statutory_profile": statutory_profile},
+            )
+
+        employee_profiles = _employee_statutory_profiles_by_employee(payroll_run, snapshots, statutory_components)
+        if _profile_flag(statutory_profile, "require_employee_statutory_profile", False):
+            for snapshot in snapshots:
+                if str(snapshot.employee_id) not in employee_profiles:
+                    add_issue(
+                        severity=_profile_severity(statutory_profile, "missing_employee_profile_severity", PayrollValidationSeverity.BLOCKER),
+                        category=PayrollValidationCategory.STATUTORY_SETUP,
+                        issue_code="MISSING_EMPLOYEE_STATUTORY_PROFILE",
+                        title="Missing employee statutory profile",
+                        detail="The statutory calculation profile requires an active employee statutory profile for every calculated employee.",
+                        input_snapshot=snapshot,
+                        source_ref=f"employee_statutory_profile:{snapshot.employee.employee_code}",
+                        context_snapshot={"employee_code": snapshot.employee.employee_code},
+                    )
+
+        sample_context = build_payroll_rule_context_from_snapshot(snapshots[0]) if snapshots else {}
+        sample_context.setdefault("components", {})
+        rule_output_paths = set(output_paths_by_rule)
+        for item in statutory_catalog:
+            wage_base_path = str(item["wage_base_path"] or "")
+            if not wage_base_path:
+                add_issue(
+                    severity=_profile_severity(statutory_profile, "missing_wage_base_severity", PayrollValidationSeverity.BLOCKER),
+                    category=PayrollValidationCategory.STATUTORY_SETUP,
+                    issue_code="STATUTORY_WAGE_BASE_NOT_CONFIGURED",
+                    title="Statutory component has no wage-base path",
+                    detail="Configure a wage-base path on the statutory component or calculation profile before statutory calculation.",
+                    source_ref=f"payroll_statutory_component:{item['statutory_component_code']}:wage_base",
+                    context_snapshot={"statutory_component": item},
+                )
+            elif not _context_has_path(sample_context, wage_base_path) and wage_base_path not in rule_output_paths:
+                add_issue(
+                    severity=_profile_severity(statutory_profile, "missing_wage_base_severity", PayrollValidationSeverity.BLOCKER),
+                    category=PayrollValidationCategory.STATUTORY_SETUP,
+                    issue_code="STATUTORY_WAGE_BASE_NOT_FOUND",
+                    title="Statutory wage-base path is not available",
+                    detail="The configured statutory wage-base path is not present in locked input snapshots or prior rule outputs.",
+                    source_ref=f"payroll_statutory_component:{item['statutory_component_code']}:wage_base",
+                    context_snapshot={"wage_base_path": wage_base_path, "statutory_component": item},
+                )
+
+        for component in statutory_components:
+            if component.calculation_method == PayrollStatutoryCalculationMethod.SLAB:
+                has_active_slab = any(
+                    slab.status == PayrollConfigStatus.ACTIVE
+                    and slab.effective_from <= payroll_run.period.end_date
+                    and (slab.effective_to is None or slab.effective_to >= payroll_run.period.start_date)
+                    for slab in component.slabs.all()
+                )
+                if not has_active_slab and not _statutory_component_config(component).get("allow_missing_slabs"):
+                    add_issue(
+                        severity=_profile_severity(statutory_profile, "missing_slab_severity", PayrollValidationSeverity.BLOCKER),
+                        category=PayrollValidationCategory.STATUTORY_SETUP,
+                        issue_code="STATUTORY_SLAB_MISSING",
+                        title="Statutory slab is not configured",
+                        detail="Slab-based statutory components need at least one active effective-dated slab.",
+                        source_ref=f"payroll_statutory_component:{component.code}:slabs",
+                        context_snapshot={"statutory_component_code": component.code, "calculation_method": component.calculation_method},
+                    )
+
     required_statutory_refs = _profile_list(profile, "required_statutory_profile_refs")
     if required_statutory_refs:
         available_refs = {
@@ -837,6 +2270,15 @@ def validate_payroll_run_for_calculation(
             ]
             if value
         }
+        available_refs.update(
+            str(value)
+            for item in statutory_catalog
+            for value in [
+                item["statutory_pack_ref"],
+                item["statutory_treatment_ref"],
+            ]
+            if value
+        )
         missing_refs = [item for item in required_statutory_refs if item not in available_refs]
         if missing_refs:
             add_issue(
@@ -1026,6 +2468,9 @@ def calculate_draft_payroll_run(
     if not rule_versions:
         raise PayrollCalculationError("No active payroll rule versions matched this run and period.")
     applied_adjustments = _applied_adjustments_by_snapshot(payroll_run, locked_snapshots)
+    statutory_profile = _statutory_calculation_profile(payroll_run)
+    statutory_components = _selected_statutory_components(payroll_run)
+    employee_statutory_profiles = _employee_statutory_profiles_by_employee(payroll_run, locked_snapshots, statutory_components)
 
     profile_ref = calculation_profile_ref or (
         payroll_run.config_snapshot.get("calculation_profile_ref") if isinstance(payroll_run.config_snapshot, dict) else None
@@ -1074,6 +2519,21 @@ def calculate_draft_payroll_run(
                     for adjustments in applied_adjustments.values()
                     for adjustment in adjustments
                 ],
+                "statutory_components": [
+                    {
+                        "statutory_pack_code": component.statutory_pack.code,
+                        "statutory_pack_ref": component.statutory_pack.statutory_profile_ref,
+                        "statutory_component_code": component.code,
+                        "statutory_type": component.statutory_type,
+                        "contribution_owner": component.contribution_owner,
+                        "calculation_method": component.calculation_method,
+                        "wage_base_ref": component.wage_base_ref,
+                        "wage_base_path": _statutory_wage_base_path(component, statutory_profile),
+                        "statutory_treatment_ref": component.statutory_treatment_ref,
+                        "calculation_order": _statutory_calculation_order(component),
+                    }
+                    for component in statutory_components
+                ],
             },
             config_snapshot={
                 "calculation_profile": payroll_run.config_snapshot.get("calculation_profile", {}) if isinstance(payroll_run.config_snapshot, dict) else {},
@@ -1088,6 +2548,7 @@ def calculate_draft_payroll_run(
         }
         error_count = 0
         line_count = 0
+        statutory_line_count = 0
 
         for snapshot in locked_snapshots:
             context = build_payroll_rule_context_from_snapshot(snapshot)
@@ -1222,6 +2683,20 @@ def calculate_draft_payroll_run(
                 )
                 line_count += 1
 
+            created_statutory_lines = _create_statutory_calculation_lines(
+                payroll_run=payroll_run,
+                calculation=calculation,
+                snapshot=snapshot,
+                context=context,
+                employee_totals=employee_totals,
+                total_values=total_values,
+                components=statutory_components,
+                employee_profiles=employee_statutory_profiles,
+                statutory_profile=statutory_profile,
+            )
+            statutory_line_count += created_statutory_lines
+            line_count += created_statutory_lines
+
             context["totals"] = employee_totals
 
         calculation.status = PayrollCalculationStatus.FAILED if error_count else PayrollCalculationStatus.COMPLETED
@@ -1235,6 +2710,8 @@ def calculate_draft_payroll_run(
         calculation.error_snapshot = {
             "error_count": error_count,
             "applied_adjustment_count": sum(len(items) for items in applied_adjustments.values()),
+            "statutory_component_count": len(statutory_components),
+            "statutory_line_count": statutory_line_count,
             "validation_issue_count": len(validation_issues),
             "validation_warning_count": sum(1 for issue in validation_issues if issue.severity == PayrollValidationSeverity.WARNING),
             "validation_blocker_count": sum(1 for issue in validation_issues if issue.severity == PayrollValidationSeverity.BLOCKER),
@@ -1929,20 +3406,44 @@ def _artifact_extension(mime_type: str) -> str:
     return ARTIFACT_FILE_EXTENSIONS.get(mime_type, "json")
 
 
-def _artifact_storage_config(profile: dict[str, Any]) -> dict[str, str]:
+def _artifact_storage_config(profile: dict[str, Any]) -> dict[str, Any]:
     storage_profile = profile.get("storage_profile") if isinstance(profile, dict) else {}
     storage_profile = storage_profile if isinstance(storage_profile, dict) else {}
-    return {
-        "storage_provider_ref": storage_profile.get("provider_ref")
-        or profile.get("storage_provider_ref")
-        or "payroll.storage.local.generated.v1",
-        "storage_key_prefix": storage_profile.get("key_prefix")
-        or profile.get("storage_key_prefix")
-        or "payroll",
-        "retention_policy_ref": storage_profile.get("retention_policy_ref")
-        or profile.get("retention_policy_ref")
-        or "payroll.retention.7y.v1",
+    provider_ref = storage_profile.get("provider_ref") or profile.get("storage_provider_ref") or "payroll.storage.local.generated.v1"
+    try:
+        signed_url_expires_in_seconds = int(
+            storage_profile.get("signed_url_expires_in_seconds")
+            or profile.get("signed_url_expires_in_seconds")
+            or 900
+        )
+    except (TypeError, ValueError):
+        signed_url_expires_in_seconds = 900
+    merged_storage_profile = {
+        **storage_profile,
+        "provider_ref": provider_ref,
+        "key_prefix": storage_profile.get("key_prefix") or profile.get("storage_key_prefix") or "payroll",
+        "retention_policy_ref": storage_profile.get("retention_policy_ref") or profile.get("retention_policy_ref") or "payroll.retention.7y.v1",
+        "download_strategy_ref": storage_profile.get("download_strategy_ref") or profile.get("download_strategy_ref") or "",
+        "signed_url_expires_in_seconds": signed_url_expires_in_seconds,
     }
+    normalized_profile = normalize_payroll_artifact_storage_profile(provider_ref, merged_storage_profile)
+    profile_snapshot = normalized_profile.snapshot()
+    return {
+        "storage_provider_ref": profile_snapshot["provider_ref"],
+        "storage_key_prefix": profile_snapshot["key_prefix"],
+        "retention_policy_ref": profile_snapshot["retention_policy_ref"],
+        "download_strategy_ref": profile_snapshot["download_strategy_ref"],
+        "signed_url_expires_in_seconds": profile_snapshot["signed_url_expires_in_seconds"],
+        "storage_profile": profile_snapshot,
+    }
+
+
+def _artifact_config_with_storage(config_snapshot: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    try:
+        storage_config = _artifact_storage_config(profile)
+    except PayrollArtifactStorageError as exc:
+        raise PayrollOutputError(str(exc)) from exc
+    return {**config_snapshot, "storage_profile": storage_config["storage_profile"]}
 
 
 def _artifact_storage_key(batch: PayrollOutputBatch, kind: str, file_name: str, profile: dict[str, Any]) -> str:
@@ -2064,7 +3565,10 @@ def _artifact_file_kwargs(
     employee_code: str = "",
 ) -> dict[str, Any]:
     mime_type = _artifact_mime_type(kind, profile)
-    storage_config = _artifact_storage_config(profile)
+    try:
+        storage_config = _artifact_storage_config(profile)
+    except PayrollArtifactStorageError as exc:
+        raise PayrollOutputError(str(exc)) from exc
     payload = _artifact_file_payload(
         kind=kind,
         title=title,
@@ -2076,15 +3580,32 @@ def _artifact_file_kwargs(
         employee_code=employee_code,
         payroll_run_name=batch.payroll_run.name,
     )
+    try:
+        stored = store_payroll_artifact_payload(
+            storage_provider_ref=storage_config["storage_provider_ref"],
+            storage_key=_artifact_storage_key(batch, kind, file_name, profile),
+            file_name=file_name,
+            content_type=mime_type,
+            payload=payload,
+            config=storage_config,
+        )
+    except PayrollArtifactStorageError as exc:
+        raise PayrollOutputError(str(exc)) from exc
     return {
         "file_name": file_name,
         "content_type": mime_type,
-        "storage_provider_ref": storage_config["storage_provider_ref"],
-        "storage_key": _artifact_storage_key(batch, kind, file_name, profile),
+        "storage_provider_ref": stored.storage_provider_ref,
+        "storage_key": stored.storage_key,
+        "storage_object_version": stored.storage_object_version,
         "mime_type": mime_type,
+        "file_size_bytes": stored.file_size_bytes,
+        "checksum_sha256": stored.checksum_sha256,
         "is_downloadable": True,
+        "download_strategy_ref": storage_config["download_strategy_ref"] or stored.download_strategy_ref,
+        "supports_signed_url": stored.supports_signed_url,
+        "signed_url_expires_in_seconds": stored.signed_url_expires_in_seconds,
         "retention_policy_ref": storage_config["retention_policy_ref"],
-        "file_payload": payload,
+        "file_payload": stored.file_payload,
     }
 
 
@@ -2099,6 +3620,420 @@ def _sync_output_batch_summary(batch: PayrollOutputBatch) -> PayrollOutputBatch:
     }
     batch.save()
     return batch
+
+
+def _artifact_access_profile(artifact: PayrollOutputArtifact) -> dict[str, Any]:
+    artifact_config = artifact.config_snapshot if isinstance(artifact.config_snapshot, dict) else {}
+    batch_config = artifact.output_batch.config_snapshot if artifact.output_batch_id and isinstance(artifact.output_batch.config_snapshot, dict) else {}
+    batch_profile = batch_config.get("output_profile") if isinstance(batch_config, dict) else {}
+    profile = artifact_config.get("artifact_access_profile") or batch_config.get("artifact_access_profile") or {}
+    if not profile and isinstance(batch_profile, dict):
+        profile = batch_profile.get("artifact_access_profile") or batch_profile.get("payslip_delivery_profile") or {}
+    return profile if isinstance(profile, dict) else {}
+
+
+def _artifact_event_profile_ref(artifact: PayrollOutputArtifact, event_type: str) -> str:
+    profile = _artifact_access_profile(artifact)
+    return (
+        profile.get(f"{event_type}_event_profile_ref")
+        or profile.get("event_profile_ref")
+        or DEFAULT_ARTIFACT_ACCESS_PROFILE_REF
+    )
+
+
+def _artifact_source_channel_ref(artifact: PayrollOutputArtifact, event_type: str, default: str = DEFAULT_EMPLOYEE_PORTAL_CHANNEL_REF) -> str:
+    profile = _artifact_access_profile(artifact)
+    return (
+        profile.get(f"{event_type}_source_channel_ref")
+        or profile.get("source_channel_ref")
+        or default
+    )
+
+
+def create_payroll_artifact_access_event(
+    artifact: PayrollOutputArtifact,
+    *,
+    event_type: str,
+    actor_user=None,
+    actor_membership=None,
+    actor_identifier: str = "",
+    notification=None,
+    signed_access_grant: PayrollArtifactSignedAccessGrant | None = None,
+    request_identifier: str = "",
+    ip_address: str | None = None,
+    user_agent: str = "",
+    source_channel_ref: str | None = None,
+    event_profile_ref: str | None = None,
+    status: str = PayrollArtifactAccessEventStatus.RECORDED,
+    read_at=None,
+    metadata_snapshot: dict[str, Any] | None = None,
+    config_snapshot: dict[str, Any] | None = None,
+) -> PayrollArtifactAccessEvent:
+    """Record an immutable payroll artifact access event with storage evidence."""
+
+    return PayrollArtifactAccessEvent.objects.create(
+        tenant=artifact.tenant,
+        output_artifact=artifact,
+        output_batch=artifact.output_batch,
+        payroll_run=artifact.payroll_run,
+        review=artifact.review,
+        employee=artifact.employee,
+        actor_user=actor_user,
+        actor_membership=actor_membership,
+        actor_identifier=actor_identifier,
+        notification=notification,
+        signed_access_grant=signed_access_grant,
+        event_type=event_type,
+        status=status,
+        event_profile_ref=event_profile_ref or _artifact_event_profile_ref(artifact, event_type),
+        source_channel_ref=source_channel_ref or _artifact_source_channel_ref(artifact, event_type),
+        request_identifier=request_identifier,
+        ip_address=ip_address or None,
+        user_agent=user_agent,
+        storage_provider_ref=artifact.storage_provider_ref,
+        storage_key=artifact.storage_key,
+        storage_object_version=artifact.storage_object_version,
+        download_strategy_ref=artifact.download_strategy_ref,
+        checksum_sha256=artifact.checksum_sha256,
+        read_at=read_at,
+        metadata_snapshot=metadata_snapshot or {},
+        config_snapshot=config_snapshot or {},
+    )
+
+
+def _artifact_signed_access_profile(artifact: PayrollOutputArtifact) -> dict[str, Any]:
+    access_profile = _artifact_access_profile(artifact)
+    profile = access_profile.get("signed_access_profile") if isinstance(access_profile, dict) else {}
+    return profile if isinstance(profile, dict) else access_profile
+
+
+def _signed_access_download_path(artifact: PayrollOutputArtifact, *, source_channel_ref: str) -> str:
+    profile = _artifact_signed_access_profile(artifact)
+    if source_channel_ref == DEFAULT_EMPLOYEE_PORTAL_CHANNEL_REF and artifact.kind == PayrollOutputArtifactKind.PAYSLIP:
+        template = profile.get("employee_download_path_template") or "/api/v1/me/payroll-payslips/{artifact_id}/download/"
+    else:
+        template = profile.get("hr_admin_download_path_template") or "/api/v1/hr-admin/payroll-output-artifacts/{artifact_id}/download/"
+    return template.format(artifact_id=artifact.id)
+
+
+def _build_signed_access_url(
+    artifact: PayrollOutputArtifact,
+    *,
+    grant: PayrollArtifactSignedAccessGrant,
+    token: str,
+    source_channel_ref: str,
+) -> str:
+    path = _signed_access_download_path(artifact, source_channel_ref=source_channel_ref)
+    separator = "&" if "?" in path else "?"
+    return f"{path}{separator}{urlencode({'grant_id': str(grant.id), 'token': token})}"
+
+
+def _assert_artifact_can_issue_signed_access(artifact: PayrollOutputArtifact) -> None:
+    if artifact.status != PayrollOutputArtifactStatus.PUBLISHED:
+        raise PayrollOutputError("Signed access grants require a published payroll artifact.")
+    if not artifact.is_downloadable:
+        raise PayrollOutputError("Signed access grants require a downloadable payroll artifact.")
+    if not artifact.supports_signed_url:
+        raise PayrollOutputError("The configured payroll artifact storage strategy does not support signed access grants.")
+
+
+def issue_payroll_artifact_signed_access_grant(
+    artifact: PayrollOutputArtifact,
+    *,
+    issued_by_user=None,
+    issued_by_membership=None,
+    issued_to_user=None,
+    issued_to_membership=None,
+    actor_identifier: str = "",
+    source_channel_ref: str = DEFAULT_HR_ADMIN_CHANNEL_REF,
+    request_identifier: str = "",
+    ip_address: str | None = None,
+    user_agent: str = "",
+    expires_in_seconds: int | None = None,
+    max_access_count: int | None = None,
+    permission_scope: str = DEFAULT_SIGNED_ACCESS_PERMISSION_SCOPE,
+    metadata_snapshot: dict[str, Any] | None = None,
+    config_snapshot: dict[str, Any] | None = None,
+) -> PayrollArtifactSignedAccessGrantIssue:
+    """Issue a token-bound signed access grant and record an issuance event."""
+
+    _assert_artifact_can_issue_signed_access(artifact)
+    profile = _artifact_signed_access_profile(artifact)
+    requested_expiry = expires_in_seconds or int(profile.get("signed_url_expires_in_seconds") or artifact.signed_url_expires_in_seconds or 900)
+    min_expiry = int(profile.get("min_signed_url_expires_in_seconds") or 60)
+    max_expiry = int(profile.get("max_signed_url_expires_in_seconds") or artifact.signed_url_expires_in_seconds or 900)
+    bounded_expiry = max(min_expiry, min(requested_expiry, max_expiry))
+    configured_max_access_count = max_access_count if max_access_count is not None else profile.get("max_access_count")
+    max_access_count_value = int(configured_max_access_count) if configured_max_access_count not in {None, ""} else None
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    token_prefix = token[:12]
+    expires_at = timezone.now() + timedelta(seconds=bounded_expiry)
+    grant = PayrollArtifactSignedAccessGrant.objects.create(
+        tenant=artifact.tenant,
+        output_artifact=artifact,
+        output_batch=artifact.output_batch,
+        payroll_run=artifact.payroll_run,
+        review=artifact.review,
+        employee=artifact.employee,
+        issued_to_user=issued_to_user,
+        issued_to_membership=issued_to_membership,
+        issued_by_user=issued_by_user,
+        issued_by_membership=issued_by_membership,
+        status=PayrollArtifactSignedAccessGrantStatus.ACTIVE,
+        permission_scope=permission_scope or DEFAULT_SIGNED_ACCESS_PERMISSION_SCOPE,
+        grant_profile_ref=profile.get("grant_profile_ref") or DEFAULT_SIGNED_ACCESS_GRANT_PROFILE_REF,
+        source_channel_ref=source_channel_ref,
+        token_hash=token_hash,
+        token_prefix=token_prefix,
+        expires_at=expires_at,
+        max_access_count=max_access_count_value,
+        storage_provider_ref=artifact.storage_provider_ref,
+        storage_key=artifact.storage_key,
+        storage_object_version=artifact.storage_object_version,
+        download_strategy_ref=artifact.download_strategy_ref,
+        checksum_sha256=artifact.checksum_sha256,
+        metadata_snapshot={
+            "request_identifier": request_identifier,
+            "ip_address": ip_address or "",
+            "user_agent": user_agent,
+            **(metadata_snapshot or {}),
+        },
+        config_snapshot=config_snapshot or profile,
+    )
+    signed_url = _build_signed_access_url(artifact, grant=grant, token=token, source_channel_ref=source_channel_ref)
+    grant.signed_url = signed_url.replace(token, f"{token_prefix}...")
+    grant.save(update_fields=["signed_url", "updated_at"])
+    create_payroll_artifact_access_event(
+        artifact,
+        event_type=PayrollArtifactAccessEventType.SIGNED_URL_ISSUED,
+        actor_user=issued_by_user,
+        actor_membership=issued_by_membership,
+        actor_identifier=actor_identifier,
+        signed_access_grant=grant,
+        request_identifier=request_identifier,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        source_channel_ref=source_channel_ref,
+        event_profile_ref=_artifact_event_profile_ref(artifact, PayrollArtifactAccessEventType.SIGNED_URL_ISSUED),
+        metadata_snapshot={
+            "signed_access_grant_id": str(grant.id),
+            "permission_scope": grant.permission_scope,
+            "expires_at": expires_at.isoformat(),
+            "issued_to_user_id": str(issued_to_user.id) if issued_to_user else "",
+            "issued_to_membership_id": str(issued_to_membership.id) if issued_to_membership else "",
+            "max_access_count": grant.max_access_count,
+            **(metadata_snapshot or {}),
+        },
+    )
+    return PayrollArtifactSignedAccessGrantIssue(grant=grant, signed_url=signed_url, token=token)
+
+
+def validate_payroll_artifact_signed_access_grant(
+    artifact: PayrollOutputArtifact,
+    *,
+    grant_id: str,
+    token: str,
+    actor_user=None,
+    actor_membership=None,
+) -> PayrollArtifactSignedAccessGrant:
+    """Validate an incoming signed access grant against artifact, token, expiry, and recipient binding."""
+
+    if not grant_id or not token:
+        raise PayrollOutputError("Signed access grant id and token are required.")
+    grant = PayrollArtifactSignedAccessGrant.objects.filter(
+        tenant=artifact.tenant,
+        output_artifact=artifact,
+        id=grant_id,
+    ).first()
+    if not grant:
+        raise PayrollOutputError("Signed access grant was not found for this payroll artifact.")
+    if grant.token_hash != hashlib.sha256(token.encode("utf-8")).hexdigest():
+        raise PayrollOutputError("Signed access grant token is invalid.")
+    now = timezone.now()
+    if grant.status == PayrollArtifactSignedAccessGrantStatus.REVOKED:
+        raise PayrollOutputError("Signed access grant has been revoked.")
+    if grant.expires_at <= now:
+        grant.status = PayrollArtifactSignedAccessGrantStatus.EXPIRED
+        grant.save(update_fields=["status", "updated_at"])
+        raise PayrollOutputError("Signed access grant has expired.")
+    if grant.max_access_count is not None and grant.access_count >= grant.max_access_count:
+        raise PayrollOutputError("Signed access grant access limit has been reached.")
+    if grant.issued_to_user_id and (not actor_user or grant.issued_to_user_id != actor_user.id):
+        raise PayrollOutputError("Signed access grant is not issued to this user.")
+    if grant.issued_to_membership_id and (not actor_membership or grant.issued_to_membership_id != actor_membership.id):
+        raise PayrollOutputError("Signed access grant is not issued to this membership.")
+    return grant
+
+
+def mark_payroll_artifact_signed_access_grant_used(grant: PayrollArtifactSignedAccessGrant) -> PayrollArtifactSignedAccessGrant:
+    grant.access_count += 1
+    grant.last_accessed_at = timezone.now()
+    grant.save(update_fields=["access_count", "last_accessed_at", "updated_at"])
+    return grant
+
+
+def revoke_payroll_artifact_signed_access_grant(
+    grant: PayrollArtifactSignedAccessGrant,
+    *,
+    revoked_by_user=None,
+    revoked_by_membership=None,
+    actor_identifier: str = "",
+    reason: str,
+    request_identifier: str = "",
+    ip_address: str | None = None,
+    user_agent: str = "",
+) -> PayrollArtifactSignedAccessGrant:
+    """Revoke an active signed access grant and record a revocation event."""
+
+    if grant.status == PayrollArtifactSignedAccessGrantStatus.REVOKED:
+        return grant
+    if not reason:
+        raise PayrollOutputError("Revoking a signed access grant requires a reason.")
+    grant.status = PayrollArtifactSignedAccessGrantStatus.REVOKED
+    grant.revoked_at = timezone.now()
+    grant.revoked_by_user = revoked_by_user
+    grant.revoked_by_membership = revoked_by_membership
+    grant.revocation_reason = reason
+    grant.save()
+    create_payroll_artifact_access_event(
+        grant.output_artifact,
+        event_type=PayrollArtifactAccessEventType.REVOKED,
+        actor_user=revoked_by_user,
+        actor_membership=revoked_by_membership,
+        actor_identifier=actor_identifier,
+        signed_access_grant=grant,
+        request_identifier=request_identifier,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        source_channel_ref=grant.source_channel_ref,
+        status=PayrollArtifactAccessEventStatus.REVOKED,
+        metadata_snapshot={
+            "signed_access_grant_id": str(grant.id),
+            "revocation_reason": reason,
+        },
+    )
+    return grant
+
+
+def payroll_artifact_access_audit_rows(artifact: PayrollOutputArtifact) -> list[dict[str, Any]]:
+    """Build exportable access audit rows for one payroll output artifact."""
+
+    rows: list[dict[str, Any]] = []
+    for event in artifact.access_events.select_related("signed_access_grant", "notification", "actor_user", "actor_membership").order_by("created_at"):
+        rows.append({
+            "row_type": "event",
+            "artifact_id": str(artifact.id),
+            "artifact_key": artifact.artifact_key,
+            "event_or_grant_id": str(event.id),
+            "event_type": event.event_type,
+            "status": event.status,
+            "source_channel_ref": event.source_channel_ref,
+            "actor_identifier": event.actor_identifier,
+            "request_identifier": event.request_identifier,
+            "signed_access_grant_id": str(event.signed_access_grant_id or ""),
+            "notification_id": str(event.notification_id or ""),
+            "storage_provider_ref": event.storage_provider_ref,
+            "storage_object_version": event.storage_object_version,
+            "download_strategy_ref": event.download_strategy_ref,
+            "checksum_sha256": event.checksum_sha256,
+            "occurred_at": event.created_at.isoformat(),
+            "expires_at": "",
+            "revoked_at": "",
+            "access_count": "",
+            "metadata_snapshot": json.dumps(event.metadata_snapshot, sort_keys=True, default=str),
+        })
+    for grant in artifact.signed_access_grants.select_related("issued_to_user", "issued_to_membership", "issued_by_user", "revoked_by_user").order_by("created_at"):
+        rows.append({
+            "row_type": "signed_access_grant",
+            "artifact_id": str(artifact.id),
+            "artifact_key": artifact.artifact_key,
+            "event_or_grant_id": str(grant.id),
+            "event_type": "signed_access_grant",
+            "status": grant.status,
+            "source_channel_ref": grant.source_channel_ref,
+            "actor_identifier": str(grant.issued_by_user or ""),
+            "request_identifier": str((grant.metadata_snapshot or {}).get("request_identifier") or ""),
+            "signed_access_grant_id": str(grant.id),
+            "notification_id": "",
+            "storage_provider_ref": grant.storage_provider_ref,
+            "storage_object_version": grant.storage_object_version,
+            "download_strategy_ref": grant.download_strategy_ref,
+            "checksum_sha256": grant.checksum_sha256,
+            "occurred_at": grant.created_at.isoformat(),
+            "expires_at": grant.expires_at.isoformat(),
+            "revoked_at": grant.revoked_at.isoformat() if grant.revoked_at else "",
+            "access_count": str(grant.access_count),
+            "metadata_snapshot": json.dumps(grant.metadata_snapshot, sort_keys=True, default=str),
+        })
+    return sorted(rows, key=lambda row: (row["occurred_at"], row["row_type"], row["event_or_grant_id"]))
+
+
+def notify_published_payroll_payslip(artifact: PayrollOutputArtifact, *, published_by=None):
+    """Create configured employee notifications for a newly published payslip artifact."""
+
+    if artifact.kind != PayrollOutputArtifactKind.PAYSLIP or not artifact.employee_id:
+        return []
+    membership = getattr(artifact.employee, "membership", None)
+    if not membership:
+        return []
+
+    profile = _artifact_access_profile(artifact)
+    trigger_key = profile.get("publish_notification_trigger_key") or DEFAULT_PAYSLIP_PUBLISH_NOTIFICATION_TRIGGER_KEY
+    payload = {
+        "artifact_id": str(artifact.id),
+        "payroll_run_id": str(artifact.payroll_run_id),
+        "payroll_run_name": artifact.payroll_run.name,
+        "period_name": artifact.payroll_run.period.name if artifact.payroll_run.period_id else "",
+        "pay_date": artifact.payroll_run.period.pay_date.isoformat() if artifact.payroll_run.period_id and artifact.payroll_run.period.pay_date else "",
+        "employee_id": str(artifact.employee_id),
+        "employee_code": artifact.employee.employee_code,
+        "employee_name": str(artifact.employee),
+        "file_name": artifact.file_name,
+        "storage_provider_ref": artifact.storage_provider_ref,
+        "storage_object_version": artifact.storage_object_version,
+        "download_strategy_ref": artifact.download_strategy_ref,
+        "retention_policy_ref": artifact.retention_policy_ref,
+        "checksum_sha256": artifact.checksum_sha256,
+        "source_hash": artifact.source_hash,
+        "download_path": f"/ess/payslips?payslipId={artifact.id}",
+        "published_by": str(published_by) if published_by else "",
+    }
+    notifications = trigger_notification_event(
+        tenant=artifact.tenant,
+        module=profile.get("notification_module") or "payroll",
+        trigger_key=trigger_key,
+        subject_type=profile.get("notification_subject_type") or "payroll_payslip",
+        subject_identifier=str(artifact.id),
+        recipient_membership=membership,
+        recipient_identifier=getattr(membership.user, "username", "") if membership.user_id else artifact.employee.employee_code,
+        fallback_title=profile.get("fallback_title") or f"{artifact.payroll_run.period.name} payslip is available",
+        fallback_subject=profile.get("fallback_subject") or "Payslip published",
+        fallback_body=profile.get("fallback_body") or "Your payroll payslip has been published and is available in self service.",
+        payload=payload,
+    )
+    delivered_at = timezone.now()
+    for notification in notifications:
+        if notification.channel == NotificationChannel.IN_APP and notification.status == NotificationStatus.PENDING:
+            notification.status = NotificationStatus.DELIVERED
+            notification.sent_at = notification.sent_at or delivered_at
+            notification.delivered_at = notification.delivered_at or delivered_at
+            notification.save(update_fields=["status", "sent_at", "delivered_at", "updated_at"])
+        create_payroll_artifact_access_event(
+            artifact,
+            event_type=PayrollArtifactAccessEventType.NOTIFIED,
+            actor_user=published_by,
+            actor_identifier=str(published_by) if published_by else "",
+            notification=notification,
+            source_channel_ref=_artifact_source_channel_ref(artifact, PayrollArtifactAccessEventType.NOTIFIED, DEFAULT_EMPLOYEE_PORTAL_CHANNEL_REF),
+            metadata_snapshot={
+                "notification_id": str(notification.id),
+                "channel": notification.channel,
+                "status": notification.status,
+                "trigger_key": trigger_key,
+            },
+        )
+    return notifications
 
 
 def generate_payroll_outputs(
@@ -2171,6 +4106,7 @@ def generate_payroll_outputs(
                 "artifact_template_ref": profile.get("payslip_template_ref", "payroll.payslip.template.default.v1"),
                 "source_hashes": sorted({line.source_hash for line in employee_lines if line.source_hash}),
             }
+            payslip_config = _artifact_config_with_storage(payslip_config, profile)
             PayrollOutputArtifact.objects.create(
                 tenant=review.tenant,
                 output_batch=batch,
@@ -2214,6 +4150,7 @@ def generate_payroll_outputs(
             "artifact_template_ref": profile.get("register_template_ref", "payroll.register.template.default.v1"),
             "employee_count": len(register_rows),
         }
+        register_config = _artifact_config_with_storage(register_config, profile)
         PayrollOutputArtifact.objects.create(
             tenant=review.tenant,
             output_batch=batch,
@@ -2258,6 +4195,20 @@ def publish_payroll_output_batch(batch: PayrollOutputBatch, *, published_by=None
             artifact.published_at = publish_time
             artifact.published_by = published_by
             artifact.save()
+            if artifact.kind == PayrollOutputArtifactKind.PAYSLIP:
+                create_payroll_artifact_access_event(
+                    artifact,
+                    event_type=PayrollArtifactAccessEventType.PUBLISHED,
+                    actor_user=published_by,
+                    actor_identifier=str(published_by) if published_by else "",
+                    source_channel_ref=_artifact_source_channel_ref(artifact, PayrollArtifactAccessEventType.PUBLISHED, DEFAULT_HR_ADMIN_CHANNEL_REF),
+                    metadata_snapshot={
+                        "output_batch_id": str(batch.id),
+                        "published_at": publish_time.isoformat(),
+                        "published_by": str(published_by) if published_by else "",
+                    },
+                )
+                notify_published_payroll_payslip(artifact, published_by=published_by)
         batch.status = PayrollOutputBatchStatus.PUBLISHED
         batch.published_at = publish_time
         batch.published_by = published_by
@@ -2268,8 +4219,14 @@ def publish_payroll_output_batch(batch: PayrollOutputBatch, *, published_by=None
 def _finance_handoff_profile(batch: PayrollOutputBatch) -> dict[str, Any]:
     batch_config = batch.config_snapshot if isinstance(batch.config_snapshot, dict) else {}
     run_config = batch.payroll_run.config_snapshot if isinstance(batch.payroll_run.config_snapshot, dict) else {}
-    profile = batch_config.get("finance_handoff_profile") or run_config.get("finance_handoff_profile") or {}
-    return profile if isinstance(profile, dict) else {}
+    run_profile = run_config.get("finance_handoff_profile") if isinstance(run_config.get("finance_handoff_profile"), dict) else {}
+    batch_profile = batch_config.get("finance_handoff_profile") if isinstance(batch_config.get("finance_handoff_profile"), dict) else {}
+    profile = {**run_profile, **batch_profile}
+    run_routes = run_profile.get("provider_routes") if isinstance(run_profile.get("provider_routes"), dict) else {}
+    batch_routes = batch_profile.get("provider_routes") if isinstance(batch_profile.get("provider_routes"), dict) else {}
+    if run_routes or batch_routes:
+        profile["provider_routes"] = {**run_routes, **batch_routes}
+    return profile
 
 
 def _money_from_payload(value: Any) -> Decimal:
@@ -2277,6 +4234,230 @@ def _money_from_payload(value: Any) -> Decimal:
         return _round_decimal(value or "0.00", 2)
     except (PayrollRuleEvaluationError, ValueError):
         return Decimal("0.00")
+
+
+def _statutory_filing_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    filing_profile = profile.get("statutory_filing_profile") if isinstance(profile, dict) else {}
+    return filing_profile if isinstance(filing_profile, dict) else {}
+
+
+def _profile_string_set(profile: dict[str, Any], key: str) -> set[str]:
+    value = profile.get(key)
+    if value is None or value == "":
+        return set()
+    if isinstance(value, (list, tuple, set)):
+        return {str(item).strip().lower() for item in value if str(item).strip()}
+    return {str(value).strip().lower()}
+
+
+def _statutory_filing_calendars(batch: PayrollOutputBatch, profile: dict[str, Any]) -> list[PayrollStatutoryFilingCalendar]:
+    filing_profile = _statutory_filing_profile(profile)
+    if filing_profile.get("enabled") is False:
+        return []
+    statuses = _profile_string_set(filing_profile, "statuses") or {
+        PayrollStatutoryFilingStatus.DRAFT,
+        PayrollStatutoryFilingStatus.UPCOMING,
+        PayrollStatutoryFilingStatus.DUE,
+        PayrollStatutoryFilingStatus.OVERDUE,
+    }
+    calendars = PayrollStatutoryFilingCalendar.objects.filter(
+        tenant=batch.tenant,
+        period_start__lte=batch.payroll_run.period.end_date,
+        period_end__gte=batch.payroll_run.period.start_date,
+        status__in=statuses,
+    ).select_related("statutory_pack", "statutory_component", "employer_registration").order_by("due_date", "filing_type_ref")
+
+    filing_type_refs = _profile_string_set(filing_profile, "filing_type_refs")
+    output_profile_refs = _profile_string_set(filing_profile, "output_profile_refs")
+    statutory_pack_codes = _profile_string_set(filing_profile, "statutory_pack_codes")
+    statutory_component_codes = _profile_string_set(filing_profile, "statutory_component_codes")
+    calendar_list = list(calendars)
+    if filing_type_refs:
+        calendar_list = [item for item in calendar_list if item.filing_type_ref.lower() in filing_type_refs]
+    if output_profile_refs:
+        calendar_list = [item for item in calendar_list if item.output_profile_ref.lower() in output_profile_refs]
+    if statutory_pack_codes:
+        calendar_list = [item for item in calendar_list if item.statutory_pack.code.lower() in statutory_pack_codes]
+    if statutory_component_codes:
+        calendar_list = [
+            item
+            for item in calendar_list
+            if item.statutory_component_id and item.statutory_component.code.lower() in statutory_component_codes
+        ]
+    return calendar_list
+
+
+def _statutory_line_matches_filing(row: dict[str, Any], filing: PayrollStatutoryFilingCalendar) -> bool:
+    config = row.get("config_snapshot") if isinstance(row.get("config_snapshot"), dict) else {}
+    row_component_id = str(row.get("statutory_component_id") or config.get("statutory_component_id") or "")
+    row_component_code = str(row.get("statutory_component_code") or config.get("statutory_component_code") or "").lower()
+    row_pack_id = str(row.get("statutory_pack_id") or config.get("statutory_pack_id") or "")
+    row_pack_code = str(row.get("statutory_pack_code") or config.get("statutory_pack_code") or "").lower()
+    row_treatment_ref = str(row.get("statutory_treatment_ref") or config.get("statutory_treatment_ref") or "").lower()
+    if filing.statutory_component_id:
+        return (
+            row_component_id == str(filing.statutory_component_id)
+            or row_component_code == filing.statutory_component.code.lower()
+            or row_treatment_ref == filing.statutory_component.statutory_treatment_ref.lower()
+        )
+    return row_pack_id == str(filing.statutory_pack_id) or row_pack_code == filing.statutory_pack.code.lower()
+
+
+def _statutory_filing_rows(
+    *,
+    filing: PayrollStatutoryFilingCalendar,
+    statutory_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], Decimal]:
+    matched_rows = [row for row in statutory_rows if _statutory_line_matches_filing(row, filing)]
+    filing_total = Decimal("0.00")
+    rows = []
+    for row in matched_rows:
+        amount = _money_from_payload(row.get("amount"))
+        filing_total += amount
+        rows.append({
+            "filing_calendar_id": str(filing.id),
+            "filing_code": filing.code,
+            "filing_type_ref": filing.filing_type_ref,
+            "period_start": filing.period_start.isoformat(),
+            "period_end": filing.period_end.isoformat(),
+            "due_date": filing.due_date.isoformat(),
+            "registration_number": filing.employer_registration.registration_number if filing.employer_registration_id else "",
+            "employer_identifier": filing.employer_registration.employer_identifier if filing.employer_registration_id else "",
+            "filing_authority_ref": filing.filing_authority_ref,
+            "provider_ref": filing.provider_ref,
+            "employee_code": row.get("employee_code", ""),
+            "component_code": row.get("component_code", ""),
+            "component_name": row.get("component_name", ""),
+            "statutory_component_code": row.get("statutory_component_code", ""),
+            "statutory_treatment_ref": row.get("statutory_treatment_ref", ""),
+            "line_type": row.get("line_type", ""),
+            "amount": str(amount),
+            "source_line_id": row.get("source_line_id", ""),
+            "source_hash": row.get("source_hash", ""),
+        })
+    return rows, filing_total
+
+
+def _statutory_challan_rows(
+    *,
+    filing: PayrollStatutoryFilingCalendar,
+    filing_total: Decimal,
+    source_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [{
+        "filing_calendar_id": str(filing.id),
+        "filing_code": filing.code,
+        "filing_type_ref": filing.filing_type_ref,
+        "period_start": filing.period_start.isoformat(),
+        "period_end": filing.period_end.isoformat(),
+        "due_date": filing.due_date.isoformat(),
+        "grace_due_date": filing.grace_due_date.isoformat() if filing.grace_due_date else "",
+        "registration_number": filing.employer_registration.registration_number if filing.employer_registration_id else "",
+        "employer_identifier": filing.employer_registration.employer_identifier if filing.employer_registration_id else "",
+        "filing_authority_ref": filing.filing_authority_ref,
+        "provider_ref": filing.provider_ref,
+        "payable_amount": str(filing_total),
+        "source_row_count": len(source_rows),
+        "source_hashes": sorted({str(row.get("source_hash", "")) for row in source_rows if row.get("source_hash")}),
+    }]
+
+
+def _create_statutory_filing_artifacts(
+    *,
+    batch: PayrollOutputBatch,
+    handoff: PayrollFinanceHandoff,
+    statutory_rows: list[dict[str, Any]],
+    generated_by=None,
+    profile: dict[str, Any],
+    artifact_key_prefix: str,
+) -> list[PayrollOutputArtifact]:
+    filing_profile = _statutory_filing_profile(profile)
+    if filing_profile.get("enabled") is False:
+        return []
+    generate_returns = filing_profile.get("generate_return_artifacts", True) is not False
+    generate_challans = filing_profile.get("generate_challan_artifacts", True) is not False
+    if not (generate_returns or generate_challans):
+        return []
+
+    artifacts: list[PayrollOutputArtifact] = []
+    for filing in _statutory_filing_calendars(batch, profile):
+        filing_rows, filing_total = _statutory_filing_rows(filing=filing, statutory_rows=statutory_rows)
+        if not filing_rows and filing_profile.get("generate_empty_filings") is not True:
+            continue
+        base_profile_ref = filing.output_profile_ref or filing_profile.get("return_output_profile_ref") or handoff.statutory_pack_ref
+        base_config = {
+            "handoff_id": str(handoff.id),
+            "handoff_profile_ref": handoff.handoff_profile_ref,
+            "statutory_filing_calendar_id": str(filing.id),
+            "statutory_filing_calendar_code": filing.code,
+            "statutory_pack_id": str(filing.statutory_pack_id),
+            "statutory_pack_code": filing.statutory_pack.code,
+            "statutory_component_id": str(filing.statutory_component_id) if filing.statutory_component_id else "",
+            "statutory_component_code": filing.statutory_component.code if filing.statutory_component_id else "",
+            "employer_registration_id": str(filing.employer_registration_id) if filing.employer_registration_id else "",
+            "employer_registration_number": filing.employer_registration.registration_number if filing.employer_registration_id else "",
+            "filing_type_ref": filing.filing_type_ref,
+            "filing_frequency": filing.filing_frequency,
+            "filing_authority_ref": filing.filing_authority_ref,
+            "provider_ref": filing.provider_ref,
+            "output_profile_ref": base_profile_ref,
+            "source_filing_hash": filing.source_hash,
+            "source_hashes": sorted({str(row.get("source_hash", "")) for row in filing_rows if row.get("source_hash")}),
+        }
+        generated_for_filing: list[PayrollOutputArtifact] = []
+        if generate_returns:
+            return_file_name = f"{batch.payroll_run.code}-{filing.code}-statutory-return.{_artifact_extension(_artifact_mime_type(PayrollOutputArtifactKind.STATUTORY_REPORT, profile))}"
+            generated_for_filing.append(_finance_artifact(
+                batch=batch,
+                kind=PayrollOutputArtifactKind.STATUTORY_REPORT,
+                artifact_key=f"{artifact_key_prefix}-statutory-return-{filing.code}",
+                title=f"{batch.payroll_run.name} {filing.name} Return",
+                file_name=return_file_name,
+                output_profile_ref=base_profile_ref,
+                totals_snapshot={
+                    "statutory_total": str(filing_total),
+                    "line_count": len(filing_rows),
+                    "filing_calendar_id": str(filing.id),
+                    "filing_type_ref": filing.filing_type_ref,
+                },
+                line_snapshot=filing_rows,
+                generated_by=generated_by,
+                config_snapshot={**base_config, "artifact_subtype": "statutory_return"},
+            ))
+        if generate_challans:
+            challan_rows = _statutory_challan_rows(filing=filing, filing_total=filing_total, source_rows=filing_rows)
+            challan_profile_ref = filing_profile.get("challan_output_profile_ref") or f"{base_profile_ref}.challan"
+            challan_file_name = f"{batch.payroll_run.code}-{filing.code}-statutory-challan.{_artifact_extension(_artifact_mime_type(PayrollOutputArtifactKind.STATUTORY_REPORT, profile))}"
+            generated_for_filing.append(_finance_artifact(
+                batch=batch,
+                kind=PayrollOutputArtifactKind.STATUTORY_REPORT,
+                artifact_key=f"{artifact_key_prefix}-statutory-challan-{filing.code}",
+                title=f"{batch.payroll_run.name} {filing.name} Challan",
+                file_name=challan_file_name,
+                output_profile_ref=challan_profile_ref,
+                totals_snapshot={
+                    "payable_amount": str(filing_total),
+                    "source_row_count": len(filing_rows),
+                    "filing_calendar_id": str(filing.id),
+                    "filing_type_ref": filing.filing_type_ref,
+                },
+                line_snapshot=challan_rows,
+                generated_by=generated_by,
+                config_snapshot={**base_config, "artifact_subtype": "statutory_challan", "output_profile_ref": challan_profile_ref},
+            ))
+        artifacts.extend(generated_for_filing)
+        latest_generation = {
+            "handoff_id": str(handoff.id),
+            "output_batch_id": str(batch.id),
+            "generated_at": timezone.now().isoformat(),
+            "artifact_ids": [str(artifact.id) for artifact in generated_for_filing],
+            "artifact_keys": [artifact.artifact_key for artifact in generated_for_filing],
+            "statutory_total": str(filing_total),
+            "line_count": len(filing_rows),
+        }
+        filing.config_snapshot = {**(filing.config_snapshot if isinstance(filing.config_snapshot, dict) else {}), "latest_generation": latest_generation}
+        filing.save()
+    return artifacts
 
 
 def _payslip_employee_name(artifact: PayrollOutputArtifact) -> str:
@@ -2302,7 +4483,10 @@ def _finance_artifact(
     if artifact:
         return artifact
     profile = _finance_handoff_profile(batch)
-    artifact_config = {**(config_snapshot or {}), "generated_by": str(generated_by) if generated_by else ""}
+    artifact_config = _artifact_config_with_storage(
+        {**(config_snapshot or {}), "generated_by": str(generated_by) if generated_by else ""},
+        profile,
+    )
     return PayrollOutputArtifact.objects.create(
         tenant=batch.tenant,
         output_batch=batch,
@@ -2330,24 +4514,1061 @@ def _finance_artifact(
 
 
 def _sync_finance_handoff_summary(handoff: PayrollFinanceHandoff) -> PayrollFinanceHandoff:
-    artifacts = PayrollOutputArtifact.objects.filter(
+    artifacts = list(PayrollOutputArtifact.objects.filter(
         output_batch=handoff.output_batch,
-        kind__in=[
-            PayrollOutputArtifactKind.BANK_ADVICE,
-            PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
-            PayrollOutputArtifactKind.STATUTORY_REPORT,
-        ],
-    )
+        kind__in=FINANCE_ARTIFACT_KINDS,
+    ))
+    statutory_filing_artifacts = [
+        artifact for artifact in artifacts
+        if artifact.kind == PayrollOutputArtifactKind.STATUTORY_REPORT
+        and (artifact.config_snapshot or {}).get("artifact_subtype") in {"statutory_return", "statutory_challan"}
+    ]
+    artifacts_by_status = {
+        "published": sum(1 for artifact in artifacts if artifact.status == PayrollOutputArtifactStatus.PUBLISHED),
+        "generated": sum(1 for artifact in artifacts if artifact.status == PayrollOutputArtifactStatus.GENERATED),
+    }
+    deliveries = handoff.provider_deliveries.all()
     handoff.handoff_summary_snapshot = {
-        "artifact_count": artifacts.count(),
-        "bank_advice_count": artifacts.filter(kind=PayrollOutputArtifactKind.BANK_ADVICE).count(),
-        "accounting_export_count": artifacts.filter(kind=PayrollOutputArtifactKind.ACCOUNTING_EXPORT).count(),
-        "statutory_report_count": artifacts.filter(kind=PayrollOutputArtifactKind.STATUTORY_REPORT).count(),
-        "published_count": artifacts.filter(status=PayrollOutputArtifactStatus.PUBLISHED).count(),
-        "generated_count": artifacts.filter(status=PayrollOutputArtifactStatus.GENERATED).count(),
+        "artifact_count": len(artifacts),
+        "bank_advice_count": sum(1 for artifact in artifacts if artifact.kind == PayrollOutputArtifactKind.BANK_ADVICE),
+        "accounting_export_count": sum(1 for artifact in artifacts if artifact.kind == PayrollOutputArtifactKind.ACCOUNTING_EXPORT),
+        "statutory_report_count": sum(1 for artifact in artifacts if artifact.kind == PayrollOutputArtifactKind.STATUTORY_REPORT),
+        "statutory_filing_artifact_count": len(statutory_filing_artifacts),
+        "statutory_filing_count": len({
+            artifact.config_snapshot.get("statutory_filing_calendar_id")
+            for artifact in statutory_filing_artifacts
+            if artifact.config_snapshot.get("statutory_filing_calendar_id")
+        }),
+        "published_count": artifacts_by_status["published"],
+        "generated_count": artifacts_by_status["generated"],
+        "delivery_count": deliveries.count(),
+        "submitted_delivery_count": deliveries.filter(status=PayrollProviderDeliveryStatus.SUBMITTED).count(),
+        "acknowledged_delivery_count": deliveries.filter(status=PayrollProviderDeliveryStatus.ACKNOWLEDGED).count(),
+        "reconciled_delivery_count": deliveries.filter(status=PayrollProviderDeliveryStatus.RECONCILED).count(),
+        "failed_delivery_count": deliveries.filter(status=PayrollProviderDeliveryStatus.FAILED).count(),
+        "rejected_delivery_count": deliveries.filter(status=PayrollProviderDeliveryStatus.REJECTED).count(),
     }
     handoff.save()
     return handoff
+
+
+def _provider_route_keys(artifact: PayrollOutputArtifact) -> list[str]:
+    config = artifact.config_snapshot if isinstance(artifact.config_snapshot, dict) else {}
+    subtype = str(config.get("artifact_subtype") or "").strip()
+    filing_type_ref = str(config.get("filing_type_ref") or "").strip()
+    route_keys = [
+        artifact.artifact_key,
+        f"output_profile:{artifact.output_profile_ref}",
+    ]
+    if filing_type_ref:
+        route_keys.append(f"filing_type:{filing_type_ref}")
+    if subtype:
+        route_keys.extend([f"{artifact.kind}:{subtype}", subtype])
+    route_keys.append(artifact.kind)
+    return route_keys
+
+
+def _provider_connection_policy(profile: dict[str, Any], route: dict[str, Any]) -> dict[str, Any]:
+    profile_policy = profile.get("provider_connection_policy") if isinstance(profile.get("provider_connection_policy"), dict) else {}
+    route_policy = route.get("provider_connection_policy") if isinstance(route.get("provider_connection_policy"), dict) else {}
+    policy = {**profile_policy, **route_policy}
+    enforcement_mode = str(
+        route.get("provider_connection_enforcement")
+        or policy.get("enforcement_mode")
+        or ("active" if route.get("require_active_provider_connection") else "")
+        or ("certified" if route.get("provider_connection_required") else "")
+        or "warn"
+    ).strip().lower()
+    if enforcement_mode not in {"disabled", "warn", "certified", "active"}:
+        enforcement_mode = "warn"
+    return {
+        **policy,
+        "enforcement_mode": enforcement_mode,
+        "required": enforcement_mode in {"certified", "active"} or bool(route.get("provider_connection_required")),
+    }
+
+
+def _provider_connection_for_route(artifact: PayrollOutputArtifact, provider_ref: str) -> PayrollProviderConnection | None:
+    connection = PayrollProviderConnection.objects.filter(
+        tenant=artifact.tenant,
+        provider_ref=provider_ref,
+    ).first()
+    if connection and not isinstance(connection.readiness_snapshot, dict):
+        connection = sync_payroll_provider_connection_readiness(connection)
+    if connection and not connection.readiness_snapshot:
+        connection = sync_payroll_provider_connection_readiness(connection)
+    return connection
+
+
+def _provider_connection_gate(
+    *,
+    profile: dict[str, Any],
+    route: dict[str, Any],
+    artifact: PayrollOutputArtifact,
+    provider_ref: str,
+    adapter_ref: str,
+    channel_ref: str,
+    credential_ref: str,
+    callback_verification_ref: str,
+    retry_policy_ref: str,
+) -> dict[str, Any]:
+    policy = _provider_connection_policy(profile, route)
+    enforcement_mode = policy["enforcement_mode"]
+    connection = _provider_connection_for_route(artifact, provider_ref)
+    gate: dict[str, Any] = {
+        "policy_ref": str(policy.get("policy_ref") or "payroll.provider_connection.policy.default.v1"),
+        "enforcement_mode": enforcement_mode,
+        "required": bool(policy["required"]),
+        "provider_ref": provider_ref,
+        "matched": connection is not None,
+        "status": "not_configured",
+        "certification_status": PayrollProviderCertificationStatus.NOT_STARTED,
+        "active_allowed": False,
+        "blocking_gate_refs": [],
+        "mismatch_refs": [],
+    }
+    if enforcement_mode == "disabled":
+        gate["status"] = "disabled"
+        return gate
+    if connection is None:
+        gate["blocking_gate_refs"] = ["provider_connection_missing"] if gate["required"] else []
+        if gate["required"]:
+            raise PayrollFinanceHandoffError(f"Payroll provider connection {provider_ref} must be configured before finance handoff transmission.")
+        return gate
+
+    readiness = connection.readiness_snapshot if isinstance(connection.readiness_snapshot, dict) else {}
+    active_allowed = bool(readiness.get("active_allowed")) and connection.certification_status == PayrollProviderCertificationStatus.PASSED
+    mismatches = []
+    expected_refs = {
+        "adapter_ref": (connection.adapter_ref, adapter_ref),
+        "channel_ref": (connection.channel_ref, channel_ref),
+        "credential_ref": (connection.credential_ref, credential_ref),
+        "callback_verification_ref": (connection.callback_verification_ref, callback_verification_ref),
+        "retry_policy_ref": (connection.retry_policy_ref, retry_policy_ref),
+    }
+    for field_name, (connection_value, route_value) in expected_refs.items():
+        if str(connection_value or "").strip() and str(route_value or "").strip() and str(connection_value) != str(route_value):
+            mismatches.append(field_name)
+    gate = {
+        **gate,
+        "provider_connection_id": str(connection.id),
+        "provider_name": connection.provider_name,
+        "provider_kind": connection.provider_kind,
+        "environment_ref": connection.environment_ref,
+        "status": connection.status,
+        "certification_status": connection.certification_status,
+        "active_allowed": active_allowed,
+        "ready_gate_count": readiness.get("ready_gate_count", 0),
+        "total_gate_count": readiness.get("total_gate_count", 0),
+        "blocking_gate_refs": list(readiness.get("blocking_gate_refs", [])) if isinstance(readiness.get("blocking_gate_refs"), list) else [],
+        "mismatch_refs": mismatches,
+    }
+    if enforcement_mode == "certified" and not active_allowed:
+        raise PayrollFinanceHandoffError(f"Payroll provider connection {provider_ref} must pass certification before finance handoff transmission.")
+    if enforcement_mode == "active" and (connection.status != PayrollProviderConnectionStatus.ACTIVE or not active_allowed):
+        raise PayrollFinanceHandoffError(f"Payroll provider connection {provider_ref} must be active and certified before finance handoff transmission.")
+    if enforcement_mode in {"certified", "active"} and mismatches:
+        raise PayrollFinanceHandoffError(f"Payroll provider connection {provider_ref} does not match route refs: {', '.join(mismatches)}.")
+    return gate
+
+
+def _provider_delivery_route(profile: dict[str, Any], artifact: PayrollOutputArtifact) -> dict[str, Any]:
+    routes = profile.get("provider_routes") if isinstance(profile, dict) else {}
+    route: dict[str, Any] = {}
+    route_key = artifact.kind
+    if isinstance(routes, dict):
+        for candidate_key in _provider_route_keys(artifact):
+            candidate = routes.get(candidate_key)
+            if isinstance(candidate, dict):
+                route = candidate
+                route_key = candidate_key
+                break
+    try:
+        validate_payroll_provider_route_config(route)
+    except PayrollProviderAdapterError as exc:
+        raise PayrollFinanceHandoffError(str(exc)) from exc
+    provider_ref = route.get("provider_ref") or f"payroll.provider.{artifact.kind}.manual.v1"
+    connection = _provider_connection_for_route(artifact, provider_ref)
+    adapter_ref = route.get("adapter_ref") or (connection.adapter_ref if connection else "") or f"payroll.provider_adapter.{artifact.kind}.manual.v1"
+    channel_ref = route.get("channel_ref") or (connection.channel_ref if connection else "") or f"payroll.channel.{artifact.kind}.manual.v1"
+    submission_profile_ref = route.get("submission_profile_ref") or f"payroll.submission.{artifact.kind}.manual.v1"
+    callback_profile_ref = route.get("callback_profile_ref") or (connection.callback_profile_ref if connection else "") or profile.get("callback_profile_ref") or "payroll.callback.manual.v1"
+    callback_verification_ref = route.get("callback_verification_ref") or (connection.callback_verification_ref if connection else "") or profile.get("callback_verification_ref") or "payroll.callback.verification.manual.v1"
+    retry_policy_ref = route.get("retry_policy_ref") or (connection.retry_policy_ref if connection else "") or profile.get("retry_policy_ref") or "payroll.delivery.retry.standard.v1"
+    credential_ref = route.get("credential_ref") or (connection.credential_ref if connection else "") or ""
+    credential_required = bool(route.get("credential_required", connection.credential_required if connection else False))
+    credential_profile_ref = route.get("credential_profile_ref") or (connection.credential_profile_ref if connection else "") or ""
+    certification_profile_ref = route.get("certification_profile_ref") or (connection.certification_profile_ref if connection else "") or f"{submission_profile_ref}.certification"
+    certification_required = route.get("certification_required")
+    if certification_required is None:
+        certification_required = artifact.kind == PayrollOutputArtifactKind.STATUTORY_REPORT
+    provider_connection_gate = _provider_connection_gate(
+        profile=profile,
+        route=route,
+        artifact=artifact,
+        provider_ref=provider_ref,
+        adapter_ref=adapter_ref,
+        channel_ref=channel_ref,
+        credential_ref=credential_ref,
+        callback_verification_ref=callback_verification_ref,
+        retry_policy_ref=retry_policy_ref,
+    )
+    return {
+        "provider_ref": provider_ref,
+        "channel_ref": channel_ref,
+        "retry_policy_ref": retry_policy_ref,
+        "acknowledgement_profile_ref": route.get("acknowledgement_profile_ref") or profile.get("acknowledgement_profile_ref") or "payroll.acknowledgement.profile.manual.v1",
+        "route_key": route_key,
+        "adapter_ref": adapter_ref,
+        "submission_mode": route.get("submission_mode") or "manual",
+        "submission_profile_ref": submission_profile_ref,
+        "request_schema_ref": route.get("request_schema_ref") or f"{submission_profile_ref}.request",
+        "response_schema_ref": route.get("response_schema_ref") or f"{submission_profile_ref}.response",
+        "callback_profile_ref": callback_profile_ref,
+        "callback_verification_ref": callback_verification_ref,
+        "credential_ref": credential_ref,
+        "credential_required": credential_required,
+        "credential_profile_ref": credential_profile_ref,
+        "retry_policy": route.get("retry_policy") if isinstance(route.get("retry_policy"), dict) else {},
+        "execution_adapter": route.get("execution_adapter") if isinstance(route.get("execution_adapter"), dict) else {},
+        "sandbox_response": route.get("sandbox_response") if isinstance(route.get("sandbox_response"), dict) else {},
+        "provider_connection_gate": provider_connection_gate,
+        "certification_profile_ref": certification_profile_ref,
+        "certification_required": bool(certification_required),
+    }
+
+
+def _provider_submission_contract(
+    *,
+    handoff: PayrollFinanceHandoff,
+    artifact: PayrollOutputArtifact,
+    route: dict[str, Any],
+) -> dict[str, Any]:
+    config = artifact.config_snapshot if isinstance(artifact.config_snapshot, dict) else {}
+    idempotency_material = ":".join([
+        str(handoff.id),
+        str(artifact.id),
+        str(route["provider_ref"]),
+        artifact.checksum_sha256,
+        artifact.storage_object_version,
+    ])
+    contract = {
+        "adapter_ref": route["adapter_ref"],
+        "provider_ref": route["provider_ref"],
+        "channel_ref": route["channel_ref"],
+        "route_key": route["route_key"],
+        "submission_mode": route["submission_mode"],
+        "submission_profile_ref": route["submission_profile_ref"],
+        "request_schema_ref": route["request_schema_ref"],
+        "response_schema_ref": route["response_schema_ref"],
+        "callback_profile_ref": route["callback_profile_ref"],
+        "callback_verification_ref": route["callback_verification_ref"],
+        "certification_profile_ref": route["certification_profile_ref"],
+        "certification_required": route["certification_required"],
+        "credential_ref": route.get("credential_ref", ""),
+        "credential_profile_ref": route.get("credential_profile_ref", ""),
+        "provider_connection_gate": route.get("provider_connection_gate", {}),
+        "idempotency_key": hashlib.sha256(idempotency_material.encode("utf-8")).hexdigest(),
+    }
+    if artifact.kind == PayrollOutputArtifactKind.STATUTORY_REPORT:
+        contract["statutory_context"] = {
+            "artifact_subtype": config.get("artifact_subtype", ""),
+            "statutory_filing_calendar_id": config.get("statutory_filing_calendar_id", ""),
+            "statutory_filing_calendar_code": config.get("statutory_filing_calendar_code", ""),
+            "filing_type_ref": config.get("filing_type_ref", ""),
+            "filing_authority_ref": config.get("filing_authority_ref", ""),
+            "employer_registration_id": config.get("employer_registration_id", ""),
+            "employer_registration_number": config.get("employer_registration_number", ""),
+            "output_profile_ref": artifact.output_profile_ref,
+        }
+    return contract
+
+
+def _provider_delivery_request_snapshot(
+    *,
+    handoff: PayrollFinanceHandoff,
+    artifact: PayrollOutputArtifact,
+    route: dict[str, Any],
+) -> dict[str, Any]:
+    contract = _provider_submission_contract(handoff=handoff, artifact=artifact, route=route)
+    return {
+        "artifact_id": str(artifact.id),
+        "artifact_key": artifact.artifact_key,
+        "artifact_kind": artifact.kind,
+        "file_name": artifact.file_name,
+        "storage_key": artifact.storage_key,
+        "storage_object_version": artifact.storage_object_version,
+        "storage_provider_ref": artifact.storage_provider_ref,
+        "download_strategy_ref": artifact.download_strategy_ref,
+        "supports_signed_url": artifact.supports_signed_url,
+        "mime_type": artifact.mime_type,
+        "file_size_bytes": artifact.file_size_bytes,
+        "checksum_sha256": artifact.checksum_sha256,
+        "retention_policy_ref": artifact.retention_policy_ref,
+        "line_count": len(artifact.line_snapshot) if isinstance(artifact.line_snapshot, list) else 0,
+        "totals_snapshot": artifact.totals_snapshot,
+        "submission_contract": contract,
+    }
+
+
+def _provider_certification_evidence(contract: dict[str, Any], *, status: str = "pending") -> dict[str, Any]:
+    return {
+        "status": status if contract.get("certification_required") else "not_required",
+        "certification_profile_ref": contract.get("certification_profile_ref", ""),
+        "provider_ref": contract.get("provider_ref", ""),
+        "adapter_ref": contract.get("adapter_ref", ""),
+        "evidence_refs": [],
+    }
+
+
+def _provider_retry_policy_config(delivery: PayrollProviderDelivery) -> dict[str, Any]:
+    delivery_config = delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}
+    route = delivery_config.get("provider_route") if isinstance(delivery_config.get("provider_route"), dict) else {}
+    retry_policy = route.get("retry_policy") if isinstance(route.get("retry_policy"), dict) else {}
+    return retry_policy
+
+
+def _provider_retry_decision(delivery: PayrollProviderDelivery, *, requested_for=None) -> dict[str, Any]:
+    policy = _provider_retry_policy_config(delivery)
+    max_attempts = int(policy.get("max_attempts") or 3)
+    backoff_seconds = int(policy.get("backoff_seconds") or 300)
+    failure_taxonomy_ref = str(policy.get("failure_taxonomy_ref") or "payroll.delivery.failure_taxonomy.default.v1")
+    failure_categories = policy.get("failure_categories") if isinstance(policy.get("failure_categories"), dict) else {}
+    failure_category_ref = str(failure_categories.get(delivery.failure_code) or policy.get("default_failure_category_ref") or "provider_failure")
+    current_attempt = max(delivery.attempt_count, 0)
+    next_attempt = current_attempt + 1
+    eligible_statuses = {
+        PayrollProviderDeliveryStatus.FAILED,
+        PayrollProviderDeliveryStatus.REJECTED,
+    }
+    eligible = delivery.status in eligible_statuses and current_attempt < max_attempts
+    scheduled_for = requested_for or timezone.now() + timedelta(seconds=backoff_seconds)
+    return {
+        "eligible": eligible,
+        "state": "scheduled" if eligible else "dead_lettered",
+        "retry_policy_ref": delivery.retry_policy_ref,
+        "failure_taxonomy_ref": failure_taxonomy_ref,
+        "failure_category_ref": failure_category_ref,
+        "max_attempts": max_attempts,
+        "current_attempt_count": current_attempt,
+        "next_attempt_number": next_attempt,
+        "backoff_seconds": backoff_seconds,
+        "scheduled_for": scheduled_for.isoformat(),
+        "failure_code": delivery.failure_code,
+        "failure_reason": delivery.failure_reason,
+    }
+
+
+def schedule_payroll_provider_delivery_retry(
+    delivery: PayrollProviderDelivery,
+    *,
+    requested_by=None,
+    retry_reason: str = "",
+    scheduled_for=None,
+) -> PayrollProviderRetryEvent:
+    """Schedule retry or dead-letter a failed/rejected provider delivery."""
+
+    if delivery.status == PayrollProviderDeliveryStatus.RECONCILED:
+        raise PayrollProviderRetryError("Reconciled provider deliveries cannot be retried.")
+    decision = _provider_retry_decision(delivery, requested_for=scheduled_for)
+    status = PayrollProviderRetryEventStatus.SCHEDULED if decision["eligible"] else PayrollProviderRetryEventStatus.DEAD_LETTERED
+    now = timezone.now()
+    with transaction.atomic():
+        event = PayrollProviderRetryEvent.objects.create(
+            tenant=delivery.tenant,
+            provider_delivery=delivery,
+            handoff=delivery.handoff,
+            output_artifact=delivery.output_artifact,
+            status=status,
+            retry_policy_ref=delivery.retry_policy_ref,
+            failure_taxonomy_ref=decision["failure_taxonomy_ref"],
+            failure_category_ref=decision["failure_category_ref"],
+            retry_reason=retry_reason,
+            attempt_number=decision["next_attempt_number"],
+            scheduled_for=scheduled_for or now + timedelta(seconds=int(decision["backoff_seconds"])),
+            requested_by=requested_by,
+            decision_snapshot=decision,
+            request_snapshot=delivery.request_snapshot,
+            failure_code="" if decision["eligible"] else "retry_exhausted",
+            failure_reason="" if decision["eligible"] else "Provider delivery reached the configured retry limit.",
+        )
+        retry_state = {
+            **decision,
+            "latest_retry_event_id": str(event.id),
+            "updated_at": now.isoformat(),
+        }
+        if not decision["eligible"]:
+            retry_state["dead_lettered_at"] = now.isoformat()
+        delivery.config_snapshot = {
+            **(delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}),
+            "retry_state": retry_state,
+        }
+        delivery.save()
+        _sync_finance_handoff_summary(delivery.handoff)
+    return event
+
+
+def requeue_payroll_provider_delivery(
+    delivery: PayrollProviderDelivery,
+    *,
+    executed_by=None,
+    retry_event: PayrollProviderRetryEvent | None = None,
+) -> PayrollProviderRetryEvent:
+    """Execute a scheduled retry by moving the delivery back to submitted state."""
+
+    if delivery.status == PayrollProviderDeliveryStatus.RECONCILED:
+        raise PayrollProviderRetryError("Reconciled provider deliveries cannot be requeued.")
+    if retry_event is None:
+        retry_event = schedule_payroll_provider_delivery_retry(delivery, requested_by=executed_by, scheduled_for=timezone.now())
+    if retry_event.status != PayrollProviderRetryEventStatus.SCHEDULED:
+        raise PayrollProviderRetryError("Only scheduled provider retries can be requeued.")
+    now = timezone.now()
+    with transaction.atomic():
+        delivery.attempt_count = max(delivery.attempt_count + 1, retry_event.attempt_number)
+        delivery.status = PayrollProviderDeliveryStatus.SUBMITTED
+        delivery.submitted_at = now
+        delivery.submitted_by = executed_by or delivery.submitted_by
+        delivery.acknowledged_at = None
+        delivery.acknowledged_by = None
+        delivery.reconciled_at = None
+        delivery.reconciled_by = None
+        delivery.failure_code = ""
+        delivery.failure_reason = ""
+        retry_state = {
+            **(delivery.config_snapshot.get("retry_state", {}) if isinstance(delivery.config_snapshot, dict) and isinstance(delivery.config_snapshot.get("retry_state"), dict) else {}),
+            "state": "requeued",
+            "latest_retry_event_id": str(retry_event.id),
+            "last_requeued_at": now.isoformat(),
+            "attempt_count": delivery.attempt_count,
+        }
+        delivery.request_snapshot = {
+            **(delivery.request_snapshot if isinstance(delivery.request_snapshot, dict) else {}),
+            "retry_context": retry_state,
+        }
+        delivery.config_snapshot = {
+            **(delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}),
+            "retry_state": retry_state,
+        }
+        delivery.save()
+
+        retry_event.status = PayrollProviderRetryEventStatus.EXECUTED
+        retry_event.executed_at = now
+        retry_event.executed_by = executed_by
+        retry_event.response_snapshot = {
+            "delivery_status": delivery.status,
+            "attempt_count": delivery.attempt_count,
+            "executed_at": now.isoformat(),
+            "request_snapshot": delivery.request_snapshot,
+        }
+        retry_event.save()
+        handoff = _sync_finance_handoff_summary(delivery.handoff)
+        if handoff.status == PayrollFinanceHandoffStatus.FAILED:
+            handoff.status = PayrollFinanceHandoffStatus.TRANSMITTED
+            handoff.save()
+    return retry_event
+
+
+def _provider_retry_execution_config(delivery: PayrollProviderDelivery) -> dict[str, Any]:
+    delivery_config = delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}
+    route = delivery_config.get("provider_route") if isinstance(delivery_config.get("provider_route"), dict) else {}
+    submission_contract = delivery_config.get("submission_contract") if isinstance(delivery_config.get("submission_contract"), dict) else {}
+    execution_adapter = route.get("execution_adapter") if isinstance(route.get("execution_adapter"), dict) else {}
+    return {
+        "worker_profile_ref": execution_adapter.get("worker_profile_ref") or route.get("worker_profile_ref") or "payroll.provider_retry.worker.default.v1",
+        "adapter_ref": execution_adapter.get("adapter_ref") or submission_contract.get("adapter_ref") or route.get("adapter_ref") or "payroll.provider_adapter.manual.v1",
+        "execution_mode": execution_adapter.get("execution_mode") or "manual_requeue",
+        "execution_strategy_ref": execution_adapter.get("execution_strategy_ref") or "payroll.provider_retry.execution.manual_requeue.v1",
+        "dispatch_mode": execution_adapter.get("dispatch_mode") or "submitted_then_callback",
+        "provider_ref": delivery.provider_ref,
+        "channel_ref": delivery.channel_ref,
+        "submission_profile_ref": submission_contract.get("submission_profile_ref", ""),
+        "request_schema_ref": submission_contract.get("request_schema_ref", ""),
+        "response_schema_ref": submission_contract.get("response_schema_ref", ""),
+        "callback_profile_ref": submission_contract.get("callback_profile_ref", ""),
+        "callback_verification_ref": submission_contract.get("callback_verification_ref", ""),
+        "idempotency_key": submission_contract.get("idempotency_key", ""),
+    }
+
+
+def _skip_payroll_provider_retry_event(
+    retry_event: PayrollProviderRetryEvent,
+    *,
+    failure_code: str,
+    failure_reason: str,
+    executed_by=None,
+    response_snapshot: dict[str, Any] | None = None,
+) -> PayrollProviderRetryEvent:
+    now = timezone.now()
+    with transaction.atomic():
+        retry_event.status = PayrollProviderRetryEventStatus.SKIPPED
+        retry_event.executed_at = now
+        retry_event.executed_by = executed_by
+        retry_event.failure_code = failure_code
+        retry_event.failure_reason = failure_reason
+        retry_event.response_snapshot = {
+            **(retry_event.response_snapshot if isinstance(retry_event.response_snapshot, dict) else {}),
+            **(response_snapshot or {}),
+            "skipped_at": now.isoformat(),
+            "failure_code": failure_code,
+            "failure_reason": failure_reason,
+        }
+        retry_event.save()
+    return retry_event
+
+
+def execute_payroll_provider_retry_event(
+    retry_event: PayrollProviderRetryEvent,
+    *,
+    executed_by=None,
+    now=None,
+) -> PayrollProviderRetryEvent:
+    """Execute one due provider retry through the configured adapter shell."""
+
+    now = now or timezone.now()
+    if retry_event.status != PayrollProviderRetryEventStatus.SCHEDULED:
+        raise PayrollProviderRetryError("Only scheduled provider retry events can be executed.")
+    if retry_event.scheduled_for and retry_event.scheduled_for > now:
+        raise PayrollProviderRetryError("Provider retry event is not due yet.")
+
+    delivery = retry_event.provider_delivery
+    adapter_config = _provider_retry_execution_config(delivery)
+    execution_snapshot = {
+        "worker_profile_ref": adapter_config["worker_profile_ref"],
+        "adapter_ref": adapter_config["adapter_ref"],
+        "execution_mode": adapter_config["execution_mode"],
+        "execution_strategy_ref": adapter_config["execution_strategy_ref"],
+        "dispatch_mode": adapter_config["dispatch_mode"],
+        "provider_ref": adapter_config["provider_ref"],
+        "channel_ref": adapter_config["channel_ref"],
+        "submission_profile_ref": adapter_config["submission_profile_ref"],
+        "request_schema_ref": adapter_config["request_schema_ref"],
+        "response_schema_ref": adapter_config["response_schema_ref"],
+        "callback_profile_ref": adapter_config["callback_profile_ref"],
+        "callback_verification_ref": adapter_config["callback_verification_ref"],
+        "idempotency_key": adapter_config["idempotency_key"],
+        "retry_event_id": str(retry_event.id),
+        "provider_delivery_id": str(delivery.id),
+        "attempt_number": retry_event.attempt_number,
+        "executed_at": now.isoformat(),
+    }
+
+    if delivery.status == PayrollProviderDeliveryStatus.RECONCILED:
+        return _skip_payroll_provider_retry_event(
+            retry_event,
+            failure_code="delivery_already_reconciled",
+            failure_reason="Provider delivery was reconciled before the retry worker executed.",
+            executed_by=executed_by,
+            response_snapshot={"adapter_execution": execution_snapshot},
+        )
+    if delivery.status not in {PayrollProviderDeliveryStatus.FAILED, PayrollProviderDeliveryStatus.REJECTED}:
+        return _skip_payroll_provider_retry_event(
+            retry_event,
+            failure_code="delivery_not_retryable",
+            failure_reason="Provider delivery is no longer in a failed or rejected state.",
+            executed_by=executed_by,
+            response_snapshot={"adapter_execution": execution_snapshot},
+        )
+
+    executed_event = requeue_payroll_provider_delivery(delivery, executed_by=executed_by, retry_event=retry_event)
+    delivery.refresh_from_db()
+    if _delivery_needs_provider_adapter_submission(delivery):
+        submit_payroll_provider_delivery(delivery, submitted_by=executed_by, retry_event=executed_event)
+    executed_event.response_snapshot = {
+        **(executed_event.response_snapshot if isinstance(executed_event.response_snapshot, dict) else {}),
+        "adapter_execution": execution_snapshot,
+        "provider_submission": delivery.response_snapshot.get("adapter_submission", {}) if isinstance(delivery.response_snapshot, dict) else {},
+    }
+    executed_event.save()
+    return executed_event
+
+
+def process_due_payroll_provider_retries(
+    *,
+    tenant=None,
+    limit: int = 100,
+    now=None,
+    executed_by=None,
+) -> PayrollProviderRetryWorkerResult:
+    """Process due provider retry events through the adapter shell."""
+
+    now = now or timezone.now()
+    queryset = PayrollProviderRetryEvent.objects.filter(
+        status=PayrollProviderRetryEventStatus.SCHEDULED,
+        scheduled_for__lte=now,
+    ).select_related("provider_delivery", "handoff", "output_artifact")
+    if tenant is not None:
+        queryset = queryset.filter(tenant=tenant)
+
+    processed_events: list[PayrollProviderRetryEvent] = []
+    executed_count = 0
+    skipped_count = 0
+    for retry_event in queryset.order_by("scheduled_for", "created_at")[: max(1, limit)]:
+        try:
+            processed_event = execute_payroll_provider_retry_event(
+                retry_event,
+                executed_by=executed_by,
+                now=now,
+            )
+        except PayrollProviderRetryError as exc:
+            processed_event = _skip_payroll_provider_retry_event(
+                retry_event,
+                failure_code="retry_execution_error",
+                failure_reason=str(exc),
+                executed_by=executed_by,
+            )
+        processed_events.append(processed_event)
+        if processed_event.status == PayrollProviderRetryEventStatus.EXECUTED:
+            executed_count += 1
+        elif processed_event.status == PayrollProviderRetryEventStatus.SKIPPED:
+            skipped_count += 1
+
+    return PayrollProviderRetryWorkerResult(
+        processed_events=processed_events,
+        executed_count=executed_count,
+        skipped_count=skipped_count,
+    )
+
+
+def _json_checksum(payload: dict[str, Any]) -> str:
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def expected_provider_callback_signature(
+    delivery: PayrollProviderDelivery,
+    *,
+    idempotency_key: str,
+    payload_checksum_sha256: str,
+) -> str:
+    config = delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}
+    contract = config.get("submission_contract") if isinstance(config.get("submission_contract"), dict) else {}
+    callback_verification_ref = contract.get("callback_verification_ref") or "payroll.callback.verification.manual.v1"
+    material = ":".join([
+        delivery.provider_ref,
+        delivery.external_reference,
+        idempotency_key,
+        payload_checksum_sha256,
+        delivery.payload_checksum_sha256,
+        str(callback_verification_ref),
+    ])
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _find_provider_callback_delivery(
+    *,
+    provider_ref: str,
+    external_reference: str = "",
+    provider_delivery_id: str = "",
+) -> PayrollProviderDelivery:
+    deliveries = PayrollProviderDelivery.objects.select_related("handoff", "output_artifact").filter(provider_ref=provider_ref)
+    if provider_delivery_id:
+        deliveries = deliveries.filter(id=provider_delivery_id)
+    elif external_reference:
+        deliveries = deliveries.filter(external_reference=external_reference)
+    else:
+        raise PayrollProviderCallbackError("Provider callbacks require a delivery id or external reference.")
+    delivery = deliveries.first()
+    if not delivery:
+        raise PayrollProviderCallbackError("Provider callback delivery was not found.")
+    return delivery
+
+
+def ingest_payroll_provider_callback(
+    *,
+    provider_ref: str,
+    idempotency_key: str,
+    provider_status: str,
+    payload_snapshot: dict[str, Any],
+    signature: str,
+    external_reference: str = "",
+    external_event_id: str = "",
+    provider_delivery_id: str = "",
+) -> tuple[PayrollProviderCallbackEvent, bool]:
+    """Verify and record a provider callback, then update the matching delivery."""
+
+    idempotency_key = str(idempotency_key or "").strip()
+    provider_ref = str(provider_ref or "").strip()
+    if not provider_ref or not idempotency_key:
+        raise PayrollProviderCallbackError("Provider callbacks require provider ref and idempotency key.")
+    if provider_status not in {
+        PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+        PayrollProviderDeliveryStatus.RECONCILED,
+        PayrollProviderDeliveryStatus.REJECTED,
+        PayrollProviderDeliveryStatus.FAILED,
+    }:
+        raise PayrollProviderCallbackError("Unsupported provider callback status.")
+
+    existing = PayrollProviderCallbackEvent.objects.filter(provider_ref=provider_ref, idempotency_key=idempotency_key).first()
+    if existing:
+        return existing, True
+
+    payload_snapshot = payload_snapshot if isinstance(payload_snapshot, dict) else {}
+    payload_checksum = _json_checksum(payload_snapshot)
+    delivery = _find_provider_callback_delivery(
+        provider_ref=provider_ref,
+        external_reference=external_reference,
+        provider_delivery_id=provider_delivery_id,
+    )
+    delivery_config = delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}
+    submission_contract = delivery_config.get("submission_contract") if isinstance(delivery_config.get("submission_contract"), dict) else {}
+    callback_profile_ref = str(submission_contract.get("callback_profile_ref") or "payroll.callback.manual.v1")
+    callback_verification_ref = str(submission_contract.get("callback_verification_ref") or "payroll.callback.verification.manual.v1")
+    expected_signature = expected_provider_callback_signature(
+        delivery,
+        idempotency_key=idempotency_key,
+        payload_checksum_sha256=payload_checksum,
+    )
+    signature_valid = secrets.compare_digest(str(signature or ""), expected_signature)
+    received_at = timezone.now()
+
+    with transaction.atomic():
+        event = PayrollProviderCallbackEvent.objects.create(
+            tenant=delivery.tenant,
+            provider_delivery=delivery,
+            handoff=delivery.handoff,
+            output_artifact=delivery.output_artifact,
+            provider_ref=provider_ref,
+            external_reference=external_reference or delivery.external_reference,
+            external_event_id=external_event_id,
+            idempotency_key=idempotency_key,
+            callback_profile_ref=callback_profile_ref,
+            callback_verification_ref=callback_verification_ref,
+            status=PayrollProviderCallbackEventStatus.RECEIVED if signature_valid else PayrollProviderCallbackEventStatus.REJECTED,
+            provider_status=provider_status,
+            payload_checksum_sha256=payload_checksum,
+            signature=signature,
+            verification_snapshot={
+                "callback_profile_ref": callback_profile_ref,
+                "callback_verification_ref": callback_verification_ref,
+                "expected_signature": expected_signature,
+                "signature_valid": signature_valid,
+                "verification_mode": "deterministic_contract_signature",
+                "received_at": received_at.isoformat(),
+            },
+            payload_snapshot=payload_snapshot,
+            failure_code="" if signature_valid else "signature_verification_failed",
+            failure_reason="" if signature_valid else "Provider callback signature did not match the delivery contract.",
+            received_at=received_at,
+        )
+        if not signature_valid:
+            return event, False
+
+        delivery.status = provider_status
+        if provider_status in {PayrollProviderDeliveryStatus.ACKNOWLEDGED, PayrollProviderDeliveryStatus.RECONCILED}:
+            delivery.acknowledged_at = received_at
+        if provider_status == PayrollProviderDeliveryStatus.RECONCILED:
+            delivery.reconciled_at = received_at
+        if provider_status in {PayrollProviderDeliveryStatus.REJECTED, PayrollProviderDeliveryStatus.FAILED}:
+            delivery.failure_code = str(payload_snapshot.get("failure_code") or "provider_callback_failure")
+            delivery.failure_reason = str(payload_snapshot.get("failure_reason") or "Provider callback reported a failed delivery.")
+        else:
+            delivery.failure_code = ""
+            delivery.failure_reason = ""
+
+        delivery.response_snapshot = {
+            **(delivery.response_snapshot if isinstance(delivery.response_snapshot, dict) else {}),
+            "provider_status": provider_status,
+            "external_reference": delivery.external_reference,
+            "external_event_id": external_event_id,
+            "callback_profile_ref": callback_profile_ref,
+            "callback_verification_ref": callback_verification_ref,
+            "payload_checksum_sha256": payload_checksum,
+            "received_at": received_at.isoformat(),
+            "payload": payload_snapshot,
+        }
+        certification_evidence = delivery_config.get("certification_evidence") if isinstance(delivery_config.get("certification_evidence"), dict) else {}
+        certification_evidence = {
+            **certification_evidence,
+            "status": "recorded" if provider_status == PayrollProviderDeliveryStatus.RECONCILED and submission_contract.get("certification_required") else certification_evidence.get("status", "not_required"),
+            "recorded_at": received_at.isoformat() if provider_status == PayrollProviderDeliveryStatus.RECONCILED and submission_contract.get("certification_required") else certification_evidence.get("recorded_at", ""),
+            "external_reference": delivery.external_reference,
+            "provider_status": provider_status,
+            "evidence_refs": payload_snapshot.get("certification_evidence_refs", certification_evidence.get("evidence_refs", [])),
+        }
+        delivery.config_snapshot = {**delivery_config, "certification_evidence": certification_evidence}
+        if provider_status == PayrollProviderDeliveryStatus.RECONCILED:
+            delivery.reconciliation_snapshot = {
+                "callback_event_id": str(event.id),
+                "callback_profile_ref": callback_profile_ref,
+                "callback_verification_ref": callback_verification_ref,
+                "certification_profile_ref": submission_contract.get("certification_profile_ref", ""),
+                "checksum_matched": delivery.payload_checksum_sha256 == delivery.output_artifact.checksum_sha256,
+                "payload_checksum_sha256": delivery.payload_checksum_sha256,
+                "artifact_checksum_sha256": delivery.output_artifact.checksum_sha256,
+                "callback_payload_checksum_sha256": payload_checksum,
+                "file_size_bytes": delivery.output_artifact.file_size_bytes,
+                "line_count": len(delivery.output_artifact.line_snapshot) if isinstance(delivery.output_artifact.line_snapshot, list) else 0,
+                "reconciled_at": received_at.isoformat(),
+            }
+        delivery.save()
+
+        handoff = _sync_finance_handoff_summary(delivery.handoff)
+        if provider_status in {PayrollProviderDeliveryStatus.REJECTED, PayrollProviderDeliveryStatus.FAILED}:
+            handoff.status = PayrollFinanceHandoffStatus.FAILED
+        elif provider_status == PayrollProviderDeliveryStatus.RECONCILED and not PayrollProviderDelivery.objects.filter(
+            handoff=handoff,
+            status__in=[
+                PayrollProviderDeliveryStatus.QUEUED,
+                PayrollProviderDeliveryStatus.SUBMITTED,
+                PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+                PayrollProviderDeliveryStatus.REJECTED,
+                PayrollProviderDeliveryStatus.FAILED,
+            ],
+        ).exists():
+            handoff.status = PayrollFinanceHandoffStatus.ACCEPTED
+            handoff.accepted_at = received_at
+        handoff.save()
+        event.status = PayrollProviderCallbackEventStatus.PROCESSED
+        event.processed_at = received_at
+        event.processing_snapshot = {
+            "delivery_id": str(delivery.id),
+            "handoff_id": str(handoff.id),
+            "delivery_status": delivery.status,
+            "handoff_status": handoff.status,
+            "processed_at": received_at.isoformat(),
+        }
+        event.save()
+    return event, False
+
+
+def _ensure_provider_delivery(
+    *,
+    handoff: PayrollFinanceHandoff,
+    artifact: PayrollOutputArtifact,
+    submitted_by=None,
+) -> PayrollProviderDelivery:
+    profile = _finance_handoff_profile(handoff.output_batch)
+    route = _provider_delivery_route(profile, artifact)
+    request_snapshot = _provider_delivery_request_snapshot(handoff=handoff, artifact=artifact, route=route)
+    submission_contract = request_snapshot["submission_contract"]
+    external_reference = f"{handoff.payroll_run.code}-{artifact.kind}-{artifact.id}"
+    delivery, created = PayrollProviderDelivery.objects.get_or_create(
+        handoff=handoff,
+        output_artifact=artifact,
+        provider_ref=route["provider_ref"],
+        defaults={
+            "tenant": handoff.tenant,
+            "output_batch": handoff.output_batch,
+            "payroll_run": handoff.payroll_run,
+            "review": handoff.review,
+            "artifact_kind": artifact.kind,
+            "status": PayrollProviderDeliveryStatus.SUBMITTED,
+            "channel_ref": route["channel_ref"],
+            "external_reference": external_reference,
+            "retry_policy_ref": route["retry_policy_ref"],
+            "attempt_count": 1,
+            "submitted_by": submitted_by,
+            "payload_checksum_sha256": artifact.checksum_sha256,
+            "request_snapshot": request_snapshot,
+            "config_snapshot": {
+                "provider_route": route,
+                "submission_contract": submission_contract,
+                "certification_evidence": _provider_certification_evidence(submission_contract),
+                "handoff_profile_ref": handoff.handoff_profile_ref,
+                "source_output_profile_ref": handoff.output_batch.output_profile_ref,
+            },
+        },
+    )
+    if created or delivery.status == PayrollProviderDeliveryStatus.RECONCILED:
+        return delivery
+    if delivery.status in {PayrollProviderDeliveryStatus.FAILED, PayrollProviderDeliveryStatus.REJECTED}:
+        delivery.attempt_count += 1
+    delivery.status = PayrollProviderDeliveryStatus.SUBMITTED
+    delivery.submitted_by = submitted_by or delivery.submitted_by
+    delivery.failure_code = ""
+    delivery.failure_reason = ""
+    delivery.request_snapshot = request_snapshot
+    delivery.config_snapshot = {
+        **(delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}),
+        "provider_route": route,
+        "submission_contract": submission_contract,
+        "certification_evidence": _provider_certification_evidence(submission_contract),
+        "handoff_profile_ref": handoff.handoff_profile_ref,
+        "source_output_profile_ref": handoff.output_batch.output_profile_ref,
+    }
+    delivery.save()
+    return delivery
+
+
+def _failure_result_from_provider_adapter_error(
+    delivery: PayrollProviderDelivery,
+    exc: PayrollProviderAdapterError,
+) -> PayrollProviderSubmissionResult:
+    return PayrollProviderSubmissionResult(
+        provider_status=PayrollProviderDeliveryStatus.FAILED,
+        external_reference=delivery.external_reference,
+        provider_batch_ref="",
+        response_snapshot={
+            "adapter_error": {
+                "code": exc.code,
+                "message": str(exc),
+                "provider_ref": exc.provider_ref or delivery.provider_ref,
+                "retryable": exc.retryable,
+            },
+        },
+        certification_evidence_refs=[],
+        failure_code=exc.code,
+        failure_reason=str(exc),
+        retryable=exc.retryable,
+    )
+
+
+def _apply_provider_submission_result(
+    delivery: PayrollProviderDelivery,
+    *,
+    request_snapshot: dict[str, Any],
+    result: PayrollProviderSubmissionResult,
+    submitted_by=None,
+    retry_event: PayrollProviderRetryEvent | None = None,
+) -> PayrollProviderDelivery:
+    provider_status = result.provider_status
+    if provider_status not in {
+        PayrollProviderDeliveryStatus.SUBMITTED,
+        PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+        PayrollProviderDeliveryStatus.RECONCILED,
+        PayrollProviderDeliveryStatus.REJECTED,
+        PayrollProviderDeliveryStatus.FAILED,
+    }:
+        raise PayrollFinanceHandoffError("Payroll provider adapter returned an unsupported delivery status.")
+
+    now = timezone.now()
+    delivery_config = delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}
+    submission_contract = delivery_config.get("submission_contract") if isinstance(delivery_config.get("submission_contract"), dict) else {}
+    adapter_submission = {
+        "request": request_snapshot,
+        "result": result.snapshot(),
+        "submitted_at": now.isoformat(),
+    }
+    if retry_event is not None:
+        adapter_submission["retry_event_id"] = str(retry_event.id)
+        adapter_submission["retry_attempt_number"] = retry_event.attempt_number
+
+    delivery.status = provider_status
+    delivery.external_reference = result.external_reference or delivery.external_reference
+    delivery.submitted_at = now
+    delivery.submitted_by = submitted_by or delivery.submitted_by
+    if provider_status in {PayrollProviderDeliveryStatus.ACKNOWLEDGED, PayrollProviderDeliveryStatus.RECONCILED}:
+        delivery.acknowledged_at = now
+        delivery.acknowledged_by = submitted_by or delivery.acknowledged_by
+    else:
+        delivery.acknowledged_at = None
+        delivery.acknowledged_by = None
+    if provider_status == PayrollProviderDeliveryStatus.RECONCILED:
+        delivery.reconciled_at = now
+        delivery.reconciled_by = submitted_by or delivery.reconciled_by
+    else:
+        delivery.reconciled_at = None
+        delivery.reconciled_by = None
+    if provider_status in {PayrollProviderDeliveryStatus.REJECTED, PayrollProviderDeliveryStatus.FAILED}:
+        delivery.failure_code = result.failure_code or "provider_adapter_failure"
+        delivery.failure_reason = result.failure_reason or "Provider adapter returned a failed delivery status."
+    else:
+        delivery.failure_code = ""
+        delivery.failure_reason = ""
+
+    delivery.request_snapshot = {
+        **(delivery.request_snapshot if isinstance(delivery.request_snapshot, dict) else {}),
+        "provider_submission_request": request_snapshot,
+    }
+    delivery.response_snapshot = {
+        **(delivery.response_snapshot if isinstance(delivery.response_snapshot, dict) else {}),
+        "provider_status": provider_status,
+        "external_reference": delivery.external_reference,
+        "provider_batch_ref": result.provider_batch_ref,
+        "adapter_submission": adapter_submission,
+        **result.response_snapshot,
+    }
+
+    certification_evidence = delivery_config.get("certification_evidence") if isinstance(delivery_config.get("certification_evidence"), dict) else {}
+    certification_evidence = {
+        **certification_evidence,
+        "status": "recorded" if provider_status == PayrollProviderDeliveryStatus.RECONCILED and submission_contract.get("certification_required") else certification_evidence.get("status", "not_required"),
+        "recorded_at": now.isoformat() if provider_status == PayrollProviderDeliveryStatus.RECONCILED and submission_contract.get("certification_required") else certification_evidence.get("recorded_at", ""),
+        "external_reference": delivery.external_reference,
+        "provider_status": provider_status,
+        "evidence_refs": result.certification_evidence_refs or certification_evidence.get("evidence_refs", []),
+    }
+    delivery.config_snapshot = {
+        **delivery_config,
+        "credential_snapshot": request_snapshot.get("credential_snapshot", {}),
+        "certification_evidence": certification_evidence,
+    }
+
+    if provider_status == PayrollProviderDeliveryStatus.RECONCILED:
+        delivery.reconciliation_snapshot = {
+            "adapter_submission": adapter_submission,
+            "callback_profile_ref": submission_contract.get("callback_profile_ref", ""),
+            "callback_verification_ref": submission_contract.get("callback_verification_ref", ""),
+            "certification_profile_ref": submission_contract.get("certification_profile_ref", ""),
+            "checksum_matched": delivery.payload_checksum_sha256 == delivery.output_artifact.checksum_sha256,
+            "payload_checksum_sha256": delivery.payload_checksum_sha256,
+            "artifact_checksum_sha256": delivery.output_artifact.checksum_sha256,
+            "file_size_bytes": delivery.output_artifact.file_size_bytes,
+            "line_count": len(delivery.output_artifact.line_snapshot) if isinstance(delivery.output_artifact.line_snapshot, list) else 0,
+            "reconciled_at": now.isoformat(),
+        }
+    delivery.save()
+
+    handoff = _sync_finance_handoff_summary(delivery.handoff)
+    if provider_status in {PayrollProviderDeliveryStatus.REJECTED, PayrollProviderDeliveryStatus.FAILED}:
+        handoff.status = PayrollFinanceHandoffStatus.FAILED
+    elif provider_status == PayrollProviderDeliveryStatus.RECONCILED and not PayrollProviderDelivery.objects.filter(
+        handoff=handoff,
+        status__in=[
+            PayrollProviderDeliveryStatus.QUEUED,
+            PayrollProviderDeliveryStatus.SUBMITTED,
+            PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+            PayrollProviderDeliveryStatus.REJECTED,
+            PayrollProviderDeliveryStatus.FAILED,
+        ],
+    ).exists():
+        handoff.status = PayrollFinanceHandoffStatus.ACCEPTED
+        handoff.accepted_at = now
+        handoff.accepted_by = submitted_by or handoff.accepted_by
+    elif handoff.status == PayrollFinanceHandoffStatus.FAILED and provider_status == PayrollProviderDeliveryStatus.SUBMITTED:
+        handoff.status = PayrollFinanceHandoffStatus.TRANSMITTED
+    handoff.save()
+    return delivery
+
+
+def submit_payroll_provider_delivery(
+    delivery: PayrollProviderDelivery,
+    *,
+    submitted_by=None,
+    retry_event: PayrollProviderRetryEvent | None = None,
+) -> PayrollProviderDelivery:
+    """Submit a provider delivery through the configured adapter boundary."""
+
+    try:
+        request = normalize_payroll_provider_submission_request(delivery)
+        adapter = get_payroll_provider_adapter(request.adapter_ref)
+        result = adapter.submit(request)
+        request_snapshot = request.snapshot()
+    except PayrollProviderAdapterError as exc:
+        request_snapshot = {
+            "delivery_id": str(delivery.id),
+            "provider_ref": delivery.provider_ref,
+            "adapter_error": {
+                "code": exc.code,
+                "message": str(exc),
+                "provider_ref": exc.provider_ref or delivery.provider_ref,
+                "retryable": exc.retryable,
+            },
+        }
+        result = _failure_result_from_provider_adapter_error(delivery, exc)
+    with transaction.atomic():
+        return _apply_provider_submission_result(
+            delivery,
+            request_snapshot=request_snapshot,
+            result=result,
+            submitted_by=submitted_by,
+            retry_event=retry_event,
+        )
+
+
+def _delivery_needs_provider_adapter_submission(delivery: PayrollProviderDelivery) -> bool:
+    response_snapshot = delivery.response_snapshot if isinstance(delivery.response_snapshot, dict) else {}
+    return delivery.status == PayrollProviderDeliveryStatus.SUBMITTED and not isinstance(response_snapshot.get("adapter_submission"), dict)
 
 
 def generate_payroll_finance_handoff(
@@ -2435,6 +5656,7 @@ def generate_payroll_finance_handoff(
             line_type = _normalized_key(line.get("line_type", ""))
             if line_type in {"deduction", "tax", "employer_contribution"}:
                 amount = _money_from_payload(line.get("amount"))
+                line_config = line.get("config_snapshot") if isinstance(line.get("config_snapshot"), dict) else {}
                 statutory_total += amount
                 statutory_rows.append({
                     "employee_code": payslip.employee.employee_code if payslip.employee_id else "",
@@ -2442,9 +5664,15 @@ def generate_payroll_finance_handoff(
                     "component_name": line.get("component_name", ""),
                     "line_type": line.get("line_type", ""),
                     "amount": str(amount),
-                    "statutory_treatment_ref": (line.get("config_snapshot") or {}).get("statutory_treatment_ref", ""),
+                    "statutory_pack_id": line_config.get("statutory_pack_id", ""),
+                    "statutory_pack_code": line_config.get("statutory_pack_code", ""),
+                    "statutory_component_id": line_config.get("statutory_component_id", ""),
+                    "statutory_component_code": line_config.get("statutory_component_code", ""),
+                    "statutory_type": line_config.get("statutory_type", ""),
+                    "statutory_treatment_ref": line_config.get("statutory_treatment_ref", ""),
                     "source_line_id": line.get("line_id", ""),
                     "source_hash": line.get("source_hash") or payslip.source_hash,
+                    "config_snapshot": line_config,
                 })
         bank_total += net_pay
         accounting_gross += gross_earnings
@@ -2518,6 +5746,25 @@ def generate_payroll_finance_handoff(
             generated_by=generated_by,
             config_snapshot={"handoff_id": str(handoff.id), "handoff_profile_ref": profile_ref},
         )
+        statutory_filing_artifacts = _create_statutory_filing_artifacts(
+            batch=batch,
+            handoff=handoff,
+            statutory_rows=statutory_rows,
+            generated_by=generated_by,
+            profile=profile,
+            artifact_key_prefix=artifact_key_prefix,
+        )
+        if statutory_filing_artifacts:
+            handoff.totals_snapshot = {
+                **handoff.totals_snapshot,
+                "statutory_filing_artifact_count": len(statutory_filing_artifacts),
+                "statutory_filing_count": len({
+                    artifact.config_snapshot.get("statutory_filing_calendar_id")
+                    for artifact in statutory_filing_artifacts
+                    if artifact.config_snapshot.get("statutory_filing_calendar_id")
+                }),
+            }
+            handoff.save()
         handoff = _sync_finance_handoff_summary(handoff)
     return handoff
 
@@ -2526,6 +5773,15 @@ def transmit_payroll_finance_handoff(handoff: PayrollFinanceHandoff, *, transmit
     """Mark a generated finance handoff as transmitted and publish its finance artifacts."""
 
     if handoff.status == PayrollFinanceHandoffStatus.TRANSMITTED:
+        for artifact in PayrollOutputArtifact.objects.filter(
+            output_batch=handoff.output_batch,
+            kind__in=FINANCE_ARTIFACT_KINDS,
+            status=PayrollOutputArtifactStatus.PUBLISHED,
+        ):
+            delivery = _ensure_provider_delivery(handoff=handoff, artifact=artifact, submitted_by=transmitted_by)
+            if _delivery_needs_provider_adapter_submission(delivery):
+                submit_payroll_provider_delivery(delivery, submitted_by=transmitted_by)
+        _sync_finance_handoff_summary(handoff)
         return handoff
     if handoff.status != PayrollFinanceHandoffStatus.GENERATED:
         raise PayrollFinanceHandoffError("Only generated payroll finance handoffs can be transmitted.")
@@ -2535,11 +5791,7 @@ def transmit_payroll_finance_handoff(handoff: PayrollFinanceHandoff, *, transmit
     with transaction.atomic():
         for artifact in PayrollOutputArtifact.objects.filter(
             output_batch=handoff.output_batch,
-            kind__in=[
-                PayrollOutputArtifactKind.BANK_ADVICE,
-                PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
-                PayrollOutputArtifactKind.STATUTORY_REPORT,
-            ],
+            kind__in=FINANCE_ARTIFACT_KINDS,
             status=PayrollOutputArtifactStatus.GENERATED,
         ):
             artifact.status = PayrollOutputArtifactStatus.PUBLISHED
@@ -2548,5 +5800,126 @@ def transmit_payroll_finance_handoff(handoff: PayrollFinanceHandoff, *, transmit
         handoff.status = PayrollFinanceHandoffStatus.TRANSMITTED
         handoff.transmitted_at = timezone.now()
         handoff.transmitted_by = transmitted_by
+        handoff.save()
+        for artifact in PayrollOutputArtifact.objects.filter(
+            output_batch=handoff.output_batch,
+            kind__in=FINANCE_ARTIFACT_KINDS,
+            status=PayrollOutputArtifactStatus.PUBLISHED,
+        ):
+            delivery = _ensure_provider_delivery(handoff=handoff, artifact=artifact, submitted_by=transmitted_by)
+            if _delivery_needs_provider_adapter_submission(delivery):
+                submit_payroll_provider_delivery(delivery, submitted_by=transmitted_by)
         handoff = _sync_finance_handoff_summary(handoff)
+    return handoff
+
+
+def reconcile_payroll_finance_handoff(
+    handoff: PayrollFinanceHandoff,
+    *,
+    reconciled_by=None,
+    acknowledgement_profile_ref: str | None = None,
+    provider_status: str = PayrollProviderDeliveryStatus.RECONCILED,
+    failure_code: str = "",
+    failure_reason: str = "",
+    response_snapshot: dict[str, Any] | None = None,
+) -> PayrollFinanceHandoff:
+    """Record external provider acknowledgements and reconcile a transmitted handoff."""
+
+    if handoff.status == PayrollFinanceHandoffStatus.ACCEPTED:
+        return handoff
+    if handoff.status != PayrollFinanceHandoffStatus.TRANSMITTED:
+        raise PayrollFinanceHandoffError("Only transmitted payroll finance handoffs can be acknowledged.")
+    if provider_status not in {
+        PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+        PayrollProviderDeliveryStatus.RECONCILED,
+        PayrollProviderDeliveryStatus.REJECTED,
+        PayrollProviderDeliveryStatus.FAILED,
+    }:
+        raise PayrollFinanceHandoffError("Unsupported provider acknowledgement status.")
+    if provider_status in {PayrollProviderDeliveryStatus.REJECTED, PayrollProviderDeliveryStatus.FAILED} and not (failure_code or failure_reason):
+        raise PayrollFinanceHandoffError("Failed provider acknowledgements require failure evidence.")
+
+    profile = _finance_handoff_profile(handoff.output_batch)
+    profile_ref = acknowledgement_profile_ref or profile.get("acknowledgement_profile_ref") or "payroll.acknowledgement.profile.manual.v1"
+    artifacts = list(
+        PayrollOutputArtifact.objects.filter(
+            output_batch=handoff.output_batch,
+            kind__in=FINANCE_ARTIFACT_KINDS,
+            status=PayrollOutputArtifactStatus.PUBLISHED,
+        ).order_by("kind", "artifact_key")
+    )
+    if not artifacts:
+        raise PayrollFinanceHandoffError("Provider acknowledgements require published finance artifacts.")
+
+    acknowledged_at = timezone.now()
+    with transaction.atomic():
+        deliveries = [_ensure_provider_delivery(handoff=handoff, artifact=artifact, submitted_by=handoff.transmitted_by) for artifact in artifacts]
+        for delivery in deliveries:
+            if delivery.status == PayrollProviderDeliveryStatus.RECONCILED:
+                continue
+            delivery_config = delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}
+            submission_contract = delivery_config.get("submission_contract") if isinstance(delivery_config.get("submission_contract"), dict) else {}
+            delivery.status = provider_status
+            delivery.acknowledged_at = acknowledged_at if provider_status in {
+                PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+                PayrollProviderDeliveryStatus.RECONCILED,
+            } else None
+            delivery.acknowledged_by = reconciled_by if provider_status in {
+                PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+                PayrollProviderDeliveryStatus.RECONCILED,
+            } else None
+            delivery.reconciled_at = acknowledged_at if provider_status == PayrollProviderDeliveryStatus.RECONCILED else None
+            delivery.reconciled_by = reconciled_by if provider_status == PayrollProviderDeliveryStatus.RECONCILED else None
+            delivery.failure_code = failure_code if provider_status in {
+                PayrollProviderDeliveryStatus.REJECTED,
+                PayrollProviderDeliveryStatus.FAILED,
+            } else ""
+            delivery.failure_reason = failure_reason if provider_status in {
+                PayrollProviderDeliveryStatus.REJECTED,
+                PayrollProviderDeliveryStatus.FAILED,
+            } else ""
+            delivery.response_snapshot = {
+                "acknowledgement_profile_ref": profile_ref,
+                "callback_profile_ref": submission_contract.get("callback_profile_ref", profile.get("callback_profile_ref") or "payroll.callback.manual.v1"),
+                "callback_verification_ref": submission_contract.get("callback_verification_ref", profile.get("callback_verification_ref") or "payroll.callback.verification.manual.v1"),
+                "response_schema_ref": submission_contract.get("response_schema_ref", ""),
+                "provider_status": provider_status,
+                "recorded_at": acknowledged_at.isoformat(),
+                "external_reference": delivery.external_reference,
+                **(response_snapshot or {}),
+            }
+            certification_evidence = delivery_config.get("certification_evidence") if isinstance(delivery_config.get("certification_evidence"), dict) else {}
+            certification_evidence = {
+                **certification_evidence,
+                "status": "recorded" if provider_status == PayrollProviderDeliveryStatus.RECONCILED and submission_contract.get("certification_required") else certification_evidence.get("status", "not_required"),
+                "recorded_at": acknowledged_at.isoformat() if provider_status == PayrollProviderDeliveryStatus.RECONCILED and submission_contract.get("certification_required") else certification_evidence.get("recorded_at", ""),
+                "external_reference": delivery.external_reference,
+                "provider_status": provider_status,
+                "evidence_refs": response_snapshot.get("certification_evidence_refs", []) if isinstance(response_snapshot, dict) else certification_evidence.get("evidence_refs", []),
+            }
+            if provider_status == PayrollProviderDeliveryStatus.RECONCILED:
+                delivery.reconciliation_snapshot = {
+                    "acknowledgement_profile_ref": profile_ref,
+                    "callback_profile_ref": submission_contract.get("callback_profile_ref", ""),
+                    "callback_verification_ref": submission_contract.get("callback_verification_ref", ""),
+                    "certification_profile_ref": submission_contract.get("certification_profile_ref", ""),
+                    "checksum_matched": delivery.payload_checksum_sha256 == delivery.output_artifact.checksum_sha256,
+                    "payload_checksum_sha256": delivery.payload_checksum_sha256,
+                    "artifact_checksum_sha256": delivery.output_artifact.checksum_sha256,
+                    "file_size_bytes": delivery.output_artifact.file_size_bytes,
+                    "line_count": len(delivery.output_artifact.line_snapshot) if isinstance(delivery.output_artifact.line_snapshot, list) else 0,
+                    "reconciled_at": acknowledged_at.isoformat(),
+                }
+            delivery.config_snapshot = {**delivery_config, "certification_evidence": certification_evidence}
+            delivery.save()
+
+        handoff = _sync_finance_handoff_summary(handoff)
+        if provider_status in {PayrollProviderDeliveryStatus.REJECTED, PayrollProviderDeliveryStatus.FAILED}:
+            handoff.status = PayrollFinanceHandoffStatus.FAILED
+        elif provider_status == PayrollProviderDeliveryStatus.RECONCILED:
+            handoff.status = PayrollFinanceHandoffStatus.ACCEPTED
+            handoff.accepted_at = acknowledged_at
+            handoff.accepted_by = reconciled_by
+        handoff.save()
+        handoff = PayrollFinanceHandoff.objects.get(id=handoff.id)
     return handoff

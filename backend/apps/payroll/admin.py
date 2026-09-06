@@ -4,11 +4,20 @@ from django.contrib import admin
 
 from apps.payroll.models import (
     EmployeeSalaryAssignment,
+    EmployeeStatutoryDeclaration,
+    EmployeeStatutoryDeclarationItem,
+    EmployeeStatutoryProfile,
     PayGroup,
     PayGroupAssignment,
     PayrollAdjustment,
+    PayrollArtifactAccessEvent,
+    PayrollArtifactSignedAccessGrant,
     PayrollCalculationLine,
     PayrollFinanceHandoff,
+    PayrollProviderCallbackEvent,
+    PayrollProviderConnection,
+    PayrollProviderDelivery,
+    PayrollProviderRetryEvent,
     PayrollRunCalculation,
     PayrollInputSnapshot,
     PayrollOutputArtifact,
@@ -28,6 +37,11 @@ from apps.payroll.models import (
     PayrollRunReview,
     PayrollSettlement,
     PayrollSettlementLine,
+    PayrollStatutoryComponent,
+    PayrollStatutoryEmployerRegistration,
+    PayrollStatutoryFilingCalendar,
+    PayrollStatutoryPack,
+    PayrollStatutorySlab,
 )
 
 
@@ -92,6 +106,62 @@ class EmployeeSalaryAssignmentAdmin(admin.ModelAdmin):
     list_display = ("employee", "structure_version", "tenant", "effective_from", "effective_to", "annual_ctc_override", "status")
     list_filter = ("status", "structure_version__structure")
     search_fields = ("employee__employee_code", "employee__first_name", "employee__last_name", "structure_version__structure__name")
+
+
+@admin.register(PayrollStatutoryPack)
+class PayrollStatutoryPackAdmin(admin.ModelAdmin):
+    list_display = ("name", "tenant", "code", "country_code", "status", "effective_from", "effective_to")
+    list_filter = ("country_code", "status", "jurisdiction_ref")
+    search_fields = ("name", "code", "tenant__name", "statutory_profile_ref")
+
+
+@admin.register(PayrollStatutoryComponent)
+class PayrollStatutoryComponentAdmin(admin.ModelAdmin):
+    list_display = ("name", "statutory_pack", "tenant", "statutory_type", "contribution_owner", "calculation_method", "status")
+    list_filter = ("statutory_type", "contribution_owner", "calculation_method", "status")
+    search_fields = ("name", "code", "statutory_treatment_ref", "statutory_pack__name")
+
+
+@admin.register(PayrollStatutorySlab)
+class PayrollStatutorySlabAdmin(admin.ModelAdmin):
+    list_display = ("name", "statutory_component", "tenant", "slab_order", "min_amount", "max_amount", "state_code", "status")
+    list_filter = ("status", "state_code", "statutory_component__statutory_type")
+    search_fields = ("name", "code", "statutory_component__name", "applicability_profile_ref")
+
+
+@admin.register(PayrollStatutoryEmployerRegistration)
+class PayrollStatutoryEmployerRegistrationAdmin(admin.ModelAdmin):
+    list_display = ("name", "statutory_pack", "tenant", "registration_type_ref", "registration_number", "status", "effective_from")
+    list_filter = ("status", "registration_type_ref", "jurisdiction_ref", "filing_authority_ref", "provider_ref")
+    search_fields = ("name", "code", "registration_number", "employer_identifier", "statutory_pack__name", "tenant__name")
+
+
+@admin.register(PayrollStatutoryFilingCalendar)
+class PayrollStatutoryFilingCalendarAdmin(admin.ModelAdmin):
+    list_display = ("name", "statutory_pack", "tenant", "filing_type_ref", "filing_frequency", "due_date", "status")
+    list_filter = ("status", "filing_frequency", "filing_type_ref", "filing_authority_ref", "provider_ref")
+    search_fields = ("name", "code", "filing_type_ref", "employer_registration__registration_number", "statutory_pack__name")
+
+
+@admin.register(EmployeeStatutoryProfile)
+class EmployeeStatutoryProfileAdmin(admin.ModelAdmin):
+    list_display = ("employee", "tenant", "statutory_pack", "status", "effective_from", "tax_regime", "declaration_status", "pf_applicable", "esi_applicable")
+    list_filter = ("status", "tax_regime", "declaration_status", "pf_applicable", "esi_applicable", "professional_tax_state")
+    search_fields = ("employee__employee_code", "employee__first_name", "employee__last_name", "pan_number", "uan_number", "pf_number", "esi_number")
+
+
+@admin.register(EmployeeStatutoryDeclaration)
+class EmployeeStatutoryDeclarationAdmin(admin.ModelAdmin):
+    list_display = ("employee", "tenant", "financial_year_code", "status", "tax_regime", "declared_total_amount", "verified_total_amount")
+    list_filter = ("status", "tax_regime", "financial_year_code")
+    search_fields = ("employee__employee_code", "employee__first_name", "employee__last_name", "financial_year_code", "declaration_profile_ref")
+
+
+@admin.register(EmployeeStatutoryDeclarationItem)
+class EmployeeStatutoryDeclarationItemAdmin(admin.ModelAdmin):
+    list_display = ("declaration", "employee", "section_code", "component_code", "proof_status", "declared_amount", "verified_amount")
+    list_filter = ("item_kind", "proof_status", "section_code")
+    search_fields = ("employee__employee_code", "section_code", "component_code", "name", "proof_document_ref", "proof_artifact_key")
 
 
 @admin.register(PayrollRun)
@@ -194,9 +264,23 @@ class PayrollOutputBatchAdmin(admin.ModelAdmin):
 
 @admin.register(PayrollOutputArtifact)
 class PayrollOutputArtifactAdmin(admin.ModelAdmin):
-    list_display = ("title", "output_batch", "tenant", "kind", "status", "employee", "published_at")
-    list_filter = ("kind", "status", "output_profile_ref")
-    search_fields = ("title", "artifact_key", "file_name", "employee__employee_code", "employee__first_name", "employee__last_name")
+    list_display = ("title", "output_batch", "tenant", "kind", "status", "storage_provider_ref", "download_strategy_ref", "employee", "published_at")
+    list_filter = ("kind", "status", "output_profile_ref", "storage_provider_ref", "download_strategy_ref", "supports_signed_url")
+    search_fields = ("title", "artifact_key", "file_name", "storage_key", "storage_object_version", "employee__employee_code", "employee__first_name", "employee__last_name")
+
+
+@admin.register(PayrollArtifactAccessEvent)
+class PayrollArtifactAccessEventAdmin(admin.ModelAdmin):
+    list_display = ("output_artifact", "tenant", "event_type", "status", "employee", "actor_identifier", "source_channel_ref", "signed_access_grant", "created_at")
+    list_filter = ("event_type", "status", "source_channel_ref", "event_profile_ref")
+    search_fields = ("output_artifact__title", "employee__employee_code", "actor_identifier", "request_identifier", "checksum_sha256", "signed_access_grant__token_prefix")
+
+
+@admin.register(PayrollArtifactSignedAccessGrant)
+class PayrollArtifactSignedAccessGrantAdmin(admin.ModelAdmin):
+    list_display = ("output_artifact", "tenant", "status", "permission_scope", "source_channel_ref", "issued_to_membership", "expires_at", "access_count", "revoked_at")
+    list_filter = ("status", "permission_scope", "source_channel_ref", "grant_profile_ref", "storage_provider_ref", "download_strategy_ref")
+    search_fields = ("output_artifact__title", "employee__employee_code", "token_prefix", "storage_key", "checksum_sha256", "revocation_reason")
 
 
 @admin.register(PayrollFinanceHandoff)
@@ -204,3 +288,31 @@ class PayrollFinanceHandoffAdmin(admin.ModelAdmin):
     list_display = ("payroll_run", "tenant", "output_batch", "status", "handoff_profile_ref", "generated_at", "transmitted_at")
     list_filter = ("status", "handoff_profile_ref", "bank_file_profile_ref", "accounting_export_profile_ref")
     search_fields = ("payroll_run__name", "payroll_run__code", "tenant__name", "handoff_profile_ref")
+
+
+@admin.register(PayrollProviderDelivery)
+class PayrollProviderDeliveryAdmin(admin.ModelAdmin):
+    list_display = ("handoff", "output_artifact", "tenant", "artifact_kind", "status", "provider_ref", "attempt_count", "submitted_at", "acknowledged_at", "reconciled_at")
+    list_filter = ("status", "artifact_kind", "provider_ref", "channel_ref")
+    search_fields = ("handoff__payroll_run__name", "output_artifact__title", "provider_ref", "external_reference", "failure_code")
+
+
+@admin.register(PayrollProviderCallbackEvent)
+class PayrollProviderCallbackEventAdmin(admin.ModelAdmin):
+    list_display = ("provider_delivery", "tenant", "provider_ref", "provider_status", "status", "idempotency_key", "received_at", "processed_at")
+    list_filter = ("status", "provider_status", "provider_ref", "callback_verification_ref")
+    search_fields = ("provider_delivery__output_artifact__title", "provider_ref", "external_reference", "external_event_id", "idempotency_key", "failure_code")
+
+
+@admin.register(PayrollProviderRetryEvent)
+class PayrollProviderRetryEventAdmin(admin.ModelAdmin):
+    list_display = ("provider_delivery", "tenant", "status", "retry_policy_ref", "failure_category_ref", "attempt_number", "scheduled_for", "executed_at")
+    list_filter = ("status", "retry_policy_ref", "failure_taxonomy_ref", "failure_category_ref")
+    search_fields = ("provider_delivery__output_artifact__title", "retry_policy_ref", "failure_taxonomy_ref", "failure_category_ref", "failure_code")
+
+
+@admin.register(PayrollProviderConnection)
+class PayrollProviderConnectionAdmin(admin.ModelAdmin):
+    list_display = ("provider_name", "tenant", "provider_kind", "environment_ref", "status", "certification_status", "adapter_ref")
+    list_filter = ("provider_kind", "environment_ref", "status", "certification_status")
+    search_fields = ("provider_name", "provider_ref", "tenant__name", "adapter_ref", "channel_ref", "credential_ref")

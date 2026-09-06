@@ -2820,6 +2820,305 @@ export type HrAdminPayrollRulesSetupResponse = {
   };
 };
 
+export type HrAdminPayrollStatutoryPack = {
+  id: string;
+  code: string;
+  name: string;
+  country_code: string;
+  jurisdiction_ref: string;
+  status: string;
+  status_label: string;
+  effective_from: string;
+  effective_to: string | null;
+  currency_code: string;
+  statutory_profile_ref: string;
+  validation_profile_ref: string;
+  config_snapshot: Record<string, unknown>;
+  component_count: number;
+  active_component_count: number;
+  employee_profile_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminPayrollStatutoryComponent = {
+  id: string;
+  statutory_pack_id: string;
+  statutory_pack_name: string;
+  salary_component_id: string | null;
+  salary_component_name: string | null;
+  code: string;
+  name: string;
+  statutory_type: string;
+  statutory_type_label: string;
+  contribution_owner: string;
+  contribution_owner_label: string;
+  calculation_method: string;
+  calculation_method_label: string;
+  wage_base_ref: string;
+  statutory_treatment_ref: string;
+  registration_ref: string;
+  applicability_profile_ref: string;
+  rounding_rule_ref: string;
+  formula_ref: string;
+  status: string;
+  status_label: string;
+  config_snapshot: Record<string, unknown>;
+  slab_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminPayrollStatutorySlab = {
+  id: string;
+  statutory_component_id: string;
+  statutory_component_name: string;
+  statutory_type: string;
+  code: string;
+  name: string;
+  slab_order: number;
+  effective_from: string;
+  effective_to: string | null;
+  min_amount: string;
+  max_amount: string | null;
+  employee_rate_percent: string;
+  employer_rate_percent: string;
+  fixed_employee_amount: string;
+  fixed_employer_amount: string;
+  wage_ceiling_amount: string | null;
+  state_code: string;
+  applicability_profile_ref: string;
+  status: string;
+  status_label: string;
+  config_snapshot: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminPayrollStatutoryEmployerRegistration = {
+  id: string;
+  statutory_pack_id: string;
+  statutory_pack_name: string;
+  statutory_component_id: string | null;
+  statutory_component_name: string | null;
+  statutory_type: string;
+  legal_entity_id: string | null;
+  legal_entity_name: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  location_id: string | null;
+  location_name: string | null;
+  code: string;
+  name: string;
+  registration_type_ref: string;
+  registration_number: string;
+  employer_identifier: string;
+  jurisdiction_ref: string;
+  filing_authority_ref: string;
+  provider_ref: string;
+  status: string;
+  status_label: string;
+  effective_from: string;
+  effective_to: string | null;
+  source_ref: string;
+  source_hash: string;
+  config_snapshot: Record<string, unknown>;
+  filing_calendar_count: number;
+  open_filing_calendar_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminPayrollStatutoryFilingCalendar = {
+  id: string;
+  statutory_pack_id: string;
+  statutory_pack_name: string;
+  statutory_component_id: string | null;
+  statutory_component_name: string | null;
+  statutory_type: string;
+  employer_registration_id: string | null;
+  employer_registration_name: string | null;
+  employer_registration_number: string;
+  code: string;
+  name: string;
+  filing_type_ref: string;
+  filing_frequency: string;
+  filing_frequency_label: string;
+  period_start: string;
+  period_end: string;
+  due_date: string;
+  grace_due_date: string | null;
+  filing_window_start: string | null;
+  filing_window_end: string | null;
+  status: string;
+  status_label: string;
+  filing_authority_ref: string;
+  provider_ref: string;
+  output_profile_ref: string;
+  source_ref: string;
+  source_hash: string;
+  config_snapshot: Record<string, unknown>;
+  days_until_due: number | null;
+  is_due: boolean;
+  is_overdue: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminEmployeeStatutoryProfile = {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  employee_code: string;
+  statutory_pack_id: string | null;
+  statutory_pack_name: string | null;
+  profile_ref: string;
+  effective_from: string;
+  effective_to: string | null;
+  status: string;
+  status_label: string;
+  pan_number: string;
+  uan_number: string;
+  pf_number: string;
+  esi_number: string;
+  pf_applicable: boolean;
+  esi_applicable: boolean;
+  professional_tax_state: string;
+  lwf_state: string;
+  tax_regime: string;
+  tax_regime_label: string;
+  declaration_status: string;
+  declaration_status_label: string;
+  previous_employment_income: string;
+  previous_employment_tax_deducted: string;
+  source_ref: string;
+  source_hash: string;
+  config_snapshot: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminEmployeeStatutoryDeclarationItem = {
+  id: string;
+  declaration_id: string;
+  employee_id: string;
+  employee_name: string;
+  employee_code: string;
+  financial_year_code: string;
+  item_kind: string;
+  item_kind_label: string;
+  section_code: string;
+  component_code: string;
+  name: string;
+  declared_amount: string;
+  verified_amount: string;
+  proof_status: string;
+  proof_status_label: string;
+  proof_document_ref: string;
+  proof_artifact_key: string;
+  proof_submitted_at: string | null;
+  verified_at: string | null;
+  verified_by_name: string | null;
+  rejected_at: string | null;
+  rejected_by_name: string | null;
+  rejection_reason: string;
+  source_ref: string;
+  source_hash: string;
+  config_snapshot: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminEmployeeStatutoryDeclaration = {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  employee_code: string;
+  employee_statutory_profile_id: string;
+  statutory_pack_id: string | null;
+  statutory_pack_name: string | null;
+  financial_year_code: string;
+  declaration_profile_ref: string;
+  proof_window_ref: string;
+  status: string;
+  status_label: string;
+  tax_regime: string;
+  tax_regime_label: string;
+  declared_total_amount: string;
+  verified_total_amount: string;
+  submitted_at: string | null;
+  submitted_by_name: string | null;
+  verified_at: string | null;
+  verified_by_name: string | null;
+  rejected_at: string | null;
+  rejected_by_name: string | null;
+  locked_at: string | null;
+  locked_by_name: string | null;
+  rejection_reason: string;
+  source_ref: string;
+  source_hash: string;
+  config_snapshot: Record<string, unknown>;
+  item_count: number;
+  submitted_item_count: number;
+  verified_item_count: number;
+  rejected_item_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminPayrollStatutorySetupResponse = {
+  summary: {
+    pack_count: number;
+    active_pack_count: number;
+    statutory_component_count: number;
+    active_statutory_component_count: number;
+    slab_count: number;
+    employee_profile_count: number;
+    active_employee_profile_count: number;
+    pf_applicable_employee_count: number;
+    esi_applicable_employee_count: number;
+    declared_tax_profile_count: number;
+    declaration_count: number;
+    submitted_declaration_count: number;
+    verified_declaration_count: number;
+    locked_declaration_count: number;
+    declaration_item_count: number;
+    verified_declaration_item_count: number;
+    employer_registration_count: number;
+    active_employer_registration_count: number;
+    filing_calendar_count: number;
+    due_filing_calendar_count: number;
+    overdue_filing_calendar_count: number;
+    acknowledged_filing_calendar_count: number;
+  };
+  packs: HrAdminPayrollStatutoryPack[];
+  statutory_components: HrAdminPayrollStatutoryComponent[];
+  slabs: HrAdminPayrollStatutorySlab[];
+  employer_registrations: HrAdminPayrollStatutoryEmployerRegistration[];
+  filing_calendars: HrAdminPayrollStatutoryFilingCalendar[];
+  employee_profiles: HrAdminEmployeeStatutoryProfile[];
+  declarations: HrAdminEmployeeStatutoryDeclaration[];
+  declaration_items: HrAdminEmployeeStatutoryDeclarationItem[];
+  options: {
+    config_statuses: HrAdminEnumOption[];
+    statutory_component_types: HrAdminEnumOption[];
+    contribution_owners: HrAdminEnumOption[];
+    calculation_methods: HrAdminEnumOption[];
+    payroll_frequencies: HrAdminEnumOption[];
+    tax_regimes: HrAdminEnumOption[];
+    declaration_statuses: HrAdminEnumOption[];
+    statutory_declaration_statuses: HrAdminEnumOption[];
+    statutory_declaration_item_kinds: HrAdminEnumOption[];
+    statutory_proof_statuses: HrAdminEnumOption[];
+    statutory_filing_statuses: HrAdminEnumOption[];
+    salary_components: Array<{ id: string; code: string; name: string; component_type: string }>;
+    employees: HrAdminManagerOption[];
+    legal_entities: HrAdminOptionItem[];
+    branches: HrAdminOptionItem[];
+    locations: HrAdminOptionItem[];
+  };
+};
+
 export type HrAdminPayrollRunCalculation = {
   id: string;
   payroll_run_id: string;
@@ -3084,15 +3383,56 @@ export type HrAdminPayrollOutputArtifact = {
   content_type: string;
   storage_provider_ref: string;
   storage_key: string;
+  storage_object_version: string;
   mime_type: string;
   file_size_bytes: number;
   checksum_sha256: string;
   is_downloadable: boolean;
+  download_strategy_ref: string;
+  supports_signed_url: boolean;
+  signed_url_expires_in_seconds: number;
   retention_policy_ref: string;
   download_url: string | null;
+  signed_download_url: string | null;
+  signed_download_expires_at: string | null;
   output_profile_ref: string;
   totals_snapshot: Record<string, unknown>;
   line_snapshot: Record<string, unknown>[];
+  access_summary: {
+    published_event_count: number;
+    notification_count: number;
+    signed_url_issued_count: number;
+    download_count: number;
+    read_acknowledgement_count: number;
+    revoked_event_count: number;
+    active_signed_grant_count: number;
+    revoked_signed_grant_count: number;
+    expired_signed_grant_count: number;
+    latest_downloaded_at: string | null;
+    first_read_at: string | null;
+    latest_notification_at: string | null;
+    latest_signed_grant_expires_at: string | null;
+    latest_revoked_at: string | null;
+    is_read_acknowledged: boolean;
+  };
+  access_events: {
+    id: string;
+    event_type: string;
+    status: string;
+    event_profile_ref: string;
+    source_channel_ref: string;
+    actor_identifier: string;
+    notification_id: string | null;
+    signed_access_grant_id: string | null;
+    request_identifier: string;
+    storage_provider_ref: string;
+    storage_object_version: string;
+    download_strategy_ref: string;
+    checksum_sha256: string;
+    read_at: string | null;
+    created_at: string;
+    metadata_snapshot: Record<string, unknown>;
+  }[];
   source_hash: string;
   published_at: string | null;
   published_by_name: string | null;
@@ -3151,6 +3491,95 @@ export type HrAdminPayrollFinanceHandoff = {
   updated_at: string;
 };
 
+export type HrAdminPayrollProviderDelivery = {
+  id: string;
+  handoff_id: string;
+  output_artifact_id: string;
+  output_artifact_title: string;
+  output_batch_id: string;
+  payroll_run_id: string;
+  review_id: string;
+  artifact_kind: string;
+  artifact_kind_label: string;
+  status: string;
+  status_label: string;
+  provider_ref: string;
+  channel_ref: string;
+  external_reference: string;
+  retry_policy_ref: string;
+  attempt_count: number;
+  submitted_at: string | null;
+  submitted_by_name: string | null;
+  acknowledged_at: string | null;
+  acknowledged_by_name: string | null;
+  reconciled_at: string | null;
+  reconciled_by_name: string | null;
+  failure_code: string;
+  failure_reason: string;
+  payload_checksum_sha256: string;
+  request_snapshot: Record<string, unknown>;
+  response_snapshot: Record<string, unknown>;
+  reconciliation_snapshot: Record<string, unknown>;
+  config_snapshot: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminPayrollProviderCallbackEvent = {
+  id: string;
+  provider_delivery_id: string;
+  handoff_id: string;
+  output_artifact_id: string;
+  output_artifact_title: string;
+  provider_ref: string;
+  external_reference: string;
+  external_event_id: string;
+  idempotency_key: string;
+  callback_profile_ref: string;
+  callback_verification_ref: string;
+  status: string;
+  status_label: string;
+  provider_status: string;
+  provider_status_label: string;
+  payload_checksum_sha256: string;
+  signature: string;
+  verification_snapshot: Record<string, unknown>;
+  payload_snapshot: Record<string, unknown>;
+  processing_snapshot: Record<string, unknown>;
+  received_at: string | null;
+  processed_at: string | null;
+  failure_code: string;
+  failure_reason: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminPayrollProviderRetryEvent = {
+  id: string;
+  provider_delivery_id: string;
+  handoff_id: string;
+  output_artifact_id: string;
+  output_artifact_title: string;
+  status: string;
+  status_label: string;
+  retry_policy_ref: string;
+  failure_taxonomy_ref: string;
+  failure_category_ref: string;
+  retry_reason: string;
+  attempt_number: number;
+  scheduled_for: string | null;
+  executed_at: string | null;
+  requested_by_name: string | null;
+  executed_by_name: string | null;
+  decision_snapshot: Record<string, unknown>;
+  request_snapshot: Record<string, unknown>;
+  response_snapshot: Record<string, unknown>;
+  failure_code: string;
+  failure_reason: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type HrAdminPayrollFinanceHandoffSetupResponse = {
   summary: {
     published_output_batch_count: number;
@@ -3158,16 +3587,90 @@ export type HrAdminPayrollFinanceHandoffSetupResponse = {
     generated_handoff_count: number;
     transmitted_handoff_count: number;
     accepted_handoff_count: number;
+    submitted_delivery_count: number;
+    reconciled_delivery_count: number;
+    failed_delivery_count: number;
+    rejected_delivery_count: number;
     finance_artifact_count: number;
+    statutory_filing_artifact_count?: number;
+    statutory_filing_count?: number;
+    provider_callback_event_count?: number;
+    processed_provider_callback_event_count?: number;
+    rejected_provider_callback_event_count?: number;
+    provider_retry_event_count?: number;
+    scheduled_provider_retry_event_count?: number;
+    executed_provider_retry_event_count?: number;
+    dead_lettered_provider_retry_event_count?: number;
     latest_net_pay: string;
   };
   output_batches: HrAdminPayrollOutputBatch[];
   handoffs: HrAdminPayrollFinanceHandoff[];
   artifacts: HrAdminPayrollOutputArtifact[];
+  deliveries: HrAdminPayrollProviderDelivery[];
+  callback_events: HrAdminPayrollProviderCallbackEvent[];
+  retry_events: HrAdminPayrollProviderRetryEvent[];
   options: {
     handoff_statuses: HrAdminEnumOption[];
     output_artifact_kinds: HrAdminEnumOption[];
     output_artifact_statuses: HrAdminEnumOption[];
+    provider_delivery_statuses: HrAdminEnumOption[];
+    provider_callback_event_statuses: HrAdminEnumOption[];
+    provider_retry_event_statuses: HrAdminEnumOption[];
+  };
+};
+
+export type HrAdminPayrollProviderConnection = {
+  id: string;
+  provider_ref: string;
+  provider_name: string;
+  provider_kind: string;
+  provider_kind_label: string;
+  environment_ref: string;
+  status: string;
+  status_label: string;
+  adapter_ref: string;
+  sandbox_adapter_ref: string;
+  channel_ref: string;
+  credential_ref: string;
+  credential_profile_ref: string;
+  credential_required: boolean;
+  callback_profile_ref: string;
+  callback_verification_ref: string;
+  retry_policy_ref: string;
+  certification_status: string;
+  certification_status_label: string;
+  certification_profile_ref: string;
+  certified_at: string | null;
+  certified_by_name: string | null;
+  last_tested_at: string | null;
+  last_tested_by_name: string | null;
+  readiness_snapshot: Record<string, unknown>;
+  certification_snapshot: Record<string, unknown>;
+  config_snapshot: Record<string, unknown>;
+  created_by_name: string | null;
+  updated_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminPayrollProviderConnectionSetupResponse = {
+  summary: {
+    connection_count: number;
+    active_connection_count: number;
+    certified_connection_count: number;
+    sandbox_ready_connection_count: number;
+    blocked_connection_count: number;
+    credential_required_count: number;
+    active_allowed_count: number;
+    bank_connection_count: number;
+    accounting_connection_count: number;
+    statutory_connection_count: number;
+  };
+  connections: HrAdminPayrollProviderConnection[];
+  options: {
+    provider_kinds: HrAdminEnumOption[];
+    connection_statuses: HrAdminEnumOption[];
+    certification_statuses: HrAdminEnumOption[];
   };
 };
 
@@ -3461,6 +3964,120 @@ export type EssDocumentCenterResponse = PaginatedListResponse<HrAdminEmployeeDoc
   categories: HrAdminOptionItem[];
   uploadable_categories: HrAdminOptionItem[];
   max_upload_size_bytes: number;
+};
+
+export type EssStatutoryDeclarationItem = Omit<
+  HrAdminEmployeeStatutoryDeclarationItem,
+  "employee_id" | "employee_name" | "employee_code" | "verified_by_name" | "rejected_by_name"
+>;
+
+export type EssStatutoryDeclaration = Omit<
+  HrAdminEmployeeStatutoryDeclaration,
+  "employee_id" | "employee_name" | "employee_code" | "submitted_by_name" | "verified_by_name" | "rejected_by_name" | "locked_by_name"
+> & {
+  items: EssStatutoryDeclarationItem[];
+};
+
+export type EssStatutoryDeclarationListResponse = PaginatedListResponse<EssStatutoryDeclaration> & {
+  summary: {
+    declaration_count: number;
+    draft_declaration_count: number;
+    submitted_declaration_count: number;
+    verified_declaration_count: number;
+    locked_declaration_count: number;
+    declaration_item_count: number;
+    submitted_item_count: number;
+    verified_item_count: number;
+    rejected_item_count: number;
+    declared_total_amount: string;
+    verified_total_amount: string;
+    available_financial_years: string[];
+  };
+  profile: HrAdminEmployeeStatutoryProfile | null;
+  options: {
+    statutory_declaration_statuses: HrAdminEnumOption[];
+    statutory_declaration_item_kinds: HrAdminEnumOption[];
+    statutory_proof_statuses: HrAdminEnumOption[];
+    tax_regimes: HrAdminEnumOption[];
+    proof_upload_categories: HrAdminOptionItem[];
+  };
+};
+
+export type EssPayrollPayslip = {
+  id: string;
+  payroll_run_id: string;
+  payroll_run_name: string;
+  period_name: string;
+  period_start_date: string | null;
+  period_end_date: string | null;
+  pay_date: string | null;
+  title: string;
+  file_name: string;
+  mime_type: string;
+  file_size_bytes: number;
+  checksum_sha256: string;
+  storage_provider_ref: string;
+  storage_object_version: string;
+  download_strategy_ref: string;
+  supports_signed_url: boolean;
+  signed_url_expires_in_seconds: number;
+  retention_policy_ref: string;
+  download_url: string | null;
+  signed_download_url: string | null;
+  signed_download_expires_at: string | null;
+  totals_snapshot: Record<string, unknown>;
+  line_snapshot: Record<string, unknown>[];
+  access_summary: {
+    published_event_count: number;
+    notification_count: number;
+    signed_url_issued_count: number;
+    download_count: number;
+    read_acknowledgement_count: number;
+    revoked_event_count: number;
+    active_signed_grant_count: number;
+    revoked_signed_grant_count: number;
+    expired_signed_grant_count: number;
+    latest_downloaded_at: string | null;
+    first_read_at: string | null;
+    latest_notification_at: string | null;
+    latest_signed_grant_expires_at: string | null;
+    latest_revoked_at: string | null;
+    is_read_acknowledged: boolean;
+  };
+  access_events: {
+    id: string;
+    event_type: string;
+    status: string;
+    event_profile_ref: string;
+    source_channel_ref: string;
+    actor_identifier: string;
+    notification_id: string | null;
+    signed_access_grant_id: string | null;
+    request_identifier: string;
+    storage_provider_ref: string;
+    storage_object_version: string;
+    download_strategy_ref: string;
+    checksum_sha256: string;
+    read_at: string | null;
+    created_at: string;
+    metadata_snapshot: Record<string, unknown>;
+  }[];
+  source_hash: string;
+  published_at: string | null;
+  published_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EssPayrollPayslipListResponse = PaginatedListResponse<EssPayrollPayslip> & {
+  summary: {
+    published_payslip_count: number;
+    downloadable_payslip_count: number;
+    latest_net_pay: string;
+    latest_pay_date: string | null;
+    latest_period_name: string;
+    available_years: number[];
+  };
 };
 
 export type ManagerLeaveApprovalListResponse = PaginatedListResponse<LeaveRequestItem>;

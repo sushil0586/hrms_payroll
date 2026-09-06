@@ -128,3 +128,14 @@ SPECTACULAR_SETTINGS = {
 
 CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+
+# Payroll artifact storage keeps secrets outside artifact snapshots. Production
+# deployments can populate these from a secret manager or inject SDK clients.
+PAYROLL_ARTIFACT_STORAGE_CREDENTIALS: dict = {}
+PAYROLL_ARTIFACT_STORAGE_CLIENT_FACTORIES: dict = {}
+PAYROLL_ARTIFACT_STORAGE_POLICIES: dict = {}
+
+# Payroll provider adapters follow the same rule: snapshots may store refs and
+# descriptors, while secret material lives in environment-managed settings.
+PAYROLL_PROVIDER_CREDENTIALS: dict = {}
+PAYROLL_PROVIDER_ADAPTERS: dict = {}

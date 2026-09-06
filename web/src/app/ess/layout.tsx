@@ -11,6 +11,8 @@ export default async function EssLayout({ children }: { children: React.ReactNod
       footerDescription="Personal requests, attendance, and balances with a softer self-service flow."
       navItems={[
         { href: "/ess", label: "Overview", shortLabel: "OV", blurb: "Self service" },
+        { href: "/ess/payslips", label: "Payslips", shortLabel: "PS", blurb: "Payroll files" },
+        { href: "/ess/statutory-declarations", label: "Tax Declarations", shortLabel: "TD", blurb: "Proof status" },
         { href: "/ess/notifications", label: "Notifications", shortLabel: "NT", blurb: "Alerts and updates" },
         { href: "/ess/documents", label: "Documents", shortLabel: "DO", blurb: "Required uploads" },
         { href: "/mss/approvals", label: "Approvals", shortLabel: "AP", blurb: "Manager queue" },
@@ -19,6 +21,8 @@ export default async function EssLayout({ children }: { children: React.ReactNod
       quickLinks={[
         { href: "/hr-admin", label: "HR Admin" },
         { href: "/mss/approvals", label: "MSS" },
+        { href: "/ess/payslips", label: "Payslips" },
+        { href: "/ess/statutory-declarations", label: "Tax" },
         { href: "/ess/notifications", label: "Inbox" },
       ]}
       roleLabel="Employee"

@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 
 test.describe("HR admin payroll output flows", () => {
-  test("outputs workspace exposes published payslips, register, profile, and source hashes", async ({ page }) => {
+  test("outputs workspace exposes published payslips, register, profile, storage strategy, and source hashes", async ({ page }) => {
     await page.goto("/hr-admin/payroll-outputs");
     await expectPageReady(page, "Payroll Outputs");
 
@@ -11,7 +11,7 @@ test.describe("HR admin payroll output flows", () => {
     await expect(page.getByText("Artifact register").first()).toBeVisible();
     await expect(page.getByText("Finance handoff readiness").first()).toBeVisible();
     await expect(page.getByText("india.monthly.output.profile.v1").first()).toBeVisible();
-    await expect(page.getByText("₹63,900").first()).toBeVisible();
+    await expect(page.getByText("₹63,400").first()).toBeVisible();
     await expect(page.getByText("Payroll Register - August 2026 Core Payroll").first()).toBeVisible();
 
     await page.getByRole("link", { name: /Payslip - Nisha Rao/ }).click();
@@ -21,6 +21,11 @@ test.describe("HR admin payroll output flows", () => {
     await expect(page.getByText("employee.portal.publish.v1").first()).toBeVisible();
     await expect(page.getByText("text/html").first()).toBeVisible();
     await expect(page.getByText("payroll.storage.local.generated.v1").first()).toBeVisible();
+    await expect(page.getByText("local-payslip-1-v1").first()).toBeVisible();
+    await expect(page.getByText("payroll.download.stream.local.v1").first()).toBeVisible();
+    await expect(page.getByText("Streamed").first()).toBeVisible();
+    await expect(page.getByText("Access governance").first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Export access audit" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Download file" }).first()).toBeVisible();
 
     await expectNoHorizontalOverflow(page);

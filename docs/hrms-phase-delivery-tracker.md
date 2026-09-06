@@ -296,7 +296,7 @@ Scope completed:
 Remaining payroll foundation scope:
 
 - richer calculation validation catalog for component prerequisites, missing outputs, and statutory profile blockers
-- full-and-final settlement, durable file storage/downloads, real bank/accounting/statutory provider integrations, acknowledgement callbacks, and broader locked output audit trails
+- full-and-final settlement, production secret-manager/cloud storage policy wiring, real bank/accounting/statutory provider integrations, webhook callback verification, and broader locked output audit trails
 
 ## Payroll Phase 4A: One-Time Adjustments, Arrears, Reimbursements, Loans, And Corrections
 
@@ -323,7 +323,7 @@ Remaining payroll foundation scope:
 
 - full-and-final settlement orchestration that composes adjustments, leave encashment, recoveries, and final dues
 - richer calculation validation catalog for component prerequisites, missing outputs, and statutory profile blockers
-- durable file storage/downloads, real bank/accounting/statutory provider integrations, acknowledgement callbacks, and broader locked output audit trails
+- production secret-manager/cloud storage policy wiring, real bank/accounting/statutory provider integrations, webhook callback verification, and broader locked output audit trails
 
 ## Payroll Phase 4B: Applied Adjustment Consumption In Draft Calculation
 
@@ -347,7 +347,7 @@ Scope completed:
 Remaining payroll foundation scope:
 
 - richer calculation validation catalog for component prerequisites, missing outputs, and statutory profile blockers
-- durable file storage/downloads, real bank/accounting/statutory provider integrations, acknowledgement callbacks, and broader locked output audit trails
+- production secret-manager/cloud storage policy wiring, real bank/accounting/statutory provider integrations, webhook callback verification, and broader locked output audit trails
 
 ## Payroll Phase 4C: Full-And-Final Settlement Orchestration
 
@@ -373,7 +373,7 @@ Scope completed:
 Remaining payroll foundation scope:
 
 - deeper statutory/component validation catalog for country packs and missing derived outputs
-- durable file storage/downloads, real bank/accounting/statutory provider integrations, acknowledgement callbacks, and broader locked output audit trails
+- production secret-manager/cloud storage policy wiring, real bank/accounting/statutory provider integrations, webhook callback verification, and broader locked output audit trails
 
 ## Payroll Phase 4D: Calculation Validation Hardening
 
@@ -399,7 +399,7 @@ Scope completed:
 
 Remaining payroll foundation scope:
 
-- durable file storage/downloads, real bank/accounting/statutory provider integrations, acknowledgement callbacks, and broader locked output audit trails
+- production secret-manager/cloud storage policy wiring, real bank/accounting/statutory provider integrations, webhook callback verification, and broader locked output audit trails
 
 ## Payroll Phase 4E: Statutory And Component Validation Catalogs
 
@@ -425,7 +425,7 @@ Scope completed:
 
 Remaining payroll foundation scope:
 
-- durable file storage/downloads, real bank/accounting/statutory provider integrations, acknowledgement callbacks, and broader locked output audit trails
+- production secret-manager/cloud storage policy wiring, real bank/accounting/statutory provider integrations, webhook callback verification, and broader locked output audit trails
 
 ## Payroll Phase 4F: Durable Payroll Files And Download Governance
 
@@ -457,11 +457,962 @@ Validation:
 
 Still open:
 
-- external object storage adapter and signed URL strategy
+- production secret-manager/cloud storage policy wiring beyond the local/signed-url placeholder strategy
 - employee self-service payslip download surface
 - bank/accounting/statutory provider transmission integrations
-- external acknowledgement callbacks and reconciliation statuses
+- external provider callback endpoints and webhook signature verification
 - broader locked output audit trail beyond current publish/transmit timestamps and checksums
+
+## Payroll Phase 4G: Provider Acknowledgements And Reconciliation
+
+Objective:
+
+Track external delivery acknowledgement and reconciliation state for finance handoff artifacts so bank advice, accounting exports, and statutory packs can move beyond local file generation while staying tenant-scoped, auditable, and configuration-driven.
+
+Completed:
+
+- Added tenant-scoped `PayrollProviderDelivery` records linked to finance handoff, output artifact, output batch, payroll run, and final-locked review lineage.
+- Added configurable delivery route references for provider, channel, retry policy, acknowledgement profile, request snapshot, response snapshot, reconciliation snapshot, and config snapshot.
+- Finance handoff transmission now creates submitted provider delivery rows for every published finance artifact.
+- Reconciliation service records acknowledged, reconciled, failed, and rejected provider outcomes without hardcoded provider behavior.
+- Failed and rejected acknowledgements require explicit failure evidence.
+- Reconciled delivery rows capture checksum/file metadata evidence and move the parent finance handoff to accepted.
+- Finance handoff setup/action API payloads now expose provider deliveries, delivery summaries, and delivery status options.
+- Added acknowledgement API at `/api/v1/hr-admin/payroll-finance-handoffs/<id>/acknowledge/`.
+- `/hr-admin/payroll-handoff` now shows provider delivery ledger, reconciliation count, external references, provider/channel refs, retry policy, attempts, and selected-artifact acknowledgement details.
+- Demo payroll handoff data now includes reconciled provider delivery rows matching the live API contract.
+- Backend API tests cover transmit-created delivery rows, reconciled acknowledgement, failed acknowledgement evidence gating, and setup summaries.
+- Playwright e2e and laptop/mobile visual baselines cover provider acknowledgement visibility.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "payroll_finance_handoff or payroll_outputs_generate_and_publish_locked_review"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web lint`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-handoff-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-handoff" --update-snapshots`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-handoff"`
+
+Still open:
+
+- real bank/accounting/statutory provider adapters
+- provider webhook callback endpoints, idempotency keys, and signature verification
+- async retry worker and provider-specific failure taxonomy
+- production secret-manager/cloud storage policy wiring beyond the local/signed-url placeholder strategy
+- employee self-service payslip download surface
+- broader locked output audit trail beyond current publish/transmit/delivery evidence
+
+## Payroll Phase 4H: Object Storage Adapterization And Signed Download Strategy
+
+Objective:
+
+Move payroll artifact file storage and download behavior behind a configurable adapter contract so SaaS deployments can use local/dev storage today and plug in object storage plus signed URLs later without hardcoding payroll file behavior.
+
+Completed:
+
+- Added `apps.payroll.storage` with a payroll artifact storage adapter contract for store, read, and signed-url behavior.
+- Preserved current local generated-payload behavior through `payroll.storage.local.generated.v1`.
+- Added a signed-url-capable placeholder adapter, `payroll.storage.signed_url.placeholder.v1`, to exercise the SaaS contract before a real object-store provider is installed.
+- `PayrollOutputArtifact` now records storage object version, download strategy ref, signed-url support flag, and signed-url expiry seconds.
+- Artifact generation now stores payloads through `store_payroll_artifact_payload` instead of building DB payload metadata directly in payroll output services.
+- HR admin downloads now read through `read_payroll_artifact_payload` with checksum verification and return storage provider, object version, download strategy, checksum, and retention headers.
+- HR admin artifact payloads now expose `storage_object_version`, `download_strategy_ref`, `supports_signed_url`, `signed_url_expires_in_seconds`, `signed_download_url`, and `signed_download_expires_at`.
+- Finance provider delivery request snapshots now include storage provider, object version, download strategy, and signed-url capability.
+- `/hr-admin/payroll-outputs` and `/hr-admin/payroll-handoff` now show object version, download strategy, and signed URL readiness in the storage governance panel.
+- Demo payroll outputs and finance handoff data now match the expanded storage contract.
+- Backend tests cover local streaming strategy, checksum/download headers, configured signed-url placeholder metadata, and finance delivery storage evidence.
+- Playwright e2e and laptop/mobile visual baselines cover the visible storage strategy fields.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "payroll_outputs or payroll_finance_handoff"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web lint`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-outputs-flows.spec.ts tests/e2e/payroll-handoff-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-(outputs|handoff)" --update-snapshots`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-(outputs|handoff)"`
+
+Still open:
+
+- production secret-manager/cloud storage policy wiring
+- provider webhook callback endpoints, idempotency keys, and signature verification
+- async retry worker and provider-specific failure taxonomy
+- broader locked output audit trail beyond current publish/transmit/delivery/download evidence
+
+## Payroll Phase 4I: Employee Self-Service Payslip Downloads
+
+Objective:
+
+Expose published payroll payslips to the signed-in employee through an employee-scoped API and modern ESS workspace, while preserving tenant isolation, storage strategy metadata, checksum governance, and published-only visibility.
+
+Completed:
+
+- Added `/api/v1/me/payroll-payslips/` for employee-scoped published payslip history.
+- Added `/api/v1/me/payroll-payslips/<id>/download/` with tenant, employee, kind, publish-state, downloadable-state, storage-adapter, and checksum verification gates.
+- Added employee payslip serializers with period, run, pay date, file metadata, storage provider, object version, download strategy, signed URL readiness, retention policy, totals, line snapshots, source hash, and publisher metadata.
+- Added the Next.js proxy route `/api/me/payroll-payslips/[itemId]/download` so employee downloads use the same authenticated browser path as other ESS files.
+- Added `/ess/payslips` as a compact employee workspace with metrics, filters, payslip register, download action, payment summary, storage governance, source hash, and calculation lines.
+- Added ESS navigation and quick-link access for Payslips.
+- Demo data now includes a deterministic published payslip for `EMP-0042`, matching the signed-in employee demo context.
+- Backend tests cover employee list/download success, manager cross-employee denial, unpublished artifact hiding, storage headers, and checksum-backed download content.
+- Playwright e2e and laptop/mobile visual baselines cover the ESS payslip workspace.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "payroll_payslip or payroll_outputs"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web lint`
+- `pnpm --dir web exec playwright test tests/e2e/ess-payslip-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts -g "ess/payslips" --update-snapshots`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts -g "ess/payslips"`
+
+Still open:
+
+- employee payslip download audit events, read receipts, and revocation history
+- payslip publish notifications and employee acknowledgement workflow
+- production secret-manager/cloud storage policy wiring
+- provider webhook callback endpoints, idempotency keys, and signature verification
+- async retry worker and provider-specific failure taxonomy
+- broader locked output audit trail beyond current publish/transmit/delivery/download evidence
+
+## Payroll Phase 4J: Payslip Access Audit, Read Receipts, And Publish Notifications
+
+Objective:
+
+Close the employee payslip distribution trust loop by recording publish, notification, download, and read acknowledgement events with tenant, actor, channel, request, storage, and notification evidence.
+
+Completed:
+
+- Added `PayrollArtifactAccessEvent` as a tenant-scoped access ledger linked to payroll output artifacts, output batches, runs, reviews, employees, actors, memberships, and optional notifications.
+- Added access event types for published, notified, downloaded, read acknowledged, and revoked outcomes with configurable event/source channel references and metadata snapshots.
+- Publishing payroll output batches now records payslip published events and triggers payslip publish notifications through the notification engine.
+- Employee payslip downloads now record download events with request id, IP address, user agent, storage provider, storage key, object version, download strategy, and checksum evidence.
+- HR admin payroll output downloads now record the same access evidence through an HR admin source channel.
+- Added `/api/v1/me/payroll-payslips/<id>/read/` so employees can acknowledge a published payslip and mark the linked in-app payslip notification as read.
+- Employee and HR admin artifact payloads now expose access summaries and recent access events.
+- `/ess/payslips` now shows access trail metrics, latest notification state, read receipt status, and recent access events beside storage governance and calculation-line evidence.
+- Demo notification data now includes a payroll payslip publish notification and filter option so the ESS inbox mirrors the live publish path.
+- Backend tests cover publish/notified events, employee download audit, read acknowledgement, notification read-state linkage, invalid year filtering, and manager denial.
+- Playwright e2e and laptop/mobile visual baselines cover the ESS payslip access trail and read receipt surface.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "payroll_payslip or payroll_outputs"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web lint`
+- `pnpm --dir web exec playwright test tests/e2e/ess-payslip-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts -g "ess/payslips" --update-snapshots`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts -g "ess/payslips"`
+
+Still open:
+
+- production secret-manager/cloud storage policy wiring
+- provider webhook callback endpoints, idempotency keys, and signature verification
+- async retry worker and provider-specific failure taxonomy
+- real bank/accounting/statutory provider adapters and certification flows
+- auditor-facing drilldowns and public audit pack packaging
+
+## Payroll Phase 4K: Signed URL Permission Binding, Revocation, And Access Audit Export
+
+Objective:
+
+Make signed artifact access SaaS-ready by binding signed URLs to explicit grants, validating token/identity/expiry/access limits at download time, recording revocations, and exporting artifact access evidence.
+
+Completed:
+
+- Added `PayrollArtifactSignedAccessGrant` for tenant-scoped, artifact-scoped signed access grants.
+- Grant records link output artifact, output batch, payroll run, review, employee, issuing actor, target user/membership, storage evidence, expiry, access counts, and revocation metadata.
+- Added signed grant statuses for active, revoked, and expired.
+- Added `signed_url_issued` access events and linked access events to optional signed access grants.
+- Grant issue service stores SHA-256 token hashes and a token prefix while returning the raw token only in the issued signed URL response.
+- Grant validation checks artifact, token hash, expiry, max access count, issued user, and issued membership before a signed URL download can proceed.
+- Employee and HR admin download endpoints now mark signed grant usage and link download events to the grant when `grant_id` and `token` are present.
+- Added HR admin signed grant issue endpoint: `/api/v1/hr-admin/payroll-output-artifacts/<id>/signed-access/`.
+- Added ESS signed grant issue endpoint: `/api/v1/me/payroll-payslips/<id>/signed-access/`.
+- Added HR admin signed grant revocation endpoint: `/api/v1/hr-admin/payroll-signed-access-grants/<id>/revoke/`.
+- Added artifact access audit CSV export endpoint: `/api/v1/hr-admin/payroll-output-artifacts/<id>/access-audit-export/`.
+- HR admin payroll output payloads and UI now expose signed issued count, active/revoked/expired grant counts, latest expiry, download count, and access audit export.
+- Demo payroll output data now carries the expanded access-summary and event fields.
+- Backend tests cover signed grant issue, token-bound download, access-limit enforcement, revocation, revocation event creation, and CSV audit export.
+- Playwright e2e and laptop/mobile visual baselines cover the HR admin access-governance panel.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "payroll_payslip or payroll_outputs"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web lint`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-outputs-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/e2e/ess-payslip-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-outputs" --update-snapshots`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-outputs"`
+
+Still open:
+
+- production secret-manager/cloud storage policy wiring
+- object-store policy verification for customer credential isolation
+- provider webhook callback endpoints, idempotency keys, and signature verification
+- async retry worker and provider-specific failure taxonomy
+- real bank/accounting/statutory provider adapters and certification flows
+- auditor-facing drilldown UX and public audit pack packaging
+
+## Payroll Phase 4L: Object-Storage Profile Contract Hardening
+
+Objective:
+
+Make payroll artifact storage SaaS-ready at the contract layer by validating object-store profiles, rejecting raw credentials, storing sanitized profile snapshots, and proving S3/GCS/Azure signed URL metadata paths without hardcoded storage assumptions.
+
+Completed:
+
+- Added a normalized payroll artifact storage profile contract for local, placeholder signed URL, S3, GCS, and Azure provider families.
+- Required object-store profiles to provide provider-specific metadata such as bucket/container/account/project, region where needed, and `credential_ref`.
+- Rejected raw credential fields recursively from payroll storage configuration snapshots so secrets cannot be persisted in output artifacts.
+- Stored sanitized `storage_profile` snapshots on generated payslip, payroll register, and finance handoff artifacts.
+- Added explicit object-store contract adapters for S3/GCS/Azure profile validation and signed URL metadata generation.
+- Kept object-store contract storage behind `contract_test_mode`; real runtime usage now fails clearly until an SDK-backed backend is installed.
+- Stopped unknown storage provider refs from silently falling back to local generated storage.
+- Generated provider-style signed URL metadata for S3, GCS, and Azure provider refs while preserving existing HR admin and ESS artifact API shapes.
+- Backend tests cover missing required object-store metadata, S3 contract-profile generation/publish/download, sanitized credential refs, and raw credential rejection.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "payroll_payslip or payroll_outputs"`
+
+Still open:
+
+- SDK-backed S3/GCS/Azure upload, read, signed URL, checksum, and object-version implementations
+- credential resolver and secret-manager integration for tenant-scoped `credential_ref` values
+- customer-managed key/KMS integration, lifecycle retention enforcement, malware scanning, and multi-region durability policy checks
+- provider webhook callback endpoints, idempotency keys, and signature verification
+- async retry worker and provider-specific failure taxonomy
+- real bank/accounting/statutory provider adapters and certification flows
+- auditor-facing drilldown UX and public audit pack packaging
+
+## Payroll Phase 4M: Credential Resolver And SDK-Backed Storage Runtime
+
+Objective:
+
+Make the payroll artifact storage adapter runnable in production-style deployments by resolving tenant-scoped credential references at runtime and using SDK-backed S3/GCS/Azure upload, read, and signed URL paths without storing secret material on payroll artifacts.
+
+Completed:
+
+- Added a runtime credential resolver for `credential_ref` values backed by `PAYROLL_ARTIFACT_STORAGE_CREDENTIALS` or `HRMS_PAYROLL_ARTIFACT_STORAGE_CREDENTIALS_JSON`.
+- Added sanitized credential descriptors so runtime resolution can be audited without exposing secret material.
+- Added optional `PAYROLL_ARTIFACT_STORAGE_CLIENT_FACTORIES` hooks so deployments/tests can inject provider clients while keeping cloud SDK imports lazy.
+- Added SDK-backed object-store adapter behavior for S3, GCS, and Azure provider families.
+- S3 runtime storage now writes bytes through `put_object`, records provider object version evidence, reads through `get_object`, and signs downloads through `generate_presigned_url`.
+- GCS and Azure runtime paths now have lazy SDK wiring for upload, read, and signed URL behavior where provider packages are installed.
+- Object-store artifacts written through runtime storage keep `file_payload` blank while preserving checksum, size, storage key, provider ref, object version, download strategy, retention, and sanitized storage profile metadata.
+- Missing, disabled, mismatched, or incomplete credential refs fail closed with explicit payroll storage errors.
+- Backend tests cover unresolved credential refs and an injected S3 runtime store/read/signed URL path with no persisted secret fields.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "payroll_payslip or payroll_outputs"`
+
+Still open:
+
+- production secret-manager provider implementation for `credential_ref` resolution
+- real deployment wiring for AWS/GCP/Azure identity, IAM policies, bucket/container policies, and key rotation
+- KMS/customer-managed key enforcement, retention lifecycle checks, malware scanning, and multi-region durability policies
+- provider webhook callback endpoints, idempotency keys, and signature verification
+- async retry worker and provider-specific failure taxonomy
+- real bank/accounting/statutory provider adapters and certification flows
+- auditor-facing drilldown UX and public audit pack packaging
+
+## Payroll Phase 4N: Production Storage Policy Hardening
+
+Objective:
+
+Make payroll artifact storage policy-driven at runtime so SaaS tenants can constrain where payroll files are stored, which credential refs can be used, which encryption/retention/lifecycle controls are required, and how signed URL/file-size limits are enforced without hardcoded customer logic.
+
+Completed:
+
+- Added configurable payroll artifact storage policies resolved from `PAYROLL_ARTIFACT_STORAGE_POLICIES` or `HRMS_PAYROLL_ARTIFACT_STORAGE_POLICIES_JSON`.
+- Extended sanitized storage profile snapshots with `storage_policy_ref`, `lifecycle_policy_ref`, `malware_scan_profile_ref`, and `durability_policy_ref`.
+- Added policy allowlists for provider families, provider refs, credential refs, bucket names, container names, retention policy refs, encryption refs, and endpoint hosts.
+- Added policy gates for required encryption refs, required private endpoints, required runtime credential resolution, required storage-key prefixes, signed URL expiry bounds, max file size, lifecycle policy refs, malware-scan profile refs, and durability policy refs.
+- Applied the same policy validation to local/dev storage, object-store contract mode, and SDK-backed runtime store/read/signed URL operations.
+- Added empty deployment defaults in Django settings for payroll storage credentials, client factories, and storage policies.
+- Backend tests cover missing explicit policy refs, strict encryption policy rejection, and strict S3 runtime policy success with lifecycle, malware-scan, durability, retention, encryption, bucket, credential, and file-size controls.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common config tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "payroll_payslip or payroll_outputs"`
+
+Still open:
+
+- production secret-manager provider implementation for `credential_ref` resolution
+- provider-side IAM/bucket/container policy verification against AWS/GCP/Azure APIs
+- actual KMS/customer-managed key verification and lifecycle retention enforcement
+- malware scanning execution hooks and quarantine workflow
+- multi-region durability verification against provider replication settings
+- provider webhook callback endpoints, idempotency keys, and signature verification
+- async retry worker and provider-specific failure taxonomy
+- real bank/accounting/statutory provider adapters and certification flows
+- auditor-facing drilldown UX and public audit pack packaging
+
+## Payroll Phase 5A: India Statutory Configuration Backbone
+
+Objective:
+
+Create the first SaaS-ready India statutory backbone so PF, ESI, PT, LWF, TDS, gratuity, and similar country-pack behavior can be configured per tenant before statutory calculations consume it.
+
+Completed:
+
+- Added tenant-scoped `PayrollStatutoryPack` records for country/jurisdiction-specific statutory configuration.
+- Added `PayrollStatutoryComponent` records for PF, ESI, PT, LWF, TDS, gratuity, and other configurable statutory components.
+- Added `PayrollStatutorySlab` records with effective dates, state codes, wage ceilings, percentage rates, fixed employee amounts, fixed employer amounts, and applicability refs.
+- Added `EmployeeStatutoryProfile` records linked to employees and optional statutory packs for PAN, UAN, PF, ESI, PT/LWF states, tax regime, declaration status, previous employment income, previous tax deducted, source refs, and source hashes.
+- Kept statutory behavior configuration-driven through wage-base refs, statutory-treatment refs, registration refs, applicability refs, rounding refs, formula refs, and JSON config snapshots.
+- Added HR admin setup and CRUD APIs for statutory packs, statutory components, slabs, and employee statutory profiles.
+- Added validation for effective-date ranges, tenant consistency, required treatment refs, formula-method refs, PAN/UAN shape, PF/UAN requirements, ESI number requirements, nonnegative statutory amounts/rates, and active employee statutory profile overlap.
+- Backend tests cover India statutory setup creation, option payloads, employee profile source hashing, PF/UAN validation, and employee denial for HR-admin statutory APIs.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common config tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "statutory or salary or payroll_rules"`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -q`
+
+Still open:
+
+- richer TDS annualization and country-pack statutory depth
+- employee statutory profile self-service edits and direct statutory proof upload UX
+- statutory filing evidence and provider submission workflows
+- challan, return, and filing output generation
+- statutory provider integrations and certification flows
+
+## Payroll Phase 5B: Statutory Calculation Consumption V1
+
+Objective:
+
+Make draft payroll calculation consume configured statutory packs, components, slabs, and employee statutory profiles so statutory lines are generated from tenant-owned configuration instead of formula hardcoding.
+
+Completed:
+
+- Added `statutory` as a first-class payroll calculation line source.
+- Draft payroll calculation can select active effective-dated statutory packs and components through the run calculation profile.
+- Statutory components can be filtered by pack code, statutory pack ref, component code, statutory type, and excluded component code.
+- Employee statutory profiles are matched per locked payroll input snapshot and can be required by tenant calculation profile.
+- Statutory wage bases resolve from configured component paths or calculation-profile wage-base mappings.
+- Slab, percentage, and fixed-amount statutory methods can generate employee deduction, employer contribution, both-sided, or informational lines.
+- Statutory slabs support effective-date selection, amount bands, wage ceilings, state-aware matching through configured employee-profile state paths, fixed amounts, and employee/employer rates.
+- Generated statutory lines record component/slab/profile IDs, statutory treatment refs, wage-base evidence, source hashes, config snapshots, and trace snapshots.
+- Payroll validation now treats statutory-generated component codes as produced components and raises statutory setup blockers for missing components, missing employee profiles, missing wage-base mappings, unavailable wage-base paths, and missing slabs.
+- Backend tests cover configured PF employee/employer line generation from slabs and missing employee statutory profile blockers.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common config tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "statutory or payroll_draft_calculation"`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -q`
+
+Still open:
+
+- employee statutory profile self-service edits and direct statutory proof upload UX
+- TDS annualization, investment/exemption sections, and tax regime comparison
+- statutory filing evidence and provider submission workflows
+- challan, return, and filing output generation
+- statutory provider integrations and certification flows
+
+## Payroll Phase 5C: Statutory Declaration And Proof Workflow Backbone
+
+Objective:
+
+Add the declaration/proof workflow backbone for employee statutory and tax declarations so declarations, proof items, HR verification decisions, lock state, and source hashes become first-class tenant-scoped records.
+
+Completed:
+
+- Added `EmployeeStatutoryDeclaration` for financial-year declaration packages linked to employee statutory profiles and optional statutory packs.
+- Added `EmployeeStatutoryDeclarationItem` for section/component-level declarations, proof references, declared amounts, verified amounts, proof status, rejection reasons, and source hashes.
+- Added configurable declaration statuses: draft, submitted, verified, rejected, and locked.
+- Added configurable proof statuses: not required, pending, submitted, verified, and rejected.
+- Added declaration item kinds for previous employment, investment, exemption, deduction, rental, and other declaration sections.
+- Added HR-admin APIs to create/update declarations, create/update proof items, submit declarations, verify declarations, reject declarations, lock declarations, and verify/reject individual proof items.
+- Declaration submission refreshes declared totals and moves the employee statutory profile into `proofs_pending`.
+- Declaration verification refreshes verified totals, verifies submitted proof items with source-hash refresh, and moves the employee statutory profile into `verified`.
+- Declaration locking freezes the declaration and moves the employee statutory profile into `locked`.
+- Payroll statutory setup payload now includes declaration counts, declaration item counts, declaration records, proof item records, and declaration/proof option catalogs.
+- Backend tests cover declaration creation, proof item creation, item verification, submission, declaration verification, locking, locked edit rejection, setup summaries, and rejection reason enforcement.
+
+Validation:
+
+- `cd backend && python3 -m compileall apps/payroll apps/common config tests/test_phase0_api_smoke.py`
+- `cd backend && .venv/bin/python manage.py check`
+- `cd backend && .venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -k "statutory_declaration or statutory_setup or employee_statutory_profile"`
+- `cd backend && .venv/bin/pytest tests/test_phase0_api_smoke.py -q`
+
+Still open:
+
+- TDS annualization, tax regime comparison, and investment/exemption cap logic
+- statutory filing evidence and provider submission workflows
+- challan, return, and filing output generation
+- statutory provider integrations and certification flows
+
+## Payroll Phase 5D: Statutory Declaration UI And Browser Coverage
+
+Objective:
+
+Expose the statutory declaration/proof workflow through modern HR-admin and employee workspaces, with Playwright coverage proving the pages are usable and visually baselined.
+
+Completed:
+
+- Added employee-scoped statutory declaration API at `/api/v1/me/statutory-declarations/`.
+- The ESS statutory payload returns only the logged-in employee's tax profile, declarations, proof items, summary totals, available financial years, and configurable status/tax-regime option catalogs.
+- Added `/hr-admin/payroll-statutory` as the HR-admin statutory review workspace for packs, components, employee profiles, declarations, proof evidence, source hashes, and lock/verification state.
+- Added `/ess/statutory-declarations` as the employee workspace for tax profile, declaration totals, proof document state, payroll consumption metadata, and source trail.
+- Added deterministic statutory demo data covering India FY 2026 packs, PF/PT components, slabs, employee profiles, declaration proofs, and locked/submitted declaration states.
+- Added HR and ESS navigation entries so the screens are reachable from the SaaS workspaces.
+- Added focused Playwright e2e tests for HR-admin statutory review and ESS statutory declarations.
+- Added the new routes to tier-one smoke coverage and operational laptop/mobile visual baselines.
+- Added backend API smoke coverage proving employee statutory declarations are scoped to the current employee.
+
+Validation:
+
+- `.venv/bin/python -m compileall backend/apps/common backend/apps/payroll backend/tests/test_phase0_api_smoke.py`
+- `.venv/bin/python backend/manage.py check`
+- `.venv/bin/python backend/manage.py makemigrations --check --dry-run`
+- `.venv/bin/python -m pytest backend/tests/test_phase0_api_smoke.py -k "statutory_declaration or payroll_statutory"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-statutory-flows.spec.ts tests/e2e/ess-statutory-declarations-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts --update-snapshots`
+- `pnpm --dir web exec playwright test tests/e2e/tier-one-route-smoke.spec.ts`
+- `git diff --check`
+
+Still open:
+
+- direct binary proof upload from the statutory screen, beyond linking existing document/artifact refs
+- TDS annualization, tax regime comparison, and investment/exemption cap logic
+- statutory filing evidence and provider submission workflows
+- challan, return, and filing output generation
+- statutory provider integrations and certification flows
+
+## Payroll Phase 5E: Employee Statutory Submission
+
+Objective:
+
+Allow employees to create, revise, and submit their own statutory declaration packages from ESS while keeping HR verification, rejection, and locking under HR-admin control.
+
+Completed:
+
+- Added employee-scoped create/update APIs for `/api/v1/me/statutory-declarations/` and `/api/v1/me/statutory-declarations/<id>/`.
+- Added employee-scoped proof item APIs for `/api/v1/me/statutory-declarations/<id>/items/` and `/api/v1/me/statutory-declaration-items/<id>/`.
+- Added employee-scoped submit API at `/api/v1/me/statutory-declarations/<id>/submit/`.
+- Employee writes are limited to the logged-in employee's own draft or rejected declarations.
+- Employee proof status writes are limited to not required, pending, or submitted; HR-only verified/rejected states remain protected.
+- Declaration submission refreshes declared totals, records the submitting user, and moves the linked employee statutory profile to proofs pending.
+- ESS statutory page now includes a compact employee submission panel for declaration metadata, tax regime, proof item refs, and submit action.
+- Next.js API proxy routes forward employee statutory mutation requests with token-scoped authentication.
+- Backend and Playwright coverage now prove employee create/update/submit behavior, scope guards, locked declaration guards, and responsive UI availability.
+
+Validation:
+
+- `.venv/bin/python -m compileall backend/apps/common backend/apps/payroll backend/tests/test_phase0_api_smoke.py`
+- `.venv/bin/python backend/manage.py check`
+- `.venv/bin/python backend/manage.py makemigrations --check --dry-run`
+- `.venv/bin/python -m pytest backend/tests/test_phase0_api_smoke.py -k "statutory_declaration or payroll_statutory"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-statutory-flows.spec.ts tests/e2e/ess-statutory-declarations-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts --update-snapshots`
+- `pnpm --dir web exec playwright test tests/e2e/tier-one-route-smoke.spec.ts`
+- `git diff --check`
+
+Still open:
+
+- employee statutory profile self-service edits
+- TDS annualization, tax regime comparison, and investment/exemption cap logic
+- statutory filing evidence and provider submission workflows
+- challan, return, and filing output generation
+- statutory provider integrations and certification flows
+
+## Payroll Phase 5F: Direct Statutory Proof Upload
+
+Objective:
+
+Let employees upload statutory proof files directly from the ESS declaration workspace while storing files in the canonical employee document center and linking the resulting document/artifact evidence to declaration proof rows.
+
+Completed:
+
+- Added multipart employee API at `/api/v1/me/statutory-declarations/<id>/proof-upload/`.
+- The proof upload workflow creates an `EmployeeDocument` through the existing self-service document service, preserving configured category, file validation, storage, notification, and verification behavior.
+- The same request creates or updates the statutory declaration item with `proof_document_ref`, `proof_artifact_key`, submitted proof status, upload metadata, and refreshed source hashes.
+- ESS statutory declaration payload now exposes tenant-configured proof upload categories, preferring tax/statutory-marked self-upload categories when configured.
+- Added Next.js multipart proxy route for direct statutory proof uploads.
+- ESS statutory declaration action panel now supports file attachment beside existing proof-reference entry.
+- Backend coverage proves direct statutory upload creates the employee document and links the statutory proof item to the document/artifact evidence.
+- Playwright coverage proves the upload controls render in the ESS statutory workspace without layout overflow.
+
+Validation:
+
+- `.venv/bin/python -m compileall backend/apps/common backend/apps/payroll backend/tests/test_phase0_api_smoke.py`
+- `.venv/bin/python backend/manage.py check`
+- `.venv/bin/python backend/manage.py makemigrations --check --dry-run`
+- `.venv/bin/python -m pytest backend/tests/test_phase0_api_smoke.py -k "statutory_declaration or payroll_statutory"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-statutory-flows.spec.ts tests/e2e/ess-statutory-declarations-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts --update-snapshots`
+- `pnpm --dir web exec playwright test tests/e2e/tier-one-route-smoke.spec.ts`
+- `git diff --check`
+
+Still open:
+
+- employee statutory profile self-service edits
+- tax regime comparison and advanced projection scenarios
+- statutory filing evidence and provider submission workflows
+- challan, return, and filing output generation
+- statutory provider integrations and certification flows
+
+## Payroll Phase 5G: TDS Annualization And Declaration Cap Engine
+
+Objective:
+
+Calculate Tax Deducted At Source as a configurable statutory component that can annualize payroll wage bases, consume verified employee declarations, apply tenant-defined caps, and emit a payroll calculation line with auditable trace evidence.
+
+Completed:
+
+- Added a TDS annualization path inside the existing statutory calculation pipeline instead of creating a separate hardcoded tax calculator.
+- TDS behavior is driven by statutory component/profile config: financial year, annualization multiplier, remaining period count, output component mapping, tax method, declaration statuses, proof statuses, declaration profile refs, and cap rules.
+- Verified or locked employee statutory declarations can now reduce taxable annual income through configurable cap rules matched by section code, component code, item kind, and tax regime.
+- Annual tax can be calculated through configured progressive statutory slabs, with the resulting remaining tax spread across configured remaining payroll periods.
+- Payroll calculation lines now carry annualization trace snapshots including annual wage, declaration adjustment, taxable annual income, slab trace, previous employment income/tax, period TDS, and consumed declaration cap evidence.
+- Source hashes for annualized TDS lines include declaration/cap evidence so recalculation changes are traceable.
+- HR payroll calculation workspace now shows a compact TDS annualization panel in the line trace drawer and demo data includes a statutory TDS line.
+- Backend coverage proves configured TDS annualization consumes verified declaration caps and updates gross/deduction/net totals.
+- Playwright coverage proves the calculation workspace exposes the TDS annualization detail without layout overflow.
+
+Validation:
+
+- `.venv/bin/python -m compileall backend/apps/payroll/services.py backend/tests/test_phase0_api_smoke.py`
+- `.venv/bin/python backend/manage.py check`
+- `.venv/bin/python backend/manage.py makemigrations --check --dry-run`
+- `.venv/bin/python -m pytest backend/tests/test_phase0_api_smoke.py -k "tds or statutory or payroll_draft_calculation"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-calculations-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/e2e/tier-one-route-smoke.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts --update-snapshots`
+
+Still open:
+
+- employee statutory profile self-service edits
+- challan, return, and filing output generation
+- statutory provider integrations and certification flows
+
+## Payroll Phase 5H: Tax Regime Comparison Projection
+
+Objective:
+
+Let payroll calculate side-by-side tax regime projections from the same configurable TDS annualization contract, so HR can review selected and alternative regime outcomes before final payroll lock.
+
+Completed:
+
+- Extended TDS annualization with configurable regime comparison keys: candidate regimes, selected regime override, comparison enablement, and selection mode.
+- Declaration cap consumption and statutory slab tax calculation can now run per candidate tax regime without hardcoded old/new logic.
+- Annualized TDS trace snapshots now include a `regime_comparisons` matrix with declaration adjustment, taxable annual amount, annual tax, remaining tax, per-period tax, selected flag, and delta from the chosen regime.
+- Payroll line amount remains profile/config selected by default, with support for a configurable lowest-tax selection mode where tenants want automated regime choice.
+- Backend coverage proves old/new candidate projections, regime-specific declaration cap behavior, selected-regime marking, and per-period delta evidence.
+- HR payroll calculation workspace now shows a compact regime comparison list inside the TDS annualization trace panel.
+- Demo payroll data and Playwright coverage now exercise the comparison UI and adjusted payroll totals.
+
+Validation:
+
+- `.venv/bin/python -m compileall backend/apps/payroll/services.py backend/tests/test_phase0_api_smoke.py`
+- `.venv/bin/python backend/manage.py check`
+- `.venv/bin/python backend/manage.py makemigrations --check --dry-run`
+- `.venv/bin/python -m pytest backend/tests/test_phase0_api_smoke.py -k "tds or statutory or payroll_draft_calculation"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-calculations-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/e2e/tier-one-route-smoke.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts --update-snapshots`
+
+Still open:
+
+- employee statutory profile self-service edits
+- challan, return, and filing output generation
+- statutory provider integrations and certification flows
+
+## Payroll Phase 5I: Employer Statutory Registrations And Filing Calendars
+
+Objective:
+
+Make employer statutory accounts and filing obligations configurable per tenant, legal entity, branch, location, statutory pack, component, authority, and provider before challan/return output generation is built.
+
+Completed:
+
+- Added tenant-scoped `PayrollStatutoryEmployerRegistration` records for statutory account numbers, employer identifiers, jurisdiction refs, filing authority refs, provider refs, effective dates, source refs, source hashes, and configuration snapshots.
+- Added tenant-scoped `PayrollStatutoryFilingCalendar` records for filing type, frequency, period range, due dates, grace dates, filing windows, status, authority/provider refs, output profile refs, source refs, source hashes, and configuration snapshots.
+- Employer registration validation enforces tenant ownership, statutory pack/component alignment, organization-scope tenant ownership, date consistency, and active effective-date overlap protection per registration type/number.
+- Filing calendar validation enforces tenant ownership, pack/component/registration alignment, period date consistency, grace-date consistency, and filing-window consistency.
+- HR-admin APIs can create, update, list, inspect, and aggregate employer registrations and filing calendars.
+- Payroll statutory setup payload now exposes registration/filing summaries, records, legal entity/branch/location option catalogs, payroll frequencies, and filing statuses.
+- `/hr-admin/payroll-statutory` now shows registration coverage and upcoming filing obligations alongside statutory packs, components, declarations, proof evidence, and source trails.
+- Demo payroll statutory data and Playwright coverage now exercise employer registrations, provider/authority refs, filing due states, and output profile refs.
+- Backend coverage proves API creation, tenant-scoped foreign-key resolution, source hashing, pack/component inheritance from employer registration, setup summaries, and option payloads.
+
+Validation:
+
+- `.venv/bin/python -m compileall backend/apps/payroll backend/apps/common`
+- `.venv/bin/python backend/manage.py check`
+- `.venv/bin/python backend/manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "payroll_statutory_setup_supports"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-statutory-flows.spec.ts`
+
+Still open:
+
+- employee statutory profile self-service edits
+- statutory provider integrations and certification flows
+
+## Payroll Phase 5J: Statutory Challan And Return Artifact Generation
+
+Objective:
+
+Generate statutory return and challan output artifacts from tenant-configured employer registrations and filing calendars, without hardcoding jurisdiction logic into the payroll handoff flow.
+
+Completed:
+
+- Finance handoff generation now discovers eligible `PayrollStatutoryFilingCalendar` records from the configured statutory filing profile.
+- Statutory filing selection supports configurable status, filing type, output profile, statutory pack code, and statutory component code filters.
+- Generated statutory filing artifacts reuse `PayrollOutputArtifact` with `kind = statutory_report` and metadata-driven `artifact_subtype` values for `statutory_return` and `statutory_challan`.
+- Return artifacts include employee/component statutory lines, filing calendar refs, employer registration numbers, authority/provider refs, source hashes, and totals.
+- Challan artifacts include payable totals, filing authority/provider refs, employer identifiers, source row count, and source hashes.
+- Filing calendars record latest generation evidence in `config_snapshot.latest_generation` with handoff, output batch, artifact IDs, totals, and generated timestamp.
+- Finance handoff summaries now expose statutory filing artifact counts and filing calendar counts.
+- `/hr-admin/payroll-handoff` now shows statutory filing files beside bank advice, accounting export, and statutory summary artifacts.
+- Demo payroll handoff data now includes configurable Maharashtra PT return/challan artifacts and statutory provider routing refs.
+- Backend and Playwright coverage prove statutory filing artifact generation, UI visibility, profile refs, provider refs, and delivery records.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "statutory_filing_artifacts or finance_handoff"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-handoff-flows.spec.ts`
+
+Still open:
+
+- employee statutory profile self-service edits
+- live statutory provider portal/API execution adapters
+- provider webhook endpoints, retry/dead-letter execution contracts, background retry workers, and certification-flow automation
+
+## Payroll Phase 5K: Provider Submission Adapter Contract
+
+Objective:
+
+Define a SaaS-ready provider submission contract for bank, accounting, statutory return, and statutory challan files so every delivery has adapter, schema, callback-verification, idempotency, and certification evidence refs before real provider execution is connected.
+
+Completed:
+
+- Provider route resolution now supports artifact-specific, output-profile, filing-type, artifact-kind, and statutory subtype keys such as `statutory_report:statutory_return`.
+- Delivery request snapshots now include a normalized `submission_contract` with provider, channel, adapter, submission mode, submission profile, request schema, response schema, callback profile, callback verification, certification profile, certification requirement, and idempotency key.
+- Statutory filing deliveries add statutory context to the submission contract, including filing calendar, filing type, authority, employer registration, and output profile refs.
+- Delivery config snapshots now retain the selected provider route, submission contract, handoff profile, source output profile, and certification evidence state.
+- Reconciliation records callback verification refs, response schema refs, certification profile refs, checksum evidence, and certification evidence refs when provider acknowledgement is recorded.
+- Demo handoff data now uses subtype-specific Clear Statutory adapter contracts for PT return and challan artifacts.
+- `/hr-admin/payroll-handoff` now shows adapter, submission profile, callback verification, certification profile, and certification evidence state in the artifact detail panel.
+- Backend and Playwright coverage prove the adapter contract and certification evidence are present for statutory return delivery.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "statutory_filing_artifacts or finance_handoff"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-handoff-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts --update-snapshots -g "/hr-admin/payroll-handoff"`
+
+Still open:
+
+- employee statutory profile self-service edits
+- live bank/accounting/statutory provider SDK or portal automation adapters
+- external provider webhook hardening for production secret rotation and IP allowlisting
+- retry/dead-letter execution contracts, background retry-worker runtime, and provider-specific queue integrations
+- automated statutory certification lifecycle beyond recorded evidence refs
+
+## Payroll Phase 5L: Provider Callback Webhook Ingestion
+
+Objective:
+
+Add a durable provider callback ingestion contract so external bank, accounting, and statutory systems can report delivery outcomes through signed, idempotent webhook events.
+
+Completed:
+
+- Added tenant-scoped `PayrollProviderCallbackEvent` records linked to provider delivery, finance handoff, and output artifact lineage.
+- Callback events store provider refs, external refs, external event IDs, idempotency keys, callback profile refs, verification refs, provider status, payload checksums, signatures, verification snapshots, payload snapshots, processing snapshots, received/processed timestamps, and failure evidence.
+- Added public callback endpoint at `/api/v1/payroll-provider-callbacks/`.
+- Callback ingestion resolves delivery by provider ref plus delivery ID or external reference.
+- Deterministic contract signatures verify provider callbacks against delivery submission contracts, callback verification refs, payload checksums, and original artifact checksums.
+- Provider/idempotency uniqueness prevents duplicate callback event creation on replay.
+- Valid callbacks update the matching delivery, response snapshot, reconciliation snapshot, certification evidence, handoff summary, and accepted/failed handoff state when applicable.
+- Rejected callbacks are retained with verification failure evidence without mutating the delivery.
+- HR-admin handoff setup payload now includes recent callback events and callback status counts.
+- `/hr-admin/payroll-handoff` now exposes provider callback events beside delivery acknowledgements.
+- Backend coverage proves signed callback processing, idempotent replay behavior, rejected-signature retention, and setup callback counts.
+- Playwright coverage proves callback events and verification refs are visible in the handoff workspace.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "provider_callback_endpoint or statutory_filing_artifacts or finance_handoff"`
+- `pnpm --dir web typecheck`
+- `pnpm --dir web exec playwright test tests/e2e/payroll-handoff-flows.spec.ts`
+- `pnpm --dir web exec playwright test tests/visual/operational-baseline.visual.spec.ts --update-snapshots -g "/hr-admin/payroll-handoff"`
+
+Still open:
+
+- employee statutory profile self-service edits
+- live bank/accounting/statutory provider SDK or portal automation adapters
+- production webhook hardening: secret rotation, provider IP allowlists, provider-specific signature algorithms, and rate limits
+- background retry-worker runtime and provider-specific queue integrations
+- automated statutory certification lifecycle beyond recorded evidence refs
+
+## Payroll Phase 5M: Provider Retry and Dead-Letter Contract
+
+Objective:
+
+Add the SaaS-ready retry/dead-letter execution contract for failed provider deliveries so bank, accounting, statutory return, and statutory challan transmissions can be recovered without hardcoded provider behavior.
+
+Completed:
+
+- Added tenant-scoped `PayrollProviderRetryEvent` records linked to provider delivery, finance handoff, output artifact, output batch, payroll run, and final-locked review lineage.
+- Retry events store scheduled/executed/dead-letter/skipped state, retry policy refs, failure taxonomy/category refs, retry reasons, attempt numbers, scheduled/executed timestamps, request/decision/response snapshots, and failure evidence.
+- Provider routes now retain nested `retry_policy` config in delivery snapshots, including max attempts, backoff seconds, taxonomy refs, and provider-specific failure category mappings.
+- Finance handoff profile resolution now composes run-level defaults with batch-level overrides, keeping SaaS tenant/run configuration from being accidentally masked.
+- Added HR-admin APIs to schedule provider delivery retries and requeue scheduled retry events.
+- Retry scheduling blocks already reconciled deliveries, classifies failures through the configured taxonomy, and creates dead-letter records once max attempts are exhausted.
+- Requeue execution increments attempts, clears stale acknowledgement/reconciliation fields, records retry context, returns delivery state to submitted, and updates handoff summaries.
+- HR-admin handoff setup payload now includes retry events, retry status options, and scheduled/executed/dead-letter counts.
+- `/hr-admin/payroll-handoff` now exposes retry metrics, provider retry ledger cards, failed delivery retry state, and schedule/requeue command surfaces.
+- Demo handoff data includes a failed statutory challan delivery with a scheduled retry so browser coverage exercises the recovery path.
+- Backend coverage proves scheduling, configured failure taxonomy mapping, requeue execution, setup counts, and dead-letter transition at max attempts.
+- Playwright coverage proves retry policy, failure category, scheduled attempt, and failed-delivery command controls are visible in the handoff workspace.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "provider_delivery_retry or provider_callback_endpoint or statutory_filing_artifacts or finance_handoff"`
+- `npm run typecheck` from `web`
+- `npx playwright test tests/e2e/payroll-handoff-flows.spec.ts` from `web`
+- `npx playwright test tests/visual/operational-baseline.visual.spec.ts --grep "/hr-admin/payroll-handoff"` from `web`
+
+Still open:
+
+- employee statutory profile self-service edits
+- live bank/accounting/statutory provider SDK or portal automation adapters
+- production queue integration and provider-specific execution adapters
+- production webhook hardening: secret rotation, provider IP allowlists, provider-specific signature algorithms, and rate limits
+- automated statutory certification lifecycle beyond recorded evidence refs
+
+## Payroll Phase 5N: Provider Retry Worker Runtime Shell
+
+Objective:
+
+Add a provider-agnostic retry worker runtime shell so scheduled retry events can be processed by command/scheduler infrastructure without binding payroll to a specific cloud queue or external provider SDK.
+
+Completed:
+
+- Added `process_due_payroll_provider_retries` to select due scheduled retry events by tenant, due time, and processing limit.
+- Added `execute_payroll_provider_retry_event` to execute one due retry through a configurable adapter shell.
+- Added route-level `execution_adapter` snapshot support with worker profile, adapter ref, execution mode, execution strategy, dispatch mode, schema refs, callback refs, and idempotency key evidence.
+- Added stale-event safety: scheduled retries are skipped with failure evidence when the provider delivery has already reconciled or is no longer failed/rejected.
+- Adapter shell currently supports the safe manual-requeue execution path: delivery returns to submitted state, retry context is recorded, and the existing callback/acknowledgement flow remains responsible for final reconciliation.
+- Added Django management command `process_payroll_provider_retries` with tenant and limit filters.
+- HR-admin handoff demo data and UI now expose retry worker profile refs for failed delivery recovery.
+- Backend coverage proves due retry processing, adapter execution metadata, delivery requeue state, command output, and stale retry skip behavior.
+- Playwright coverage proves the retry worker profile is visible in the handoff workspace.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "provider_retry_worker or provider_delivery_retry or provider_callback_endpoint or statutory_filing_artifacts or finance_handoff"`
+- `npm run typecheck` from `web`
+- `npx playwright test tests/e2e/payroll-handoff-flows.spec.ts` from `web`
+- `npx playwright test tests/visual/operational-baseline.visual.spec.ts --grep "/hr-admin/payroll-handoff"` from `web`
+
+Still open:
+
+- employee statutory profile self-service edits
+- provider-specific bank/accounting/statutory SDK or portal automation adapters
+- production queue integration for recurring retry workers
+- production webhook hardening: secret rotation, provider IP allowlists, provider-specific signature algorithms, and rate limits
+- automated statutory certification lifecycle beyond recorded evidence refs
+
+## Payroll Phase 5O: Provider Adapter Boundary
+
+Objective:
+
+Define the live-provider adapter boundary for bank, accounting, and statutory submissions so tenant-specific provider integrations can be added without hardcoding credentials, schemas, request formats, or provider behavior into payroll core.
+
+Completed:
+
+- Added `backend/apps/payroll/providers.py` with provider adapter protocol, normalized submission request/result dataclasses, runtime credential resolver, raw-secret validation, manual adapter, sandbox adapter, and configurable adapter registry hook.
+- Provider credentials now resolve from `PAYROLL_PROVIDER_CREDENTIALS` or `HRMS_PAYROLL_PROVIDER_CREDENTIALS_JSON` by `credential_ref`; snapshots store sanitized descriptors only.
+- Provider routes reject raw credential keys recursively before route snapshots are persisted.
+- Provider route snapshots now retain credential refs, credential profile refs, credential-required flags, sandbox responses, retry policies, and execution adapter config.
+- Finance handoff transmission now submits each newly created provider delivery through the adapter boundary and records normalized adapter request/result evidence.
+- Adapter results can move deliveries to submitted, acknowledged, reconciled, rejected, or failed states while preserving checksums, schema refs, callback refs, certification evidence refs, and provider batch refs.
+- Retry-worker execution now reuses the same provider submission boundary after requeue, so initial submit and retry submit share one contract.
+- Added explicit `PAYROLL_PROVIDER_CREDENTIALS` and `PAYROLL_PROVIDER_ADAPTERS` settings for environment-owned provider integrations.
+- HR-admin handoff demo/UI now exposes credential refs and credential profile refs for failed delivery recovery without revealing secret material.
+- Backend coverage proves sandbox credential resolution, sanitized snapshots, raw-secret rejection, adapter response normalization, and backwards-compatible handoff/retry/callback flows.
+- Playwright coverage proves provider credential refs are visible in the handoff workspace when configured.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "provider_adapter_boundary or provider_retry_worker or provider_delivery_retry or provider_callback_endpoint or statutory_filing_artifacts or finance_handoff"`
+- `npm run typecheck` from `web`
+- `npx playwright test tests/e2e/payroll-handoff-flows.spec.ts` from `web`
+- `npx playwright test tests/visual/operational-baseline.visual.spec.ts --grep "/hr-admin/payroll-handoff"` from `web`
+
+Still open:
+
+- employee statutory profile self-service edits
+- production bank/accounting/statutory SDK or portal automation adapters
+- production queue integration for recurring retry workers
+- production webhook hardening: secret rotation, provider IP allowlists, provider-specific signature algorithms, and rate limits
+- automated statutory certification lifecycle beyond recorded evidence refs
+
+## Payroll Phase 5P: Provider-Specific Sandbox Adapter Scaffolds
+
+Objective:
+
+Add provider-specific adapter scaffolds for bank, accounting, and statutory delivery domains so future live SDK/portal implementations plug into explicit domain contracts instead of a single generic adapter path.
+
+Completed:
+
+- Added bank, accounting, and statutory sandbox adapter classes behind the existing provider adapter protocol.
+- Each scaffold validates supported artifact kinds before submission, preventing a bank adapter from processing accounting or statutory artifacts by configuration mistake.
+- Bank adapter responses stamp `payroll.provider_contract.bank_payment_instruction.v1` evidence with payment file name and checksum.
+- Accounting adapter responses stamp `payroll.provider_contract.accounting_journal_import.v1` evidence with ledger file name and checksum.
+- Statutory adapter responses stamp `payroll.provider_contract.statutory_filing_upload.v1` evidence with filing file name, checksum, and filing context.
+- Adapter registry now resolves `payroll.provider_adapter.bank.sandbox.v1`, `payroll.provider_adapter.accounting.sandbox.v1`, and `payroll.provider_adapter.statutory.sandbox.v1`.
+- Backend coverage proves all three provider-specific sandbox adapters submit through finance handoff delivery, record domain contract evidence, and preserve certification evidence for statutory reconciliation.
+- HR-admin handoff demo now uses the statutory sandbox adapter ref for failed challan recovery.
+- Playwright coverage proves the statutory sandbox adapter ref is visible in the handoff detail workflow.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "provider_specific_sandbox_adapters or provider_adapter_boundary or provider_retry_worker or provider_delivery_retry or provider_callback_endpoint or statutory_filing_artifacts or finance_handoff"`
+- `npm run typecheck` from `web`
+- `npx playwright test tests/e2e/payroll-handoff-flows.spec.ts` from `web`
+- `npx playwright test tests/visual/operational-baseline.visual.spec.ts --grep "/hr-admin/payroll-handoff"` from `web`
+
+Still open:
+
+- employee statutory profile self-service edits
+- production bank/accounting/statutory SDK or portal automation adapters
+- production queue integration for recurring retry workers
+- production webhook hardening: secret rotation, provider IP allowlists, provider-specific signature algorithms, and rate limits
+- automated statutory certification lifecycle beyond recorded evidence refs
+
+## Payroll Phase 5Q: Provider Onboarding And Certification Workspace
+
+Objective:
+
+Add the SaaS provider onboarding layer before production provider execution, so each tenant can configure, certify, and activate bank, accounting, and statutory provider connections through refs and evidence instead of hardcoded route assumptions.
+
+Completed:
+
+- Added tenant-scoped `PayrollProviderConnection` records for provider refs, provider kind, environment, adapter refs, channel refs, credential refs, callback refs, retry policy refs, certification profile refs, readiness snapshots, certification snapshots, and lifecycle status.
+- Added model validation that rejects raw credential keys in provider config/evidence snapshots and blocks active provider connections until required refs and passed certification are present.
+- Added deterministic readiness gates for adapter, channel, credential ref, callback contract, retry policy, and certification.
+- Added default bank, accounting, and statutory provider connection blueprints with credential-ref-only SaaS setup metadata.
+- Added HR-admin provider connection setup, list/create, detail/update, and certify APIs.
+- Added `/hr-admin/payroll-providers` with provider catalog, launch-control metrics, readiness gate cards, vertical coverage register, credential boundary, runtime refs, and certification evidence.
+- Added browser e2e and laptop/mobile visual coverage for the provider onboarding workspace.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "provider_connection or provider_specific_sandbox_adapters or provider_adapter_boundary or provider_retry_worker or provider_delivery_retry or provider_callback_endpoint"`
+- `npm run typecheck` from `web`
+- `npx playwright test tests/e2e/payroll-providers-flows.spec.ts` from `web`
+- `npx playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-providers"` from `web`
+
+Still open:
+
+- production bank/accounting/statutory SDK or portal automation adapters
+- production queue integration for recurring retry workers
+- production webhook hardening: secret rotation, provider IP allowlists, provider-specific signature algorithms, and rate limits
+- automatic certification test execution against real provider sandboxes
+
+## Payroll Phase 5R: Certified Provider Connection Route Gating
+
+Objective:
+
+Connect finance handoff provider route selection to tenant-owned provider connection readiness so bank, accounting, and statutory submissions can require certified or active provider connections before transmission.
+
+Completed:
+
+- Added configurable provider connection policy enforcement modes for finance handoff routes: `disabled`, `warn`, `certified`, and `active`.
+- Provider routes can now resolve adapter refs, channel refs, credential refs, credential profile refs, callback refs, retry policy refs, and certification refs from the matching `PayrollProviderConnection`.
+- Strict `certified` and `active` modes block finance handoff transmission when the provider connection is missing, uncertified, inactive, not launch-ready, or mismatched with explicit route refs.
+- Delivery route snapshots and submission contracts now carry `provider_connection_gate` evidence with policy ref, enforcement mode, matched connection, status, certification status, readiness counts, blockers, and mismatch refs.
+- `/hr-admin/payroll-handoff` now displays provider connection gate status and blockers in the provider acknowledgement detail panel.
+- Demo handoff data now shows the statutory challan path with certified-connection enforcement and a pending certification blocker.
+- Backend and Playwright coverage prove blocked uncertified routing, active connection ref resolution, handoff visibility, and visual stability.
+
+Validation:
+
+- `cd backend && ../.venv/bin/python -m compileall apps/payroll apps/common tests/test_phase0_api_smoke.py`
+- `cd backend && ../.venv/bin/python manage.py check`
+- `cd backend && ../.venv/bin/python manage.py makemigrations --check --dry-run`
+- `cd backend && ../.venv/bin/pytest tests/test_phase0_api_smoke.py -k "provider_connection or provider_specific_sandbox_adapters or provider_adapter_boundary or provider_retry_worker or provider_delivery_retry or provider_callback_endpoint"`
+- `npm run typecheck` from `web`
+- `npx playwright test tests/e2e/payroll-handoff-flows.spec.ts tests/e2e/payroll-providers-flows.spec.ts` from `web`
+- `npx playwright test tests/visual/operational-baseline.visual.spec.ts -g "payroll-handoff|payroll-providers"` from `web`
+
+Still open:
+
+- production bank/accounting/statutory SDK or portal automation adapters
+- production queue integration for recurring retry workers
+- production webhook hardening: secret rotation, provider IP allowlists, provider-specific signature algorithms, and rate limits
+- automatic certification test execution against real provider sandboxes
 
 ## Phase 1: HR Admin Backbone
 

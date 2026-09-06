@@ -20,7 +20,14 @@ test.describe("HR admin payroll calculation flows", () => {
     await expect(page.getByText("Attempt 2").first()).toBeVisible();
     await expect(page.getByText("PF Employee India").first()).toBeVisible();
     await expect(page.getByText("Performance Bonus").first()).toBeVisible();
-    await expect(page.getByText("₹63,900").first()).toBeVisible();
+    await expect(page.getByText("₹63,400").first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Tax Deducted At Source" })).toBeVisible();
+    await expect(page.getByText("TDS annualization").first()).toBeVisible();
+    await expect(page.getByText("FY2026-27").first()).toBeVisible();
+    await expect(page.getByText("1 cap rules consumed").first()).toBeVisible();
+    await expect(page.getByText("Regime comparison").first()).toBeVisible();
+    await expect(page.getByText("Old").first()).toBeVisible();
+    await expect(page.getByText("New").first()).toBeVisible();
 
     await page.getByRole("link", { name: /PF Employee India/ }).first().click();
     await expect(page).toHaveURL(/lineId=paycalcline-0-2/);

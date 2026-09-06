@@ -86,6 +86,9 @@ function resolveSourceHref(item: HrAdminNotification, workspace: "ess" | "mss") 
   if (item.subject_type === "employee_document") {
     return workspace === "mss" ? "/hr-admin/employee-documents" : "/ess/documents";
   }
+  if (item.subject_type === "payroll_payslip") {
+    return workspace === "mss" ? "/hr-admin/payroll-outputs" : "/ess/payslips";
+  }
   return "";
 }
 
@@ -205,6 +208,7 @@ export function UserNotificationCenter({
                 <option value="attendance_regularization">Attendance regularization</option>
                 <option value="employee_document">Employee document</option>
                 <option value="employee_onboarding">Onboarding</option>
+                <option value="payroll_payslip">Payroll payslip</option>
               </select>
             </label>
             <label className="form-field">

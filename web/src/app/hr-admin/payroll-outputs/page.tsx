@@ -142,9 +142,27 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
         <div className="detail-grid">
           <div className="detail-row"><span className="detail-label">Provider</span><span className="detail-value">{artifact.storage_provider_ref}</span></div>
           <div className="detail-row"><span className="detail-label">Key</span><span className="detail-value">{artifact.storage_key || "Pending"}</span></div>
+          <div className="detail-row"><span className="detail-label">Object version</span><span className="detail-value">{artifact.storage_object_version || "Pending"}</span></div>
+          <div className="detail-row"><span className="detail-label">Strategy</span><span className="detail-value">{artifact.download_strategy_ref}</span></div>
+          <div className="detail-row"><span className="detail-label">Signed URL</span><span className="detail-value">{artifact.supports_signed_url ? `${artifact.signed_url_expires_in_seconds}s` : "Streamed"}</span></div>
           <div className="detail-row"><span className="detail-label">Retention</span><span className="detail-value">{artifact.retention_policy_ref}</span></div>
           <div className="detail-row"><span className="detail-label">Download</span><span className="detail-value">{artifact.is_downloadable ? "Ready" : "Blocked"}</span></div>
         </div>
+      </section>
+
+      <section className="payroll-rule-source-card">
+        <span className="workspace-card__eyebrow">Access governance</span>
+        <div className="detail-grid">
+          <div className="detail-row"><span className="detail-label">Signed issued</span><span className="detail-value">{artifact.access_summary.signed_url_issued_count}</span></div>
+          <div className="detail-row"><span className="detail-label">Active grants</span><span className="detail-value">{artifact.access_summary.active_signed_grant_count}</span></div>
+          <div className="detail-row"><span className="detail-label">Revoked grants</span><span className="detail-value">{artifact.access_summary.revoked_signed_grant_count}</span></div>
+          <div className="detail-row"><span className="detail-label">Expired grants</span><span className="detail-value">{artifact.access_summary.expired_signed_grant_count}</span></div>
+          <div className="detail-row"><span className="detail-label">Downloads</span><span className="detail-value">{artifact.access_summary.download_count}</span></div>
+          <div className="detail-row"><span className="detail-label">Latest expiry</span><span className="detail-value">{formatDate(artifact.access_summary.latest_signed_grant_expires_at)}</span></div>
+        </div>
+        <a className="button button--ghost payroll-output-download-link" href={`/api/v1/hr-admin/payroll-output-artifacts/${artifact.id}/access-audit-export/`}>
+          Export access audit
+        </a>
       </section>
 
       <section className="payroll-rule-source-card">
