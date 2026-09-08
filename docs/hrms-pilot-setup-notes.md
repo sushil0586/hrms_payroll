@@ -124,6 +124,11 @@ cd backend
 
 These commands should be wired into the deployment scheduler before a production pilot that depends on notification delivery or recurring document expiry reminders.
 
+Payroll provider production readiness:
+
+- use `docs/payroll-production-readiness-runbook.md` before enabling certified or active finance handoff routes
+- use `docs/payroll-production-env-template.md` for sanitized provider credential, transport, package, storage policy, and verifier configuration shapes
+
 ---
 
 ## 7. Pilot Entry Criteria
@@ -136,4 +141,3 @@ The HRMS pilot can start when:
 - known limitations are accepted
 - the mobile `image-size` dependency risk is either out of pilot scope or explicitly accepted
 - support owner and escalation path are named
-

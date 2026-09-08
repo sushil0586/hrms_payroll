@@ -2166,6 +2166,946 @@ export type HrAdminDashboardBreakdownItem = {
   value: number;
 };
 
+export type HrAdminLaunchAuditGate = {
+  ref: string;
+  label: string;
+  severity: "blocker" | "warning";
+  status: "passed" | "blocked" | "warning";
+  passed: boolean;
+  value: string | number | boolean | null;
+  action: string;
+  evidence_ref: string;
+  owner_role_ref: string;
+  action_href: string;
+  action_label: string;
+  sla_days: number;
+  remediation_state: "open" | "closed";
+};
+
+export type HrAdminLaunchAuditModule = {
+  module_ref: string;
+  label: string;
+  status: "ready" | "warning" | "blocked";
+  gate_count: number;
+  passed_gate_count: number;
+  blocker_count: number;
+  warning_count: number;
+  gates: HrAdminLaunchAuditGate[];
+  owner_role_ref: string;
+  action_href: string;
+  action_label: string;
+  sla_days: number;
+};
+
+export type HrAdminLaunchAuditAction = {
+  ref: string;
+  label: string;
+  module_ref: string;
+  module_label: string;
+  severity: "blocker" | "warning";
+  status: "blocked" | "warning";
+  owner_role_ref: string;
+  action_href: string;
+  action_label: string;
+  sla_days: number;
+  value: string | number | boolean | null;
+  evidence_ref: string;
+};
+
+export type HrAdminLaunchRemediationAssignment = {
+  id: string;
+  gate_ref: string;
+  module_ref: string;
+  module_label: string;
+  label: string;
+  severity: "blocker" | "warning";
+  status: "open" | "closed" | "ignored";
+  owner_role_ref: string;
+  assigned_to_identifier: string;
+  action_href: string;
+  action_label: string;
+  sla_days: number;
+  current_value: string;
+  evidence_ref: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  due_at: string | null;
+  due_source_ref: string;
+  due_state: "overdue" | "due_soon" | "scheduled" | "unscheduled" | "open" | "closed" | "ignored";
+  days_until_due: number | null;
+  is_overdue: boolean;
+  is_due_soon: boolean;
+  acknowledged_at: string | null;
+  acknowledged_by_identifier: string;
+  reminder_sent_at: string | null;
+  reminder_count: number;
+  escalated_at: string | null;
+  escalated_by_identifier: string;
+  escalation_owner_role_ref: string;
+  ignored_at: string | null;
+  ignored_by_identifier: string;
+  resolved_at: string | null;
+  resolution_note: string;
+  action_history: Array<Record<string, unknown>>;
+  source_hash: string;
+};
+
+export type HrAdminLaunchRemediationListResponse = {
+  summary: {
+    open_count: number;
+    closed_count: number;
+    ignored_count: number;
+    blocker_count: number;
+    warning_count: number;
+    overdue_count: number;
+    due_soon_count: number;
+    unscheduled_count: number;
+    escalated_count: number;
+    owner_count: number;
+    module_count: number;
+  };
+  filters: {
+    status: string;
+    severity: string;
+    owner_role_ref: string;
+    module_ref: string;
+    due_state: string;
+    q: string;
+  };
+  options: {
+    statuses: string[];
+    severities: string[];
+    due_states: string[];
+    owners: string[];
+    modules: Array<{
+      module_ref: string;
+      module_label: string;
+    }>;
+  };
+  items: HrAdminLaunchRemediationAssignment[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+  has_previous: boolean;
+};
+
+export type HrAdminSaasCommercialEntitlement = {
+  entitlement_ref: string;
+  label: string;
+  enabled: boolean;
+};
+
+export type HrAdminSaasCommercialUsageLimit = {
+  meter_ref: string;
+  label: string;
+  current_value: number;
+  limit_value: number;
+  remaining_value: number | null;
+  status: "ok" | "near_limit" | "exceeded" | "unlimited";
+};
+
+export type HrAdminSaasCommercialEnforcementScope = {
+  scope_ref: string;
+  label: string;
+  enabled: boolean;
+  entitlements: string[];
+  blocking_usage_limits: string[];
+  path_prefixes: string[];
+  methods: string[];
+  missing_entitlements: string[];
+  exceeded_usage_limits: string[];
+  blocking_reasons: string[];
+  allowed: boolean;
+};
+
+export type HrAdminSaasUsageMeterSnapshot = {
+  id: string;
+  profile_ref: string;
+  profile_source: string;
+  plan_ref: string;
+  subscription_status: string;
+  meter_ref: string;
+  label: string;
+  current_value: number;
+  limit_value: number;
+  remaining_value: number | null;
+  status: string;
+  source_ref: string;
+  actor_identifier: string;
+  recorded_at: string;
+  source_hash: string;
+};
+
+export type HrAdminSaasCommercialAuditEvent = {
+  id: string;
+  event_type: string;
+  actor_identifier: string;
+  source_ref: string;
+  profile_ref: string;
+  profile_source: string;
+  plan_ref: string;
+  subscription_status: string;
+  occurred_at: string;
+  previous_state: Record<string, unknown>;
+  new_state: Record<string, unknown>;
+  usage_snapshot: HrAdminSaasCommercialUsageLimit[];
+  enforcement_snapshot: {
+    enabled: boolean;
+    scope_count: number;
+    blocking_scope_count: number;
+    scopes: HrAdminSaasCommercialEnforcementScope[];
+  };
+  event_snapshot: Record<string, unknown>;
+  source_hash: string;
+};
+
+export type HrAdminSaasCommercialControl = {
+  profile_ref: string;
+  profile_source: string;
+  profile_name: string;
+  version: number;
+  tenant: {
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+    subscription_plan: string;
+  };
+  subscription: {
+    status: string;
+    billing_provider_ref: string;
+    billing_account_ref: string;
+    current_period_end: string;
+    active_statuses: string[];
+    status_options: string[];
+  };
+  plan: {
+    plan_ref: string;
+    edition: string;
+    configured: boolean;
+  };
+  available_plans: Array<{
+    plan_ref: string;
+    edition: string;
+    label: string;
+  }>;
+  summary: {
+    entitlement_count: number;
+    enabled_entitlement_count: number;
+    required_entitlement_count: number;
+    missing_required_entitlement_count: number;
+    usage_meter_count: number;
+    exceeded_usage_limit_count: number;
+    near_usage_limit_count: number;
+    can_launch: boolean;
+  };
+  entitlements: HrAdminSaasCommercialEntitlement[];
+  usage_limits: HrAdminSaasCommercialUsageLimit[];
+  required_entitlements: string[];
+  missing_required_entitlements: string[];
+  exceeded_usage_limits: string[];
+  blocking_usage_limits: string[];
+  enforcement: {
+    enabled: boolean;
+    scope_count: number;
+    blocking_scope_count: number;
+    scopes: HrAdminSaasCommercialEnforcementScope[];
+  };
+  recent_usage_snapshots: HrAdminSaasUsageMeterSnapshot[];
+  recent_audit_events: HrAdminSaasCommercialAuditEvent[];
+};
+
+export type TenantAdminConsole = {
+  tenant: {
+    id: string;
+    code: string;
+    name: string;
+    legal_name: string;
+    status: string;
+    subscription_plan: string;
+    country_code: string;
+    timezone: string;
+    is_sandbox: boolean;
+    go_live_at: string | null;
+    onboarding_status: string;
+  };
+  summary: {
+    status: "ready" | "warning" | "blocked";
+    blocked_check_count: number;
+    warning_check_count: number;
+    active_membership_count: number;
+    role_count: number;
+    published_configuration_count: number;
+    commercial_can_launch: boolean;
+  };
+  commercial_control: HrAdminSaasCommercialControl;
+  seat_usage: HrAdminSaasCommercialUsageLimit;
+  membership_status_counts: Record<string, number>;
+  role_coverage: Array<{
+    role_ref: string;
+    label: string;
+    active_membership_count: number;
+    is_system_role: boolean;
+  }>;
+  configuration_health: {
+    tenant_configuration_count: number;
+    published_count: number;
+    draft_count: number;
+    archived_count: number;
+    system_definition_count: number;
+    recent_configurations: Array<{
+      key: string;
+      name: string;
+      category: string;
+      status: string;
+      version: number;
+      updated_at: string;
+    }>;
+  };
+  governance_checks: Array<{
+    ref: string;
+    label: string;
+    status: "ready" | "warning" | "blocked";
+    value: string | number | boolean;
+  }>;
+  membership_management: {
+    status_options: Array<{
+      value: string;
+      label: string;
+    }>;
+    role_options: Array<{
+      id: string;
+      code: string;
+      name: string;
+      is_system_role: boolean;
+    }>;
+    recent_memberships: Array<{
+      id: string;
+      user_id: string;
+      username: string;
+      email: string;
+      display_name: string;
+      first_name: string;
+      last_name: string;
+      phone_number: string;
+      is_user_active: boolean;
+      membership_status: string;
+      is_default_membership: boolean;
+      employee_code: string;
+      role_ids: string[];
+      roles: Array<{
+        id: string;
+        code: string;
+        name: string;
+        is_primary: boolean;
+        is_system_role: boolean;
+      }>;
+      created_at: string;
+      updated_at: string;
+    }>;
+    available_actions: Array<{
+      value: string;
+      label: string;
+    }>;
+  };
+  change_request_management: {
+    enabled: boolean;
+    profile_source: string;
+    request_type_options: Array<{
+      value: string;
+      label: string;
+      description: string;
+      target_ref_required: boolean;
+      allowed_payload_fields: string[];
+    }>;
+    status_options: Array<{
+      value: string;
+      label: string;
+    }>;
+    action_options: Array<{
+      value: string;
+      label: string;
+    }>;
+    recent_requests: Array<{
+      id: string;
+      request_type: string;
+      status: string;
+      title: string;
+      description: string;
+      target_ref: string;
+      requested_by_identifier: string;
+      decided_by_identifier: string;
+      applied_by_identifier: string;
+      requested_payload: Record<string, unknown>;
+      current_snapshot: Record<string, unknown>;
+      decision_note: string;
+      action_history: Array<Record<string, unknown>>;
+      requested_at: string;
+      decided_at: string | null;
+      applied_at: string | null;
+      source_ref: string;
+      source_hash: string;
+    }>;
+  };
+  support_access_management: {
+    enabled: boolean;
+    profile_source: string;
+    max_duration_minutes: number;
+    scope_options: Array<{
+      value: string;
+      label: string;
+      description: string;
+    }>;
+    status_options: Array<{
+      value: string;
+      label: string;
+    }>;
+    action_options: Array<{
+      value: string;
+      label: string;
+    }>;
+    recent_grants: Array<{
+      id: string;
+      status: string;
+      support_agent_identifier: string;
+      reason: string;
+      scope_refs: string[];
+      requested_duration_minutes: number;
+      approved_duration_minutes: number;
+      requested_by_identifier: string;
+      approved_by_identifier: string;
+      revoked_by_identifier: string;
+      started_by_identifier: string;
+      ended_by_identifier: string;
+      requested_at: string;
+      approved_at: string | null;
+      access_starts_at: string | null;
+      access_expires_at: string | null;
+      started_at: string | null;
+      ended_at: string | null;
+      revoked_at: string | null;
+      decision_note: string;
+      session_ref: string;
+      action_history: Array<Record<string, unknown>>;
+      request_snapshot: Record<string, unknown>;
+      source_ref: string;
+      source_hash: string;
+    }>;
+  };
+  recent_usage_snapshots: HrAdminSaasUsageMeterSnapshot[];
+  recent_audit_events: HrAdminSaasCommercialAuditEvent[];
+};
+
+export type TenantAdminTrustAuditEvent = HrAdminSaasCommercialAuditEvent & {
+  event_group_refs: string[];
+  support_session_ref: string;
+};
+
+export type TenantAdminTrustAuditReview = {
+  profile_ref: string;
+  profile_source: string;
+  generated_at: string;
+  tenant: {
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+    subscription_plan: string;
+    timezone: string;
+  };
+  summary: {
+    status: "ready" | "warning" | "blocked";
+    total_event_count: number;
+    visible_event_count: number;
+    event_type_count: number;
+    source_ref_count: number;
+    support_session_count: number;
+    configured_group_count: number;
+    page: number;
+    page_size: number;
+  };
+  filters: {
+    event_group: string;
+    event_type: string;
+    actor: string;
+    source_ref: string;
+    support_session_ref: string;
+    date_from: string;
+    date_to: string;
+  };
+  options: {
+    event_groups: Array<{
+      group_ref: string;
+      label: string;
+      event_types: string[];
+    }>;
+    event_types: string[];
+    source_refs: string[];
+    support_session_refs: string[];
+  };
+  events: TenantAdminTrustAuditEvent[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+  has_previous: boolean;
+};
+
+export type TenantAdminEnterpriseSecurityReadiness = {
+  profile_ref: string;
+  security_profile_ref: string;
+  profile_source: string;
+  generated_at: string;
+  tenant: {
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+    subscription_plan: string;
+    timezone: string;
+  };
+  summary: {
+    status: "ready" | "warning" | "blocked";
+    check_count: number;
+    passed_check_count: number;
+    blocker_count: number;
+    warning_count: number;
+    mfa_ready: boolean;
+    sso_ready: boolean;
+    scim_ready: boolean;
+    session_ready: boolean;
+    audit_ready: boolean;
+    data_protection_ready: boolean;
+    launch_blocker_refs: string[];
+  };
+  mfa: {
+    required: boolean;
+    enforced: boolean;
+    allowed_methods: string[];
+    exempt_role_refs: string[];
+    minimum_method_count: number;
+    evidence_ref: string;
+    owner_role_ref: string;
+  };
+  sso: {
+    required: boolean;
+    enabled: boolean;
+    provider_ref: string;
+    protocol: string;
+    allowed_protocols: string[];
+    metadata_ref: string;
+    last_tested_at: string | null;
+    test_interval_days: number;
+    certificate_rotation_due_at: string | null;
+    certificate_warning_days: number;
+  };
+  scim: {
+    required: boolean;
+    enabled: boolean;
+    provider_ref: string;
+    last_sync_at: string | null;
+    sync_interval_hours: number;
+    error_count: number;
+    max_error_count: number;
+    deprovisioning_enabled: boolean;
+  };
+  session: {
+    idle_timeout_minutes: number;
+    max_idle_timeout_minutes: number;
+    absolute_timeout_hours: number;
+    max_absolute_timeout_hours: number;
+    device_trust_required: boolean;
+    device_trust_enabled: boolean;
+  };
+  audit: {
+    retention_days: number;
+    minimum_retention_days: number;
+    customer_export_enabled: boolean;
+    immutable_export_ref: string;
+  };
+  data_protection: {
+    encryption_at_rest: boolean;
+    encryption_in_transit: boolean;
+    customer_managed_key_ref: string;
+    data_residency_ref: string;
+  };
+  checks: Array<{
+    ref: string;
+    label: string;
+    status: "ready" | "warning" | "blocked";
+    severity: "warning" | "blocker";
+    passed: boolean;
+    value: unknown;
+    detail: string;
+    action_label: string;
+    action_href: string;
+    owner_role_ref: string;
+  }>;
+};
+
+export type TenantAdminMembershipMutationResult = {
+  membership: TenantAdminConsole["membership_management"]["recent_memberships"][number];
+  generated_password: string;
+  password_was_set: boolean;
+  console: TenantAdminConsole;
+};
+
+export type TenantAdminChangeRequestMutationResult = {
+  change_request: TenantAdminConsole["change_request_management"]["recent_requests"][number];
+  console: TenantAdminConsole;
+};
+
+export type TenantAdminSupportAccessGrantMutationResult = {
+  support_access_grant: TenantAdminConsole["support_access_management"]["recent_grants"][number];
+  console: TenantAdminConsole;
+};
+
+export type SupportSessionTenantConsole = {
+  support_session: {
+    allowed: boolean;
+    detail: string;
+    code: string;
+    tenant_code: string;
+    actor_identifier: string;
+    required_scope_ref: string;
+    request_path: string;
+    method: string;
+    grant: TenantAdminConsole["support_access_management"]["recent_grants"][number] | null;
+    scope_refs: string[];
+    session_ref: string;
+    access_expires_at: string | null;
+  };
+  tenant: {
+    id: string;
+    code: string;
+    name: string;
+  };
+  granted_sections: string[];
+  account: {
+    summary: TenantAdminConsole["summary"];
+    commercial_control: {
+      profile_ref: string;
+      profile_source: string;
+      subscription: HrAdminSaasCommercialControl["subscription"];
+      plan: HrAdminSaasCommercialControl["plan"];
+      summary: HrAdminSaasCommercialControl["summary"];
+    };
+    seat_usage: TenantAdminConsole["seat_usage"];
+    role_coverage: TenantAdminConsole["role_coverage"];
+    governance_checks: TenantAdminConsole["governance_checks"];
+  } | null;
+  configuration_health: TenantAdminConsole["configuration_health"] | null;
+  commercial_evidence: {
+    recent_usage_snapshots: TenantAdminConsole["recent_usage_snapshots"];
+    recent_audit_events: TenantAdminConsole["recent_audit_events"];
+  } | null;
+  payroll_support: {
+    readiness_ref: string;
+    payroll_route_refs: string[];
+  } | null;
+};
+
+export type SupportSessionDomainSnapshot = {
+  support_session: SupportSessionTenantConsole["support_session"];
+  tenant: SupportSessionTenantConsole["tenant"];
+  domain: {
+    domain_ref: string;
+    label: string;
+    description: string;
+    scope_ref: string;
+    profile_source: string;
+  };
+  available_domains: Array<{
+    domain_ref: string;
+    label: string;
+    description: string;
+    scope_ref: string;
+    profile_source: string;
+  }>;
+  snapshot: Record<string, unknown>;
+};
+
+export type HrAdminSaasResilienceReadiness = {
+  profile_ref: string;
+  resilience_profile_ref: string;
+  profile_source: string;
+  generated_at: string;
+  tenant: {
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+    subscription_plan: string;
+    timezone: string;
+  };
+  summary: {
+    status: "ready" | "warning" | "blocked";
+    check_count: number;
+    passed_check_count: number;
+    blocker_count: number;
+    warning_count: number;
+    backup_ready: boolean;
+    restore_ready: boolean;
+    retention_ready: boolean;
+  };
+  backup: {
+    enabled: boolean;
+    required: boolean;
+    frequency_hours: number;
+    grace_hours: number;
+    recovery_point_objective_minutes: number;
+    last_successful_backup_at: string | null;
+    last_backup_status: string;
+    encryption_required: boolean;
+    encryption_enabled: boolean;
+    offsite_required: boolean;
+    offsite_copy_enabled: boolean;
+    runbook_ref: string;
+  };
+  restore: {
+    required: boolean;
+    restore_test_interval_days: number;
+    grace_days: number;
+    last_restore_test_at: string | null;
+    last_restore_test_status: string;
+    runbook_ref: string;
+  };
+  retention: {
+    default_retention_days: number;
+    minimum_default_retention_days: number;
+    payroll_retention_days: number;
+    minimum_payroll_retention_days: number;
+    audit_retention_days: number;
+    minimum_audit_retention_days: number;
+    support_session_retention_days: number;
+    minimum_support_session_retention_days: number;
+    deletion_policy_ref: string;
+    legal_hold_policy_ref: string;
+  };
+  evidence: {
+    storage_policy_ref: string;
+    backup_job_ref: string;
+    restore_test_ref: string;
+    retention_policy_ref: string;
+    last_evidence_at: string | null;
+  };
+  checks: Array<{
+    ref: string;
+    label: string;
+    status: "ready" | "warning" | "blocked";
+    severity: "blocker" | "warning";
+    passed: boolean;
+    value: string | number | boolean | Record<string, string> | null;
+    detail: string;
+    action_label: string;
+    action_href: string;
+  }>;
+};
+
+export type HrAdminSaasSlaOperations = {
+  profile_ref: string;
+  sla_profile_ref: string;
+  profile_source: string;
+  generated_at: string;
+  tenant: {
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+    subscription_plan: string;
+    timezone: string;
+  };
+  summary: {
+    status: "ready" | "warning" | "blocked";
+    signal_count: number;
+    blocked_signal_count: number;
+    warning_signal_count: number;
+    incident_count: number;
+    open_incident_count: number;
+    breached_incident_count: number;
+    at_risk_incident_count: number;
+    failed_notification_count: number;
+    stale_provider_job_count: number;
+    expired_support_grant_count: number;
+    overdue_remediation_count: number;
+  };
+  incident_targets: Record<string, { response_minutes: number; resolution_minutes: number; owner_role_ref: string }>;
+  impact_options: Record<string, { label: string }>;
+  operational_thresholds: Record<string, { max_count: number; severity: string; owner_role_ref: string; href: string }>;
+  status_counts: Record<string, number>;
+  severity_counts: Record<string, number>;
+  impact_counts: Record<string, number>;
+  health_signals: Array<{
+    ref: string;
+    label: string;
+    status: "ready" | "warning" | "blocked";
+    value: string | number | boolean | null;
+    detail: string;
+    href: string;
+    owner_role_ref: string;
+  }>;
+  incidents: Array<{
+    id: string;
+    incident_ref: string;
+    title: string;
+    description: string;
+    severity: string;
+    status: string;
+    impact_refs: string[];
+    impact_labels: string[];
+    owner_role_ref: string;
+    detected_at: string;
+    acknowledged_at: string | null;
+    mitigated_at: string | null;
+    resolved_at: string | null;
+    target_response_minutes: number;
+    target_resolution_minutes: number;
+    response_due_at: string;
+    resolution_due_at: string;
+    response_state: "met" | "breached" | "at_risk" | "open";
+    resolution_state: "met" | "breached" | "at_risk" | "open";
+    breached: boolean;
+    at_risk: boolean;
+    action_history: Array<Record<string, string>>;
+    incident_snapshot: Record<string, string | number | boolean>;
+    source_ref: string;
+    source_hash: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+};
+
+export type HrAdminSaasOperationalHealth = {
+  profile_ref: string;
+  generated_at: string;
+  tenant: {
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+    subscription_plan: string;
+    timezone: string;
+  };
+  summary: {
+    status: "ready" | "warning" | "blocked";
+    signal_count: number;
+    blocked_signal_count: number;
+    warning_signal_count: number;
+    ready_signal_count: number;
+    open_remediation_count: number;
+    overdue_remediation_count: number;
+    failed_notification_count: number;
+    pending_notification_count: number;
+    resilience_status: "ready" | "warning" | "blocked";
+    resilience_blocker_count: number;
+    resilience_warning_count: number;
+    sla_status: "ready" | "warning" | "blocked";
+    sla_open_incident_count: number;
+    sla_breached_incident_count: number;
+    queued_provider_job_count: number;
+    running_provider_job_count: number;
+    stale_provider_job_count: number;
+    dead_lettered_provider_job_count: number;
+    dead_lettered_provider_retry_event_count: number;
+    active_support_session_count: number;
+    expired_support_grant_count: number;
+    pending_change_request_count: number;
+    commercial_event_count: number;
+    usage_snapshot_count: number;
+  };
+  signals: Array<{
+    ref: string;
+    label: string;
+    status: "ready" | "warning" | "blocked";
+    value: string | number | boolean | null;
+    detail: string;
+    href: string;
+    owner_role_ref: string;
+  }>;
+  launch_audit: {
+    audit_profile_ref: string;
+    status: "ready" | "warning" | "blocked";
+    blocker_count: number;
+    warning_count: number;
+    release_blocker_refs: string[];
+    release_warning_refs: string[];
+  };
+  commercial_control: {
+    profile_ref: string;
+    profile_source: string;
+    summary: HrAdminSaasCommercialControl["summary"];
+    subscription: HrAdminSaasCommercialControl["subscription"];
+    plan: HrAdminSaasCommercialControl["plan"];
+    exceeded_usage_limits: string[];
+  };
+  resilience_readiness: {
+    profile_ref: string;
+    resilience_profile_ref: string;
+    profile_source: string;
+    summary: HrAdminSaasResilienceReadiness["summary"];
+    backup: HrAdminSaasResilienceReadiness["backup"];
+    restore: HrAdminSaasResilienceReadiness["restore"];
+    retention: HrAdminSaasResilienceReadiness["retention"];
+  };
+  sla_operations: {
+    profile_ref: string;
+    sla_profile_ref: string;
+    profile_source: string;
+    summary: HrAdminSaasSlaOperations["summary"];
+    health_signals: HrAdminSaasSlaOperations["health_signals"];
+    incidents: HrAdminSaasSlaOperations["incidents"];
+  };
+  notification_delivery: {
+    pending_count: number;
+    failed_count: number;
+    sent_today_count: number;
+    latest_activity_at: string;
+  };
+  provider_queue: {
+    job_status_counts: Record<string, number>;
+    retry_status_counts: Record<string, number>;
+    stale_job_count: number;
+    dead_lettered_job_count: number;
+    dead_lettered_retry_event_count: number;
+  };
+  support_access: {
+    active_session_count: number;
+    expired_runtime_grant_count: number;
+    status_counts: Record<string, number>;
+    recent_grants: TenantAdminConsole["support_access_management"]["recent_grants"];
+  };
+  tenant_change_requests: {
+    pending_count: number;
+    status_counts: Record<string, number>;
+  };
+  recent_commercial_events: HrAdminSaasCommercialAuditEvent[];
+  recent_usage_snapshots: HrAdminSaasUsageMeterSnapshot[];
+};
+
+export type HrAdminLaunchAudit = {
+  audit_profile_ref: string;
+  audit_profile_source: string;
+  status: "ready" | "warning" | "blocked";
+  module_count: number;
+  gate_count: number;
+  passed_gate_count: number;
+  blocker_count: number;
+  warning_count: number;
+  release_blocker_refs: string[];
+  release_warning_refs: string[];
+  release_actions: HrAdminLaunchAuditAction[];
+  remediation_assignments: HrAdminLaunchRemediationAssignment[];
+  remediation_assignment_summary: {
+    open_count: number;
+    opened_count: number;
+    updated_count: number;
+    closed_count: number;
+  };
+  evidence_refs: string[];
+  modules: HrAdminLaunchAuditModule[];
+};
+
 export type HrAdminDashboard = {
   overview: {
     total_employees: number;
@@ -2211,6 +3151,7 @@ export type HrAdminDashboard = {
     documents_expiring_30_days: number;
     latest_activity_at: string;
   };
+  launch_audit: HrAdminLaunchAudit;
 };
 
 export type HrAdminPayrollReadinessPeriod = {
@@ -3580,6 +4521,45 @@ export type HrAdminPayrollProviderRetryEvent = {
   updated_at: string;
 };
 
+export type HrAdminPayrollProviderJob = {
+  id: string;
+  job_kind: string;
+  job_kind_label: string;
+  status: string;
+  status_label: string;
+  queue_policy_ref: string;
+  worker_profile_ref: string;
+  idempotency_key: string;
+  provider_ref: string;
+  provider_delivery_id: string | null;
+  provider_connection_id: string | null;
+  retry_event_id: string | null;
+  callback_event_id: string | null;
+  certification_run_id: string | null;
+  priority: number;
+  attempt_count: number;
+  max_attempts: number;
+  scheduled_for: string | null;
+  leased_at: string | null;
+  leased_until: string | null;
+  lease_owner_ref: string;
+  heartbeat_at: string | null;
+  heartbeat_count: number;
+  recovery_count: number;
+  last_recovered_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  requested_by_name: string | null;
+  executed_by_name: string | null;
+  request_snapshot: Record<string, unknown>;
+  lease_snapshot: Record<string, unknown>;
+  response_snapshot: Record<string, unknown>;
+  failure_code: string;
+  failure_reason: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type HrAdminPayrollFinanceHandoffSetupResponse = {
   summary: {
     published_output_batch_count: number;
@@ -3601,6 +4581,15 @@ export type HrAdminPayrollFinanceHandoffSetupResponse = {
     scheduled_provider_retry_event_count?: number;
     executed_provider_retry_event_count?: number;
     dead_lettered_provider_retry_event_count?: number;
+    provider_job_count?: number;
+    queued_provider_job_count?: number;
+    running_provider_job_count?: number;
+    completed_provider_job_count?: number;
+    dead_lettered_provider_job_count?: number;
+    recovered_provider_job_count?: number;
+    heartbeat_provider_job_count?: number;
+    stale_provider_job_count?: number;
+    provider_audit_pack_count?: number;
     latest_net_pay: string;
   };
   output_batches: HrAdminPayrollOutputBatch[];
@@ -3609,6 +4598,7 @@ export type HrAdminPayrollFinanceHandoffSetupResponse = {
   deliveries: HrAdminPayrollProviderDelivery[];
   callback_events: HrAdminPayrollProviderCallbackEvent[];
   retry_events: HrAdminPayrollProviderRetryEvent[];
+  provider_jobs: HrAdminPayrollProviderJob[];
   options: {
     handoff_statuses: HrAdminEnumOption[];
     output_artifact_kinds: HrAdminEnumOption[];
@@ -3616,6 +4606,8 @@ export type HrAdminPayrollFinanceHandoffSetupResponse = {
     provider_delivery_statuses: HrAdminEnumOption[];
     provider_callback_event_statuses: HrAdminEnumOption[];
     provider_retry_event_statuses: HrAdminEnumOption[];
+    provider_job_kinds?: HrAdminEnumOption[];
+    provider_job_statuses?: HrAdminEnumOption[];
   };
 };
 
@@ -3682,6 +4674,188 @@ export type HrAdminPayrollProviderCertificationRun = {
   updated_at: string;
 };
 
+export type HrAdminPayrollProviderSchemaMappingPack = {
+  id: string;
+  provider_connection_id: string | null;
+  provider_ref: string;
+  provider_kind: string;
+  provider_kind_label: string;
+  environment_ref: string;
+  artifact_kind: string;
+  artifact_kind_label: string;
+  mapping_profile_ref: string;
+  version: number;
+  status: string;
+  status_label: string;
+  source_schema_ref: string;
+  target_schema_ref: string;
+  transform_profile_ref: string;
+  validation_profile_ref: string;
+  enforcement_mode: string;
+  transform_rules: Record<string, unknown>[];
+  validation_rules: Record<string, unknown>[];
+  sample_request_snapshot: Record<string, unknown>;
+  sample_output_snapshot: Record<string, unknown>;
+  evidence_snapshot: Record<string, unknown>;
+  source_hash: string;
+  created_by_name: string | null;
+  updated_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminPayrollProviderSchemaMappingSimulation = {
+  id: string;
+  mapping_pack_id: string;
+  baseline_mapping_pack_id: string | null;
+  provider_connection_id: string | null;
+  provider_ref: string;
+  provider_kind: string;
+  provider_kind_label: string;
+  environment_ref: string;
+  artifact_kind: string;
+  artifact_kind_label: string;
+  mapping_profile_ref: string;
+  mapping_pack_version: number;
+  baseline_mapping_pack_version: number;
+  simulation_profile_ref: string;
+  comparison_profile_ref: string;
+  status: string;
+  status_label: string;
+  comparison_status: string;
+  gate_count: number;
+  passed_gate_count: number;
+  blocker_count: number;
+  changed_path_count: number;
+  added_path_count: number;
+  removed_path_count: number;
+  request_snapshot: Record<string, unknown>;
+  provider_payload_snapshot: Record<string, unknown>;
+  baseline_payload_snapshot: Record<string, unknown>;
+  gate_snapshot: Record<string, unknown>[];
+  blocking_gate_refs: string[];
+  comparison_snapshot: Record<string, unknown>;
+  evidence_snapshot: Record<string, unknown>;
+  source_hash: string;
+  simulated_by_name: string | null;
+  simulated_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminPayrollProviderAdapterRegistryEntry = {
+  adapter_ref: string;
+  source_ref: string;
+  loader_ref: string;
+  status: string;
+  required_by_connection: boolean;
+  blocking_gate_refs: string[];
+  capabilities: Record<string, unknown>;
+};
+
+export type HrAdminPayrollProviderAdapterRegistry = {
+  registry_profile_ref: string;
+  adapter_count: number;
+  ready_adapter_count: number;
+  blocked_adapter_count: number;
+  configured_adapter_count: number;
+  builtin_adapter_count: number;
+  production_pack_adapter_count: number;
+  required_adapter_count: number;
+  blocked_adapter_refs: string[];
+  adapters: HrAdminPayrollProviderAdapterRegistryEntry[];
+};
+
+export type HrAdminPayrollProviderClientRegistryEntry = {
+  client_ref: string;
+  source_ref: string;
+  loader_ref: string;
+  status: string;
+  required_by_connection: boolean;
+  blocking_gate_refs: string[];
+  capabilities: Record<string, unknown>;
+};
+
+export type HrAdminPayrollProviderClientRegistry = {
+  registry_profile_ref: string;
+  client_count: number;
+  ready_client_count: number;
+  blocked_client_count: number;
+  configured_client_count: number;
+  builtin_client_count: number;
+  fixture_client_count: number;
+  required_client_count: number;
+  blocked_client_refs: string[];
+  clients: HrAdminPayrollProviderClientRegistryEntry[];
+};
+
+export type HrAdminPayrollProviderPackageRegistryEntry = {
+  package_ref: string;
+  source_ref: string;
+  status: string;
+  required_by_connection: boolean;
+  blocking_gate_refs: string[];
+  manifest: Record<string, unknown>;
+  capabilities: Record<string, unknown>;
+};
+
+export type HrAdminPayrollProviderPackageRegistry = {
+  registry_profile_ref: string;
+  package_count: number;
+  ready_package_count: number;
+  blocked_package_count: number;
+  configured_package_count: number;
+  builtin_package_count: number;
+  fixture_package_count: number;
+  required_package_count: number;
+  blocked_package_refs: string[];
+  packages: HrAdminPayrollProviderPackageRegistryEntry[];
+};
+
+export type HrAdminPayrollStoragePolicyRegistryEntry = {
+  storage_policy_ref: string;
+  source_ref: string;
+  status: string;
+  required_by_package: boolean;
+  blocking_gate_refs: string[];
+  policy: Record<string, unknown>;
+  control_verification: Record<string, unknown>;
+  capabilities: Record<string, unknown>;
+};
+
+export type HrAdminPayrollStoragePolicyRegistry = {
+  registry_profile_ref: string;
+  storage_policy_count: number;
+  ready_storage_policy_count: number;
+  blocked_storage_policy_count: number;
+  configured_storage_policy_count: number;
+  builtin_storage_policy_count: number;
+  required_storage_policy_count: number;
+  blocked_storage_policy_refs: string[];
+  policies: HrAdminPayrollStoragePolicyRegistryEntry[];
+};
+
+export type HrAdminPayrollProviderLaunchRehearsal = {
+  id: string;
+  rehearsal_profile_ref: string;
+  audit_pack_ref: string;
+  generated_by_ref: string;
+  status: string;
+  status_label: string;
+  can_launch: boolean;
+  ready_lane_count: number;
+  blocked_lane_count: number;
+  launch_blocker_count: number;
+  release_blocker_refs: string[];
+  audit_pack_snapshot: Record<string, unknown>;
+  evidence_checksum_sha256: string;
+  generated_at: string;
+  generated_by_name: string | null;
+  source_hash: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type HrAdminPayrollProviderConnectionSetupResponse = {
   summary: {
     connection_count: number;
@@ -3694,18 +4868,72 @@ export type HrAdminPayrollProviderConnectionSetupResponse = {
     certification_run_count: number;
     passed_certification_run_count: number;
     failed_certification_run_count: number;
+    schema_mapping_pack_count?: number;
+    active_schema_mapping_pack_count?: number;
+    draft_schema_mapping_pack_count?: number;
+    archived_schema_mapping_pack_count?: number;
+    strict_schema_mapping_pack_count?: number;
+    schema_mapping_simulation_count?: number;
+    passed_schema_mapping_simulation_count?: number;
+    blocked_schema_mapping_simulation_count?: number;
+    changed_schema_mapping_simulation_count?: number;
+    adapter_registry_count?: number;
+    ready_adapter_registry_count?: number;
+    blocked_adapter_registry_count?: number;
+    configured_adapter_registry_count?: number;
+    production_pack_adapter_registry_count?: number;
+    client_registry_count?: number;
+    ready_client_registry_count?: number;
+    blocked_client_registry_count?: number;
+    configured_client_registry_count?: number;
+    fixture_client_registry_count?: number;
+    package_registry_count?: number;
+    ready_package_registry_count?: number;
+    blocked_package_registry_count?: number;
+    configured_package_registry_count?: number;
+    fixture_package_registry_count?: number;
+    storage_policy_registry_count?: number;
+    ready_storage_policy_registry_count?: number;
+    blocked_storage_policy_registry_count?: number;
+    configured_storage_policy_registry_count?: number;
+    required_storage_policy_registry_count?: number;
+    launch_rehearsal_status?: string;
+    launch_rehearsal_ready_lane_count?: number;
+    launch_rehearsal_blocked_lane_count?: number;
+    launch_rehearsal_blocker_count?: number;
+    launch_rehearsal_run_count?: number;
+    ready_launch_rehearsal_run_count?: number;
+    blocked_launch_rehearsal_run_count?: number;
+    latest_launch_rehearsal_status?: string;
+    latest_launch_rehearsal_checksum?: string;
     bank_connection_count: number;
     accounting_connection_count: number;
     statutory_connection_count: number;
   };
   connections: HrAdminPayrollProviderConnection[];
   certification_runs: HrAdminPayrollProviderCertificationRun[];
+  schema_mapping_packs: HrAdminPayrollProviderSchemaMappingPack[];
+  schema_mapping_simulations: HrAdminPayrollProviderSchemaMappingSimulation[];
+  launch_rehearsals: HrAdminPayrollProviderLaunchRehearsal[];
+  adapter_registry?: HrAdminPayrollProviderAdapterRegistry;
+  client_registry?: HrAdminPayrollProviderClientRegistry;
+  package_registry?: HrAdminPayrollProviderPackageRegistry;
+  storage_policy_registry?: HrAdminPayrollStoragePolicyRegistry;
+  launch_rehearsal?: Record<string, unknown>;
   options: {
     provider_kinds: HrAdminEnumOption[];
     connection_statuses: HrAdminEnumOption[];
     certification_statuses: HrAdminEnumOption[];
     certification_run_statuses: HrAdminEnumOption[];
+    schema_mapping_pack_statuses?: HrAdminEnumOption[];
+    launch_rehearsal_statuses?: HrAdminEnumOption[];
   };
+};
+
+export type HrAdminPayrollProviderLaunchRehearsalActionResult = {
+  launch_rehearsal_run: HrAdminPayrollProviderLaunchRehearsal;
+  setup: HrAdminPayrollProviderConnectionSetupResponse;
+  detail: string;
 };
 
 export type HrAdminOrganizationSnapshot = {
@@ -4133,6 +5361,7 @@ export type SessionWorkspaceAccess = {
   ess: boolean;
   mss: boolean;
   hr_admin: boolean;
+  tenant_admin: boolean;
 };
 
 export type SessionUser = {

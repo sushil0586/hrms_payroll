@@ -154,6 +154,7 @@ class PayrollOutputArtifactKind(models.TextChoices):
     BANK_ADVICE = "bank_advice", "Bank Advice"
     ACCOUNTING_EXPORT = "accounting_export", "Accounting Export"
     STATUTORY_REPORT = "statutory_report", "Statutory Report"
+    PROVIDER_AUDIT_PACK = "provider_audit_pack", "Provider Audit Pack"
 
 
 class PayrollOutputArtifactStatus(models.TextChoices):
@@ -190,6 +191,41 @@ class PayrollProviderRetryEventStatus(models.TextChoices):
     EXECUTED = "executed", "Executed"
     DEAD_LETTERED = "dead_lettered", "Dead Lettered"
     SKIPPED = "skipped", "Skipped"
+
+
+class PayrollProviderJobKind(models.TextChoices):
+    PROVIDER_SUBMISSION = "provider_submission", "Provider Submission"
+    PROVIDER_RETRY = "provider_retry", "Provider Retry"
+    PROVIDER_CERTIFICATION = "provider_certification", "Provider Certification"
+    CALLBACK_RECONCILIATION = "callback_reconciliation", "Callback Reconciliation"
+
+
+class PayrollProviderJobStatus(models.TextChoices):
+    QUEUED = "queued", "Queued"
+    LEASED = "leased", "Leased"
+    RUNNING = "running", "Running"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+    DEAD_LETTERED = "dead_lettered", "Dead Lettered"
+    SKIPPED = "skipped", "Skipped"
+    CANCELED = "canceled", "Canceled"
+
+
+class PayrollProviderLaunchRehearsalStatus(models.TextChoices):
+    READY = "ready", "Ready"
+    BLOCKED = "blocked", "Blocked"
+
+
+class PayrollProviderSchemaMappingPackStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    ACTIVE = "active", "Active"
+    INACTIVE = "inactive", "Inactive"
+    ARCHIVED = "archived", "Archived"
+
+
+class PayrollProviderSchemaMappingSimulationStatus(models.TextChoices):
+    PASSED = "passed", "Passed"
+    BLOCKED = "blocked", "Blocked"
 
 
 class PayrollProviderConnectionKind(models.TextChoices):
@@ -3728,7 +3764,7 @@ class PayrollProviderCallbackEvent(UUIDPrimaryKeyModel, TimeStampedModel):
     )
     provider_status = models.CharField(max_length=20, choices=PayrollProviderDeliveryStatus.choices)
     payload_checksum_sha256 = models.CharField(max_length=64)
-    signature = models.CharField(max_length=160, blank=True)
+    signature = models.CharField(max_length=1024, blank=True)
     verification_snapshot = models.JSONField(default=dict, blank=True)
     payload_snapshot = models.JSONField(default=dict, blank=True)
     processing_snapshot = models.JSONField(default=dict, blank=True)
@@ -3978,6 +4014,281 @@ class PayrollProviderConnection(UUIDPrimaryKeyModel, TimeStampedModel):
         return f"{self.provider_name}:{self.provider_ref}:{self.status}"
 
 
+class PayrollProviderSchemaMappingPack(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Tenant-owned provider schema mapping pack for outbound provider payloads."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="payroll_provider_schema_mapping_packs")
+    provider_connection = models.ForeignKey(
+        PayrollProviderConnection,
+        on_delete=models.SET_NULL,
+        related_name="schema_mapping_packs",
+        blank=True,
+        null=True,
+    )
+    provider_ref = models.CharField(max_length=160)
+    provider_kind = models.CharField(
+        max_length=24,
+        choices=PayrollProviderConnectionKind.choices,
+        default=PayrollProviderConnectionKind.OTHER,
+    )
+    environment_ref = models.CharField(max_length=80, default="sandbox")
+    artifact_kind = models.CharField(max_length=40, choices=PayrollOutputArtifactKind.choices)
+    mapping_profile_ref = models.CharField(max_length=180)
+    version = models.PositiveIntegerField(default=1)
+    status = models.CharField(
+        max_length=20,
+        choices=PayrollProviderSchemaMappingPackStatus.choices,
+        default=PayrollProviderSchemaMappingPackStatus.DRAFT,
+    )
+    source_schema_ref = models.CharField(max_length=180, blank=True)
+    target_schema_ref = models.CharField(max_length=180, blank=True)
+    transform_profile_ref = models.CharField(max_length=180, default="payroll.provider_mapping.transform.safe_paths.v1")
+    validation_profile_ref = models.CharField(max_length=180, default="payroll.provider_mapping.validation.standard.v1")
+    enforcement_mode = models.CharField(max_length=20, default="warn")
+    transform_rules = models.JSONField(default=list, blank=True)
+    validation_rules = models.JSONField(default=list, blank=True)
+    sample_request_snapshot = models.JSONField(default=dict, blank=True)
+    sample_output_snapshot = models.JSONField(default=dict, blank=True)
+    evidence_snapshot = models.JSONField(default=dict, blank=True)
+    source_hash = models.CharField(max_length=64, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="created_payroll_provider_schema_mapping_packs",
+        blank=True,
+        null=True,
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="updated_payroll_provider_schema_mapping_packs",
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        ordering = ["provider_kind", "provider_ref", "artifact_kind", "-version"]
+        unique_together = [("tenant", "mapping_profile_ref", "version")]
+        indexes = [
+            models.Index(fields=["tenant", "provider_ref", "artifact_kind", "status"]),
+            models.Index(fields=["tenant", "mapping_profile_ref", "status"]),
+        ]
+        verbose_name = "Payroll Provider Schema Mapping Pack"
+        verbose_name_plural = "Payroll Provider Schema Mapping Packs"
+
+    def _mapping_digest(self) -> str:
+        payload = {
+            "provider_connection_id": str(self.provider_connection_id or ""),
+            "provider_ref": self.provider_ref,
+            "provider_kind": self.provider_kind,
+            "environment_ref": self.environment_ref,
+            "artifact_kind": self.artifact_kind,
+            "mapping_profile_ref": self.mapping_profile_ref,
+            "version": self.version,
+            "status": self.status,
+            "source_schema_ref": self.source_schema_ref,
+            "target_schema_ref": self.target_schema_ref,
+            "transform_profile_ref": self.transform_profile_ref,
+            "validation_profile_ref": self.validation_profile_ref,
+            "enforcement_mode": self.enforcement_mode,
+            "transform_rules": self.transform_rules,
+            "validation_rules": self.validation_rules,
+            "sample_request_snapshot": self.sample_request_snapshot,
+            "sample_output_snapshot": self.sample_output_snapshot,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+    def clean(self):
+        errors = {}
+        if self.provider_connection_id and self.tenant_id and self.provider_connection.tenant_id != self.tenant_id:
+            errors["provider_connection"] = "Provider schema mapping pack connection must belong to the same tenant."
+        if self.enforcement_mode not in {"disabled", "warn", "strict"}:
+            errors["enforcement_mode"] = "Mapping enforcement mode must be disabled, warn, or strict."
+        if self.status == PayrollProviderSchemaMappingPackStatus.ACTIVE:
+            required_refs = {
+                "provider_ref": self.provider_ref,
+                "artifact_kind": self.artifact_kind,
+                "mapping_profile_ref": self.mapping_profile_ref,
+                "source_schema_ref": self.source_schema_ref,
+                "target_schema_ref": self.target_schema_ref,
+            }
+            missing = [field_name for field_name, value in required_refs.items() if not str(value or "").strip()]
+            if missing:
+                errors["status"] = f"Active mapping packs require {', '.join(missing)}."
+            if not isinstance(self.transform_rules, list) or not self.transform_rules:
+                errors["transform_rules"] = "Active mapping packs require at least one transform rule."
+        for field_name in ("transform_rules", "validation_rules", "sample_request_snapshot", "sample_output_snapshot", "evidence_snapshot"):
+            value = getattr(self, field_name)
+            if isinstance(value, (dict, list)):
+                try:
+                    validate_payroll_provider_route_config({"schema_mapping": value})
+                except PayrollProviderAdapterError as exc:
+                    errors[field_name] = str(exc)
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.provider_connection_id:
+            if not self.tenant_id:
+                self.tenant = self.provider_connection.tenant
+            self.provider_ref = self.provider_ref or self.provider_connection.provider_ref
+            self.provider_kind = self.provider_kind or self.provider_connection.provider_kind
+            self.environment_ref = self.environment_ref or self.provider_connection.environment_ref
+        self.provider_ref = str(self.provider_ref or "").strip()
+        self.mapping_profile_ref = str(self.mapping_profile_ref or "").strip()
+        self.source_hash = self._mapping_digest()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.mapping_profile_ref}:v{self.version}:{self.status}"
+
+
+class PayrollProviderSchemaMappingSimulation(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Persisted provider mapping simulation and active-version comparison evidence."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="payroll_provider_schema_mapping_simulations")
+    mapping_pack = models.ForeignKey(
+        PayrollProviderSchemaMappingPack,
+        on_delete=models.CASCADE,
+        related_name="simulation_runs",
+    )
+    baseline_mapping_pack = models.ForeignKey(
+        PayrollProviderSchemaMappingPack,
+        on_delete=models.SET_NULL,
+        related_name="baseline_simulation_runs",
+        blank=True,
+        null=True,
+    )
+    provider_connection = models.ForeignKey(
+        PayrollProviderConnection,
+        on_delete=models.SET_NULL,
+        related_name="schema_mapping_simulations",
+        blank=True,
+        null=True,
+    )
+    provider_ref = models.CharField(max_length=160)
+    provider_kind = models.CharField(
+        max_length=24,
+        choices=PayrollProviderConnectionKind.choices,
+        default=PayrollProviderConnectionKind.OTHER,
+    )
+    environment_ref = models.CharField(max_length=80, default="sandbox")
+    artifact_kind = models.CharField(max_length=40, choices=PayrollOutputArtifactKind.choices)
+    mapping_profile_ref = models.CharField(max_length=180)
+    mapping_pack_version = models.PositiveIntegerField(default=1)
+    baseline_mapping_pack_version = models.PositiveIntegerField(default=0)
+    simulation_profile_ref = models.CharField(max_length=180, default="payroll.provider_schema_mapping_pack.simulation.v1")
+    comparison_profile_ref = models.CharField(max_length=180, default="payroll.provider_schema_mapping_pack.comparison.v1")
+    status = models.CharField(
+        max_length=20,
+        choices=PayrollProviderSchemaMappingSimulationStatus.choices,
+        default=PayrollProviderSchemaMappingSimulationStatus.BLOCKED,
+    )
+    comparison_status = models.CharField(max_length=24, default="no_baseline")
+    gate_count = models.PositiveIntegerField(default=0)
+    passed_gate_count = models.PositiveIntegerField(default=0)
+    blocker_count = models.PositiveIntegerField(default=0)
+    changed_path_count = models.PositiveIntegerField(default=0)
+    added_path_count = models.PositiveIntegerField(default=0)
+    removed_path_count = models.PositiveIntegerField(default=0)
+    request_snapshot = models.JSONField(default=dict, blank=True)
+    provider_payload_snapshot = models.JSONField(default=dict, blank=True)
+    baseline_payload_snapshot = models.JSONField(default=dict, blank=True)
+    gate_snapshot = models.JSONField(default=list, blank=True)
+    blocking_gate_refs = models.JSONField(default=list, blank=True)
+    comparison_snapshot = models.JSONField(default=dict, blank=True)
+    evidence_snapshot = models.JSONField(default=dict, blank=True)
+    source_hash = models.CharField(max_length=64, blank=True)
+    simulated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="payroll_provider_schema_mapping_simulations",
+        blank=True,
+        null=True,
+    )
+    simulated_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-simulated_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "provider_ref", "artifact_kind", "-simulated_at"]),
+            models.Index(fields=["tenant", "mapping_profile_ref", "-simulated_at"]),
+            models.Index(fields=["tenant", "status", "comparison_status"]),
+        ]
+        verbose_name = "Payroll Provider Schema Mapping Simulation"
+        verbose_name_plural = "Payroll Provider Schema Mapping Simulations"
+
+    def _simulation_digest(self) -> str:
+        payload = {
+            "mapping_pack_id": str(self.mapping_pack_id or ""),
+            "baseline_mapping_pack_id": str(self.baseline_mapping_pack_id or ""),
+            "provider_connection_id": str(self.provider_connection_id or ""),
+            "provider_ref": self.provider_ref,
+            "provider_kind": self.provider_kind,
+            "environment_ref": self.environment_ref,
+            "artifact_kind": self.artifact_kind,
+            "mapping_profile_ref": self.mapping_profile_ref,
+            "mapping_pack_version": self.mapping_pack_version,
+            "baseline_mapping_pack_version": self.baseline_mapping_pack_version,
+            "simulation_profile_ref": self.simulation_profile_ref,
+            "comparison_profile_ref": self.comparison_profile_ref,
+            "status": self.status,
+            "comparison_status": self.comparison_status,
+            "request_snapshot": self.request_snapshot,
+            "provider_payload_snapshot": self.provider_payload_snapshot,
+            "baseline_payload_snapshot": self.baseline_payload_snapshot,
+            "gate_snapshot": self.gate_snapshot,
+            "blocking_gate_refs": self.blocking_gate_refs,
+            "comparison_snapshot": self.comparison_snapshot,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+    def clean(self):
+        errors = {}
+        if self.mapping_pack_id and self.tenant_id and self.mapping_pack.tenant_id != self.tenant_id:
+            errors["mapping_pack"] = "Mapping simulation pack must belong to the same tenant."
+        if self.baseline_mapping_pack_id and self.tenant_id and self.baseline_mapping_pack.tenant_id != self.tenant_id:
+            errors["baseline_mapping_pack"] = "Mapping simulation baseline pack must belong to the same tenant."
+        if self.provider_connection_id and self.tenant_id and self.provider_connection.tenant_id != self.tenant_id:
+            errors["provider_connection"] = "Mapping simulation connection must belong to the same tenant."
+        if self.comparison_status not in {"no_baseline", "unchanged", "changed"}:
+            errors["comparison_status"] = "Mapping simulation comparison status must be no_baseline, unchanged, or changed."
+        for field_name in ("request_snapshot", "provider_payload_snapshot", "baseline_payload_snapshot", "comparison_snapshot", "evidence_snapshot"):
+            if not isinstance(getattr(self, field_name), dict):
+                errors[field_name] = "Mapping simulation snapshots must be objects."
+        for field_name in ("gate_snapshot", "blocking_gate_refs"):
+            if not isinstance(getattr(self, field_name), list):
+                errors[field_name] = "Mapping simulation gate snapshots must be lists."
+        if isinstance(self.request_snapshot, dict):
+            try:
+                validate_payroll_provider_route_config(self.request_snapshot)
+            except PayrollProviderAdapterError as exc:
+                errors["request_snapshot"] = str(exc)
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.mapping_pack_id:
+            if not self.tenant_id:
+                self.tenant = self.mapping_pack.tenant
+            self.provider_connection = self.provider_connection or self.mapping_pack.provider_connection
+            self.provider_ref = self.provider_ref or self.mapping_pack.provider_ref
+            self.provider_kind = self.provider_kind or self.mapping_pack.provider_kind
+            self.environment_ref = self.environment_ref or self.mapping_pack.environment_ref
+            self.artifact_kind = self.artifact_kind or self.mapping_pack.artifact_kind
+            self.mapping_profile_ref = self.mapping_profile_ref or self.mapping_pack.mapping_profile_ref
+            self.mapping_pack_version = self.mapping_pack_version or self.mapping_pack.version
+        if self.baseline_mapping_pack_id:
+            self.baseline_mapping_pack_version = self.baseline_mapping_pack_version or self.baseline_mapping_pack.version
+        self.source_hash = self._simulation_digest()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.mapping_profile_ref}:v{self.mapping_pack_version}:{self.status}:{self.comparison_status}"
+
+
 class PayrollProviderCertificationRun(UUIDPrimaryKeyModel, TimeStampedModel):
     """Automated provider sandbox certification run with scenario evidence."""
 
@@ -4094,3 +4405,259 @@ class PayrollProviderCertificationRun(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.provider_ref}:{self.status}:{self.created_at}"
+
+
+class PayrollProviderJob(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Tenant-scoped provider job ledger for portable queue orchestration."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="payroll_provider_jobs")
+    job_kind = models.CharField(max_length=40, choices=PayrollProviderJobKind.choices)
+    status = models.CharField(
+        max_length=24,
+        choices=PayrollProviderJobStatus.choices,
+        default=PayrollProviderJobStatus.QUEUED,
+    )
+    queue_policy_ref = models.CharField(max_length=180, default="payroll.provider_queue.standard.v1")
+    worker_profile_ref = models.CharField(max_length=180, default="payroll.provider_worker.standard.v1")
+    idempotency_key = models.CharField(max_length=220)
+    provider_ref = models.CharField(max_length=160, blank=True)
+    provider_delivery = models.ForeignKey(
+        PayrollProviderDelivery,
+        on_delete=models.CASCADE,
+        related_name="provider_jobs",
+        blank=True,
+        null=True,
+    )
+    provider_connection = models.ForeignKey(
+        PayrollProviderConnection,
+        on_delete=models.CASCADE,
+        related_name="provider_jobs",
+        blank=True,
+        null=True,
+    )
+    retry_event = models.ForeignKey(
+        PayrollProviderRetryEvent,
+        on_delete=models.CASCADE,
+        related_name="provider_jobs",
+        blank=True,
+        null=True,
+    )
+    callback_event = models.ForeignKey(
+        PayrollProviderCallbackEvent,
+        on_delete=models.CASCADE,
+        related_name="provider_jobs",
+        blank=True,
+        null=True,
+    )
+    certification_run = models.ForeignKey(
+        PayrollProviderCertificationRun,
+        on_delete=models.SET_NULL,
+        related_name="provider_jobs",
+        blank=True,
+        null=True,
+    )
+    priority = models.PositiveSmallIntegerField(default=100)
+    attempt_count = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=3)
+    scheduled_for = models.DateTimeField(blank=True, null=True)
+    leased_at = models.DateTimeField(blank=True, null=True)
+    leased_until = models.DateTimeField(blank=True, null=True)
+    lease_owner_ref = models.CharField(max_length=180, blank=True)
+    heartbeat_at = models.DateTimeField(blank=True, null=True)
+    heartbeat_count = models.PositiveIntegerField(default=0)
+    recovery_count = models.PositiveIntegerField(default=0)
+    last_recovered_at = models.DateTimeField(blank=True, null=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="requested_payroll_provider_jobs",
+        blank=True,
+        null=True,
+    )
+    executed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="executed_payroll_provider_jobs",
+        blank=True,
+        null=True,
+    )
+    request_snapshot = models.JSONField(default=dict, blank=True)
+    lease_snapshot = models.JSONField(default=dict, blank=True)
+    response_snapshot = models.JSONField(default=dict, blank=True)
+    failure_code = models.CharField(max_length=80, blank=True)
+    failure_reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["scheduled_for", "priority", "created_at"]
+        unique_together = [("tenant", "idempotency_key")]
+        indexes = [
+            models.Index(fields=["tenant", "status", "scheduled_for"]),
+            models.Index(fields=["tenant", "job_kind", "status"]),
+            models.Index(fields=["tenant", "provider_ref"]),
+        ]
+        verbose_name = "Payroll Provider Job"
+        verbose_name_plural = "Payroll Provider Jobs"
+
+    def clean(self):
+        errors = {}
+        related_items = {
+            "provider_delivery": self.provider_delivery,
+            "provider_connection": self.provider_connection,
+            "retry_event": self.retry_event,
+            "callback_event": self.callback_event,
+            "certification_run": self.certification_run,
+        }
+        for field_name, related_item in related_items.items():
+            if related_item and self.tenant_id and related_item.tenant_id != self.tenant_id:
+                errors[field_name] = "Provider job related objects must belong to the same tenant."
+        if not str(self.idempotency_key or "").strip():
+            errors["idempotency_key"] = "Provider jobs require an idempotency key."
+        if self.max_attempts < 1:
+            errors["max_attempts"] = "Provider jobs require at least one attempt."
+        if self.status in {PayrollProviderJobStatus.LEASED, PayrollProviderJobStatus.RUNNING} and not self.leased_until:
+            errors["leased_until"] = "Leased or running provider jobs require a lease expiry."
+        if self.heartbeat_count and not self.heartbeat_at:
+            errors["heartbeat_at"] = "Provider jobs with heartbeat counts require a heartbeat timestamp."
+        if self.status in {PayrollProviderJobStatus.COMPLETED, PayrollProviderJobStatus.FAILED, PayrollProviderJobStatus.DEAD_LETTERED, PayrollProviderJobStatus.SKIPPED, PayrollProviderJobStatus.CANCELED} and not self.completed_at:
+            errors["completed_at"] = "Terminal provider jobs require a completed timestamp."
+        if self.status in {PayrollProviderJobStatus.FAILED, PayrollProviderJobStatus.DEAD_LETTERED, PayrollProviderJobStatus.SKIPPED} and not (self.failure_code or self.failure_reason):
+            errors["failure_reason"] = "Failed, skipped, and dead-lettered provider jobs require failure evidence."
+        for field_name in ("request_snapshot", "lease_snapshot", "response_snapshot"):
+            value = getattr(self, field_name)
+            if isinstance(value, dict):
+                try:
+                    validate_payroll_provider_route_config(value)
+                except PayrollProviderAdapterError as exc:
+                    errors[field_name] = str(exc)
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.retry_event_id and not self.provider_delivery_id:
+            self.provider_delivery = self.retry_event.provider_delivery
+        if self.callback_event_id and not self.provider_delivery_id:
+            self.provider_delivery = self.callback_event.provider_delivery
+        if self.certification_run_id and not self.provider_connection_id:
+            self.provider_connection = self.certification_run.provider_connection
+        if self.provider_delivery_id:
+            if not self.tenant_id:
+                self.tenant = self.provider_delivery.tenant
+            if not self.provider_ref:
+                self.provider_ref = self.provider_delivery.provider_ref
+        if self.provider_connection_id:
+            if not self.tenant_id:
+                self.tenant = self.provider_connection.tenant
+            if not self.provider_ref:
+                self.provider_ref = self.provider_connection.provider_ref
+        if not self.scheduled_for:
+            self.scheduled_for = timezone.now()
+        if self.status in {PayrollProviderJobStatus.COMPLETED, PayrollProviderJobStatus.FAILED, PayrollProviderJobStatus.DEAD_LETTERED, PayrollProviderJobStatus.SKIPPED, PayrollProviderJobStatus.CANCELED} and not self.completed_at:
+            self.completed_at = timezone.now()
+        self.idempotency_key = str(self.idempotency_key or "").strip()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.job_kind}:{self.idempotency_key}:{self.status}"
+
+
+class PayrollProviderLaunchRehearsal(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Tenant-level launch-readiness rehearsal ledger for provider go-live gates."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="payroll_provider_launch_rehearsals")
+    rehearsal_profile_ref = models.CharField(max_length=180, default="payroll.provider_launch_rehearsal.v1")
+    audit_pack_ref = models.CharField(max_length=180, default="payroll.provider_launch_readiness.audit_pack.v1")
+    generated_by_ref = models.CharField(max_length=180, default="payroll.provider_launch_readiness.management_command.v1")
+    status = models.CharField(
+        max_length=20,
+        choices=PayrollProviderLaunchRehearsalStatus.choices,
+        default=PayrollProviderLaunchRehearsalStatus.BLOCKED,
+    )
+    can_launch = models.BooleanField(default=False)
+    ready_lane_count = models.PositiveIntegerField(default=0)
+    blocked_lane_count = models.PositiveIntegerField(default=0)
+    launch_blocker_count = models.PositiveIntegerField(default=0)
+    release_blocker_refs = models.JSONField(default=list, blank=True)
+    audit_pack_snapshot = models.JSONField(default=dict, blank=True)
+    evidence_checksum_sha256 = models.CharField(max_length=64, blank=True)
+    generated_at = models.DateTimeField(default=timezone.now)
+    generated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="generated_payroll_provider_launch_rehearsals",
+        blank=True,
+        null=True,
+    )
+    source_hash = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ["-generated_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "status", "generated_at"]),
+            models.Index(fields=["tenant", "can_launch"]),
+            models.Index(fields=["tenant", "evidence_checksum_sha256"]),
+        ]
+        verbose_name = "Payroll Provider Launch Rehearsal"
+        verbose_name_plural = "Payroll Provider Launch Rehearsals"
+
+    def _rehearsal_digest(self) -> str:
+        payload = {
+            "tenant_id": str(self.tenant_id or ""),
+            "rehearsal_profile_ref": self.rehearsal_profile_ref,
+            "audit_pack_ref": self.audit_pack_ref,
+            "generated_by_ref": self.generated_by_ref,
+            "status": self.status,
+            "can_launch": self.can_launch,
+            "ready_lane_count": self.ready_lane_count,
+            "blocked_lane_count": self.blocked_lane_count,
+            "launch_blocker_count": self.launch_blocker_count,
+            "release_blocker_refs": self.release_blocker_refs,
+            "audit_pack_snapshot": self.audit_pack_snapshot,
+            "evidence_checksum_sha256": self.evidence_checksum_sha256,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+    def clean(self):
+        errors = {}
+        if not isinstance(self.release_blocker_refs, list):
+            errors["release_blocker_refs"] = "Release blocker refs must be a list."
+        if not isinstance(self.audit_pack_snapshot, dict):
+            errors["audit_pack_snapshot"] = "Audit pack snapshot must be an object."
+        if self.status == PayrollProviderLaunchRehearsalStatus.READY and not self.can_launch:
+            errors["can_launch"] = "Ready launch rehearsals must set can_launch."
+        if self.can_launch and self.launch_blocker_count:
+            errors["launch_blocker_count"] = "Launchable rehearsals cannot have blockers."
+        if self.evidence_checksum_sha256 and len(self.evidence_checksum_sha256) != 64:
+            errors["evidence_checksum_sha256"] = "Evidence checksum must be a SHA-256 hex digest."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        audit_pack = self.audit_pack_snapshot if isinstance(self.audit_pack_snapshot, dict) else {}
+        summary = audit_pack.get("summary") if isinstance(audit_pack.get("summary"), dict) else {}
+        if audit_pack:
+            self.audit_pack_ref = str(audit_pack.get("audit_pack_ref") or self.audit_pack_ref)
+            launch_rehearsal = audit_pack.get("launch_rehearsal") if isinstance(audit_pack.get("launch_rehearsal"), dict) else {}
+            self.rehearsal_profile_ref = str(launch_rehearsal.get("rehearsal_profile_ref") or self.rehearsal_profile_ref)
+            self.status = PayrollProviderLaunchRehearsalStatus.READY if audit_pack.get("can_launch") else PayrollProviderLaunchRehearsalStatus.BLOCKED
+            self.can_launch = bool(audit_pack.get("can_launch"))
+            self.ready_lane_count = int(summary.get("ready_lane_count") or self.ready_lane_count or 0)
+            self.blocked_lane_count = int(summary.get("blocked_lane_count") or self.blocked_lane_count or 0)
+            self.launch_blocker_count = int(summary.get("launch_blocker_count") or self.launch_blocker_count or 0)
+            blockers = audit_pack.get("release_blockers") if isinstance(audit_pack.get("release_blockers"), list) else []
+            self.release_blocker_refs = [
+                str(item.get("ref") or "").strip()
+                for item in blockers
+                if isinstance(item, dict) and str(item.get("ref") or "").strip()
+            ]
+            self.evidence_checksum_sha256 = str(audit_pack.get("evidence_checksum_sha256") or self.evidence_checksum_sha256)
+        if not self.generated_at:
+            self.generated_at = timezone.now()
+        self.source_hash = self._rehearsal_digest()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.tenant_id}:{self.status}:{self.evidence_checksum_sha256[:12]}"

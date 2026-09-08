@@ -48,6 +48,7 @@ class WorkspaceAccessSerializer(serializers.Serializer):
     ess = serializers.BooleanField()
     mss = serializers.BooleanField()
     hr_admin = serializers.BooleanField()
+    tenant_admin = serializers.BooleanField()
 
 
 class SessionUserSerializer(serializers.Serializer):
@@ -93,12 +94,14 @@ def build_workspace_access_payload(default_membership: TenantMembership | None) 
     role_codes = set(_membership_role_codes(default_membership))
     has_employee_context = bool(default_membership and getattr(default_membership, "employee", None))
     hr_admin_access = "hr-admin" in role_codes
+    tenant_admin_access = hr_admin_access or "tenant-admin" in role_codes
     mss_access = hr_admin_access or "manager" in role_codes or _membership_has_pending_mss_assignment(default_membership)
 
     return {
         "ess": has_employee_context,
         "mss": mss_access,
         "hr_admin": hr_admin_access,
+        "tenant_admin": tenant_admin_access,
     }
 
 

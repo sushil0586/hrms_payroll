@@ -31,8 +31,9 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
-      HRMS_ENABLE_DEMO_DATA: "true",
-      HRMS_API_BASE_URL: "",
+      HRMS_ENABLE_DEMO_DATA: process.env.HRMS_ENABLE_DEMO_DATA ?? "true",
+      HRMS_API_BASE_URL: process.env.HRMS_API_BASE_URL ?? "",
+      HRMS_API_BEARER_TOKEN: process.env.HRMS_API_BEARER_TOKEN ?? "",
     },
   },
   projects: [

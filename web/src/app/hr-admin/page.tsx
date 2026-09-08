@@ -16,6 +16,23 @@ import {
   getHrAdminOrganizationSnapshot,
   getHrAdminWorkflowTemplates,
 } from "@/lib/api";
+import type { HrAdminLaunchAuditModule } from "@/lib/types";
+
+const launchAuditStatusLabel = {
+  ready: "Ready",
+  warning: "Warnings",
+  blocked: "Blocked",
+};
+
+function launchAuditChipClass(status: HrAdminLaunchAuditModule["status"]) {
+  if (status === "ready") {
+    return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--ready";
+  }
+  if (status === "blocked") {
+    return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--blocked";
+  }
+  return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--warning";
+}
 
 export default async function HrAdminLandingPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
@@ -48,6 +65,9 @@ export default async function HrAdminLandingPage() {
       ? "live"
       : "demo";
   const activeEmployees = employees.filter((employee) => employee.employment_status === "active").length;
+  const launchAudit = dashboard.launch_audit;
+  const launchAuditModules = launchAudit.modules.slice(0, 8);
+  const launchAuditActions = launchAudit.release_actions.slice(0, 4);
 
   return (
     <main className="shell">
@@ -82,6 +102,68 @@ export default async function HrAdminLandingPage() {
           <MetricTile label="Active employees" value={dashboard.overview.active_employees || activeEmployees} trend="Healthy operating baseline" />
           <MetricTile label="Departments configured" value={organization.summary.departments_count} trend="Org structure depth" />
           <MetricTile label="Pending approvals" value={dashboard.overview.pending_approvals} trend="Cross-module action load" />
+          <MetricTile label="Launch audit" value={launchAuditStatusLabel[launchAudit.status]} trend={`${launchAudit.passed_gate_count}/${launchAudit.gate_count} gates passed`} />
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="hr-admin-launch-audit panel-card-soft">
+          <div className="hr-admin-launch-audit__header">
+            <div>
+              <span className="workspace-card__eyebrow">SaaS launch audit</span>
+              <h2>{launchAudit.audit_profile_ref}</h2>
+            </div>
+            <div className="hr-admin-launch-audit__summary">
+              <span className={launchAuditChipClass(launchAudit.status)}>{launchAuditStatusLabel[launchAudit.status]}</span>
+              <span className="queue-summary-chip"><strong>{launchAudit.remediation_assignment_summary.open_count}</strong> open assignments</span>
+              <span className="queue-summary-chip"><strong>{launchAudit.blocker_count}</strong> blockers</span>
+              <span className="queue-summary-chip"><strong>{launchAudit.warning_count}</strong> warnings</span>
+              <Link className="button button--secondary" href="/hr-admin/launch-remediation">
+                View assignments
+              </Link>
+              <a className="button button--secondary" href="/api/hr-admin/saas-launch-audit/download">
+                Download audit
+              </a>
+            </div>
+          </div>
+
+          <div className="hr-admin-launch-audit__modules">
+            {launchAuditModules.map((module) => (
+              <article className="hr-admin-launch-audit__module" key={module.module_ref}>
+                <div>
+                  <span className={launchAuditChipClass(module.status)}>{launchAuditStatusLabel[module.status]}</span>
+                  <strong>{module.label}</strong>
+                </div>
+                <span>{module.passed_gate_count}/{module.gate_count} gates</span>
+                <span>{module.blocker_count} blockers</span>
+                <span>{module.warning_count} warnings</span>
+              </article>
+            ))}
+          </div>
+
+          {launchAuditActions.length ? (
+            <div className="hr-admin-launch-audit__actions">
+              {launchAuditActions.map((action) => (
+                <article className="hr-admin-launch-audit__action" key={action.ref}>
+                  <div>
+                    <span className={launchAuditChipClass(action.status)}>{launchAuditStatusLabel[action.status]}</span>
+                    <strong>{action.label}</strong>
+                    <small>{action.module_label} - {action.owner_role_ref} - {action.sla_days}d</small>
+                  </div>
+                  <span>{String(action.value)}</span>
+                  <Link className="button button--secondary" href={action.action_href}>
+                    {action.action_label}
+                  </Link>
+                </article>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="hr-admin-launch-audit__evidence">
+            {launchAudit.evidence_refs.map((evidenceRef) => (
+              <code key={evidenceRef}>{evidenceRef}</code>
+            ))}
+          </div>
         </div>
       </section>
 

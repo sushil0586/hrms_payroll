@@ -10,8 +10,10 @@ export default async function HomePage() {
   const sessionUser = await getSessionUser();
   const canAccessHrAdmin = sessionHasAnyRole(sessionUser, ["hr-admin"]);
   const canAccessMss = sessionCanAccessWorkspace(sessionUser, "mss");
-  const accessibleWorkspaces = [true, canAccessHrAdmin, canAccessMss].filter(Boolean).length;
+  const canAccessTenantAdmin = sessionCanAccessWorkspace(sessionUser, "tenant_admin");
+  const accessibleWorkspaces = [true, canAccessHrAdmin, canAccessMss, canAccessTenantAdmin].filter(Boolean).length;
   const hrAdminHref = sessionUser ? "/hr-admin" : "/login";
+  const tenantAdminHref = sessionUser ? "/tenant-admin" : "/login";
   const essHref = sessionUser ? "/ess" : "/login";
   const mssHref = sessionUser ? "/mss/approvals" : "/login";
 
@@ -28,6 +30,9 @@ export default async function HomePage() {
             </Link>
             <Link className="button button--secondary" href={essHref}>
               Open ESS
+            </Link>
+            <Link className="button button--secondary" href={tenantAdminHref}>
+              Open Tenant
             </Link>
             <Link className="button button--secondary" href={mssHref}>
               Open MSS
@@ -96,6 +101,20 @@ export default async function HomePage() {
               { label: "Best for", value: "Managers" },
               { label: "Focus", value: "Approval inbox and team visibility" },
               { label: "Includes", value: "Leave and attendance decisions" },
+            ]}
+          />
+          <WorkspaceCard
+            eyebrow="Tenant admin"
+            title="Manage account"
+            description="Plan posture, seat usage, configuration health, and commercial audit evidence."
+            href={tenantAdminHref}
+            cta={sessionUser ? (canAccessTenantAdmin ? "Open tenant console" : "Tenant admin restricted") : "Sign in for tenant admin"}
+            className="workspace-card--compact public-workspace-card"
+            descriptionClassName="section-copy-soft"
+            details={[
+              { label: "Best for", value: "Tenant owners" },
+              { label: "Focus", value: "Commercial and account posture" },
+              { label: "Includes", value: "Seats, config, evidence" },
             ]}
           />
         </div>

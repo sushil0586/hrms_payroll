@@ -18,7 +18,11 @@ from apps.payroll.models import (
     PayrollProviderCertificationRun,
     PayrollProviderConnection,
     PayrollProviderDelivery,
+    PayrollProviderJob,
+    PayrollProviderLaunchRehearsal,
     PayrollProviderRetryEvent,
+    PayrollProviderSchemaMappingSimulation,
+    PayrollProviderSchemaMappingPack,
     PayrollRunCalculation,
     PayrollInputSnapshot,
     PayrollOutputArtifact,
@@ -312,11 +316,39 @@ class PayrollProviderRetryEventAdmin(admin.ModelAdmin):
     search_fields = ("provider_delivery__output_artifact__title", "retry_policy_ref", "failure_taxonomy_ref", "failure_category_ref", "failure_code")
 
 
+@admin.register(PayrollProviderJob)
+class PayrollProviderJobAdmin(admin.ModelAdmin):
+    list_display = ("job_kind", "tenant", "status", "provider_ref", "queue_policy_ref", "attempt_count", "recovery_count", "scheduled_for", "leased_until", "heartbeat_at", "completed_at")
+    list_filter = ("job_kind", "status", "queue_policy_ref", "worker_profile_ref")
+    search_fields = ("idempotency_key", "provider_ref", "failure_code", "failure_reason")
+
+
+@admin.register(PayrollProviderLaunchRehearsal)
+class PayrollProviderLaunchRehearsalAdmin(admin.ModelAdmin):
+    list_display = ("tenant", "status", "can_launch", "ready_lane_count", "blocked_lane_count", "launch_blocker_count", "generated_at", "generated_by")
+    list_filter = ("status", "can_launch", "rehearsal_profile_ref", "audit_pack_ref")
+    search_fields = ("tenant__name", "tenant__code", "evidence_checksum_sha256", "source_hash")
+
+
 @admin.register(PayrollProviderConnection)
 class PayrollProviderConnectionAdmin(admin.ModelAdmin):
     list_display = ("provider_name", "tenant", "provider_kind", "environment_ref", "status", "certification_status", "adapter_ref")
     list_filter = ("provider_kind", "environment_ref", "status", "certification_status")
     search_fields = ("provider_name", "provider_ref", "tenant__name", "adapter_ref", "channel_ref", "credential_ref")
+
+
+@admin.register(PayrollProviderSchemaMappingPack)
+class PayrollProviderSchemaMappingPackAdmin(admin.ModelAdmin):
+    list_display = ("mapping_profile_ref", "tenant", "provider_ref", "artifact_kind", "version", "status", "enforcement_mode")
+    list_filter = ("status", "provider_kind", "artifact_kind", "environment_ref", "enforcement_mode")
+    search_fields = ("mapping_profile_ref", "provider_ref", "source_schema_ref", "target_schema_ref", "source_hash")
+
+
+@admin.register(PayrollProviderSchemaMappingSimulation)
+class PayrollProviderSchemaMappingSimulationAdmin(admin.ModelAdmin):
+    list_display = ("mapping_profile_ref", "tenant", "provider_ref", "artifact_kind", "mapping_pack_version", "status", "comparison_status", "simulated_at")
+    list_filter = ("status", "comparison_status", "provider_kind", "artifact_kind", "environment_ref")
+    search_fields = ("mapping_profile_ref", "provider_ref", "source_hash")
 
 
 @admin.register(PayrollProviderCertificationRun)

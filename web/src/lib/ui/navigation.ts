@@ -29,6 +29,11 @@ export const hrAdminNavigation: HrAdminNavGroup[] = [
     items: [
       { href: "/hr-admin/attendance-operations", label: "Attendance", shortLabel: "AT", blurb: "Shifts and review windows" },
       { href: "/hr-admin/notifications-admin", label: "Notifications", shortLabel: "NT", blurb: "Events and delivery" },
+      { href: "/hr-admin/launch-remediation", label: "Launch", shortLabel: "LA", blurb: "Release gate actions" },
+      { href: "/hr-admin/saas-control-plane", label: "SaaS", shortLabel: "SA", blurb: "Plan and usage gates" },
+      { href: "/hr-admin/saas-operations", label: "Ops Health", shortLabel: "OH", blurb: "Tenant health signals" },
+      { href: "/hr-admin/saas-resilience", label: "Resilience", shortLabel: "RS", blurb: "Backup and retention" },
+      { href: "/hr-admin/saas-sla-operations", label: "SLA Ops", shortLabel: "SL", blurb: "Incidents and breach posture" },
     ],
   },
   {

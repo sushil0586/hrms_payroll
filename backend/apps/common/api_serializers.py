@@ -6,6 +6,7 @@ from rest_framework import serializers
 
 from apps.attendance.models import AttendancePolicyStatus, AttendanceSource, AttendanceStatus, AttendanceUnit, HolidayType
 from apps.employees.models import EmploymentStatus
+from apps.common.models import SaasTenantChangeRequestType
 from apps.iam.models import MembershipStatus, ScopeType
 from apps.leave_management.models import AccrualFrequency, LeaveCategory, LeavePolicyStatus, LeaveUnit
 from apps.documents.models import DocumentCategoryType, EmployeeDocumentStatus, LetterType, VerificationStatus
@@ -39,7 +40,11 @@ from apps.payroll.models import (
     PayrollProviderConnectionKind,
     PayrollProviderConnectionStatus,
     PayrollProviderDeliveryStatus,
+    PayrollProviderJobKind,
+    PayrollProviderJobStatus,
     PayrollProviderRetryEventStatus,
+    PayrollProviderSchemaMappingSimulationStatus,
+    PayrollProviderSchemaMappingPackStatus,
     PayrollReviewStatus,
     PayrollSettlementLineKind,
     PayrollSettlementStatus,
@@ -554,6 +559,343 @@ class HrAdminDashboardSerializer(serializers.Serializer):
     documents = HrAdminDashboardDocumentsSerializer()
     governance = HrAdminDashboardGovernanceSerializer()
     delivery = HrAdminDashboardDeliverySerializer()
+    launch_audit = serializers.JSONField()
+
+
+class HrAdminLaunchRemediationAssignmentSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    gate_ref = serializers.CharField()
+    module_ref = serializers.CharField()
+    module_label = serializers.CharField()
+    label = serializers.CharField()
+    severity = serializers.CharField()
+    status = serializers.CharField()
+    owner_role_ref = serializers.CharField()
+    assigned_to_identifier = serializers.CharField(allow_blank=True)
+    action_href = serializers.CharField()
+    action_label = serializers.CharField()
+    sla_days = serializers.IntegerField()
+    current_value = serializers.CharField(allow_blank=True)
+    evidence_ref = serializers.CharField(allow_blank=True)
+    first_seen_at = serializers.DateTimeField()
+    last_seen_at = serializers.DateTimeField()
+    due_at = serializers.DateTimeField(allow_null=True)
+    due_source_ref = serializers.CharField()
+    due_state = serializers.CharField()
+    days_until_due = serializers.IntegerField(allow_null=True)
+    is_overdue = serializers.BooleanField()
+    is_due_soon = serializers.BooleanField()
+    acknowledged_at = serializers.DateTimeField(allow_null=True)
+    acknowledged_by_identifier = serializers.CharField(allow_blank=True)
+    reminder_sent_at = serializers.DateTimeField(allow_null=True)
+    reminder_count = serializers.IntegerField()
+    escalated_at = serializers.DateTimeField(allow_null=True)
+    escalated_by_identifier = serializers.CharField(allow_blank=True)
+    escalation_owner_role_ref = serializers.CharField(allow_blank=True)
+    ignored_at = serializers.DateTimeField(allow_null=True)
+    ignored_by_identifier = serializers.CharField(allow_blank=True)
+    resolved_at = serializers.DateTimeField(allow_null=True)
+    resolution_note = serializers.CharField(allow_blank=True)
+    action_history = serializers.JSONField()
+    source_hash = serializers.CharField()
+
+
+class HrAdminLaunchRemediationListSerializer(serializers.Serializer):
+    summary = serializers.JSONField()
+    filters = serializers.JSONField()
+    options = serializers.JSONField()
+    items = HrAdminLaunchRemediationAssignmentSerializer(many=True)
+    total_count = serializers.IntegerField()
+    page = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    has_next = serializers.BooleanField()
+    has_previous = serializers.BooleanField()
+
+
+class HrAdminLaunchRemediationActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["acknowledge", "assign", "set_due_date", "send_reminder", "escalate", "ignore", "resolve", "reopen"])
+    owner_role_ref = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    assigned_to_identifier = serializers.CharField(required=False, allow_blank=True, max_length=160)
+    due_at = serializers.DateTimeField(required=False, allow_null=True)
+    escalation_owner_role_ref = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    resolution_note = serializers.CharField(required=False, allow_blank=True, max_length=1200)
+
+    def validate(self, attrs):
+        action = attrs["action"]
+        owner_role_ref = attrs.get("owner_role_ref", "").strip()
+        assigned_to_identifier = attrs.get("assigned_to_identifier", "").strip()
+        escalation_owner_role_ref = attrs.get("escalation_owner_role_ref", "").strip()
+        resolution_note = attrs.get("resolution_note", "").strip()
+        if action == "assign" and not owner_role_ref and not assigned_to_identifier:
+            raise serializers.ValidationError({"assigned_to_identifier": "Provide an owner role or assignee identifier."})
+        if action == "set_due_date" and not attrs.get("due_at"):
+            raise serializers.ValidationError({"due_at": "Provide a due date for this assignment."})
+        if action == "escalate" and not escalation_owner_role_ref and not owner_role_ref:
+            raise serializers.ValidationError({"escalation_owner_role_ref": "Provide an escalation owner role."})
+        if action in {"ignore", "resolve"} and not resolution_note:
+            raise serializers.ValidationError({"resolution_note": "Add a short note for this launch decision."})
+        attrs["owner_role_ref"] = owner_role_ref
+        attrs["assigned_to_identifier"] = assigned_to_identifier
+        attrs["escalation_owner_role_ref"] = escalation_owner_role_ref
+        attrs["resolution_note"] = resolution_note
+        return attrs
+
+
+class HrAdminSaasCommercialControlSerializer(serializers.Serializer):
+    profile_ref = serializers.CharField()
+    profile_source = serializers.CharField()
+    profile_name = serializers.CharField()
+    version = serializers.IntegerField()
+    tenant = serializers.JSONField()
+    subscription = serializers.JSONField()
+    plan = serializers.JSONField()
+    available_plans = serializers.JSONField()
+    summary = serializers.JSONField()
+    entitlements = serializers.JSONField()
+    usage_limits = serializers.JSONField()
+    required_entitlements = serializers.JSONField()
+    missing_required_entitlements = serializers.JSONField()
+    exceeded_usage_limits = serializers.JSONField()
+    blocking_usage_limits = serializers.JSONField()
+    enforcement = serializers.JSONField()
+    recent_usage_snapshots = serializers.JSONField()
+    recent_audit_events = serializers.JSONField()
+
+
+class HrAdminSaasCommercialSubscriptionUpdateSerializer(serializers.Serializer):
+    subscription_plan = serializers.CharField(required=False, allow_blank=True, max_length=40)
+    status = serializers.CharField(required=False, allow_blank=True, max_length=40)
+    billing_provider_ref = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    billing_account_ref = serializers.CharField(required=False, allow_blank=True, max_length=160)
+    current_period_end = serializers.CharField(required=False, allow_blank=True, max_length=80)
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("Provide at least one commercial subscription field.")
+        return attrs
+
+
+class TenantAdminConsoleSerializer(serializers.Serializer):
+    tenant = serializers.JSONField()
+    summary = serializers.JSONField()
+    commercial_control = serializers.JSONField()
+    seat_usage = serializers.JSONField()
+    membership_status_counts = serializers.JSONField()
+    role_coverage = serializers.JSONField()
+    configuration_health = serializers.JSONField()
+    governance_checks = serializers.JSONField()
+    membership_management = serializers.JSONField()
+    change_request_management = serializers.JSONField()
+    support_access_management = serializers.JSONField()
+    recent_usage_snapshots = serializers.JSONField()
+    recent_audit_events = serializers.JSONField()
+
+
+class TenantAdminMembershipInviteSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField()
+    first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    display_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    phone_number = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    is_user_active = serializers.BooleanField(required=False, default=True)
+    must_change_password = serializers.BooleanField(required=False, default=True)
+    membership_status = serializers.ChoiceField(choices=[MembershipStatus.INVITED, MembershipStatus.ACTIVE], required=False, default=MembershipStatus.INVITED)
+    is_default_membership = serializers.BooleanField(required=False, default=False)
+    role_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
+    password = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)
+
+    def validate_username(self, value):
+        return value.strip()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class TenantAdminMembershipActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["activate", "suspend", "revoke", "update_roles"])
+    role_ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False, required=False)
+    note = serializers.CharField(required=False, allow_blank=True, max_length=1200)
+
+    def validate(self, attrs):
+        if attrs["action"] == "update_roles" and not attrs.get("role_ids"):
+            raise serializers.ValidationError({"role_ids": "Select at least one tenant role."})
+        attrs["note"] = attrs.get("note", "").strip()
+        return attrs
+
+
+class TenantAdminMembershipMutationResultSerializer(serializers.Serializer):
+    membership = serializers.JSONField()
+    generated_password = serializers.CharField(required=False, allow_blank=True)
+    password_was_set = serializers.BooleanField()
+    console = serializers.JSONField()
+
+
+class TenantAdminChangeRequestCreateSerializer(serializers.Serializer):
+    request_type = serializers.ChoiceField(choices=SaasTenantChangeRequestType.values)
+    title = serializers.CharField(max_length=180)
+    description = serializers.CharField(required=False, allow_blank=True, max_length=2400)
+    target_ref = serializers.CharField(required=False, allow_blank=True, max_length=180)
+    requested_payload = serializers.JSONField(required=False, default=dict)
+
+    def validate(self, attrs):
+        if not isinstance(attrs.get("requested_payload", {}), dict):
+            raise serializers.ValidationError({"requested_payload": "Requested payload must be an object."})
+        attrs["title"] = attrs["title"].strip()
+        attrs["description"] = attrs.get("description", "").strip()
+        attrs["target_ref"] = attrs.get("target_ref", "").strip()
+        if not attrs["title"]:
+            raise serializers.ValidationError({"title": "Title is required."})
+        return attrs
+
+
+class TenantAdminChangeRequestActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["approve", "reject", "cancel", "apply"])
+    decision_note = serializers.CharField(required=False, allow_blank=True, max_length=1200)
+
+    def validate(self, attrs):
+        attrs["decision_note"] = attrs.get("decision_note", "").strip()
+        return attrs
+
+
+class TenantAdminChangeRequestMutationResultSerializer(serializers.Serializer):
+    change_request = serializers.JSONField()
+    console = serializers.JSONField()
+
+
+class TenantAdminSupportAccessGrantCreateSerializer(serializers.Serializer):
+    support_agent_identifier = serializers.CharField(max_length=160)
+    reason = serializers.CharField(max_length=2400)
+    scope_refs = serializers.ListField(child=serializers.CharField(max_length=120), allow_empty=False)
+    requested_duration_minutes = serializers.IntegerField(required=False, min_value=1, default=60)
+
+    def validate(self, attrs):
+        attrs["support_agent_identifier"] = attrs["support_agent_identifier"].strip()
+        attrs["reason"] = attrs["reason"].strip()
+        attrs["scope_refs"] = [item.strip() for item in attrs.get("scope_refs", []) if item.strip()]
+        if not attrs["support_agent_identifier"]:
+            raise serializers.ValidationError({"support_agent_identifier": "Support agent identifier is required."})
+        if not attrs["reason"]:
+            raise serializers.ValidationError({"reason": "Reason is required."})
+        if not attrs["scope_refs"]:
+            raise serializers.ValidationError({"scope_refs": "Select at least one support access scope."})
+        return attrs
+
+
+class TenantAdminSupportAccessGrantActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["approve", "reject", "start", "end", "revoke"])
+    decision_note = serializers.CharField(required=False, allow_blank=True, max_length=1200)
+    approved_duration_minutes = serializers.IntegerField(required=False, min_value=1)
+    session_ref = serializers.CharField(required=False, allow_blank=True, max_length=180)
+
+    def validate(self, attrs):
+        attrs["decision_note"] = attrs.get("decision_note", "").strip()
+        attrs["session_ref"] = attrs.get("session_ref", "").strip()
+        return attrs
+
+
+class TenantAdminSupportAccessGrantMutationResultSerializer(serializers.Serializer):
+    support_access_grant = serializers.JSONField()
+    console = serializers.JSONField()
+
+
+class TenantAdminTrustAuditReviewSerializer(serializers.Serializer):
+    profile_ref = serializers.CharField()
+    profile_source = serializers.CharField()
+    generated_at = serializers.DateTimeField()
+    tenant = serializers.JSONField()
+    summary = serializers.JSONField()
+    filters = serializers.JSONField()
+    options = serializers.JSONField()
+    events = serializers.JSONField()
+    total_count = serializers.IntegerField()
+    page = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    has_next = serializers.BooleanField()
+    has_previous = serializers.BooleanField()
+
+
+class TenantAdminEnterpriseSecurityReadinessSerializer(serializers.Serializer):
+    profile_ref = serializers.CharField()
+    security_profile_ref = serializers.CharField()
+    profile_source = serializers.CharField()
+    generated_at = serializers.DateTimeField()
+    tenant = serializers.JSONField()
+    summary = serializers.JSONField()
+    mfa = serializers.JSONField()
+    sso = serializers.JSONField()
+    scim = serializers.JSONField()
+    session = serializers.JSONField()
+    audit = serializers.JSONField()
+    data_protection = serializers.JSONField()
+    checks = serializers.JSONField()
+
+
+class SupportSessionTenantConsoleSerializer(serializers.Serializer):
+    support_session = serializers.JSONField()
+    tenant = serializers.JSONField()
+    granted_sections = serializers.JSONField()
+    account = serializers.JSONField(allow_null=True)
+    configuration_health = serializers.JSONField(allow_null=True)
+    commercial_evidence = serializers.JSONField(allow_null=True)
+    payroll_support = serializers.JSONField(allow_null=True)
+
+
+class SupportSessionDomainSnapshotSerializer(serializers.Serializer):
+    support_session = serializers.JSONField()
+    tenant = serializers.JSONField()
+    domain = serializers.JSONField()
+    available_domains = serializers.JSONField()
+    snapshot = serializers.JSONField()
+
+
+class HrAdminSaasOperationalHealthSerializer(serializers.Serializer):
+    profile_ref = serializers.CharField()
+    generated_at = serializers.DateTimeField()
+    tenant = serializers.JSONField()
+    summary = serializers.JSONField()
+    signals = serializers.JSONField()
+    launch_audit = serializers.JSONField()
+    commercial_control = serializers.JSONField()
+    resilience_readiness = serializers.JSONField()
+    sla_operations = serializers.JSONField()
+    notification_delivery = serializers.JSONField()
+    provider_queue = serializers.JSONField()
+    support_access = serializers.JSONField()
+    tenant_change_requests = serializers.JSONField()
+    recent_commercial_events = serializers.JSONField()
+    recent_usage_snapshots = serializers.JSONField()
+
+
+class HrAdminSaasResilienceReadinessSerializer(serializers.Serializer):
+    profile_ref = serializers.CharField()
+    resilience_profile_ref = serializers.CharField()
+    profile_source = serializers.CharField()
+    generated_at = serializers.DateTimeField()
+    tenant = serializers.JSONField()
+    summary = serializers.JSONField()
+    backup = serializers.JSONField()
+    restore = serializers.JSONField()
+    retention = serializers.JSONField()
+    evidence = serializers.JSONField()
+    checks = serializers.JSONField()
+
+
+class HrAdminSaasSlaOperationsSerializer(serializers.Serializer):
+    profile_ref = serializers.CharField()
+    sla_profile_ref = serializers.CharField()
+    profile_source = serializers.CharField()
+    generated_at = serializers.DateTimeField()
+    tenant = serializers.JSONField()
+    summary = serializers.JSONField()
+    incident_targets = serializers.JSONField()
+    impact_options = serializers.JSONField()
+    operational_thresholds = serializers.JSONField()
+    status_counts = serializers.JSONField()
+    severity_counts = serializers.JSONField()
+    impact_counts = serializers.JSONField()
+    health_signals = serializers.JSONField()
+    incidents = serializers.JSONField()
 
 
 class HrAdminPayrollReadinessPeriodSerializer(serializers.Serializer):
@@ -2387,6 +2729,66 @@ class HrAdminPayrollProviderRetryEventSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField()
 
 
+class HrAdminPayrollProviderJobSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    job_kind = serializers.CharField()
+    job_kind_label = serializers.CharField()
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    queue_policy_ref = serializers.CharField()
+    worker_profile_ref = serializers.CharField()
+    idempotency_key = serializers.CharField()
+    provider_ref = serializers.CharField(allow_blank=True)
+    provider_delivery_id = serializers.UUIDField(allow_null=True)
+    provider_connection_id = serializers.UUIDField(allow_null=True)
+    retry_event_id = serializers.UUIDField(allow_null=True)
+    callback_event_id = serializers.UUIDField(allow_null=True)
+    certification_run_id = serializers.UUIDField(allow_null=True)
+    priority = serializers.IntegerField()
+    attempt_count = serializers.IntegerField()
+    max_attempts = serializers.IntegerField()
+    scheduled_for = serializers.DateTimeField(allow_null=True)
+    leased_at = serializers.DateTimeField(allow_null=True)
+    leased_until = serializers.DateTimeField(allow_null=True)
+    lease_owner_ref = serializers.CharField(allow_blank=True)
+    heartbeat_at = serializers.DateTimeField(allow_null=True)
+    heartbeat_count = serializers.IntegerField()
+    recovery_count = serializers.IntegerField()
+    last_recovered_at = serializers.DateTimeField(allow_null=True)
+    started_at = serializers.DateTimeField(allow_null=True)
+    completed_at = serializers.DateTimeField(allow_null=True)
+    requested_by_name = serializers.CharField(allow_null=True)
+    executed_by_name = serializers.CharField(allow_null=True)
+    request_snapshot = serializers.JSONField()
+    lease_snapshot = serializers.JSONField()
+    response_snapshot = serializers.JSONField()
+    failure_code = serializers.CharField(allow_blank=True)
+    failure_reason = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollProviderLaunchRehearsalSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    rehearsal_profile_ref = serializers.CharField()
+    audit_pack_ref = serializers.CharField()
+    generated_by_ref = serializers.CharField()
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    can_launch = serializers.BooleanField()
+    ready_lane_count = serializers.IntegerField()
+    blocked_lane_count = serializers.IntegerField()
+    launch_blocker_count = serializers.IntegerField()
+    release_blocker_refs = serializers.JSONField()
+    audit_pack_snapshot = serializers.JSONField()
+    evidence_checksum_sha256 = serializers.CharField()
+    generated_at = serializers.DateTimeField()
+    generated_by_name = serializers.CharField(allow_null=True)
+    source_hash = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
 class HrAdminPayrollFinanceHandoffAcknowledgeRequestSerializer(serializers.Serializer):
     acknowledgement_profile_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
     provider_status = serializers.CharField(max_length=20, required=False, allow_blank=True)
@@ -2410,7 +2812,7 @@ class PayrollProviderCallbackRequestSerializer(serializers.Serializer):
         PayrollProviderDeliveryStatus.FAILED,
     ])
     payload_snapshot = serializers.JSONField(required=False)
-    signature = serializers.CharField(max_length=160)
+    signature = serializers.CharField(max_length=1024)
 
 
 class PayrollProviderCallbackResultSerializer(serializers.Serializer):
@@ -2498,6 +2900,175 @@ class HrAdminPayrollProviderCertificationRunSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField()
 
 
+class HrAdminPayrollProviderSchemaMappingPackSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    provider_connection_id = serializers.UUIDField(allow_null=True)
+    provider_ref = serializers.CharField()
+    provider_kind = serializers.CharField()
+    provider_kind_label = serializers.CharField()
+    environment_ref = serializers.CharField()
+    artifact_kind = serializers.CharField()
+    artifact_kind_label = serializers.CharField()
+    mapping_profile_ref = serializers.CharField()
+    version = serializers.IntegerField()
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    source_schema_ref = serializers.CharField(allow_blank=True)
+    target_schema_ref = serializers.CharField(allow_blank=True)
+    transform_profile_ref = serializers.CharField()
+    validation_profile_ref = serializers.CharField()
+    enforcement_mode = serializers.CharField()
+    transform_rules = serializers.JSONField()
+    validation_rules = serializers.JSONField()
+    sample_request_snapshot = serializers.JSONField()
+    sample_output_snapshot = serializers.JSONField()
+    evidence_snapshot = serializers.JSONField()
+    source_hash = serializers.CharField(allow_blank=True)
+    created_by_name = serializers.CharField(allow_null=True)
+    updated_by_name = serializers.CharField(allow_null=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollProviderSchemaMappingSimulationSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    mapping_pack_id = serializers.UUIDField()
+    baseline_mapping_pack_id = serializers.UUIDField(allow_null=True)
+    provider_connection_id = serializers.UUIDField(allow_null=True)
+    provider_ref = serializers.CharField()
+    provider_kind = serializers.CharField()
+    provider_kind_label = serializers.CharField()
+    environment_ref = serializers.CharField()
+    artifact_kind = serializers.CharField()
+    artifact_kind_label = serializers.CharField()
+    mapping_profile_ref = serializers.CharField()
+    mapping_pack_version = serializers.IntegerField()
+    baseline_mapping_pack_version = serializers.IntegerField()
+    simulation_profile_ref = serializers.CharField()
+    comparison_profile_ref = serializers.CharField()
+    status = serializers.ChoiceField(choices=PayrollProviderSchemaMappingSimulationStatus.choices)
+    status_label = serializers.CharField()
+    comparison_status = serializers.CharField()
+    gate_count = serializers.IntegerField()
+    passed_gate_count = serializers.IntegerField()
+    blocker_count = serializers.IntegerField()
+    changed_path_count = serializers.IntegerField()
+    added_path_count = serializers.IntegerField()
+    removed_path_count = serializers.IntegerField()
+    request_snapshot = serializers.JSONField()
+    provider_payload_snapshot = serializers.JSONField()
+    baseline_payload_snapshot = serializers.JSONField()
+    gate_snapshot = serializers.JSONField()
+    blocking_gate_refs = serializers.JSONField()
+    comparison_snapshot = serializers.JSONField()
+    evidence_snapshot = serializers.JSONField()
+    source_hash = serializers.CharField(allow_blank=True)
+    simulated_by_name = serializers.CharField(allow_null=True)
+    simulated_at = serializers.DateTimeField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollProviderSchemaMappingPackWriteSerializer(serializers.Serializer):
+    provider_connection_id = serializers.UUIDField(required=False, allow_null=True)
+    provider_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    provider_kind = serializers.ChoiceField(choices=PayrollProviderConnectionKind.choices, required=False)
+    environment_ref = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    artifact_kind = serializers.ChoiceField(choices=PayrollOutputArtifactKind.choices, required=False)
+    mapping_profile_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    version = serializers.IntegerField(required=False, min_value=1)
+    source_schema_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    target_schema_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    transform_profile_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    validation_profile_ref = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    enforcement_mode = serializers.ChoiceField(choices=[("disabled", "Disabled"), ("warn", "Warn"), ("strict", "Strict")], required=False)
+    transform_rules = serializers.JSONField(required=False)
+    validation_rules = serializers.JSONField(required=False)
+    sample_request_snapshot = serializers.JSONField(required=False)
+    sample_output_snapshot = serializers.JSONField(required=False)
+    change_reason = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_transform_rules(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Transform rules must be a list.")
+        return value
+
+    def validate_validation_rules(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Validation rules must be a list.")
+        return value
+
+    def validate_sample_request_snapshot(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Sample request snapshot must be an object.")
+        return value
+
+    def validate_sample_output_snapshot(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Sample output snapshot must be an object.")
+        return value
+
+
+class HrAdminPayrollProviderSchemaMappingPackLifecycleRequestSerializer(serializers.Serializer):
+    approval_reason = serializers.CharField(required=False, allow_blank=True)
+    archive_reason = serializers.CharField(required=False, allow_blank=True)
+    approval_snapshot = serializers.JSONField(required=False)
+    overrides = serializers.JSONField(required=False)
+
+    def validate_approval_snapshot(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Approval snapshot must be an object.")
+        return value
+
+    def validate_overrides(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Overrides must be an object.")
+        return value
+
+
+class HrAdminPayrollProviderSchemaMappingPackSimulationRequestSerializer(serializers.Serializer):
+    request_snapshot = serializers.JSONField(required=False)
+    mapping_contract = serializers.JSONField(required=False)
+
+    def validate_request_snapshot(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Simulation request snapshot must be an object.")
+        return value
+
+    def validate_mapping_contract(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Simulation mapping contract must be an object.")
+        return value
+
+
+class HrAdminPayrollProviderSchemaMappingPackSimulationResultSerializer(serializers.Serializer):
+    mapping_pack = HrAdminPayrollProviderSchemaMappingPackSerializer()
+    simulation_run = HrAdminPayrollProviderSchemaMappingSimulationSerializer()
+    simulation = serializers.JSONField()
+    detail = serializers.CharField()
+
+
+class HrAdminPayrollProviderSchemaMappingPackImportSerializer(serializers.Serializer):
+    provider_connection_id = serializers.UUIDField(required=False, allow_null=True)
+    mapping_pack = serializers.JSONField()
+
+    def validate_mapping_pack(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Mapping pack import payload must be an object.")
+        return value
+
+
+class HrAdminPayrollProviderSchemaMappingPackActionResultSerializer(serializers.Serializer):
+    mapping_pack = HrAdminPayrollProviderSchemaMappingPackSerializer()
+    detail = serializers.CharField()
+
+
+class HrAdminPayrollProviderSchemaMappingPackExportSerializer(serializers.Serializer):
+    mapping_pack = HrAdminPayrollProviderSchemaMappingPackSerializer()
+    export_payload = serializers.JSONField()
+    detail = serializers.CharField()
+
+
 class HrAdminPayrollProviderConnectionWriteSerializer(serializers.Serializer):
     provider_ref = serializers.CharField(max_length=160, required=False)
     provider_name = serializers.CharField(max_length=160, required=False)
@@ -2531,12 +3102,22 @@ class HrAdminPayrollProviderConnectionOptionsSerializer(serializers.Serializer):
     connection_statuses = HrAdminEnumOptionSerializer(many=True)
     certification_statuses = HrAdminEnumOptionSerializer(many=True)
     certification_run_statuses = HrAdminEnumOptionSerializer(many=True)
+    schema_mapping_pack_statuses = HrAdminEnumOptionSerializer(many=True)
+    launch_rehearsal_statuses = HrAdminEnumOptionSerializer(many=True)
 
 
 class HrAdminPayrollProviderConnectionSetupSerializer(serializers.Serializer):
     summary = serializers.JSONField()
     connections = HrAdminPayrollProviderConnectionSerializer(many=True)
     certification_runs = HrAdminPayrollProviderCertificationRunSerializer(many=True)
+    schema_mapping_packs = HrAdminPayrollProviderSchemaMappingPackSerializer(many=True)
+    schema_mapping_simulations = HrAdminPayrollProviderSchemaMappingSimulationSerializer(many=True)
+    launch_rehearsals = HrAdminPayrollProviderLaunchRehearsalSerializer(many=True)
+    adapter_registry = serializers.JSONField()
+    client_registry = serializers.JSONField()
+    package_registry = serializers.JSONField()
+    storage_policy_registry = serializers.JSONField()
+    launch_rehearsal = serializers.JSONField()
     options = HrAdminPayrollProviderConnectionOptionsSerializer()
 
 
@@ -2551,8 +3132,18 @@ class HrAdminPayrollProviderCertificationRunActionResultSerializer(serializers.S
     detail = serializers.CharField()
 
 
+class HrAdminPayrollProviderLaunchRehearsalActionResultSerializer(serializers.Serializer):
+    launch_rehearsal_run = HrAdminPayrollProviderLaunchRehearsalSerializer()
+    setup = HrAdminPayrollProviderConnectionSetupSerializer()
+    detail = serializers.CharField()
+
+
 class HrAdminPayrollGenerateFinanceHandoffRequestSerializer(serializers.Serializer):
     handoff_profile_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
+
+
+class HrAdminPayrollGenerateProviderAuditPackRequestSerializer(serializers.Serializer):
+    audit_pack_profile_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
 
 
 class HrAdminPayrollFinanceHandoffActionResultSerializer(serializers.Serializer):
@@ -2561,6 +3152,7 @@ class HrAdminPayrollFinanceHandoffActionResultSerializer(serializers.Serializer)
     deliveries = HrAdminPayrollProviderDeliverySerializer(many=True)
     callback_events = HrAdminPayrollProviderCallbackEventSerializer(many=True, required=False)
     retry_events = HrAdminPayrollProviderRetryEventSerializer(many=True, required=False)
+    provider_jobs = HrAdminPayrollProviderJobSerializer(many=True, required=False)
     detail = serializers.CharField()
 
 
@@ -2571,6 +3163,8 @@ class HrAdminPayrollFinanceHandoffOptionsSerializer(serializers.Serializer):
     provider_delivery_statuses = HrAdminEnumOptionSerializer(many=True)
     provider_callback_event_statuses = HrAdminEnumOptionSerializer(many=True)
     provider_retry_event_statuses = HrAdminEnumOptionSerializer(many=True)
+    provider_job_kinds = HrAdminEnumOptionSerializer(many=True)
+    provider_job_statuses = HrAdminEnumOptionSerializer(many=True)
 
 
 class HrAdminPayrollFinanceHandoffSetupSerializer(serializers.Serializer):
@@ -2581,6 +3175,7 @@ class HrAdminPayrollFinanceHandoffSetupSerializer(serializers.Serializer):
     deliveries = HrAdminPayrollProviderDeliverySerializer(many=True)
     callback_events = HrAdminPayrollProviderCallbackEventSerializer(many=True)
     retry_events = HrAdminPayrollProviderRetryEventSerializer(many=True)
+    provider_jobs = HrAdminPayrollProviderJobSerializer(many=True)
     options = HrAdminPayrollFinanceHandoffOptionsSerializer()
 
 

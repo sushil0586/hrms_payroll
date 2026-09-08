@@ -1173,6 +1173,164 @@ select.input-control {
     linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.9));
 }
 
+.hr-admin-launch-audit {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.hr-admin-launch-audit__header,
+.hr-admin-launch-audit__summary,
+.hr-admin-launch-audit__module,
+.hr-admin-launch-audit__evidence {
+  display: flex;
+  align-items: center;
+}
+
+.hr-admin-launch-audit__header {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hr-admin-launch-audit__header h2 {
+  margin: 4px 0 0;
+  color: #111827;
+  font-family: var(--font-sans);
+  font-size: 19px;
+  font-weight: 750;
+  line-height: 1.15;
+}
+
+.hr-admin-launch-audit__summary {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.hr-admin-launch-audit__modules {
+  display: grid;
+  gap: 8px;
+}
+
+.hr-admin-launch-audit__actions {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.hr-admin-launch-audit__action {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(80px, auto) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+.hr-admin-launch-audit__action > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.hr-admin-launch-audit__action strong,
+.hr-admin-launch-audit__action small,
+.hr-admin-launch-audit__action > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hr-admin-launch-audit__action strong {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hr-admin-launch-audit__action small,
+.hr-admin-launch-audit__action > span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.hr-admin-launch-audit__action .button {
+  justify-self: end;
+}
+
+.hr-admin-launch-audit__action .hr-admin-launch-audit__chip {
+  justify-self: start;
+}
+
+.hr-admin-launch-audit__module {
+  min-height: 44px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #536078;
+  font-size: 12px;
+}
+
+.hr-admin-launch-audit__module > div {
+  display: flex;
+  min-width: 220px;
+  align-items: center;
+  gap: 9px;
+}
+
+.hr-admin-launch-audit__module strong {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hr-admin-launch-audit__chip {
+  display: inline-flex;
+  min-width: 72px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.hr-admin-launch-audit__chip--ready {
+  border-color: rgba(22, 163, 74, 0.18);
+  background: rgba(220, 252, 231, 0.8);
+  color: #15803d;
+}
+
+.hr-admin-launch-audit__chip--warning {
+  border-color: rgba(245, 158, 11, 0.2);
+  background: rgba(254, 243, 199, 0.84);
+  color: #a16207;
+}
+
+.hr-admin-launch-audit__chip--blocked {
+  border-color: rgba(220, 38, 38, 0.16);
+  background: rgba(254, 226, 226, 0.84);
+  color: #b91c1c;
+}
+
+.hr-admin-launch-audit__evidence {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hr-admin-launch-audit__evidence code {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: rgba(248, 250, 252, 0.82);
+  color: #526078;
+  font-size: 11px;
+}
+
 .workspace-card__eyebrow {
   font-size: 11px;
   font-weight: 800;
@@ -2819,6 +2977,7 @@ select.input-control {
 }
 
 .readiness-badge--closed,
+.readiness-badge--ignored,
 .readiness-badge--inactive,
 .readiness-badge--archived {
   background: #f1f5f9;
@@ -3771,7 +3930,8 @@ select.input-control {
   padding: 14px 16px 16px;
 }
 
-.payroll-output-handoff-grid article {
+.payroll-output-handoff-grid article,
+.payroll-output-handoff-grid .payroll-handoff-evidence-card {
   display: grid;
   gap: 5px;
   min-width: 0;
@@ -4073,7 +4233,7 @@ select.input-control {
 }
 
 .payroll-handoff-control-strip {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
 }
 
 .payroll-handoff-profile-panel {
@@ -4086,6 +4246,10 @@ select.input-control {
 
 .payroll-handoff-filing-panel {
   background: #ffffff;
+}
+
+.payroll-handoff-audit-pack-panel {
+  background: #f8fafc;
 }
 
 .payroll-handoff-filing-grid {
@@ -4125,6 +4289,22 @@ select.input-control {
   font-size: 12px;
 }
 
+.payroll-handoff-audit-pack-card {
+  border-color: rgba(15, 23, 42, 0.18);
+  background: #ffffff;
+}
+
+.payroll-handoff-inline-button {
+  margin-top: 6px;
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.payroll-handoff-control-strip form {
+  margin: 0;
+}
+
 .payroll-handoff-delivery-panel {
   background: #f8fafc;
 }
@@ -4135,6 +4315,15 @@ select.input-control {
 
 .payroll-handoff-retry-panel {
   background: #fff7ed;
+}
+
+.payroll-handoff-job-panel {
+  background: #f8fafc;
+}
+
+.payroll-handoff-job-card {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: #ffffff;
 }
 
 .payroll-handoff-retry-command-card {
@@ -4156,15 +4345,38 @@ select.input-control {
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
-.payroll-handoff-delivery-grid article {
+.payroll-handoff-delivery-grid article,
+.payroll-handoff-delivery-grid .payroll-handoff-evidence-card {
+  display: grid;
+  gap: 8px;
   min-height: 122px;
   border-color: rgba(14, 165, 233, 0.16);
+  color: inherit;
+  text-decoration: none;
 }
 
 .payroll-handoff-delivery-grid code,
-.payroll-handoff-delivery-grid span {
+.payroll-handoff-delivery-grid span,
+.payroll-handoff-delivery-grid strong {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.payroll-handoff-evidence-card {
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.payroll-handoff-evidence-card:hover,
+.payroll-handoff-evidence-card:focus-visible {
+  border-color: rgba(37, 99, 235, 0.38);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.payroll-handoff-evidence-card.is-selected {
+  border-color: rgba(37, 99, 235, 0.5);
+  box-shadow: inset 3px 0 0 #2563eb, 0 12px 28px rgba(37, 99, 235, 0.12);
 }
 
 .payroll-delivery-card-heading {
@@ -4241,6 +4453,77 @@ select.input-control {
 
 .payroll-handoff-detail-panel {
   align-content: start;
+}
+
+.payroll-handoff-audit-panel {
+  gap: 12px;
+}
+
+.payroll-handoff-audit-close {
+  justify-self: start;
+}
+
+.payroll-handoff-audit-block {
+  gap: 10px;
+  border-color: rgba(37, 99, 235, 0.16);
+  background: #fbfdff;
+}
+
+.payroll-handoff-audit-block h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.payroll-handoff-audit-empty {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.payroll-handoff-audit-gate-list {
+  padding-top: 2px;
+}
+
+.payroll-handoff-audit-event-list {
+  display: grid;
+  gap: 8px;
+}
+
+.payroll-handoff-audit-event {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 8px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.payroll-handoff-audit-event strong,
+.payroll-handoff-audit-event span,
+.payroll-handoff-audit-event code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.payroll-handoff-audit-event strong {
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.payroll-handoff-audit-event span,
+.payroll-handoff-audit-event code {
+  color: #475569;
+  font-size: 11px;
 }
 
 .shell--payroll-providers {
@@ -4352,6 +4635,771 @@ select.input-control {
   line-height: 1.35;
 }
 
+.launch-remediation-list {
+  display: grid;
+  gap: 12px;
+}
+
+.launch-remediation-card {
+  border-radius: 12px;
+}
+
+.launch-remediation-toolbar .queue-toolbar__grid {
+  grid-template-columns: minmax(240px, 1.35fr) repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.launch-remediation-toolbar .queue-toolbar__grid label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.launch-remediation-toolbar input,
+.launch-remediation-toolbar select,
+.launch-remediation-actions__inputs input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 9px 11px;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111827;
+  font: inherit;
+  line-height: 1.2;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.launch-remediation-toolbar input:focus,
+.launch-remediation-toolbar select:focus,
+.launch-remediation-actions__inputs input:focus {
+  outline: 2px solid rgba(108, 92, 255, 0.22);
+  outline-offset: 1px;
+  border-color: rgba(108, 92, 255, 0.44);
+}
+
+.launch-remediation-card__grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.launch-remediation-card .detail-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.launch-remediation-card__evidence {
+  width: fit-content;
+  max-width: 100%;
+  padding: 7px 9px;
+  overflow-wrap: anywhere;
+  border-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(248, 250, 252, 0.92);
+  color: #475569;
+  font-size: 12px;
+}
+
+.launch-remediation-actions {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(226, 232, 240, 0.82);
+}
+
+.launch-remediation-actions__inputs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.launch-remediation-actions__inputs label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.launch-remediation-actions__inputs span,
+.queue-toolbar__grid label > span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.launch-remediation-actions__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.launch-remediation-actions__buttons span {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.launch-remediation-empty {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+}
+
+.launch-remediation-empty h2,
+.launch-remediation-empty p {
+  margin: 0;
+}
+
+.saas-control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.saas-control-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.saas-control-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.saas-control-panel__header,
+.saas-entitlement-row,
+.saas-enforcement-row,
+.saas-usage-card__header,
+.saas-usage-card__numbers {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.saas-control-panel__header h2,
+.saas-control-panel__header p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.saas-tenant-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.saas-tenant-grid .detail-row strong {
+  overflow-wrap: anywhere;
+}
+
+.saas-lifecycle-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.saas-lifecycle-actions label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.saas-lifecycle-actions input,
+.saas-lifecycle-actions select {
+  min-width: 0;
+  width: 100%;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  background: rgba(255, 255, 255, 0.88);
+  color: #111827;
+  font: inherit;
+  padding: 0 11px;
+}
+
+.saas-lifecycle-actions__footer {
+  display: flex;
+  grid-column: 1 / -1;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.saas-lifecycle-actions__footer span {
+  color: #64748b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.saas-entitlement-list,
+.saas-enforcement-list,
+.saas-usage-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.saas-entitlement-row,
+.saas-enforcement-row,
+.saas-usage-card {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.saas-entitlement-row strong,
+.saas-enforcement-row strong,
+.saas-usage-card strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.saas-entitlement-row span,
+.saas-enforcement-row span,
+.saas-usage-card span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.saas-entitlement-row__meta,
+.saas-enforcement-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.saas-usage-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.saas-usage-card {
+  display: grid;
+  gap: 12px;
+}
+
+.saas-usage-card__meter {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.saas-usage-card__meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #6366f1;
+}
+
+.saas-history-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.saas-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.saas-history-list .muted-text {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.saas-history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.85fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.saas-history-row > * {
+  min-width: 0;
+}
+
+.saas-history-row strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.saas-history-row span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tenant-console-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.tenant-console-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.tenant-console-panel__header,
+.tenant-console-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tenant-console-panel__header h2 {
+  margin: 0;
+}
+
+.tenant-console-detail-grid,
+.tenant-console-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tenant-console-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tenant-console-detail-grid .detail-row strong {
+  overflow-wrap: anywhere;
+}
+
+.tenant-console-row {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.tenant-console-row strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.tenant-console-row span,
+.tenant-console-empty {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tenant-console-empty {
+  margin: 0;
+}
+
+.tenant-console-row__meta {
+  display: grid;
+  min-width: 0;
+  justify-items: end;
+  gap: 3px;
+  text-align: right;
+}
+
+.tenant-membership-actions,
+.tenant-membership-actions__invite,
+.tenant-membership-actions__members {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.tenant-membership-form-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tenant-membership-form-grid label,
+.tenant-membership-row select {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.tenant-membership-form-grid span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.tenant-membership-form-grid input,
+.tenant-membership-form-grid select,
+.tenant-membership-row select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+  padding: 9px 10px;
+}
+
+.tenant-role-picker {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tenant-role-picker label {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.9);
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.25;
+  padding: 7px 10px;
+}
+
+.tenant-membership-actions__footer {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.tenant-membership-actions__footer span {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tenant-membership-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(160px, 220px) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.tenant-membership-row strong,
+.tenant-membership-row span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.tenant-membership-row strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.tenant-membership-row span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tenant-membership-row__actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tenant-change-request-actions,
+.tenant-change-request-list {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.tenant-change-request-form {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(180px, 1.1fr) minmax(160px, 1fr) minmax(180px, 1.2fr);
+  gap: 10px;
+}
+
+.tenant-change-request-form label,
+.tenant-change-request-row label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.tenant-change-request-form__payload {
+  grid-column: 1 / -1;
+}
+
+.tenant-change-request-form span,
+.tenant-change-request-row label span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.tenant-change-request-form input,
+.tenant-change-request-form select,
+.tenant-change-request-form textarea,
+.tenant-change-request-row input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  padding: 9px 10px;
+}
+
+.tenant-change-request-form textarea {
+  resize: vertical;
+}
+
+.tenant-change-request-hint {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tenant-change-request-hint strong {
+  color: #334155;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.tenant-change-request-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(240px, 1fr) auto minmax(180px, 260px) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.tenant-change-request-row strong,
+.tenant-change-request-row span,
+.tenant-change-request-row code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.tenant-change-request-row strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.tenant-change-request-row span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tenant-change-request-row code {
+  margin-top: 8px;
+  max-height: 88px;
+  overflow: auto;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.95);
+  color: #334155;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+.tenant-change-request-row__actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tenant-support-access-actions,
+.tenant-support-access-list {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.tenant-support-access-form {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(180px, 1fr) minmax(110px, 0.45fr) minmax(260px, 1.4fr);
+  gap: 10px;
+}
+
+.tenant-support-access-form label,
+.tenant-support-access-row label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.tenant-support-access-form span,
+.tenant-support-access-row label span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.tenant-support-access-form input,
+.tenant-support-access-row input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  padding: 9px 10px;
+}
+
+.tenant-support-access-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(230px, 1fr) auto minmax(240px, 0.9fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.tenant-support-access-row strong,
+.tenant-support-access-row span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.tenant-support-access-row strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.tenant-support-access-row span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.tenant-support-access-row__inputs {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.tenant-support-access-row__actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.support-session-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.support-session-scopes {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.support-session-metric-value,
+.support-session-metric-trend {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.support-session-method-chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.payroll-provider-launch-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.payroll-provider-launch-history {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(226, 232, 240, 0.88);
+}
+
 .payroll-provider-run-card {
   background: #f8fafc;
 }
@@ -4385,12 +5433,442 @@ select.input-control {
 }
 
 .payroll-provider-run-table {
-  min-width: 920px;
+  min-width: 1120px;
 }
 
 .payroll-provider-run-table code,
 .payroll-provider-run-table span,
 .payroll-provider-run-table strong {
+  overflow-wrap: anywhere;
+}
+
+.payroll-provider-mapping-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.payroll-provider-mapping-actions .button {
+  min-height: 30px;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+.payroll-provider-mapping-actions span {
+  flex-basis: 100%;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.payroll-provider-mapping-toolbar {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.payroll-rule-builder-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.payroll-rule-builder-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.payroll-rule-builder-drawer {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) minmax(0, 0.8fr) auto;
+  width: min(880px, 100vw);
+  height: 100vh;
+  min-width: 0;
+  gap: 14px;
+  overflow: auto;
+  padding: 22px;
+  border-left: 1px solid rgba(226, 232, 240, 0.92);
+  background: #ffffff;
+  box-shadow: -28px 0 80px rgba(15, 23, 42, 0.22);
+}
+
+.payroll-rule-builder-header,
+.payroll-rule-builder-section-header,
+.payroll-rule-builder-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.payroll-rule-builder-header h2,
+.payroll-rule-builder-section-header h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.payroll-rule-builder-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.payroll-rule-builder-state-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(150px, 0.6fr) repeat(2, minmax(130px, 0.45fr));
+  gap: 10px;
+}
+
+.payroll-rule-builder-state-grid label,
+.payroll-rule-builder-state-grid div,
+.payroll-rule-builder-rule label,
+.payroll-rule-builder-validation label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.payroll-rule-builder-state-grid span,
+.payroll-rule-builder-rule span,
+.payroll-rule-builder-validation span,
+.payroll-rule-builder-footer span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.payroll-rule-builder-state-grid strong,
+.payroll-rule-builder-footer strong {
+  color: #0f172a;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.payroll-rule-builder-state-grid input,
+.payroll-rule-builder-state-grid select,
+.payroll-rule-builder-rule input,
+.payroll-rule-builder-rule select,
+.payroll-rule-builder-validation input,
+.payroll-rule-builder-sample textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  letter-spacing: 0;
+  padding: 8px 10px;
+}
+
+.payroll-rule-builder-sample {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.payroll-rule-builder-sample textarea {
+  min-height: 132px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.payroll-rule-builder-preview {
+  padding: 12px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.payroll-rule-builder-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+  gap: 8px;
+}
+
+.payroll-rule-builder-preview-grid article {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.payroll-rule-builder-preview-grid article span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.payroll-rule-builder-preview-grid article strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.payroll-rule-builder-preview-grid pre {
+  grid-column: 1 / -1;
+  max-height: 240px;
+  min-width: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.payroll-rule-builder-diff-preview {
+  grid-column: 1 / -1;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.payroll-rule-builder-diff-preview span {
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.payroll-rule-builder-gate-preview {
+  grid-column: 1 / -1;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.payroll-rule-builder-gate-preview span {
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.payroll-rule-builder-gate-preview .is-passed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.payroll-rule-builder-gate-preview .is-blocked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.payroll-rule-builder-lock {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  border-radius: 8px;
+  background: #fffbeb;
+}
+
+.payroll-rule-builder-lock strong {
+  color: #92400e;
+}
+
+.payroll-rule-builder-lock span {
+  color: #78350f;
+  font-size: 12px;
+}
+
+.payroll-rule-builder-section {
+  display: grid;
+  min-height: 0;
+  gap: 10px;
+}
+
+.payroll-rule-builder-rule-list {
+  display: grid;
+  min-height: 0;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.payroll-rule-builder-rule {
+  display: grid;
+  grid-template-columns: minmax(105px, 0.45fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(120px, 0.55fr) minmax(120px, 0.65fr) minmax(100px, 0.5fr) minmax(90px, 0.35fr) auto;
+  min-width: 0;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.payroll-rule-builder-advanced-summary {
+  grid-column: 1 / -1;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.payroll-rule-builder-advanced-summary span,
+.payroll-rule-builder-advanced-summary code {
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.payroll-rule-builder-validation {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.8fr) minmax(90px, 0.35fr) auto;
+  min-width: 0;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.payroll-rule-builder-check {
+  align-content: end;
+  grid-template-columns: auto 1fr;
+  min-height: 38px;
+  align-items: center;
+  padding-bottom: 4px;
+}
+
+.payroll-rule-builder-check input {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+}
+
+.payroll-rule-builder-footer {
+  position: sticky;
+  bottom: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
+  background: #ffffff;
+}
+
+.payroll-rule-builder-footer div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.payroll-provider-lifecycle-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.payroll-provider-simulation-summary {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.88);
+}
+
+.payroll-provider-diff-list {
+  display: grid;
+  gap: 8px;
+}
+
+.payroll-provider-diff-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, auto);
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.payroll-provider-diff-row div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.payroll-provider-diff-row strong,
+.payroll-provider-diff-row span,
+.payroll-provider-diff-row code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.payroll-provider-lifecycle-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid rgba(226, 232, 240, 0.88);
+}
+
+.payroll-provider-lifecycle-row div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.payroll-provider-lifecycle-row strong,
+.payroll-provider-lifecycle-row span {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
@@ -4782,6 +6260,7 @@ select.input-control {
   .payroll-provider-detail-panel {
     grid-column: auto;
   }
+
 }
 
 @media (max-width: 959px) {
@@ -4819,7 +6298,59 @@ select.input-control {
     align-items: stretch;
   }
 
+  .payroll-rule-builder-drawer {
+    grid-template-rows: auto auto auto auto auto auto;
+    width: 100vw;
+    padding: 16px;
+  }
+
+  .payroll-rule-builder-header,
+  .payroll-rule-builder-section-header,
+  .payroll-rule-builder-footer,
+  .payroll-rule-builder-lock {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .payroll-rule-builder-state-grid,
+  .payroll-rule-builder-rule,
+  .payroll-rule-builder-validation,
+  .payroll-rule-builder-preview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .launch-remediation-card__grid,
+  .launch-remediation-toolbar .queue-toolbar__grid,
+  .launch-remediation-actions__inputs,
+  .saas-control-grid,
+  .saas-tenant-grid,
+  .saas-lifecycle-actions,
+  .saas-history-grid,
+  .tenant-console-grid,
+  .tenant-console-detail-grid,
+  .support-session-grid,
+  .tenant-membership-form-grid,
+  .tenant-membership-row,
+  .tenant-change-request-form,
+  .tenant-change-request-row,
+  .tenant-support-access-form,
+  .tenant-support-access-row,
+  .saas-usage-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topbar-actions--workspace {
+    justify-content: flex-start;
+  }
+
+  .payroll-provider-launch-actions,
+  .payroll-provider-launch-actions .payroll-provider-cert-actions,
+  .payroll-provider-launch-actions .button {
+    width: 100%;
+  }
+
+  .payroll-provider-launch-actions {
+    align-items: stretch;
     justify-content: flex-start;
   }
 
@@ -4860,5 +6391,71 @@ select.input-control {
 
   .page-intro__description {
     -webkit-line-clamp: 2;
+  }
+
+  .hr-admin-launch-audit__header,
+  .hr-admin-launch-audit__summary,
+  .hr-admin-launch-audit__module,
+  .payroll-setup-panel__header--split {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .payroll-setup-panel__header--split {
+    align-items: stretch;
+  }
+
+  .hr-admin-launch-audit__summary {
+    justify-content: flex-start;
+  }
+
+  .hr-admin-launch-audit__module > div {
+    min-width: 0;
+  }
+
+  .hr-admin-launch-audit__action {
+    grid-template-columns: 1fr;
+  }
+
+  .hr-admin-launch-audit__action .button {
+    justify-self: stretch;
+  }
+
+  .launch-remediation-card__grid,
+  .launch-remediation-toolbar .queue-toolbar__grid,
+  .launch-remediation-actions__inputs,
+  .saas-control-grid,
+  .saas-tenant-grid,
+  .saas-lifecycle-actions,
+  .saas-history-grid,
+  .saas-history-row,
+  .tenant-console-grid,
+  .tenant-console-detail-grid,
+  .support-session-grid,
+  .tenant-membership-form-grid,
+  .tenant-membership-row,
+  .tenant-change-request-form,
+  .tenant-change-request-row,
+  .tenant-support-access-form,
+  .tenant-support-access-row,
+  .saas-usage-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tenant-membership-row__actions,
+  .tenant-change-request-row__actions,
+  .tenant-support-access-row__actions {
+    justify-content: stretch;
+  }
+
+  .tenant-membership-row__actions .button,
+  .tenant-change-request-row__actions .button,
+  .tenant-support-access-row__actions .button {
+    width: 100%;
+  }
+
+  .launch-remediation-actions__buttons .button,
+  .launch-remediation-card .record-card__actions .button {
+    width: 100%;
   }
 }

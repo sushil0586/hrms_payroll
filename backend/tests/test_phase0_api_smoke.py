@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from datetime import datetime, timedelta
@@ -11,11 +12,32 @@ import pytest
 from django.core import mail
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.utils import timezone
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from rest_framework.test import APIClient
 
+from apps.common.models import (
+    HrmsLaunchRemediationAssignment,
+    HrmsLaunchRemediationStatus,
+    SaasCommercialAuditEvent,
+    SaasIncidentRecord,
+    SaasIncidentSeverity,
+    SaasIncidentStatus,
+    SaasSupportAccessGrant,
+    SaasSupportAccessGrantStatus,
+    SaasTenantChangeRequest,
+    SaasTenantChangeRequestStatus,
+    SaasTenantChangeRequestType,
+    SaasUsageMeterSnapshot,
+)
+from apps.common.selectors import (
+    record_saas_commercial_audit_event,
+    record_saas_usage_meter_snapshots,
+)
 from apps.attendance.models import (
     AttendancePolicy,
     AttendancePolicyAssignment,
@@ -90,11 +112,20 @@ from apps.payroll.models import (
     PayrollProviderCertificationRun,
     PayrollProviderCertificationRunStatus,
     PayrollProviderConnection,
+    PayrollProviderConnectionKind,
     PayrollProviderConnectionStatus,
     PayrollProviderDelivery,
     PayrollProviderDeliveryStatus,
+    PayrollProviderJob,
+    PayrollProviderJobKind,
+    PayrollProviderJobStatus,
+    PayrollProviderLaunchRehearsal,
+    PayrollProviderLaunchRehearsalStatus,
     PayrollProviderRetryEvent,
     PayrollProviderRetryEventStatus,
+    PayrollProviderSchemaMappingSimulation,
+    PayrollProviderSchemaMappingPack,
+    PayrollProviderSchemaMappingPackStatus,
     PayrollReviewStatus,
     PayrollRuleDefinition,
     PayrollRuleEvaluation,
@@ -136,10 +167,28 @@ from apps.payroll.models import (
 )
 from apps.payroll.providers import (
     PayrollProviderAdapterError,
+    PayrollProviderSubmissionRequest,
+    describe_payroll_provider_launch_readiness_audit_pack,
+    describe_payroll_provider_adapter_registry,
+    describe_payroll_provider_client_registry,
+    describe_payroll_provider_launch_rehearsal,
+    describe_payroll_provider_package_registry,
+    get_payroll_provider_adapter,
     validate_payroll_provider_route_config,
 )
-from apps.payroll.services import expected_provider_callback_signature
+from apps.payroll.storage import (
+    describe_payroll_artifact_storage_policy_registry,
+    resolve_payroll_artifact_storage_policy,
+    verify_payroll_artifact_storage_policy_controls,
+)
+from apps.payroll.services import (
+    enqueue_payroll_provider_retry_job,
+    expected_provider_callback_signature,
+    heartbeat_payroll_provider_job,
+    process_due_payroll_provider_jobs,
+)
 from apps.platform_config.models import ConfigCategory, ConfigDataType, ConfigStatus, ConfigurationDefinition, TenantConfiguration
+from apps.tenants.models import Tenant
 from apps.workflows.models import WorkflowAction, WorkflowActionLog, WorkflowActorType, WorkflowAssignment, WorkflowInstance, WorkflowInstanceStatus, WorkflowStep, WorkflowStepInstance, WorkflowStatus, WorkflowTemplate
 
 
@@ -357,6 +406,36 @@ def test_auth_login_session_logout_round_trip(api_client: APIClient, bootstrappe
 
 
 @pytest.mark.django_db
+def test_tenant_admin_session_exposes_tenant_workspace_access(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    user = User.objects.create_user(
+        username="tenant.owner",
+        email="tenant.owner@example.com",
+        password=PASSWORD,
+        first_name="Tenant",
+        last_name="Owner",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    role = Role.objects.create(tenant=tenant, code="tenant-admin", name="Tenant Admin", is_system_role=True)
+    membership.membership_roles.create(role=role, is_primary=True)
+
+    token = login(api_client, "tenant.owner")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/auth/session/")
+
+    assert response.status_code == 200
+    assert response.json()["default_membership"]["role_codes"] == ["tenant-admin"]
+    assert response.json()["workspace_access"]["tenant_admin"] is True
+    assert response.json()["workspace_access"]["hr_admin"] is False
+
+
+@pytest.mark.django_db
 def test_employee_cannot_access_hr_admin_dashboard(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "riya.sharma")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -364,6 +443,1611 @@ def test_employee_cannot_access_hr_admin_dashboard(api_client: APIClient, bootst
     response = api_client.get("/api/v1/hr-admin/dashboard/")
 
     assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_hr_admin_dashboard_returns_saas_launch_audit(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/dashboard/")
+
+    assert response.status_code == 200, response.json()
+    launch_audit = response.json()["launch_audit"]
+    assert launch_audit["audit_profile_ref"] == "hrms.saas_launch_audit.v1"
+    assert launch_audit["module_count"] >= 10
+    assert launch_audit["gate_count"] >= launch_audit["passed_gate_count"]
+    assert "docs.hrms_module_wise_vertical_coverage.v1" in launch_audit["evidence_refs"]
+    assert "payroll.provider_launch_readiness.audit_pack.v1" in launch_audit["evidence_refs"]
+    assert launch_audit["audit_profile_source"]
+    assert launch_audit["release_actions"]
+    assert all(item["owner_role_ref"] and item["action_href"] for item in launch_audit["release_actions"])
+    assert launch_audit["remediation_assignment_summary"]["open_count"] == len(launch_audit["release_actions"])
+    assert launch_audit["remediation_assignments"]
+    assert HrmsLaunchRemediationAssignment.objects.filter(tenant__code="northstar-foods", status=HrmsLaunchRemediationStatus.OPEN).count() == len(launch_audit["release_actions"])
+    module_refs = {item["module_ref"] for item in launch_audit["modules"]}
+    assert {"tenant_foundation", "iam_workspace_access", "payroll_core", "provider_launch_history"}.issubset(module_refs)
+    payroll_core = next(item for item in launch_audit["modules"] if item["module_ref"] == "payroll_core")
+    assert payroll_core["gate_count"] >= 5
+    assert {gate["ref"] for gate in payroll_core["gates"]} >= {
+        "payroll.calendars",
+        "payroll.pay_groups",
+        "payroll.salary_components",
+        "payroll.structure_versions",
+        "payroll.rule_versions",
+    }
+
+
+@pytest.mark.django_db
+def test_rehearse_hrms_saas_launch_command_exports_actionable_audit_pack(bootstrapped_workspace, tmp_path):
+    tenant = Tenant.objects.get(code="northstar-foods")
+    output_file = tmp_path / "hrms-saas-launch-audit.json"
+    stdout = StringIO()
+
+    call_command(
+        "rehearse_hrms_saas_launch",
+        tenant_code=tenant.code,
+        output_file=str(output_file),
+        allow_blocked=True,
+        stdout=stdout,
+    )
+
+    audit_pack = json.loads(output_file.read_text())
+    assert audit_pack["audit_pack_ref"] == "hrms.saas_launch_audit_pack.v1"
+    assert audit_pack["audit_profile_ref"] == "hrms.saas_launch_audit.v1"
+    assert len(audit_pack["evidence_checksum_sha256"]) == 64
+    checksum_payload = {key: value for key, value in audit_pack.items() if key != "evidence_checksum_sha256"}
+    assert audit_pack["evidence_checksum_sha256"] == hashlib.sha256(json.dumps(checksum_payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    assert audit_pack["summary"]["release_action_count"] == len(audit_pack["release_actions"])
+    assert all(item["owner_role_ref"] and item["action_href"] and item["action_label"] for item in audit_pack["release_actions"])
+    assert HrmsLaunchRemediationAssignment.objects.filter(tenant=tenant, status=HrmsLaunchRemediationStatus.OPEN).count() == len(audit_pack["release_actions"])
+    assert "Remediation assignments:" in stdout.getvalue()
+    assert "HRMS SaaS launch audit" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_hr_admin_can_download_hrms_saas_launch_audit_pack(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/saas-launch-audit/download/")
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/json"
+    assert "hrms-saas-launch-audit.json" in response["Content-Disposition"]
+    assert len(response["X-HRMS-Launch-Audit-Checksum"]) == 64
+    audit_pack = json.loads(response.content)
+    checksum_payload = {key: value for key, value in audit_pack.items() if key != "evidence_checksum_sha256"}
+    assert response["X-HRMS-Launch-Audit-Checksum"] == hashlib.sha256(json.dumps(checksum_payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    assert audit_pack["audit_pack_ref"] == "hrms.saas_launch_audit_pack.v1"
+    assert audit_pack["remediation_assignment_summary"]["open_count"] == len(audit_pack["release_actions"])
+    assert HrmsLaunchRemediationAssignment.objects.filter(tenant__code="northstar-foods", status=HrmsLaunchRemediationStatus.OPEN).exists()
+
+
+@pytest.mark.django_db
+def test_hr_admin_can_manage_launch_remediation_assignment_lifecycle(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    list_response = api_client.get("/api/v1/hr-admin/launch-remediations/?status=open&page=1&page_size=5")
+
+    assert list_response.status_code == 200, list_response.json()
+    list_payload = list_response.json()
+    assert list_payload["summary"]["open_count"] >= 1
+    assert list_payload["items"]
+    assignment_id = list_payload["items"][0]["id"]
+
+    acknowledge_response = api_client.patch(
+        f"/api/v1/hr-admin/launch-remediations/{assignment_id}/",
+        {"action": "acknowledge", "resolution_note": "Reviewed during launch standup."},
+        format="json",
+    )
+
+    assert acknowledge_response.status_code == 200, acknowledge_response.json()
+    acknowledged = acknowledge_response.json()
+    assert acknowledged["acknowledged_at"]
+    assert acknowledged["acknowledged_by_identifier"] == "nisha.rao"
+    assert acknowledged["resolution_note"] == "Reviewed during launch standup."
+
+    assign_response = api_client.patch(
+        f"/api/v1/hr-admin/launch-remediations/{assignment_id}/",
+        {
+            "action": "assign",
+            "owner_role_ref": "payroll-admin",
+            "assigned_to_identifier": "payroll.launch.owner@example.com",
+        },
+        format="json",
+    )
+
+    assert assign_response.status_code == 200, assign_response.json()
+    assigned = assign_response.json()
+    assert assigned["owner_role_ref"] == "payroll-admin"
+    assert assigned["assigned_to_identifier"] == "payroll.launch.owner@example.com"
+    assert len(assigned["action_history"]) >= 2
+
+    due_at = (timezone.now() + timedelta(days=2)).isoformat()
+    due_response = api_client.patch(
+        f"/api/v1/hr-admin/launch-remediations/{assignment_id}/",
+        {"action": "set_due_date", "due_at": due_at, "resolution_note": "Aligned with pilot launch checkpoint."},
+        format="json",
+    )
+
+    assert due_response.status_code == 200, due_response.json()
+    due_payload = due_response.json()
+    assert due_payload["due_at"]
+    assert due_payload["due_source_ref"] == "manual_override"
+    assert due_payload["due_state"] == "scheduled"
+
+    reminder_response = api_client.patch(
+        f"/api/v1/hr-admin/launch-remediations/{assignment_id}/",
+        {"action": "send_reminder", "resolution_note": "Reminder before launch checkpoint."},
+        format="json",
+    )
+
+    assert reminder_response.status_code == 200, reminder_response.json()
+    reminder_payload = reminder_response.json()
+    assert reminder_payload["reminder_count"] == 1
+    assert reminder_payload["reminder_sent_at"]
+    assert Notification.objects.filter(subject_type="hrms_launch_remediation_assignment", subject_identifier=assignment_id).count() == 1
+
+    escalate_response = api_client.patch(
+        f"/api/v1/hr-admin/launch-remediations/{assignment_id}/",
+        {
+            "action": "escalate",
+            "escalation_owner_role_ref": "hr-admin",
+            "resolution_note": "Escalating before pilot go/no-go.",
+        },
+        format="json",
+    )
+
+    assert escalate_response.status_code == 200, escalate_response.json()
+    escalated_payload = escalate_response.json()
+    assert escalated_payload["escalated_at"]
+    assert escalated_payload["escalated_by_identifier"] == "nisha.rao"
+    assert escalated_payload["escalation_owner_role_ref"] == "hr-admin"
+    assert Notification.objects.filter(subject_type="hrms_launch_remediation_assignment", subject_identifier=assignment_id).count() == 2
+
+    ignore_response = api_client.patch(
+        f"/api/v1/hr-admin/launch-remediations/{assignment_id}/",
+        {"action": "ignore", "resolution_note": "Accepted for pilot launch."},
+        format="json",
+    )
+
+    assert ignore_response.status_code == 200, ignore_response.json()
+    ignored = ignore_response.json()
+    assert ignored["status"] == HrmsLaunchRemediationStatus.IGNORED
+    assert ignored["ignored_by_identifier"] == "nisha.rao"
+    assert ignored["resolution_note"] == "Accepted for pilot launch."
+
+    refreshed_response = api_client.get("/api/v1/hr-admin/launch-remediations/?status=ignored")
+    assert refreshed_response.status_code == 200, refreshed_response.json()
+    refreshed_payload = refreshed_response.json()
+    assert any(item["id"] == assignment_id and item["status"] == HrmsLaunchRemediationStatus.IGNORED for item in refreshed_payload["items"])
+
+
+@pytest.mark.django_db
+def test_hrms_launch_remediation_sla_processor_sends_reminders_and_escalations(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    list_response = api_client.get("/api/v1/hr-admin/launch-remediations/?status=open&page_size=10")
+    assert list_response.status_code == 200, list_response.json()
+    assignment_ids = [item["id"] for item in list_response.json()["items"][:2]]
+    assert len(assignment_ids) == 2
+    due_soon_assignment = HrmsLaunchRemediationAssignment.objects.get(id=assignment_ids[0], tenant=tenant)
+    overdue_assignment = HrmsLaunchRemediationAssignment.objects.get(id=assignment_ids[1], tenant=tenant)
+    due_soon_assignment.due_at = timezone.now() + timedelta(hours=2)
+    due_soon_assignment.due_source_ref = "test.override"
+    due_soon_assignment.save()
+    overdue_assignment.due_at = timezone.now() - timedelta(hours=2)
+    overdue_assignment.due_source_ref = "test.override"
+    overdue_assignment.save()
+    stdout = StringIO()
+
+    call_command(
+        "process_hrms_launch_remediations",
+        tenant_code=tenant.code,
+        reminder_window_hours=24,
+        reminder_cooldown_hours=1,
+        stdout=stdout,
+    )
+
+    due_soon_assignment.refresh_from_db()
+    overdue_assignment.refresh_from_db()
+    assert due_soon_assignment.reminder_count == 1
+    assert due_soon_assignment.reminder_sent_at
+    assert overdue_assignment.escalated_at
+    assert overdue_assignment.escalation_owner_role_ref == overdue_assignment.owner_role_ref
+    assert Notification.objects.filter(subject_type="hrms_launch_remediation_assignment").count() >= 2
+    assert "1 reminded, 1 escalated" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_employee_cannot_access_hr_admin_launch_remediations(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/launch-remediations/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_hr_admin_saas_control_plane_returns_entitlements_and_usage(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/saas-control-plane/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["profile_ref"] == "saas.commercial_profile.v1"
+    assert payload["tenant"]["subscription_plan"] == "growth"
+    assert payload["plan"]["configured"] is True
+    assert payload["summary"]["can_launch"] is True
+    assert payload["summary"]["enabled_entitlement_count"] >= payload["summary"]["required_entitlement_count"]
+    assert {item["meter_ref"] for item in payload["usage_limits"]} >= {
+        "active_employees",
+        "active_memberships",
+        "payroll_runs_per_month",
+        "provider_connections",
+    }
+
+
+@pytest.mark.django_db
+def test_tenant_admin_console_returns_commercial_and_account_posture(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/tenant-admin/console/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["tenant"]["code"] == tenant.code
+    assert payload["summary"]["commercial_can_launch"] is True
+    assert payload["commercial_control"]["profile_ref"] == "saas.commercial_profile.v1"
+    assert payload["seat_usage"]["meter_ref"] == "active_memberships"
+    assert payload["role_coverage"]
+    assert payload["configuration_health"]["tenant_configuration_count"] >= 0
+    assert {item["ref"] for item in payload["governance_checks"]} >= {
+        "tenant.status.active",
+        "commercial.plan.configured",
+        "commercial.subscription.active",
+        "commercial.seats.within_limit",
+    }
+
+
+@pytest.mark.django_db
+def test_employee_cannot_access_tenant_admin_console(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/tenant-admin/console/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_tenant_admin_can_invite_and_manage_membership_with_audit(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee_role = Role.objects.get(tenant=tenant, code="employee")
+    manager_role = Role.objects.get(tenant=tenant, code="manager")
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    invite_response = api_client.post(
+        "/api/v1/tenant-admin/memberships/",
+        {
+            "username": "finance.viewer",
+            "email": "finance.viewer@example.com",
+            "first_name": "Finance",
+            "last_name": "Viewer",
+            "membership_status": MembershipStatus.INVITED,
+            "role_ids": [str(employee_role.id)],
+        },
+        format="json",
+    )
+
+    assert invite_response.status_code == 201, invite_response.json()
+    invited_payload = invite_response.json()
+    membership_id = invited_payload["membership"]["id"]
+    assert invited_payload["membership"]["membership_status"] == MembershipStatus.INVITED
+    assert invited_payload["generated_password"]
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_membership_invited").exists()
+
+    activate_response = api_client.patch(
+        f"/api/v1/tenant-admin/memberships/{membership_id}/",
+        {"action": "activate"},
+        format="json",
+    )
+
+    assert activate_response.status_code == 200, activate_response.json()
+    assert activate_response.json()["membership"]["membership_status"] == MembershipStatus.ACTIVE
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_membership_activated").exists()
+
+    role_response = api_client.patch(
+        f"/api/v1/tenant-admin/memberships/{membership_id}/",
+        {"action": "update_roles", "role_ids": [str(manager_role.id)], "note": "Promoted to manager workspace."},
+        format="json",
+    )
+
+    assert role_response.status_code == 200, role_response.json()
+    assert role_response.json()["membership"]["roles"][0]["code"] == "manager"
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_membership_roles_updated").exists()
+
+    suspend_response = api_client.patch(
+        f"/api/v1/tenant-admin/memberships/{membership_id}/",
+        {"action": "suspend"},
+        format="json",
+    )
+
+    assert suspend_response.status_code == 200, suspend_response.json()
+    assert suspend_response.json()["membership"]["membership_status"] == MembershipStatus.SUSPENDED
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_membership_suspended").exists()
+
+
+@pytest.mark.django_db
+def test_tenant_admin_membership_activation_respects_configured_seat_limit(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee_role = Role.objects.get(tenant=tenant, code="employee")
+    active_membership_count = TenantMembership.objects.filter(tenant=tenant, status=MembershipStatus.ACTIVE).count()
+    definition, _ = ConfigurationDefinition.objects.update_or_create(
+        key="saas.commercial_profile.v1",
+        defaults={
+            "name": "SaaS commercial profile",
+            "category": ConfigCategory.SECURITY,
+            "data_type": ConfigDataType.JSON,
+            "default_value": {},
+            "is_system_managed": True,
+        },
+    )
+    TenantConfiguration.objects.update_or_create(
+        tenant=tenant,
+        definition=definition,
+        defaults={
+            "status": ConfigStatus.PUBLISHED,
+            "published_value": {
+                "subscription": {"status": "active"},
+                "plans": {"growth": {"usage_limits": {"active_memberships": active_membership_count}}},
+            },
+            "current_value": {},
+        },
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    invite_response = api_client.post(
+        "/api/v1/tenant-admin/memberships/",
+        {
+            "username": "seat.limit.user",
+            "email": "seat.limit.user@example.com",
+            "first_name": "Seat",
+            "last_name": "Limit",
+            "membership_status": MembershipStatus.INVITED,
+            "role_ids": [str(employee_role.id)],
+        },
+        format="json",
+    )
+
+    assert invite_response.status_code == 201, invite_response.json()
+    activation_response = api_client.patch(
+        f"/api/v1/tenant-admin/memberships/{invite_response.json()['membership']['id']}/",
+        {"action": "activate"},
+        format="json",
+    )
+
+    assert activation_response.status_code == 400
+    assert "active membership limit" in activation_response.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_employee_cannot_mutate_tenant_admin_memberships(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee_role = Role.objects.get(tenant=tenant, code="employee")
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.post(
+        "/api/v1/tenant-admin/memberships/",
+        {
+            "username": "denied.member",
+            "email": "denied.member@example.com",
+            "membership_status": MembershipStatus.INVITED,
+            "role_ids": [str(employee_role.id)],
+        },
+        format="json",
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_tenant_admin_can_submit_and_approve_change_request_with_audit(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    create_response = api_client.post(
+        "/api/v1/tenant-admin/change-requests/",
+        {
+            "request_type": SaasTenantChangeRequestType.PLAN_CHANGE,
+            "title": "Move to enterprise",
+            "description": "Need unlimited employee and payroll capacity.",
+            "requested_payload": {"subscription_plan": "enterprise"},
+        },
+        format="json",
+    )
+
+    assert create_response.status_code == 201, create_response.json()
+    created = create_response.json()["change_request"]
+    assert created["status"] == SaasTenantChangeRequestStatus.SUBMITTED
+    assert created["current_snapshot"]["plan"]["plan_ref"] == "growth"
+    assert create_response.json()["console"]["change_request_management"]["recent_requests"]
+    assert SaasTenantChangeRequest.objects.filter(tenant=tenant, title="Move to enterprise").exists()
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_change_request_submitted").exists()
+
+    approve_response = api_client.patch(
+        f"/api/v1/tenant-admin/change-requests/{created['id']}/",
+        {"action": "approve", "decision_note": "Approved for annual contract."},
+        format="json",
+    )
+
+    assert approve_response.status_code == 200, approve_response.json()
+    approved = approve_response.json()["change_request"]
+    assert approved["status"] == SaasTenantChangeRequestStatus.APPROVED
+    assert approved["decided_by_identifier"] == "nisha.rao"
+    assert approved["decision_note"] == "Approved for annual contract."
+    assert len(approved["action_history"]) == 2
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_change_request_approved").exists()
+
+    apply_response = api_client.patch(
+        f"/api/v1/tenant-admin/change-requests/{created['id']}/",
+        {"action": "apply", "decision_note": "Marked applied after billing confirmation."},
+        format="json",
+    )
+
+    assert apply_response.status_code == 200, apply_response.json()
+    assert apply_response.json()["change_request"]["status"] == SaasTenantChangeRequestStatus.APPLIED
+    assert apply_response.json()["change_request"]["applied_by_identifier"] == "nisha.rao"
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_change_request_applied").exists()
+
+
+@pytest.mark.django_db
+def test_tenant_admin_change_request_rejects_unconfigured_payload_fields(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.post(
+        "/api/v1/tenant-admin/change-requests/",
+        {
+            "request_type": SaasTenantChangeRequestType.BILLING_CONTACT,
+            "title": "Update billing owner",
+            "requested_payload": {"primary_email": "billing@example.com", "raw_provider_secret": "never-store"},
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "not allowed" in response.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_employee_cannot_create_tenant_admin_change_request(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.post(
+        "/api/v1/tenant-admin/change-requests/",
+        {
+            "request_type": SaasTenantChangeRequestType.PLAN_CHANGE,
+            "title": "Denied request",
+            "requested_payload": {"subscription_plan": "enterprise"},
+        },
+        format="json",
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_tenant_admin_can_control_support_access_grant_lifecycle(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    create_response = api_client.post(
+        "/api/v1/tenant-admin/support-access-grants/",
+        {
+            "support_agent_identifier": "support.agent@example.com",
+            "reason": "Investigate payroll close configuration warning.",
+            "scope_refs": ["read_only_account", "configuration_health"],
+            "requested_duration_minutes": 45,
+        },
+        format="json",
+    )
+
+    assert create_response.status_code == 201, create_response.json()
+    created = create_response.json()["support_access_grant"]
+    assert created["status"] == SaasSupportAccessGrantStatus.REQUESTED
+    assert created["source_hash"]
+    assert create_response.json()["console"]["support_access_management"]["recent_grants"]
+    assert SaasSupportAccessGrant.objects.filter(tenant=tenant, support_agent_identifier="support.agent@example.com").exists()
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="support_access_requested").exists()
+
+    approve_response = api_client.patch(
+        f"/api/v1/tenant-admin/support-access-grants/{created['id']}/",
+        {"action": "approve", "approved_duration_minutes": 30, "decision_note": "Approved for bounded investigation."},
+        format="json",
+    )
+
+    assert approve_response.status_code == 200, approve_response.json()
+    approved = approve_response.json()["support_access_grant"]
+    assert approved["status"] == SaasSupportAccessGrantStatus.APPROVED
+    assert approved["approved_duration_minutes"] == 30
+    assert approved["approved_by_identifier"] == "nisha.rao"
+    assert approved["access_expires_at"]
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="support_access_approved").exists()
+
+    start_response = api_client.patch(
+        f"/api/v1/tenant-admin/support-access-grants/{created['id']}/",
+        {"action": "start", "session_ref": "support-session-test-001"},
+        format="json",
+    )
+
+    assert start_response.status_code == 200, start_response.json()
+    started = start_response.json()["support_access_grant"]
+    assert started["status"] == SaasSupportAccessGrantStatus.ACTIVE
+    assert started["session_ref"] == "support-session-test-001"
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="support_access_session_started").exists()
+
+    end_response = api_client.patch(
+        f"/api/v1/tenant-admin/support-access-grants/{created['id']}/",
+        {"action": "end", "decision_note": "Support session closed."},
+        format="json",
+    )
+
+    assert end_response.status_code == 200, end_response.json()
+    ended = end_response.json()["support_access_grant"]
+    assert ended["status"] == SaasSupportAccessGrantStatus.ENDED
+    assert ended["ended_by_identifier"] == "nisha.rao"
+    assert len(ended["action_history"]) == 4
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="support_access_session_ended").exists()
+
+
+@pytest.mark.django_db
+def test_tenant_admin_support_access_respects_configured_duration_and_scope(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    definition, _ = ConfigurationDefinition.objects.update_or_create(
+        key="saas.commercial_profile.v1",
+        defaults={
+            "name": "SaaS commercial profile",
+            "category": ConfigCategory.SECURITY,
+            "data_type": ConfigDataType.JSON,
+            "default_value": {},
+            "is_system_managed": True,
+        },
+    )
+    TenantConfiguration.objects.update_or_create(
+        tenant=tenant,
+        definition=definition,
+        defaults={
+            "status": ConfigStatus.PUBLISHED,
+            "published_value": {
+                    "support_access": {
+                        "max_duration_minutes": 15,
+                        "allowed_scope_refs": ["read_only_account"],
+                        "scope_options": {
+                            "read_only_account": {"label": "Account posture"},
+                        },
+                }
+            },
+            "current_value": {},
+        },
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    duration_response = api_client.post(
+        "/api/v1/tenant-admin/support-access-grants/",
+        {
+            "support_agent_identifier": "support.agent@example.com",
+            "reason": "Too long.",
+            "scope_refs": ["read_only_account"],
+            "requested_duration_minutes": 30,
+        },
+        format="json",
+    )
+    scope_response = api_client.post(
+        "/api/v1/tenant-admin/support-access-grants/",
+        {
+            "support_agent_identifier": "support.agent@example.com",
+            "reason": "Unknown scope.",
+            "scope_refs": ["payroll_support"],
+            "requested_duration_minutes": 10,
+        },
+        format="json",
+    )
+
+    assert duration_response.status_code == 400
+    assert "between 1 and 15 minutes" in duration_response.json()["detail"]
+    assert scope_response.status_code == 400
+    assert "not configured" in scope_response.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_employee_cannot_create_support_access_grant(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.post(
+        "/api/v1/tenant-admin/support-access-grants/",
+        {
+            "support_agent_identifier": "support.agent@example.com",
+            "reason": "Denied support request.",
+            "scope_refs": ["read_only_account"],
+            "requested_duration_minutes": 15,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_support_session_console_allows_authenticated_agent_with_active_scope(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    support_user = User.objects.create_user(
+        username="support.agent",
+        email="support.agent@example.com",
+        password=PASSWORD,
+        first_name="Support",
+        last_name="Agent",
+    )
+    SaasSupportAccessGrant.objects.create(
+        tenant=tenant,
+        status=SaasSupportAccessGrantStatus.ACTIVE,
+        support_agent_identifier=support_user.email,
+        reason="Investigate configuration warning.",
+        scope_refs=["read_only_account", "configuration_health"],
+        requested_duration_minutes=45,
+        approved_duration_minutes=30,
+        requested_by_identifier="tenant.owner",
+        approved_by_identifier="nisha.rao",
+        started_by_identifier="nisha.rao",
+        requested_at=timezone.now(),
+        approved_at=timezone.now(),
+        access_starts_at=timezone.now(),
+        access_expires_at=timezone.now() + timedelta(minutes=30),
+        started_at=timezone.now(),
+        session_ref="support-session-active-001",
+    )
+    token = login(api_client, "support.agent")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get(
+        "/api/v1/support/tenant-console/?tenant_code=northstar-foods&scope_ref=configuration_health",
+        HTTP_X_HRMS_SUPPORT_SESSION_REF="support-session-active-001",
+    )
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["support_session"]["allowed"] is True
+    assert payload["configuration_health"]["tenant_configuration_count"] >= 0
+    assert "recent_configurations" in payload["configuration_health"]
+    assert "configuration_health" in payload["granted_sections"]
+    assert payload["account"]["summary"]["status"] in {"ready", "warning", "blocked"}
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="support_access_session_checked").exists()
+
+
+@pytest.mark.django_db
+def test_support_session_domain_snapshot_allows_configured_payroll_scope(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    support_user = User.objects.create_user(
+        username="support.domain",
+        email="support.domain@example.com",
+        password=PASSWORD,
+    )
+    SaasSupportAccessGrant.objects.create(
+        tenant=tenant,
+        status=SaasSupportAccessGrantStatus.ACTIVE,
+        support_agent_identifier=support_user.email,
+        reason="Investigate payroll provider queue posture.",
+        scope_refs=["payroll_support"],
+        requested_duration_minutes=45,
+        approved_duration_minutes=30,
+        requested_by_identifier="tenant.owner",
+        approved_by_identifier="nisha.rao",
+        started_by_identifier="nisha.rao",
+        requested_at=timezone.now(),
+        approved_at=timezone.now(),
+        access_starts_at=timezone.now(),
+        access_expires_at=timezone.now() + timedelta(minutes=30),
+        started_at=timezone.now(),
+        session_ref="support-domain-payroll-001",
+    )
+    token = login(api_client, "support.domain")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get(
+        "/api/v1/support/domain-snapshot/?tenant_code=northstar-foods&domain_ref=payroll_providers",
+        HTTP_X_HRMS_SUPPORT_SESSION_REF="support-domain-payroll-001",
+    )
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["support_session"]["allowed"] is True
+    assert payload["domain"]["domain_ref"] == "payroll_providers"
+    assert payload["domain"]["scope_ref"] == "payroll_support"
+    assert "provider_connection_count" in payload["snapshot"]["summary"]
+    assert "payroll_providers" in {item["domain_ref"] for item in payload["available_domains"]}
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="support_access_session_checked").exists()
+
+
+@pytest.mark.django_db
+def test_support_session_domain_snapshot_denies_ungranted_payroll_scope(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    support_user = User.objects.create_user(
+        username="support.domain.scope",
+        email="support.domain.scope@example.com",
+        password=PASSWORD,
+    )
+    SaasSupportAccessGrant.objects.create(
+        tenant=tenant,
+        status=SaasSupportAccessGrantStatus.ACTIVE,
+        support_agent_identifier=support_user.email,
+        reason="Account posture only.",
+        scope_refs=["read_only_account"],
+        requested_duration_minutes=30,
+        approved_duration_minutes=30,
+        requested_by_identifier="tenant.owner",
+        approved_by_identifier="nisha.rao",
+        started_by_identifier="nisha.rao",
+        requested_at=timezone.now(),
+        approved_at=timezone.now(),
+        access_starts_at=timezone.now(),
+        access_expires_at=timezone.now() + timedelta(minutes=30),
+        started_at=timezone.now(),
+        session_ref="support-domain-denied-001",
+    )
+    token = login(api_client, "support.domain.scope")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get(
+        "/api/v1/support/domain-snapshot/?tenant_code=northstar-foods&domain_ref=payroll_providers",
+        HTTP_X_HRMS_SUPPORT_SESSION_REF="support-domain-denied-001",
+    )
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "support_scope_denied"
+    assert response.json()["required_scope_ref"] == "payroll_support"
+
+
+@pytest.mark.django_db
+def test_support_session_domain_snapshot_respects_configured_domains(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    definition, _ = ConfigurationDefinition.objects.update_or_create(
+        key="saas.commercial_profile.v1",
+        defaults={
+            "name": "SaaS commercial profile",
+            "category": ConfigCategory.SECURITY,
+            "data_type": ConfigDataType.JSON,
+            "default_value": {},
+            "is_system_managed": True,
+        },
+    )
+    TenantConfiguration.objects.update_or_create(
+        tenant=tenant,
+        definition=definition,
+        defaults={
+            "status": ConfigStatus.PUBLISHED,
+            "published_value": {
+                "support_access": {
+                    "allowed_scope_refs": ["read_only_account"],
+                    "domain_snapshots": {
+                        "tenant_account": {"label": "Tenant account", "scope_ref": "read_only_account"},
+                    },
+                }
+            },
+            "current_value": {},
+        },
+    )
+    support_user = User.objects.create_user(
+        username="support.domain.config",
+        email="support.domain.config@example.com",
+        password=PASSWORD,
+    )
+    SaasSupportAccessGrant.objects.create(
+        tenant=tenant,
+        status=SaasSupportAccessGrantStatus.ACTIVE,
+        support_agent_identifier=support_user.email,
+        reason="Configured account-only posture.",
+        scope_refs=["read_only_account"],
+        requested_duration_minutes=30,
+        approved_duration_minutes=30,
+        requested_by_identifier="tenant.owner",
+        approved_by_identifier="nisha.rao",
+        started_by_identifier="nisha.rao",
+        requested_at=timezone.now(),
+        approved_at=timezone.now(),
+        access_starts_at=timezone.now(),
+        access_expires_at=timezone.now() + timedelta(minutes=30),
+        started_at=timezone.now(),
+        session_ref="support-domain-config-001",
+    )
+    token = login(api_client, "support.domain.config")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get(
+        "/api/v1/support/domain-snapshot/?tenant_code=northstar-foods&domain_ref=payroll_providers",
+        HTTP_X_HRMS_SUPPORT_SESSION_REF="support-domain-config-001",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "support_domain_not_configured"
+
+
+@pytest.mark.django_db
+def test_support_session_console_denies_ungranted_scope(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    support_user = User.objects.create_user(
+        username="support.scope",
+        email="support.scope@example.com",
+        password=PASSWORD,
+    )
+    SaasSupportAccessGrant.objects.create(
+        tenant=tenant,
+        status=SaasSupportAccessGrantStatus.ACTIVE,
+        support_agent_identifier=support_user.email,
+        reason="Read account posture only.",
+        scope_refs=["read_only_account"],
+        requested_duration_minutes=30,
+        approved_duration_minutes=30,
+        requested_by_identifier="tenant.owner",
+        approved_by_identifier="nisha.rao",
+        started_by_identifier="nisha.rao",
+        requested_at=timezone.now(),
+        approved_at=timezone.now(),
+        access_starts_at=timezone.now(),
+        access_expires_at=timezone.now() + timedelta(minutes=30),
+        started_at=timezone.now(),
+        session_ref="support-session-scope-001",
+    )
+    token = login(api_client, "support.scope")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get(
+        "/api/v1/support/tenant-console/?tenant_code=northstar-foods&scope_ref=configuration_health",
+        HTTP_X_HRMS_SUPPORT_SESSION_REF="support-session-scope-001",
+    )
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "support_scope_denied"
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="support_access_session_denied").exists()
+
+
+@pytest.mark.django_db
+def test_support_session_console_denies_wrong_agent(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    User.objects.create_user(
+        username="support.other",
+        email="support.other@example.com",
+        password=PASSWORD,
+    )
+    SaasSupportAccessGrant.objects.create(
+        tenant=tenant,
+        status=SaasSupportAccessGrantStatus.ACTIVE,
+        support_agent_identifier="support.agent@example.com",
+        reason="Bound to another support agent.",
+        scope_refs=["read_only_account"],
+        requested_duration_minutes=30,
+        approved_duration_minutes=30,
+        requested_by_identifier="tenant.owner",
+        approved_by_identifier="nisha.rao",
+        started_by_identifier="nisha.rao",
+        requested_at=timezone.now(),
+        approved_at=timezone.now(),
+        access_starts_at=timezone.now(),
+        access_expires_at=timezone.now() + timedelta(minutes=30),
+        started_at=timezone.now(),
+        session_ref="support-session-agent-001",
+    )
+    token = login(api_client, "support.other")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get(
+        "/api/v1/support/tenant-console/?tenant_code=northstar-foods&scope_ref=read_only_account",
+        HTTP_X_HRMS_SUPPORT_SESSION_REF="support-session-agent-001",
+    )
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "support_agent_mismatch"
+
+
+@pytest.mark.django_db
+def test_support_session_console_expires_stale_active_grant(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    support_user = User.objects.create_user(
+        username="support.expired",
+        email="support.expired@example.com",
+        password=PASSWORD,
+    )
+    grant = SaasSupportAccessGrant.objects.create(
+        tenant=tenant,
+        status=SaasSupportAccessGrantStatus.ACTIVE,
+        support_agent_identifier=support_user.email,
+        reason="Expired investigation.",
+        scope_refs=["read_only_account"],
+        requested_duration_minutes=30,
+        approved_duration_minutes=30,
+        requested_by_identifier="tenant.owner",
+        approved_by_identifier="nisha.rao",
+        started_by_identifier="nisha.rao",
+        requested_at=timezone.now() - timedelta(hours=2),
+        approved_at=timezone.now() - timedelta(hours=2),
+        access_starts_at=timezone.now() - timedelta(hours=2),
+        access_expires_at=timezone.now() - timedelta(minutes=1),
+        started_at=timezone.now() - timedelta(hours=2),
+        session_ref="support-session-expired-001",
+    )
+    token = login(api_client, "support.expired")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get(
+        "/api/v1/support/tenant-console/?tenant_code=northstar-foods&scope_ref=read_only_account",
+        HTTP_X_HRMS_SUPPORT_SESSION_REF="support-session-expired-001",
+    )
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "support_session_not_active"
+    grant.refresh_from_db()
+    assert grant.status == SaasSupportAccessGrantStatus.EXPIRED
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="support_access_session_expired").exists()
+
+
+@pytest.mark.django_db
+def test_tenant_admin_can_download_commercial_support_audit_pack(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    record_saas_usage_meter_snapshots(
+        tenant,
+        source_ref="test.commercial_support_audit.snapshot.v1",
+        actor_identifier="nisha.rao",
+    )
+    SaasSupportAccessGrant.objects.create(
+        tenant=tenant,
+        status=SaasSupportAccessGrantStatus.ACTIVE,
+        support_agent_identifier="support.audit@example.com",
+        reason="Audit export coverage.",
+        scope_refs=["read_only_account", "commercial_evidence"],
+        requested_duration_minutes=30,
+        approved_duration_minutes=30,
+        requested_by_identifier="tenant.owner",
+        approved_by_identifier="nisha.rao",
+        started_by_identifier="nisha.rao",
+        requested_at=timezone.now(),
+        approved_at=timezone.now(),
+        access_starts_at=timezone.now(),
+        access_expires_at=timezone.now() + timedelta(minutes=30),
+        started_at=timezone.now(),
+        session_ref="support-session-audit-pack-001",
+    )
+    record_saas_commercial_audit_event(
+        tenant,
+        event_type="commercial_support_audit_seeded",
+        actor_identifier="nisha.rao",
+        source_ref="test.commercial_support_audit.event.v1",
+        event_snapshot={"purpose": "download-test"},
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/tenant-admin/commercial-support-audit/download/")
+
+    assert response.status_code == 200, response.content
+    assert response["Content-Type"].startswith("application/json")
+    assert "attachment;" in response["Content-Disposition"]
+    assert "northstar-foods-commercial-support-audit-pack.json" in response["Content-Disposition"]
+    assert response["X-SaaS-Audit-Pack-Ref"] == "saas.commercial_support_audit_pack.v1"
+    audit_pack = json.loads(response.content)
+    checksum_payload = {key: value for key, value in audit_pack.items() if key != "evidence_checksum_sha256"}
+    assert audit_pack["evidence_checksum_sha256"] == hashlib.sha256(json.dumps(checksum_payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    assert response["X-SaaS-Audit-Pack-Checksum"] == audit_pack["evidence_checksum_sha256"]
+    assert audit_pack["tenant"]["code"] == tenant.code
+    assert audit_pack["generated_for_actor"] == "nisha.rao"
+    assert audit_pack["summary"]["commercial_event_count"] >= 1
+    assert audit_pack["summary"]["usage_snapshot_count"] >= 1
+    assert audit_pack["summary"]["support_access_grant_count"] >= 1
+    assert audit_pack["support_access"]["grants"][0]["source_hash"]
+    assert audit_pack["integrity"]["source_hash_count"] >= 3
+
+
+@pytest.mark.django_db
+def test_tenant_admin_can_review_trust_audit_with_support_filters(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    record_saas_commercial_audit_event(
+        tenant,
+        event_type="support_access_session_checked",
+        actor_identifier="support.audit@example.com",
+        source_ref="saas.support_access.runtime.v1",
+        event_snapshot={
+            "support_access_runtime": {
+                "session_ref": "support-session-review-001",
+                "scope_refs": ["payroll_support"],
+                "required_scope_ref": "payroll_support",
+            }
+        },
+    )
+    record_saas_commercial_audit_event(
+        tenant,
+        event_type="tenant_change_request_submitted",
+        actor_identifier="tenant.owner",
+        source_ref="saas.tenant_change_request.v1",
+        event_snapshot={"change_request_ref": "billing-contact"},
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get(
+        "/api/v1/tenant-admin/trust-audit/?event_group=support&support_session_ref=support-session-review-001"
+    )
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["profile_ref"] == "saas.tenant_trust_audit_review.v1"
+    assert payload["filters"]["event_group"] == "support"
+    assert payload["summary"]["total_event_count"] == 1
+    assert payload["events"][0]["event_type"] == "support_access_session_checked"
+    assert payload["events"][0]["support_session_ref"] == "support-session-review-001"
+    assert "support" in payload["events"][0]["event_group_refs"]
+
+
+@pytest.mark.django_db
+def test_tenant_admin_trust_audit_respects_configured_groups_and_page_size(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    definition, _ = ConfigurationDefinition.objects.update_or_create(
+        key="saas.commercial_profile.v1",
+        defaults={
+            "name": "SaaS commercial profile",
+            "category": ConfigCategory.SECURITY,
+            "data_type": ConfigDataType.JSON,
+            "default_value": {},
+            "is_system_managed": True,
+        },
+    )
+    TenantConfiguration.objects.update_or_create(
+        tenant=tenant,
+        definition=definition,
+        defaults={
+            "status": ConfigStatus.PUBLISHED,
+            "published_value": {
+                "trust_audit": {
+                    "default_page_size": 1,
+                    "max_page_size": 2,
+                    "event_type_groups": {
+                        "support_runtime": {
+                            "label": "Support runtime",
+                            "event_types": ["support_access_session_checked"],
+                        }
+                    },
+                }
+            },
+            "current_value": {},
+        },
+    )
+    record_saas_commercial_audit_event(
+        tenant,
+        event_type="support_access_session_checked",
+        actor_identifier="support.audit@example.com",
+        source_ref="saas.support_access.runtime.v1",
+        event_snapshot={"support_access_runtime": {"session_ref": "support-session-config-001"}},
+    )
+    record_saas_commercial_audit_event(
+        tenant,
+        event_type="support_access_session_checked",
+        actor_identifier="support.audit@example.com",
+        source_ref="saas.support_access.runtime.v1",
+        event_snapshot={"support_access_runtime": {"session_ref": "support-session-config-002"}},
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/tenant-admin/trust-audit/?event_group=support_runtime&page_size=20")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["summary"]["page_size"] == 2
+    assert payload["summary"]["total_event_count"] == 2
+    assert "support_runtime" in {item["group_ref"] for item in payload["options"]["event_groups"]}
+    assert {event["event_type"] for event in payload["events"]} == {"support_access_session_checked"}
+
+
+@pytest.mark.django_db
+def test_employee_cannot_review_tenant_admin_trust_audit(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/tenant-admin/trust-audit/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_tenant_admin_can_review_enterprise_security_readiness_defaults(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/tenant-admin/security-readiness/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["profile_ref"] == "saas.enterprise_security_readiness.v1"
+    assert payload["security_profile_ref"] == "saas.enterprise_security_profile.v1"
+    assert payload["profile_source"] == "platform_default"
+    assert payload["tenant"]["code"] == tenant.code
+    assert payload["summary"]["status"] == "blocked"
+    assert payload["summary"]["blocker_count"] >= 1
+    check_refs = {item["ref"] for item in payload["checks"]}
+    assert "mfa.enforced" in check_refs
+    assert "sso.enabled" in check_refs
+    assert "scim.enabled" in check_refs
+    assert "audit.customer_export" in check_refs
+
+
+@pytest.mark.django_db
+def test_tenant_admin_enterprise_security_readiness_uses_published_config(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    now = timezone.now()
+    definition, _ = ConfigurationDefinition.objects.update_or_create(
+        key="saas.enterprise_security_profile.v1",
+        defaults={
+            "name": "Enterprise security readiness profile",
+            "category": ConfigCategory.SECURITY,
+            "data_type": ConfigDataType.JSON,
+            "default_value": {},
+            "is_system_managed": True,
+        },
+    )
+    TenantConfiguration.objects.update_or_create(
+        tenant=tenant,
+        definition=definition,
+        defaults={
+            "status": ConfigStatus.PUBLISHED,
+            "published_value": {
+                "mfa": {
+                    "enforced": True,
+                    "allowed_methods": ["totp", "webauthn"],
+                    "evidence_ref": "security.mfa.policy.northstar.v1",
+                },
+                "sso": {
+                    "enabled": True,
+                    "provider_ref": "idp.northstar.workforce",
+                    "protocol": "saml",
+                    "metadata_ref": "idp.metadata.northstar.saml.v1",
+                    "last_tested_at": now.isoformat(),
+                    "certificate_rotation_due_at": (now + timedelta(days=90)).isoformat(),
+                },
+                "scim": {
+                    "enabled": True,
+                    "provider_ref": "idp.northstar.scim",
+                    "last_sync_at": now.isoformat(),
+                    "error_count": 0,
+                    "deprovisioning_enabled": True,
+                },
+                "session": {
+                    "idle_timeout_minutes": 30,
+                    "absolute_timeout_hours": 8,
+                    "device_trust_required": True,
+                    "device_trust_enabled": True,
+                },
+                "audit": {
+                    "retention_days": 3650,
+                    "customer_export_enabled": True,
+                    "immutable_export_ref": "audit.export.immutable.northstar.v1",
+                },
+                "data_protection": {
+                    "encryption_at_rest": True,
+                    "encryption_in_transit": True,
+                    "customer_managed_key_ref": "kms.customer.northstar.v1",
+                    "data_residency_ref": "data.residency.in-west.v1",
+                },
+            },
+            "current_value": {},
+        },
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/tenant-admin/security-readiness/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["profile_source"] == ConfigStatus.PUBLISHED
+    assert payload["summary"]["status"] == "ready"
+    assert payload["summary"]["blocker_count"] == 0
+    assert payload["summary"]["warning_count"] == 0
+    assert payload["summary"]["mfa_ready"] is True
+    assert payload["summary"]["sso_ready"] is True
+    assert payload["summary"]["scim_ready"] is True
+    assert payload["mfa"]["allowed_methods"] == ["totp", "webauthn"]
+    assert payload["data_protection"]["customer_managed_key_ref"] == "kms.customer.northstar.v1"
+
+
+@pytest.mark.django_db
+def test_employee_cannot_review_enterprise_security_readiness(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/tenant-admin/security-readiness/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_employee_cannot_download_commercial_support_audit_pack(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/tenant-admin/commercial-support-audit/download/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_hr_admin_saas_operational_health_summarizes_tenant_risk(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    record_saas_usage_meter_snapshots(
+        tenant,
+        source_ref="test.saas_operational_health.snapshot.v1",
+        actor_identifier="nisha.rao",
+    )
+    PayrollProviderJob.objects.create(
+        tenant=tenant,
+        job_kind=PayrollProviderJobKind.PROVIDER_SUBMISSION,
+        status=PayrollProviderJobStatus.DEAD_LETTERED,
+        idempotency_key="test-saas-operational-health-dead-letter",
+        provider_ref="bank.fixture",
+        failure_code="provider_unreachable",
+        failure_reason="Provider endpoint failed during launch rehearsal.",
+    )
+    SaasSupportAccessGrant.objects.create(
+        tenant=tenant,
+        status=SaasSupportAccessGrantStatus.ACTIVE,
+        support_agent_identifier="support.ops@example.com",
+        reason="Operational health coverage.",
+        scope_refs=["read_only_account"],
+        requested_duration_minutes=30,
+        approved_duration_minutes=30,
+        requested_by_identifier="tenant.owner",
+        approved_by_identifier="nisha.rao",
+        started_by_identifier="nisha.rao",
+        requested_at=timezone.now(),
+        approved_at=timezone.now(),
+        access_starts_at=timezone.now(),
+        access_expires_at=timezone.now() + timedelta(minutes=30),
+        started_at=timezone.now(),
+        session_ref="support-session-operational-health-001",
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/saas-operational-health/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["profile_ref"] == "saas.operational_health.v1"
+    assert payload["tenant"]["code"] == tenant.code
+    assert payload["summary"]["dead_lettered_provider_job_count"] == 1
+    assert payload["summary"]["active_support_session_count"] == 1
+    assert payload["summary"]["usage_snapshot_count"] >= 1
+    assert payload["provider_queue"]["job_status_counts"][PayrollProviderJobStatus.DEAD_LETTERED] == 1
+    provider_signal = next(item for item in payload["signals"] if item["ref"] == "provider.queue")
+    assert provider_signal["status"] == "blocked"
+    assert provider_signal["href"] == "/hr-admin/payroll-handoff"
+
+
+@pytest.mark.django_db
+def test_employee_cannot_access_saas_operational_health(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/saas-operational-health/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_hr_admin_saas_resilience_default_profile_reports_missing_evidence(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/saas-resilience/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["profile_ref"] == "saas.resilience_readiness.v1"
+    assert payload["resilience_profile_ref"] == "saas.resilience_profile.v1"
+    assert payload["profile_source"] == "platform_default"
+    assert payload["tenant"]["code"] == tenant.code
+    assert payload["summary"]["status"] == "blocked"
+    assert payload["summary"]["blocker_count"] >= 1
+    check_refs = {item["ref"] for item in payload["checks"]}
+    assert "backup.latest_successful" in check_refs
+    assert "restore.last_test" in check_refs
+    assert "retention.policy_refs" in check_refs
+
+
+@pytest.mark.django_db
+def test_hr_admin_saas_resilience_uses_configured_tenant_profile(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    now = timezone.now()
+    definition, _ = ConfigurationDefinition.objects.update_or_create(
+        key="saas.resilience_profile.v1",
+        defaults={
+            "name": "SaaS resilience profile",
+            "category": ConfigCategory.SECURITY,
+            "data_type": ConfigDataType.JSON,
+            "default_value": {},
+            "is_system_managed": True,
+        },
+    )
+    TenantConfiguration.objects.update_or_create(
+        tenant=tenant,
+        definition=definition,
+        defaults={
+            "status": ConfigStatus.PUBLISHED,
+            "published_value": {
+                "backup": {
+                    "frequency_hours": 12,
+                    "recovery_point_objective_minutes": 720,
+                    "last_successful_backup_at": now.isoformat(),
+                    "last_backup_status": "succeeded",
+                    "encryption_enabled": True,
+                    "offsite_copy_enabled": True,
+                    "runbook_ref": "runbook.backup.northstar.v1",
+                },
+                "restore": {
+                    "restore_test_interval_days": 30,
+                    "last_restore_test_at": now.isoformat(),
+                    "last_restore_test_status": "passed",
+                    "runbook_ref": "runbook.restore.northstar.v1",
+                },
+                "retention": {
+                    "default_retention_days": 2555,
+                    "payroll_retention_days": 3650,
+                    "audit_retention_days": 3650,
+                    "support_session_retention_days": 365,
+                    "deletion_policy_ref": "data.deletion.northstar.v1",
+                    "legal_hold_policy_ref": "legal_hold.northstar.v1",
+                },
+                "evidence": {
+                    "storage_policy_ref": "storage.policy.encrypted_offsite.v1",
+                    "backup_job_ref": "backup.job.daily.northstar.v1",
+                    "restore_test_ref": "restore.test.latest.northstar.v1",
+                    "retention_policy_ref": "retention.policy.northstar.v1",
+                    "last_evidence_at": now.isoformat(),
+                },
+            },
+            "current_value": {},
+        },
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/saas-resilience/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["profile_ref"] == "saas.resilience_readiness.v1"
+    assert payload["profile_source"] == ConfigStatus.PUBLISHED
+    assert payload["summary"]["status"] == "ready"
+    assert payload["summary"]["blocker_count"] == 0
+    assert payload["summary"]["backup_ready"] is True
+    assert payload["summary"]["restore_ready"] is True
+    assert payload["summary"]["retention_ready"] is True
+    assert payload["backup"]["frequency_hours"] == 12
+    assert payload["retention"]["deletion_policy_ref"] == "data.deletion.northstar.v1"
+    assert all(item["passed"] for item in payload["checks"])
+
+
+@pytest.mark.django_db
+def test_employee_cannot_access_saas_resilience_readiness(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/saas-resilience/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_hr_admin_saas_sla_operations_reports_breached_incident(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    SaasIncidentRecord.objects.create(
+        tenant=tenant,
+        incident_ref="inc-payroll-handoff-001",
+        title="Payroll handoff delayed",
+        description="Finance handoff queue stalled after provider retry exhaustion.",
+        severity=SaasIncidentSeverity.HIGH,
+        status=SaasIncidentStatus.OPEN,
+        impact_refs=["payroll", "provider_queue"],
+        owner_role_ref="payroll-admin",
+        detected_at=timezone.now() - timedelta(hours=8),
+        target_response_minutes=30,
+        target_resolution_minutes=240,
+        incident_snapshot={"provider_ref": "bank.fixture", "queue_status": "stalled"},
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/saas-sla-operations/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["profile_ref"] == "saas.sla_operations.v1"
+    assert payload["sla_profile_ref"] == "saas.sla_profile.v1"
+    assert payload["tenant"]["code"] == tenant.code
+    assert payload["summary"]["status"] == "blocked"
+    assert payload["summary"]["open_incident_count"] == 1
+    assert payload["summary"]["breached_incident_count"] == 1
+    incident = payload["incidents"][0]
+    assert incident["incident_ref"] == "inc-payroll-handoff-001"
+    assert incident["response_state"] == "breached"
+    assert incident["resolution_state"] == "breached"
+    assert incident["source_hash"]
+    incident_signal = next(item for item in payload["health_signals"] if item["ref"] == "incident.response_resolution")
+    assert incident_signal["status"] == "blocked"
+
+
+@pytest.mark.django_db
+def test_hr_admin_saas_sla_operations_uses_configured_targets(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    definition, _ = ConfigurationDefinition.objects.update_or_create(
+        key="saas.sla_profile.v1",
+        defaults={
+            "name": "SaaS SLA profile",
+            "category": ConfigCategory.SECURITY,
+            "data_type": ConfigDataType.JSON,
+            "default_value": {},
+            "is_system_managed": True,
+        },
+    )
+    TenantConfiguration.objects.update_or_create(
+        tenant=tenant,
+        definition=definition,
+        defaults={
+            "status": ConfigStatus.PUBLISHED,
+            "published_value": {
+                "incident_targets": {
+                    "high": {"response_minutes": 240, "resolution_minutes": 720, "owner_role_ref": "tenant-success"}
+                }
+            },
+            "current_value": {},
+        },
+    )
+    SaasIncidentRecord.objects.create(
+        tenant=tenant,
+        incident_ref="inc-configured-sla-001",
+        title="Configured target review",
+        severity=SaasIncidentSeverity.HIGH,
+        status=SaasIncidentStatus.OPEN,
+        impact_refs=["tenant_admin"],
+        detected_at=timezone.now() - timedelta(hours=2),
+        target_response_minutes=30,
+        target_resolution_minutes=240,
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/saas-sla-operations/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["profile_source"] == ConfigStatus.PUBLISHED
+    incident = payload["incidents"][0]
+    assert incident["target_response_minutes"] == 240
+    assert incident["target_resolution_minutes"] == 720
+    assert incident["response_state"] != "breached"
+    assert payload["incident_targets"]["high"]["owner_role_ref"] == "tenant-success"
+
+
+@pytest.mark.django_db
+def test_employee_cannot_access_saas_sla_operations(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/saas-sla-operations/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_commercial_profile_override_adds_launch_blocker_for_missing_required_entitlement(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    definition, _ = ConfigurationDefinition.objects.update_or_create(
+        key="saas.commercial_profile.v1",
+        defaults={
+            "name": "SaaS commercial profile",
+            "category": ConfigCategory.SECURITY,
+            "data_type": ConfigDataType.JSON,
+            "default_value": {},
+            "is_system_managed": True,
+        },
+    )
+    TenantConfiguration.objects.update_or_create(
+        tenant=tenant,
+        definition=definition,
+        defaults={
+            "status": ConfigStatus.PUBLISHED,
+            "published_value": {
+                "subscription": {"status": "active"},
+                "plans": {
+                    "growth": {
+                        "entitlements": {"payroll": False},
+                    },
+                },
+            },
+            "current_value": {},
+        },
+    )
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    control_response = api_client.get("/api/v1/hr-admin/saas-control-plane/")
+    audit_response = api_client.get("/api/v1/hr-admin/dashboard/")
+
+    assert control_response.status_code == 200, control_response.json()
+    assert "payroll" in control_response.json()["missing_required_entitlements"]
+    assert control_response.json()["summary"]["can_launch"] is False
+    assert audit_response.status_code == 200, audit_response.json()
+    release_actions = audit_response.json()["launch_audit"]["release_actions"]
+    assert any(item["ref"] == "commercial.required_entitlements" for item in release_actions)
+
+
+@pytest.mark.django_db
+def test_saas_commercial_subscription_update_enforces_payroll_entitlement(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    update_response = api_client.patch(
+        "/api/v1/hr-admin/saas-control-plane/",
+        {
+            "subscription_plan": "starter",
+            "status": "active",
+            "billing_provider_ref": "manual_billing.v1",
+        },
+        format="json",
+    )
+    assert update_response.status_code == 200, update_response.json()
+    payload = update_response.json()
+    assert payload["tenant"]["subscription_plan"] == "starter"
+    assert payload["summary"]["can_launch"] is False
+    assert "payroll" in payload["missing_required_entitlements"]
+    assert payload["enforcement"]["blocking_scope_count"] >= 1
+    assert payload["recent_usage_snapshots"]
+    assert payload["recent_audit_events"]
+    assert payload["recent_audit_events"][0]["event_type"] == "subscription_updated"
+    assert SaasUsageMeterSnapshot.objects.filter(tenant=bootstrapped_workspace["pending_leave"].tenant).count() >= 4
+    assert SaasCommercialAuditEvent.objects.filter(tenant=bootstrapped_workspace["pending_leave"].tenant, event_type="subscription_updated").exists()
+
+    payroll_response = api_client.get("/api/v1/hr-admin/payroll-setup/")
+
+    assert payroll_response.status_code == 403
+    assert "saas_commercial_access_denied" in str(payroll_response.json())
+    assert "payroll_core" in str(payroll_response.json())
+
+
+@pytest.mark.django_db
+def test_snapshot_saas_commercial_usage_command_records_meter_history(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+
+    call_command("snapshot_saas_commercial_usage", tenant_code=tenant.code)
+
+    assert SaasUsageMeterSnapshot.objects.filter(tenant=tenant).count() == 4
+    event = SaasCommercialAuditEvent.objects.get(tenant=tenant, event_type="usage_snapshot_recorded")
+    assert event.event_snapshot["snapshot_count"] == 4
+    assert event.source_hash
 
 
 def test_employee_cannot_access_hr_admin_payroll_readiness(api_client: APIClient, bootstrapped_workspace):
@@ -3875,6 +5559,53 @@ def test_hr_admin_payroll_finance_handoff_generate_and_transmit(api_client: APIC
     assert bank_delivery["reconciliation_snapshot"]["checksum_matched"] is True
     assert bank_delivery["reconciled_by_name"]
 
+    audit_pack_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/generate-audit-pack/",
+        {"audit_pack_profile_ref": "payroll.provider_audit_pack.standard.v1"},
+        format="json",
+    )
+    assert audit_pack_response.status_code == 200, audit_pack_response.json()
+    audit_pack_payload = audit_pack_response.json()
+    assert audit_pack_payload["detail"] == "Payroll provider audit pack generated."
+    assert audit_pack_payload["handoff"]["artifact_count"] == 4
+    audit_pack = next(item for item in audit_pack_payload["artifacts"] if item["kind"] == PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK)
+    assert audit_pack["status"] == PayrollOutputArtifactStatus.PUBLISHED
+    assert audit_pack["mime_type"] == "application/json"
+    assert audit_pack["is_downloadable"] is True
+    assert audit_pack["output_profile_ref"] == "payroll.provider_audit_pack.standard.v1"
+    assert audit_pack["retention_policy_ref"] == "payroll.retention.provider_audit.10y.v1"
+    assert audit_pack["totals_snapshot"]["delivery_count"] == 3
+    assert audit_pack["totals_snapshot"]["reconciled_delivery_count"] == 3
+    assert audit_pack["totals_snapshot"]["provider_job_count"] == 0
+    assert audit_pack["config_snapshot"]["lock_profile_ref"] == "payroll.provider_audit_pack.locked_artifact.v1"
+    assert audit_pack["config_snapshot"]["audit_pack_schema_ref"] == "payroll.provider_audit_pack.schema.v1"
+    assert audit_pack["config_snapshot"]["evidence_checksum_sha256"] == audit_pack["totals_snapshot"]["evidence_checksum_sha256"]
+    evidence_snapshot = audit_pack["config_snapshot"]["evidence_snapshot"]
+    assert evidence_snapshot["evidence_counts"]["artifact_count"] == 3
+    assert evidence_snapshot["evidence_counts"]["delivery_count"] == 3
+    assert evidence_snapshot["provider_deliveries"][0]["request_snapshot"]["submission_contract"]["idempotency_key"]
+    assert "api_key" not in json.dumps(evidence_snapshot).lower()
+    assert PayrollOutputArtifact.objects.filter(
+        output_batch_id=batch_id,
+        kind=PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK,
+        status=PayrollOutputArtifactStatus.PUBLISHED,
+    ).count() == 1
+    repeated_audit_pack_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/generate-audit-pack/",
+        {"audit_pack_profile_ref": "payroll.provider_audit_pack.standard.v1"},
+        format="json",
+    )
+    assert repeated_audit_pack_response.status_code == 200, repeated_audit_pack_response.json()
+    assert PayrollOutputArtifact.objects.filter(output_batch_id=batch_id, kind=PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK).count() == 1
+
+    audit_pack_download_response = api_client.get(audit_pack["download_url"])
+    assert audit_pack_download_response.status_code == 200
+    assert audit_pack_download_response["Content-Type"].startswith("application/json")
+    assert audit_pack_download_response["X-Payroll-Artifact-Checksum"] == audit_pack["checksum_sha256"]
+    audit_pack_document = json.loads(audit_pack_download_response.content)
+    assert audit_pack_document["line_snapshot"][0]["audit_pack"]["audit_pack_profile_ref"] == "payroll.provider_audit_pack.standard.v1"
+    assert audit_pack_document["line_snapshot"][0]["audit_pack"]["evidence_counts"]["delivery_count"] == 3
+
     setup_response = api_client.get("/api/v1/hr-admin/payroll-finance-handoff-setup/")
     assert setup_response.status_code == 200, setup_response.json()
     setup_payload = setup_response.json()
@@ -3883,6 +5614,8 @@ def test_hr_admin_payroll_finance_handoff_generate_and_transmit(api_client: APIC
     assert setup_payload["summary"]["accepted_handoff_count"] == 1
     assert setup_payload["summary"]["reconciled_delivery_count"] == 3
     assert setup_payload["summary"]["finance_artifact_count"] == 3
+    assert setup_payload["summary"]["provider_audit_pack_count"] == 1
+    assert any(item["kind"] == PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK for item in setup_payload["artifacts"])
     assert PayrollFinanceHandoff.objects.filter(id=handoff_id, status=PayrollFinanceHandoffStatus.ACCEPTED).exists()
     assert PayrollProviderDelivery.objects.filter(handoff_id=handoff_id, status=PayrollProviderDeliveryStatus.RECONCILED).count() == 3
 
@@ -4083,6 +5816,317 @@ def test_payroll_provider_callback_endpoint_enforces_strict_security_policy(api_
     assert rejected_response.json()["delivery"]["status"] == PayrollProviderDeliveryStatus.SUBMITTED
 
 
+def test_payroll_provider_callback_endpoint_uses_configured_signature_adapter(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(api_client, tenant=tenant, employee=employee)
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/",
+        {"handoff_profile_ref": "india.monthly.finance.handoff.v1"},
+        format="json",
+    )
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+    config_snapshot = delivery.config_snapshot
+    config_snapshot["submission_contract"]["callback_security_policy"] = {
+        **config_snapshot["submission_contract"]["callback_security_policy"],
+        "signature_algorithm_ref": "payroll.callback.signature.hmac_sha256_ref.v1",
+        "signature_adapter_ref": "payroll.provider_signature_adapter.hmac_sha256_ref.v1",
+        "signature_key_ref": "tenant.callback_signature_key.bank.primary.v1",
+        "signature_material_fields": [
+            "provider_ref",
+            "external_reference",
+            "idempotency_key",
+            "payload_checksum_sha256",
+            "artifact_checksum_sha256",
+            "callback_verification_ref",
+        ],
+    }
+    delivery.config_snapshot = config_snapshot
+    delivery.save()
+
+    payload_snapshot = {
+        "provider_batch_ref": "BANK-CALLBACK-HMAC-2026-08",
+        "settlement_reference": "UTR-HMAC-4488122",
+        "line_count": delivery.request_snapshot["line_count"],
+    }
+    payload_checksum = hashlib.sha256(json.dumps(payload_snapshot, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+    idempotency_key = "bank-callback-aug-2026-hmac-adapter"
+    signature = expected_provider_callback_signature(
+        delivery,
+        idempotency_key=idempotency_key,
+        payload_checksum_sha256=payload_checksum,
+    )
+    api_client.credentials()
+    callback_response = api_client.post(
+        "/api/v1/payroll-provider-callbacks/",
+        {
+            "provider_delivery_id": str(delivery.id),
+            "provider_ref": delivery.provider_ref,
+            "external_reference": delivery.external_reference,
+            "external_event_id": "evt-bank-aug-2026-hmac",
+            "idempotency_key": idempotency_key,
+            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+            "payload_snapshot": payload_snapshot,
+            "signature": signature,
+        },
+        format="json",
+    )
+    assert callback_response.status_code == 200, callback_response.json()
+    verification = callback_response.json()["callback_event"]["verification_snapshot"]
+    assert verification["signature_valid"] is True
+    assert verification["verification_mode"] == "provider_signature_adapter"
+    assert verification["signature_adapter"]["signature_algorithm_ref"] == "payroll.callback.signature.hmac_sha256_ref.v1"
+    assert verification["signature_adapter"]["signature_adapter_ref"] == "payroll.provider_signature_adapter.hmac_sha256_ref.v1"
+    assert verification["signature_adapter"]["signature_key_ref"] == "tenant.callback_signature_key.bank.primary.v1"
+    assert verification["signature_adapter"]["signature_material_fields"][0] == "provider_ref"
+    signature_gate = verification["callback_security"]["gates"][0]
+    assert signature_gate["adapter_ref"] == "payroll.provider_signature_adapter.hmac_sha256_ref.v1"
+    assert signature_gate["signature_material_hash_sha256"]
+
+
+@override_settings(
+    PAYROLL_PROVIDER_CREDENTIALS={
+        "tenant.callback_signature_key.bank.primary.v1": {
+            "provider_ref": "payroll.provider.bank_advice.manual.v1",
+            "source_ref": "unit-test-secret-manager",
+            "credentials": {"signing_secret": "runtime-webhook-signing-secret"},
+            "metadata": {"rotation_policy_ref": "payroll.secret.rotation.30d.v1", "environment": "production"},
+        },
+    },
+)
+def test_payroll_provider_callback_signature_adapter_resolves_runtime_secret_key(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(api_client, tenant=tenant, employee=employee)
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/",
+        {"handoff_profile_ref": "india.monthly.finance.handoff.v1"},
+        format="json",
+    )
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+    config_snapshot = delivery.config_snapshot
+    config_snapshot["submission_contract"]["callback_security_policy"] = {
+        **config_snapshot["submission_contract"]["callback_security_policy"],
+        "signature_algorithm_ref": "payroll.callback.signature.hmac_sha256_ref.v1",
+        "signature_adapter_ref": "payroll.provider_signature_adapter.hmac_sha256_ref.v1",
+        "signature_key_ref": "tenant.callback_signature_key.bank.primary.v1",
+        "signature_key_resolution_mode": "runtime",
+        "signature_key_material_field": "signing_secret",
+        "require_runtime_signature_key": True,
+    }
+    delivery.config_snapshot = config_snapshot
+    delivery.save()
+
+    payload_snapshot = {
+        "provider_batch_ref": "BANK-CALLBACK-RUNTIME-2026-08",
+        "settlement_reference": "UTR-RUNTIME-4488122",
+        "line_count": delivery.request_snapshot["line_count"],
+    }
+    payload_checksum = hashlib.sha256(json.dumps(payload_snapshot, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+    idempotency_key = "bank-callback-aug-2026-runtime-signature"
+    signature = expected_provider_callback_signature(
+        delivery,
+        idempotency_key=idempotency_key,
+        payload_checksum_sha256=payload_checksum,
+    )
+    api_client.credentials()
+    callback_response = api_client.post(
+        "/api/v1/payroll-provider-callbacks/",
+        {
+            "provider_delivery_id": str(delivery.id),
+            "provider_ref": delivery.provider_ref,
+            "external_reference": delivery.external_reference,
+            "external_event_id": "evt-bank-aug-2026-runtime-signature",
+            "idempotency_key": idempotency_key,
+            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+            "payload_snapshot": payload_snapshot,
+            "signature": signature,
+        },
+        format="json",
+    )
+    assert callback_response.status_code == 200, callback_response.json()
+    callback_event = PayrollProviderCallbackEvent.objects.get(id=callback_response.json()["callback_event"]["id"])
+    signature_adapter = callback_response.json()["callback_event"]["verification_snapshot"]["signature_adapter"]
+    assert signature_adapter["signature_valid"] is True
+    assert signature_adapter["key_material_mode"] == "runtime_secret_ref"
+    assert signature_adapter["signature_key_resolution_mode"] == "runtime"
+    assert signature_adapter["credential_snapshot"]["source_ref"] == "unit-test-secret-manager"
+    assert signature_adapter["credential_snapshot"]["metadata"]["rotation_policy_ref"] == "payroll.secret.rotation.30d.v1"
+    assert signature_adapter["credential_snapshot"]["material_field_ref"] == "signing_secret"
+    serialized_evidence = json.dumps(
+        {
+            "delivery_request": delivery.request_snapshot,
+            "delivery_response": delivery.response_snapshot,
+            "delivery_config": delivery.config_snapshot,
+            "callback_verification": callback_event.verification_snapshot,
+            "callback_payload": callback_event.payload_snapshot,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert "runtime-webhook-signing-secret" not in serialized_evidence
+
+
+def test_payroll_provider_callback_signature_adapter_verifies_rsa_public_key(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(api_client, tenant=tenant, employee=employee)
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/",
+        {"handoff_profile_ref": "india.monthly.finance.handoff.v1"},
+        format="json",
+    )
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("utf-8")
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+    config_snapshot = delivery.config_snapshot
+    config_snapshot["submission_contract"]["callback_security_policy"] = {
+        **config_snapshot["submission_contract"]["callback_security_policy"],
+        "signature_algorithm_ref": "payroll.callback.signature.rsa_sha256.v1",
+        "signature_adapter_ref": "payroll.provider_signature_adapter.rsa_sha256_public_key.v1",
+        "signature_key_ref": "tenant.callback_signature_key.bank.rsa.v1",
+        "signature_key_resolution_mode": "runtime",
+        "signature_key_material_field": "public_key",
+        "require_runtime_signature_key": True,
+        "signature_encoding": "base64",
+    }
+    delivery.config_snapshot = config_snapshot
+    delivery.save()
+
+    payload_snapshot = {
+        "provider_batch_ref": "BANK-CALLBACK-RSA-2026-08",
+        "settlement_reference": "UTR-RSA-4488122",
+        "line_count": delivery.request_snapshot["line_count"],
+    }
+    payload_checksum = hashlib.sha256(json.dumps(payload_snapshot, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+    idempotency_key = "bank-callback-aug-2026-rsa-signature"
+    callback_verification_ref = config_snapshot["submission_contract"]["callback_verification_ref"]
+    material = ":".join([
+        delivery.provider_ref,
+        delivery.external_reference,
+        idempotency_key,
+        payload_checksum,
+        delivery.payload_checksum_sha256,
+        callback_verification_ref,
+    ])
+    signature = base64.b64encode(
+        private_key.sign(
+            material.encode("utf-8"),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+    ).decode("utf-8")
+
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.callback_signature_key.bank.rsa.v1": {
+                "provider_ref": delivery.provider_ref,
+                "source_ref": "unit-test-public-key-manager",
+                "credentials": {"public_key": public_key_pem},
+                "metadata": {"rotation_policy_ref": "payroll.public_key.rotation.180d.v1", "kid": "bank-rsa-2026-08"},
+            },
+        },
+    ):
+        api_client.credentials()
+        callback_response = api_client.post(
+            "/api/v1/payroll-provider-callbacks/",
+            {
+                "provider_delivery_id": str(delivery.id),
+                "provider_ref": delivery.provider_ref,
+                "external_reference": delivery.external_reference,
+                "external_event_id": "evt-bank-aug-2026-rsa",
+                "idempotency_key": idempotency_key,
+                "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+                "payload_snapshot": payload_snapshot,
+                "signature": signature,
+            },
+            format="json",
+        )
+    assert callback_response.status_code == 200, callback_response.json()
+    callback_event = PayrollProviderCallbackEvent.objects.get(id=callback_response.json()["callback_event"]["id"])
+    signature_adapter = callback_response.json()["callback_event"]["verification_snapshot"]["signature_adapter"]
+    assert signature_adapter["signature_valid"] is True
+    assert signature_adapter["signature_algorithm_ref"] == "payroll.callback.signature.rsa_sha256.v1"
+    assert signature_adapter["signature_adapter_ref"] == "payroll.provider_signature_adapter.rsa_sha256_public_key.v1"
+    assert signature_adapter["key_material_mode"] == "runtime_public_key_ref"
+    assert signature_adapter["signature_encoding"] == "base64"
+    assert signature_adapter["expected_signature"] == ""
+    assert signature_adapter["credential_snapshot"]["source_ref"] == "unit-test-public-key-manager"
+    assert signature_adapter["credential_snapshot"]["metadata"]["kid"] == "bank-rsa-2026-08"
+    assert signature_adapter["credential_snapshot"]["material_field_ref"] == "public_key"
+    signature_gate = callback_response.json()["callback_event"]["verification_snapshot"]["callback_security"]["gates"][0]
+    assert signature_gate["adapter_ref"] == "payroll.provider_signature_adapter.rsa_sha256_public_key.v1"
+    serialized_evidence = json.dumps(
+        {
+            "delivery_request": delivery.request_snapshot,
+            "delivery_response": delivery.response_snapshot,
+            "delivery_config": delivery.config_snapshot,
+            "callback_verification": callback_event.verification_snapshot,
+            "callback_payload": callback_event.payload_snapshot,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert private_key_pem not in serialized_evidence
+
+
 def test_hr_admin_payroll_provider_delivery_retry_and_dead_letter_contract(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -4149,6 +6193,11 @@ def test_hr_admin_payroll_provider_delivery_retry_and_dead_letter_contract(api_c
     assert schedule_payload["retry_event"]["failure_taxonomy_ref"] == "bank.failure.taxonomy.v1"
     assert schedule_payload["retry_event"]["failure_category_ref"] == "transient_network"
     assert schedule_payload["delivery"]["config_snapshot"]["retry_state"]["eligible"] is True
+    provider_job = PayrollProviderJob.objects.get(retry_event_id=schedule_payload["retry_event"]["id"])
+    assert provider_job.job_kind == PayrollProviderJobKind.PROVIDER_RETRY
+    assert provider_job.status == PayrollProviderJobStatus.QUEUED
+    assert provider_job.idempotency_key == f"provider-retry:{schedule_payload['retry_event']['id']}"
+    assert provider_job.request_snapshot["retry_event_id"] == schedule_payload["retry_event"]["id"]
 
     requeue_response = api_client.post(
         f"/api/v1/hr-admin/payroll-provider-deliveries/{delivery.id}/requeue/",
@@ -4185,6 +6234,9 @@ def test_hr_admin_payroll_provider_delivery_retry_and_dead_letter_contract(api_c
     assert setup_response.json()["summary"]["provider_retry_event_count"] == 2
     assert setup_response.json()["summary"]["executed_provider_retry_event_count"] == 1
     assert setup_response.json()["summary"]["dead_lettered_provider_retry_event_count"] == 1
+    assert setup_response.json()["summary"]["provider_job_count"] == 1
+    assert setup_response.json()["summary"]["queued_provider_job_count"] == 1
+    assert setup_response.json()["provider_jobs"][0]["job_kind"] == PayrollProviderJobKind.PROVIDER_RETRY
 
 
 def test_payroll_provider_retry_worker_processes_due_events(api_client: APIClient, bootstrapped_workspace):
@@ -4254,13 +6306,22 @@ def test_payroll_provider_retry_worker_processes_due_events(api_client: APIClien
     )
     assert schedule_response.status_code == 200, schedule_response.json()
     retry_event_id = schedule_response.json()["retry_event"]["id"]
+    provider_job = PayrollProviderJob.objects.get(retry_event_id=retry_event_id)
+    assert provider_job.status == PayrollProviderJobStatus.QUEUED
+    same_job, created = enqueue_payroll_provider_retry_job(provider_job.retry_event)
+    assert created is False
+    assert same_job.id == provider_job.id
 
     stdout = StringIO()
-    call_command("process_payroll_provider_retries", tenant_code=tenant.code, limit=5, stdout=stdout)
-    assert "1 executed, 0 skipped" in stdout.getvalue()
+    call_command("process_payroll_provider_jobs", tenant_code=tenant.code, limit=5, stdout=stdout)
+    assert "1 completed, 0 failed, 0 skipped, 0 dead-lettered" in stdout.getvalue()
 
     retry_event = PayrollProviderRetryEvent.objects.get(id=retry_event_id)
+    provider_job.refresh_from_db()
     delivery.refresh_from_db()
+    assert provider_job.status == PayrollProviderJobStatus.COMPLETED
+    assert provider_job.attempt_count == 1
+    assert provider_job.response_snapshot["retry_event_id"] == retry_event_id
     assert retry_event.status == PayrollProviderRetryEventStatus.EXECUTED
     assert retry_event.response_snapshot["adapter_execution"]["worker_profile_ref"] == "bank.retry.worker.manual.v1"
     assert retry_event.response_snapshot["adapter_execution"]["adapter_ref"] == "bank-neft.manual.adapter.v1"
@@ -4282,12 +6343,131 @@ def test_payroll_provider_retry_worker_processes_due_events(api_client: APIClien
         attempt_number=3,
         scheduled_for=timezone.now() - timedelta(minutes=1),
     )
+    stale_job, created = enqueue_payroll_provider_retry_job(stale_event)
+    assert created is True
     stdout = StringIO()
-    call_command("process_payroll_provider_retries", tenant_code=tenant.code, limit=5, stdout=stdout)
-    assert "0 executed, 1 skipped" in stdout.getvalue()
+    call_command("process_payroll_provider_jobs", tenant_code=tenant.code, limit=5, stdout=stdout)
+    assert "0 completed, 0 failed, 1 skipped, 0 dead-lettered" in stdout.getvalue()
     stale_event.refresh_from_db()
+    stale_job.refresh_from_db()
     assert stale_event.status == PayrollProviderRetryEventStatus.SKIPPED
     assert stale_event.failure_code == "delivery_not_retryable"
+    assert stale_job.status == PayrollProviderJobStatus.SKIPPED
+    assert stale_job.failure_code == "delivery_not_retryable"
+
+
+def test_payroll_provider_job_runtime_heartbeat_and_stale_recovery(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    now = timezone.now()
+
+    running_job = PayrollProviderJob.objects.create(
+        tenant=tenant,
+        job_kind=PayrollProviderJobKind.PROVIDER_RETRY,
+        status=PayrollProviderJobStatus.RUNNING,
+        queue_policy_ref="payroll.provider_queue.provider_retry.production.v1",
+        worker_profile_ref="payroll.provider_worker.provider_retry.production.v1",
+        idempotency_key=f"runtime-heartbeat:{uuid4()}",
+        provider_ref="payroll.provider.bank.runtime.v1",
+        priority=40,
+        attempt_count=1,
+        max_attempts=3,
+        scheduled_for=now - timedelta(minutes=5),
+        leased_at=now - timedelta(seconds=20),
+        leased_until=now + timedelta(seconds=20),
+        lease_owner_ref="payroll.provider_worker.runtime-a.v1",
+        started_at=now - timedelta(seconds=20),
+        request_snapshot={
+            "queue_policy": {
+                "queue_policy_ref": "payroll.provider_queue.provider_retry.production.v1",
+                "worker_profile_ref": "payroll.provider_worker.provider_retry.production.v1",
+                "lease_seconds": 120,
+                "heartbeat_seconds": 30,
+                "stale_recovery_backoff_seconds": 45,
+                "max_recoveries": 2,
+            },
+        },
+    )
+    heartbeat_at = now + timedelta(seconds=5)
+    heartbeat_payroll_provider_job(
+        running_job,
+        lease_owner_ref="payroll.provider_worker.runtime-a.v1",
+        now=heartbeat_at,
+        extend_seconds=180,
+    )
+    running_job.refresh_from_db()
+    assert running_job.heartbeat_count == 1
+    assert running_job.heartbeat_at == heartbeat_at
+    assert running_job.leased_until == heartbeat_at + timedelta(seconds=180)
+    assert running_job.lease_snapshot["heartbeat_profile_ref"] == "payroll.provider_queue.heartbeat.standard.v1"
+    assert running_job.response_snapshot["last_runtime_event"] == "heartbeat"
+
+    running_job.leased_until = now - timedelta(seconds=10)
+    running_job.save()
+    result = process_due_payroll_provider_jobs(
+        tenant=tenant,
+        limit=5,
+        now=now,
+        lease_owner_ref="payroll.provider_worker.runtime-recovery.v1",
+    )
+    running_job.refresh_from_db()
+    assert result.recovered_count == 1
+    assert result.processed_jobs == []
+    assert running_job.status == PayrollProviderJobStatus.QUEUED
+    assert running_job.recovery_count == 1
+    assert running_job.last_recovered_at == now
+    assert running_job.scheduled_for == now + timedelta(seconds=45)
+    assert running_job.lease_owner_ref == ""
+    assert running_job.leased_until is None
+    assert running_job.failure_code == "provider_job_stale_lease_recovered"
+    assert running_job.response_snapshot["last_runtime_event"] == "stale_lease_recovered"
+    assert running_job.response_snapshot["runtime_events"][-1]["evidence"]["recovery_owner_ref"] == "payroll.provider_worker.runtime-recovery.v1"
+
+    exhausted_job = PayrollProviderJob.objects.create(
+        tenant=tenant,
+        job_kind=PayrollProviderJobKind.PROVIDER_SUBMISSION,
+        status=PayrollProviderJobStatus.RUNNING,
+        queue_policy_ref="payroll.provider_queue.provider_submission.production.v1",
+        worker_profile_ref="payroll.provider_worker.provider_submission.production.v1",
+        idempotency_key=f"runtime-exhausted:{uuid4()}",
+        provider_ref="payroll.provider.bank.runtime.v1",
+        priority=40,
+        attempt_count=1,
+        max_attempts=3,
+        recovery_count=1,
+        scheduled_for=now - timedelta(minutes=5),
+        leased_at=now - timedelta(minutes=5),
+        leased_until=now - timedelta(minutes=4),
+        lease_owner_ref="payroll.provider_worker.runtime-b.v1",
+        started_at=now - timedelta(minutes=5),
+        request_snapshot={
+            "queue_policy": {
+                "lease_seconds": 120,
+                "heartbeat_seconds": 30,
+                "stale_recovery_backoff_seconds": 45,
+                "max_recoveries": 2,
+            },
+        },
+    )
+    result = process_due_payroll_provider_jobs(
+        tenant=tenant,
+        limit=5,
+        now=now,
+        lease_owner_ref="payroll.provider_worker.runtime-recovery.v1",
+    )
+    exhausted_job.refresh_from_db()
+    assert result.recovered_count == 1
+    assert exhausted_job.status == PayrollProviderJobStatus.DEAD_LETTERED
+    assert exhausted_job.recovery_count == 2
+    assert exhausted_job.completed_at == now
+    assert exhausted_job.failure_code == "provider_job_stale_lease_dead_lettered"
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-finance-handoff-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    jobs = {item["id"]: item for item in setup_response.json()["provider_jobs"]}
+    assert jobs[str(running_job.id)]["heartbeat_count"] == 1
+    assert jobs[str(running_job.id)]["recovery_count"] == 1
+    assert jobs[str(exhausted_job.id)]["last_recovered_at"] is not None
 
 
 @override_settings(
@@ -4369,6 +6549,141 @@ def test_payroll_provider_adapter_boundary_resolves_sandbox_credentials(api_clie
     contract_validation = adapter_submission["request"]["adapter_contract_validation"]
     assert contract_validation["request"]["status"] == "passed"
     assert contract_validation["result"]["status"] == "passed"
+    schema_mapping = adapter_submission["request"]["schema_mapping"]
+    assert schema_mapping["status"] == "passed"
+    assert schema_mapping["provider_payload"]["file"]["name"].endswith("bank-advice.csv")
+    assert schema_mapping["provider_payload"]["submission"]["idempotency_key"]
+    assert adapter_submission["result"]["response_snapshot"]["provider_payload"]["file"]["checksum_sha256"] == delivery.payload_checksum_sha256
+
+
+def test_payroll_provider_http_json_adapter_submits_with_runtime_credentials(api_client: APIClient, bootstrapped_workspace):
+    captured_requests: list[dict[str, object]] = []
+
+    def fake_provider_transport(*, method, url, headers, body, timeout_seconds):
+        captured_requests.append({
+            "method": method,
+            "url": url,
+            "headers": headers,
+            "body": body,
+            "timeout_seconds": timeout_seconds,
+        })
+        assert headers["X-Bank-Key"] == "runtime-bank-api-key"
+        assert body["provider_payload"]["payment"]["total_amount"]
+        return {
+            "status_code": 202,
+            "response_body": json.dumps({
+                "status": PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+                "data": {
+                    "external_reference": "BANK-HTTP-EXT-2026-08",
+                    "batch_ref": "BANK-HTTP-BATCH-2026-08",
+                },
+                "certification_evidence_refs": ["bank-http://evidence/2026-08"],
+            }),
+            "response_headers": {"x-provider-request-id": "req-bank-http-001"},
+        }
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "payroll.provider.bank.http.v1",
+                        "channel_ref": "payroll.channel.bank.api.v1",
+                        "adapter_ref": "payroll.provider_adapter.http_json.v1",
+                        "submission_mode": "api",
+                        "submission_profile_ref": "bank-http.neft.submit.v1",
+                        "request_schema_ref": "bank-http.neft.request.v1",
+                        "response_schema_ref": "bank-http.neft.response.v1",
+                        "callback_profile_ref": "bank-http.neft.callback.v1",
+                        "callback_verification_ref": "bank-http.neft.callback.rsa.v1",
+                        "credential_ref": "tenant.bank-http.runtime.v1",
+                        "credential_required": True,
+                        "http_adapter": {
+                            "adapter_profile_ref": "bank-http.neft.adapter.v1",
+                            "endpoint_url": "https://bank-provider.example.test/payroll/neft/batches",
+                            "method": "POST",
+                            "transport_ref": "unit-test-bank-http",
+                            "timeout_seconds": 12,
+                            "auth_scheme": "api_key_header",
+                            "api_key_header_name": "X-Bank-Key",
+                            "provider_status_path": "status",
+                            "external_reference_path": "data.external_reference",
+                            "provider_batch_ref_path": "data.batch_ref",
+                            "domain_contract_ref": "payroll.provider_contract.bank_payment_instruction.http.v1",
+                        },
+                        "adapter_contract": {
+                            "contract_profile_ref": "bank-http.adapter.contract.v1",
+                            "enforcement_mode": "strict",
+                            "expected_adapter_ref": "payroll.provider_adapter.http_json.v1",
+                            "expected_provider_ref": "payroll.provider.bank.http.v1",
+                            "require_credential_resolution": True,
+                            "response_snapshot_required_fields": ["domain_contract_ref", "http_request.transport_ref"],
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.bank-http.runtime.v1": {
+                "provider_ref": "payroll.provider.bank.http.v1",
+                "source_ref": "unit-test-secret-manager",
+                "credentials": {"api_key": "runtime-bank-api-key"},
+                "metadata": {"environment": "production", "rotation_policy_ref": "payroll.secret.rotation.30d.v1"},
+            },
+        },
+        PAYROLL_PROVIDER_HTTP_TRANSPORTS={"unit-test-bank-http": fake_provider_transport},
+    ):
+        generate_outputs_response = api_client.post(
+            f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+            {"output_profile_ref": "india.monthly.output.profile.v1"},
+            format="json",
+        )
+        assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+        batch_id = generate_outputs_response.json()["output_batch"]["id"]
+        publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+        assert publish_response.status_code == 200, publish_response.json()
+        handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+        assert handoff_response.status_code == 200, handoff_response.json()
+        handoff_id = handoff_response.json()["handoff"]["id"]
+        transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+        assert transmit_response.status_code == 200, transmit_response.json()
+
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+    assert len(captured_requests) == 1, delivery.response_snapshot
+    assert delivery.status == PayrollProviderDeliveryStatus.ACKNOWLEDGED
+    assert delivery.external_reference == "BANK-HTTP-EXT-2026-08"
+    assert delivery.response_snapshot["provider_batch_ref"] == "BANK-HTTP-BATCH-2026-08"
+    adapter_submission = delivery.response_snapshot["adapter_submission"]
+    assert adapter_submission["request"]["credential_snapshot"]["resolved"] is True
+    assert adapter_submission["request"]["adapter_contract_validation"]["request"]["status"] == "passed"
+    assert adapter_submission["request"]["adapter_contract_validation"]["result"]["status"] == "passed"
+    response_snapshot = adapter_submission["result"]["response_snapshot"]
+    assert response_snapshot["dispatch_mode"] == "http_json"
+    assert response_snapshot["http_request"]["endpoint_url"] == "https://bank-provider.example.test/payroll/neft/batches"
+    assert response_snapshot["http_request"]["headers"]["X-Bank-Key"] == "configured"
+    assert response_snapshot["http_request"]["credential_snapshot"]["source_ref"] == "unit-test-secret-manager"
+    assert response_snapshot["http_response"]["status_code"] == 202
+    assert response_snapshot["provider_payload"]["payment"]["total_amount"]
+    serialized_delivery = json.dumps(
+        {
+            "request_snapshot": delivery.request_snapshot,
+            "response_snapshot": delivery.response_snapshot,
+            "config_snapshot": delivery.config_snapshot,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert "runtime-bank-api-key" not in serialized_delivery
 
 
 def test_payroll_provider_adapter_strict_contract_blocks_invalid_result(api_client: APIClient, bootstrapped_workspace):
@@ -4427,6 +6742,75 @@ def test_payroll_provider_adapter_strict_contract_blocks_invalid_result(api_clie
     assert delivery.request_snapshot["provider_submission_request"]["adapter_contract_validation"]["request"]["status"] == "passed"
     assert "response_snapshot:domain_contract_ref" in delivery.failure_reason
     assert delivery.config_snapshot["submission_contract"]["adapter_contract"]["enforcement_mode"] == "strict"
+
+
+def test_payroll_provider_schema_mapping_pack_blocks_strict_missing_field(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "payroll.provider.bank.strict-mapping.v1",
+                        "channel_ref": "payroll.channel.bank.strict-mapping.v1",
+                        "adapter_ref": "payroll.provider_adapter.manual.v1",
+                        "submission_mode": "api",
+                        "submission_profile_ref": "bank.strict-mapping.submit.v1",
+                        "request_schema_ref": "bank.strict-mapping.request.v1",
+                        "response_schema_ref": "bank.strict-mapping.response.v1",
+                        "callback_profile_ref": "bank.strict-mapping.callback.v1",
+                        "callback_verification_ref": "bank.strict-mapping.callback.hmac.v1",
+                        "schema_mapping": {
+                            "mapping_profile_ref": "bank.strict-mapping.pack.v1",
+                            "source_schema_ref": "payroll.internal.bank_advice.submission.v1",
+                            "target_schema_ref": "bank.strict-mapping.payload.v1",
+                            "enforcement_mode": "strict",
+                            "transform_rules": [
+                                {
+                                    "source_path": "artifact_snapshot.config_snapshot.missing_required_bank_code",
+                                    "target_path": "bank.required_code",
+                                    "required": True,
+                                    "value_type": "string",
+                                },
+                            ],
+                            "validation_rules": [
+                                {"path": "bank.required_code", "required": True, "gate_ref": "bank_required_code_mapped"},
+                            ],
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+    assert delivery.status == PayrollProviderDeliveryStatus.FAILED
+    assert delivery.failure_code == "provider_schema_mapping_failed"
+    schema_mapping = delivery.request_snapshot["provider_submission_request"]["schema_mapping"]
+    assert schema_mapping["status"] == "blocked"
+    assert "mapping_rule:bank.required_code" in schema_mapping["blocking_gate_refs"]
+    assert "bank_required_code_mapped" in schema_mapping["blocking_gate_refs"]
 
 
 def test_payroll_provider_specific_sandbox_adapters_stamp_domain_contracts(api_client: APIClient, bootstrapped_workspace):
@@ -4526,6 +6910,2396 @@ def test_payroll_provider_specific_sandbox_adapters_stamp_domain_contracts(api_c
     assert statutory_delivery.config_snapshot["certification_evidence"]["evidence_refs"] == ["sandbox://statutory/receipt/aug-2026"]
 
 
+@override_settings(
+    PAYROLL_PROVIDER_CREDENTIALS={
+        "tenant.bank-production.runtime.v1": {
+            "provider_ref": "payroll.provider.bank.production.v1",
+            "source_ref": "unit-test-secret-manager",
+            "credentials": {"api_key": "bank-production-secret"},
+            "metadata": {"environment": "production", "rotation_policy_ref": "payroll.secret.rotation.30d.v1"},
+        },
+        "tenant.statutory-production.runtime.v1": {
+            "provider_ref": "payroll.provider.statutory.production.v1",
+            "source_ref": "unit-test-secret-manager",
+            "credentials": {"token": "statutory-production-secret"},
+            "metadata": {"environment": "production", "rotation_policy_ref": "payroll.secret.rotation.30d.v1"},
+        },
+    },
+)
+def test_payroll_provider_production_adapter_packs_stamp_configurable_controls(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+
+    with pytest.raises(PayrollProviderAdapterError):
+        validate_payroll_provider_route_config({
+            "adapter_ref": "payroll.provider_adapter.bank.production_pack.v1",
+            "production_adapter": {"transport_mode": "fax"},
+        })
+
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "payroll.provider.bank.production.v1",
+                        "channel_ref": "payroll.channel.bank.api.production.v1",
+                        "adapter_ref": "payroll.provider_adapter.bank.production_pack.v1",
+                        "submission_mode": "api",
+                        "submission_profile_ref": "bank.production.neft.submit.v1",
+                        "request_schema_ref": "bank.production.neft.request.v1",
+                        "response_schema_ref": "bank.production.neft.response.v1",
+                        "callback_profile_ref": "bank.production.callback.v1",
+                        "callback_verification_ref": "bank.production.callback.hmac.v1",
+                        "credential_ref": "tenant.bank-production.runtime.v1",
+                        "credential_required": True,
+                        "production_adapter": {
+                            "adapter_pack_ref": "tenant.bank.neft.production_pack.v1",
+                            "adapter_profile_ref": "tenant.bank.neft.profile.v1",
+                            "environment_ref": "production",
+                            "transport_mode": "api",
+                            "transport_ref": "bank.production.http.primary.v1",
+                            "operation_ref": "bank.neft.batch.submit.v1",
+                            "domain_contract_ref": "bank.neft.payment_instruction.production.v1",
+                            "evidence_profile_ref": "bank.neft.ack.evidence.v1",
+                            "requires_certified_connection": False,
+                            "provider_status": PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+                            "provider_batch_ref": "BANK-PROD-BATCH-2026-08",
+                        },
+                        "adapter_contract": {
+                            "enforcement_mode": "strict",
+                            "expected_adapter_ref": "payroll.provider_adapter.bank.production_pack.v1",
+                            "expected_provider_ref": "payroll.provider.bank.production.v1",
+                            "require_credential_resolution": True,
+                            "response_snapshot_required_fields": ["adapter_pack_ref", "domain_contract_ref", "production_controls.secret_material_policy_ref"],
+                        },
+                    },
+                    "accounting_export": {
+                        "provider_ref": "payroll.provider.accounting.production.v1",
+                        "channel_ref": "payroll.channel.accounting.file.production.v1",
+                        "adapter_ref": "payroll.provider_adapter.accounting.production_pack.v1",
+                        "submission_mode": "file_export",
+                        "submission_profile_ref": "accounting.production.journal.submit.v1",
+                        "request_schema_ref": "accounting.production.journal.request.v1",
+                        "response_schema_ref": "accounting.production.journal.response.v1",
+                        "callback_profile_ref": "accounting.production.callback.manual.v1",
+                        "callback_verification_ref": "accounting.production.callback.audit.v1",
+                        "production_adapter": {
+                            "adapter_pack_ref": "tenant.accounting.ledger.production_pack.v1",
+                            "transport_mode": "file_export",
+                            "transport_ref": "accounting.secure-drop.primary.v1",
+                            "operation_ref": "accounting.ledger.import.v1",
+                            "domain_contract_ref": "accounting.ledger.import.production.v1",
+                            "requires_credential_ref": False,
+                            "requires_certified_connection": False,
+                            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+                        },
+                        "adapter_contract": {
+                            "enforcement_mode": "strict",
+                            "expected_adapter_ref": "payroll.provider_adapter.accounting.production_pack.v1",
+                            "expected_provider_ref": "payroll.provider.accounting.production.v1",
+                            "response_snapshot_required_fields": ["adapter_pack_ref", "transport_mode", "production_controls.requires_credential_ref"],
+                        },
+                    },
+                    "statutory_report": {
+                        "provider_ref": "payroll.provider.statutory.production.v1",
+                        "channel_ref": "payroll.channel.statutory.portal.production.v1",
+                        "adapter_ref": "payroll.provider_adapter.statutory.production_pack.v1",
+                        "submission_mode": "portal_automation",
+                        "submission_profile_ref": "statutory.production.return.submit.v1",
+                        "request_schema_ref": "statutory.production.return.request.v1",
+                        "response_schema_ref": "statutory.production.return.response.v1",
+                        "callback_profile_ref": "statutory.production.callback.v1",
+                        "callback_verification_ref": "statutory.production.callback.hmac.v1",
+                        "credential_ref": "tenant.statutory-production.runtime.v1",
+                        "credential_required": True,
+                        "production_adapter": {
+                            "adapter_pack_ref": "tenant.statutory.portal.production_pack.v1",
+                            "transport_mode": "portal_automation",
+                            "transport_ref": "statutory.portal.robot.primary.v1",
+                            "operation_ref": "statutory.return.upload.v1",
+                            "domain_contract_ref": "statutory.return.upload.production.v1",
+                            "evidence_profile_ref": "statutory.receipt.evidence.v1",
+                            "requires_certified_connection": False,
+                            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+                            "certification_evidence_refs": ["statutory://receipt/aug-2026"],
+                        },
+                        "adapter_contract": {
+                            "enforcement_mode": "strict",
+                            "expected_adapter_ref": "payroll.provider_adapter.statutory.production_pack.v1",
+                            "expected_provider_ref": "payroll.provider.statutory.production.v1",
+                            "require_credential_resolution": True,
+                            "response_snapshot_required_fields": ["adapter_pack_ref", "evidence_profile_ref", "production_controls.certification_evidence_required"],
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+
+    deliveries = {
+        item.artifact_kind: item
+        for item in PayrollProviderDelivery.objects.filter(handoff_id=handoff_id).select_related("output_artifact")
+    }
+    bank_delivery = deliveries[PayrollOutputArtifactKind.BANK_ADVICE]
+    accounting_delivery = deliveries[PayrollOutputArtifactKind.ACCOUNTING_EXPORT]
+    statutory_delivery = deliveries[PayrollOutputArtifactKind.STATUTORY_REPORT]
+
+    assert bank_delivery.status == PayrollProviderDeliveryStatus.ACKNOWLEDGED
+    assert bank_delivery.response_snapshot["dispatch_mode"] == "production_adapter_pack"
+    assert bank_delivery.response_snapshot["adapter_pack_ref"] == "tenant.bank.neft.production_pack.v1"
+    assert bank_delivery.response_snapshot["domain_contract_ref"] == "bank.neft.payment_instruction.production.v1"
+    assert bank_delivery.response_snapshot["production_controls"]["requires_credential_ref"] is True
+    assert bank_delivery.response_snapshot["credential_snapshot"]["resolved"] is True
+
+    assert accounting_delivery.status == PayrollProviderDeliveryStatus.RECONCILED
+    assert accounting_delivery.response_snapshot["adapter_family"] == "accounting"
+    assert accounting_delivery.response_snapshot["transport_mode"] == "file_export"
+    assert accounting_delivery.response_snapshot["production_controls"]["requires_credential_ref"] is False
+
+    assert statutory_delivery.status == PayrollProviderDeliveryStatus.RECONCILED
+    assert statutory_delivery.response_snapshot["adapter_family"] == "statutory"
+    assert statutory_delivery.response_snapshot["transport_mode"] == "portal_automation"
+    assert statutory_delivery.response_snapshot["evidence_profile_ref"] == "statutory.receipt.evidence.v1"
+    assert statutory_delivery.config_snapshot["certification_evidence"]["evidence_refs"] == ["statutory://receipt/aug-2026"]
+
+    serialized_snapshot = json.dumps(
+        {
+            "bank": bank_delivery.response_snapshot,
+            "accounting": accounting_delivery.response_snapshot,
+            "statutory": statutory_delivery.response_snapshot,
+            "configs": [item.config_snapshot for item in deliveries.values()],
+            "requests": [item.request_snapshot for item in deliveries.values()],
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert "bank-production-secret" not in serialized_snapshot
+    assert "statutory-production-secret" not in serialized_snapshot
+
+
+@override_settings(
+    PAYROLL_PROVIDER_ADAPTERS={
+        "tenant.bank.live-sdk.adapter.v1": "apps.payroll.providers:ManualPayrollProviderAdapter",
+        "tenant.statutory.missing.adapter.v1": "apps.payroll.missing:NoAdapter",
+    },
+)
+def test_payroll_provider_adapter_registry_readiness_surfaces_custom_and_missing_refs(api_client: APIClient, bootstrapped_workspace):
+    registry = describe_payroll_provider_adapter_registry(
+        {
+            "payroll.provider_adapter.bank.production_pack.v1",
+            "tenant.bank.live-sdk.adapter.v1",
+            "tenant.unregistered.adapter.v1",
+        }
+    )
+    registry_by_ref = {item["adapter_ref"]: item for item in registry["adapters"]}
+    assert registry_by_ref["payroll.provider_adapter.bank.production_pack.v1"]["status"] == "ready"
+    assert registry_by_ref["payroll.provider_adapter.bank.production_pack.v1"]["capabilities"]["is_production_pack"] is True
+    assert registry_by_ref["tenant.bank.live-sdk.adapter.v1"]["status"] == "ready"
+    assert registry_by_ref["tenant.bank.live-sdk.adapter.v1"]["source_ref"] == "settings.PAYROLL_PROVIDER_ADAPTERS"
+    assert registry_by_ref["tenant.statutory.missing.adapter.v1"]["status"] == "blocked"
+    assert registry_by_ref["tenant.unregistered.adapter.v1"]["status"] == "blocked"
+    assert "adapter_ref_not_registered" in registry_by_ref["tenant.unregistered.adapter.v1"]["blocking_gate_refs"]
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-provider-connection-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    setup_payload = setup_response.json()
+    assert setup_payload["adapter_registry"]["registry_profile_ref"] == "payroll.provider_adapter_registry.readiness.v1"
+    assert setup_payload["summary"]["adapter_registry_count"] == setup_payload["adapter_registry"]["adapter_count"]
+    assert setup_payload["summary"]["configured_adapter_registry_count"] == 2
+    assert setup_payload["summary"]["blocked_adapter_registry_count"] >= 1
+    api_registry_by_ref = {item["adapter_ref"]: item for item in setup_payload["adapter_registry"]["adapters"]}
+    assert api_registry_by_ref["tenant.bank.live-sdk.adapter.v1"]["status"] == "ready"
+    assert api_registry_by_ref["tenant.statutory.missing.adapter.v1"]["status"] == "blocked"
+    assert api_registry_by_ref["payroll.provider_adapter.statutory.production_pack.v1"]["capabilities"]["supported_artifact_kinds"] == ["statutory_report"]
+
+
+@override_settings(
+    PAYROLL_BANK_PAYOUT_CLIENTS={
+        "tenant.bank.live-sdk.client.v1": lambda *, request, credential, config: {"provider_status": "acknowledged"},
+    },
+    PAYROLL_STATUTORY_FILING_CLIENTS={
+        "tenant.statutory.invalid.client.v1": object(),
+    },
+)
+def test_payroll_provider_client_registry_readiness_surfaces_fixtures_custom_and_missing_refs(api_client: APIClient, bootstrapped_workspace):
+    registry = describe_payroll_provider_client_registry(
+        {
+            "payroll.provider_client.bank.fixture.v1": "bank",
+            "tenant.bank.live-sdk.client.v1": "bank",
+            "tenant.unregistered.client.v1": "statutory",
+        }
+    )
+    registry_by_ref = {item["client_ref"]: item for item in registry["clients"]}
+    assert registry_by_ref["payroll.provider_client.bank.fixture.v1"]["status"] == "ready"
+    assert registry_by_ref["payroll.provider_client.bank.fixture.v1"]["capabilities"]["is_fixture_client"] is True
+    assert registry_by_ref["tenant.bank.live-sdk.client.v1"]["status"] == "ready"
+    assert registry_by_ref["tenant.bank.live-sdk.client.v1"]["source_ref"] == "settings.PAYROLL_BANK_PAYOUT_CLIENTS"
+    assert registry_by_ref["tenant.statutory.invalid.client.v1"]["status"] == "blocked"
+    assert "provider_client_method_missing" in registry_by_ref["tenant.statutory.invalid.client.v1"]["blocking_gate_refs"]
+    assert registry_by_ref["tenant.unregistered.client.v1"]["status"] == "blocked"
+    assert "provider_client_ref_not_registered" in registry_by_ref["tenant.unregistered.client.v1"]["blocking_gate_refs"]
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-provider-connection-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    setup_payload = setup_response.json()
+    assert setup_payload["client_registry"]["registry_profile_ref"] == "payroll.provider_client_registry.readiness.v1"
+    assert setup_payload["summary"]["client_registry_count"] == setup_payload["client_registry"]["client_count"]
+    assert setup_payload["summary"]["configured_client_registry_count"] == 2
+    assert setup_payload["summary"]["fixture_client_registry_count"] == 3
+    api_registry_by_ref = {item["client_ref"]: item for item in setup_payload["client_registry"]["clients"]}
+    assert api_registry_by_ref["payroll.provider_client.accounting.fixture.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_client.bank.sdk_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_client.bank.sdk_http.v1"]["capabilities"]["is_live_provider_client"] is True
+    assert api_registry_by_ref["payroll.provider_client.bank.razorpayx_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_client.bank.razorpayx_http.v1"]["capabilities"]["is_live_provider_client"] is True
+    assert api_registry_by_ref["payroll.provider_client.accounting.sdk_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_client.accounting.sdk_http.v1"]["capabilities"]["is_live_provider_client"] is True
+    assert api_registry_by_ref["payroll.provider_client.accounting.tallyprime_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_client.accounting.tallyprime_http.v1"]["capabilities"]["is_live_provider_client"] is True
+    assert api_registry_by_ref["payroll.provider_client.statutory.sdk_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_client.statutory.sdk_http.v1"]["capabilities"]["is_live_provider_client"] is True
+    assert api_registry_by_ref["payroll.provider_client.statutory.epfo_ecr_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_client.statutory.epfo_ecr_http.v1"]["capabilities"]["is_live_provider_client"] is True
+    assert api_registry_by_ref["tenant.statutory.invalid.client.v1"]["status"] == "blocked"
+
+
+@override_settings(
+    PAYROLL_BANK_PAYOUT_CLIENTS={
+        "tenant.bank.live-sdk.client.v1": lambda *, request, credential, config: {"provider_status": "acknowledged"},
+    },
+    PAYROLL_PROVIDER_PACKAGES={
+        "tenant.bank.live-sdk.package.v1": {
+            "package_profile_ref": "tenant.provider_package_manifest.bank.live.v1",
+            "provider_kind": "bank",
+            "provider_name": "Tenant bank live SDK",
+            "adapter_ref": "payroll.provider_adapter.bank.live_payout.v1",
+            "client_ref": "tenant.bank.live-sdk.client.v1",
+            "certification_fixture_client_ref": "payroll.provider_client.bank.fixture.v1",
+            "supported_artifact_kinds": ["bank_advice"],
+            "supported_transport_modes": ["api"],
+            "required_route_config_refs": [
+                "bank_payout_adapter.client_ref",
+                "bank_payout_adapter.debit_account_ref",
+                "bank_payout_adapter.payment_date",
+            ],
+            "certification_scenario_refs": ["bank_payout_acknowledged", "bank_payout_idempotent_replay"],
+            "evidence_path_refs": ["bank_payout.utr_refs", "bank_payout.evidence_refs"],
+            "secret_material_policy_ref": "payroll.provider_secret_material.reference_only.v1",
+            "storage_policy_refs": ["payroll.storage.policy.default.v1"],
+            "sandbox_ready": True,
+        },
+        "tenant.unsafe.package.v1": {
+            "provider_kind": "bank",
+            "adapter_ref": "payroll.provider_adapter.bank.live_payout.v1",
+            "client_ref": "tenant.bank.live-sdk.client.v1",
+            "api_key": "must-not-be-here",
+        },
+    },
+)
+def test_payroll_provider_package_registry_readiness_surfaces_manifest_gates(api_client: APIClient, bootstrapped_workspace):
+    registry = describe_payroll_provider_package_registry(
+        {"tenant.missing.package.v1"},
+        route_snapshots=[
+            {
+                "provider_package_ref": "tenant.bank.live-sdk.package.v1",
+                "adapter_ref": "payroll.provider_adapter.bank.live_payout.v1",
+                "bank_payout_adapter": {"client_ref": "tenant.bank.live-sdk.client.v1"},
+            }
+        ],
+    )
+    registry_by_ref = {item["package_ref"]: item for item in registry["packages"]}
+    assert registry_by_ref["payroll.provider_package.bank.fixture.v1"]["status"] == "ready"
+    assert registry_by_ref["payroll.provider_package.bank.fixture.v1"]["capabilities"]["is_fixture_package"] is True
+    assert registry_by_ref["tenant.bank.live-sdk.package.v1"]["status"] == "ready"
+    assert registry_by_ref["tenant.bank.live-sdk.package.v1"]["required_by_connection"] is True
+    assert registry_by_ref["tenant.bank.live-sdk.package.v1"]["source_ref"] == "settings.PAYROLL_PROVIDER_PACKAGES"
+    assert registry_by_ref["tenant.unsafe.package.v1"]["status"] == "blocked"
+    assert "raw_provider_credentials_not_allowed" in registry_by_ref["tenant.unsafe.package.v1"]["blocking_gate_refs"]
+    assert registry_by_ref["tenant.missing.package.v1"]["status"] == "blocked"
+    assert "provider_package_ref_not_registered" in registry_by_ref["tenant.missing.package.v1"]["blocking_gate_refs"]
+
+    with pytest.raises(PayrollProviderAdapterError):
+        validate_payroll_provider_route_config({"provider_package_ref": {"not": "a-ref"}})
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-provider-connection-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    setup_payload = setup_response.json()
+    assert setup_payload["package_registry"]["registry_profile_ref"] == "payroll.provider_package_registry.readiness.v1"
+    assert setup_payload["launch_rehearsal"]["rehearsal_profile_ref"] == "payroll.provider_launch_rehearsal.v1"
+    assert setup_payload["launch_rehearsal"]["status"] == "blocked"
+    assert setup_payload["launch_rehearsal"]["lane_count"] == 3
+    assert setup_payload["summary"]["launch_rehearsal_blocker_count"] == setup_payload["launch_rehearsal"]["launch_blocker_count"]
+    audit_pack = describe_payroll_provider_launch_readiness_audit_pack(
+        tenant_snapshot={"tenant_code": bootstrapped_workspace["pending_leave"].tenant.code},
+        setup_payload=setup_payload,
+        generated_at="2026-09-07T00:00:00+05:30",
+    )
+    assert audit_pack["audit_pack_ref"] == "payroll.provider_launch_readiness.audit_pack.v1"
+    assert audit_pack["status"] == "blocked"
+    assert audit_pack["can_launch"] is False
+    assert audit_pack["summary"]["launch_blocker_count"] == len(audit_pack["release_blockers"])
+    assert audit_pack["evidence_checksum_sha256"]
+    assert setup_payload["summary"]["launch_rehearsal_run_count"] == 0
+    assert setup_payload["launch_rehearsals"] == []
+    assert setup_payload["summary"]["package_registry_count"] == setup_payload["package_registry"]["package_count"]
+    assert setup_payload["summary"]["configured_package_registry_count"] == 2
+    assert setup_payload["summary"]["fixture_package_registry_count"] == 3
+    api_registry_by_ref = {item["package_ref"]: item for item in setup_payload["package_registry"]["packages"]}
+    assert api_registry_by_ref["payroll.provider_package.statutory.fixture.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_package.bank.sdk_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_package.bank.sdk_http.v1"]["capabilities"]["is_fixture_package"] is False
+    assert "bank_payout_adapter.endpoint_url" in api_registry_by_ref["payroll.provider_package.bank.sdk_http.v1"]["manifest"]["required_route_config_refs"]
+    assert api_registry_by_ref["payroll.provider_package.bank.razorpayx_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_package.bank.razorpayx_http.v1"]["capabilities"]["package_module_ref"] == "payroll.provider_package_module.bank.razorpayx_http.v1"
+    assert api_registry_by_ref["payroll.provider_package.bank.razorpayx_http.v1"]["capabilities"]["provider_contract_ref"] == "payroll.provider_contract.bank.razorpayx_payout.v1"
+    assert api_registry_by_ref["payroll.provider_package.accounting.sdk_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_package.accounting.sdk_http.v1"]["capabilities"]["is_fixture_package"] is False
+    assert "accounting_journal_adapter.endpoint_url" in api_registry_by_ref["payroll.provider_package.accounting.sdk_http.v1"]["manifest"]["required_route_config_refs"]
+    assert api_registry_by_ref["payroll.provider_package.accounting.tallyprime_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_package.accounting.tallyprime_http.v1"]["capabilities"]["package_module_ref"] == "payroll.provider_package_module.accounting.tallyprime_http.v1"
+    assert api_registry_by_ref["payroll.provider_package.accounting.tallyprime_http.v1"]["capabilities"]["provider_contract_ref"] == "payroll.provider_contract.accounting.tallyprime_journal_import.v1"
+    assert api_registry_by_ref["payroll.provider_package.statutory.sdk_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_package.statutory.sdk_http.v1"]["capabilities"]["is_fixture_package"] is False
+    assert "statutory_filing_adapter.endpoint_url" in api_registry_by_ref["payroll.provider_package.statutory.sdk_http.v1"]["manifest"]["required_route_config_refs"]
+    assert "payroll.storage.policy.default.v1" in api_registry_by_ref["payroll.provider_package.statutory.sdk_http.v1"]["manifest"]["storage_policy_refs"]
+    assert api_registry_by_ref["payroll.provider_package.statutory.epfo_ecr_http.v1"]["status"] == "ready"
+    assert api_registry_by_ref["payroll.provider_package.statutory.epfo_ecr_http.v1"]["capabilities"]["package_module_ref"] == "payroll.provider_package_module.statutory.epfo_ecr_http.v1"
+    assert api_registry_by_ref["payroll.provider_package.statutory.epfo_ecr_http.v1"]["capabilities"]["provider_contract_ref"] == "payroll.provider_contract.statutory.epfo_ecr_upload.v1"
+    assert api_registry_by_ref["tenant.unsafe.package.v1"]["status"] == "blocked"
+
+
+@override_settings(
+    PAYROLL_ARTIFACT_STORAGE_POLICIES={
+        "payroll.storage.policy.strict-runtime.v1": {
+            "enabled": True,
+            "allowed_provider_families": ["s3"],
+            "allowed_provider_refs": ["payroll.storage.s3.private.v1"],
+            "allowed_credential_refs": ["tenant:northstar:secret/payroll-s3-runtime"],
+            "allowed_bucket_names": ["tenant-payroll-private"],
+            "allowed_retention_policy_refs": ["payroll.retention.10y.v1"],
+            "allowed_encryption_refs": ["tenant-managed-kms/payroll"],
+            "allowed_endpoint_hosts": ["tenant-payroll-private.s3.ap-south-1.amazonaws.com"],
+            "required_key_prefix": "tenant-payroll",
+            "require_encryption_ref": True,
+            "require_private_endpoint": True,
+            "require_runtime_credentials": True,
+            "max_signed_url_expires_in_seconds": 180,
+            "max_file_size_bytes": 100000,
+            "lifecycle_policy_ref": "payroll.lifecycle.retention.10y.v1",
+            "malware_scan_profile_ref": "payroll.malware.scan.sync.v1",
+            "durability_policy_ref": "payroll.durability.multi-region.v1",
+            "metadata": {"iam_policy_ref": "tenant-payroll-artifact-writer"},
+        },
+        "payroll.storage.policy.disabled.v1": {
+            "enabled": False,
+            "metadata": {"secret_key": "must-not-leak"},
+        },
+    },
+)
+def test_payroll_storage_policy_registry_readiness_surfaces_iam_and_storage_gates(api_client: APIClient, bootstrapped_workspace):
+    registry = describe_payroll_artifact_storage_policy_registry(
+        {
+            "payroll.storage.policy.strict-runtime.v1",
+            "payroll.storage.policy.disabled.v1",
+            "payroll.storage.policy.missing.v1",
+        }
+    )
+    registry_by_ref = {item["storage_policy_ref"]: item for item in registry["policies"]}
+    assert registry["registry_profile_ref"] == "payroll.storage_policy_registry.readiness.v1"
+    assert registry_by_ref["payroll.storage.policy.default.v1"]["status"] == "ready"
+    assert registry_by_ref["payroll.storage.policy.strict-runtime.v1"]["status"] == "ready"
+    assert registry_by_ref["payroll.storage.policy.strict-runtime.v1"]["capabilities"]["requires_runtime_credentials"] is True
+    assert registry_by_ref["payroll.storage.policy.strict-runtime.v1"]["capabilities"]["requires_lifecycle_policy"] is True
+    assert registry_by_ref["payroll.storage.policy.strict-runtime.v1"]["capabilities"]["requires_malware_scan"] is True
+    assert registry_by_ref["payroll.storage.policy.strict-runtime.v1"]["capabilities"]["requires_durability_policy"] is True
+    assert registry_by_ref["payroll.storage.policy.disabled.v1"]["status"] == "blocked"
+    assert "storage_policy_disabled" in registry_by_ref["payroll.storage.policy.disabled.v1"]["blocking_gate_refs"]
+    assert "raw_storage_credentials_not_allowed" in registry_by_ref["payroll.storage.policy.disabled.v1"]["blocking_gate_refs"]
+    assert registry_by_ref["payroll.storage.policy.disabled.v1"]["policy"]["metadata"]["secret_key"] == "[redacted]"
+    assert registry_by_ref["payroll.storage.policy.missing.v1"]["status"] == "blocked"
+    assert "storage_policy_not_configured" in registry_by_ref["payroll.storage.policy.missing.v1"]["blocking_gate_refs"]
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-provider-connection-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    setup_payload = setup_response.json()
+    assert setup_payload["storage_policy_registry"]["registry_profile_ref"] == "payroll.storage_policy_registry.readiness.v1"
+    assert setup_payload["summary"]["storage_policy_registry_count"] == setup_payload["storage_policy_registry"]["storage_policy_count"]
+    assert setup_payload["summary"]["ready_storage_policy_registry_count"] >= 1
+    assert setup_payload["summary"]["blocked_storage_policy_registry_count"] == 1
+    api_package_by_ref = {item["package_ref"]: item for item in setup_payload["package_registry"]["packages"]}
+    assert api_package_by_ref["payroll.provider_package.bank.sdk_http.v1"]["status"] == "ready"
+    api_storage_by_ref = {item["storage_policy_ref"]: item for item in setup_payload["storage_policy_registry"]["policies"]}
+    assert api_storage_by_ref["payroll.storage.policy.default.v1"]["required_by_package"] is True
+    assert api_storage_by_ref["payroll.storage.policy.disabled.v1"]["status"] == "blocked"
+
+
+def _payroll_storage_control_test_verifier(*, control_ref, control_kind, policy, verification_mode):
+    if control_ref == "payroll.malware.scan.failed.v1":
+        return {
+            "status": "blocked",
+            "verified": False,
+            "blocking": True,
+            "failure_code": "malware_scan_profile_unavailable",
+            "failure_reason": "Malware scan profile could not be verified.",
+            "evidence_snapshot": {
+                "verification_mode": verification_mode,
+                "policy_ref": policy.storage_policy_ref,
+                "secret_key": "must-not-leak",
+            },
+        }
+    return {
+        "status": "verified",
+        "verified": True,
+        "evidence_snapshot": {
+            "verification_mode": verification_mode,
+            "control_kind": control_kind,
+            "control_ref": control_ref,
+            "policy_ref": policy.storage_policy_ref,
+            "secret_key": "must-not-leak",
+        },
+    }
+
+
+@override_settings(
+    PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFIERS={
+        "kms_encryption": _payroll_storage_control_test_verifier,
+        "lifecycle": _payroll_storage_control_test_verifier,
+        "malware_scan": _payroll_storage_control_test_verifier,
+        "durability": _payroll_storage_control_test_verifier,
+        "iam": _payroll_storage_control_test_verifier,
+    },
+    PAYROLL_ARTIFACT_STORAGE_POLICIES={
+        "payroll.storage.policy.verified-controls.v1": {
+            "allowed_encryption_refs": ["tenant-managed-kms/payroll"],
+            "lifecycle_policy_ref": "payroll.lifecycle.retention.10y.v1",
+            "malware_scan_profile_ref": "payroll.malware.scan.sync.v1",
+            "durability_policy_ref": "payroll.durability.multi-region.v1",
+            "metadata": {
+                "iam_policy_ref": "tenant-payroll-artifact-writer",
+                "control_verification_mode": "strict",
+                "control_verification_profile_ref": "payroll.storage_control_verification.strict.v1",
+            },
+        },
+        "payroll.storage.policy.failed-controls.v1": {
+            "malware_scan_profile_ref": "payroll.malware.scan.failed.v1",
+            "metadata": {"control_verification_mode": "strict"},
+        },
+        "payroll.storage.policy.unconfigured-strict.v1": {
+            "lifecycle_policy_ref": "payroll.lifecycle.retention.10y.v1",
+            "metadata": {"control_verification_mode": "strict"},
+        },
+    },
+)
+def test_payroll_storage_control_verifiers_produce_strict_launch_evidence():
+    policy = resolve_payroll_artifact_storage_policy("payroll.storage.policy.verified-controls.v1")
+    verification = verify_payroll_artifact_storage_policy_controls(policy)
+    assert verification["verification_profile_ref"] == "payroll.storage_control_verification.strict.v1"
+    assert verification["verification_mode"] == "strict"
+    assert verification["status"] == "ready"
+    assert verification["control_count"] == 5
+    assert verification["verified_control_count"] == 5
+    assert {item["control_kind"] for item in verification["controls"]} == {
+        "kms_encryption",
+        "lifecycle",
+        "malware_scan",
+        "durability",
+        "iam",
+    }
+    assert all(item["evidence_snapshot"]["secret_key"] == "[redacted]" for item in verification["controls"])
+
+    registry = describe_payroll_artifact_storage_policy_registry(
+        {
+            "payroll.storage.policy.verified-controls.v1",
+            "payroll.storage.policy.failed-controls.v1",
+            "payroll.storage.policy.unconfigured-strict.v1",
+        }
+    )
+    registry_by_ref = {item["storage_policy_ref"]: item for item in registry["policies"]}
+    assert registry_by_ref["payroll.storage.policy.verified-controls.v1"]["status"] == "ready"
+    assert registry_by_ref["payroll.storage.policy.verified-controls.v1"]["control_verification"]["verified_control_count"] == 5
+    assert registry_by_ref["payroll.storage.policy.failed-controls.v1"]["status"] == "blocked"
+    assert "storage_control_verification_blocked" in registry_by_ref["payroll.storage.policy.failed-controls.v1"]["blocking_gate_refs"]
+    assert registry_by_ref["payroll.storage.policy.failed-controls.v1"]["control_verification"]["blocked_control_refs"] == ["payroll.malware.scan.failed.v1"]
+    assert registry_by_ref["payroll.storage.policy.unconfigured-strict.v1"]["status"] == "ready"
+
+
+@override_settings(
+    PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFIERS={},
+    PAYROLL_ARTIFACT_STORAGE_POLICIES={
+        "payroll.storage.policy.unconfigured-strict.v1": {
+            "lifecycle_policy_ref": "payroll.lifecycle.retention.10y.v1",
+            "metadata": {"control_verification_mode": "strict"},
+        },
+    },
+)
+def test_payroll_storage_control_verification_blocks_strict_policy_without_verifier():
+    registry = describe_payroll_artifact_storage_policy_registry({"payroll.storage.policy.unconfigured-strict.v1"})
+    registry_by_ref = {item["storage_policy_ref"]: item for item in registry["policies"]}
+    policy_row = registry_by_ref["payroll.storage.policy.unconfigured-strict.v1"]
+    assert policy_row["status"] == "blocked"
+    assert "storage_control_verification_blocked" in policy_row["blocking_gate_refs"]
+    assert policy_row["control_verification"]["blocked_control_refs"] == ["payroll.lifecycle.retention.10y.v1"]
+    assert policy_row["control_verification"]["controls"][0]["failure_code"] == "storage_control_verifier_not_configured"
+
+
+@pytest.mark.django_db
+def test_hr_admin_can_record_payroll_provider_launch_rehearsal_history(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+
+    response = api_client.post("/api/v1/hr-admin/payroll-provider-launch-rehearsals/run/", {}, format="json")
+
+    assert response.status_code == 201, response.json()
+    payload = response.json()
+    run = payload["launch_rehearsal_run"]
+    assert run["audit_pack_ref"] == "payroll.provider_launch_readiness.audit_pack.v1"
+    assert run["rehearsal_profile_ref"] == "payroll.provider_launch_rehearsal.v1"
+    assert run["status"] == PayrollProviderLaunchRehearsalStatus.BLOCKED
+    assert run["can_launch"] is False
+    assert run["launch_blocker_count"] == len(run["release_blocker_refs"])
+    assert run["evidence_checksum_sha256"] == run["audit_pack_snapshot"]["evidence_checksum_sha256"]
+    assert PayrollProviderLaunchRehearsal.objects.filter(tenant=tenant).count() == 1
+    setup = payload["setup"]
+    assert setup["summary"]["launch_rehearsal_run_count"] == 1
+    assert setup["summary"]["blocked_launch_rehearsal_run_count"] == 1
+    assert setup["summary"]["latest_launch_rehearsal_status"] == PayrollProviderLaunchRehearsalStatus.BLOCKED
+    assert setup["summary"]["latest_launch_rehearsal_checksum"] == run["evidence_checksum_sha256"]
+    assert setup["launch_rehearsals"][0]["id"] == run["id"]
+
+
+def test_payroll_provider_launch_rehearsal_proves_three_lane_production_readiness():
+    def verified_storage_control(**kwargs):
+        return {
+            "status": "verified",
+            "verified": True,
+            "evidence_snapshot": {
+                "control_ref": kwargs["control_ref"],
+                "control_kind": kwargs["control_kind"],
+                "verification_mode": kwargs["verification_mode"],
+                "secret_key": "storage-verifier-secret",
+            },
+        }
+
+    storage_policy_ref = "tenant.launch.storage_policy.v1"
+
+    def package_manifest(*, package_ref, provider_kind, adapter_ref, client_ref, fixture_ref, artifact_kind):
+        config_key = {
+            "bank": "bank_payout_adapter",
+            "accounting": "accounting_journal_adapter",
+            "statutory": "statutory_filing_adapter",
+        }[provider_kind]
+        return {
+            "package_profile_ref": f"{package_ref}.manifest",
+            "package_module_ref": f"{package_ref}.module",
+            "vendor_profile_ref": f"{package_ref}.vendor",
+            "provider_contract_ref": f"{package_ref}.contract",
+            "provider_kind": provider_kind,
+            "provider_name": f"{provider_kind.title()} launch rehearsal package",
+            "adapter_ref": adapter_ref,
+            "client_ref": client_ref,
+            "certification_fixture_client_ref": fixture_ref,
+            "supported_artifact_kinds": [artifact_kind],
+            "supported_transport_modes": ["api"],
+            "required_route_config_refs": [
+                "provider_package_ref",
+                f"{config_key}.client_ref",
+                f"{config_key}.endpoint_url",
+                f"{config_key}.transport_ref",
+                f"{config_key}.auth_scheme",
+            ],
+            "certification_scenario_refs": [f"{provider_kind}_launch_rehearsal_certified"],
+            "evidence_path_refs": [f"{config_key}.provider_response.sdk_client.response_status_code"],
+            "schema_mapping_profile_ref": f"{package_ref}.mapping",
+            "credential_profile_ref": f"{package_ref}.credential",
+            "failure_taxonomy_ref": f"{package_ref}.failure_taxonomy",
+            "secret_material_policy_ref": "payroll.provider_secret_material.reference_only.v1",
+            "storage_policy_refs": [storage_policy_ref],
+            "sandbox_ready": False,
+        }
+
+    package_refs = {
+        "bank": "tenant.launch.package.bank.razorpayx.v1",
+        "accounting": "tenant.launch.package.accounting.tallyprime.v1",
+        "statutory": "tenant.launch.package.statutory.epfo.v1",
+    }
+    provider_package_manifests = {
+        package_refs["bank"]: package_manifest(
+            package_ref=package_refs["bank"],
+            provider_kind="bank",
+            adapter_ref="payroll.provider_adapter.bank.live_payout.v1",
+            client_ref="payroll.provider_client.bank.razorpayx_http.v1",
+            fixture_ref="payroll.provider_client.bank.fixture.v1",
+            artifact_kind="bank_advice",
+        ),
+        package_refs["accounting"]: package_manifest(
+            package_ref=package_refs["accounting"],
+            provider_kind="accounting",
+            adapter_ref="payroll.provider_adapter.accounting.live_journal.v1",
+            client_ref="payroll.provider_client.accounting.tallyprime_http.v1",
+            fixture_ref="payroll.provider_client.accounting.fixture.v1",
+            artifact_kind="accounting_export",
+        ),
+        package_refs["statutory"]: package_manifest(
+            package_ref=package_refs["statutory"],
+            provider_kind="statutory",
+            adapter_ref="payroll.provider_adapter.statutory.live_filing.v1",
+            client_ref="payroll.provider_client.statutory.epfo_ecr_http.v1",
+            fixture_ref="payroll.provider_client.statutory.fixture.v1",
+            artifact_kind="statutory_report",
+        ),
+    }
+    route_snapshots = [
+        {
+            "provider_ref": "tenant.launch.provider.bank.razorpayx.v1",
+            "adapter_ref": "payroll.provider_adapter.bank.live_payout.v1",
+            "provider_package_ref": package_refs["bank"],
+            "provider_connection_policy": {"enforcement_mode": "active"},
+            "bank_payout_adapter": {
+                "client_ref": "payroll.provider_client.bank.razorpayx_http.v1",
+                "endpoint_url": "https://bank.example.test/payouts",
+                "transport_ref": "tenant.launch.transport.bank",
+                "auth_scheme": "bearer",
+            },
+        },
+        {
+            "provider_ref": "tenant.launch.provider.accounting.tallyprime.v1",
+            "adapter_ref": "payroll.provider_adapter.accounting.live_journal.v1",
+            "provider_package_ref": package_refs["accounting"],
+            "provider_connection_policy": {"enforcement_mode": "active"},
+            "accounting_journal_adapter": {
+                "client_ref": "payroll.provider_client.accounting.tallyprime_http.v1",
+                "endpoint_url": "https://accounting.example.test/journals",
+                "transport_ref": "tenant.launch.transport.accounting",
+                "auth_scheme": "api_key_header",
+            },
+        },
+        {
+            "provider_ref": "tenant.launch.provider.statutory.epfo.v1",
+            "adapter_ref": "payroll.provider_adapter.statutory.live_filing.v1",
+            "provider_package_ref": package_refs["statutory"],
+            "provider_connection_policy": {"enforcement_mode": "active"},
+            "statutory_filing_adapter": {
+                "client_ref": "payroll.provider_client.statutory.epfo_ecr_http.v1",
+                "endpoint_url": "https://statutory.example.test/ecr",
+                "transport_ref": "tenant.launch.transport.statutory",
+                "auth_scheme": "bearer",
+            },
+        },
+    ]
+    connections = [
+        {
+            "provider_kind": provider_kind,
+            "provider_ref": route["provider_ref"],
+            "status": "active",
+            "certification_status": "passed",
+            "readiness_snapshot": {"active_allowed": True},
+        }
+        for provider_kind, route in zip(["bank", "accounting", "statutory"], route_snapshots, strict=True)
+    ]
+
+    with override_settings(
+        PAYROLL_PROVIDER_PACKAGES=provider_package_manifests,
+        PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFICATION_MODE="strict",
+        PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFIERS={"*": verified_storage_control},
+        PAYROLL_ARTIFACT_STORAGE_POLICIES={
+            storage_policy_ref: {
+                "enabled": True,
+                "allowed_provider_families": ["s3"],
+                "allowed_provider_refs": ["tenant.launch.storage.s3.v1"],
+                "allowed_credential_refs": ["tenant.launch.storage.credential.v1"],
+                "allowed_bucket_names": ["tenant-launch-payroll-private"],
+                "allowed_retention_policy_refs": ["payroll.retention.10y.v1"],
+                "allowed_encryption_refs": ["tenant.launch.kms.payroll.v1"],
+                "allowed_endpoint_hosts": ["tenant-launch-payroll-private.example.test"],
+                "required_key_prefix": "tenant/launch/payroll",
+                "require_encryption_ref": True,
+                "require_private_endpoint": True,
+                "require_runtime_credentials": True,
+                "lifecycle_policy_ref": "tenant.launch.lifecycle.payroll.10y.v1",
+                "malware_scan_profile_ref": "tenant.launch.malware_scan.payroll.v1",
+                "durability_policy_ref": "tenant.launch.durability.payroll.v1",
+                "metadata": {"iam_policy_ref": "tenant.launch.iam.payroll.writer.v1"},
+            },
+        },
+    ):
+        adapter_registry = describe_payroll_provider_adapter_registry()
+        client_registry = describe_payroll_provider_client_registry({
+            "payroll.provider_client.bank.razorpayx_http.v1": "bank",
+            "payroll.provider_client.accounting.tallyprime_http.v1": "accounting",
+            "payroll.provider_client.statutory.epfo_ecr_http.v1": "statutory",
+        })
+        package_registry = describe_payroll_provider_package_registry(route_snapshots=route_snapshots)
+        storage_policy_registry = describe_payroll_artifact_storage_policy_registry([storage_policy_ref])
+        rehearsal = describe_payroll_provider_launch_rehearsal(
+            connections=connections,
+            route_snapshots=route_snapshots,
+            adapter_registry=adapter_registry,
+            client_registry=client_registry,
+            package_registry=package_registry,
+            storage_policy_registry=storage_policy_registry,
+        )
+
+    assert rehearsal["rehearsal_profile_ref"] == "payroll.provider_launch_rehearsal.v1"
+    assert rehearsal["status"] == "ready"
+    assert rehearsal["ready_lane_count"] == 3
+    assert rehearsal["blocked_lane_count"] == 0
+    assert rehearsal["launch_blocking_gate_refs"] == []
+    lanes_by_kind = {item["provider_kind"]: item for item in rehearsal["lanes"]}
+    assert lanes_by_kind["bank"]["package_ref"] == package_refs["bank"]
+    assert lanes_by_kind["accounting"]["client_ref"] == "payroll.provider_client.accounting.tallyprime_http.v1"
+    assert lanes_by_kind["statutory"]["provider_connection_enforcement"] == "active"
+    assert all(lane["blocking_gate_refs"] == [] for lane in rehearsal["lanes"])
+    assert storage_policy_registry["ready_storage_policy_count"] >= 1
+    serialized_rehearsal = json.dumps(
+        {
+            "rehearsal": rehearsal,
+            "storage_policy_registry": storage_policy_registry,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert "storage-verifier-secret" not in serialized_rehearsal
+    assert '"secret_key": "[redacted]"' in serialized_rehearsal
+
+
+@pytest.mark.django_db
+def test_rehearse_payroll_provider_launch_command_exports_blocked_audit_pack(bootstrapped_workspace, tmp_path):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    output_file = tmp_path / "blocked-launch-audit.json"
+
+    with pytest.raises(CommandError):
+        call_command("rehearse_payroll_provider_launch", tenant_code=tenant.code, output_file=str(output_file))
+
+    audit_pack = json.loads(output_file.read_text(encoding="utf-8"))
+    assert PayrollProviderLaunchRehearsal.objects.filter(tenant=tenant).count() == 1
+    persisted_run = PayrollProviderLaunchRehearsal.objects.get(tenant=tenant)
+    assert persisted_run.status == PayrollProviderLaunchRehearsalStatus.BLOCKED
+    assert persisted_run.evidence_checksum_sha256 == audit_pack["evidence_checksum_sha256"]
+    assert audit_pack["audit_pack_ref"] == "payroll.provider_launch_readiness.audit_pack.v1"
+    assert audit_pack["tenant"]["tenant_code"] == tenant.code
+    assert audit_pack["status"] == "blocked"
+    assert audit_pack["can_launch"] is False
+    assert audit_pack["summary"]["blocked_lane_count"] >= 1
+    assert audit_pack["release_blockers"]
+
+    stdout = StringIO()
+    call_command(
+        "rehearse_payroll_provider_launch",
+        tenant_code=tenant.code,
+        output_file=str(output_file),
+        allow_blocked=True,
+        stdout=stdout,
+    )
+    assert "blocked" in stdout.getvalue()
+    assert "Evidence checksum:" in stdout.getvalue()
+    assert PayrollProviderLaunchRehearsal.objects.filter(tenant=tenant).count() == 2
+
+
+@pytest.mark.django_db
+def test_rehearse_payroll_provider_launch_command_passes_ready_three_lane_tenant(bootstrapped_workspace, tmp_path):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    storage_policy_ref = "tenant.launch.command.storage_policy.v1"
+
+    def verified_storage_control(**kwargs):
+        return {
+            "status": "verified",
+            "verified": True,
+            "evidence_snapshot": {
+                "control_ref": kwargs["control_ref"],
+                "control_kind": kwargs["control_kind"],
+                "secret_key": "launch-command-secret",
+            },
+        }
+
+    def package_manifest(*, package_ref, provider_kind, adapter_ref, client_ref, fixture_ref, artifact_kind):
+        config_key = {
+            "bank": "bank_payout_adapter",
+            "accounting": "accounting_journal_adapter",
+            "statutory": "statutory_filing_adapter",
+        }[provider_kind]
+        return {
+            "package_profile_ref": f"{package_ref}.manifest",
+            "package_module_ref": f"{package_ref}.module",
+            "vendor_profile_ref": f"{package_ref}.vendor",
+            "provider_contract_ref": f"{package_ref}.contract",
+            "provider_kind": provider_kind,
+            "provider_name": f"{provider_kind.title()} command launch package",
+            "adapter_ref": adapter_ref,
+            "client_ref": client_ref,
+            "certification_fixture_client_ref": fixture_ref,
+            "supported_artifact_kinds": [artifact_kind],
+            "supported_transport_modes": ["api"],
+            "required_route_config_refs": [
+                "provider_package_ref",
+                f"{config_key}.client_ref",
+                f"{config_key}.endpoint_url",
+                f"{config_key}.transport_ref",
+                f"{config_key}.auth_scheme",
+            ],
+            "certification_scenario_refs": [f"{provider_kind}_command_launch_certified"],
+            "evidence_path_refs": [f"{config_key}.provider_response.sdk_client.response_status_code"],
+            "schema_mapping_profile_ref": f"{package_ref}.mapping",
+            "credential_profile_ref": f"{package_ref}.credential",
+            "failure_taxonomy_ref": f"{package_ref}.failure_taxonomy",
+            "secret_material_policy_ref": "payroll.provider_secret_material.reference_only.v1",
+            "storage_policy_refs": [storage_policy_ref],
+            "sandbox_ready": False,
+        }
+
+    package_refs = {
+        "bank": "tenant.launch.command.package.bank.razorpayx.v1",
+        "accounting": "tenant.launch.command.package.accounting.tallyprime.v1",
+        "statutory": "tenant.launch.command.package.statutory.epfo.v1",
+    }
+    package_manifests = {
+        package_refs["bank"]: package_manifest(
+            package_ref=package_refs["bank"],
+            provider_kind="bank",
+            adapter_ref="payroll.provider_adapter.bank.live_payout.v1",
+            client_ref="payroll.provider_client.bank.razorpayx_http.v1",
+            fixture_ref="payroll.provider_client.bank.fixture.v1",
+            artifact_kind="bank_advice",
+        ),
+        package_refs["accounting"]: package_manifest(
+            package_ref=package_refs["accounting"],
+            provider_kind="accounting",
+            adapter_ref="payroll.provider_adapter.accounting.live_journal.v1",
+            client_ref="payroll.provider_client.accounting.tallyprime_http.v1",
+            fixture_ref="payroll.provider_client.accounting.fixture.v1",
+            artifact_kind="accounting_export",
+        ),
+        package_refs["statutory"]: package_manifest(
+            package_ref=package_refs["statutory"],
+            provider_kind="statutory",
+            adapter_ref="payroll.provider_adapter.statutory.live_filing.v1",
+            client_ref="payroll.provider_client.statutory.epfo_ecr_http.v1",
+            fixture_ref="payroll.provider_client.statutory.fixture.v1",
+            artifact_kind="statutory_report",
+        ),
+    }
+    routes_by_kind = {
+        "bank": {
+            "provider_ref": "tenant.launch.command.provider.bank.razorpayx.v1",
+            "adapter_ref": "payroll.provider_adapter.bank.live_payout.v1",
+            "provider_package_ref": package_refs["bank"],
+            "provider_connection_policy": {"enforcement_mode": "active"},
+            "bank_payout_adapter": {
+                "client_ref": "payroll.provider_client.bank.razorpayx_http.v1",
+                "endpoint_url": "https://bank.example.test/payouts",
+                "transport_ref": "tenant.launch.command.transport.bank",
+                "auth_scheme": "bearer",
+            },
+        },
+        "accounting": {
+            "provider_ref": "tenant.launch.command.provider.accounting.tallyprime.v1",
+            "adapter_ref": "payroll.provider_adapter.accounting.live_journal.v1",
+            "provider_package_ref": package_refs["accounting"],
+            "provider_connection_policy": {"enforcement_mode": "active"},
+            "accounting_journal_adapter": {
+                "client_ref": "payroll.provider_client.accounting.tallyprime_http.v1",
+                "endpoint_url": "https://accounting.example.test/journals",
+                "transport_ref": "tenant.launch.command.transport.accounting",
+                "auth_scheme": "api_key_header",
+            },
+        },
+        "statutory": {
+            "provider_ref": "tenant.launch.command.provider.statutory.epfo.v1",
+            "adapter_ref": "payroll.provider_adapter.statutory.live_filing.v1",
+            "provider_package_ref": package_refs["statutory"],
+            "provider_connection_policy": {"enforcement_mode": "active"},
+            "statutory_filing_adapter": {
+                "client_ref": "payroll.provider_client.statutory.epfo_ecr_http.v1",
+                "endpoint_url": "https://statutory.example.test/ecr",
+                "transport_ref": "tenant.launch.command.transport.statutory",
+                "auth_scheme": "bearer",
+            },
+        },
+    }
+
+    for provider_kind, route in routes_by_kind.items():
+        PayrollProviderConnection.objects.update_or_create(
+            tenant=tenant,
+            provider_ref=route["provider_ref"],
+            defaults={
+                "provider_name": f"{provider_kind.title()} launch command provider",
+                "provider_kind": provider_kind,
+                "environment_ref": "production",
+                "status": PayrollProviderConnectionStatus.ACTIVE,
+                "adapter_ref": route["adapter_ref"],
+                "sandbox_adapter_ref": "payroll.provider_adapter.sandbox.v1",
+                "channel_ref": f"tenant.launch.command.channel.{provider_kind}.v1",
+                "credential_ref": f"tenant.launch.command.credential.{provider_kind}.v1",
+                "credential_profile_ref": f"tenant.launch.command.credential_profile.{provider_kind}.v1",
+                "credential_required": True,
+                "callback_profile_ref": f"tenant.launch.command.callback.{provider_kind}.v1",
+                "callback_verification_ref": f"tenant.launch.command.callback_verification.{provider_kind}.v1",
+                "retry_policy_ref": f"tenant.launch.command.retry.{provider_kind}.v1",
+                "certification_status": PayrollProviderCertificationStatus.PASSED,
+                "certification_profile_ref": f"tenant.launch.command.certification.{provider_kind}.v1",
+                "certified_at": timezone.now(),
+                "last_tested_at": timezone.now(),
+                "readiness_snapshot": {"active_allowed": True, "launch_gate_ref": "tenant.launch.command.ready.v1"},
+                "certification_snapshot": {"scenario_status": "passed"},
+                "config_snapshot": {"provider_route": route},
+            },
+        )
+
+    output_file = tmp_path / "ready-launch-audit.json"
+    with override_settings(
+        PAYROLL_PROVIDER_PACKAGES=package_manifests,
+        PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFICATION_MODE="strict",
+        PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFIERS={"*": verified_storage_control},
+        PAYROLL_ARTIFACT_STORAGE_POLICIES={
+            storage_policy_ref: {
+                "enabled": True,
+                "allowed_provider_families": ["s3"],
+                "allowed_provider_refs": ["tenant.launch.command.storage.s3.v1"],
+                "allowed_credential_refs": ["tenant.launch.command.storage.credential.v1"],
+                "allowed_bucket_names": ["tenant-launch-command-payroll-private"],
+                "allowed_retention_policy_refs": ["payroll.retention.10y.v1"],
+                "allowed_encryption_refs": ["tenant.launch.command.kms.payroll.v1"],
+                "allowed_endpoint_hosts": ["tenant-launch-command-payroll-private.example.test"],
+                "required_key_prefix": "tenant/launch-command/payroll",
+                "require_encryption_ref": True,
+                "require_private_endpoint": True,
+                "require_runtime_credentials": True,
+                "lifecycle_policy_ref": "tenant.launch.command.lifecycle.payroll.10y.v1",
+                "malware_scan_profile_ref": "tenant.launch.command.malware_scan.payroll.v1",
+                "durability_policy_ref": "tenant.launch.command.durability.payroll.v1",
+                "metadata": {"iam_policy_ref": "tenant.launch.command.iam.payroll.writer.v1"},
+            },
+        },
+    ):
+        stdout = StringIO()
+        call_command(
+            "rehearse_payroll_provider_launch",
+            tenant_code=tenant.code,
+            output_file=str(output_file),
+            stdout=stdout,
+        )
+
+    audit_pack = json.loads(output_file.read_text(encoding="utf-8"))
+    persisted_run = PayrollProviderLaunchRehearsal.objects.filter(tenant=tenant).latest("generated_at")
+    assert persisted_run.status == PayrollProviderLaunchRehearsalStatus.READY
+    assert persisted_run.can_launch is True
+    assert persisted_run.evidence_checksum_sha256 == audit_pack["evidence_checksum_sha256"]
+    assert "ready" in stdout.getvalue()
+    assert audit_pack["status"] == "ready"
+    assert audit_pack["can_launch"] is True
+    assert audit_pack["summary"]["ready_lane_count"] == 3
+    assert audit_pack["release_blockers"] == []
+    assert all(gate["passed"] for gate in audit_pack["release_gates"])
+    assert len(audit_pack["evidence_checksum_sha256"]) == 64
+    serialized_audit_pack = json.dumps(audit_pack, sort_keys=True, default=str)
+    assert "launch-command-secret" not in serialized_audit_pack
+    assert '"secret_key": "[redacted]"' in serialized_audit_pack
+
+
+@pytest.mark.django_db
+def test_seed_staging_launch_data_command_creates_disposable_live_handles(api_client: APIClient, tmp_path):
+    output_file = tmp_path / "staging-launch-seed.json"
+
+    call_command("seed_staging_launch_data", output_file=str(output_file), stdout=StringIO())
+
+    manifest = json.loads(output_file.read_text(encoding="utf-8"))
+    tenant = Tenant.objects.get(code=manifest["tenant_code"])
+    retry_notification = Notification.objects.get(id=manifest["handles"]["PLAYWRIGHT_LIVE_RETRY_NOTIFICATION_ID"])
+    employee_notification = Notification.objects.get(id=manifest["handles"]["PLAYWRIGHT_LIVE_EMPLOYEE_NOTIFICATION_ID"])
+    payslip = PayrollOutputArtifact.objects.get(id=manifest["handles"]["PLAYWRIGHT_LIVE_PAYSLIP_ID"])
+
+    assert manifest["seed_ref"] == "PW_TEST_STAGING_LAUNCH"
+    assert manifest["employee_username"] == "riya.sharma"
+    assert manifest["export"] == [
+        f"export PLAYWRIGHT_LIVE_RETRY_NOTIFICATION_ID={retry_notification.id}",
+        f"export PLAYWRIGHT_LIVE_EMPLOYEE_NOTIFICATION_ID={employee_notification.id}",
+        f"export PLAYWRIGHT_LIVE_PAYSLIP_ID={payslip.id}",
+    ]
+    assert retry_notification.tenant == tenant
+    assert retry_notification.status == NotificationStatus.FAILED
+    assert retry_notification.payload["seed_ref"] == "PW_TEST_STAGING_LAUNCH"
+    assert NotificationDeliveryLog.objects.filter(notification=retry_notification, status=NotificationStatus.FAILED).count() == 1
+    assert employee_notification.status == NotificationStatus.DELIVERED
+    assert employee_notification.payload["seed_ref"] == "PW_TEST_STAGING_LAUNCH"
+    assert payslip.status == PayrollOutputArtifactStatus.PUBLISHED
+    assert payslip.kind == PayrollOutputArtifactKind.PAYSLIP
+    assert payslip.employee.employee_code == "EMP-0042"
+    assert payslip.config_snapshot["seed_ref"] == "PW_TEST_STAGING_LAUNCH"
+    assert payslip.is_downloadable is True
+    assert PayrollArtifactAccessEvent.objects.filter(output_artifact=payslip, event_type=PayrollArtifactAccessEventType.PUBLISHED).count() == 1
+    assert PayrollArtifactAccessEvent.objects.filter(output_artifact=payslip, event_type=PayrollArtifactAccessEventType.NOTIFIED).count() == 1
+
+    employee_token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {employee_token}")
+    payslip_response = api_client.get("/api/v1/me/payroll-payslips/?q=PW%20Test")
+    assert payslip_response.status_code == 200, payslip_response.json()
+    assert any(item["id"] == str(payslip.id) for item in payslip_response.json()["items"])
+
+    read_response = api_client.post(f"/api/v1/me/payroll-payslips/{payslip.id}/read/", {}, format="json")
+    assert read_response.status_code == 200, read_response.json()
+    assert read_response.json()["access_summary"]["is_read_acknowledged"] is True
+
+    notification_read_response = api_client.patch(
+        f"/api/v1/me/notifications/{employee_notification.id}/",
+        {"read_at": "2026-09-08T10:00:00+05:30"},
+        format="json",
+    )
+    assert notification_read_response.status_code == 200, notification_read_response.json()
+
+    hr_token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {hr_token}")
+    retry_response = api_client.post(
+        f"/api/v1/hr-admin/notifications/{retry_notification.id}/retry/",
+        {"process_now": True},
+        format="json",
+    )
+    assert retry_response.status_code == 200, retry_response.json()
+    assert retry_response.json()["status"] == NotificationStatus.DELIVERED
+
+
+@pytest.mark.django_db
+def test_seed_staging_launch_data_command_cleanup_removes_disposable_records(tmp_path):
+    seed_file = tmp_path / "staging-launch-seed.json"
+    cleanup_file = tmp_path / "staging-launch-cleanup.json"
+
+    call_command("seed_staging_launch_data", output_file=str(seed_file), stdout=StringIO())
+    seed_manifest = json.loads(seed_file.read_text(encoding="utf-8"))
+    tenant = Tenant.objects.get(code=seed_manifest["tenant_code"])
+    assert Notification.objects.filter(tenant=tenant, payload__seed_ref="PW_TEST_STAGING_LAUNCH").count() == 3
+    assert PayrollOutputArtifact.objects.filter(tenant=tenant, config_snapshot__seed_ref="PW_TEST_STAGING_LAUNCH").count() == 1
+
+    call_command("seed_staging_launch_data", cleanup=True, output_file=str(cleanup_file), stdout=StringIO())
+
+    cleanup_manifest = json.loads(cleanup_file.read_text(encoding="utf-8"))
+    assert cleanup_manifest["action"] == "cleanup"
+    assert cleanup_manifest["cleanup"]["notifications"] == 3
+    assert cleanup_manifest["cleanup"]["payroll_artifacts"] == 1
+    assert Notification.objects.filter(tenant=tenant, payload__seed_ref="PW_TEST_STAGING_LAUNCH").count() == 0
+    assert PayrollOutputArtifact.objects.filter(tenant=tenant, config_snapshot__seed_ref="PW_TEST_STAGING_LAUNCH").count() == 0
+
+
+def test_payroll_live_adapters_can_execute_builtin_fixture_clients():
+    base_request = {
+        "tenant_id": "tenant-fixture",
+        "delivery_id": "delivery-fixture",
+        "handoff_id": "handoff-fixture",
+        "output_artifact_id": "artifact-fixture",
+        "provider_ref": "payroll.provider.fixture.v1",
+        "channel_ref": "payroll.channel.fixture.v1",
+        "submission_mode": "api",
+        "submission_profile_ref": "payroll.submission.fixture.v1",
+        "request_schema_ref": "payroll.request.fixture.v1",
+        "response_schema_ref": "payroll.response.fixture.v1",
+        "callback_profile_ref": "payroll.callback.fixture.v1",
+        "callback_verification_ref": "payroll.callback.verification.fixture.v1",
+        "idempotency_key": "fixture-idempotency",
+        "external_reference": "fixture-external-ref",
+        "payload_checksum_sha256": "abc123def4567890",
+        "artifact_snapshot": {"file_name": "fixture.csv", "config_snapshot": {}},
+        "credential_snapshot": {},
+    }
+    scenarios = [
+        (
+            "payroll.provider_adapter.bank.live_payout.v1",
+            "bank_advice",
+            "bank_payout_adapter",
+            {
+                "client_ref": "payroll.provider_client.bank.fixture.v1",
+                "debit_account_ref": "payroll.bank.debit.fixture.v1",
+                "payment_date": "2026-09-30",
+                "requires_credential_ref": False,
+            },
+            {"payment": {"total_amount": "100.00", "employee_rows": [{"employee": {"code": "EMP-001"}, "amount": {"net_pay": "100.00"}}]}},
+            "bank_payout",
+            "acknowledged",
+        ),
+        (
+            "payroll.provider_adapter.accounting.live_journal.v1",
+            "accounting_export",
+            "accounting_journal_adapter",
+            {
+                "client_ref": "payroll.provider_client.accounting.fixture.v1",
+                "company_ref": "payroll.accounting.company.fixture.v1",
+                "posting_date": "2026-09-30",
+                "requires_credential_ref": False,
+            },
+            {"journal": {"total_amount": "100.00", "entries": [{"account_ref": "salary", "amount": "100.00"}]}},
+            "accounting_journal",
+            "reconciled",
+        ),
+        (
+            "payroll.provider_adapter.statutory.live_filing.v1",
+            "statutory_report",
+            "statutory_filing_adapter",
+            {
+                "client_ref": "payroll.provider_client.statutory.fixture.v1",
+                "filing_type_ref": "fixture.filing.monthly.v1",
+                "authority_ref": "fixture.authority.v1",
+                "registration_ref": "REG-FIXTURE",
+                "requires_credential_ref": False,
+            },
+            {"filing": {"total_amount": "100.00", "rows": [{"employee_code": "EMP-001", "amount": "100.00"}]}},
+            "statutory_filing",
+            "reconciled",
+        ),
+    ]
+
+    for adapter_ref, artifact_kind, config_key, adapter_config, provider_payload, response_key, expected_status in scenarios:
+        adapter = get_payroll_provider_adapter(adapter_ref)
+        result = adapter.submit(
+            PayrollProviderSubmissionRequest(
+                **base_request,
+                artifact_kind=artifact_kind,
+                adapter_ref=adapter_ref,
+                route_snapshot={
+                    config_key: adapter_config,
+                    "provider_payload": provider_payload,
+                },
+            )
+        )
+        assert result.provider_status == expected_status
+        assert result.response_snapshot[response_key]["client_ref"] == adapter_config["client_ref"]
+        assert result.certification_evidence_refs
+        assert result.response_snapshot[response_key]["secret_material_policy_ref"] == "payroll.provider_secret_material.reference_only.v1"
+
+
+def test_payroll_bank_sdk_http_package_skeleton_uses_configured_transport_and_redacts_credentials():
+    captured_requests: list[dict[str, object]] = []
+
+    def fake_transport(*, method, url, headers, body, timeout_seconds):
+        captured_requests.append({
+            "method": method,
+            "url": url,
+            "headers": headers,
+            "body": body,
+            "timeout_seconds": timeout_seconds,
+        })
+        assert method == "POST"
+        assert url == "https://bank.example.test/payroll/payouts"
+        assert headers["Authorization"] == "Bearer bank-sdk-token"
+        assert headers["Idempotency-Key"] == "sdk-http-idempotency"
+        assert body["provider_package_ref"] == "payroll.provider_package.bank.sdk_http.v1"
+        assert body["payment_operation_ref"] == "bank.imps.bulk_payout.v1"
+        assert body["payout_rows"][0]["employee"]["code"] == "EMP-001"
+        return {
+            "status_code": 202,
+            "response_body": json.dumps({
+                "provider_status": "acknowledged",
+                "external_reference": "BANK-SDK-EXT-001",
+                "provider_batch_ref": "BANK-SDK-BATCH-001",
+                "accepted_count": 1,
+                "rejected_count": 0,
+                "utr_refs": ["UTR-SDK-001"],
+                "transaction_refs": [{"employee_code": "EMP-001", "transaction_ref": "TXN-SDK-001"}],
+                "evidence_refs": ["bank-sdk://ack/BANK-SDK-BATCH-001"],
+            }),
+            "response_headers": {"x-provider-request-id": "bank-sdk-req-001"},
+        }
+
+    adapter = get_payroll_provider_adapter("payroll.provider_adapter.bank.live_payout.v1")
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.bank-sdk.runtime.v1": {
+                "provider_ref": "payroll.provider.bank.sdk.v1",
+                "source_ref": "unit-test-secret-manager",
+                "credentials": {"bearer_token": "bank-sdk-token"},
+                "metadata": {"environment": "sandbox"},
+            },
+        },
+        PAYROLL_PROVIDER_HTTP_TRANSPORTS={"bank-sdk-http-transport": fake_transport},
+    ):
+        result = adapter.submit(
+            PayrollProviderSubmissionRequest(
+                tenant_id="tenant-sdk",
+                delivery_id="delivery-sdk",
+                handoff_id="handoff-sdk",
+                output_artifact_id="artifact-sdk",
+                artifact_kind="bank_advice",
+                provider_ref="payroll.provider.bank.sdk.v1",
+                channel_ref="payroll.channel.bank.sdk-http.v1",
+                adapter_ref="payroll.provider_adapter.bank.live_payout.v1",
+                submission_mode="api",
+                submission_profile_ref="bank.sdk_http.payout.v1",
+                request_schema_ref="bank.sdk_http.request.v1",
+                response_schema_ref="bank.sdk_http.response.v1",
+                callback_profile_ref="bank.sdk_http.callback.v1",
+                callback_verification_ref="bank.sdk_http.callback.hmac.v1",
+                idempotency_key="sdk-http-idempotency",
+                external_reference="sdk-http-external",
+                payload_checksum_sha256="sdk1234567890abc",
+                artifact_snapshot={"file_name": "bank-sdk.csv", "config_snapshot": {}},
+                credential_snapshot={"credential_ref": "tenant.bank-sdk.runtime.v1", "resolved": True},
+                route_snapshot={
+                    "provider_package_ref": "payroll.provider_package.bank.sdk_http.v1",
+                    "bank_payout_adapter": {
+                        "provider_package_ref": "payroll.provider_package.bank.sdk_http.v1",
+                        "client_ref": "payroll.provider_client.bank.sdk_http.v1",
+                        "endpoint_url": "https://bank.example.test/payroll/payouts",
+                        "transport_ref": "bank-sdk-http-transport",
+                        "timeout_seconds": 17,
+                        "auth_scheme": "bearer",
+                        "payout_profile_ref": "bank.sdk_http.payout.v1",
+                        "payment_operation_ref": "bank.imps.bulk_payout.v1",
+                        "payment_network_ref": "imps",
+                        "debit_account_ref": "tenant.bank.debit.sdk.v1",
+                        "payment_date": "2026-09-30",
+                    },
+                    "provider_payload": {
+                        "payment": {
+                            "total_amount": "100.00",
+                            "employee_rows": [{"employee": {"code": "EMP-001"}, "amount": {"net_pay": "100.00"}}],
+                        },
+                    },
+                },
+            )
+        )
+
+    assert len(captured_requests) == 1
+    assert captured_requests[0]["timeout_seconds"] == 17
+    assert result.provider_status == "acknowledged"
+    bank_payout = result.response_snapshot["bank_payout"]
+    assert bank_payout["client_ref"] == "payroll.provider_client.bank.sdk_http.v1"
+    assert bank_payout["provider_response"]["sdk_client"]["package_ref"] == "payroll.provider_package.bank.sdk_http.v1"
+    assert bank_payout["provider_response"]["sdk_client"]["response_status_code"] == 202
+    assert bank_payout["provider_response"]["provider_response"]["provider_batch_ref"] == "BANK-SDK-BATCH-001"
+    serialized_result = json.dumps(result.snapshot(), sort_keys=True, default=str)
+    assert "bank-sdk-token" not in serialized_result
+    assert "Authorization: Bearer" not in serialized_result
+
+
+def test_payroll_bank_razorpayx_http_package_module_uses_configured_transport_and_redacts_credentials():
+    captured_requests: list[dict[str, object]] = []
+
+    def fake_transport(*, method, url, headers, body, timeout_seconds):
+        captured_requests.append({
+            "method": method,
+            "url": url,
+            "headers": headers,
+            "body": body,
+            "timeout_seconds": timeout_seconds,
+        })
+        assert method == "POST"
+        assert url == "https://api.razorpayx.example.test/v1/payouts/bulk"
+        assert headers["Authorization"] == "Bearer razorpayx-runtime-token"
+        assert headers["X-Tenant-Bank-Program"] == "northstar-payroll"
+        assert body["provider_package_ref"] == "payroll.provider_package.bank.razorpayx_http.v1"
+        assert body["payment_operation_ref"] == "razorpayx.payouts.bulk.v1"
+        assert body["payout_rows"][0]["employee"]["code"] == "EMP-001"
+        return {
+            "status_code": 200,
+            "response_body": json.dumps({
+                "status": "acknowledged",
+                "id": "rzpx-ext-001",
+                "batch_id": "rzpx-batch-001",
+                "accepted_count": 1,
+                "rejected_count": 0,
+                "utr_refs": ["RZPX-UTR-001"],
+                "transaction_refs": ["RZPX-TXN-001"],
+                "evidence_refs": ["razorpayx://payouts/rzpx-batch-001"],
+            }),
+            "response_headers": {"x-request-id": "rzpx-request-001"},
+        }
+
+    adapter = get_payroll_provider_adapter("payroll.provider_adapter.bank.live_payout.v1")
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.razorpayx.runtime.v1": {
+                "provider_ref": "payroll.provider.bank.razorpayx.v1",
+                "source_ref": "unit-test-secret-manager",
+                "credentials": {"bearer_token": "razorpayx-runtime-token"},
+                "metadata": {"environment": "sandbox"},
+            },
+        },
+        PAYROLL_PROVIDER_HTTP_TRANSPORTS={"razorpayx-http-transport": fake_transport},
+    ):
+        result = adapter.submit(
+            PayrollProviderSubmissionRequest(
+                tenant_id="tenant-razorpayx",
+                delivery_id="delivery-razorpayx",
+                handoff_id="handoff-razorpayx",
+                output_artifact_id="artifact-razorpayx",
+                artifact_kind="bank_advice",
+                provider_ref="payroll.provider.bank.razorpayx.v1",
+                channel_ref="payroll.channel.bank.razorpayx-api.v1",
+                adapter_ref="payroll.provider_adapter.bank.live_payout.v1",
+                submission_mode="api",
+                submission_profile_ref="bank.razorpayx_http.payout.v1",
+                request_schema_ref="bank.razorpayx_http.request.v1",
+                response_schema_ref="bank.razorpayx_http.response.v1",
+                callback_profile_ref="bank.razorpayx_http.callback.v1",
+                callback_verification_ref="bank.razorpayx_http.callback.hmac.v1",
+                idempotency_key="razorpayx-idempotency",
+                external_reference="razorpayx-external",
+                payload_checksum_sha256="rzpx1234567890abc",
+                artifact_snapshot={"file_name": "bank-razorpayx.csv", "config_snapshot": {}},
+                credential_snapshot={"credential_ref": "tenant.razorpayx.runtime.v1", "resolved": True},
+                route_snapshot={
+                    "provider_package_ref": "payroll.provider_package.bank.razorpayx_http.v1",
+                    "bank_payout_adapter": {
+                        "provider_package_ref": "payroll.provider_package.bank.razorpayx_http.v1",
+                        "client_ref": "payroll.provider_client.bank.razorpayx_http.v1",
+                        "endpoint_url": "https://api.razorpayx.example.test/v1/payouts/bulk",
+                        "transport_ref": "razorpayx-http-transport",
+                        "timeout_seconds": 19,
+                        "auth_scheme": "bearer",
+                        "static_headers": {"X-Tenant-Bank-Program": "northstar-payroll"},
+                        "payout_profile_ref": "bank.razorpayx_http.payout.v1",
+                        "payment_operation_ref": "razorpayx.payouts.bulk.v1",
+                        "payment_network_ref": "imps",
+                        "debit_account_ref": "tenant.bank.debit.razorpayx.v1",
+                        "payment_date": "2026-09-30",
+                    },
+                    "provider_payload": {
+                        "payment": {
+                            "total_amount": "100.00",
+                            "employee_rows": [{"employee": {"code": "EMP-001"}, "amount": {"net_pay": "100.00"}}],
+                        },
+                    },
+                },
+            )
+        )
+
+    assert len(captured_requests) == 1
+    assert captured_requests[0]["timeout_seconds"] == 19
+    assert result.provider_status == "acknowledged"
+    assert result.provider_batch_ref == "rzpx-batch-001"
+    bank_payout = result.response_snapshot["bank_payout"]
+    assert bank_payout["client_ref"] == "payroll.provider_client.bank.razorpayx_http.v1"
+    assert bank_payout["utr_refs"] == ["RZPX-UTR-001"]
+    assert bank_payout["provider_response"]["sdk_client"]["package_ref"] == "payroll.provider_package.bank.razorpayx_http.v1"
+    assert bank_payout["provider_response"]["sdk_client"]["package_module_ref"] == "payroll.provider_package_module.bank.razorpayx_http.v1"
+    assert bank_payout["provider_response"]["package_module"]["provider_contract_ref"] == "payroll.provider_contract.bank.razorpayx_payout.v1"
+    serialized_result = json.dumps(result.snapshot(), sort_keys=True, default=str)
+    assert "razorpayx-runtime-token" not in serialized_result
+    assert "Authorization: Bearer" not in serialized_result
+
+
+def test_payroll_accounting_sdk_http_package_skeleton_uses_configured_transport_and_redacts_credentials():
+    captured_requests: list[dict[str, object]] = []
+
+    def fake_transport(*, method, url, headers, body, timeout_seconds):
+        captured_requests.append({
+            "method": method,
+            "url": url,
+            "headers": headers,
+            "body": body,
+            "timeout_seconds": timeout_seconds,
+        })
+        assert method == "POST"
+        assert url == "https://accounting.example.test/payroll/journals"
+        assert headers["X-Accounting-Key"] == "accounting-sdk-key"
+        assert headers["Idempotency-Key"] == "accounting-sdk-idempotency"
+        assert body["provider_package_ref"] == "payroll.provider_package.accounting.sdk_http.v1"
+        assert body["journal_operation_ref"] == "accounting.ledger.journal.post.v1"
+        assert body["journal_rows"][0]["account_ref"] == "salary-expense"
+        return {
+            "status_code": 201,
+            "response_body": json.dumps({
+                "provider_status": "reconciled",
+                "external_reference": "ACCOUNTING-SDK-EXT-001",
+                "provider_batch_ref": "ACCOUNTING-SDK-BATCH-001",
+                "posted_count": 1,
+                "rejected_count": 0,
+                "voucher_refs": ["VCH-SDK-001"],
+                "document_refs": ["DOC-SDK-001"],
+                "evidence_refs": ["accounting-sdk://journal/ACCOUNTING-SDK-BATCH-001"],
+            }),
+            "response_headers": {"x-provider-request-id": "accounting-sdk-req-001"},
+        }
+
+    adapter = get_payroll_provider_adapter("payroll.provider_adapter.accounting.live_journal.v1")
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.accounting-sdk.runtime.v1": {
+                "provider_ref": "payroll.provider.accounting.sdk.v1",
+                "source_ref": "unit-test-secret-manager",
+                "credentials": {"api_key": "accounting-sdk-key"},
+                "metadata": {"environment": "sandbox"},
+            },
+        },
+        PAYROLL_PROVIDER_HTTP_TRANSPORTS={"accounting-sdk-http-transport": fake_transport},
+    ):
+        result = adapter.submit(
+            PayrollProviderSubmissionRequest(
+                tenant_id="tenant-accounting-sdk",
+                delivery_id="delivery-accounting-sdk",
+                handoff_id="handoff-accounting-sdk",
+                output_artifact_id="artifact-accounting-sdk",
+                artifact_kind="accounting_export",
+                provider_ref="payroll.provider.accounting.sdk.v1",
+                channel_ref="payroll.channel.accounting.sdk-http.v1",
+                adapter_ref="payroll.provider_adapter.accounting.live_journal.v1",
+                submission_mode="api",
+                submission_profile_ref="accounting.sdk_http.journal.v1",
+                request_schema_ref="accounting.sdk_http.request.v1",
+                response_schema_ref="accounting.sdk_http.response.v1",
+                callback_profile_ref="accounting.sdk_http.callback.v1",
+                callback_verification_ref="accounting.sdk_http.callback.audit.v1",
+                idempotency_key="accounting-sdk-idempotency",
+                external_reference="accounting-sdk-external",
+                payload_checksum_sha256="acct1234567890abc",
+                artifact_snapshot={"file_name": "accounting-sdk.csv", "config_snapshot": {}},
+                credential_snapshot={"credential_ref": "tenant.accounting-sdk.runtime.v1", "resolved": True},
+                route_snapshot={
+                    "provider_package_ref": "payroll.provider_package.accounting.sdk_http.v1",
+                    "accounting_journal_adapter": {
+                        "provider_package_ref": "payroll.provider_package.accounting.sdk_http.v1",
+                        "client_ref": "payroll.provider_client.accounting.sdk_http.v1",
+                        "endpoint_url": "https://accounting.example.test/payroll/journals",
+                        "transport_ref": "accounting-sdk-http-transport",
+                        "timeout_seconds": 19,
+                        "auth_scheme": "api_key_header",
+                        "api_key_header_name": "X-Accounting-Key",
+                        "ledger_profile_ref": "accounting.sdk_http.ledger.v1",
+                        "posting_profile_ref": "accounting.sdk_http.monthly-payroll.posting.v1",
+                        "journal_operation_ref": "accounting.ledger.journal.post.v1",
+                        "company_ref": "tenant.accounting.company.sdk.v1",
+                        "books_ref": "tenant.accounting.books.sdk.v1",
+                        "posting_date": "2026-09-30",
+                    },
+                    "provider_payload": {
+                        "journal": {
+                            "total_amount": "100.00",
+                            "entries": [{"account_ref": "salary-expense", "amount": "100.00"}],
+                        },
+                    },
+                },
+            )
+        )
+
+    assert len(captured_requests) == 1
+    assert captured_requests[0]["timeout_seconds"] == 19
+    assert result.provider_status == "reconciled"
+    accounting_journal = result.response_snapshot["accounting_journal"]
+    assert accounting_journal["client_ref"] == "payroll.provider_client.accounting.sdk_http.v1"
+    assert accounting_journal["posted_count"] == 1
+    assert accounting_journal["voucher_refs"] == ["VCH-SDK-001"]
+    assert accounting_journal["provider_response"]["sdk_client"]["package_ref"] == "payroll.provider_package.accounting.sdk_http.v1"
+    assert accounting_journal["provider_response"]["sdk_client"]["response_status_code"] == 201
+    assert accounting_journal["provider_response"]["provider_response"]["provider_batch_ref"] == "ACCOUNTING-SDK-BATCH-001"
+    serialized_result = json.dumps(result.snapshot(), sort_keys=True, default=str)
+    assert "accounting-sdk-key" not in serialized_result
+    assert "X-Accounting-Key: accounting" not in serialized_result
+
+
+def test_payroll_accounting_tallyprime_http_package_module_uses_configured_transport_and_redacts_credentials():
+    captured_requests: list[dict[str, object]] = []
+
+    def fake_transport(*, method, url, headers, body, timeout_seconds):
+        captured_requests.append({
+            "method": method,
+            "url": url,
+            "headers": headers,
+            "body": body,
+            "timeout_seconds": timeout_seconds,
+        })
+        assert method == "POST"
+        assert url == "https://tallyprime.example.test/payroll/journals/import"
+        assert headers["Authorization"] == "Bearer tallyprime-runtime-token"
+        assert headers["X-Tenant-Accounting-Bridge"] == "northstar-tallyprime"
+        assert headers["Idempotency-Key"] == "tallyprime-http-idempotency"
+        assert body["provider_package_ref"] == "payroll.provider_package.accounting.tallyprime_http.v1"
+        assert body["journal_operation_ref"] == "tallyprime.voucher.import.v1"
+        assert body["company_ref"] == "tenant.accounting.company.tallyprime.v1"
+        assert body["books_ref"] == "tenant.accounting.books.tallyprime.v1"
+        assert body["journal_rows"][0]["account_ref"] == "salary-expense"
+        return {
+            "status_code": 202,
+            "response_body": json.dumps({
+                "result": {
+                    "status": "reconciled",
+                    "guid": "TALLY-GUID-001",
+                    "import_id": "TALLY-IMPORT-SEP-2026",
+                    "posted": 2,
+                    "rejected": 0,
+                    "vouchers": ["VCH-TALLY-001", "VCH-TALLY-002"],
+                    "documents": ["DOC-TALLY-SEP-2026"],
+                },
+                "audit": {"evidence_refs": ["tallyprime://journal/TALLY-IMPORT-SEP-2026"]},
+            }),
+            "response_headers": {"x-provider-request-id": "tallyprime-req-001"},
+        }
+
+    adapter = get_payroll_provider_adapter("payroll.provider_adapter.accounting.live_journal.v1")
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.tallyprime.runtime.v1": {
+                "provider_ref": "payroll.provider.accounting.tallyprime.v1",
+                "source_ref": "unit-test-secret-manager",
+                "credentials": {"bearer_token": "tallyprime-runtime-token"},
+                "metadata": {"environment": "sandbox"},
+            },
+        },
+        PAYROLL_PROVIDER_HTTP_TRANSPORTS={"tallyprime-http-transport": fake_transport},
+    ):
+        result = adapter.submit(
+            PayrollProviderSubmissionRequest(
+                tenant_id="tenant-tallyprime",
+                delivery_id="delivery-tallyprime",
+                handoff_id="handoff-tallyprime",
+                output_artifact_id="artifact-tallyprime",
+                artifact_kind="accounting_export",
+                provider_ref="payroll.provider.accounting.tallyprime.v1",
+                channel_ref="payroll.channel.accounting.tallyprime-http.v1",
+                adapter_ref="payroll.provider_adapter.accounting.live_journal.v1",
+                submission_mode="api",
+                submission_profile_ref="accounting.tallyprime_http.journal.v1",
+                request_schema_ref="accounting.tallyprime_http.request.v1",
+                response_schema_ref="accounting.tallyprime_http.response.v1",
+                callback_profile_ref="accounting.tallyprime_http.callback.v1",
+                callback_verification_ref="accounting.tallyprime_http.callback.audit.v1",
+                idempotency_key="tallyprime-http-idempotency",
+                external_reference="tallyprime-http-external",
+                payload_checksum_sha256="tallyprime1234567890abc",
+                artifact_snapshot={"file_name": "tallyprime-sep-2026.xml", "config_snapshot": {}},
+                credential_snapshot={"credential_ref": "tenant.tallyprime.runtime.v1", "resolved": True},
+                route_snapshot={
+                    "provider_package_ref": "payroll.provider_package.accounting.tallyprime_http.v1",
+                    "accounting_journal_adapter": {
+                        "provider_package_ref": "payroll.provider_package.accounting.tallyprime_http.v1",
+                        "client_ref": "payroll.provider_client.accounting.tallyprime_http.v1",
+                        "endpoint_url": "https://tallyprime.example.test/payroll/journals/import",
+                        "transport_ref": "tallyprime-http-transport",
+                        "timeout_seconds": 24,
+                        "auth_scheme": "bearer",
+                        "static_headers": {"X-Tenant-Accounting-Bridge": "northstar-tallyprime"},
+                        "ledger_profile_ref": "accounting.tallyprime_http.ledger.v1",
+                        "posting_profile_ref": "accounting.tallyprime_http.monthly-payroll.posting.v1",
+                        "journal_operation_ref": "tallyprime.voucher.import.v1",
+                        "company_ref": "tenant.accounting.company.tallyprime.v1",
+                        "books_ref": "tenant.accounting.books.tallyprime.v1",
+                        "posting_date": "2026-09-30",
+                    },
+                    "provider_payload": {
+                        "journal": {
+                            "total_amount": "200.00",
+                            "entries": [
+                                {"account_ref": "salary-expense", "amount": "100.00"},
+                                {"account_ref": "payroll-payable", "amount": "-100.00"},
+                            ],
+                        },
+                    },
+                },
+            )
+        )
+
+    assert len(captured_requests) == 1
+    assert captured_requests[0]["timeout_seconds"] == 24
+    assert result.provider_status == "reconciled"
+    assert result.provider_batch_ref == "TALLY-IMPORT-SEP-2026"
+    accounting_journal = result.response_snapshot["accounting_journal"]
+    assert accounting_journal["client_ref"] == "payroll.provider_client.accounting.tallyprime_http.v1"
+    assert accounting_journal["posted_count"] == 2
+    assert accounting_journal["voucher_refs"] == ["VCH-TALLY-001", "VCH-TALLY-002"]
+    assert accounting_journal["provider_response"]["sdk_client"]["package_ref"] == "payroll.provider_package.accounting.tallyprime_http.v1"
+    assert accounting_journal["provider_response"]["sdk_client"]["package_module_ref"] == "payroll.provider_package_module.accounting.tallyprime_http.v1"
+    assert accounting_journal["provider_response"]["package_module"]["provider_contract_ref"] == "payroll.provider_contract.accounting.tallyprime_journal_import.v1"
+    assert accounting_journal["provider_response"]["sdk_client"]["response_status_code"] == 202
+    serialized_result = json.dumps(result.snapshot(), sort_keys=True, default=str)
+    assert "tallyprime-runtime-token" not in serialized_result
+    assert "Authorization: Bearer" not in serialized_result
+
+
+def test_payroll_statutory_sdk_http_package_skeleton_uses_configured_transport_and_redacts_credentials():
+    captured_requests: list[dict[str, object]] = []
+
+    def fake_transport(*, method, url, headers, body, timeout_seconds):
+        captured_requests.append({
+            "method": method,
+            "url": url,
+            "headers": headers,
+            "body": body,
+            "timeout_seconds": timeout_seconds,
+        })
+        assert method == "POST"
+        assert url == "https://statutory.example.test/filings/ecr"
+        assert headers["Authorization"] == "Bearer statutory-sdk-token"
+        assert headers["Idempotency-Key"] == "statutory-sdk-idempotency"
+        assert body["provider_package_ref"] == "payroll.provider_package.statutory.sdk_http.v1"
+        assert body["filing_operation_ref"] == "statutory.epfo.ecr.upload.v1"
+        assert body["authority_ref"] == "india.epfo.portal.v1"
+        assert body["registration_ref"] == "EPFO-MH-SDK-001"
+        assert body["filing_rows"][0]["employee_code"] == "EMP-001"
+        return {
+            "status_code": 202,
+            "response_body": json.dumps({
+                "provider_status": "reconciled",
+                "external_reference": "STATUTORY-SDK-EXT-001",
+                "provider_batch_ref": "STATUTORY-SDK-BATCH-001",
+                "accepted_count": 1,
+                "rejected_count": 0,
+                "receipt_refs": ["RCPT-SDK-001"],
+                "challan_refs": ["CHLN-SDK-001"],
+                "acknowledgement_refs": ["ACK-SDK-001"],
+                "evidence_refs": ["statutory-sdk://filing/STATUTORY-SDK-BATCH-001"],
+            }),
+            "response_headers": {"x-provider-request-id": "statutory-sdk-req-001"},
+        }
+
+    adapter = get_payroll_provider_adapter("payroll.provider_adapter.statutory.live_filing.v1")
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.statutory-sdk.runtime.v1": {
+                "provider_ref": "payroll.provider.statutory.sdk.v1",
+                "source_ref": "unit-test-secret-manager",
+                "credentials": {"bearer_token": "statutory-sdk-token"},
+                "metadata": {"environment": "sandbox"},
+            },
+        },
+        PAYROLL_PROVIDER_HTTP_TRANSPORTS={"statutory-sdk-http-transport": fake_transport},
+    ):
+        result = adapter.submit(
+            PayrollProviderSubmissionRequest(
+                tenant_id="tenant-statutory-sdk",
+                delivery_id="delivery-statutory-sdk",
+                handoff_id="handoff-statutory-sdk",
+                output_artifact_id="artifact-statutory-sdk",
+                artifact_kind="statutory_report",
+                provider_ref="payroll.provider.statutory.sdk.v1",
+                channel_ref="payroll.channel.statutory.sdk-http.v1",
+                adapter_ref="payroll.provider_adapter.statutory.live_filing.v1",
+                submission_mode="api",
+                submission_profile_ref="statutory.sdk_http.filing.v1",
+                request_schema_ref="statutory.sdk_http.request.v1",
+                response_schema_ref="statutory.sdk_http.response.v1",
+                callback_profile_ref="statutory.sdk_http.callback.v1",
+                callback_verification_ref="statutory.sdk_http.callback.hmac.v1",
+                idempotency_key="statutory-sdk-idempotency",
+                external_reference="statutory-sdk-external",
+                payload_checksum_sha256="stat1234567890abc",
+                artifact_snapshot={"file_name": "statutory-sdk.csv", "config_snapshot": {}},
+                credential_snapshot={"credential_ref": "tenant.statutory-sdk.runtime.v1", "resolved": True},
+                route_snapshot={
+                    "provider_package_ref": "payroll.provider_package.statutory.sdk_http.v1",
+                    "statutory_filing_adapter": {
+                        "provider_package_ref": "payroll.provider_package.statutory.sdk_http.v1",
+                        "client_ref": "payroll.provider_client.statutory.sdk_http.v1",
+                        "endpoint_url": "https://statutory.example.test/filings/ecr",
+                        "transport_ref": "statutory-sdk-http-transport",
+                        "timeout_seconds": 23,
+                        "auth_scheme": "bearer",
+                        "filing_profile_ref": "statutory.sdk_http.ecr.profile.v1",
+                        "filing_operation_ref": "statutory.epfo.ecr.upload.v1",
+                        "filing_type_ref": "india.epfo.ecr.monthly.v1",
+                        "authority_ref": "india.epfo.portal.v1",
+                        "registration_ref": "EPFO-MH-SDK-001",
+                        "filing_calendar_ref": "epfo-sep-2026",
+                        "due_date": "2026-10-15",
+                    },
+                    "provider_payload": {
+                        "filing": {
+                            "total_amount": "100.00",
+                            "rows": [{"employee_code": "EMP-001", "amount": "100.00"}],
+                        },
+                    },
+                },
+            )
+        )
+
+    assert len(captured_requests) == 1
+    assert captured_requests[0]["timeout_seconds"] == 23
+    assert result.provider_status == "reconciled"
+    statutory_filing = result.response_snapshot["statutory_filing"]
+    assert statutory_filing["client_ref"] == "payroll.provider_client.statutory.sdk_http.v1"
+    assert statutory_filing["accepted_count"] == 1
+    assert statutory_filing["receipt_refs"] == ["RCPT-SDK-001"]
+    assert statutory_filing["challan_refs"] == ["CHLN-SDK-001"]
+    assert statutory_filing["acknowledgement_refs"] == ["ACK-SDK-001"]
+    assert statutory_filing["provider_response"]["sdk_client"]["package_ref"] == "payroll.provider_package.statutory.sdk_http.v1"
+    assert statutory_filing["provider_response"]["sdk_client"]["response_status_code"] == 202
+    assert statutory_filing["provider_response"]["provider_response"]["provider_batch_ref"] == "STATUTORY-SDK-BATCH-001"
+    assert "RCPT-SDK-001" in result.certification_evidence_refs
+    serialized_result = json.dumps(result.snapshot(), sort_keys=True, default=str)
+    assert "statutory-sdk-token" not in serialized_result
+    assert "Authorization: Bearer" not in serialized_result
+
+
+def test_payroll_statutory_epfo_ecr_http_package_module_uses_configured_transport_and_redacts_credentials():
+    captured_requests: list[dict[str, object]] = []
+
+    def fake_transport(*, method, url, headers, body, timeout_seconds):
+        captured_requests.append({
+            "method": method,
+            "url": url,
+            "headers": headers,
+            "body": body,
+            "timeout_seconds": timeout_seconds,
+        })
+        assert method == "POST"
+        assert url == "https://epfo.example.test/ecr/upload"
+        assert headers["Authorization"] == "Bearer epfo-runtime-token"
+        assert headers["X-Tenant-Statutory-Bridge"] == "northstar-epfo"
+        assert headers["Idempotency-Key"] == "epfo-ecr-http-idempotency"
+        assert body["provider_package_ref"] == "payroll.provider_package.statutory.epfo_ecr_http.v1"
+        assert body["filing_operation_ref"] == "epfo.ecr.upload.v1"
+        assert body["filing_type_ref"] == "india.epfo.ecr.monthly.v1"
+        assert body["authority_ref"] == "india.epfo.portal.v1"
+        assert body["registration_ref"] == "EPFO-MH-001"
+        assert body["filing_rows"][0]["employee_code"] == "EMP-001"
+        return {
+            "status_code": 202,
+            "response_body": json.dumps({
+                "filing": {
+                    "status": "reconciled",
+                    "trrn": "TRRN-SEP-2026-001",
+                    "ecr_id": "ECR-SEP-2026-001",
+                    "accepted_count": 1,
+                    "rejected_count": 0,
+                    "receipts": ["RCPT-EPFO-SEP-2026-001"],
+                    "challans": ["CHLN-EPFO-SEP-2026-001"],
+                    "acknowledgements": ["ACK-EPFO-SEP-2026-001"],
+                },
+                "audit": {"evidence_refs": ["epfo://ecr/ECR-SEP-2026-001"]},
+            }),
+            "response_headers": {"x-provider-request-id": "epfo-req-001"},
+        }
+
+    adapter = get_payroll_provider_adapter("payroll.provider_adapter.statutory.live_filing.v1")
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.epfo.runtime.v1": {
+                "provider_ref": "payroll.provider.statutory.epfo.v1",
+                "source_ref": "unit-test-secret-manager",
+                "credentials": {"bearer_token": "epfo-runtime-token"},
+                "metadata": {"environment": "sandbox"},
+            },
+        },
+        PAYROLL_PROVIDER_HTTP_TRANSPORTS={"epfo-ecr-http-transport": fake_transport},
+    ):
+        result = adapter.submit(
+            PayrollProviderSubmissionRequest(
+                tenant_id="tenant-epfo",
+                delivery_id="delivery-epfo",
+                handoff_id="handoff-epfo",
+                output_artifact_id="artifact-epfo",
+                artifact_kind="statutory_report",
+                provider_ref="payroll.provider.statutory.epfo.v1",
+                channel_ref="payroll.channel.statutory.epfo-ecr-http.v1",
+                adapter_ref="payroll.provider_adapter.statutory.live_filing.v1",
+                submission_mode="api",
+                submission_profile_ref="statutory.epfo_ecr_http.filing.v1",
+                request_schema_ref="statutory.epfo_ecr_http.request.v1",
+                response_schema_ref="statutory.epfo_ecr_http.response.v1",
+                callback_profile_ref="statutory.epfo_ecr_http.callback.v1",
+                callback_verification_ref="statutory.epfo_ecr_http.callback.hmac.v1",
+                idempotency_key="epfo-ecr-http-idempotency",
+                external_reference="epfo-ecr-http-external",
+                payload_checksum_sha256="epfo1234567890abc",
+                artifact_snapshot={"file_name": "epfo-ecr-sep-2026.txt", "config_snapshot": {}},
+                credential_snapshot={"credential_ref": "tenant.epfo.runtime.v1", "resolved": True},
+                route_snapshot={
+                    "provider_package_ref": "payroll.provider_package.statutory.epfo_ecr_http.v1",
+                    "statutory_filing_adapter": {
+                        "provider_package_ref": "payroll.provider_package.statutory.epfo_ecr_http.v1",
+                        "client_ref": "payroll.provider_client.statutory.epfo_ecr_http.v1",
+                        "endpoint_url": "https://epfo.example.test/ecr/upload",
+                        "transport_ref": "epfo-ecr-http-transport",
+                        "timeout_seconds": 28,
+                        "auth_scheme": "bearer",
+                        "static_headers": {"X-Tenant-Statutory-Bridge": "northstar-epfo"},
+                        "filing_profile_ref": "statutory.epfo_ecr_http.profile.v1",
+                        "filing_operation_ref": "epfo.ecr.upload.v1",
+                        "filing_type_ref": "india.epfo.ecr.monthly.v1",
+                        "authority_ref": "india.epfo.portal.v1",
+                        "registration_ref": "EPFO-MH-001",
+                        "filing_calendar_ref": "epfo-sep-2026",
+                        "due_date": "2026-10-15",
+                    },
+                    "provider_payload": {
+                        "filing": {
+                            "total_amount": "100.00",
+                            "rows": [{"employee_code": "EMP-001", "amount": "100.00"}],
+                        },
+                    },
+                },
+            )
+        )
+
+    assert len(captured_requests) == 1
+    assert captured_requests[0]["timeout_seconds"] == 28
+    assert result.provider_status == "reconciled"
+    assert result.provider_batch_ref == "ECR-SEP-2026-001"
+    statutory_filing = result.response_snapshot["statutory_filing"]
+    assert statutory_filing["client_ref"] == "payroll.provider_client.statutory.epfo_ecr_http.v1"
+    assert statutory_filing["accepted_count"] == 1
+    assert statutory_filing["receipt_refs"] == ["RCPT-EPFO-SEP-2026-001"]
+    assert statutory_filing["challan_refs"] == ["CHLN-EPFO-SEP-2026-001"]
+    assert statutory_filing["acknowledgement_refs"] == ["ACK-EPFO-SEP-2026-001"]
+    assert statutory_filing["provider_response"]["sdk_client"]["package_ref"] == "payroll.provider_package.statutory.epfo_ecr_http.v1"
+    assert statutory_filing["provider_response"]["sdk_client"]["package_module_ref"] == "payroll.provider_package_module.statutory.epfo_ecr_http.v1"
+    assert statutory_filing["provider_response"]["package_module"]["provider_contract_ref"] == "payroll.provider_contract.statutory.epfo_ecr_upload.v1"
+    assert statutory_filing["provider_response"]["sdk_client"]["response_status_code"] == 202
+    assert "RCPT-EPFO-SEP-2026-001" in result.certification_evidence_refs
+    serialized_result = json.dumps(result.snapshot(), sort_keys=True, default=str)
+    assert "epfo-runtime-token" not in serialized_result
+    assert "Authorization: Bearer" not in serialized_result
+
+
+def test_payroll_bank_live_payout_adapter_uses_injected_client_and_stores_evidence(api_client: APIClient, bootstrapped_workspace):
+    captured_requests: list[dict[str, object]] = []
+
+    def fake_bank_client(*, request, credential, config):
+        captured_requests.append({
+            "request": request,
+            "credential_material": credential.material if credential else {},
+            "config": config,
+        })
+        assert credential.material["api_key"] == "live-bank-secret"
+        assert request["debit_account_ref"] == "tenant.bank.debit_account.payroll.v1"
+        assert request["payment_operation_ref"] == "bank.neft.bulk_payout.v1"
+        assert request["payout_row_count"] == 1
+        assert request["total_amount"] == "28200.00"
+        assert request["payout_rows"][0]["employee"]["code"] == "EMP-0042"
+        return {
+            "provider_status": PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+            "external_reference": "BANK-LIVE-EXT-2026-08",
+            "provider_batch_ref": "BANK-LIVE-BATCH-2026-08",
+            "accepted_count": 1,
+            "rejected_count": 0,
+            "utr_refs": ["UTR-AUG-2026-001"],
+            "transaction_refs": [{"employee_code": "EMP-0042", "transaction_ref": "TXN-AUG-2026-001"}],
+            "evidence_refs": ["bank://ack/BANK-LIVE-BATCH-2026-08"],
+            "api_key": "must-not-persist",
+        }
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+
+    with pytest.raises(PayrollProviderAdapterError):
+        validate_payroll_provider_route_config({
+            "adapter_ref": "payroll.provider_adapter.bank.live_payout.v1",
+            "bank_payout_adapter": {"api_key": "do-not-store"},
+        })
+
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "bank_advice": {
+                        "provider_ref": "payroll.provider.bank.live.v1",
+                        "channel_ref": "payroll.channel.bank.live-api.v1",
+                        "adapter_ref": "payroll.provider_adapter.bank.live_payout.v1",
+                        "submission_mode": "api",
+                        "submission_profile_ref": "bank.live.neft.submit.v1",
+                        "request_schema_ref": "bank.live.neft.request.v1",
+                        "response_schema_ref": "bank.live.neft.response.v1",
+                        "callback_profile_ref": "bank.live.callback.v1",
+                        "callback_verification_ref": "bank.live.callback.hmac.v1",
+                        "credential_ref": "tenant.bank-live.runtime.v1",
+                        "credential_required": True,
+                        "bank_payout_adapter": {
+                            "adapter_profile_ref": "bank.live.payout.profile.v1",
+                            "client_ref": "unit-test-bank-client",
+                            "payout_profile_ref": "bank.live.neft.payout.v1",
+                            "payment_operation_ref": "bank.neft.bulk_payout.v1",
+                            "payment_network_ref": "neft",
+                            "debit_account_ref": "tenant.bank.debit_account.payroll.v1",
+                            "payment_date": "2026-09-30",
+                            "failure_taxonomy_ref": "bank.live.failure_taxonomy.v1",
+                            "failure_categories": {"BANK_TIMEOUT": "provider_timeout", "DUPLICATE_BATCH": "duplicate_batch"},
+                        },
+                        "schema_mapping": {
+                            "mapping_profile_ref": "bank.live.neft.mapping.v1",
+                            "source_schema_ref": "payroll.internal.bank_advice.submission.v1",
+                            "target_schema_ref": "bank.live.neft.payout.payload.v1",
+                            "enforcement_mode": "strict",
+                            "transform_rules": [
+                                {"source_path": "provider_ref", "target_path": "provider.provider_ref", "required": True, "value_type": "string"},
+                                {"source_path": "external_reference", "target_path": "submission.external_reference", "required": True, "value_type": "string"},
+                                {"source_path": "idempotency_key", "target_path": "submission.idempotency_key", "required": True, "value_type": "string"},
+                                {"source_path": "artifact_snapshot.file_name", "target_path": "file.name", "required": True, "value_type": "string"},
+                                {"source_path": "artifact_snapshot.checksum_sha256", "target_path": "file.checksum_sha256", "required": True, "value_type": "string"},
+                                {"source_path": "artifact_snapshot.file_size_bytes", "target_path": "file.size_bytes", "required": True, "value_type": "integer"},
+                                {"source_path": "artifact_snapshot.totals_snapshot.net_pay", "target_path": "payment.total_amount", "required": True, "value_type": "decimal_string"},
+                                {
+                                    "source_path": "artifact_snapshot.line_snapshot",
+                                    "target_path": "payment.employee_rows",
+                                    "mode": "expand_rows",
+                                    "required": True,
+                                    "gate_ref": "employee_payment_rows",
+                                    "row_mappings": [
+                                        {"source_path": "employee_code", "target_path": "employee.code", "required": True, "value_type": "string"},
+                                        {"source_path": "employee_name", "target_path": "employee.name", "required": True, "value_type": "string"},
+                                        {"source_path": "net_pay", "target_path": "amount.net_pay", "required": True, "value_type": "money_string"},
+                                        {"source_path": "currency_code", "target_path": "amount.currency_code", "required": True, "value_type": "string"},
+                                    ],
+                                },
+                            ],
+                            "validation_rules": [
+                                {"path": "provider.provider_ref", "required": True, "gate_ref": "provider_ref_mapped"},
+                                {"path": "submission.idempotency_key", "required": True, "gate_ref": "idempotency_key_mapped"},
+                                {"path": "file.checksum_sha256", "required": True, "gate_ref": "file_checksum_mapped"},
+                                {"path": "payment.total_amount", "required": True, "gate_ref": "payment_total_mapped"},
+                                {"path": "payment.employee_rows.0.employee.code", "required": True, "gate_ref": "first_employee_row_mapped"},
+                            ],
+                        },
+                        "adapter_contract": {
+                            "contract_profile_ref": "bank.live.payout.adapter_contract.v1",
+                            "enforcement_mode": "strict",
+                            "expected_adapter_ref": "payroll.provider_adapter.bank.live_payout.v1",
+                            "expected_provider_ref": "payroll.provider.bank.live.v1",
+                            "require_credential_resolution": True,
+                            "response_snapshot_required_fields": ["bank_payout.client_ref", "bank_payout.utr_refs", "bank_payout.request_gates"],
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.bank-live.runtime.v1": {
+                "provider_ref": "payroll.provider.bank.live.v1",
+                "source_ref": "unit-test-secret-manager",
+                "credentials": {"api_key": "live-bank-secret"},
+                "metadata": {"environment": "production", "rotation_policy_ref": "payroll.secret.rotation.15d.v1"},
+            },
+        },
+        PAYROLL_BANK_PAYOUT_CLIENTS={"unit-test-bank-client": fake_bank_client},
+    ):
+        generate_outputs_response = api_client.post(
+            f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+            {"output_profile_ref": "india.monthly.output.profile.v1"},
+            format="json",
+        )
+        assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+        batch_id = generate_outputs_response.json()["output_batch"]["id"]
+        publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+        assert publish_response.status_code == 200, publish_response.json()
+        handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+        assert handoff_response.status_code == 200, handoff_response.json()
+        handoff_id = handoff_response.json()["handoff"]["id"]
+        transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+        assert transmit_response.status_code == 200, transmit_response.json()
+
+    assert len(captured_requests) == 1
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE)
+    assert delivery.status == PayrollProviderDeliveryStatus.ACKNOWLEDGED
+    assert delivery.external_reference == "BANK-LIVE-EXT-2026-08"
+    assert delivery.response_snapshot["provider_batch_ref"] == "BANK-LIVE-BATCH-2026-08"
+    bank_payout = delivery.response_snapshot["bank_payout"]
+    assert bank_payout["client_ref"] == "unit-test-bank-client"
+    assert bank_payout["payout_profile_ref"] == "bank.live.neft.payout.v1"
+    assert bank_payout["payment_operation_ref"] == "bank.neft.bulk_payout.v1"
+    assert bank_payout["accepted_count"] == 1
+    assert bank_payout["rejected_count"] == 0
+    assert bank_payout["utr_refs"] == ["UTR-AUG-2026-001"]
+    assert bank_payout["credential_snapshot"]["source_ref"] == "unit-test-secret-manager"
+    assert bank_payout["provider_response"]["api_key"] == "[redacted]"
+    assert delivery.config_snapshot["certification_evidence"]["evidence_refs"] == ["bank://ack/BANK-LIVE-BATCH-2026-08"]
+    assert delivery.request_snapshot["provider_submission_request"]["schema_mapping"]["provider_payload"]["payment"]["employee_rows"][0]["employee"]["code"] == "EMP-0042"
+    assert delivery.request_snapshot["provider_submission_request"]["adapter_contract_validation"]["result"]["status"] == "passed"
+
+    serialized_delivery = json.dumps(
+        {
+            "request_snapshot": delivery.request_snapshot,
+            "response_snapshot": delivery.response_snapshot,
+            "config_snapshot": delivery.config_snapshot,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert "live-bank-secret" not in serialized_delivery
+    assert "must-not-persist" not in serialized_delivery
+
+
+def test_payroll_accounting_live_journal_adapter_uses_injected_client_and_stores_evidence(api_client: APIClient, bootstrapped_workspace):
+    captured_requests: list[dict[str, object]] = []
+
+    def fake_accounting_client(*, request, credential, config):
+        captured_requests.append({
+            "request": request,
+            "credential_material": credential.material if credential else {},
+            "config": config,
+        })
+        assert credential.material["token"] == "live-accounting-secret"
+        assert request["company_ref"] == "tenant.accounting.company.primary.v1"
+        assert request["journal_operation_ref"] == "accounting.ledger.journal.post.v1"
+        assert request["journal_row_count"] == 3
+        assert request["total_amount"] == "30000.00"
+        assert request["journal_rows"][0]["employee"]["code"] == "EMP-0042"
+        assert request["journal_rows"][0]["ledger"]["line_type"] == "earning"
+        return {
+            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+            "external_reference": "LEDGER-LIVE-EXT-2026-08",
+            "provider_batch_ref": "LEDGER-LIVE-BATCH-2026-08",
+            "posted_count": 3,
+            "rejected_count": 0,
+            "voucher_refs": ["VCH-AUG-2026-001"],
+            "document_refs": ["DOC-AUG-2026-001"],
+            "evidence_refs": ["ledger://journal/LEDGER-LIVE-BATCH-2026-08"],
+            "token": "must-not-persist",
+        }
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+
+    with pytest.raises(PayrollProviderAdapterError):
+        validate_payroll_provider_route_config({
+            "adapter_ref": "payroll.provider_adapter.accounting.live_journal.v1",
+            "accounting_journal_adapter": {"token": "do-not-store"},
+        })
+
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "accounting_export": {
+                        "provider_ref": "payroll.provider.accounting.live.v1",
+                        "channel_ref": "payroll.channel.accounting.live-api.v1",
+                        "adapter_ref": "payroll.provider_adapter.accounting.live_journal.v1",
+                        "submission_mode": "api",
+                        "submission_profile_ref": "accounting.live.journal.submit.v1",
+                        "request_schema_ref": "accounting.live.journal.request.v1",
+                        "response_schema_ref": "accounting.live.journal.response.v1",
+                        "callback_profile_ref": "accounting.live.callback.v1",
+                        "callback_verification_ref": "accounting.live.callback.audit.v1",
+                        "credential_ref": "tenant.accounting-live.runtime.v1",
+                        "credential_required": True,
+                        "accounting_journal_adapter": {
+                            "adapter_profile_ref": "accounting.live.journal.profile.v1",
+                            "client_ref": "unit-test-accounting-client",
+                            "ledger_profile_ref": "accounting.live.ledger.profile.v1",
+                            "posting_profile_ref": "accounting.live.monthly-payroll.posting.v1",
+                            "journal_operation_ref": "accounting.ledger.journal.post.v1",
+                            "company_ref": "tenant.accounting.company.primary.v1",
+                            "books_ref": "tenant.accounting.books.payroll.v1",
+                            "posting_date": "2026-09-30",
+                            "failure_taxonomy_ref": "accounting.live.failure_taxonomy.v1",
+                            "failure_categories": {"LEDGER_TIMEOUT": "provider_timeout", "PERIOD_CLOSED": "closed_period"},
+                            "requires_credential_ref": True,
+                        },
+                        "schema_mapping": {
+                            "mapping_profile_ref": "accounting.live.journal.mapping.v1",
+                            "source_schema_ref": "payroll.internal.accounting_export.submission.v1",
+                            "target_schema_ref": "accounting.live.journal.payload.v1",
+                            "enforcement_mode": "strict",
+                            "transform_rules": [
+                                {"source_path": "provider_ref", "target_path": "provider.provider_ref", "required": True, "value_type": "string"},
+                                {"source_path": "external_reference", "target_path": "submission.external_reference", "required": True, "value_type": "string"},
+                                {"source_path": "idempotency_key", "target_path": "submission.idempotency_key", "required": True, "value_type": "string"},
+                                {"source_path": "artifact_snapshot.file_name", "target_path": "file.name", "required": True, "value_type": "string"},
+                                {"source_path": "artifact_snapshot.checksum_sha256", "target_path": "file.checksum_sha256", "required": True, "value_type": "string"},
+                                {"source_path": "artifact_snapshot.file_size_bytes", "target_path": "file.size_bytes", "required": True, "value_type": "integer"},
+                                {"source_path": "artifact_snapshot.totals_snapshot.gross_earnings", "target_path": "journal.total_amount", "required": True, "value_type": "decimal_string"},
+                                {
+                                    "source_path": "artifact_snapshot.line_snapshot",
+                                    "target_path": "journal.entries",
+                                    "mode": "expand_rows",
+                                    "required": True,
+                                    "gate_ref": "journal_entries",
+                                    "row_mappings": [
+                                        {"source_path": "employee_code", "target_path": "employee.code", "required": True, "value_type": "string"},
+                                        {"source_path": "line_type", "target_path": "ledger.line_type", "required": True, "value_type": "string"},
+                                        {"source_path": "amount", "target_path": "amount.value", "required": True, "value_type": "money_string"},
+                                        {"source_path": "source_hash", "target_path": "audit.source_hash", "required": True, "value_type": "string"},
+                                    ],
+                                },
+                            ],
+                            "validation_rules": [
+                                {"path": "provider.provider_ref", "required": True, "gate_ref": "provider_ref_mapped"},
+                                {"path": "submission.idempotency_key", "required": True, "gate_ref": "idempotency_key_mapped"},
+                                {"path": "file.checksum_sha256", "required": True, "gate_ref": "file_checksum_mapped"},
+                                {"path": "journal.total_amount", "required": True, "gate_ref": "journal_total_mapped"},
+                                {"path": "journal.entries.0.employee.code", "required": True, "gate_ref": "first_journal_entry_mapped"},
+                            ],
+                        },
+                        "adapter_contract": {
+                            "contract_profile_ref": "accounting.live.journal.adapter_contract.v1",
+                            "enforcement_mode": "strict",
+                            "expected_adapter_ref": "payroll.provider_adapter.accounting.live_journal.v1",
+                            "expected_provider_ref": "payroll.provider.accounting.live.v1",
+                            "require_credential_resolution": True,
+                            "response_snapshot_required_fields": ["accounting_journal.client_ref", "accounting_journal.voucher_refs", "accounting_journal.request_gates"],
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.accounting-live.runtime.v1": {
+                "provider_ref": "payroll.provider.accounting.live.v1",
+                "source_ref": "unit-test-secret-manager",
+                "credentials": {"token": "live-accounting-secret"},
+                "metadata": {"environment": "production", "rotation_policy_ref": "payroll.secret.rotation.30d.v1"},
+            },
+        },
+        PAYROLL_ACCOUNTING_JOURNAL_CLIENTS={"unit-test-accounting-client": fake_accounting_client},
+    ):
+        generate_outputs_response = api_client.post(
+            f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+            {"output_profile_ref": "india.monthly.output.profile.v1"},
+            format="json",
+        )
+        assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+        batch_id = generate_outputs_response.json()["output_batch"]["id"]
+        publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+        assert publish_response.status_code == 200, publish_response.json()
+        handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+        assert handoff_response.status_code == 200, handoff_response.json()
+        handoff_id = handoff_response.json()["handoff"]["id"]
+        transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+        assert transmit_response.status_code == 200, transmit_response.json()
+
+    assert len(captured_requests) == 1
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.ACCOUNTING_EXPORT)
+    assert delivery.status == PayrollProviderDeliveryStatus.RECONCILED
+    assert delivery.external_reference == "LEDGER-LIVE-EXT-2026-08"
+    assert delivery.response_snapshot["provider_batch_ref"] == "LEDGER-LIVE-BATCH-2026-08"
+    accounting_journal = delivery.response_snapshot["accounting_journal"]
+    assert accounting_journal["client_ref"] == "unit-test-accounting-client"
+    assert accounting_journal["ledger_profile_ref"] == "accounting.live.ledger.profile.v1"
+    assert accounting_journal["journal_operation_ref"] == "accounting.ledger.journal.post.v1"
+    assert accounting_journal["posted_count"] == 3
+    assert accounting_journal["rejected_count"] == 0
+    assert accounting_journal["voucher_refs"] == ["VCH-AUG-2026-001"]
+    assert accounting_journal["credential_snapshot"]["source_ref"] == "unit-test-secret-manager"
+    assert accounting_journal["provider_response"]["token"] == "[redacted]"
+    assert delivery.config_snapshot["certification_evidence"]["evidence_refs"] == ["ledger://journal/LEDGER-LIVE-BATCH-2026-08"]
+    assert delivery.request_snapshot["provider_submission_request"]["schema_mapping"]["provider_payload"]["journal"]["entries"][0]["employee"]["code"] == "EMP-0042"
+    assert delivery.request_snapshot["provider_submission_request"]["adapter_contract_validation"]["result"]["status"] == "passed"
+
+    serialized_delivery = json.dumps(
+        {
+            "request_snapshot": delivery.request_snapshot,
+            "response_snapshot": delivery.response_snapshot,
+            "config_snapshot": delivery.config_snapshot,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert "live-accounting-secret" not in serialized_delivery
+    assert "must-not-persist" not in serialized_delivery
+
+
+def test_payroll_statutory_live_filing_adapter_uses_injected_client_and_stores_evidence(api_client: APIClient, bootstrapped_workspace):
+    captured_requests: list[dict[str, object]] = []
+
+    def fake_statutory_client(*, request, credential, config):
+        captured_requests.append({
+            "request": request,
+            "credential_material": credential.material if credential else {},
+            "config": config,
+        })
+        assert credential.material["token"] == "live-statutory-secret"
+        assert request["authority_ref"] == "india.epfo.portal.v1"
+        assert request["registration_ref"] == "EPFO-MH-ACME-001"
+        assert request["filing_operation_ref"] == "statutory.epfo.ecr.upload.v1"
+        assert request["filing_type_ref"] == "india.epfo.ecr.monthly.v1"
+        assert request["filing_row_count"] == 1
+        assert request["total_amount"] == "1800.00"
+        assert request["filing_rows"][0]["employee"]["code"] == "EMP-0042"
+        return {
+            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+            "external_reference": "STAT-LIVE-EXT-2026-08",
+            "provider_batch_ref": "STAT-LIVE-BATCH-2026-08",
+            "accepted_count": 1,
+            "rejected_count": 0,
+            "receipt_refs": ["RCPT-EPFO-AUG-2026-001"],
+            "challan_refs": ["CHLN-EPFO-AUG-2026-001"],
+            "acknowledgement_refs": ["ACK-EPFO-AUG-2026-001"],
+            "evidence_refs": ["statutory://receipt/STAT-LIVE-BATCH-2026-08"],
+            "token": "must-not-persist",
+        }
+
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+
+    with pytest.raises(PayrollProviderAdapterError):
+        validate_payroll_provider_route_config({
+            "adapter_ref": "payroll.provider_adapter.statutory.live_filing.v1",
+            "statutory_filing_adapter": {"token": "do-not-store"},
+        })
+
+    review = create_locked_payroll_review(
+        api_client,
+        tenant=tenant,
+        employee=employee,
+        run_config={
+            "finance_handoff_profile": {
+                "provider_routes": {
+                    "statutory_report": {
+                        "provider_ref": "payroll.provider.statutory.live.v1",
+                        "channel_ref": "payroll.channel.statutory.live-api.v1",
+                        "adapter_ref": "payroll.provider_adapter.statutory.live_filing.v1",
+                        "submission_mode": "api",
+                        "submission_profile_ref": "statutory.live.epfo.ecr.submit.v1",
+                        "request_schema_ref": "statutory.live.epfo.ecr.request.v1",
+                        "response_schema_ref": "statutory.live.epfo.ecr.response.v1",
+                        "callback_profile_ref": "statutory.live.callback.v1",
+                        "callback_verification_ref": "statutory.live.callback.hmac.v1",
+                        "credential_ref": "tenant.statutory-live.runtime.v1",
+                        "credential_required": True,
+                        "certification_required": True,
+                        "statutory_filing_adapter": {
+                            "adapter_profile_ref": "statutory.live.filing.profile.v1",
+                            "client_ref": "unit-test-statutory-client",
+                            "filing_profile_ref": "statutory.live.epfo.ecr.profile.v1",
+                            "filing_operation_ref": "statutory.epfo.ecr.upload.v1",
+                            "filing_type_ref": "india.epfo.ecr.monthly.v1",
+                            "authority_ref": "india.epfo.portal.v1",
+                            "registration_ref": "EPFO-MH-ACME-001",
+                            "filing_calendar_ref": "epfo-aug-2026",
+                            "due_date": "2026-09-15",
+                            "failure_taxonomy_ref": "statutory.live.failure_taxonomy.v1",
+                            "failure_categories": {"PORTAL_TIMEOUT": "provider_timeout", "INVALID_ECR": "schema_rejected"},
+                            "requires_credential_ref": True,
+                        },
+                        "schema_mapping": {
+                            "mapping_profile_ref": "statutory.live.epfo.ecr.mapping.v1",
+                            "source_schema_ref": "payroll.internal.statutory_report.submission.v1",
+                            "target_schema_ref": "statutory.live.epfo.ecr.payload.v1",
+                            "enforcement_mode": "strict",
+                            "transform_rules": [
+                                {"source_path": "provider_ref", "target_path": "provider.provider_ref", "required": True, "value_type": "string"},
+                                {"source_path": "external_reference", "target_path": "submission.external_reference", "required": True, "value_type": "string"},
+                                {"source_path": "idempotency_key", "target_path": "submission.idempotency_key", "required": True, "value_type": "string"},
+                                {"source_path": "artifact_snapshot.file_name", "target_path": "file.name", "required": True, "value_type": "string"},
+                                {"source_path": "artifact_snapshot.checksum_sha256", "target_path": "file.checksum_sha256", "required": True, "value_type": "string"},
+                                {"source_path": "artifact_snapshot.totals_snapshot.statutory_total", "target_path": "filing.total_amount", "required": True, "value_type": "decimal_string"},
+                                {
+                                    "source_path": "artifact_snapshot.line_snapshot",
+                                    "target_path": "filing.rows",
+                                    "mode": "expand_rows",
+                                    "required": True,
+                                    "gate_ref": "filing_rows",
+                                    "row_mappings": [
+                                        {"source_path": "employee_code", "target_path": "employee.code", "required": True, "value_type": "string"},
+                                        {"source_path": "component_code", "target_path": "component.code", "required": True, "value_type": "string"},
+                                        {"source_path": "line_type", "target_path": "component.line_type", "required": True, "value_type": "string"},
+                                        {"source_path": "amount", "target_path": "amount.value", "required": True, "value_type": "money_string"},
+                                        {"source_path": "source_hash", "target_path": "audit.source_hash", "required": True, "value_type": "string"},
+                                    ],
+                                },
+                            ],
+                            "validation_rules": [
+                                {"path": "provider.provider_ref", "required": True, "gate_ref": "provider_ref_mapped"},
+                                {"path": "submission.idempotency_key", "required": True, "gate_ref": "idempotency_key_mapped"},
+                                {"path": "file.checksum_sha256", "required": True, "gate_ref": "file_checksum_mapped"},
+                                {"path": "filing.total_amount", "required": True, "gate_ref": "filing_total_mapped"},
+                                {"path": "filing.rows.0.employee.code", "required": True, "gate_ref": "first_filing_row_mapped"},
+                            ],
+                        },
+                        "adapter_contract": {
+                            "contract_profile_ref": "statutory.live.filing.adapter_contract.v1",
+                            "enforcement_mode": "strict",
+                            "expected_adapter_ref": "payroll.provider_adapter.statutory.live_filing.v1",
+                            "expected_provider_ref": "payroll.provider.statutory.live.v1",
+                            "require_credential_resolution": True,
+                            "response_snapshot_required_fields": ["statutory_filing.client_ref", "statutory_filing.receipt_refs", "statutory_filing.request_gates"],
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    with override_settings(
+        PAYROLL_PROVIDER_CREDENTIALS={
+            "tenant.statutory-live.runtime.v1": {
+                "provider_ref": "payroll.provider.statutory.live.v1",
+                "source_ref": "unit-test-secret-manager",
+                "credentials": {"token": "live-statutory-secret"},
+                "metadata": {"environment": "production", "rotation_policy_ref": "payroll.secret.rotation.30d.v1"},
+            },
+        },
+        PAYROLL_STATUTORY_FILING_CLIENTS={"unit-test-statutory-client": fake_statutory_client},
+    ):
+        generate_outputs_response = api_client.post(
+            f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+            {"output_profile_ref": "india.monthly.output.profile.v1"},
+            format="json",
+        )
+        assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+        batch_id = generate_outputs_response.json()["output_batch"]["id"]
+        publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+        assert publish_response.status_code == 200, publish_response.json()
+        handoff_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/", {}, format="json")
+        assert handoff_response.status_code == 200, handoff_response.json()
+        handoff_id = handoff_response.json()["handoff"]["id"]
+        transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+        assert transmit_response.status_code == 200, transmit_response.json()
+
+    assert len(captured_requests) == 1
+    delivery = PayrollProviderDelivery.objects.get(handoff_id=handoff_id, artifact_kind=PayrollOutputArtifactKind.STATUTORY_REPORT)
+    assert delivery.status == PayrollProviderDeliveryStatus.RECONCILED
+    assert delivery.external_reference == "STAT-LIVE-EXT-2026-08"
+    assert delivery.response_snapshot["provider_batch_ref"] == "STAT-LIVE-BATCH-2026-08"
+    statutory_filing = delivery.response_snapshot["statutory_filing"]
+    assert statutory_filing["client_ref"] == "unit-test-statutory-client"
+    assert statutory_filing["filing_profile_ref"] == "statutory.live.epfo.ecr.profile.v1"
+    assert statutory_filing["filing_operation_ref"] == "statutory.epfo.ecr.upload.v1"
+    assert statutory_filing["receipt_refs"] == ["RCPT-EPFO-AUG-2026-001"]
+    assert statutory_filing["challan_refs"] == ["CHLN-EPFO-AUG-2026-001"]
+    assert statutory_filing["acknowledgement_refs"] == ["ACK-EPFO-AUG-2026-001"]
+    assert statutory_filing["credential_snapshot"]["source_ref"] == "unit-test-secret-manager"
+    assert statutory_filing["provider_response"]["token"] == "[redacted]"
+    assert delivery.config_snapshot["certification_evidence"]["evidence_refs"] == [
+        "statutory://receipt/STAT-LIVE-BATCH-2026-08",
+        "RCPT-EPFO-AUG-2026-001",
+        "CHLN-EPFO-AUG-2026-001",
+        "ACK-EPFO-AUG-2026-001",
+    ]
+    assert delivery.request_snapshot["provider_submission_request"]["schema_mapping"]["provider_payload"]["filing"]["rows"][0]["employee"]["code"] == "EMP-0042"
+    assert delivery.request_snapshot["provider_submission_request"]["adapter_contract_validation"]["result"]["status"] == "passed"
+
+    serialized_delivery = json.dumps(
+        {
+            "request_snapshot": delivery.request_snapshot,
+            "response_snapshot": delivery.response_snapshot,
+            "config_snapshot": delivery.config_snapshot,
+        },
+        sort_keys=True,
+        default=str,
+    )
+    assert "live-statutory-secret" not in serialized_delivery
+    assert "must-not-persist" not in serialized_delivery
+
+
 def test_hr_admin_payroll_provider_connection_setup_certification_and_activation(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -4537,6 +9311,10 @@ def test_hr_admin_payroll_provider_connection_setup_certification_and_activation
     assert setup_payload["summary"]["connection_count"] >= 3
     assert "clear-statutory.portal.v1" in {item["provider_ref"] for item in setup_payload["connections"]}
     assert PayrollProviderConnection.objects.filter(tenant=tenant, provider_ref="clear-statutory.portal.v1").exists()
+    assert setup_payload["summary"]["schema_mapping_pack_count"] >= 3
+    assert setup_payload["summary"]["active_schema_mapping_pack_count"] >= 3
+    assert any(item["mapping_profile_ref"].startswith("payroll.provider_mapping.") for item in setup_payload["schema_mapping_packs"])
+    assert PayrollProviderSchemaMappingPack.objects.filter(tenant=tenant, status=PayrollProviderSchemaMappingPackStatus.ACTIVE).count() >= 3
 
     raw_secret_response = api_client.post(
         "/api/v1/hr-admin/payroll-provider-connections/",
@@ -4631,6 +9409,291 @@ def test_hr_admin_payroll_provider_connection_setup_certification_and_activation
     )
     assert activate_response.status_code == 200, activate_response.json()
     assert activate_response.json()["connection"]["status"] == PayrollProviderConnectionStatus.ACTIVE
+
+
+def test_hr_admin_payroll_provider_schema_mapping_pack_lifecycle(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-provider-connection-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    bank_pack_payload = next(
+        item
+        for item in setup_response.json()["schema_mapping_packs"]
+        if item["provider_kind"] == PayrollProviderConnectionKind.BANK and item["artifact_kind"] == PayrollOutputArtifactKind.BANK_ADVICE
+    )
+    active_pack = PayrollProviderSchemaMappingPack.objects.get(id=bank_pack_payload["id"])
+    assert active_pack.status == PayrollProviderSchemaMappingPackStatus.ACTIVE
+
+    active_edit_response = api_client.patch(
+        f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{active_pack.id}/",
+        {"target_schema_ref": "should.not.edit.active.v1"},
+        format="json",
+    )
+    assert active_edit_response.status_code == 400
+    assert "cloned before editing" in active_edit_response.json()["detail"]
+
+    clone_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{active_pack.id}/clone/",
+        {"overrides": {"change_reason": "Add provider batch id mapping."}},
+        format="json",
+    )
+    assert clone_response.status_code == 201, clone_response.json()
+    draft_payload = clone_response.json()["mapping_pack"]
+    assert draft_payload["version"] == active_pack.version + 1
+    assert draft_payload["status"] == PayrollProviderSchemaMappingPackStatus.DRAFT
+    assert draft_payload["evidence_snapshot"]["last_lifecycle_action"] == "cloned"
+
+    new_transform_rules = [
+        *draft_payload["transform_rules"],
+        {
+            "source_path": "artifact_snapshot.config_snapshot.bank_file_profile_ref",
+            "target_path": "bank.file_profile_ref",
+            "required": False,
+            "value_type": "string",
+            "gate_ref": "bank_file_profile_ref",
+        },
+    ]
+    update_response = api_client.patch(
+        f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{draft_payload['id']}/",
+        {
+            "target_schema_ref": "razorpayx.bank_advice.payload.v2",
+            "enforcement_mode": "strict",
+            "transform_rules": new_transform_rules,
+            "change_reason": "Provider sandbox v2 schema.",
+        },
+        format="json",
+    )
+    assert update_response.status_code == 200, update_response.json()
+    updated_payload = update_response.json()["mapping_pack"]
+    assert updated_payload["target_schema_ref"] == "razorpayx.bank_advice.payload.v2"
+    assert updated_payload["enforcement_mode"] == "strict"
+    assert updated_payload["transform_rules"][-1]["target_path"] == "bank.file_profile_ref"
+    assert updated_payload["evidence_snapshot"]["last_lifecycle_action"] == "updated"
+
+    simulation_sample = {
+        "provider_ref": active_pack.provider_ref,
+        "external_reference": "HANDOFF-AUG-2026-BANK",
+        "idempotency_key": "bank-advice-sim-001",
+        "artifact_snapshot": {
+            "file_name": "bank-advice.csv",
+            "checksum_sha256": "sample-checksum",
+            "file_size_bytes": 2048,
+            "totals_snapshot": {"net_pay": "125000.25"},
+            "config_snapshot": {"bank_file_profile_ref": "india.neft.v2"},
+        },
+    }
+    simulate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{draft_payload['id']}/simulate/",
+        {"request_snapshot": simulation_sample},
+        format="json",
+    )
+    assert simulate_response.status_code == 200, simulate_response.json()
+    simulation_payload = simulate_response.json()["simulation"]
+    simulation_run_payload = simulate_response.json()["simulation_run"]
+    assert simulation_payload["status"] == "passed"
+    assert simulation_payload["baseline_mapping_pack_id"] == str(active_pack.id)
+    assert simulation_payload["provider_payload"]["payment"]["total_amount"] == "125000.25"
+    assert simulation_payload["provider_payload"]["bank"]["file_profile_ref"] == "india.neft.v2"
+    assert simulation_payload["comparison"]["comparison_profile_ref"] == "payroll.provider_schema_mapping_pack.comparison.v1"
+    assert simulation_payload["comparison"]["status"] == "changed"
+    assert simulation_payload["comparison"]["added_path_count"] == 1
+    assert simulation_payload["comparison"]["changed_path_count"] == 0
+    assert simulation_payload["comparison"]["removed_path_count"] == 0
+    assert simulation_payload["comparison"]["diffs"][0]["path"] == "bank.file_profile_ref"
+    assert simulation_payload["passed_gate_count"] == simulation_payload["gate_count"]
+    assert simulation_run_payload["id"] == simulation_payload["simulation_run_id"]
+    assert simulation_run_payload["mapping_pack_id"] == draft_payload["id"]
+    assert simulation_run_payload["baseline_mapping_pack_id"] == str(active_pack.id)
+    assert simulation_run_payload["status"] == "passed"
+    assert simulation_run_payload["comparison_status"] == "changed"
+    assert simulation_run_payload["added_path_count"] == 1
+    simulation_record = PayrollProviderSchemaMappingSimulation.objects.get(id=simulation_payload["simulation_run_id"])
+    assert simulation_record.tenant == tenant
+    assert str(simulation_record.mapping_pack_id) == draft_payload["id"]
+    assert simulation_record.baseline_mapping_pack_id == active_pack.id
+    assert simulation_record.provider_payload_snapshot["bank"]["file_profile_ref"] == "india.neft.v2"
+    assert simulation_record.baseline_payload_snapshot["payment"]["total_amount"] == "125000.25"
+    assert simulation_record.comparison_snapshot["status"] == "changed"
+    assert simulation_record.source_hash
+
+    blocked_simulate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{draft_payload['id']}/simulate/",
+        {"request_snapshot": {"provider_ref": active_pack.provider_ref}},
+        format="json",
+    )
+    assert blocked_simulate_response.status_code == 200, blocked_simulate_response.json()
+    blocked_payload = blocked_simulate_response.json()["simulation"]
+    assert blocked_payload["status"] == "blocked"
+    assert "mapping_rule:submission.external_reference" in blocked_payload["blocking_gate_refs"]
+    assert PayrollProviderSchemaMappingSimulation.objects.filter(mapping_pack_id=draft_payload["id"]).count() == 2
+    setup_after_simulation_response = api_client.get("/api/v1/hr-admin/payroll-provider-connection-setup/")
+    assert setup_after_simulation_response.status_code == 200, setup_after_simulation_response.json()
+    setup_after_simulation_payload = setup_after_simulation_response.json()
+    assert setup_after_simulation_payload["summary"]["schema_mapping_simulation_count"] >= 2
+    assert setup_after_simulation_payload["summary"]["changed_schema_mapping_simulation_count"] >= 1
+    assert any(
+        item["id"] == simulation_payload["simulation_run_id"] and item["comparison_status"] == "changed"
+        for item in setup_after_simulation_payload["schema_mapping_simulations"]
+    )
+
+    activate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{draft_payload['id']}/activate/",
+        {
+            "approval_reason": "Sandbox schema v2 certification passed.",
+            "approval_snapshot": {"ticket_ref": "PAY-5X-001"},
+        },
+        format="json",
+    )
+    assert activate_response.status_code == 200, activate_response.json()
+    activated_payload = activate_response.json()["mapping_pack"]
+    assert activated_payload["status"] == PayrollProviderSchemaMappingPackStatus.ACTIVE
+    assert activated_payload["evidence_snapshot"]["last_lifecycle_action"] == "activated"
+    assert activated_payload["evidence_snapshot"]["lifecycle_history"][-1]["evidence"]["approval_snapshot"]["ticket_ref"] == "PAY-5X-001"
+
+    active_pack.refresh_from_db()
+    assert active_pack.status == PayrollProviderSchemaMappingPackStatus.INACTIVE
+    assert active_pack.evidence_snapshot["last_lifecycle_action"] == "superseded"
+
+    export_response = api_client.get(f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{draft_payload['id']}/export/")
+    assert export_response.status_code == 200, export_response.json()
+    export_payload = export_response.json()["export_payload"]
+    assert export_payload["export_version"] == "payroll.provider_schema_mapping_pack.export.v1"
+    assert export_payload["target_schema_ref"] == "razorpayx.bank_advice.payload.v2"
+
+    import_response = api_client.post(
+        "/api/v1/hr-admin/payroll-provider-schema-mapping-packs/import/",
+        {
+            "provider_connection_id": active_pack.provider_connection_id,
+            "mapping_pack": export_payload,
+        },
+        format="json",
+    )
+    assert import_response.status_code == 201, import_response.json()
+    imported_payload = import_response.json()["mapping_pack"]
+    assert imported_payload["status"] == PayrollProviderSchemaMappingPackStatus.DRAFT
+    assert imported_payload["version"] == activated_payload["version"] + 1
+    assert imported_payload["evidence_snapshot"]["import_snapshot"]["source_hash"] == export_payload["source_hash"]
+
+    archive_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{imported_payload['id']}/archive/",
+        {"archive_reason": "Imported only for rollback evidence."},
+        format="json",
+    )
+    assert archive_response.status_code == 200, archive_response.json()
+    assert archive_response.json()["mapping_pack"]["status"] == PayrollProviderSchemaMappingPackStatus.ARCHIVED
+
+
+def test_hr_admin_payroll_provider_schema_mapping_pack_simulates_nested_row_expansion(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-provider-connection-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    bank_pack_payload = next(
+        item
+        for item in setup_response.json()["schema_mapping_packs"]
+        if item["provider_kind"] == PayrollProviderConnectionKind.BANK and item["artifact_kind"] == PayrollOutputArtifactKind.BANK_ADVICE
+    )
+    active_pack = PayrollProviderSchemaMappingPack.objects.get(id=bank_pack_payload["id"])
+    clone_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{active_pack.id}/clone/",
+        {"overrides": {"change_reason": "Test nested provider row expansion."}},
+        format="json",
+    )
+    assert clone_response.status_code == 201, clone_response.json()
+    draft_payload = clone_response.json()["mapping_pack"]
+    row_expansion_rule = {
+        "mode": "expand_rows",
+        "source_path": "artifact_snapshot.line_snapshot",
+        "target_path": "payment.employee_rows",
+        "required": True,
+        "gate_ref": "employee_payment_rows",
+        "row_mappings": [
+            {"source_path": "employee_code", "target_path": "employee.code", "required": True, "value_type": "string", "gate_ref": "employee_code"},
+            {"source_path": "employee_name", "target_path": "employee.name", "required": True, "value_type": "string", "gate_ref": "employee_name"},
+            {"source_path": "net_pay", "target_path": "amount.net_pay", "required": True, "value_type": "decimal_string", "gate_ref": "net_pay"},
+            {"source_path": "cost_center_code", "target_path": "accounting.cost_center_code", "required": False, "value_type": "string", "gate_ref": "cost_center"},
+        ],
+    }
+    grouped_rule = {
+        "mode": "group_rows",
+        "source_path": "artifact_snapshot.line_snapshot",
+        "target_path": "payment.cost_center_groups",
+        "group_by_path": "cost_center_code",
+        "group_key_target_path": "cost_center_code",
+        "rows_target_path": "employees",
+        "required": True,
+        "gate_ref": "cost_center_payment_groups",
+        "row_mappings": [
+            {"source_path": "employee_code", "target_path": "employee_code", "required": True, "value_type": "string", "gate_ref": "employee_code"},
+            {"source_path": "net_pay", "target_path": "net_pay", "required": True, "value_type": "decimal_string", "gate_ref": "net_pay"},
+        ],
+        "aggregate_rules": [
+            {"operation": "sum", "source_path": "net_pay", "target_path": "totals.net_pay", "value_type": "decimal_string"},
+            {"operation": "count", "target_path": "totals.employee_count", "value_type": "integer"},
+        ],
+    }
+    update_response = api_client.patch(
+        f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{draft_payload['id']}/",
+        {
+            "target_schema_ref": "razorpayx.bank_advice.nested_rows.v1",
+            "enforcement_mode": "strict",
+            "transform_rules": [*draft_payload["transform_rules"], row_expansion_rule, grouped_rule],
+            "validation_rules": [
+                *draft_payload["validation_rules"],
+                {"path": "payment.employee_rows.0.employee.code", "required": True, "gate_ref": "first_employee_row_mapped"},
+                {"path": "payment.cost_center_groups.0.totals.net_pay", "required": True, "gate_ref": "first_cost_center_total_mapped"},
+            ],
+            "change_reason": "Configured nested rows and grouped totals.",
+        },
+        format="json",
+    )
+    assert update_response.status_code == 200, update_response.json()
+    sample = {
+        "provider_ref": active_pack.provider_ref,
+        "external_reference": "HANDOFF-AUG-2026-BANK-NESTED",
+        "idempotency_key": "bank-advice-nested-sim-001",
+        "artifact_snapshot": {
+            "file_name": "bank-advice.csv",
+            "checksum_sha256": "sample-checksum",
+            "file_size_bytes": 2048,
+            "totals_snapshot": {"net_pay": "1500.75"},
+            "line_snapshot": [
+                {"employee_code": "EMP-001", "employee_name": "Asha Mehta", "net_pay": "1000.25", "cost_center_code": "CC-ENG"},
+                {"employee_code": "EMP-002", "employee_name": "Ravi Shah", "net_pay": "500.50", "cost_center_code": "CC-OPS"},
+            ],
+        },
+    }
+    simulate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-schema-mapping-packs/{draft_payload['id']}/simulate/",
+        {"request_snapshot": sample},
+        format="json",
+    )
+    assert simulate_response.status_code == 200, simulate_response.json()
+    simulation = simulate_response.json()["simulation"]
+    payload = simulation["provider_payload"]
+    assert simulation["status"] == "passed"
+    assert payload["payment"]["employee_rows"][0]["employee"]["code"] == "EMP-001"
+    assert payload["payment"]["employee_rows"][0]["amount"]["net_pay"] == "1000.25"
+    assert payload["payment"]["employee_rows"][1]["accounting"]["cost_center_code"] == "CC-OPS"
+    assert payload["payment"]["cost_center_groups"][0]["cost_center_code"] == "CC-ENG"
+    assert payload["payment"]["cost_center_groups"][0]["totals"]["net_pay"] == "1000.25"
+    assert payload["payment"]["cost_center_groups"][1]["totals"]["employee_count"] == 1
+    assert simulation["comparison"]["status"] == "changed"
+    assert simulation["comparison"]["added_path_count"] >= 8
+    assert any(diff["path"].startswith("payment.employee_rows[0]") for diff in simulation["comparison"]["diffs"])
+    simulation_run = PayrollProviderSchemaMappingSimulation.objects.get(id=simulation["simulation_run_id"])
+    assert simulation_run.comparison_status == "changed"
+    assert simulation_run.added_path_count >= 8
+    assert simulation_run.provider_payload_snapshot["payment"]["cost_center_groups"][1]["totals"]["net_pay"] == "500.50"
+    assert PayrollProviderSchemaMappingPack.objects.filter(
+        tenant=tenant,
+        mapping_profile_ref=active_pack.mapping_profile_ref,
+        status=PayrollProviderSchemaMappingPackStatus.ACTIVE,
+    ).count() == 1
 
 
 def test_hr_admin_payroll_provider_connection_runs_automated_certification(api_client: APIClient, bootstrapped_workspace):
@@ -5167,6 +10230,7 @@ def test_manager_session_exposes_workspace_role_codes(api_client: APIClient, boo
         "ess": True,
         "mss": True,
         "hr_admin": False,
+        "tenant_admin": False,
     }
 
 
@@ -5232,6 +10296,7 @@ def test_workflow_approver_session_gets_mss_workspace_access(api_client: APIClie
         "ess": True,
         "mss": True,
         "hr_admin": False,
+        "tenant_admin": False,
     }
 
 

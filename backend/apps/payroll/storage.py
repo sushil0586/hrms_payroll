@@ -25,7 +25,9 @@ DEFAULT_SIGNED_DOWNLOAD_STRATEGY_REF = "payroll.download.signed_url.v1"
 DEFAULT_SIGNED_URL_EXPIRY_SECONDS = 900
 PAYROLL_STORAGE_CREDENTIALS_ENV = "HRMS_PAYROLL_ARTIFACT_STORAGE_CREDENTIALS_JSON"
 PAYROLL_STORAGE_POLICIES_ENV = "HRMS_PAYROLL_ARTIFACT_STORAGE_POLICIES_JSON"
+PAYROLL_STORAGE_CONTROL_VERIFICATION_MODE = "declaration"
 DEFAULT_STORAGE_POLICY_REF = "payroll.storage.policy.default.v1"
+BUILTIN_STORAGE_POLICY_REFS = {DEFAULT_STORAGE_POLICY_REF}
 RAW_CREDENTIAL_KEYS = {
     "access_key",
     "access_key_id",
@@ -237,6 +239,32 @@ class PayrollArtifactStoragePolicy:
         }
 
 
+@dataclass(frozen=True)
+class PayrollArtifactStorageControlVerification:
+    control_ref: str
+    control_kind: str
+    verifier_ref: str
+    status: str
+    verified: bool
+    blocking: bool
+    evidence_snapshot: dict[str, Any]
+    failure_code: str = ""
+    failure_reason: str = ""
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "control_ref": self.control_ref,
+            "control_kind": self.control_kind,
+            "verifier_ref": self.verifier_ref,
+            "status": self.status,
+            "verified": self.verified,
+            "blocking": self.blocking,
+            "evidence_snapshot": _redact_storage_secret_values(self.evidence_snapshot),
+            "failure_code": self.failure_code,
+            "failure_reason": self.failure_reason,
+        }
+
+
 class PayrollArtifactStorageAdapter(Protocol):
     provider_ref: str
     download_strategy_ref: str
@@ -310,6 +338,163 @@ def _has_raw_credential_key(value: Any) -> bool:
     if isinstance(value, list):
         return any(_has_raw_credential_key(item) for item in value)
     return False
+
+
+def _redact_storage_secret_values(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, nested_value in value.items():
+            if str(key).lower() in RAW_CREDENTIAL_KEYS:
+                redacted[str(key)] = "[redacted]"
+            else:
+                redacted[str(key)] = _redact_storage_secret_values(nested_value)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_storage_secret_values(item) for item in value]
+    return value
+
+
+def _storage_control_verifier_entries() -> dict[str, Any]:
+    entries = getattr(settings, "PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFIERS", None)
+    return entries if isinstance(entries, dict) else {}
+
+
+def _storage_control_verification_mode(policy: PayrollArtifactStoragePolicy) -> str:
+    mode = str(
+        policy.metadata.get("control_verification_mode")
+        or getattr(settings, "PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFICATION_MODE", PAYROLL_STORAGE_CONTROL_VERIFICATION_MODE)
+        or PAYROLL_STORAGE_CONTROL_VERIFICATION_MODE
+    ).strip().lower()
+    return mode if mode in {"declaration", "strict"} else PAYROLL_STORAGE_CONTROL_VERIFICATION_MODE
+
+
+def _storage_control_verification_profile_ref(policy: PayrollArtifactStoragePolicy) -> str:
+    return str(policy.metadata.get("control_verification_profile_ref") or "payroll.storage_control_verification.v1")
+
+
+def _payroll_storage_policy_control_refs(policy: PayrollArtifactStoragePolicy) -> list[tuple[str, str]]:
+    controls: list[tuple[str, str]] = []
+    if policy.require_encryption_ref or policy.allowed_encryption_refs:
+        encryption_refs = policy.allowed_encryption_refs or ("required_encryption_ref",)
+        controls.extend(("kms_encryption", item) for item in encryption_refs)
+    if policy.lifecycle_policy_ref:
+        controls.append(("lifecycle", policy.lifecycle_policy_ref))
+    if policy.malware_scan_profile_ref:
+        controls.append(("malware_scan", policy.malware_scan_profile_ref))
+    if policy.durability_policy_ref:
+        controls.append(("durability", policy.durability_policy_ref))
+    iam_policy_ref = str(policy.metadata.get("iam_policy_ref") or "").strip()
+    if iam_policy_ref:
+        controls.append(("iam", iam_policy_ref))
+    return controls
+
+
+def _storage_control_verifier(control_kind: str, control_ref: str):
+    entries = _storage_control_verifier_entries()
+    return _resolve_callable(entries.get(control_ref) or entries.get(control_kind) or entries.get("*"))
+
+
+def _normalize_storage_control_verification_result(
+    *,
+    control_kind: str,
+    control_ref: str,
+    verifier_ref: str,
+    result: Any,
+    strict_mode: bool,
+) -> PayrollArtifactStorageControlVerification:
+    payload = result if isinstance(result, dict) else {"status": "verified" if result is True else "blocked"}
+    status = str(payload.get("status") or "").strip().lower()
+    if status in {"passed", "ready", "verified", "ok"}:
+        status = "verified"
+    elif status in {"skipped", "declared"}:
+        status = "declared"
+    elif status not in {"blocked", "failed"}:
+        status = "verified" if payload.get("verified") is True else "blocked"
+    blocked = status in {"blocked", "failed"}
+    return PayrollArtifactStorageControlVerification(
+        control_ref=control_ref,
+        control_kind=control_kind,
+        verifier_ref=str(payload.get("verifier_ref") or verifier_ref),
+        status="blocked" if blocked else status,
+        verified=bool(payload.get("verified", status == "verified")),
+        blocking=bool(payload.get("blocking", blocked or (strict_mode and status != "verified"))),
+        evidence_snapshot=payload.get("evidence_snapshot") if isinstance(payload.get("evidence_snapshot"), dict) else {},
+        failure_code=str(payload.get("failure_code") or ("storage_control_verification_failed" if blocked else "")),
+        failure_reason=str(payload.get("failure_reason") or ""),
+    )
+
+
+def verify_payroll_artifact_storage_policy_controls(policy: PayrollArtifactStoragePolicy) -> dict[str, Any]:
+    """Verify configured storage control refs through deployment-provided hooks."""
+
+    mode = _storage_control_verification_mode(policy)
+    strict_mode = mode == "strict"
+    control_results: list[PayrollArtifactStorageControlVerification] = []
+    for control_kind, control_ref in _payroll_storage_policy_control_refs(policy):
+        verifier = _storage_control_verifier(control_kind, control_ref)
+        verifier_ref = (
+            f"{verifier.__module__}:{getattr(verifier, '__name__', verifier.__class__.__name__)}"
+            if verifier
+            else ""
+        )
+        if verifier is None:
+            control_results.append(
+                PayrollArtifactStorageControlVerification(
+                    control_ref=control_ref,
+                    control_kind=control_kind,
+                    verifier_ref="",
+                    status="blocked" if strict_mode else "declared",
+                    verified=False,
+                    blocking=strict_mode,
+                    evidence_snapshot={"verification_mode": mode, "verifier_configured": False},
+                    failure_code="storage_control_verifier_not_configured" if strict_mode else "",
+                    failure_reason="Storage control verifier is required in strict mode." if strict_mode else "",
+                )
+            )
+            continue
+        try:
+            verification_result = verifier(
+                control_ref=control_ref,
+                control_kind=control_kind,
+                policy=policy,
+                verification_mode=mode,
+            )
+        except Exception as exc:  # pragma: no cover - exact verifier failures vary by deployment.
+            control_results.append(
+                PayrollArtifactStorageControlVerification(
+                    control_ref=control_ref,
+                    control_kind=control_kind,
+                    verifier_ref=verifier_ref,
+                    status="blocked",
+                    verified=False,
+                    blocking=True,
+                    evidence_snapshot={"verification_mode": mode, "verifier_configured": True},
+                    failure_code=f"storage_control_verifier_failed:{exc.__class__.__name__}",
+                    failure_reason=str(exc),
+                )
+            )
+            continue
+        control_results.append(
+            _normalize_storage_control_verification_result(
+                control_kind=control_kind,
+                control_ref=control_ref,
+                verifier_ref=verifier_ref,
+                result=verification_result,
+                strict_mode=strict_mode,
+            )
+        )
+    blocked_results = [item for item in control_results if item.blocking]
+    verified_count = sum(1 for item in control_results if item.verified)
+    return {
+        "verification_profile_ref": _storage_control_verification_profile_ref(policy),
+        "verification_mode": mode,
+        "status": "ready" if not blocked_results else "blocked",
+        "control_count": len(control_results),
+        "verified_control_count": verified_count,
+        "blocked_control_count": len(blocked_results),
+        "blocked_control_refs": [item.control_ref for item in blocked_results],
+        "controls": [item.snapshot() for item in control_results],
+    }
 
 
 def normalize_payroll_artifact_storage_profile(provider_ref: str | None, config: dict[str, Any] | None) -> PayrollArtifactStorageProfile:
@@ -559,6 +744,128 @@ def validate_payroll_artifact_storage_policy(
             retryable=False,
         )
     return policy
+
+
+def _storage_policy_blockers(policy: PayrollArtifactStoragePolicy | None, raw_entry: Any, source_ref: str) -> list[str]:
+    blockers: list[str] = []
+    if source_ref == "missing":
+        blockers.append("storage_policy_not_configured")
+        return blockers
+    if _has_raw_credential_key(raw_entry):
+        blockers.append("raw_storage_credentials_not_allowed")
+    if policy is None:
+        blockers.append("storage_policy_not_configured")
+        return blockers
+    if not policy.enabled:
+        blockers.append("storage_policy_disabled")
+    if (
+        policy.min_signed_url_expires_in_seconds
+        and policy.max_signed_url_expires_in_seconds
+        and policy.min_signed_url_expires_in_seconds > policy.max_signed_url_expires_in_seconds
+    ):
+        blockers.append("storage_policy_signed_url_window_invalid")
+    if verify_payroll_artifact_storage_policy_controls(policy)["status"] == "blocked":
+        blockers.append("storage_control_verification_blocked")
+    return blockers
+
+
+def describe_payroll_artifact_storage_policy_registry(
+    storage_policy_refs: list[str] | tuple[str, ...] | set[str] | None = None,
+) -> dict[str, Any]:
+    """Return storage/IAM policy readiness without exposing credential material."""
+
+    configured_entries = _policy_entries_from_settings()
+    configured_refs = {
+        str(policy_ref).strip()
+        for policy_ref in configured_entries
+        if str(policy_ref or "").strip()
+    }
+    required_refs = {
+        str(policy_ref).strip()
+        for policy_ref in (storage_policy_refs or [])
+        if str(policy_ref or "").strip()
+    }
+    policy_refs = set(BUILTIN_STORAGE_POLICY_REFS)
+    policy_refs.update(configured_refs)
+    policy_refs.update(required_refs)
+
+    policies = []
+    for policy_ref in sorted(policy_refs):
+        source_ref = "builtin"
+        raw_entry: Any = {}
+        policy: PayrollArtifactStoragePolicy | None = None
+        if policy_ref in configured_refs:
+            source_ref = "settings.PAYROLL_ARTIFACT_STORAGE_POLICIES"
+            raw_entry = configured_entries.get(policy_ref)
+        elif policy_ref not in BUILTIN_STORAGE_POLICY_REFS:
+            source_ref = "missing"
+        if source_ref != "missing":
+            try:
+                policy = resolve_payroll_artifact_storage_policy(policy_ref)
+            except PayrollArtifactStorageError:
+                source_ref = "missing"
+        blocking_gate_refs = _storage_policy_blockers(policy, raw_entry, source_ref)
+        policy_snapshot = _redact_storage_secret_values(policy.snapshot()) if policy is not None else {
+            "storage_policy_ref": policy_ref,
+            "enabled": False,
+            "metadata": {},
+        }
+        control_verification = verify_payroll_artifact_storage_policy_controls(policy) if policy is not None else {
+            "verification_profile_ref": "payroll.storage_control_verification.v1",
+            "verification_mode": "strict",
+            "status": "blocked",
+            "control_count": 0,
+            "verified_control_count": 0,
+            "blocked_control_count": 0,
+            "blocked_control_refs": [],
+            "controls": [],
+        }
+        capabilities = {
+            "allowed_provider_family_count": len(policy.allowed_provider_families) if policy else 0,
+            "allowed_provider_ref_count": len(policy.allowed_provider_refs) if policy else 0,
+            "allowed_credential_ref_count": len(policy.allowed_credential_refs) if policy else 0,
+            "allowed_bucket_count": len(policy.allowed_bucket_names) if policy else 0,
+            "allowed_container_count": len(policy.allowed_container_names) if policy else 0,
+            "allowed_retention_policy_count": len(policy.allowed_retention_policy_refs) if policy else 0,
+            "allowed_encryption_ref_count": len(policy.allowed_encryption_refs) if policy else 0,
+            "allowed_endpoint_host_count": len(policy.allowed_endpoint_hosts) if policy else 0,
+            "requires_encryption_ref": bool(policy and policy.require_encryption_ref),
+            "requires_private_endpoint": bool(policy and policy.require_private_endpoint),
+            "requires_runtime_credentials": bool(policy and policy.require_runtime_credentials),
+            "requires_lifecycle_policy": bool(policy and policy.lifecycle_policy_ref),
+            "requires_malware_scan": bool(policy and policy.malware_scan_profile_ref),
+            "requires_durability_policy": bool(policy and policy.durability_policy_ref),
+            "max_file_size_bytes": policy.max_file_size_bytes if policy else 0,
+            "control_verification_count": control_verification["control_count"],
+            "verified_control_count": control_verification["verified_control_count"],
+            "blocked_control_count": control_verification["blocked_control_count"],
+            "secret_material_policy_ref": "payroll.storage_secret_material.reference_only.v1",
+        }
+        policies.append({
+            "storage_policy_ref": policy_ref,
+            "source_ref": source_ref,
+            "status": "ready" if not blocking_gate_refs else "blocked",
+            "required_by_package": policy_ref in required_refs,
+            "blocking_gate_refs": blocking_gate_refs,
+            "policy": policy_snapshot,
+            "control_verification": control_verification,
+            "capabilities": capabilities,
+        })
+
+    ready_count = sum(1 for item in policies if item["status"] == "ready")
+    configured_count = sum(1 for item in policies if item["source_ref"] == "settings.PAYROLL_ARTIFACT_STORAGE_POLICIES")
+    blocked_refs = [item["storage_policy_ref"] for item in policies if item["status"] != "ready"]
+    return {
+        "registry_profile_ref": "payroll.storage_policy_registry.readiness.v1",
+        "storage_policy_count": len(policies),
+        "ready_storage_policy_count": ready_count,
+        "blocked_storage_policy_count": len(policies) - ready_count,
+        "configured_storage_policy_count": configured_count,
+        "builtin_storage_policy_count": sum(1 for item in policies if item["source_ref"] == "builtin"),
+        "required_storage_policy_count": len(required_refs),
+        "blocked_storage_policy_refs": blocked_refs,
+        "policies": policies,
+    }
 
 
 def _credential_entries_from_settings() -> dict[str, Any]:

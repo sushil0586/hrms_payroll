@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import ast
+import base64
 import csv
 import hashlib
+import hmac
 import json
 import secrets
 from dataclasses import dataclass
@@ -18,6 +20,10 @@ from django.db import transaction
 from django.db.models import Max, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 from apps.notifications.models import NotificationChannel, NotificationStatus
 from apps.notifications.services import trigger_notification_event
@@ -59,8 +65,16 @@ from apps.payroll.models import (
     PayrollProviderConnectionStatus,
     PayrollProviderDelivery,
     PayrollProviderDeliveryStatus,
+    PayrollProviderJob,
+    PayrollProviderJobKind,
+    PayrollProviderJobStatus,
+    PayrollProviderLaunchRehearsal,
     PayrollProviderRetryEvent,
     PayrollProviderRetryEventStatus,
+    PayrollProviderSchemaMappingSimulation,
+    PayrollProviderSchemaMappingSimulationStatus,
+    PayrollProviderSchemaMappingPack,
+    PayrollProviderSchemaMappingPackStatus,
     PayrollReviewStatus,
     EmployeeStatutoryProfile,
     PayrollRuleVersion,
@@ -92,11 +106,14 @@ from apps.payroll.models import (
     PayrollValidationSeverity,
 )
 from apps.payroll.providers import (
+    PAYROLL_PROVIDER_LAUNCH_READINESS_COMMAND_REF,
     PayrollProviderAdapterError,
     PayrollProviderSubmissionRequest,
     PayrollProviderSubmissionResult,
+    describe_payroll_provider_launch_readiness_audit_pack,
     get_payroll_provider_adapter,
     normalize_payroll_provider_submission_request,
+    resolve_payroll_provider_credential,
     validate_payroll_provider_adapter_request_contract,
     validate_payroll_provider_adapter_result_contract,
     validate_payroll_provider_route_config,
@@ -140,12 +157,60 @@ class PayrollProviderCallbackError(ValueError):
     """Raised when provider callback ingestion fails validation or verification."""
 
 
+class PayrollProviderSignatureAdapterError(ValueError):
+    """Raised when provider callback signatures cannot be calculated."""
+
+
 class PayrollProviderRetryError(ValueError):
     """Raised when provider delivery retry planning or execution is not allowed."""
 
 
+class PayrollProviderJobError(ValueError):
+    """Raised when provider queue jobs cannot be scheduled or executed."""
+
+
 class PayrollProviderConnectionError(ValueError):
     """Raised when provider onboarding or certification cannot be updated."""
+
+
+class PayrollProviderSchemaMappingPackError(ValueError):
+    """Raised when provider schema mapping packs cannot be changed."""
+
+
+def record_payroll_provider_launch_rehearsal(
+    tenant,
+    *,
+    setup_payload: dict[str, Any],
+    generated_by=None,
+    generated_by_ref: str = PAYROLL_PROVIDER_LAUNCH_READINESS_COMMAND_REF,
+    generated_at=None,
+) -> PayrollProviderLaunchRehearsal:
+    """Persist a tenant launch-readiness rehearsal from a sanitized setup snapshot."""
+
+    generated_at = generated_at or timezone.now()
+    audit_pack = describe_payroll_provider_launch_readiness_audit_pack(
+        tenant_snapshot={
+            "tenant_id": str(tenant.id),
+            "tenant_code": tenant.code,
+            "tenant_name": tenant.name,
+            "tenant_status": tenant.status,
+            "subscription_plan": tenant.subscription_plan,
+            "country_code": tenant.country_code,
+            "timezone": tenant.timezone,
+            "is_sandbox": tenant.is_sandbox,
+            "go_live_at": tenant.go_live_at,
+        },
+        setup_payload=setup_payload,
+        generated_at=generated_at,
+        generated_by_ref=generated_by_ref,
+    )
+    return PayrollProviderLaunchRehearsal.objects.create(
+        tenant=tenant,
+        generated_by=generated_by,
+        generated_by_ref=generated_by_ref,
+        generated_at=generated_at,
+        audit_pack_snapshot=audit_pack,
+    )
 
 
 @dataclass(frozen=True)
@@ -153,6 +218,16 @@ class PayrollProviderRetryWorkerResult:
     processed_events: list[PayrollProviderRetryEvent]
     executed_count: int
     skipped_count: int
+
+
+@dataclass(frozen=True)
+class PayrollProviderJobWorkerResult:
+    processed_jobs: list[PayrollProviderJob]
+    completed_count: int
+    failed_count: int
+    skipped_count: int
+    dead_lettered_count: int
+    recovered_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -168,6 +243,7 @@ ARTIFACT_MIME_TYPES = {
     PayrollOutputArtifactKind.BANK_ADVICE: "text/csv",
     PayrollOutputArtifactKind.ACCOUNTING_EXPORT: "text/csv",
     PayrollOutputArtifactKind.STATUTORY_REPORT: "text/csv",
+    PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK: "application/json",
 }
 
 ARTIFACT_FILE_EXTENSIONS = {
@@ -798,6 +874,90 @@ def run_payroll_provider_connection_certification(
     return run
 
 
+def _default_provider_schema_mapping_transform_rules(artifact_kind: str) -> list[dict[str, Any]]:
+    rules = [
+        {
+            "source_path": "provider_ref",
+            "target_path": "provider.provider_ref",
+            "required": True,
+            "value_type": "string",
+        },
+        {
+            "source_path": "external_reference",
+            "target_path": "submission.external_reference",
+            "required": True,
+            "value_type": "string",
+        },
+        {
+            "source_path": "idempotency_key",
+            "target_path": "submission.idempotency_key",
+            "required": True,
+            "value_type": "string",
+        },
+        {
+            "source_path": "artifact_snapshot.file_name",
+            "target_path": "file.name",
+            "required": True,
+            "value_type": "string",
+        },
+        {
+            "source_path": "artifact_snapshot.checksum_sha256",
+            "target_path": "file.checksum_sha256",
+            "required": True,
+            "value_type": "string",
+        },
+        {
+            "source_path": "artifact_snapshot.file_size_bytes",
+            "target_path": "file.size_bytes",
+            "required": True,
+            "value_type": "integer",
+        },
+    ]
+    if artifact_kind == PayrollOutputArtifactKind.BANK_ADVICE:
+        rules.append({
+            "source_path": "artifact_snapshot.totals_snapshot.net_pay",
+            "target_path": "payment.total_amount",
+            "required": True,
+            "value_type": "decimal_string",
+        })
+    elif artifact_kind == PayrollOutputArtifactKind.ACCOUNTING_EXPORT:
+        rules.append({
+            "source_path": "artifact_snapshot.totals_snapshot.gross_earnings",
+            "target_path": "ledger.gross_earnings",
+            "required": False,
+            "value_type": "decimal_string",
+        })
+    elif artifact_kind == PayrollOutputArtifactKind.STATUTORY_REPORT:
+        rules.extend([
+            {
+                "source_path": "artifact_snapshot.config_snapshot.filing_type_ref",
+                "target_path": "filing.filing_type_ref",
+                "required": False,
+                "value_type": "string",
+            },
+            {
+                "source_path": "artifact_snapshot.config_snapshot.employer_registration_number",
+                "target_path": "filing.employer_registration_number",
+                "required": False,
+                "value_type": "string",
+            },
+        ])
+    return rules
+
+
+def _default_provider_schema_mapping_validation_rules(artifact_kind: str) -> list[dict[str, Any]]:
+    rules = [
+        {"path": "provider.provider_ref", "required": True, "gate_ref": "provider_ref_mapped"},
+        {"path": "submission.external_reference", "required": True, "gate_ref": "external_reference_mapped"},
+        {"path": "submission.idempotency_key", "required": True, "gate_ref": "idempotency_key_mapped"},
+        {"path": "file.name", "required": True, "gate_ref": "file_name_mapped"},
+        {"path": "file.checksum_sha256", "required": True, "gate_ref": "file_checksum_mapped"},
+    ]
+    if artifact_kind == PayrollOutputArtifactKind.BANK_ADVICE:
+        rules.append({"path": "payment.total_amount", "required": True, "gate_ref": "payment_total_mapped"})
+    return rules
+
+
 def ensure_default_payroll_provider_connections(tenant, *, created_by=None) -> list[PayrollProviderConnection]:
     connections: list[PayrollProviderConnection] = []
     for blueprint in DEFAULT_PAYROLL_PROVIDER_CONNECTION_BLUEPRINTS:
@@ -822,7 +982,13 @@ def ensure_default_payroll_provider_connections(tenant, *, created_by=None) -> l
                         "callback_security_policy": {
                             "security_policy_ref": f"payroll.callback_security.{blueprint['provider_kind']}.standard.v1",
                             "enforcement_mode": "warn",
-                            "signature_algorithm_ref": "payroll.callback.signature.sha256.v1",
+                            "signature_algorithm_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ALGORITHM_REF,
+                            "signature_adapter_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ADAPTER_REF,
+                            "signature_material_fields": list(DEFAULT_PROVIDER_CALLBACK_SIGNATURE_MATERIAL_FIELDS),
+                            "signature_key_ref": f"payroll.callback_signature_key.{blueprint['provider_kind']}.configured.v1",
+                            "signature_key_resolution_mode": "reference",
+                            "require_runtime_signature_key": False,
+                            "signature_encoding": "hex",
                             "secret_rotation_ref": f"payroll.callback_secret_rotation.{blueprint['provider_kind']}.standard.v1",
                             "replay_window_seconds": 900,
                             "timestamp_required": False,
@@ -847,10 +1013,693 @@ def ensure_default_payroll_provider_connections(tenant, *, created_by=None) -> l
                 "updated_by": created_by,
             },
         )
+        artifact_kind = {
+            PayrollProviderConnectionKind.BANK: PayrollOutputArtifactKind.BANK_ADVICE,
+            PayrollProviderConnectionKind.ACCOUNTING: PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
+            PayrollProviderConnectionKind.STATUTORY: PayrollOutputArtifactKind.STATUTORY_REPORT,
+        }.get(blueprint["provider_kind"], PayrollOutputArtifactKind.STATUTORY_REPORT)
+        mapping_profile_ref = f"payroll.provider_mapping.{blueprint['provider_kind']}.{artifact_kind}.default.v1"
+        PayrollProviderSchemaMappingPack.objects.get_or_create(
+            tenant=tenant,
+            mapping_profile_ref=mapping_profile_ref,
+            version=1,
+            defaults={
+                "provider_connection": connection,
+                "provider_ref": connection.provider_ref,
+                "provider_kind": connection.provider_kind,
+                "environment_ref": connection.environment_ref,
+                "artifact_kind": artifact_kind,
+                "status": PayrollProviderSchemaMappingPackStatus.ACTIVE,
+                "source_schema_ref": f"payroll.internal.{artifact_kind}.submission.v1",
+                "target_schema_ref": f"{connection.provider_ref}.{artifact_kind}.payload.v1",
+                "enforcement_mode": "warn",
+                "transform_rules": _default_provider_schema_mapping_transform_rules(artifact_kind),
+                "validation_rules": _default_provider_schema_mapping_validation_rules(artifact_kind),
+                "evidence_snapshot": {
+                    "source": "payroll_provider_schema_mapping_blueprint.v1",
+                    "provider_ref": connection.provider_ref,
+                    "artifact_kind": artifact_kind,
+                },
+                "created_by": created_by,
+                "updated_by": created_by,
+            },
+        )
         if created or not isinstance(connection.readiness_snapshot, dict) or not connection.readiness_snapshot:
             connection = sync_payroll_provider_connection_readiness(connection)
         connections.append(connection)
     return connections
+
+
+PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_EXPORT_VERSION = "payroll.provider_schema_mapping_pack.export.v1"
+PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_LIFECYCLE_PROFILE_REF = "payroll.provider_schema_mapping_pack.lifecycle.v1"
+PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_SIMULATION_PROFILE_REF = "payroll.provider_schema_mapping_pack.simulation.v1"
+PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_COMPARISON_PROFILE_REF = "payroll.provider_schema_mapping_pack.comparison.v1"
+PAYROLL_PROVIDER_CALLBACK_SIGNATURE_PROFILE_REF = "payroll.provider_callback.signature.framework.v1"
+PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ALGORITHM_REF = "payroll.callback.signature.sha256.v1"
+PAYROLL_PROVIDER_CALLBACK_SIGNATURE_HMAC_SHA256_ALGORITHM_REF = "payroll.callback.signature.hmac_sha256_ref.v1"
+PAYROLL_PROVIDER_CALLBACK_SIGNATURE_RSA_SHA256_ALGORITHM_REF = "payroll.callback.signature.rsa_sha256.v1"
+PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ADAPTER_REF = "payroll.provider_signature_adapter.deterministic_sha256.v1"
+PAYROLL_PROVIDER_CALLBACK_SIGNATURE_HMAC_SHA256_ADAPTER_REF = "payroll.provider_signature_adapter.hmac_sha256_ref.v1"
+PAYROLL_PROVIDER_CALLBACK_SIGNATURE_RSA_SHA256_ADAPTER_REF = "payroll.provider_signature_adapter.rsa_sha256_public_key.v1"
+PAYROLL_PROVIDER_AUDIT_PACK_PROFILE_REF = "payroll.provider_audit_pack.standard.v1"
+PAYROLL_PROVIDER_AUDIT_PACK_SCHEMA_REF = "payroll.provider_audit_pack.schema.v1"
+PAYROLL_PROVIDER_AUDIT_PACK_RETENTION_REF = "payroll.retention.provider_audit.10y.v1"
+RAW_PAYROLL_AUDIT_PACK_KEYS = {
+    "access_key",
+    "access_key_id",
+    "account_key",
+    "api_key",
+    "authorization",
+    "bearer_token",
+    "client_secret",
+    "connection_string",
+    "hmac_secret",
+    "password",
+    "private_key",
+    "proxy_authorization",
+    "secret",
+    "secret_access_key",
+    "secret_key",
+    "signing_secret",
+    "token",
+    "webhook_secret",
+    "x-api-key",
+    "x-api-token",
+}
+DEFAULT_PROVIDER_CALLBACK_SIGNATURE_MATERIAL_FIELDS = [
+    "provider_ref",
+    "external_reference",
+    "idempotency_key",
+    "payload_checksum_sha256",
+    "artifact_checksum_sha256",
+    "callback_verification_ref",
+]
+DEFAULT_PROVIDER_CALLBACK_SIGNATURE_KEY_MATERIAL_FIELDS = [
+    "signing_secret",
+    "webhook_secret",
+    "hmac_secret",
+    "hmac_key",
+    "secret",
+    "key",
+]
+DEFAULT_PROVIDER_CALLBACK_PUBLIC_KEY_MATERIAL_FIELDS = [
+    "public_key",
+    "rsa_public_key",
+    "webhook_public_key",
+    "signing_public_key",
+]
+
+
+def _provider_schema_mapping_pack_audit_entry(*, action: str, actor=None, reason: str = "", evidence: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {
+        "action": action,
+        "actor_id": str(getattr(actor, "id", "") or ""),
+        "actor_name": str(actor) if actor else "",
+        "reason": reason,
+        "evidence": evidence or {},
+        "recorded_at": timezone.now().isoformat(),
+    }
+
+
+def _append_provider_schema_mapping_pack_audit(
+    item: PayrollProviderSchemaMappingPack,
+    *,
+    action: str,
+    actor=None,
+    reason: str = "",
+    evidence: dict[str, Any] | None = None,
+) -> None:
+    snapshot = item.evidence_snapshot if isinstance(item.evidence_snapshot, dict) else {}
+    history = snapshot.get("lifecycle_history") if isinstance(snapshot.get("lifecycle_history"), list) else []
+    item.evidence_snapshot = {
+        **snapshot,
+        "lifecycle_profile_ref": PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_LIFECYCLE_PROFILE_REF,
+        "last_lifecycle_action": action,
+        "last_lifecycle_actor": str(actor) if actor else "",
+        "last_lifecycle_at": timezone.now().isoformat(),
+        "lifecycle_history": [
+            *history[-24:],
+            _provider_schema_mapping_pack_audit_entry(action=action, actor=actor, reason=reason, evidence=evidence),
+        ],
+    }
+
+
+def _provider_schema_mapping_pack_connection_for_actor(actor, provider_connection_id: Any) -> PayrollProviderConnection | None:
+    if not provider_connection_id:
+        return None
+    connection = PayrollProviderConnection.objects.filter(tenant=actor.tenant, id=provider_connection_id).first()
+    if not connection:
+        raise PayrollProviderSchemaMappingPackError("Payroll provider connection not found for mapping pack.")
+    return connection
+
+
+def _provider_schema_mapping_pack_next_version(tenant, mapping_profile_ref: str) -> int:
+    current = PayrollProviderSchemaMappingPack.objects.filter(
+        tenant=tenant,
+        mapping_profile_ref=mapping_profile_ref,
+    ).aggregate(max_version=Max("version"))["max_version"]
+    return int(current or 0) + 1
+
+
+def save_payroll_provider_schema_mapping_pack_for_actor(
+    actor,
+    data: dict[str, Any],
+    *,
+    item: PayrollProviderSchemaMappingPack | None = None,
+) -> PayrollProviderSchemaMappingPack:
+    create = item is None
+    if create:
+        mapping_profile_ref = str(data.get("mapping_profile_ref") or "").strip()
+        if not mapping_profile_ref:
+            raise PayrollProviderSchemaMappingPackError("Mapping profile ref is required.")
+        item = PayrollProviderSchemaMappingPack(
+            tenant=actor.tenant,
+            mapping_profile_ref=mapping_profile_ref,
+            version=int(data.get("version") or _provider_schema_mapping_pack_next_version(actor.tenant, mapping_profile_ref)),
+            status=PayrollProviderSchemaMappingPackStatus.DRAFT,
+            created_by=getattr(actor, "user", None),
+        )
+    elif item.status == PayrollProviderSchemaMappingPackStatus.ACTIVE:
+        raise PayrollProviderSchemaMappingPackError("Active mapping packs must be cloned before editing.")
+
+    if "provider_connection_id" in data:
+        item.provider_connection = _provider_schema_mapping_pack_connection_for_actor(actor, data.get("provider_connection_id"))
+    for field_name in [
+        "provider_ref",
+        "provider_kind",
+        "environment_ref",
+        "artifact_kind",
+        "mapping_profile_ref",
+        "version",
+        "source_schema_ref",
+        "target_schema_ref",
+        "transform_profile_ref",
+        "validation_profile_ref",
+        "enforcement_mode",
+        "transform_rules",
+        "validation_rules",
+        "sample_request_snapshot",
+        "sample_output_snapshot",
+    ]:
+        if field_name in data:
+            setattr(item, field_name, data[field_name])
+    if create and item.provider_connection_id:
+        item.provider_ref = item.provider_ref or item.provider_connection.provider_ref
+        item.provider_kind = item.provider_kind or item.provider_connection.provider_kind
+        item.environment_ref = item.environment_ref or item.provider_connection.environment_ref
+    if not item.provider_ref:
+        raise PayrollProviderSchemaMappingPackError("Provider ref is required.")
+    if not item.artifact_kind:
+        raise PayrollProviderSchemaMappingPackError("Artifact kind is required.")
+    _append_provider_schema_mapping_pack_audit(
+        item,
+        action="created" if create else "updated",
+        actor=getattr(actor, "user", None),
+        reason=str(data.get("change_reason") or ""),
+        evidence={"status": item.status},
+    )
+    item.updated_by = getattr(actor, "user", None)
+    try:
+        item.save()
+    except Exception as exc:
+        raise PayrollProviderSchemaMappingPackError(str(exc)) from exc
+    return item
+
+
+def clone_payroll_provider_schema_mapping_pack_for_actor(
+    actor,
+    item: PayrollProviderSchemaMappingPack,
+    *,
+    overrides: dict[str, Any] | None = None,
+) -> PayrollProviderSchemaMappingPack:
+    if item.tenant_id != actor.tenant_id:
+        raise PayrollProviderSchemaMappingPackError("Payroll provider schema mapping pack not found.")
+    overrides = overrides or {}
+    mapping_profile_ref = str(overrides.get("mapping_profile_ref") or item.mapping_profile_ref).strip()
+    clone = PayrollProviderSchemaMappingPack(
+        tenant=item.tenant,
+        provider_connection=item.provider_connection,
+        provider_ref=item.provider_ref,
+        provider_kind=item.provider_kind,
+        environment_ref=item.environment_ref,
+        artifact_kind=item.artifact_kind,
+        mapping_profile_ref=mapping_profile_ref,
+        version=_provider_schema_mapping_pack_next_version(item.tenant, mapping_profile_ref),
+        status=PayrollProviderSchemaMappingPackStatus.DRAFT,
+        source_schema_ref=item.source_schema_ref,
+        target_schema_ref=item.target_schema_ref,
+        transform_profile_ref=item.transform_profile_ref,
+        validation_profile_ref=item.validation_profile_ref,
+        enforcement_mode=item.enforcement_mode,
+        transform_rules=item.transform_rules,
+        validation_rules=item.validation_rules,
+        sample_request_snapshot=item.sample_request_snapshot,
+        sample_output_snapshot=item.sample_output_snapshot,
+        evidence_snapshot={
+            "source": "payroll_provider_schema_mapping_pack_clone",
+            "source_mapping_pack_id": str(item.id),
+            "source_mapping_profile_ref": item.mapping_profile_ref,
+            "source_version": item.version,
+            "source_hash": item.source_hash,
+        },
+        created_by=getattr(actor, "user", None),
+        updated_by=getattr(actor, "user", None),
+    )
+    mutable_overrides = {key: value for key, value in overrides.items() if key not in {"status", "version", "provider_connection_id"}}
+    for field_name, value in mutable_overrides.items():
+        if hasattr(clone, field_name):
+            setattr(clone, field_name, value)
+    if "provider_connection_id" in overrides:
+        clone.provider_connection = _provider_schema_mapping_pack_connection_for_actor(actor, overrides.get("provider_connection_id"))
+    _append_provider_schema_mapping_pack_audit(
+        clone,
+        action="cloned",
+        actor=getattr(actor, "user", None),
+        reason=str(overrides.get("change_reason") or ""),
+        evidence={"source_mapping_pack_id": str(item.id), "source_version": item.version},
+    )
+    try:
+        clone.save()
+    except Exception as exc:
+        raise PayrollProviderSchemaMappingPackError(str(exc)) from exc
+    return clone
+
+
+def activate_payroll_provider_schema_mapping_pack_for_actor(
+    actor,
+    item: PayrollProviderSchemaMappingPack,
+    *,
+    approval_snapshot: dict[str, Any] | None = None,
+) -> PayrollProviderSchemaMappingPack:
+    if item.tenant_id != actor.tenant_id:
+        raise PayrollProviderSchemaMappingPackError("Payroll provider schema mapping pack not found.")
+    with transaction.atomic():
+        item = PayrollProviderSchemaMappingPack.objects.select_for_update().get(id=item.id)
+        previous_active = list(
+            PayrollProviderSchemaMappingPack.objects.select_for_update().filter(
+                tenant=item.tenant,
+                mapping_profile_ref=item.mapping_profile_ref,
+                status=PayrollProviderSchemaMappingPackStatus.ACTIVE,
+            ).exclude(id=item.id)
+        )
+        for previous in previous_active:
+            previous.status = PayrollProviderSchemaMappingPackStatus.INACTIVE
+            _append_provider_schema_mapping_pack_audit(
+                previous,
+                action="superseded",
+                actor=getattr(actor, "user", None),
+                evidence={"active_mapping_pack_id": str(item.id), "active_version": item.version},
+            )
+            previous.updated_by = getattr(actor, "user", None)
+            previous.save()
+        item.status = PayrollProviderSchemaMappingPackStatus.ACTIVE
+        _append_provider_schema_mapping_pack_audit(
+            item,
+            action="activated",
+            actor=getattr(actor, "user", None),
+            reason=str((approval_snapshot or {}).get("approval_reason") or ""),
+            evidence={
+                "approval_snapshot": approval_snapshot or {},
+                "superseded_mapping_pack_ids": [str(previous.id) for previous in previous_active],
+            },
+        )
+        item.updated_by = getattr(actor, "user", None)
+        try:
+            item.save()
+        except Exception as exc:
+            raise PayrollProviderSchemaMappingPackError(str(exc)) from exc
+    return item
+
+
+def archive_payroll_provider_schema_mapping_pack_for_actor(
+    actor,
+    item: PayrollProviderSchemaMappingPack,
+    *,
+    archive_reason: str = "",
+) -> PayrollProviderSchemaMappingPack:
+    if item.tenant_id != actor.tenant_id:
+        raise PayrollProviderSchemaMappingPackError("Payroll provider schema mapping pack not found.")
+    item.status = PayrollProviderSchemaMappingPackStatus.ARCHIVED
+    _append_provider_schema_mapping_pack_audit(
+        item,
+        action="archived",
+        actor=getattr(actor, "user", None),
+        reason=archive_reason,
+    )
+    item.updated_by = getattr(actor, "user", None)
+    try:
+        item.save()
+    except Exception as exc:
+        raise PayrollProviderSchemaMappingPackError(str(exc)) from exc
+    return item
+
+
+def export_payroll_provider_schema_mapping_pack(item: PayrollProviderSchemaMappingPack) -> dict[str, Any]:
+    return {
+        "export_version": PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_EXPORT_VERSION,
+        "mapping_profile_ref": item.mapping_profile_ref,
+        "version": item.version,
+        "provider_ref": item.provider_ref,
+        "provider_kind": item.provider_kind,
+        "environment_ref": item.environment_ref,
+        "artifact_kind": item.artifact_kind,
+        "source_schema_ref": item.source_schema_ref,
+        "target_schema_ref": item.target_schema_ref,
+        "transform_profile_ref": item.transform_profile_ref,
+        "validation_profile_ref": item.validation_profile_ref,
+        "enforcement_mode": item.enforcement_mode,
+        "transform_rules": item.transform_rules,
+        "validation_rules": item.validation_rules,
+        "sample_request_snapshot": item.sample_request_snapshot,
+        "sample_output_snapshot": item.sample_output_snapshot,
+        "source_hash": item.source_hash,
+        "exported_at": timezone.now().isoformat(),
+    }
+
+
+def _provider_schema_mapping_pack_contract(item: PayrollProviderSchemaMappingPack) -> dict[str, Any]:
+    return {
+        "mapping_pack_id": str(item.id),
+        "mapping_profile_ref": item.mapping_profile_ref,
+        "version": item.version,
+        "provider_ref": item.provider_ref,
+        "provider_kind": item.provider_kind,
+        "environment_ref": item.environment_ref,
+        "artifact_kind": item.artifact_kind,
+        "source_schema_ref": item.source_schema_ref,
+        "target_schema_ref": item.target_schema_ref,
+        "transform_profile_ref": item.transform_profile_ref,
+        "validation_profile_ref": item.validation_profile_ref,
+        "enforcement_mode": item.enforcement_mode,
+        "transform_rules": item.transform_rules,
+        "validation_rules": item.validation_rules,
+        "source_hash": item.source_hash,
+    }
+
+
+def _flatten_mapping_payload(value: Any, *, prefix: str = "") -> dict[str, Any]:
+    if isinstance(value, dict):
+        flattened: dict[str, Any] = {}
+        for key, child in sorted(value.items(), key=lambda pair: str(pair[0])):
+            child_prefix = f"{prefix}.{key}" if prefix else str(key)
+            flattened.update(_flatten_mapping_payload(child, prefix=child_prefix))
+        return flattened
+    if isinstance(value, list):
+        flattened = {}
+        for index, child in enumerate(value):
+            child_prefix = f"{prefix}[{index}]" if prefix else f"[{index}]"
+            flattened.update(_flatten_mapping_payload(child, prefix=child_prefix))
+        return flattened
+    return {prefix or "$": value}
+
+
+def _provider_schema_mapping_pack_active_baseline(item: PayrollProviderSchemaMappingPack) -> PayrollProviderSchemaMappingPack | None:
+    return (
+        PayrollProviderSchemaMappingPack.objects.filter(
+            tenant=item.tenant,
+            provider_ref=item.provider_ref,
+            artifact_kind=item.artifact_kind,
+            status=PayrollProviderSchemaMappingPackStatus.ACTIVE,
+        )
+        .exclude(id=item.id)
+        .order_by("-version", "-updated_at")
+        .first()
+    )
+
+
+def _compare_provider_schema_mapping_payloads(
+    *,
+    item: PayrollProviderSchemaMappingPack,
+    baseline: PayrollProviderSchemaMappingPack | None,
+    request_snapshot: dict[str, Any],
+    mapping_contract: dict[str, Any],
+    provider_payload: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if not baseline:
+        return {}, {
+            "comparison_profile_ref": PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_COMPARISON_PROFILE_REF,
+            "status": "no_baseline",
+            "mapping_pack_id": str(item.id),
+            "mapping_pack_version": item.version,
+            "baseline_mapping_pack_id": "",
+            "baseline_mapping_pack_version": 0,
+            "changed_path_count": 0,
+            "added_path_count": 0,
+            "removed_path_count": 0,
+            "unchanged_path_count": 0,
+            "diffs": [],
+        }
+    baseline_contract = _provider_schema_mapping_pack_contract(baseline)
+    baseline_validation = apply_payroll_provider_schema_mapping(
+        request_snapshot=request_snapshot,
+        mapping_contract=baseline_contract,
+    )
+    baseline_payload = baseline_validation.get("provider_payload", {})
+    baseline_payload = baseline_payload if isinstance(baseline_payload, dict) else {}
+    active_paths = _flatten_mapping_payload(provider_payload)
+    baseline_paths = _flatten_mapping_payload(baseline_payload)
+    all_paths = sorted(set(active_paths) | set(baseline_paths))
+    diffs: list[dict[str, Any]] = []
+    added_count = 0
+    removed_count = 0
+    changed_count = 0
+    unchanged_count = 0
+    for path in all_paths:
+        left_missing = path not in baseline_paths
+        right_missing = path not in active_paths
+        if left_missing:
+            added_count += 1
+            change_type = "added"
+        elif right_missing:
+            removed_count += 1
+            change_type = "removed"
+        elif baseline_paths[path] != active_paths[path]:
+            changed_count += 1
+            change_type = "changed"
+        else:
+            unchanged_count += 1
+            continue
+        if len(diffs) < 50:
+            diffs.append({
+                "path": path,
+                "change_type": change_type,
+                "baseline_value": None if left_missing else baseline_paths.get(path),
+                "candidate_value": None if right_missing else active_paths.get(path),
+            })
+    total_changes = added_count + removed_count + changed_count
+    return baseline_payload, {
+        "comparison_profile_ref": PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_COMPARISON_PROFILE_REF,
+        "status": "changed" if total_changes else "unchanged",
+        "mapping_pack_id": str(item.id),
+        "mapping_profile_ref": item.mapping_profile_ref,
+        "mapping_pack_version": item.version,
+        "mapping_source_hash": str(mapping_contract.get("source_hash") or item.source_hash),
+        "baseline_mapping_pack_id": str(baseline.id),
+        "baseline_mapping_profile_ref": baseline.mapping_profile_ref,
+        "baseline_mapping_pack_version": baseline.version,
+        "baseline_source_hash": baseline.source_hash,
+        "changed_path_count": changed_count,
+        "added_path_count": added_count,
+        "removed_path_count": removed_count,
+        "unchanged_path_count": unchanged_count,
+        "diffs": diffs,
+    }
+
+
+def build_payroll_provider_schema_mapping_simulation_payload(item: PayrollProviderSchemaMappingSimulation) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "mapping_pack_id": item.mapping_pack_id,
+        "baseline_mapping_pack_id": item.baseline_mapping_pack_id,
+        "provider_connection_id": item.provider_connection_id,
+        "provider_ref": item.provider_ref,
+        "provider_kind": item.provider_kind,
+        "provider_kind_label": item.get_provider_kind_display(),
+        "environment_ref": item.environment_ref,
+        "artifact_kind": item.artifact_kind,
+        "artifact_kind_label": item.get_artifact_kind_display(),
+        "mapping_profile_ref": item.mapping_profile_ref,
+        "mapping_pack_version": item.mapping_pack_version,
+        "baseline_mapping_pack_version": item.baseline_mapping_pack_version,
+        "simulation_profile_ref": item.simulation_profile_ref,
+        "comparison_profile_ref": item.comparison_profile_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "comparison_status": item.comparison_status,
+        "gate_count": item.gate_count,
+        "passed_gate_count": item.passed_gate_count,
+        "blocker_count": item.blocker_count,
+        "changed_path_count": item.changed_path_count,
+        "added_path_count": item.added_path_count,
+        "removed_path_count": item.removed_path_count,
+        "request_snapshot": item.request_snapshot,
+        "provider_payload_snapshot": item.provider_payload_snapshot,
+        "baseline_payload_snapshot": item.baseline_payload_snapshot,
+        "gate_snapshot": item.gate_snapshot,
+        "blocking_gate_refs": item.blocking_gate_refs,
+        "comparison_snapshot": item.comparison_snapshot,
+        "evidence_snapshot": item.evidence_snapshot,
+        "source_hash": item.source_hash,
+        "simulated_by_name": str(item.simulated_by) if item.simulated_by else None,
+        "simulated_at": item.simulated_at,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def simulate_payroll_provider_schema_mapping_pack_for_actor(
+    actor,
+    item: PayrollProviderSchemaMappingPack,
+    *,
+    request_snapshot: dict[str, Any] | None = None,
+    mapping_contract_overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if item.tenant_id != actor.tenant_id:
+        raise PayrollProviderSchemaMappingPackError("Payroll provider schema mapping pack not found.")
+    sample = request_snapshot if request_snapshot is not None else item.sample_request_snapshot
+    if not isinstance(sample, dict):
+        raise PayrollProviderSchemaMappingPackError("Mapping simulation request snapshot must be an object.")
+    try:
+        validate_payroll_provider_route_config(sample)
+    except PayrollProviderAdapterError as exc:
+        raise PayrollProviderSchemaMappingPackError(str(exc)) from exc
+    mapping_contract = _provider_schema_mapping_pack_contract(item)
+    if mapping_contract_overrides:
+        for field_name in [
+            "target_schema_ref",
+            "transform_profile_ref",
+            "validation_profile_ref",
+            "enforcement_mode",
+            "transform_rules",
+            "validation_rules",
+        ]:
+            if field_name in mapping_contract_overrides:
+                mapping_contract[field_name] = mapping_contract_overrides[field_name]
+    validation = apply_payroll_provider_schema_mapping(
+        request_snapshot=sample,
+        mapping_contract=mapping_contract,
+    )
+    gate_count = len(validation.get("gates", [])) if isinstance(validation.get("gates"), list) else 0
+    blocking = validation.get("blocking_gate_refs") if isinstance(validation.get("blocking_gate_refs"), list) else []
+    provider_payload = validation.get("provider_payload", {})
+    provider_payload = provider_payload if isinstance(provider_payload, dict) else {}
+    baseline = _provider_schema_mapping_pack_active_baseline(item)
+    baseline_payload, comparison = _compare_provider_schema_mapping_payloads(
+        item=item,
+        baseline=baseline,
+        request_snapshot=sample,
+        mapping_contract=mapping_contract,
+        provider_payload=provider_payload,
+    )
+    simulation_record = PayrollProviderSchemaMappingSimulation.objects.create(
+        tenant=item.tenant,
+        mapping_pack=item,
+        baseline_mapping_pack=baseline,
+        provider_connection=item.provider_connection,
+        provider_ref=item.provider_ref,
+        provider_kind=item.provider_kind,
+        environment_ref=item.environment_ref,
+        artifact_kind=item.artifact_kind,
+        mapping_profile_ref=item.mapping_profile_ref,
+        mapping_pack_version=item.version,
+        baseline_mapping_pack_version=baseline.version if baseline else 0,
+        simulation_profile_ref=PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_SIMULATION_PROFILE_REF,
+        comparison_profile_ref=PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_COMPARISON_PROFILE_REF,
+        status=PayrollProviderSchemaMappingSimulationStatus.BLOCKED if blocking else PayrollProviderSchemaMappingSimulationStatus.PASSED,
+        comparison_status=str(comparison.get("status") or "no_baseline"),
+        gate_count=gate_count,
+        passed_gate_count=gate_count - len(blocking),
+        blocker_count=len(blocking),
+        changed_path_count=int(comparison.get("changed_path_count") or 0),
+        added_path_count=int(comparison.get("added_path_count") or 0),
+        removed_path_count=int(comparison.get("removed_path_count") or 0),
+        request_snapshot=sample,
+        provider_payload_snapshot=provider_payload,
+        baseline_payload_snapshot=baseline_payload,
+        gate_snapshot=validation.get("gates", []) if isinstance(validation.get("gates"), list) else [],
+        blocking_gate_refs=blocking,
+        comparison_snapshot=comparison,
+        evidence_snapshot={
+            "source": "payroll_provider_schema_mapping_pack_simulation",
+            "mapping_contract": mapping_contract,
+            "baseline_mapping_pack_id": str(baseline.id) if baseline else "",
+            "baseline_source_hash": baseline.source_hash if baseline else "",
+            "persisted": True,
+        },
+        simulated_by=getattr(actor, "user", None),
+    )
+    simulation = {
+        "simulation_profile_ref": PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_SIMULATION_PROFILE_REF,
+        "comparison_profile_ref": PAYROLL_PROVIDER_SCHEMA_MAPPING_PACK_COMPARISON_PROFILE_REF,
+        "simulation_run_id": str(simulation_record.id),
+        "mapping_pack_id": str(item.id),
+        "baseline_mapping_pack_id": str(baseline.id) if baseline else "",
+        "mapping_profile_ref": item.mapping_profile_ref,
+        "version": item.version,
+        "provider_ref": item.provider_ref,
+        "artifact_kind": item.artifact_kind,
+        "source_schema_ref": item.source_schema_ref,
+        "target_schema_ref": mapping_contract.get("target_schema_ref", item.target_schema_ref),
+        "enforcement_mode": mapping_contract.get("enforcement_mode", item.enforcement_mode),
+        "status": validation.get("status", "blocked"),
+        "gate_count": gate_count,
+        "passed_gate_count": gate_count - len(blocking),
+        "blocking_gate_refs": blocking,
+        "provider_payload": provider_payload,
+        "baseline_provider_payload": baseline_payload,
+        "comparison": comparison,
+        "gates": validation.get("gates", []) if isinstance(validation.get("gates"), list) else [],
+        "request_snapshot": sample,
+        "source_hash": item.source_hash,
+        "simulation_source_hash": simulation_record.source_hash,
+        "simulated_at": timezone.now().isoformat(),
+    }
+    return simulation
+
+
+def import_payroll_provider_schema_mapping_pack_for_actor(
+    actor,
+    payload: dict[str, Any],
+    *,
+    provider_connection_id: Any = None,
+) -> PayrollProviderSchemaMappingPack:
+    if not isinstance(payload, dict):
+        raise PayrollProviderSchemaMappingPackError("Mapping pack import payload must be an object.")
+    mapping_profile_ref = str(payload.get("mapping_profile_ref") or "").strip()
+    if not mapping_profile_ref:
+        raise PayrollProviderSchemaMappingPackError("Imported mapping pack requires mapping_profile_ref.")
+    data = {
+        "provider_connection_id": provider_connection_id,
+        "provider_ref": payload.get("provider_ref", ""),
+        "provider_kind": payload.get("provider_kind", PayrollProviderConnectionKind.OTHER),
+        "environment_ref": payload.get("environment_ref", "sandbox"),
+        "artifact_kind": payload.get("artifact_kind", ""),
+        "mapping_profile_ref": mapping_profile_ref,
+        "version": _provider_schema_mapping_pack_next_version(actor.tenant, mapping_profile_ref),
+        "source_schema_ref": payload.get("source_schema_ref", ""),
+        "target_schema_ref": payload.get("target_schema_ref", ""),
+        "transform_profile_ref": payload.get("transform_profile_ref", "payroll.provider_mapping.transform.safe_paths.v1"),
+        "validation_profile_ref": payload.get("validation_profile_ref", "payroll.provider_mapping.validation.standard.v1"),
+        "enforcement_mode": payload.get("enforcement_mode", "warn"),
+        "transform_rules": payload.get("transform_rules") if isinstance(payload.get("transform_rules"), list) else [],
+        "validation_rules": payload.get("validation_rules") if isinstance(payload.get("validation_rules"), list) else [],
+        "sample_request_snapshot": payload.get("sample_request_snapshot") if isinstance(payload.get("sample_request_snapshot"), dict) else {},
+        "sample_output_snapshot": payload.get("sample_output_snapshot") if isinstance(payload.get("sample_output_snapshot"), dict) else {},
+        "change_reason": "Imported mapping pack.",
+    }
+    item = save_payroll_provider_schema_mapping_pack_for_actor(actor, data)
+    snapshot = item.evidence_snapshot if isinstance(item.evidence_snapshot, dict) else {}
+    item.evidence_snapshot = {
+        **snapshot,
+        "import_snapshot": {
+            "export_version": payload.get("export_version", ""),
+            "source_version": payload.get("version", ""),
+            "source_hash": payload.get("source_hash", ""),
+            "imported_at": timezone.now().isoformat(),
+        },
+    }
+    item.save()
+    return item
 DEFAULT_SIGNED_ACCESS_GRANT_PROFILE_REF = "payroll.signed_access.profile.default.v1"
 DEFAULT_EMPLOYEE_PORTAL_CHANNEL_REF = "employee.portal.v1"
 DEFAULT_HR_ADMIN_CHANNEL_REF = "hr_admin.payroll_outputs.v1"
@@ -5021,6 +5870,318 @@ def _sync_finance_handoff_summary(handoff: PayrollFinanceHandoff) -> PayrollFina
     return handoff
 
 
+def _payroll_audit_pack_redacted(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, nested_value in value.items():
+            if str(key).lower() in RAW_PAYROLL_AUDIT_PACK_KEYS:
+                redacted[str(key)] = "[redacted]"
+            else:
+                redacted[str(key)] = _payroll_audit_pack_redacted(nested_value)
+        return redacted
+    if isinstance(value, list):
+        return [_payroll_audit_pack_redacted(item) for item in value]
+    return _json_safe(value)
+
+
+def _payroll_provider_audit_artifact_payload(artifact: PayrollOutputArtifact) -> dict[str, Any]:
+    return _payroll_audit_pack_redacted({
+        "id": str(artifact.id),
+        "artifact_key": artifact.artifact_key,
+        "kind": artifact.kind,
+        "status": artifact.status,
+        "title": artifact.title,
+        "file_name": artifact.file_name,
+        "storage_provider_ref": artifact.storage_provider_ref,
+        "storage_key": artifact.storage_key,
+        "storage_object_version": artifact.storage_object_version,
+        "mime_type": artifact.mime_type,
+        "file_size_bytes": artifact.file_size_bytes,
+        "checksum_sha256": artifact.checksum_sha256,
+        "download_strategy_ref": artifact.download_strategy_ref,
+        "retention_policy_ref": artifact.retention_policy_ref,
+        "output_profile_ref": artifact.output_profile_ref,
+        "totals_snapshot": artifact.totals_snapshot,
+        "source_hash": artifact.source_hash,
+        "published_at": artifact.published_at.isoformat() if artifact.published_at else "",
+        "published_by": str(artifact.published_by) if artifact.published_by_id else "",
+        "config_snapshot": artifact.config_snapshot,
+    })
+
+
+def _payroll_provider_audit_delivery_payload(delivery: PayrollProviderDelivery) -> dict[str, Any]:
+    return _payroll_audit_pack_redacted({
+        "id": str(delivery.id),
+        "output_artifact_id": str(delivery.output_artifact_id),
+        "artifact_kind": delivery.artifact_kind,
+        "status": delivery.status,
+        "provider_ref": delivery.provider_ref,
+        "channel_ref": delivery.channel_ref,
+        "external_reference": delivery.external_reference,
+        "retry_policy_ref": delivery.retry_policy_ref,
+        "attempt_count": delivery.attempt_count,
+        "submitted_at": delivery.submitted_at.isoformat() if delivery.submitted_at else "",
+        "acknowledged_at": delivery.acknowledged_at.isoformat() if delivery.acknowledged_at else "",
+        "reconciled_at": delivery.reconciled_at.isoformat() if delivery.reconciled_at else "",
+        "failure_code": delivery.failure_code,
+        "failure_reason": delivery.failure_reason,
+        "payload_checksum_sha256": delivery.payload_checksum_sha256,
+        "request_snapshot": delivery.request_snapshot,
+        "response_snapshot": delivery.response_snapshot,
+        "reconciliation_snapshot": delivery.reconciliation_snapshot,
+        "config_snapshot": delivery.config_snapshot,
+    })
+
+
+def _payroll_provider_audit_callback_payload(event: PayrollProviderCallbackEvent) -> dict[str, Any]:
+    return _payroll_audit_pack_redacted({
+        "id": str(event.id),
+        "provider_delivery_id": str(event.provider_delivery_id),
+        "output_artifact_id": str(event.output_artifact_id),
+        "provider_ref": event.provider_ref,
+        "external_reference": event.external_reference,
+        "external_event_id": event.external_event_id,
+        "idempotency_key": event.idempotency_key,
+        "callback_profile_ref": event.callback_profile_ref,
+        "callback_verification_ref": event.callback_verification_ref,
+        "status": event.status,
+        "provider_status": event.provider_status,
+        "payload_checksum_sha256": event.payload_checksum_sha256,
+        "verification_snapshot": event.verification_snapshot,
+        "payload_snapshot": event.payload_snapshot,
+        "processing_snapshot": event.processing_snapshot,
+        "received_at": event.received_at.isoformat() if event.received_at else "",
+        "processed_at": event.processed_at.isoformat() if event.processed_at else "",
+        "failure_code": event.failure_code,
+        "failure_reason": event.failure_reason,
+    })
+
+
+def _payroll_provider_audit_retry_payload(event: PayrollProviderRetryEvent) -> dict[str, Any]:
+    return _payroll_audit_pack_redacted({
+        "id": str(event.id),
+        "provider_delivery_id": str(event.provider_delivery_id),
+        "output_artifact_id": str(event.output_artifact_id),
+        "status": event.status,
+        "retry_policy_ref": event.retry_policy_ref,
+        "failure_taxonomy_ref": event.failure_taxonomy_ref,
+        "failure_category_ref": event.failure_category_ref,
+        "retry_reason": event.retry_reason,
+        "attempt_number": event.attempt_number,
+        "scheduled_for": event.scheduled_for.isoformat() if event.scheduled_for else "",
+        "executed_at": event.executed_at.isoformat() if event.executed_at else "",
+        "requested_by": str(event.requested_by) if event.requested_by_id else "",
+        "executed_by": str(event.executed_by) if event.executed_by_id else "",
+        "decision_snapshot": event.decision_snapshot,
+        "request_snapshot": event.request_snapshot,
+        "response_snapshot": event.response_snapshot,
+        "failure_code": event.failure_code,
+        "failure_reason": event.failure_reason,
+    })
+
+
+def _payroll_provider_audit_job_payload(job: PayrollProviderJob) -> dict[str, Any]:
+    return _payroll_audit_pack_redacted({
+        "id": str(job.id),
+        "job_kind": job.job_kind,
+        "status": job.status,
+        "queue_policy_ref": job.queue_policy_ref,
+        "worker_profile_ref": job.worker_profile_ref,
+        "idempotency_key": job.idempotency_key,
+        "provider_ref": job.provider_ref,
+        "provider_delivery_id": str(job.provider_delivery_id or ""),
+        "provider_connection_id": str(job.provider_connection_id or ""),
+        "retry_event_id": str(job.retry_event_id or ""),
+        "callback_event_id": str(job.callback_event_id or ""),
+        "certification_run_id": str(job.certification_run_id or ""),
+        "priority": job.priority,
+        "attempt_count": job.attempt_count,
+        "max_attempts": job.max_attempts,
+        "scheduled_for": job.scheduled_for.isoformat() if job.scheduled_for else "",
+        "leased_at": job.leased_at.isoformat() if job.leased_at else "",
+        "leased_until": job.leased_until.isoformat() if job.leased_until else "",
+        "lease_owner_ref": job.lease_owner_ref,
+        "heartbeat_at": job.heartbeat_at.isoformat() if job.heartbeat_at else "",
+        "heartbeat_count": job.heartbeat_count,
+        "recovery_count": job.recovery_count,
+        "last_recovered_at": job.last_recovered_at.isoformat() if job.last_recovered_at else "",
+        "started_at": job.started_at.isoformat() if job.started_at else "",
+        "completed_at": job.completed_at.isoformat() if job.completed_at else "",
+        "request_snapshot": job.request_snapshot,
+        "lease_snapshot": job.lease_snapshot,
+        "response_snapshot": job.response_snapshot,
+        "failure_code": job.failure_code,
+        "failure_reason": job.failure_reason,
+    })
+
+
+def build_payroll_provider_audit_pack_snapshot(handoff: PayrollFinanceHandoff) -> dict[str, Any]:
+    """Build a deterministic provider audit evidence package for one finance handoff."""
+
+    artifacts = PayrollOutputArtifact.objects.filter(
+        output_batch=handoff.output_batch,
+        kind__in=FINANCE_ARTIFACT_KINDS,
+    ).select_related("published_by").order_by("kind", "artifact_key")
+    deliveries = handoff.provider_deliveries.select_related("output_artifact").order_by("artifact_kind", "provider_ref", "created_at")
+    callback_events = handoff.provider_callback_events.select_related("provider_delivery", "output_artifact").order_by("provider_ref", "external_event_id", "created_at")
+    retry_events = PayrollProviderRetryEvent.objects.filter(handoff=handoff).select_related("requested_by", "executed_by").order_by("scheduled_for", "created_at")
+    provider_jobs = PayrollProviderJob.objects.filter(
+        tenant=handoff.tenant,
+        provider_delivery__handoff=handoff,
+    ).order_by("scheduled_for", "priority", "created_at")
+    payload = {
+        "audit_pack_profile_ref": PAYROLL_PROVIDER_AUDIT_PACK_PROFILE_REF,
+        "audit_pack_schema_ref": PAYROLL_PROVIDER_AUDIT_PACK_SCHEMA_REF,
+        "handoff": {
+            "id": str(handoff.id),
+            "status": handoff.status,
+            "handoff_profile_ref": handoff.handoff_profile_ref,
+            "bank_file_profile_ref": handoff.bank_file_profile_ref,
+            "accounting_export_profile_ref": handoff.accounting_export_profile_ref,
+            "statutory_pack_ref": handoff.statutory_pack_ref,
+            "generated_at": handoff.generated_at.isoformat() if handoff.generated_at else "",
+            "transmitted_at": handoff.transmitted_at.isoformat() if handoff.transmitted_at else "",
+            "accepted_at": handoff.accepted_at.isoformat() if handoff.accepted_at else "",
+            "totals_snapshot": handoff.totals_snapshot,
+            "handoff_summary_snapshot": handoff.handoff_summary_snapshot,
+            "config_snapshot": handoff.config_snapshot,
+        },
+        "payroll_run": {
+            "id": str(handoff.payroll_run_id),
+            "code": handoff.payroll_run.code,
+            "name": handoff.payroll_run.name,
+            "status": handoff.payroll_run.status,
+        },
+        "output_batch": {
+            "id": str(handoff.output_batch_id),
+            "status": handoff.output_batch.status,
+            "output_profile_ref": handoff.output_batch.output_profile_ref,
+            "artifact_summary_snapshot": handoff.output_batch.artifact_summary_snapshot,
+            "config_snapshot": handoff.output_batch.config_snapshot,
+        },
+        "evidence_counts": {
+            "artifact_count": artifacts.count(),
+            "delivery_count": deliveries.count(),
+            "callback_event_count": callback_events.count(),
+            "retry_event_count": retry_events.count(),
+            "provider_job_count": provider_jobs.count(),
+            "reconciled_delivery_count": deliveries.filter(status=PayrollProviderDeliveryStatus.RECONCILED).count(),
+            "failed_delivery_count": deliveries.filter(status=PayrollProviderDeliveryStatus.FAILED).count(),
+            "dead_lettered_job_count": provider_jobs.filter(status=PayrollProviderJobStatus.DEAD_LETTERED).count(),
+            "recovered_job_count": provider_jobs.filter(recovery_count__gt=0).count(),
+        },
+        "artifacts": [_payroll_provider_audit_artifact_payload(artifact) for artifact in artifacts],
+        "provider_deliveries": [_payroll_provider_audit_delivery_payload(delivery) for delivery in deliveries],
+        "provider_callback_events": [_payroll_provider_audit_callback_payload(event) for event in callback_events],
+        "provider_retry_events": [_payroll_provider_audit_retry_payload(event) for event in retry_events],
+        "provider_jobs": [_payroll_provider_audit_job_payload(job) for job in provider_jobs],
+    }
+    return _payroll_audit_pack_redacted(payload)
+
+
+def generate_payroll_provider_audit_pack(
+    handoff: PayrollFinanceHandoff,
+    *,
+    generated_by=None,
+    audit_pack_profile_ref: str | None = None,
+) -> PayrollOutputArtifact:
+    """Generate a locked, downloadable provider audit pack artifact for a terminal handoff."""
+
+    if handoff.status not in {PayrollFinanceHandoffStatus.ACCEPTED, PayrollFinanceHandoffStatus.FAILED}:
+        raise PayrollFinanceHandoffError("Provider audit packs require an accepted or failed finance handoff.")
+    open_deliveries = handoff.provider_deliveries.filter(status__in=[
+        PayrollProviderDeliveryStatus.QUEUED,
+        PayrollProviderDeliveryStatus.SUBMITTED,
+        PayrollProviderDeliveryStatus.ACKNOWLEDGED,
+    ])
+    if open_deliveries.exists():
+        raise PayrollFinanceHandoffError("Provider audit packs require terminal provider delivery evidence.")
+
+    profile = _finance_handoff_profile(handoff.output_batch)
+    snapshot = build_payroll_provider_audit_pack_snapshot(handoff)
+    pack_profile_ref = audit_pack_profile_ref or str(profile.get("provider_audit_pack_profile_ref") or PAYROLL_PROVIDER_AUDIT_PACK_PROFILE_REF)
+    evidence_checksum = hashlib.sha256(json.dumps(snapshot, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    artifact_key_prefix = profile.get("artifact_key_prefix") or f"{handoff.payroll_run.code}-{handoff.handoff_profile_ref}"
+    artifact_key = f"{artifact_key_prefix}-provider-audit-pack-{evidence_checksum[:12]}"
+    existing = PayrollOutputArtifact.objects.filter(
+        output_batch=handoff.output_batch,
+        kind=PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK,
+        artifact_key=artifact_key,
+    ).first()
+    if existing:
+        return existing
+
+    audit_profile = {
+        **profile,
+        "retention_policy_ref": PAYROLL_PROVIDER_AUDIT_PACK_RETENTION_REF,
+        "mime_types": {
+            **(profile.get("mime_types") if isinstance(profile.get("mime_types"), dict) else {}),
+            PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK: "application/json",
+        },
+    }
+    totals_snapshot = {
+        **snapshot["evidence_counts"],
+        "evidence_checksum_sha256": evidence_checksum,
+    }
+    line_snapshot = [
+        {"section": "artifacts", "record_count": snapshot["evidence_counts"]["artifact_count"]},
+        {"section": "provider_deliveries", "record_count": snapshot["evidence_counts"]["delivery_count"]},
+        {"section": "provider_callback_events", "record_count": snapshot["evidence_counts"]["callback_event_count"]},
+        {"section": "provider_retry_events", "record_count": snapshot["evidence_counts"]["retry_event_count"]},
+        {"section": "provider_jobs", "record_count": snapshot["evidence_counts"]["provider_job_count"]},
+    ]
+    config_snapshot = {
+        "handoff_id": str(handoff.id),
+        "handoff_profile_ref": handoff.handoff_profile_ref,
+        "audit_pack_profile_ref": pack_profile_ref,
+        "audit_pack_schema_ref": PAYROLL_PROVIDER_AUDIT_PACK_SCHEMA_REF,
+        "evidence_checksum_sha256": evidence_checksum,
+        "evidence_snapshot": snapshot,
+        "lock_profile_ref": "payroll.provider_audit_pack.locked_artifact.v1",
+        "generated_by": str(generated_by) if generated_by else "",
+    }
+    artifact_config = _artifact_config_with_storage(config_snapshot, audit_profile)
+    artifact = PayrollOutputArtifact.objects.create(
+        tenant=handoff.tenant,
+        output_batch=handoff.output_batch,
+        payroll_run=handoff.payroll_run,
+        review=handoff.review,
+        kind=PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK,
+        status=PayrollOutputArtifactStatus.PUBLISHED,
+        artifact_key=artifact_key,
+        title=f"{handoff.payroll_run.name} Provider Audit Pack",
+        output_profile_ref=pack_profile_ref,
+        totals_snapshot=totals_snapshot,
+        line_snapshot=line_snapshot,
+        config_snapshot=artifact_config,
+        published_by=generated_by,
+        **_artifact_file_kwargs(
+            batch=handoff.output_batch,
+            kind=PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK,
+            title=f"{handoff.payroll_run.name} Provider Audit Pack",
+            file_name=f"{handoff.payroll_run.code}-provider-audit-pack-{evidence_checksum[:12]}.json",
+            totals_snapshot=totals_snapshot,
+            line_snapshot=[{"audit_pack": snapshot}],
+            config_snapshot=artifact_config,
+            profile=audit_profile,
+        ),
+    )
+    create_payroll_artifact_access_event(
+        artifact,
+        event_type=PayrollArtifactAccessEventType.PUBLISHED,
+        actor_user=generated_by,
+        actor_identifier=str(generated_by) if generated_by else "",
+        source_channel_ref="hr_admin.payroll_handoff.audit_pack.v1",
+        metadata_snapshot={
+            "handoff_id": str(handoff.id),
+            "audit_pack_profile_ref": pack_profile_ref,
+            "evidence_checksum_sha256": evidence_checksum,
+            "lock_profile_ref": "payroll.provider_audit_pack.locked_artifact.v1",
+        },
+    )
+    return artifact
+
+
 def _provider_route_keys(artifact: PayrollOutputArtifact) -> list[str]:
     config = artifact.config_snapshot if isinstance(artifact.config_snapshot, dict) else {}
     subtype = str(config.get("artifact_subtype") or "").strip()
@@ -5111,6 +6272,372 @@ def _provider_adapter_contract(profile: dict[str, Any], route: dict[str, Any], *
         ),
         "require_credential_resolution": bool(contract.get("require_credential_resolution", False)),
     }
+
+
+def _snapshot_path_value(payload: dict[str, Any], path: str) -> Any:
+    value: Any = payload
+    for part in str(path).split("."):
+        if isinstance(value, dict) and part in value:
+            value = value[part]
+        elif isinstance(value, list) and part.isdigit():
+            index = int(part)
+            if 0 <= index < len(value):
+                value = value[index]
+            else:
+                return None
+        else:
+            return None
+    return value
+
+
+def _set_snapshot_path_value(payload: dict[str, Any], path: str, value: Any) -> None:
+    parts = [part for part in str(path).split(".") if part]
+    if not parts:
+        return
+    cursor = payload
+    for part in parts[:-1]:
+        nested = cursor.get(part)
+        if not isinstance(nested, dict):
+            nested = {}
+            cursor[part] = nested
+        cursor = nested
+    cursor[parts[-1]] = value
+
+
+def _append_snapshot_path_values(payload: dict[str, Any], path: str, values: list[Any]) -> None:
+    parts = [part for part in str(path).split(".") if part]
+    if not parts:
+        return
+    cursor = payload
+    for part in parts[:-1]:
+        nested = cursor.get(part)
+        if not isinstance(nested, dict):
+            nested = {}
+            cursor[part] = nested
+        cursor = nested
+    existing = cursor.get(parts[-1])
+    if not isinstance(existing, list):
+        existing = []
+        cursor[parts[-1]] = existing
+    existing.extend(values)
+
+
+def _provider_mapping_format(value: Any, value_type: str) -> Any:
+    if value is None:
+        return None
+    if value_type == "string":
+        return str(value)
+    if value_type == "integer":
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return value
+    if value_type in {"decimal_string", "money_string"}:
+        try:
+            return str(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+        except (InvalidOperation, TypeError, ValueError):
+            return str(value)
+    if value_type == "boolean":
+        return bool(value)
+    return value
+
+
+def _provider_mapping_value_missing(value: Any) -> bool:
+    return value is None or value == ""
+
+
+def _provider_mapping_row_payload(
+    *,
+    source_row: Any,
+    row_mappings: list[Any],
+    rule_gate_ref: str,
+    row_index: int,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    payload: dict[str, Any] = {}
+    gates: list[dict[str, Any]] = []
+    source = source_row if isinstance(source_row, dict) else {"value": source_row}
+    for mapping_index, mapping in enumerate(row_mappings):
+        if not isinstance(mapping, dict):
+            continue
+        source_path = str(mapping.get("source_path") or "").strip()
+        target_path = str(mapping.get("target_path") or "").strip()
+        required = bool(mapping.get("required", False))
+        value = source if not source_path else _snapshot_path_value(source, source_path)
+        if _provider_mapping_value_missing(value) and "default" in mapping:
+            value = mapping.get("default")
+        value = _provider_mapping_format(value, str(mapping.get("value_type") or ""))
+        passed = bool(target_path and (not _provider_mapping_value_missing(value) or not required))
+        mapping_gate_ref = str(mapping.get("gate_ref") or target_path or f"row_mapping:{mapping_index + 1}")
+        gates.append({
+            "ref": f"mapping_rule:{rule_gate_ref}:row:{row_index + 1}:{mapping_gate_ref}",
+            "source_path": source_path,
+            "target_path": target_path,
+            "required": required,
+            "row_index": row_index,
+            "passed": passed,
+        })
+        if target_path and not _provider_mapping_value_missing(value):
+            _set_snapshot_path_value(payload, target_path, value)
+    return payload, gates
+
+
+def _provider_mapping_decimal(value: Any) -> Decimal:
+    try:
+        return Decimal(str(value or "0"))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")
+
+
+def _apply_provider_mapping_aggregate_rules(
+    *,
+    target_payload: dict[str, Any],
+    source_rows: list[Any],
+    aggregate_rules: list[Any],
+) -> None:
+    for rule in aggregate_rules:
+        if not isinstance(rule, dict):
+            continue
+        target_path = str(rule.get("target_path") or "").strip()
+        if not target_path:
+            continue
+        operation = str(rule.get("operation") or "sum").strip().lower()
+        source_path = str(rule.get("source_path") or "").strip()
+        value_type = str(rule.get("value_type") or "decimal_string")
+        if operation == "count":
+            value: Any = len(source_rows)
+        elif operation == "sum":
+            total = Decimal("0")
+            for source_row in source_rows:
+                row = source_row if isinstance(source_row, dict) else {"value": source_row}
+                total += _provider_mapping_decimal(_snapshot_path_value(row, source_path) if source_path else row.get("value"))
+            value = total
+        else:
+            continue
+        _set_snapshot_path_value(target_payload, target_path, _provider_mapping_format(value, value_type))
+
+
+def _provider_schema_mapping_pack_for_route(
+    *,
+    artifact: PayrollOutputArtifact,
+    provider_ref: str,
+    route: dict[str, Any],
+    connection: PayrollProviderConnection | None,
+) -> PayrollProviderSchemaMappingPack | None:
+    mapping_profile_ref = str(route.get("schema_mapping_profile_ref") or route.get("mapping_profile_ref") or "").strip()
+    queryset = PayrollProviderSchemaMappingPack.objects.filter(
+        tenant=artifact.tenant,
+        status=PayrollProviderSchemaMappingPackStatus.ACTIVE,
+    )
+    if mapping_profile_ref:
+        return queryset.filter(mapping_profile_ref=mapping_profile_ref).order_by("-version").first()
+    if connection:
+        connected = queryset.filter(provider_connection=connection, artifact_kind=artifact.kind).order_by("-version").first()
+        if connected:
+            return connected
+    return queryset.filter(provider_ref=provider_ref, artifact_kind=artifact.kind).order_by("-version").first()
+
+
+def _provider_schema_mapping_contract(
+    *,
+    artifact: PayrollOutputArtifact,
+    provider_ref: str,
+    route: dict[str, Any],
+    connection: PayrollProviderConnection | None,
+) -> dict[str, Any]:
+    configured = route.get("schema_mapping") if isinstance(route.get("schema_mapping"), dict) else {}
+    mapping_pack = _provider_schema_mapping_pack_for_route(
+        artifact=artifact,
+        provider_ref=provider_ref,
+        route=route,
+        connection=connection,
+    )
+    if mapping_pack:
+        return {
+            "mapping_pack_id": str(mapping_pack.id),
+            "mapping_profile_ref": mapping_pack.mapping_profile_ref,
+            "version": mapping_pack.version,
+            "provider_ref": mapping_pack.provider_ref,
+            "provider_kind": mapping_pack.provider_kind,
+            "environment_ref": mapping_pack.environment_ref,
+            "artifact_kind": mapping_pack.artifact_kind,
+            "source_schema_ref": mapping_pack.source_schema_ref,
+            "target_schema_ref": mapping_pack.target_schema_ref,
+            "transform_profile_ref": mapping_pack.transform_profile_ref,
+            "validation_profile_ref": mapping_pack.validation_profile_ref,
+            "enforcement_mode": mapping_pack.enforcement_mode,
+            "transform_rules": mapping_pack.transform_rules,
+            "validation_rules": mapping_pack.validation_rules,
+            "source_hash": mapping_pack.source_hash,
+        }
+    enforcement_mode = str(configured.get("enforcement_mode") or "warn").strip().lower()
+    if enforcement_mode not in {"disabled", "warn", "strict"}:
+        enforcement_mode = "warn"
+    transform_rules = configured.get("transform_rules") if isinstance(configured.get("transform_rules"), list) else []
+    validation_rules = configured.get("validation_rules") if isinstance(configured.get("validation_rules"), list) else []
+    if not transform_rules:
+        transform_rules = _default_provider_schema_mapping_transform_rules(artifact.kind)
+    if not validation_rules:
+        validation_rules = _default_provider_schema_mapping_validation_rules(artifact.kind)
+    return {
+        "mapping_pack_id": "",
+        "mapping_profile_ref": configured.get("mapping_profile_ref") or route.get("schema_mapping_profile_ref") or f"payroll.provider_mapping.{artifact.kind}.default.v1",
+        "version": int(configured.get("version") or 1),
+        "provider_ref": provider_ref,
+        "provider_kind": connection.provider_kind if connection else "",
+        "environment_ref": connection.environment_ref if connection else "sandbox",
+        "artifact_kind": artifact.kind,
+        "source_schema_ref": configured.get("source_schema_ref") or route.get("request_schema_ref") or "",
+        "target_schema_ref": configured.get("target_schema_ref") or route.get("target_schema_ref") or route.get("request_schema_ref") or "",
+        "transform_profile_ref": configured.get("transform_profile_ref") or "payroll.provider_mapping.transform.safe_paths.v1",
+        "validation_profile_ref": configured.get("validation_profile_ref") or "payroll.provider_mapping.validation.standard.v1",
+        "enforcement_mode": enforcement_mode,
+        "transform_rules": transform_rules,
+        "validation_rules": validation_rules,
+        "source_hash": "",
+    }
+
+
+def apply_payroll_provider_schema_mapping(
+    *,
+    request_snapshot: dict[str, Any],
+    mapping_contract: dict[str, Any],
+) -> dict[str, Any]:
+    enforcement_mode = str(mapping_contract.get("enforcement_mode") or "warn").strip().lower()
+    if enforcement_mode not in {"disabled", "warn", "strict"}:
+        enforcement_mode = "warn"
+    transform_rules = mapping_contract.get("transform_rules") if isinstance(mapping_contract.get("transform_rules"), list) else []
+    validation_rules = mapping_contract.get("validation_rules") if isinstance(mapping_contract.get("validation_rules"), list) else []
+    provider_payload: dict[str, Any] = {}
+    gates: list[dict[str, Any]] = []
+    if enforcement_mode == "disabled":
+        return {
+            "mapping_profile_ref": mapping_contract.get("mapping_profile_ref", ""),
+            "target_schema_ref": mapping_contract.get("target_schema_ref", ""),
+            "enforcement_mode": enforcement_mode,
+            "status": "disabled",
+            "provider_payload": provider_payload,
+            "gates": gates,
+            "blocking_gate_refs": [],
+        }
+    for index, rule in enumerate(transform_rules):
+        if not isinstance(rule, dict):
+            continue
+        source_path = str(rule.get("source_path") or "").strip()
+        target_path = str(rule.get("target_path") or "").strip()
+        required = bool(rule.get("required", False))
+        mode = str(rule.get("mode") or rule.get("transform_mode") or "copy").strip().lower()
+        gate_ref = str(rule.get("gate_ref") or target_path or f"transform_rule:{index + 1}")
+        if mode in {"expand_rows", "group_rows"}:
+            source_rows = _snapshot_path_value(request_snapshot, source_path) if source_path else []
+            source_rows = source_rows if isinstance(source_rows, list) else []
+            row_mappings = rule.get("row_mappings") if isinstance(rule.get("row_mappings"), list) else []
+            passed = bool(target_path and row_mappings and (source_rows or not required))
+            gates.append({
+                "ref": f"mapping_rule:{gate_ref}",
+                "source_path": source_path,
+                "target_path": target_path,
+                "required": required,
+                "mode": mode,
+                "row_count": len(source_rows),
+                "row_mapping_count": len(row_mappings),
+                "passed": passed,
+            })
+            if not target_path or not row_mappings:
+                continue
+            if mode == "expand_rows":
+                expanded_rows: list[dict[str, Any]] = []
+                for row_index, source_row in enumerate(source_rows):
+                    row_payload, row_gates = _provider_mapping_row_payload(
+                        source_row=source_row,
+                        row_mappings=row_mappings,
+                        rule_gate_ref=gate_ref,
+                        row_index=row_index,
+                    )
+                    gates.extend(row_gates)
+                    expanded_rows.append(row_payload)
+                if expanded_rows:
+                    _append_snapshot_path_values(provider_payload, target_path, expanded_rows)
+                continue
+            group_by_path = str(rule.get("group_by_path") or "").strip()
+            group_key_target_path = str(rule.get("group_key_target_path") or "group_key").strip()
+            rows_target_path = str(rule.get("rows_target_path") or "rows").strip()
+            aggregate_rules = rule.get("aggregate_rules") if isinstance(rule.get("aggregate_rules"), list) else []
+            grouped_rows: dict[str, list[Any]] = {}
+            for source_row in source_rows:
+                row = source_row if isinstance(source_row, dict) else {"value": source_row}
+                group_key = _snapshot_path_value(row, group_by_path) if group_by_path else "default"
+                grouped_rows.setdefault(str(group_key or "unassigned"), []).append(source_row)
+            group_payloads: list[dict[str, Any]] = []
+            for group_key, group_source_rows in grouped_rows.items():
+                item_payload: dict[str, Any] = {}
+                if group_key_target_path:
+                    _set_snapshot_path_value(item_payload, group_key_target_path, group_key)
+                row_payloads: list[dict[str, Any]] = []
+                for row_index, source_row in enumerate(group_source_rows):
+                    row_payload, row_gates = _provider_mapping_row_payload(
+                        source_row=source_row,
+                        row_mappings=row_mappings,
+                        rule_gate_ref=f"{gate_ref}:{group_key}",
+                        row_index=row_index,
+                    )
+                    gates.extend(row_gates)
+                    row_payloads.append(row_payload)
+                if rows_target_path:
+                    _set_snapshot_path_value(item_payload, rows_target_path, row_payloads)
+                _apply_provider_mapping_aggregate_rules(
+                    target_payload=item_payload,
+                    source_rows=group_source_rows,
+                    aggregate_rules=aggregate_rules,
+                )
+                group_payloads.append(item_payload)
+            if group_payloads:
+                _append_snapshot_path_values(provider_payload, target_path, group_payloads)
+            continue
+        value = _snapshot_path_value(request_snapshot, source_path) if source_path else None
+        if _provider_mapping_value_missing(value) and "default" in rule:
+            value = rule.get("default")
+        value = _provider_mapping_format(value, str(rule.get("value_type") or ""))
+        passed = bool(target_path and (not _provider_mapping_value_missing(value) or not required))
+        gates.append({
+            "ref": f"mapping_rule:{gate_ref}",
+            "source_path": source_path,
+            "target_path": target_path,
+            "required": required,
+            "mode": mode,
+            "passed": passed,
+        })
+        if target_path and value is not None:
+            _set_snapshot_path_value(provider_payload, target_path, value)
+    for index, rule in enumerate(validation_rules):
+        if not isinstance(rule, dict):
+            continue
+        path = str(rule.get("path") or "").strip()
+        required = bool(rule.get("required", True))
+        value = _snapshot_path_value(provider_payload, path) if path else None
+        passed = bool(not _provider_mapping_value_missing(value) or not required)
+        gates.append({
+            "ref": str(rule.get("gate_ref") or f"provider_payload:{path or index + 1}"),
+            "path": path,
+            "required": required,
+            "passed": passed,
+        })
+    blocking = [gate["ref"] for gate in gates if not gate["passed"]]
+    snapshot = {
+        "mapping_pack_id": mapping_contract.get("mapping_pack_id", ""),
+        "mapping_profile_ref": mapping_contract.get("mapping_profile_ref", ""),
+        "version": mapping_contract.get("version", 1),
+        "source_schema_ref": mapping_contract.get("source_schema_ref", ""),
+        "target_schema_ref": mapping_contract.get("target_schema_ref", ""),
+        "transform_profile_ref": mapping_contract.get("transform_profile_ref", ""),
+        "validation_profile_ref": mapping_contract.get("validation_profile_ref", ""),
+        "source_hash": mapping_contract.get("source_hash", ""),
+        "enforcement_mode": enforcement_mode,
+        "status": "passed" if not blocking else "blocked",
+        "provider_payload": provider_payload,
+        "gates": gates,
+        "blocking_gate_refs": blocking,
+    }
+    return snapshot
 
 
 def _provider_connection_for_route(artifact: PayrollOutputArtifact, provider_ref: str) -> PayrollProviderConnection | None:
@@ -5219,7 +6746,20 @@ def _provider_callback_security_policy_config(
     return {
         "security_policy_ref": policy.get("security_policy_ref") or "payroll.callback.security.standard.v1",
         "enforcement_mode": policy.get("enforcement_mode") or "warn",
-        "signature_algorithm_ref": policy.get("signature_algorithm_ref") or "payroll.callback.signature.sha256.v1",
+        "signature_algorithm_ref": policy.get("signature_algorithm_ref") or PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ALGORITHM_REF,
+        "signature_adapter_ref": policy.get("signature_adapter_ref") or "",
+        "signature_material_fields": (
+            [str(item) for item in policy["signature_material_fields"] if str(item or "").strip()]
+            if isinstance(policy.get("signature_material_fields"), list)
+            else list(DEFAULT_PROVIDER_CALLBACK_SIGNATURE_MATERIAL_FIELDS)
+        ),
+        "signature_material_delimiter": str(policy.get("signature_material_delimiter") or ":"),
+        "signature_key_ref": str(policy.get("signature_key_ref") or ""),
+        "signature_key_resolution_mode": str(policy.get("signature_key_resolution_mode") or "reference"),
+        "signature_key_material_field": str(policy.get("signature_key_material_field") or ""),
+        "require_runtime_signature_key": bool(policy.get("require_runtime_signature_key", False)),
+        "signature_encoding": str(policy.get("signature_encoding") or "hex"),
+        "signature_digest_format": str(policy.get("signature_digest_format") or "hex"),
         "callback_verification_ref": callback_verification_ref,
         "secret_rotation_ref": policy.get("secret_rotation_ref") or "payroll.callback.secret_rotation.configured.v1",
         "replay_window_seconds": _positive_int(policy.get("replay_window_seconds"), 900),
@@ -5297,8 +6837,19 @@ def _provider_delivery_route(profile: dict[str, Any], artifact: PayrollOutputArt
         "credential_profile_ref": credential_profile_ref,
         "retry_policy": route.get("retry_policy") if isinstance(route.get("retry_policy"), dict) else {},
         "execution_adapter": route.get("execution_adapter") if isinstance(route.get("execution_adapter"), dict) else {},
+        "http_adapter": route.get("http_adapter") if isinstance(route.get("http_adapter"), dict) else {},
+        "production_adapter": route.get("production_adapter") if isinstance(route.get("production_adapter"), dict) else {},
+        "bank_payout_adapter": route.get("bank_payout_adapter") if isinstance(route.get("bank_payout_adapter"), dict) else {},
+        "accounting_journal_adapter": route.get("accounting_journal_adapter") if isinstance(route.get("accounting_journal_adapter"), dict) else {},
+        "statutory_filing_adapter": route.get("statutory_filing_adapter") if isinstance(route.get("statutory_filing_adapter"), dict) else {},
         "sandbox_response": route.get("sandbox_response") if isinstance(route.get("sandbox_response"), dict) else {},
         "provider_connection_gate": provider_connection_gate,
+        "schema_mapping": _provider_schema_mapping_contract(
+            artifact=artifact,
+            provider_ref=provider_ref,
+            route=route,
+            connection=connection,
+        ),
         "adapter_contract": _provider_adapter_contract(
             profile,
             route,
@@ -5343,6 +6894,11 @@ def _provider_submission_contract(
         "credential_profile_ref": route.get("credential_profile_ref", ""),
         "provider_connection_gate": route.get("provider_connection_gate", {}),
         "adapter_contract": route.get("adapter_contract", {}),
+        "schema_mapping": route.get("schema_mapping", {}),
+        "production_adapter": route.get("production_adapter", {}),
+        "bank_payout_adapter": route.get("bank_payout_adapter", {}),
+        "accounting_journal_adapter": route.get("accounting_journal_adapter", {}),
+        "statutory_filing_adapter": route.get("statutory_filing_adapter", {}),
         "idempotency_key": hashlib.sha256(idempotency_material.encode("utf-8")).hexdigest(),
     }
     if artifact.kind == PayrollOutputArtifactKind.STATUTORY_REPORT:
@@ -5480,6 +7036,17 @@ def schedule_payroll_provider_delivery_retry(
         }
         delivery.save()
         _sync_finance_handoff_summary(delivery.handoff)
+        provider_job = None
+        if event.status == PayrollProviderRetryEventStatus.SCHEDULED:
+            provider_job, _created = enqueue_payroll_provider_retry_job(event, requested_by=requested_by)
+        if provider_job:
+            event.decision_snapshot = {
+                **(event.decision_snapshot if isinstance(event.decision_snapshot, dict) else {}),
+                "provider_job_id": str(provider_job.id),
+                "queue_policy_ref": provider_job.queue_policy_ref,
+                "worker_profile_ref": provider_job.worker_profile_ref,
+            }
+            event.save()
     return event
 
 
@@ -5704,9 +7271,891 @@ def process_due_payroll_provider_retries(
     )
 
 
+def _provider_job_policy_from_snapshot(snapshot: dict[str, Any], *, job_kind: str) -> dict[str, Any]:
+    route = snapshot.get("provider_route") if isinstance(snapshot.get("provider_route"), dict) else {}
+    submission_contract = snapshot.get("submission_contract") if isinstance(snapshot.get("submission_contract"), dict) else {}
+    policy = route.get("provider_job_policy") if isinstance(route.get("provider_job_policy"), dict) else {}
+    if not policy and isinstance(submission_contract.get("provider_job_policy"), dict):
+        policy = submission_contract["provider_job_policy"]
+    return {
+        "queue_policy_ref": policy.get("queue_policy_ref") or f"payroll.provider_queue.{job_kind}.standard.v1",
+        "worker_profile_ref": policy.get("worker_profile_ref") or f"payroll.provider_worker.{job_kind}.standard.v1",
+        "max_attempts": _positive_int(policy.get("max_attempts"), 3),
+        "lease_seconds": _positive_int(policy.get("lease_seconds"), 300),
+        "heartbeat_seconds": _positive_int(policy.get("heartbeat_seconds"), 60),
+        "max_recoveries": _positive_int(policy.get("max_recoveries"), 3),
+        "stale_recovery_backoff_seconds": _positive_int(policy.get("stale_recovery_backoff_seconds"), 60),
+        "backoff_seconds": _positive_int(policy.get("backoff_seconds"), 300),
+        "priority": _positive_int(policy.get("priority"), 100),
+    }
+
+
+def _provider_job_policy_for_delivery(delivery: PayrollProviderDelivery, *, job_kind: str) -> dict[str, Any]:
+    snapshot = delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}
+    return _provider_job_policy_from_snapshot(snapshot, job_kind=job_kind)
+
+
+def _provider_job_policy_for_connection(connection: PayrollProviderConnection, *, job_kind: str) -> dict[str, Any]:
+    snapshot = connection.config_snapshot if isinstance(connection.config_snapshot, dict) else {}
+    provider_route = snapshot.get("provider_route") if isinstance(snapshot.get("provider_route"), dict) else snapshot
+    return _provider_job_policy_from_snapshot({"provider_route": provider_route}, job_kind=job_kind)
+
+
+def enqueue_payroll_provider_job(
+    *,
+    tenant,
+    job_kind: str,
+    idempotency_key: str,
+    queue_policy_ref: str = "",
+    worker_profile_ref: str = "",
+    provider_ref: str = "",
+    provider_delivery: PayrollProviderDelivery | None = None,
+    provider_connection: PayrollProviderConnection | None = None,
+    retry_event: PayrollProviderRetryEvent | None = None,
+    callback_event: PayrollProviderCallbackEvent | None = None,
+    certification_run: PayrollProviderCertificationRun | None = None,
+    scheduled_for=None,
+    priority: int = 100,
+    max_attempts: int = 3,
+    requested_by=None,
+    request_snapshot: dict[str, Any] | None = None,
+) -> tuple[PayrollProviderJob, bool]:
+    idempotency_key = str(idempotency_key or "").strip()
+    if not idempotency_key:
+        raise PayrollProviderJobError("Provider queue jobs require an idempotency key.")
+    if job_kind not in {choice for choice, _label in PayrollProviderJobKind.choices}:
+        raise PayrollProviderJobError("Unsupported provider queue job kind.")
+    defaults = {
+        "job_kind": job_kind,
+        "status": PayrollProviderJobStatus.QUEUED,
+        "queue_policy_ref": queue_policy_ref or f"payroll.provider_queue.{job_kind}.standard.v1",
+        "worker_profile_ref": worker_profile_ref or f"payroll.provider_worker.{job_kind}.standard.v1",
+        "provider_ref": provider_ref,
+        "provider_delivery": provider_delivery,
+        "provider_connection": provider_connection,
+        "retry_event": retry_event,
+        "callback_event": callback_event,
+        "certification_run": certification_run,
+        "scheduled_for": scheduled_for or timezone.now(),
+        "priority": max(1, int(priority or 100)),
+        "max_attempts": max(1, int(max_attempts or 3)),
+        "requested_by": requested_by,
+        "request_snapshot": request_snapshot or {},
+    }
+    job, created = PayrollProviderJob.objects.get_or_create(
+        tenant=tenant,
+        idempotency_key=idempotency_key,
+        defaults=defaults,
+    )
+    return job, created
+
+
+def enqueue_payroll_provider_delivery_submission_job(
+    delivery: PayrollProviderDelivery,
+    *,
+    requested_by=None,
+    scheduled_for=None,
+) -> tuple[PayrollProviderJob, bool]:
+    policy = _provider_job_policy_for_delivery(delivery, job_kind=PayrollProviderJobKind.PROVIDER_SUBMISSION)
+    return enqueue_payroll_provider_job(
+        tenant=delivery.tenant,
+        job_kind=PayrollProviderJobKind.PROVIDER_SUBMISSION,
+        idempotency_key=f"provider-submission:{delivery.id}",
+        queue_policy_ref=policy["queue_policy_ref"],
+        worker_profile_ref=policy["worker_profile_ref"],
+        provider_ref=delivery.provider_ref,
+        provider_delivery=delivery,
+        scheduled_for=scheduled_for,
+        priority=policy["priority"],
+        max_attempts=policy["max_attempts"],
+        requested_by=requested_by,
+        request_snapshot={
+            "provider_delivery_id": str(delivery.id),
+            "provider_ref": delivery.provider_ref,
+            "artifact_kind": delivery.artifact_kind,
+            "queue_policy": policy,
+        },
+    )
+
+
+def enqueue_payroll_provider_retry_job(
+    retry_event: PayrollProviderRetryEvent,
+    *,
+    requested_by=None,
+) -> tuple[PayrollProviderJob, bool]:
+    delivery = retry_event.provider_delivery
+    policy = _provider_job_policy_for_delivery(delivery, job_kind=PayrollProviderJobKind.PROVIDER_RETRY)
+    return enqueue_payroll_provider_job(
+        tenant=retry_event.tenant,
+        job_kind=PayrollProviderJobKind.PROVIDER_RETRY,
+        idempotency_key=f"provider-retry:{retry_event.id}",
+        queue_policy_ref=policy["queue_policy_ref"],
+        worker_profile_ref=policy["worker_profile_ref"],
+        provider_ref=delivery.provider_ref,
+        provider_delivery=delivery,
+        retry_event=retry_event,
+        scheduled_for=retry_event.scheduled_for,
+        priority=policy["priority"],
+        max_attempts=policy["max_attempts"],
+        requested_by=requested_by or retry_event.requested_by,
+        request_snapshot={
+            "retry_event_id": str(retry_event.id),
+            "provider_delivery_id": str(delivery.id),
+            "provider_ref": delivery.provider_ref,
+            "retry_policy_ref": retry_event.retry_policy_ref,
+            "queue_policy": policy,
+        },
+    )
+
+
+def enqueue_payroll_provider_certification_job(
+    connection: PayrollProviderConnection,
+    *,
+    requested_by=None,
+    scheduled_for=None,
+    run_profile_ref: str | None = None,
+    scenario_profile_ref: str | None = None,
+) -> tuple[PayrollProviderJob, bool]:
+    policy = _provider_job_policy_for_connection(connection, job_kind=PayrollProviderJobKind.PROVIDER_CERTIFICATION)
+    material = ":".join([
+        "provider-certification",
+        str(connection.id),
+        run_profile_ref or "payroll.provider_connection.certification_run.sandbox.v1",
+        scenario_profile_ref or "",
+        str(scheduled_for.isoformat() if hasattr(scheduled_for, "isoformat") else scheduled_for or "now"),
+    ])
+    idempotency_key = hashlib.sha256(material.encode("utf-8")).hexdigest()
+    return enqueue_payroll_provider_job(
+        tenant=connection.tenant,
+        job_kind=PayrollProviderJobKind.PROVIDER_CERTIFICATION,
+        idempotency_key=idempotency_key,
+        queue_policy_ref=policy["queue_policy_ref"],
+        worker_profile_ref=policy["worker_profile_ref"],
+        provider_ref=connection.provider_ref,
+        provider_connection=connection,
+        scheduled_for=scheduled_for,
+        priority=policy["priority"],
+        max_attempts=policy["max_attempts"],
+        requested_by=requested_by,
+        request_snapshot={
+            "provider_connection_id": str(connection.id),
+            "provider_ref": connection.provider_ref,
+            "run_profile_ref": run_profile_ref or "payroll.provider_connection.certification_run.sandbox.v1",
+            "scenario_profile_ref": scenario_profile_ref or "",
+            "queue_policy": policy,
+        },
+    )
+
+
+def enqueue_payroll_provider_callback_reconciliation_job(
+    callback_event: PayrollProviderCallbackEvent,
+    *,
+    requested_by=None,
+    scheduled_for=None,
+) -> tuple[PayrollProviderJob, bool]:
+    delivery = callback_event.provider_delivery
+    policy = _provider_job_policy_for_delivery(delivery, job_kind=PayrollProviderJobKind.CALLBACK_RECONCILIATION)
+    return enqueue_payroll_provider_job(
+        tenant=callback_event.tenant,
+        job_kind=PayrollProviderJobKind.CALLBACK_RECONCILIATION,
+        idempotency_key=f"callback-reconciliation:{callback_event.id}",
+        queue_policy_ref=policy["queue_policy_ref"],
+        worker_profile_ref=policy["worker_profile_ref"],
+        provider_ref=callback_event.provider_ref,
+        provider_delivery=delivery,
+        callback_event=callback_event,
+        scheduled_for=scheduled_for,
+        priority=policy["priority"],
+        max_attempts=policy["max_attempts"],
+        requested_by=requested_by,
+        request_snapshot={
+            "callback_event_id": str(callback_event.id),
+            "provider_delivery_id": str(delivery.id),
+            "provider_ref": callback_event.provider_ref,
+            "callback_status": callback_event.status,
+            "queue_policy": policy,
+        },
+    )
+
+
+def _payroll_provider_job_runtime_policy(job: PayrollProviderJob) -> dict[str, Any]:
+    request_snapshot = job.request_snapshot if isinstance(job.request_snapshot, dict) else {}
+    policy = request_snapshot.get("queue_policy") if isinstance(request_snapshot.get("queue_policy"), dict) else {}
+    return {
+        "lease_seconds": _positive_int(policy.get("lease_seconds"), 300),
+        "heartbeat_seconds": _positive_int(policy.get("heartbeat_seconds"), 60),
+        "max_recoveries": _positive_int(policy.get("max_recoveries"), 3),
+        "stale_recovery_backoff_seconds": _positive_int(policy.get("stale_recovery_backoff_seconds"), 60),
+        "backoff_seconds": _positive_int(policy.get("backoff_seconds"), 300),
+    }
+
+
+def _append_payroll_provider_job_runtime_event(
+    job: PayrollProviderJob,
+    *,
+    event_type: str,
+    recorded_at,
+    evidence: dict[str, Any] | None = None,
+) -> None:
+    snapshot = job.response_snapshot if isinstance(job.response_snapshot, dict) else {}
+    events = snapshot.get("runtime_events") if isinstance(snapshot.get("runtime_events"), list) else []
+    job.response_snapshot = {
+        **snapshot,
+        "queue_runtime_profile_ref": "payroll.provider_queue.runtime.standard.v1",
+        "last_runtime_event": event_type,
+        "last_runtime_event_at": recorded_at.isoformat() if hasattr(recorded_at, "isoformat") else str(recorded_at),
+        "runtime_events": [
+            *events[-49:],
+            {
+                "event_type": event_type,
+                "recorded_at": recorded_at.isoformat() if hasattr(recorded_at, "isoformat") else str(recorded_at),
+                "evidence": evidence or {},
+            },
+        ],
+    }
+
+
+def heartbeat_payroll_provider_job(
+    job: PayrollProviderJob,
+    *,
+    lease_owner_ref: str,
+    now=None,
+    extend_seconds: int | None = None,
+) -> PayrollProviderJob:
+    now = now or timezone.now()
+    lease_owner_ref = str(lease_owner_ref or "").strip()
+    if job.status not in {PayrollProviderJobStatus.LEASED, PayrollProviderJobStatus.RUNNING}:
+        raise PayrollProviderJobError("Only leased or running provider jobs can be heartbeated.")
+    if not lease_owner_ref or job.lease_owner_ref != lease_owner_ref:
+        raise PayrollProviderJobError("Provider job heartbeat lease owner does not match.")
+    if job.leased_until and job.leased_until <= now:
+        raise PayrollProviderJobError("Provider job lease has expired and must be recovered.")
+    policy = _payroll_provider_job_runtime_policy(job)
+    lease_seconds = _positive_int(extend_seconds, policy["lease_seconds"])
+    job.heartbeat_at = now
+    job.heartbeat_count += 1
+    job.leased_until = now + timedelta(seconds=lease_seconds)
+    lease_snapshot = job.lease_snapshot if isinstance(job.lease_snapshot, dict) else {}
+    heartbeats = lease_snapshot.get("heartbeats") if isinstance(lease_snapshot.get("heartbeats"), list) else []
+    job.lease_snapshot = {
+        **lease_snapshot,
+        "heartbeat_profile_ref": "payroll.provider_queue.heartbeat.standard.v1",
+        "heartbeat_owner_ref": lease_owner_ref,
+        "heartbeat_count": job.heartbeat_count,
+        "last_heartbeat_at": now.isoformat(),
+        "leased_until": job.leased_until.isoformat(),
+        "heartbeats": [
+            *heartbeats[-9:],
+            {
+                "heartbeat_at": now.isoformat(),
+                "lease_owner_ref": lease_owner_ref,
+                "leased_until": job.leased_until.isoformat(),
+                "heartbeat_seconds": policy["heartbeat_seconds"],
+            },
+        ],
+    }
+    _append_payroll_provider_job_runtime_event(
+        job,
+        event_type="heartbeat",
+        recorded_at=now,
+        evidence={"lease_owner_ref": lease_owner_ref, "leased_until": job.leased_until.isoformat()},
+    )
+    job.save()
+    return job
+
+
+def recover_stale_payroll_provider_jobs(
+    *,
+    tenant=None,
+    limit: int = 100,
+    now=None,
+    recovery_owner_ref: str = "payroll.provider_worker.recovery.v1",
+) -> list[PayrollProviderJob]:
+    now = now or timezone.now()
+    queryset = PayrollProviderJob.objects.filter(
+        status__in=[PayrollProviderJobStatus.LEASED, PayrollProviderJobStatus.RUNNING],
+        leased_until__lte=now,
+    ).select_related("provider_delivery", "provider_connection", "retry_event", "callback_event", "certification_run")
+    if tenant is not None:
+        queryset = queryset.filter(tenant=tenant)
+    recovered_jobs: list[PayrollProviderJob] = []
+    for job in queryset.order_by("leased_until", "priority", "created_at")[: max(1, limit)]:
+        with transaction.atomic():
+            job = PayrollProviderJob.objects.select_for_update().get(id=job.id)
+            if job.status not in {PayrollProviderJobStatus.LEASED, PayrollProviderJobStatus.RUNNING}:
+                continue
+            if not job.leased_until or job.leased_until > now:
+                continue
+            policy = _payroll_provider_job_runtime_policy(job)
+            job.recovery_count += 1
+            job.last_recovered_at = now
+            failure_code = "provider_job_stale_lease_recovered"
+            failure_reason = "Provider queue job lease expired before completion and was recovered for a future attempt."
+            terminal = job.recovery_count >= policy["max_recoveries"] or job.attempt_count >= job.max_attempts
+            if terminal:
+                job.status = PayrollProviderJobStatus.DEAD_LETTERED
+                job.completed_at = now
+                failure_code = "provider_job_stale_lease_dead_lettered"
+                failure_reason = "Provider queue job exceeded stale lease recovery limits."
+            else:
+                job.status = PayrollProviderJobStatus.QUEUED
+                job.scheduled_for = now + timedelta(seconds=policy["stale_recovery_backoff_seconds"])
+                job.completed_at = None
+            _append_payroll_provider_job_runtime_event(
+                job,
+                event_type="stale_lease_recovered",
+                recorded_at=now,
+                evidence={
+                    "recovery_owner_ref": recovery_owner_ref,
+                    "previous_lease_owner_ref": job.lease_owner_ref,
+                    "previous_leased_until": job.leased_until.isoformat() if job.leased_until else "",
+                    "attempt_count": job.attempt_count,
+                    "max_attempts": job.max_attempts,
+                    "recovery_count": job.recovery_count,
+                    "max_recoveries": policy["max_recoveries"],
+                    "next_scheduled_for": job.scheduled_for.isoformat() if job.status == PayrollProviderJobStatus.QUEUED and job.scheduled_for else "",
+                },
+            )
+            job.failure_code = failure_code
+            job.failure_reason = failure_reason
+            job.lease_owner_ref = ""
+            job.leased_at = None
+            job.leased_until = None
+            job.save()
+            recovered_jobs.append(job)
+    return recovered_jobs
+
+
+def _complete_payroll_provider_job(
+    job: PayrollProviderJob,
+    *,
+    status: str,
+    response_snapshot: dict[str, Any],
+    failure_code: str = "",
+    failure_reason: str = "",
+) -> PayrollProviderJob:
+    now = timezone.now()
+    job.status = status
+    job.completed_at = now
+    job.response_snapshot = {
+        **(job.response_snapshot if isinstance(job.response_snapshot, dict) else {}),
+        **response_snapshot,
+        "completed_at": now.isoformat(),
+    }
+    job.failure_code = failure_code
+    job.failure_reason = failure_reason
+    job.lease_owner_ref = ""
+    job.leased_at = None
+    job.leased_until = None
+    job.save()
+    return job
+
+
+def execute_payroll_provider_job(
+    job: PayrollProviderJob,
+    *,
+    executed_by=None,
+    lease_owner_ref: str = "payroll.provider_worker.local.v1",
+    now=None,
+) -> PayrollProviderJob:
+    """Lease and execute one provider queue job through the configured service seam."""
+
+    now = now or timezone.now()
+    if job.status not in {PayrollProviderJobStatus.QUEUED, PayrollProviderJobStatus.LEASED}:
+        raise PayrollProviderJobError("Only queued or expired leased provider jobs can be executed.")
+    if job.scheduled_for and job.scheduled_for > now:
+        raise PayrollProviderJobError("Provider queue job is not due yet.")
+    if job.status == PayrollProviderJobStatus.LEASED and job.leased_until and job.leased_until > now:
+        raise PayrollProviderJobError("Provider queue job is leased by another worker.")
+
+    lease_seconds = _positive_int((job.request_snapshot or {}).get("queue_policy", {}).get("lease_seconds") if isinstance(job.request_snapshot, dict) and isinstance(job.request_snapshot.get("queue_policy"), dict) else None, 300)
+    with transaction.atomic():
+        job.status = PayrollProviderJobStatus.RUNNING
+        job.attempt_count += 1
+        job.started_at = now
+        job.executed_by = executed_by
+        job.leased_at = now
+        job.leased_until = now + timedelta(seconds=lease_seconds)
+        job.lease_owner_ref = lease_owner_ref
+        job.lease_snapshot = {
+            "lease_owner_ref": lease_owner_ref,
+            "leased_at": now.isoformat(),
+            "leased_until": job.leased_until.isoformat(),
+            "attempt_number": job.attempt_count,
+            "worker_profile_ref": job.worker_profile_ref,
+            "heartbeat_seconds": _payroll_provider_job_runtime_policy(job)["heartbeat_seconds"],
+        }
+        _append_payroll_provider_job_runtime_event(
+            job,
+            event_type="lease_acquired",
+            recorded_at=now,
+            evidence={
+                "lease_owner_ref": lease_owner_ref,
+                "worker_profile_ref": job.worker_profile_ref,
+                "attempt_number": job.attempt_count,
+                "leased_until": job.leased_until.isoformat(),
+            },
+        )
+        job.save()
+
+    try:
+        if job.job_kind == PayrollProviderJobKind.PROVIDER_RETRY:
+            if not job.retry_event_id:
+                raise PayrollProviderJobError("Provider retry jobs require a retry event.")
+            retry_event = execute_payroll_provider_retry_event(job.retry_event, executed_by=executed_by, now=now)
+            return _complete_payroll_provider_job(
+                job,
+                status=PayrollProviderJobStatus.COMPLETED if retry_event.status == PayrollProviderRetryEventStatus.EXECUTED else PayrollProviderJobStatus.SKIPPED,
+                response_snapshot={
+                    "retry_event_id": str(retry_event.id),
+                    "retry_event_status": retry_event.status,
+                    "provider_delivery_id": str(retry_event.provider_delivery_id),
+                    "provider_delivery_status": retry_event.provider_delivery.status,
+                },
+                failure_code="" if retry_event.status == PayrollProviderRetryEventStatus.EXECUTED else retry_event.failure_code,
+                failure_reason="" if retry_event.status == PayrollProviderRetryEventStatus.EXECUTED else retry_event.failure_reason,
+            )
+        if job.job_kind == PayrollProviderJobKind.PROVIDER_SUBMISSION:
+            if not job.provider_delivery_id:
+                raise PayrollProviderJobError("Provider submission jobs require a provider delivery.")
+            delivery = submit_payroll_provider_delivery(job.provider_delivery, submitted_by=executed_by)
+            return _complete_payroll_provider_job(
+                job,
+                status=PayrollProviderJobStatus.COMPLETED,
+                response_snapshot={
+                    "provider_delivery_id": str(delivery.id),
+                    "provider_delivery_status": delivery.status,
+                    "adapter_submission": delivery.response_snapshot.get("adapter_submission", {}) if isinstance(delivery.response_snapshot, dict) else {},
+                },
+            )
+        if job.job_kind == PayrollProviderJobKind.PROVIDER_CERTIFICATION:
+            if not job.provider_connection_id:
+                raise PayrollProviderJobError("Provider certification jobs require a provider connection.")
+            request_snapshot = job.request_snapshot if isinstance(job.request_snapshot, dict) else {}
+            run = run_payroll_provider_connection_certification(
+                job.provider_connection,
+                requested_by=job.requested_by,
+                executed_by=executed_by,
+                run_profile_ref=str(request_snapshot.get("run_profile_ref") or "payroll.provider_connection.certification_run.sandbox.v1"),
+                scenario_profile_ref=str(request_snapshot.get("scenario_profile_ref") or ""),
+            )
+            job.certification_run = run
+            return _complete_payroll_provider_job(
+                job,
+                status=PayrollProviderJobStatus.COMPLETED if run.status == PayrollProviderCertificationRunStatus.PASSED else PayrollProviderJobStatus.FAILED,
+                response_snapshot={
+                    "certification_run_id": str(run.id),
+                    "certification_status": run.status,
+                    "passed_count": run.passed_count,
+                    "failed_count": run.failed_count,
+                    "blocker_count": run.blocker_count,
+                },
+                failure_code="" if run.status == PayrollProviderCertificationRunStatus.PASSED else "provider_certification_failed",
+                failure_reason="" if run.status == PayrollProviderCertificationRunStatus.PASSED else "Provider certification run failed.",
+            )
+        if job.job_kind == PayrollProviderJobKind.CALLBACK_RECONCILIATION:
+            if not job.callback_event_id:
+                raise PayrollProviderJobError("Callback reconciliation jobs require a callback event.")
+            callback_event = job.callback_event
+            return _complete_payroll_provider_job(
+                job,
+                status=PayrollProviderJobStatus.COMPLETED,
+                response_snapshot={
+                    "callback_event_id": str(callback_event.id),
+                    "callback_event_status": callback_event.status,
+                    "provider_delivery_id": str(callback_event.provider_delivery_id),
+                    "provider_delivery_status": callback_event.provider_delivery.status,
+                    "handoff_status": callback_event.handoff.status,
+                },
+            )
+        raise PayrollProviderJobError("Unsupported provider queue job kind.")
+    except Exception as exc:
+        retry_policy = job.request_snapshot.get("queue_policy", {}) if isinstance(job.request_snapshot, dict) and isinstance(job.request_snapshot.get("queue_policy"), dict) else {}
+        backoff_seconds = _positive_int(retry_policy.get("backoff_seconds"), 300)
+        now = timezone.now()
+        if job.attempt_count >= job.max_attempts:
+            job.status = PayrollProviderJobStatus.DEAD_LETTERED
+            job.completed_at = now
+        else:
+            job.status = PayrollProviderJobStatus.QUEUED
+            job.scheduled_for = now + timedelta(seconds=backoff_seconds)
+            job.completed_at = None
+        job.failure_code = "provider_job_execution_failed"
+        job.failure_reason = str(exc)
+        job.response_snapshot = {
+            **(job.response_snapshot if isinstance(job.response_snapshot, dict) else {}),
+            "error": {
+                "code": job.failure_code,
+                "message": str(exc),
+                "attempt_count": job.attempt_count,
+                "max_attempts": job.max_attempts,
+                "retry_scheduled_for": job.scheduled_for.isoformat() if job.status == PayrollProviderJobStatus.QUEUED and job.scheduled_for else "",
+            },
+        }
+        job.lease_owner_ref = ""
+        job.leased_at = None
+        job.leased_until = None
+        job.save()
+        return job
+
+
+def process_due_payroll_provider_jobs(
+    *,
+    tenant=None,
+    limit: int = 100,
+    now=None,
+    executed_by=None,
+    lease_owner_ref: str = "payroll.provider_worker.local.v1",
+) -> PayrollProviderJobWorkerResult:
+    """Process due generic provider jobs through the portable job ledger."""
+
+    now = now or timezone.now()
+    recovered_jobs = recover_stale_payroll_provider_jobs(
+        tenant=tenant,
+        limit=limit,
+        now=now,
+        recovery_owner_ref=lease_owner_ref,
+    )
+    remaining_limit = max(0, max(1, limit) - len(recovered_jobs))
+    if remaining_limit == 0:
+        return PayrollProviderJobWorkerResult(
+            processed_jobs=[],
+            completed_count=0,
+            failed_count=0,
+            skipped_count=0,
+            dead_lettered_count=0,
+            recovered_count=len(recovered_jobs),
+        )
+    queryset = PayrollProviderJob.objects.filter(
+        status=PayrollProviderJobStatus.QUEUED,
+        scheduled_for__lte=now,
+    ).select_related(
+        "provider_delivery",
+        "provider_connection",
+        "retry_event",
+        "callback_event",
+        "certification_run",
+    )
+    if tenant is not None:
+        queryset = queryset.filter(tenant=tenant)
+
+    processed_jobs: list[PayrollProviderJob] = []
+    completed_count = 0
+    failed_count = 0
+    skipped_count = 0
+    dead_lettered_count = 0
+    for job in queryset.order_by("scheduled_for", "priority", "created_at")[:remaining_limit]:
+        processed_job = execute_payroll_provider_job(
+            job,
+            executed_by=executed_by,
+            lease_owner_ref=lease_owner_ref,
+            now=now,
+        )
+        processed_jobs.append(processed_job)
+        if processed_job.status == PayrollProviderJobStatus.COMPLETED:
+            completed_count += 1
+        elif processed_job.status == PayrollProviderJobStatus.FAILED:
+            failed_count += 1
+        elif processed_job.status == PayrollProviderJobStatus.SKIPPED:
+            skipped_count += 1
+        elif processed_job.status == PayrollProviderJobStatus.DEAD_LETTERED:
+            dead_lettered_count += 1
+
+    return PayrollProviderJobWorkerResult(
+        processed_jobs=processed_jobs,
+        completed_count=completed_count,
+        failed_count=failed_count,
+        skipped_count=skipped_count,
+        dead_lettered_count=dead_lettered_count,
+        recovered_count=len(recovered_jobs),
+    )
+
+
 def _json_checksum(payload: dict[str, Any]) -> str:
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _provider_callback_signature_adapter_ref(policy: dict[str, Any]) -> str:
+    adapter_ref = str(policy.get("signature_adapter_ref") or "").strip()
+    if adapter_ref:
+        return adapter_ref
+    algorithm_ref = str(policy.get("signature_algorithm_ref") or PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ALGORITHM_REF)
+    if algorithm_ref == PAYROLL_PROVIDER_CALLBACK_SIGNATURE_RSA_SHA256_ALGORITHM_REF:
+        return PAYROLL_PROVIDER_CALLBACK_SIGNATURE_RSA_SHA256_ADAPTER_REF
+    if algorithm_ref == PAYROLL_PROVIDER_CALLBACK_SIGNATURE_HMAC_SHA256_ALGORITHM_REF:
+        return PAYROLL_PROVIDER_CALLBACK_SIGNATURE_HMAC_SHA256_ADAPTER_REF
+    return PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ADAPTER_REF
+
+
+def _provider_callback_signature_field_values(
+    delivery: PayrollProviderDelivery,
+    *,
+    idempotency_key: str,
+    payload_checksum_sha256: str,
+    callback_verification_ref: str,
+) -> dict[str, str]:
+    return {
+        "provider_ref": delivery.provider_ref,
+        "provider_delivery_id": str(delivery.id),
+        "handoff_id": str(delivery.handoff_id),
+        "output_artifact_id": str(delivery.output_artifact_id),
+        "artifact_kind": delivery.artifact_kind,
+        "channel_ref": delivery.channel_ref,
+        "external_reference": delivery.external_reference,
+        "idempotency_key": idempotency_key,
+        "payload_checksum_sha256": payload_checksum_sha256,
+        "artifact_checksum_sha256": delivery.payload_checksum_sha256,
+        "callback_verification_ref": callback_verification_ref,
+    }
+
+
+def _provider_callback_signature_material(
+    delivery: PayrollProviderDelivery,
+    *,
+    idempotency_key: str,
+    payload_checksum_sha256: str,
+    policy: dict[str, Any],
+) -> tuple[str, list[str], list[str]]:
+    callback_verification_ref = str(policy.get("callback_verification_ref") or "payroll.callback.verification.manual.v1")
+    configured_fields = policy.get("signature_material_fields")
+    material_fields = (
+        [str(item) for item in configured_fields if str(item or "").strip()]
+        if isinstance(configured_fields, list)
+        else list(DEFAULT_PROVIDER_CALLBACK_SIGNATURE_MATERIAL_FIELDS)
+    )
+    if not material_fields:
+        material_fields = list(DEFAULT_PROVIDER_CALLBACK_SIGNATURE_MATERIAL_FIELDS)
+    values = _provider_callback_signature_field_values(
+        delivery,
+        idempotency_key=idempotency_key,
+        payload_checksum_sha256=payload_checksum_sha256,
+        callback_verification_ref=callback_verification_ref,
+    )
+    unknown_fields = [field for field in material_fields if field not in values]
+    delimiter = str(policy.get("signature_material_delimiter") or ":")
+    material = delimiter.join(str(values.get(field, "")) for field in material_fields)
+    return material, material_fields, unknown_fields
+
+
+def _provider_callback_runtime_signature_key(
+    *,
+    signature_key_ref: str,
+    provider_ref: str,
+    policy: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    try:
+        credential = resolve_payroll_provider_credential(signature_key_ref, provider_ref=provider_ref)
+    except PayrollProviderAdapterError as exc:
+        raise PayrollProviderSignatureAdapterError(str(exc)) from exc
+
+    configured_field = str(policy.get("signature_key_material_field") or "").strip()
+    candidate_fields = [configured_field] if configured_field else list(DEFAULT_PROVIDER_CALLBACK_SIGNATURE_KEY_MATERIAL_FIELDS)
+    for field_name in candidate_fields:
+        if field_name and credential.material.get(field_name) not in {None, ""}:
+            return str(credential.material[field_name]), {
+                "key_material_mode": "runtime_secret_ref",
+                "signature_key_ref": signature_key_ref,
+                "signature_key_material_field": field_name,
+                "credential_snapshot": {
+                    **credential.snapshot(),
+                    "resolved": True,
+                    "material_field_ref": field_name,
+                },
+            }
+    raise PayrollProviderSignatureAdapterError(
+        f"Payroll provider credential_ref {signature_key_ref} has no callback signature key material."
+    )
+
+
+def _provider_callback_runtime_public_key(
+    *,
+    signature_key_ref: str,
+    provider_ref: str,
+    policy: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    try:
+        credential = resolve_payroll_provider_credential(signature_key_ref, provider_ref=provider_ref)
+    except PayrollProviderAdapterError as exc:
+        raise PayrollProviderSignatureAdapterError(str(exc)) from exc
+
+    configured_field = str(policy.get("signature_key_material_field") or "").strip()
+    candidate_fields = [configured_field] if configured_field else list(DEFAULT_PROVIDER_CALLBACK_PUBLIC_KEY_MATERIAL_FIELDS)
+    for field_name in candidate_fields:
+        if field_name and credential.material.get(field_name) not in {None, ""}:
+            return str(credential.material[field_name]), {
+                "key_material_mode": "runtime_public_key_ref",
+                "signature_key_ref": signature_key_ref,
+                "signature_key_material_field": field_name,
+                "credential_snapshot": {
+                    **credential.snapshot(),
+                    "resolved": True,
+                    "material_field_ref": field_name,
+                },
+            }
+    raise PayrollProviderSignatureAdapterError(
+        f"Payroll provider credential_ref {signature_key_ref} has no callback public key material."
+    )
+
+
+def _decode_provider_callback_signature(signature: str, *, encoding: str) -> bytes:
+    normalized_encoding = str(encoding or "base64").strip().lower()
+    signature_value = str(signature or "").strip()
+    try:
+        if normalized_encoding == "base64":
+            return base64.b64decode(signature_value.encode("utf-8"), validate=True)
+        if normalized_encoding == "hex":
+            return bytes.fromhex(signature_value)
+    except (ValueError, TypeError) as exc:
+        raise PayrollProviderSignatureAdapterError("Provider callback signature could not be decoded.") from exc
+    raise PayrollProviderSignatureAdapterError(f"Unsupported callback signature encoding: {encoding}.")
+
+
+def _verify_provider_callback_rsa_sha256_signature(
+    *,
+    material: str,
+    signature: str,
+    policy: dict[str, Any],
+    provider_ref: str,
+) -> dict[str, Any]:
+    signature_key_ref = str(policy.get("signature_key_ref") or "").strip()
+    if not signature_key_ref:
+        raise PayrollProviderSignatureAdapterError("RSA callback signatures require a public key ref.")
+    public_key_pem, key_evidence = _provider_callback_runtime_public_key(
+        signature_key_ref=signature_key_ref,
+        provider_ref=provider_ref,
+        policy=policy,
+    )
+    try:
+        public_key = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
+    except ValueError as exc:
+        raise PayrollProviderSignatureAdapterError("Provider callback public key material is not a valid PEM public key.") from exc
+
+    signature_encoding = str(policy.get("signature_encoding") or "base64")
+    signature_bytes = _decode_provider_callback_signature(signature, encoding=signature_encoding)
+    try:
+        public_key.verify(
+            signature_bytes,
+            material.encode("utf-8"),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+        signature_valid = True
+    except InvalidSignature:
+        signature_valid = False
+    return {
+        "algorithm_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_RSA_SHA256_ALGORITHM_REF,
+        "signature_key_resolution_mode": "runtime",
+        "signature_encoding": signature_encoding,
+        "signature_valid": signature_valid,
+        **key_evidence,
+    }
+
+
+def _compute_provider_callback_signature(
+    *,
+    material: str,
+    policy: dict[str, Any],
+    adapter_ref: str,
+    provider_ref: str,
+) -> tuple[str, dict[str, Any]]:
+    algorithm_ref = str(policy.get("signature_algorithm_ref") or PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ALGORITHM_REF)
+    digest_format = str(policy.get("signature_digest_format") or "hex")
+    if digest_format != "hex":
+        raise PayrollProviderSignatureAdapterError("Only hex callback signature digests are currently supported.")
+
+    if adapter_ref == PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ADAPTER_REF:
+        return hashlib.sha256(material.encode("utf-8")).hexdigest(), {
+            "key_material_mode": "none",
+            "algorithm_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ALGORITHM_REF,
+        }
+    if adapter_ref == PAYROLL_PROVIDER_CALLBACK_SIGNATURE_HMAC_SHA256_ADAPTER_REF:
+        signature_key_ref = str(
+            policy.get("signature_key_ref")
+            or policy.get("secret_rotation_ref")
+            or policy.get("callback_verification_ref")
+            or ""
+        ).strip()
+        if not signature_key_ref:
+            raise PayrollProviderSignatureAdapterError("HMAC callback signatures require a signature key ref.")
+        key_resolution_mode = str(policy.get("signature_key_resolution_mode") or "reference").strip().lower()
+        if policy.get("require_runtime_signature_key"):
+            key_resolution_mode = "runtime"
+        if key_resolution_mode == "runtime":
+            signing_key, key_evidence = _provider_callback_runtime_signature_key(
+                signature_key_ref=signature_key_ref,
+                provider_ref=provider_ref,
+                policy=policy,
+            )
+        else:
+            signing_key = signature_key_ref
+            key_evidence = {
+                "key_material_mode": "reference_derived",
+                "signature_key_ref": signature_key_ref,
+            }
+        digest = hmac.new(signing_key.encode("utf-8"), material.encode("utf-8"), hashlib.sha256).hexdigest()
+        return digest, {
+            "algorithm_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_HMAC_SHA256_ALGORITHM_REF,
+            "signature_key_resolution_mode": key_resolution_mode,
+            **key_evidence,
+        }
+
+    if algorithm_ref == PAYROLL_PROVIDER_CALLBACK_SIGNATURE_HMAC_SHA256_ALGORITHM_REF:
+        raise PayrollProviderSignatureAdapterError(f"Unsupported HMAC callback signature adapter: {adapter_ref}.")
+    raise PayrollProviderSignatureAdapterError(f"Unsupported callback signature adapter: {adapter_ref}.")
+
+
+def verify_provider_callback_signature(
+    delivery: PayrollProviderDelivery,
+    *,
+    idempotency_key: str,
+    payload_checksum_sha256: str,
+    signature: str,
+) -> dict[str, Any]:
+    policy = _provider_callback_security_policy(delivery)
+    adapter_ref = _provider_callback_signature_adapter_ref(policy)
+    material, material_fields, unknown_fields = _provider_callback_signature_material(
+        delivery,
+        idempotency_key=idempotency_key,
+        payload_checksum_sha256=payload_checksum_sha256,
+        policy=policy,
+    )
+    received_signature = str(signature or "")
+    if adapter_ref == PAYROLL_PROVIDER_CALLBACK_SIGNATURE_RSA_SHA256_ADAPTER_REF:
+        adapter_evidence = _verify_provider_callback_rsa_sha256_signature(
+            material=material,
+            signature=received_signature,
+            policy=policy,
+            provider_ref=delivery.provider_ref,
+        )
+        expected_signature = ""
+        signature_valid = not unknown_fields and bool(adapter_evidence.get("signature_valid"))
+    else:
+        expected_signature, adapter_evidence = _compute_provider_callback_signature(
+            material=material,
+            policy=policy,
+            adapter_ref=adapter_ref,
+            provider_ref=delivery.provider_ref,
+        )
+        signature_valid = not unknown_fields and secrets.compare_digest(received_signature, expected_signature)
+    return {
+        "signature_profile_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_PROFILE_REF,
+        "signature_algorithm_ref": adapter_evidence["algorithm_ref"],
+        "signature_adapter_ref": adapter_ref,
+        "callback_verification_ref": policy["callback_verification_ref"],
+        "signature_material_fields": material_fields,
+        "unknown_material_fields": unknown_fields,
+        "signature_material_delimiter": str(policy.get("signature_material_delimiter") or ":"),
+        "signature_material_hash_sha256": hashlib.sha256(material.encode("utf-8")).hexdigest(),
+        "signature_encoding": adapter_evidence.get("signature_encoding", policy.get("signature_encoding", "hex")),
+        "signature_digest_format": str(policy.get("signature_digest_format") or "hex"),
+        "compare_mode": "constant_time",
+        "expected_signature": expected_signature,
+        "received_signature": received_signature,
+        "signature_valid": signature_valid,
+        "verification_mode": "provider_signature_adapter",
+        **adapter_evidence,
+    }
 
 
 def expected_provider_callback_signature(
@@ -5715,18 +8164,25 @@ def expected_provider_callback_signature(
     idempotency_key: str,
     payload_checksum_sha256: str,
 ) -> str:
-    config = delivery.config_snapshot if isinstance(delivery.config_snapshot, dict) else {}
-    contract = config.get("submission_contract") if isinstance(config.get("submission_contract"), dict) else {}
-    callback_verification_ref = contract.get("callback_verification_ref") or "payroll.callback.verification.manual.v1"
-    material = ":".join([
-        delivery.provider_ref,
-        delivery.external_reference,
-        idempotency_key,
-        payload_checksum_sha256,
-        delivery.payload_checksum_sha256,
-        str(callback_verification_ref),
-    ])
-    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+    policy = _provider_callback_security_policy(delivery)
+    adapter_ref = _provider_callback_signature_adapter_ref(policy)
+    if adapter_ref == PAYROLL_PROVIDER_CALLBACK_SIGNATURE_RSA_SHA256_ADAPTER_REF:
+        raise PayrollProviderSignatureAdapterError("RSA callback signatures are verified with a public key and cannot produce an expected signature.")
+    material, _, unknown_fields = _provider_callback_signature_material(
+        delivery,
+        idempotency_key=idempotency_key,
+        payload_checksum_sha256=payload_checksum_sha256,
+        policy=policy,
+    )
+    if unknown_fields:
+        raise PayrollProviderSignatureAdapterError(f"Unknown callback signature material fields: {', '.join(unknown_fields)}.")
+    expected_signature, _ = _compute_provider_callback_signature(
+        material=material,
+        policy=policy,
+        adapter_ref=adapter_ref,
+        provider_ref=delivery.provider_ref,
+    )
+    return expected_signature
 
 
 def _coerce_callback_datetime(value: Any) -> datetime | None:
@@ -5755,7 +8211,20 @@ def _provider_callback_security_policy(delivery: PayrollProviderDelivery) -> dic
     return {
         "security_policy_ref": policy.get("security_policy_ref") or "payroll.callback.security.standard.v1",
         "enforcement_mode": policy.get("enforcement_mode") or "warn",
-        "signature_algorithm_ref": policy.get("signature_algorithm_ref") or "payroll.callback.signature.sha256.v1",
+        "signature_algorithm_ref": policy.get("signature_algorithm_ref") or PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ALGORITHM_REF,
+        "signature_adapter_ref": policy.get("signature_adapter_ref") or "",
+        "signature_material_fields": (
+            [str(item) for item in policy["signature_material_fields"] if str(item or "").strip()]
+            if isinstance(policy.get("signature_material_fields"), list)
+            else list(DEFAULT_PROVIDER_CALLBACK_SIGNATURE_MATERIAL_FIELDS)
+        ),
+        "signature_material_delimiter": str(policy.get("signature_material_delimiter") or ":"),
+        "signature_key_ref": str(policy.get("signature_key_ref") or ""),
+        "signature_key_resolution_mode": str(policy.get("signature_key_resolution_mode") or "reference"),
+        "signature_key_material_field": str(policy.get("signature_key_material_field") or ""),
+        "require_runtime_signature_key": bool(policy.get("require_runtime_signature_key", False)),
+        "signature_encoding": str(policy.get("signature_encoding") or "hex"),
+        "signature_digest_format": str(policy.get("signature_digest_format") or "hex"),
         "callback_verification_ref": callback_verification_ref,
         "secret_rotation_ref": policy.get("secret_rotation_ref") or "payroll.callback.secret_rotation.configured.v1",
         "replay_window_seconds": _positive_int(policy.get("replay_window_seconds"), 900),
@@ -5773,6 +8242,7 @@ def _validate_provider_callback_security(
     *,
     delivery: PayrollProviderDelivery,
     signature_valid: bool,
+    signature_verification: dict[str, Any] | None = None,
     source_ip: str,
     received_at: datetime,
     event_timestamp: datetime | None,
@@ -5817,8 +8287,12 @@ def _validate_provider_callback_security(
         _callback_security_gate(
             "callback_signature_matched",
             signature_valid,
-            algorithm_ref=policy["signature_algorithm_ref"],
+            algorithm_ref=(signature_verification or {}).get("signature_algorithm_ref", policy["signature_algorithm_ref"]),
+            adapter_ref=(signature_verification or {}).get("signature_adapter_ref", _provider_callback_signature_adapter_ref(policy)),
             callback_verification_ref=policy["callback_verification_ref"],
+            signature_material_fields=(signature_verification or {}).get("signature_material_fields", policy["signature_material_fields"]),
+            signature_material_hash_sha256=(signature_verification or {}).get("signature_material_hash_sha256", ""),
+            unknown_material_fields=(signature_verification or {}).get("unknown_material_fields", []),
         ),
         _callback_security_gate(
             "callback_secret_rotation_ref",
@@ -5929,17 +8403,34 @@ def ingest_payroll_provider_callback(
     submission_contract = delivery_config.get("submission_contract") if isinstance(delivery_config.get("submission_contract"), dict) else {}
     callback_profile_ref = str(submission_contract.get("callback_profile_ref") or "payroll.callback.manual.v1")
     callback_verification_ref = str(submission_contract.get("callback_verification_ref") or "payroll.callback.verification.manual.v1")
-    expected_signature = expected_provider_callback_signature(
-        delivery,
-        idempotency_key=idempotency_key,
-        payload_checksum_sha256=payload_checksum,
-    )
-    signature_valid = secrets.compare_digest(str(signature or ""), expected_signature)
+    try:
+        signature_verification = verify_provider_callback_signature(
+            delivery,
+            idempotency_key=idempotency_key,
+            payload_checksum_sha256=payload_checksum,
+            signature=signature,
+        )
+    except PayrollProviderSignatureAdapterError as exc:
+        signature_verification = {
+            "signature_profile_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_PROFILE_REF,
+            "signature_algorithm_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ALGORITHM_REF,
+            "signature_adapter_ref": "",
+            "callback_verification_ref": callback_verification_ref,
+            "expected_signature": "",
+            "received_signature": str(signature or ""),
+            "signature_valid": False,
+            "verification_mode": "provider_signature_adapter",
+            "failure_code": "signature_adapter_failed",
+            "failure_reason": str(exc),
+        }
+    expected_signature = str(signature_verification.get("expected_signature", ""))
+    signature_valid = bool(signature_verification.get("signature_valid"))
     received_at = timezone.now()
     callback_event_timestamp = _coerce_callback_datetime(event_timestamp) or _coerce_callback_datetime(payload_snapshot.get("event_timestamp")) or _coerce_callback_datetime(payload_snapshot.get("sent_at"))
     security_snapshot = _validate_provider_callback_security(
         delivery=delivery,
         signature_valid=signature_valid,
+        signature_verification=signature_verification,
         source_ip=source_ip,
         received_at=received_at,
         event_timestamp=callback_event_timestamp,
@@ -5969,7 +8460,8 @@ def ingest_payroll_provider_callback(
                 "callback_verification_ref": callback_verification_ref,
                 "expected_signature": expected_signature,
                 "signature_valid": signature_valid,
-                "verification_mode": "deterministic_contract_signature",
+                "verification_mode": signature_verification.get("verification_mode", "provider_signature_adapter"),
+                "signature_adapter": signature_verification,
                 "callback_security": security_snapshot,
                 "received_at": received_at.isoformat(),
             },
@@ -6274,14 +8766,47 @@ def submit_payroll_provider_delivery(
 
     request_contract_validation: dict[str, Any] = {}
     result_contract_validation: dict[str, Any] = {}
+    schema_mapping_validation: dict[str, Any] = {}
     try:
         request = normalize_payroll_provider_submission_request(delivery)
+        request_snapshot = request.snapshot()
+        mapping_contract = request.route_snapshot.get("schema_mapping") if isinstance(request.route_snapshot.get("schema_mapping"), dict) else {}
+        schema_mapping_validation = apply_payroll_provider_schema_mapping(
+            request_snapshot=request_snapshot,
+            mapping_contract=mapping_contract,
+        )
+        if schema_mapping_validation.get("status") == "blocked" and schema_mapping_validation.get("enforcement_mode") == "strict":
+            raise PayrollProviderAdapterError(
+                "Payroll provider schema mapping failed strict validation: "
+                + ", ".join(schema_mapping_validation.get("blocking_gate_refs", [])),
+                code="provider_schema_mapping_failed",
+                provider_ref=request.provider_ref,
+                retryable=False,
+            )
+        request = PayrollProviderSubmissionRequest(
+            **{
+                **request.__dict__,
+                "route_snapshot": {
+                    **request.route_snapshot,
+                    "schema_mapping": {
+                        **mapping_contract,
+                        "validation": {
+                            key: value
+                            for key, value in schema_mapping_validation.items()
+                            if key != "provider_payload"
+                        },
+                    },
+                    "provider_payload": schema_mapping_validation.get("provider_payload", {}),
+                },
+            }
+        )
         request_contract_validation = validate_payroll_provider_adapter_request_contract(request)
         adapter = get_payroll_provider_adapter(request.adapter_ref)
         result = adapter.submit(request)
         result_contract_validation = validate_payroll_provider_adapter_result_contract(request, result)
         request_snapshot = {
             **request.snapshot(),
+            "schema_mapping": schema_mapping_validation,
             "adapter_contract_validation": {
                 "request": request_contract_validation,
                 "result": result_contract_validation,
@@ -6291,6 +8816,7 @@ def submit_payroll_provider_delivery(
         request_snapshot = {
             "delivery_id": str(delivery.id),
             "provider_ref": delivery.provider_ref,
+            "schema_mapping": schema_mapping_validation,
             "adapter_contract_validation": {
                 "request": request_contract_validation,
                 "result": result_contract_validation,
@@ -6520,12 +9046,15 @@ def transmit_payroll_finance_handoff(handoff: PayrollFinanceHandoff, *, transmit
     """Mark a generated finance handoff as transmitted and publish its finance artifacts."""
 
     if handoff.status == PayrollFinanceHandoffStatus.TRANSMITTED:
-        for artifact in PayrollOutputArtifact.objects.filter(
-            output_batch=handoff.output_batch,
-            kind__in=FINANCE_ARTIFACT_KINDS,
-            status=PayrollOutputArtifactStatus.PUBLISHED,
-        ):
-            delivery = _ensure_provider_delivery(handoff=handoff, artifact=artifact, submitted_by=transmitted_by)
+        deliveries = [
+            _ensure_provider_delivery(handoff=handoff, artifact=artifact, submitted_by=transmitted_by)
+            for artifact in PayrollOutputArtifact.objects.filter(
+                output_batch=handoff.output_batch,
+                kind__in=FINANCE_ARTIFACT_KINDS,
+                status=PayrollOutputArtifactStatus.PUBLISHED,
+            )
+        ]
+        for delivery in deliveries:
             if _delivery_needs_provider_adapter_submission(delivery):
                 submit_payroll_provider_delivery(delivery, submitted_by=transmitted_by)
         _sync_finance_handoff_summary(handoff)
@@ -6548,12 +9077,15 @@ def transmit_payroll_finance_handoff(handoff: PayrollFinanceHandoff, *, transmit
         handoff.transmitted_at = timezone.now()
         handoff.transmitted_by = transmitted_by
         handoff.save()
-        for artifact in PayrollOutputArtifact.objects.filter(
-            output_batch=handoff.output_batch,
-            kind__in=FINANCE_ARTIFACT_KINDS,
-            status=PayrollOutputArtifactStatus.PUBLISHED,
-        ):
-            delivery = _ensure_provider_delivery(handoff=handoff, artifact=artifact, submitted_by=transmitted_by)
+        deliveries = [
+            _ensure_provider_delivery(handoff=handoff, artifact=artifact, submitted_by=transmitted_by)
+            for artifact in PayrollOutputArtifact.objects.filter(
+                output_batch=handoff.output_batch,
+                kind__in=FINANCE_ARTIFACT_KINDS,
+                status=PayrollOutputArtifactStatus.PUBLISHED,
+            )
+        ]
+        for delivery in deliveries:
             if _delivery_needs_provider_adapter_submission(delivery):
                 submit_payroll_provider_delivery(delivery, submitted_by=transmitted_by)
         handoff = _sync_finance_handoff_summary(handoff)

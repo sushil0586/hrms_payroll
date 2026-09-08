@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, timedelta
 import csv
+import json
 import re
 import secrets
 from decimal import Decimal
@@ -19,6 +20,7 @@ from rest_framework import exceptions, permissions, response, serializers, statu
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.views import APIView
 
+from apps.common.models import HrmsLaunchRemediationAssignment
 from apps.common.api_serializers import (
     LIFECYCLE_COMMON_DUE_ANCHORS,
     LIFECYCLE_EXIT_DUE_ANCHORS,
@@ -112,6 +114,28 @@ from apps.common.api_serializers import (
     HrAdminGeneratedLetterListSerializer,
     HrAdminGeneratedLetterPreviewRequestSerializer,
     HrAdminGeneratedLetterPreviewSerializer,
+    HrAdminLaunchRemediationActionSerializer,
+    HrAdminLaunchRemediationAssignmentSerializer,
+    HrAdminLaunchRemediationListSerializer,
+    HrAdminSaasCommercialControlSerializer,
+    HrAdminSaasCommercialSubscriptionUpdateSerializer,
+    HrAdminSaasOperationalHealthSerializer,
+    HrAdminSaasResilienceReadinessSerializer,
+    HrAdminSaasSlaOperationsSerializer,
+    TenantAdminConsoleSerializer,
+    TenantAdminChangeRequestActionSerializer,
+    TenantAdminChangeRequestCreateSerializer,
+    TenantAdminChangeRequestMutationResultSerializer,
+    TenantAdminMembershipActionSerializer,
+    TenantAdminMembershipInviteSerializer,
+    TenantAdminMembershipMutationResultSerializer,
+    TenantAdminSupportAccessGrantActionSerializer,
+    TenantAdminSupportAccessGrantCreateSerializer,
+    TenantAdminSupportAccessGrantMutationResultSerializer,
+    TenantAdminEnterpriseSecurityReadinessSerializer,
+    TenantAdminTrustAuditReviewSerializer,
+    SupportSessionDomainSnapshotSerializer,
+    SupportSessionTenantConsoleSerializer,
     HrAdminGeneratedLetterWriteSerializer,
     HrAdminPayGroupAssignmentSerializer,
     HrAdminPayGroupAssignmentWriteSerializer,
@@ -162,6 +186,7 @@ from apps.common.api_serializers import (
     HrAdminPayrollFinanceHandoffActionResultSerializer,
     HrAdminPayrollFinanceHandoffSetupSerializer,
     HrAdminPayrollGenerateFinanceHandoffRequestSerializer,
+    HrAdminPayrollGenerateProviderAuditPackRequestSerializer,
     HrAdminPayrollGenerateOutputsRequestSerializer,
     HrAdminPayrollOpenReviewRequestSerializer,
     HrAdminPayrollOutputActionResultSerializer,
@@ -176,6 +201,17 @@ from apps.common.api_serializers import (
     HrAdminPayrollProviderCertificationRunActionResultSerializer,
     HrAdminPayrollProviderCertificationRunRequestSerializer,
     HrAdminPayrollProviderCertificationRunSerializer,
+    HrAdminPayrollProviderJobSerializer,
+    HrAdminPayrollProviderLaunchRehearsalActionResultSerializer,
+    HrAdminPayrollProviderLaunchRehearsalSerializer,
+    HrAdminPayrollProviderSchemaMappingPackActionResultSerializer,
+    HrAdminPayrollProviderSchemaMappingPackExportSerializer,
+    HrAdminPayrollProviderSchemaMappingPackImportSerializer,
+    HrAdminPayrollProviderSchemaMappingPackLifecycleRequestSerializer,
+    HrAdminPayrollProviderSchemaMappingPackSerializer,
+    HrAdminPayrollProviderSchemaMappingPackSimulationRequestSerializer,
+    HrAdminPayrollProviderSchemaMappingPackSimulationResultSerializer,
+    HrAdminPayrollProviderSchemaMappingPackWriteSerializer,
     PayrollArtifactSignedAccessGrantIssueRequestSerializer,
     PayrollArtifactSignedAccessGrantIssueResultSerializer,
     PayrollArtifactSignedAccessGrantRevokeRequestSerializer,
@@ -321,8 +357,16 @@ from apps.payroll.models import (
     PayrollProviderConnectionStatus,
     PayrollProviderDelivery,
     PayrollProviderDeliveryStatus,
+    PayrollProviderJob,
+    PayrollProviderJobKind,
+    PayrollProviderJobStatus,
+    PayrollProviderLaunchRehearsal,
+    PayrollProviderLaunchRehearsalStatus,
     PayrollProviderRetryEvent,
     PayrollProviderRetryEventStatus,
+    PayrollProviderSchemaMappingSimulation,
+    PayrollProviderSchemaMappingPack,
+    PayrollProviderSchemaMappingPackStatus,
     PayrollCalendar,
     PayrollConfigStatus,
     PayrollFrequency,
@@ -370,6 +414,10 @@ from apps.payroll.models import (
     SalaryStructureVersion,
 )
 from apps.common.selectors import (
+    describe_hrms_saas_launch_audit_pack,
+    describe_saas_commercial_support_audit_pack,
+    describe_saas_commercial_control,
+    evaluate_saas_commercial_access,
     get_employee_attendance_regularization_detail,
     get_employee_attendance_regularizations,
     get_employee_attendance_summary,
@@ -387,8 +435,18 @@ from apps.common.selectors import (
     get_hr_admin_organization_item_detail,
     get_hr_admin_organization_snapshot,
     get_hr_admin_payroll_readiness,
+    get_hr_admin_saas_operational_health,
+    get_hr_admin_saas_resilience_readiness,
+    get_hr_admin_saas_sla_operations,
     get_hr_admin_pending_approvals_export,
     get_hr_admin_workforce_export,
+    get_hrms_saas_launch_remediation_assignments,
+    get_tenant_admin_console_payload,
+    get_tenant_admin_enterprise_security_readiness,
+    get_support_domain_snapshot_option,
+    get_support_session_domain_snapshot_payload,
+    get_support_session_tenant_console_payload,
+    get_tenant_admin_trust_audit_review,
     get_default_membership_for_user,
     get_employee_leave_request_detail,
     get_employee_leave_requests,
@@ -398,6 +456,17 @@ from apps.common.selectors import (
     get_manager_leave_request_detail,
     get_manager_pending_leave_requests,
     get_manager_team_summary,
+    recompute_hrms_saas_launch_audit_pack_checksum,
+    sync_hrms_saas_launch_remediation_assignments,
+    create_tenant_admin_change_request,
+    create_support_access_grant,
+    evaluate_support_access_session,
+    invite_tenant_admin_membership,
+    update_tenant_admin_change_request,
+    update_tenant_admin_membership,
+    update_support_access_grant,
+    update_hrms_saas_launch_remediation_assignment,
+    update_saas_commercial_subscription,
 )
 from apps.attendance.models import (
     AttendancePolicy,
@@ -419,6 +488,7 @@ from apps.attendance.models import (
     HolidayCalendar,
     Shift,
 )
+from apps.tenants.models import Tenant
 from apps.attendance.services import (
     evaluate_attendance_runtime,
     normalize_employee_shift_assignment_config,
@@ -441,6 +511,7 @@ from apps.payroll.services import (
     PayrollProviderCallbackError,
     PayrollProviderConnectionError,
     PayrollProviderRetryError,
+    PayrollProviderSchemaMappingPackError,
     PayrollReviewError,
     PayrollRuleEvaluationError,
     PayrollSettlementError,
@@ -449,8 +520,11 @@ from apps.payroll.services import (
     approve_payroll_run_review,
     approve_payroll_adjustment,
     approve_payroll_settlement,
+    activate_payroll_provider_schema_mapping_pack_for_actor,
+    archive_payroll_provider_schema_mapping_pack_for_actor,
     build_payroll_rule_context_from_snapshot,
     calculate_draft_payroll_run,
+    clone_payroll_provider_schema_mapping_pack_for_actor,
     create_payroll_adjustment,
     create_payroll_artifact_access_event,
     create_payroll_settlement,
@@ -458,10 +532,14 @@ from apps.payroll.services import (
     create_payroll_run_exception,
     decide_payroll_run_exception,
     evaluate_payroll_rule_version,
+    export_payroll_provider_schema_mapping_pack,
     generate_payroll_finance_handoff,
+    generate_payroll_provider_audit_pack,
     generate_payroll_outputs,
+    build_payroll_provider_schema_mapping_simulation_payload,
     ensure_default_payroll_provider_connections,
     ingest_payroll_provider_callback,
+    import_payroll_provider_schema_mapping_pack_for_actor,
     issue_payroll_artifact_signed_access_grant,
     lock_approved_payroll_run_review,
     mark_payroll_artifact_signed_access_grant_used,
@@ -470,6 +548,7 @@ from apps.payroll.services import (
     publish_payroll_output_batch,
     reconcile_payroll_finance_handoff,
     record_payroll_provider_connection_certification,
+    record_payroll_provider_launch_rehearsal,
     reject_payroll_adjustment,
     reject_payroll_run_review,
     reject_payroll_settlement,
@@ -477,6 +556,8 @@ from apps.payroll.services import (
     revoke_payroll_artifact_signed_access_grant,
     run_payroll_provider_connection_certification,
     schedule_payroll_provider_delivery_retry,
+    save_payroll_provider_schema_mapping_pack_for_actor,
+    simulate_payroll_provider_schema_mapping_pack_for_actor,
     sync_payroll_provider_connection_readiness,
     submit_payroll_adjustment,
     submit_payroll_run_review,
@@ -484,8 +565,15 @@ from apps.payroll.services import (
     transmit_payroll_finance_handoff,
     validate_payroll_artifact_signed_access_grant,
 )
+from apps.payroll.providers import (
+    describe_payroll_provider_launch_rehearsal,
+    describe_payroll_provider_adapter_registry,
+    describe_payroll_provider_client_registry,
+    describe_payroll_provider_package_registry,
+)
 from apps.payroll.storage import (
     PayrollArtifactStorageError,
+    describe_payroll_artifact_storage_policy_registry,
     get_payroll_artifact_signed_url,
     read_payroll_artifact_payload,
 )
@@ -6056,6 +6144,11 @@ def save_hr_admin_notification_channel_configuration(actor, validated_data, *, i
     return item
 
 
+class SaasCommercialAccessDenied(exceptions.APIException):
+    status_code = status.HTTP_403_FORBIDDEN
+    default_code = "saas_commercial_access_denied"
+
+
 class EmployeeContextMixin:
     """Resolves the logged-in user into an employee record."""
 
@@ -6118,6 +6211,36 @@ class MeProfileView(EmployeeContextMixin, APIView):
 
 class HrAdminContextMixin(EmployeeContextMixin):
     workspace_role_codes = ("hr-admin",)
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        membership = get_default_membership_for_user(request.user)
+        if not membership:
+            return
+        commercial_access = evaluate_saas_commercial_access(
+            membership.tenant,
+            request_path=request.path,
+            method=request.method,
+        )
+        if commercial_access["allowed"]:
+            return
+        raise SaasCommercialAccessDenied(
+            {
+                "detail": commercial_access["detail"],
+                "code": "saas_commercial_access_denied",
+                "matched_scopes": commercial_access["matched_scopes"],
+                "blocking_scopes": commercial_access["blocking_scopes"],
+            },
+            code="saas_commercial_access_denied",
+        )
+
+
+class TenantAdminContextMixin(EmployeeContextMixin):
+    workspace_role_codes = ("tenant-admin", "hr-admin")
+
+    def get_tenant(self):
+        membership = get_default_membership_for_user(self.request.user)
+        return membership.tenant if membership else None
 
 
 class MeLeaveSummaryView(EmployeeContextMixin, APIView):
@@ -7183,7 +7306,389 @@ class HrAdminDashboardView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         payload = get_hr_admin_dashboard(employee)
+        remediation_summary = sync_hrms_saas_launch_remediation_assignments(employee.tenant, payload["launch_audit"])
+        payload["launch_audit"]["remediation_assignments"] = remediation_summary["items"]
+        payload["launch_audit"]["remediation_assignment_summary"] = {
+            "open_count": remediation_summary["open_count"],
+            "opened_count": remediation_summary["opened_count"],
+            "updated_count": remediation_summary["updated_count"],
+            "closed_count": remediation_summary["closed_count"],
+        }
         return response.Response(HrAdminDashboardSerializer(payload).data)
+
+
+class HrAdminSaasLaunchAuditPackDownloadView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+
+        audit_pack = describe_hrms_saas_launch_audit_pack(
+            employee.tenant,
+            generated_at=timezone.now(),
+            generated_by_ref="hr_admin.hrms_saas_launch_audit.download.v1",
+        )
+        remediation_summary = sync_hrms_saas_launch_remediation_assignments(employee.tenant, {"release_actions": audit_pack["release_actions"]})
+        audit_pack["remediation_assignment_summary"] = {
+            "open_count": remediation_summary["open_count"],
+            "opened_count": remediation_summary["opened_count"],
+            "updated_count": remediation_summary["updated_count"],
+            "closed_count": remediation_summary["closed_count"],
+        }
+        recompute_hrms_saas_launch_audit_pack_checksum(audit_pack)
+        payload = json.dumps(audit_pack, sort_keys=True, indent=2, default=str)
+        file_name = f"{slugify(employee.tenant.code)}-hrms-saas-launch-audit.json"
+        download_response = HttpResponse(payload, content_type="application/json")
+        download_response["Content-Disposition"] = f'attachment; filename="{file_name}"'
+        download_response["X-HRMS-Launch-Audit-Checksum"] = audit_pack["evidence_checksum_sha256"]
+        download_response["X-HRMS-Launch-Audit-Profile"] = audit_pack["audit_profile_ref"]
+        return download_response
+
+
+class HrAdminLaunchRemediationListView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        page, page_size = _get_page_params(request)
+        payload = get_hrms_saas_launch_remediation_assignments(
+            employee.tenant,
+            status_filter=request.query_params.get("status", "open"),
+            severity=request.query_params.get("severity", ""),
+            owner_role_ref=request.query_params.get("owner_role_ref", ""),
+            module_ref=request.query_params.get("module_ref", ""),
+            due_state=request.query_params.get("due_state", ""),
+            query=request.query_params.get("q", ""),
+            page=page,
+            page_size=page_size,
+        )
+        return response.Response(HrAdminLaunchRemediationListSerializer(payload).data)
+
+
+class HrAdminLaunchRemediationDetailView(HrAdminContextMixin, APIView):
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = HrAdminLaunchRemediationActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        actor_identifier = (
+            getattr(user, "username", "")
+            or getattr(user, "email", "")
+            or str(getattr(user, "id", ""))
+            or "hr-admin"
+        )
+        try:
+            assignment = update_hrms_saas_launch_remediation_assignment(
+                employee.tenant,
+                item_id,
+                action=serializer.validated_data["action"],
+                actor_identifier=actor_identifier,
+                owner_role_ref=serializer.validated_data.get("owner_role_ref", ""),
+                assigned_to_identifier=serializer.validated_data.get("assigned_to_identifier", ""),
+                due_at=serializer.validated_data.get("due_at"),
+                escalation_owner_role_ref=serializer.validated_data.get("escalation_owner_role_ref", ""),
+                resolution_note=serializer.validated_data.get("resolution_note", ""),
+            )
+        except HrmsLaunchRemediationAssignment.DoesNotExist:
+            return response.Response({"detail": "Launch remediation assignment not found."}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminLaunchRemediationAssignmentSerializer(assignment).data)
+
+
+class HrAdminSaasCommercialControlView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        payload = describe_saas_commercial_control(employee.tenant)
+        return response.Response(HrAdminSaasCommercialControlSerializer(payload).data)
+
+    def patch(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminSaasCommercialSubscriptionUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            payload = update_saas_commercial_subscription(
+                employee.tenant,
+                subscription_plan=serializer.validated_data.get("subscription_plan"),
+                status=serializer.validated_data.get("status"),
+                billing_provider_ref=serializer.validated_data.get("billing_provider_ref"),
+                billing_account_ref=serializer.validated_data.get("billing_account_ref"),
+                current_period_end=serializer.validated_data.get("current_period_end"),
+                actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
+            )
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(HrAdminSaasCommercialControlSerializer(payload).data)
+
+
+class HrAdminSaasOperationalHealthView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        payload = get_hr_admin_saas_operational_health(employee.tenant)
+        return response.Response(HrAdminSaasOperationalHealthSerializer(payload).data)
+
+
+class HrAdminSaasResilienceReadinessView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        payload = get_hr_admin_saas_resilience_readiness(employee.tenant)
+        return response.Response(HrAdminSaasResilienceReadinessSerializer(payload).data)
+
+
+class HrAdminSaasSlaOperationsView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        payload = get_hr_admin_saas_sla_operations(employee.tenant)
+        return response.Response(HrAdminSaasSlaOperationsSerializer(payload).data)
+
+
+class TenantAdminConsoleView(TenantAdminContextMixin, APIView):
+    def get(self, request):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        payload = get_tenant_admin_console_payload(tenant)
+        return response.Response(TenantAdminConsoleSerializer(payload).data)
+
+
+class TenantAdminCommercialSupportAuditPackDownloadView(TenantAdminContextMixin, APIView):
+    def get(self, request):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        actor_identifier = getattr(request.user, "username", "") or getattr(request.user, "email", "")
+        audit_pack = describe_saas_commercial_support_audit_pack(
+            tenant,
+            generated_at=timezone.now(),
+            generated_by_ref="tenant_admin.commercial_support_audit.download.v1",
+            actor_identifier=actor_identifier,
+        )
+        payload = json.dumps(audit_pack, sort_keys=True, indent=2, default=str)
+        file_name = f"{slugify(tenant.code)}-commercial-support-audit-pack.json"
+        download_response = HttpResponse(payload, content_type="application/json")
+        download_response["Content-Disposition"] = f'attachment; filename="{file_name}"'
+        download_response["X-SaaS-Audit-Pack-Checksum"] = audit_pack["evidence_checksum_sha256"]
+        download_response["X-SaaS-Audit-Pack-Ref"] = audit_pack["audit_pack_ref"]
+        return download_response
+
+
+class TenantAdminTrustAuditReviewView(TenantAdminContextMixin, APIView):
+    def get(self, request):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        payload = get_tenant_admin_trust_audit_review(
+            tenant,
+            event_group=request.query_params.get("event_group") or "all",
+            event_type=request.query_params.get("event_type") or "",
+            actor=request.query_params.get("actor") or "",
+            source_ref=request.query_params.get("source_ref") or "",
+            support_session_ref=request.query_params.get("support_session_ref") or "",
+            date_from=request.query_params.get("date_from") or "",
+            date_to=request.query_params.get("date_to") or "",
+            page=request.query_params.get("page") or 1,
+            page_size=request.query_params.get("page_size") or None,
+        )
+        return response.Response(TenantAdminTrustAuditReviewSerializer(payload).data)
+
+
+class TenantAdminEnterpriseSecurityReadinessView(TenantAdminContextMixin, APIView):
+    def get(self, request):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        payload = get_tenant_admin_enterprise_security_readiness(tenant)
+        return response.Response(TenantAdminEnterpriseSecurityReadinessSerializer(payload).data)
+
+
+class TenantAdminMembershipListCreateView(TenantAdminContextMixin, APIView):
+    def post(self, request):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = TenantAdminMembershipInviteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                payload = invite_tenant_admin_membership(
+                    tenant,
+                    actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
+                    payload=serializer.validated_data,
+                )
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(TenantAdminMembershipMutationResultSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+
+class TenantAdminMembershipDetailView(TenantAdminContextMixin, APIView):
+    def patch(self, request, membership_id):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = TenantAdminMembershipActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                payload = update_tenant_admin_membership(
+                    tenant,
+                    membership_id,
+                    actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
+                    payload=serializer.validated_data,
+                )
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(TenantAdminMembershipMutationResultSerializer(payload).data)
+
+
+class TenantAdminChangeRequestListCreateView(TenantAdminContextMixin, APIView):
+    def post(self, request):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = TenantAdminChangeRequestCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                payload = create_tenant_admin_change_request(
+                    tenant,
+                    actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
+                    payload=serializer.validated_data,
+                )
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(TenantAdminChangeRequestMutationResultSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+
+class TenantAdminChangeRequestDetailView(TenantAdminContextMixin, APIView):
+    def patch(self, request, item_id):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = TenantAdminChangeRequestActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                payload = update_tenant_admin_change_request(
+                    tenant,
+                    item_id,
+                    actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
+                    payload=serializer.validated_data,
+                )
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(TenantAdminChangeRequestMutationResultSerializer(payload).data)
+
+
+class TenantAdminSupportAccessGrantListCreateView(TenantAdminContextMixin, APIView):
+    def post(self, request):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = TenantAdminSupportAccessGrantCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                payload = create_support_access_grant(
+                    tenant,
+                    actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
+                    payload=serializer.validated_data,
+                )
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(TenantAdminSupportAccessGrantMutationResultSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+
+class TenantAdminSupportAccessGrantDetailView(TenantAdminContextMixin, APIView):
+    def patch(self, request, item_id):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = TenantAdminSupportAccessGrantActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                payload = update_support_access_grant(
+                    tenant,
+                    item_id,
+                    actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
+                    payload=serializer.validated_data,
+                )
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(TenantAdminSupportAccessGrantMutationResultSerializer(payload).data)
+
+
+class SupportSessionTenantConsoleView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        tenant_code = (request.query_params.get("tenant_code") or request.headers.get("X-HRMS-Tenant-Code") or "").strip()
+        scope_ref = (request.query_params.get("scope_ref") or request.headers.get("X-HRMS-Support-Scope") or "read_only_account").strip()
+        session_ref = (request.headers.get("X-HRMS-Support-Session-Ref") or request.query_params.get("session_ref") or "").strip()
+        if not tenant_code:
+            return response.Response({"detail": "Tenant code is required.", "code": "tenant_code_required"}, status=status.HTTP_400_BAD_REQUEST)
+        tenant = Tenant.objects.filter(code=tenant_code).first()
+        if not tenant:
+            return response.Response({"detail": "Tenant was not found.", "code": "tenant_not_found"}, status=status.HTTP_404_NOT_FOUND)
+
+        support_session = evaluate_support_access_session(
+            tenant,
+            user=request.user,
+            session_ref=session_ref,
+            required_scope_ref=scope_ref,
+            request_path=request.path,
+            method=request.method,
+        )
+        if not support_session["allowed"]:
+            return response.Response(support_session, status=status.HTTP_403_FORBIDDEN)
+
+        payload = get_support_session_tenant_console_payload(tenant, support_session=support_session)
+        return response.Response(SupportSessionTenantConsoleSerializer(payload).data)
+
+
+class SupportSessionDomainSnapshotView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        tenant_code = (request.query_params.get("tenant_code") or request.headers.get("X-HRMS-Tenant-Code") or "").strip()
+        domain_ref = (request.query_params.get("domain_ref") or "tenant_account").strip()
+        session_ref = (request.headers.get("X-HRMS-Support-Session-Ref") or request.query_params.get("session_ref") or "").strip()
+        if not tenant_code:
+            return response.Response({"detail": "Tenant code is required.", "code": "tenant_code_required"}, status=status.HTTP_400_BAD_REQUEST)
+        tenant = Tenant.objects.filter(code=tenant_code).first()
+        if not tenant:
+            return response.Response({"detail": "Tenant was not found.", "code": "tenant_not_found"}, status=status.HTTP_404_NOT_FOUND)
+
+        domain_option = get_support_domain_snapshot_option(tenant, domain_ref)
+        if not domain_option:
+            return response.Response({"detail": "Support domain snapshot is not configured.", "code": "support_domain_not_configured"}, status=status.HTTP_400_BAD_REQUEST)
+
+        support_session = evaluate_support_access_session(
+            tenant,
+            user=request.user,
+            session_ref=session_ref,
+            required_scope_ref=domain_option["scope_ref"],
+            request_path=request.path,
+            method=request.method,
+        )
+        if not support_session["allowed"]:
+            return response.Response(support_session, status=status.HTTP_403_FORBIDDEN)
+
+        payload = get_support_session_domain_snapshot_payload(tenant, support_session=support_session, domain_ref=domain_ref)
+        return response.Response(SupportSessionDomainSnapshotSerializer(payload).data)
 
 
 class HrAdminPayrollReadinessView(HrAdminContextMixin, APIView):
@@ -10821,6 +11326,7 @@ def build_hr_admin_payroll_finance_handoff_payload(item: PayrollFinanceHandoff) 
                 PayrollOutputArtifactKind.BANK_ADVICE,
                 PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
                 PayrollOutputArtifactKind.STATUTORY_REPORT,
+                PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK,
             ],
         ).count(),
         "created_at": item.created_at,
@@ -10923,6 +11429,70 @@ def build_hr_admin_payroll_provider_retry_event_payload(item: PayrollProviderRet
     }
 
 
+def build_hr_admin_payroll_provider_job_payload(item: PayrollProviderJob) -> dict:
+    return {
+        "id": item.id,
+        "job_kind": item.job_kind,
+        "job_kind_label": item.get_job_kind_display(),
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "queue_policy_ref": item.queue_policy_ref,
+        "worker_profile_ref": item.worker_profile_ref,
+        "idempotency_key": item.idempotency_key,
+        "provider_ref": item.provider_ref,
+        "provider_delivery_id": item.provider_delivery_id,
+        "provider_connection_id": item.provider_connection_id,
+        "retry_event_id": item.retry_event_id,
+        "callback_event_id": item.callback_event_id,
+        "certification_run_id": item.certification_run_id,
+        "priority": item.priority,
+        "attempt_count": item.attempt_count,
+        "max_attempts": item.max_attempts,
+        "scheduled_for": item.scheduled_for,
+        "leased_at": item.leased_at,
+        "leased_until": item.leased_until,
+        "lease_owner_ref": item.lease_owner_ref,
+        "heartbeat_at": item.heartbeat_at,
+        "heartbeat_count": item.heartbeat_count,
+        "recovery_count": item.recovery_count,
+        "last_recovered_at": item.last_recovered_at,
+        "started_at": item.started_at,
+        "completed_at": item.completed_at,
+        "requested_by_name": str(item.requested_by) if item.requested_by else None,
+        "executed_by_name": str(item.executed_by) if item.executed_by else None,
+        "request_snapshot": item.request_snapshot,
+        "lease_snapshot": item.lease_snapshot,
+        "response_snapshot": item.response_snapshot,
+        "failure_code": item.failure_code,
+        "failure_reason": item.failure_reason,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_payroll_provider_launch_rehearsal_payload(item: PayrollProviderLaunchRehearsal) -> dict:
+    return {
+        "id": item.id,
+        "rehearsal_profile_ref": item.rehearsal_profile_ref,
+        "audit_pack_ref": item.audit_pack_ref,
+        "generated_by_ref": item.generated_by_ref,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "can_launch": item.can_launch,
+        "ready_lane_count": item.ready_lane_count,
+        "blocked_lane_count": item.blocked_lane_count,
+        "launch_blocker_count": item.launch_blocker_count,
+        "release_blocker_refs": item.release_blocker_refs,
+        "audit_pack_snapshot": item.audit_pack_snapshot,
+        "evidence_checksum_sha256": item.evidence_checksum_sha256,
+        "generated_at": item.generated_at,
+        "generated_by_name": str(item.generated_by) if item.generated_by else None,
+        "source_hash": item.source_hash,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
 def build_hr_admin_payroll_provider_connection_payload(item: PayrollProviderConnection) -> dict:
     return {
         "id": item.id,
@@ -10990,9 +11560,95 @@ def build_hr_admin_payroll_provider_certification_run_payload(item: PayrollProvi
     }
 
 
+def build_hr_admin_payroll_provider_schema_mapping_pack_payload(item: PayrollProviderSchemaMappingPack) -> dict:
+    return {
+        "id": item.id,
+        "provider_connection_id": item.provider_connection_id,
+        "provider_ref": item.provider_ref,
+        "provider_kind": item.provider_kind,
+        "provider_kind_label": item.get_provider_kind_display(),
+        "environment_ref": item.environment_ref,
+        "artifact_kind": item.artifact_kind,
+        "artifact_kind_label": item.get_artifact_kind_display(),
+        "mapping_profile_ref": item.mapping_profile_ref,
+        "version": item.version,
+        "status": item.status,
+        "status_label": item.get_status_display(),
+        "source_schema_ref": item.source_schema_ref,
+        "target_schema_ref": item.target_schema_ref,
+        "transform_profile_ref": item.transform_profile_ref,
+        "validation_profile_ref": item.validation_profile_ref,
+        "enforcement_mode": item.enforcement_mode,
+        "transform_rules": item.transform_rules,
+        "validation_rules": item.validation_rules,
+        "sample_request_snapshot": item.sample_request_snapshot,
+        "sample_output_snapshot": item.sample_output_snapshot,
+        "evidence_snapshot": item.evidence_snapshot,
+        "source_hash": item.source_hash,
+        "created_by_name": str(item.created_by) if item.created_by else None,
+        "updated_by_name": str(item.updated_by) if item.updated_by else None,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def build_hr_admin_payroll_provider_schema_mapping_simulation_payload(item: PayrollProviderSchemaMappingSimulation) -> dict:
+    return build_payroll_provider_schema_mapping_simulation_payload(item)
+
+
+def _payroll_provider_client_refs_for_connections(connections: list[PayrollProviderConnection]) -> dict[str, str]:
+    client_refs: dict[str, str] = {}
+    adapter_config_families = {
+        "bank_payout_adapter": "bank",
+        "accounting_journal_adapter": "accounting",
+        "statutory_filing_adapter": "statutory",
+    }
+    for connection in connections:
+        config = connection.config_snapshot if isinstance(connection.config_snapshot, dict) else {}
+        route = config.get("provider_route") if isinstance(config.get("provider_route"), dict) else {}
+        for config_key, family in adapter_config_families.items():
+            adapter_config = route.get(config_key) if isinstance(route.get(config_key), dict) else {}
+            client_ref = str(adapter_config.get("client_ref") or "").strip()
+            if client_ref:
+                client_refs[client_ref] = family
+    return client_refs
+
+
+def _payroll_provider_routes_for_connections(connections: list[PayrollProviderConnection]) -> list[dict]:
+    routes: list[dict] = []
+    for connection in connections:
+        config = connection.config_snapshot if isinstance(connection.config_snapshot, dict) else {}
+        route = config.get("provider_route") if isinstance(config.get("provider_route"), dict) else {}
+        if route:
+            routes.append(route)
+    return routes
+
+
+def _payroll_storage_policy_refs_for_packages(package_registry: dict) -> list[str]:
+    refs: set[str] = set()
+    packages = package_registry.get("packages") if isinstance(package_registry, dict) else []
+    for package in packages if isinstance(packages, list) else []:
+        if not isinstance(package, dict):
+            continue
+        manifest = package.get("manifest") if isinstance(package.get("manifest"), dict) else {}
+        storage_policy_refs = manifest.get("storage_policy_refs")
+        if not isinstance(storage_policy_refs, list):
+            capabilities = package.get("capabilities") if isinstance(package.get("capabilities"), dict) else {}
+            storage_policy_refs = capabilities.get("storage_policy_refs")
+        if isinstance(storage_policy_refs, list):
+            refs.update(str(item).strip() for item in storage_policy_refs if str(item or "").strip())
+    return sorted(refs)
+
+
 def get_hr_admin_payroll_provider_connection_setup_payload(actor) -> dict:
-    tenant = actor.tenant
-    ensure_default_payroll_provider_connections(tenant, created_by=getattr(actor, "user", None))
+    return get_hr_admin_payroll_provider_connection_setup_payload_for_tenant(
+        actor.tenant,
+        user=getattr(actor, "user", None),
+    )
+
+
+def get_hr_admin_payroll_provider_connection_setup_payload_for_tenant(tenant, *, user=None) -> dict:
+    ensure_default_payroll_provider_connections(tenant, created_by=user)
     queryset = PayrollProviderConnection.objects.filter(tenant=tenant)
     connections = list(
         queryset.select_related("certified_by", "last_tested_by", "created_by", "updated_by").order_by(
@@ -11008,9 +11664,57 @@ def get_hr_admin_payroll_provider_connection_setup_payload(actor) -> dict:
             "-started_at",
         )[:50]
     )
+    schema_mapping_pack_queryset = PayrollProviderSchemaMappingPack.objects.filter(tenant=tenant)
+    schema_mapping_packs = list(
+        schema_mapping_pack_queryset.select_related("provider_connection", "created_by", "updated_by").order_by(
+            "provider_kind",
+            "artifact_kind",
+            "provider_ref",
+            "-version",
+        )[:100]
+    )
+    schema_mapping_simulation_queryset = PayrollProviderSchemaMappingSimulation.objects.filter(tenant=tenant)
+    schema_mapping_simulations = list(
+        schema_mapping_simulation_queryset.select_related(
+            "mapping_pack",
+            "baseline_mapping_pack",
+            "provider_connection",
+            "simulated_by",
+        ).order_by("-simulated_at", "-created_at")[:100]
+    )
+    launch_rehearsal_queryset = PayrollProviderLaunchRehearsal.objects.filter(tenant=tenant)
+    launch_rehearsals = list(
+        launch_rehearsal_queryset.select_related("generated_by").order_by("-generated_at", "-created_at")[:25]
+    )
+    latest_launch_rehearsal = launch_rehearsals[0] if launch_rehearsals else None
     active_allowed_count = sum(
         1 for item in connections
         if isinstance(item.readiness_snapshot, dict) and item.readiness_snapshot.get("active_allowed")
+    )
+    provider_routes = _payroll_provider_routes_for_connections(connections)
+    adapter_registry = describe_payroll_provider_adapter_registry(
+        [
+            adapter_ref
+            for item in connections
+            for adapter_ref in (item.adapter_ref, item.sandbox_adapter_ref)
+            if adapter_ref
+        ]
+    )
+    client_registry = describe_payroll_provider_client_registry(_payroll_provider_client_refs_for_connections(connections))
+    package_registry = describe_payroll_provider_package_registry(
+        route_snapshots=provider_routes,
+    )
+    storage_policy_registry = describe_payroll_artifact_storage_policy_registry(
+        _payroll_storage_policy_refs_for_packages(package_registry)
+    )
+    connection_payloads = [build_hr_admin_payroll_provider_connection_payload(item) for item in connections]
+    launch_rehearsal = describe_payroll_provider_launch_rehearsal(
+        connections=connection_payloads,
+        route_snapshots=provider_routes,
+        adapter_registry=adapter_registry,
+        client_registry=client_registry,
+        package_registry=package_registry,
+        storage_policy_registry=storage_policy_registry,
     )
     return {
         "summary": {
@@ -11024,17 +11728,65 @@ def get_hr_admin_payroll_provider_connection_setup_payload(actor) -> dict:
             "certification_run_count": certification_run_queryset.count(),
             "passed_certification_run_count": certification_run_queryset.filter(status=PayrollProviderCertificationRunStatus.PASSED).count(),
             "failed_certification_run_count": certification_run_queryset.filter(status=PayrollProviderCertificationRunStatus.FAILED).count(),
+            "schema_mapping_pack_count": schema_mapping_pack_queryset.count(),
+            "active_schema_mapping_pack_count": schema_mapping_pack_queryset.filter(status=PayrollProviderSchemaMappingPackStatus.ACTIVE).count(),
+            "draft_schema_mapping_pack_count": schema_mapping_pack_queryset.filter(status=PayrollProviderSchemaMappingPackStatus.DRAFT).count(),
+            "archived_schema_mapping_pack_count": schema_mapping_pack_queryset.filter(status=PayrollProviderSchemaMappingPackStatus.ARCHIVED).count(),
+            "strict_schema_mapping_pack_count": schema_mapping_pack_queryset.filter(enforcement_mode="strict").count(),
+            "schema_mapping_simulation_count": schema_mapping_simulation_queryset.count(),
+            "passed_schema_mapping_simulation_count": schema_mapping_simulation_queryset.filter(status="passed").count(),
+            "blocked_schema_mapping_simulation_count": schema_mapping_simulation_queryset.filter(status="blocked").count(),
+            "changed_schema_mapping_simulation_count": schema_mapping_simulation_queryset.filter(comparison_status="changed").count(),
             "bank_connection_count": queryset.filter(provider_kind=PayrollProviderConnectionKind.BANK).count(),
             "accounting_connection_count": queryset.filter(provider_kind=PayrollProviderConnectionKind.ACCOUNTING).count(),
             "statutory_connection_count": queryset.filter(provider_kind=PayrollProviderConnectionKind.STATUTORY).count(),
+            "adapter_registry_count": adapter_registry["adapter_count"],
+            "ready_adapter_registry_count": adapter_registry["ready_adapter_count"],
+            "blocked_adapter_registry_count": adapter_registry["blocked_adapter_count"],
+            "configured_adapter_registry_count": adapter_registry["configured_adapter_count"],
+            "production_pack_adapter_registry_count": adapter_registry["production_pack_adapter_count"],
+            "client_registry_count": client_registry["client_count"],
+            "ready_client_registry_count": client_registry["ready_client_count"],
+            "blocked_client_registry_count": client_registry["blocked_client_count"],
+            "configured_client_registry_count": client_registry["configured_client_count"],
+            "fixture_client_registry_count": client_registry["fixture_client_count"],
+            "package_registry_count": package_registry["package_count"],
+            "ready_package_registry_count": package_registry["ready_package_count"],
+            "blocked_package_registry_count": package_registry["blocked_package_count"],
+            "configured_package_registry_count": package_registry["configured_package_count"],
+            "fixture_package_registry_count": package_registry["fixture_package_count"],
+            "storage_policy_registry_count": storage_policy_registry["storage_policy_count"],
+            "ready_storage_policy_registry_count": storage_policy_registry["ready_storage_policy_count"],
+            "blocked_storage_policy_registry_count": storage_policy_registry["blocked_storage_policy_count"],
+            "configured_storage_policy_registry_count": storage_policy_registry["configured_storage_policy_count"],
+            "required_storage_policy_registry_count": storage_policy_registry["required_storage_policy_count"],
+            "launch_rehearsal_status": launch_rehearsal["status"],
+            "launch_rehearsal_ready_lane_count": launch_rehearsal["ready_lane_count"],
+            "launch_rehearsal_blocked_lane_count": launch_rehearsal["blocked_lane_count"],
+            "launch_rehearsal_blocker_count": launch_rehearsal["launch_blocker_count"],
+            "launch_rehearsal_run_count": launch_rehearsal_queryset.count(),
+            "ready_launch_rehearsal_run_count": launch_rehearsal_queryset.filter(status=PayrollProviderLaunchRehearsalStatus.READY).count(),
+            "blocked_launch_rehearsal_run_count": launch_rehearsal_queryset.filter(status=PayrollProviderLaunchRehearsalStatus.BLOCKED).count(),
+            "latest_launch_rehearsal_status": latest_launch_rehearsal.status if latest_launch_rehearsal else "",
+            "latest_launch_rehearsal_checksum": latest_launch_rehearsal.evidence_checksum_sha256 if latest_launch_rehearsal else "",
         },
-        "connections": [build_hr_admin_payroll_provider_connection_payload(item) for item in connections],
+        "connections": connection_payloads,
         "certification_runs": [build_hr_admin_payroll_provider_certification_run_payload(item) for item in certification_runs],
+        "schema_mapping_packs": [build_hr_admin_payroll_provider_schema_mapping_pack_payload(item) for item in schema_mapping_packs],
+        "schema_mapping_simulations": [build_hr_admin_payroll_provider_schema_mapping_simulation_payload(item) for item in schema_mapping_simulations],
+        "launch_rehearsals": [build_hr_admin_payroll_provider_launch_rehearsal_payload(item) for item in launch_rehearsals],
+        "adapter_registry": adapter_registry,
+        "client_registry": client_registry,
+        "package_registry": package_registry,
+        "storage_policy_registry": storage_policy_registry,
+        "launch_rehearsal": launch_rehearsal,
         "options": {
             "provider_kinds": [{"value": value, "label": label} for value, label in PayrollProviderConnectionKind.choices],
             "connection_statuses": [{"value": value, "label": label} for value, label in PayrollProviderConnectionStatus.choices],
             "certification_statuses": [{"value": value, "label": label} for value, label in PayrollProviderCertificationStatus.choices],
             "certification_run_statuses": [{"value": value, "label": label} for value, label in PayrollProviderCertificationRunStatus.choices],
+            "schema_mapping_pack_statuses": [{"value": value, "label": label} for value, label in PayrollProviderSchemaMappingPackStatus.choices],
+            "launch_rehearsal_statuses": [{"value": value, "label": label} for value, label in PayrollProviderLaunchRehearsalStatus.choices],
         },
     }
 
@@ -11070,6 +11822,20 @@ def save_hr_admin_payroll_provider_connection(actor, data: dict, item: PayrollPr
     return sync_payroll_provider_connection_readiness(item)
 
 
+def get_hr_admin_payroll_provider_schema_mapping_pack_or_404(actor, item_id) -> PayrollProviderSchemaMappingPack | None:
+    return PayrollProviderSchemaMappingPack.objects.filter(
+        tenant=actor.tenant,
+        id=item_id,
+    ).select_related("provider_connection", "created_by", "updated_by").first()
+
+
+def build_hr_admin_payroll_provider_schema_mapping_pack_action_payload(item: PayrollProviderSchemaMappingPack, detail: str) -> dict:
+    return {
+        "mapping_pack": build_hr_admin_payroll_provider_schema_mapping_pack_payload(item),
+        "detail": detail,
+    }
+
+
 def build_hr_admin_payroll_finance_handoff_action_payload(handoff: PayrollFinanceHandoff, detail: str) -> dict:
     artifacts = PayrollOutputArtifact.objects.filter(
         output_batch=handoff.output_batch,
@@ -11077,6 +11843,7 @@ def build_hr_admin_payroll_finance_handoff_action_payload(handoff: PayrollFinanc
             PayrollOutputArtifactKind.BANK_ADVICE,
             PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
             PayrollOutputArtifactKind.STATUTORY_REPORT,
+            PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK,
         ],
     ).select_related("employee", "input_snapshot", "published_by")
     deliveries = PayrollProviderDelivery.objects.filter(handoff=handoff).select_related(
@@ -11087,12 +11854,17 @@ def build_hr_admin_payroll_finance_handoff_action_payload(handoff: PayrollFinanc
     )
     callback_events = PayrollProviderCallbackEvent.objects.filter(handoff=handoff).select_related("provider_delivery", "output_artifact")[:100]
     retry_events = PayrollProviderRetryEvent.objects.filter(handoff=handoff).select_related("provider_delivery", "output_artifact", "requested_by", "executed_by")[:100]
+    provider_jobs = PayrollProviderJob.objects.filter(
+        tenant=handoff.tenant,
+        provider_delivery__handoff=handoff,
+    ).select_related("provider_delivery", "provider_connection", "retry_event", "callback_event", "certification_run", "requested_by", "executed_by")[:100]
     return {
         "handoff": build_hr_admin_payroll_finance_handoff_payload(handoff),
         "artifacts": [build_hr_admin_payroll_output_artifact_payload(item) for item in artifacts],
         "deliveries": [build_hr_admin_payroll_provider_delivery_payload(item) for item in deliveries],
         "callback_events": [build_hr_admin_payroll_provider_callback_event_payload(item) for item in callback_events],
         "retry_events": [build_hr_admin_payroll_provider_retry_event_payload(item) for item in retry_events],
+        "provider_jobs": [build_hr_admin_payroll_provider_job_payload(item) for item in provider_jobs],
         "detail": detail,
     }
 
@@ -11119,6 +11891,7 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
             PayrollOutputArtifactKind.BANK_ADVICE,
             PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
             PayrollOutputArtifactKind.STATUTORY_REPORT,
+            PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK,
         ],
     ).select_related(
         "output_batch",
@@ -11140,7 +11913,18 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
     callback_events = callback_event_queryset.select_related("provider_delivery", "output_artifact").order_by("-received_at", "-created_at")[:200]
     retry_event_queryset = PayrollProviderRetryEvent.objects.filter(tenant=tenant)
     retry_events = retry_event_queryset.select_related("provider_delivery", "output_artifact", "requested_by", "executed_by").order_by("-scheduled_for", "-created_at")[:200]
+    provider_job_queryset = PayrollProviderJob.objects.filter(tenant=tenant)
+    provider_jobs = provider_job_queryset.select_related(
+        "provider_delivery",
+        "provider_connection",
+        "retry_event",
+        "callback_event",
+        "certification_run",
+        "requested_by",
+        "executed_by",
+    ).order_by("scheduled_for", "priority", "created_at")[:200]
     latest_handoff = handoffs.first()
+    now = timezone.now()
     return {
         "summary": {
             "published_output_batch_count": batches.filter(status=PayrollOutputBatchStatus.PUBLISHED).count(),
@@ -11159,6 +11943,17 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
             "scheduled_provider_retry_event_count": retry_event_queryset.filter(status=PayrollProviderRetryEventStatus.SCHEDULED).count(),
             "executed_provider_retry_event_count": retry_event_queryset.filter(status=PayrollProviderRetryEventStatus.EXECUTED).count(),
             "dead_lettered_provider_retry_event_count": retry_event_queryset.filter(status=PayrollProviderRetryEventStatus.DEAD_LETTERED).count(),
+            "provider_job_count": provider_job_queryset.count(),
+            "queued_provider_job_count": provider_job_queryset.filter(status=PayrollProviderJobStatus.QUEUED).count(),
+            "running_provider_job_count": provider_job_queryset.filter(status__in=[PayrollProviderJobStatus.LEASED, PayrollProviderJobStatus.RUNNING]).count(),
+            "completed_provider_job_count": provider_job_queryset.filter(status=PayrollProviderJobStatus.COMPLETED).count(),
+            "dead_lettered_provider_job_count": provider_job_queryset.filter(status=PayrollProviderJobStatus.DEAD_LETTERED).count(),
+            "recovered_provider_job_count": provider_job_queryset.filter(recovery_count__gt=0).count(),
+            "heartbeat_provider_job_count": provider_job_queryset.filter(heartbeat_count__gt=0).count(),
+            "stale_provider_job_count": provider_job_queryset.filter(
+                status__in=[PayrollProviderJobStatus.LEASED, PayrollProviderJobStatus.RUNNING],
+                leased_until__lte=now,
+            ).count(),
             "finance_artifact_count": PayrollOutputArtifact.objects.filter(
                 tenant=tenant,
                 kind__in=[
@@ -11166,6 +11961,10 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
                     PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
                     PayrollOutputArtifactKind.STATUTORY_REPORT,
                 ],
+            ).count(),
+            "provider_audit_pack_count": PayrollOutputArtifact.objects.filter(
+                tenant=tenant,
+                kind=PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK,
             ).count(),
             "latest_net_pay": latest_handoff.totals_snapshot.get("net_pay") if latest_handoff else "0.00",
         },
@@ -11175,6 +11974,7 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
         "deliveries": [build_hr_admin_payroll_provider_delivery_payload(item) for item in deliveries],
         "callback_events": [build_hr_admin_payroll_provider_callback_event_payload(item) for item in callback_events],
         "retry_events": [build_hr_admin_payroll_provider_retry_event_payload(item) for item in retry_events],
+        "provider_jobs": [build_hr_admin_payroll_provider_job_payload(item) for item in provider_jobs],
         "options": {
             "handoff_statuses": [{"value": value, "label": label} for value, label in PayrollFinanceHandoffStatus.choices],
             "output_artifact_kinds": [{"value": value, "label": label} for value, label in PayrollOutputArtifactKind.choices],
@@ -11182,6 +11982,8 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
             "provider_delivery_statuses": [{"value": value, "label": label} for value, label in PayrollProviderDeliveryStatus.choices],
             "provider_callback_event_statuses": [{"value": value, "label": label} for value, label in PayrollProviderCallbackEventStatus.choices],
             "provider_retry_event_statuses": [{"value": value, "label": label} for value, label in PayrollProviderRetryEventStatus.choices],
+            "provider_job_kinds": [{"value": value, "label": label} for value, label in PayrollProviderJobKind.choices],
+            "provider_job_statuses": [{"value": value, "label": label} for value, label in PayrollProviderJobStatus.choices],
         },
     }
 
@@ -11200,6 +12002,27 @@ class HrAdminPayrollProviderConnectionSetupView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         return response.Response(HrAdminPayrollProviderConnectionSetupSerializer(get_hr_admin_payroll_provider_connection_setup_payload(employee)).data)
+
+
+class HrAdminPayrollProviderLaunchRehearsalRunView(HrAdminContextMixin, APIView):
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        setup_payload = get_hr_admin_payroll_provider_connection_setup_payload(employee)
+        rehearsal = record_payroll_provider_launch_rehearsal(
+            employee.tenant,
+            setup_payload=setup_payload,
+            generated_by=request.user,
+            generated_by_ref="hr_admin.payroll_providers.launch_rehearsal.v1",
+        )
+        refreshed_setup = get_hr_admin_payroll_provider_connection_setup_payload(employee)
+        payload = {
+            "launch_rehearsal_run": build_hr_admin_payroll_provider_launch_rehearsal_payload(rehearsal),
+            "setup": refreshed_setup,
+            "detail": "Payroll provider launch rehearsal recorded.",
+        }
+        return response.Response(HrAdminPayrollProviderLaunchRehearsalActionResultSerializer(payload).data, status=status.HTTP_201_CREATED)
 
 
 class HrAdminPayrollProviderConnectionListCreateView(HrAdminContextMixin, APIView):
@@ -11322,6 +12145,197 @@ class HrAdminPayrollProviderConnectionRunCertificationView(HrAdminContextMixin, 
         return response.Response(HrAdminPayrollProviderCertificationRunActionResultSerializer(payload).data)
 
 
+class HrAdminPayrollProviderSchemaMappingPackListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        items = PayrollProviderSchemaMappingPack.objects.filter(tenant=employee.tenant).select_related(
+            "provider_connection",
+            "created_by",
+            "updated_by",
+        ).order_by("provider_kind", "artifact_kind", "provider_ref", "-version")
+        payload = [build_hr_admin_payroll_provider_schema_mapping_pack_payload(item) for item in items]
+        return response.Response(HrAdminPayrollProviderSchemaMappingPackSerializer(payload, many=True).data)
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderSchemaMappingPackWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_payroll_provider_schema_mapping_pack_for_actor(employee, serializer.validated_data)
+        except PayrollProviderSchemaMappingPackError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payload = build_hr_admin_payroll_provider_schema_mapping_pack_action_payload(item, "Payroll provider schema mapping pack created.")
+        return response.Response(HrAdminPayrollProviderSchemaMappingPackActionResultSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminPayrollProviderSchemaMappingPackImportView(HrAdminContextMixin, APIView):
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderSchemaMappingPackImportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = import_payroll_provider_schema_mapping_pack_for_actor(
+                employee,
+                serializer.validated_data["mapping_pack"],
+                provider_connection_id=serializer.validated_data.get("provider_connection_id"),
+            )
+        except PayrollProviderSchemaMappingPackError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payload = build_hr_admin_payroll_provider_schema_mapping_pack_action_payload(item, "Payroll provider schema mapping pack imported as draft.")
+        return response.Response(HrAdminPayrollProviderSchemaMappingPackActionResultSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminPayrollProviderSchemaMappingPackDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = get_hr_admin_payroll_provider_schema_mapping_pack_or_404(employee, item_id)
+        if not item:
+            return response.Response({"detail": "Payroll provider schema mapping pack not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminPayrollProviderSchemaMappingPackSerializer(build_hr_admin_payroll_provider_schema_mapping_pack_payload(item)).data)
+
+    def patch(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = get_hr_admin_payroll_provider_schema_mapping_pack_or_404(employee, item_id)
+        if not item:
+            return response.Response({"detail": "Payroll provider schema mapping pack not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderSchemaMappingPackWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = save_payroll_provider_schema_mapping_pack_for_actor(employee, serializer.validated_data, item=item)
+        except PayrollProviderSchemaMappingPackError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payload = build_hr_admin_payroll_provider_schema_mapping_pack_action_payload(item, "Payroll provider schema mapping pack updated.")
+        return response.Response(HrAdminPayrollProviderSchemaMappingPackActionResultSerializer(payload).data)
+
+
+class HrAdminPayrollProviderSchemaMappingPackCloneView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = get_hr_admin_payroll_provider_schema_mapping_pack_or_404(employee, item_id)
+        if not item:
+            return response.Response({"detail": "Payroll provider schema mapping pack not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderSchemaMappingPackLifecycleRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            cloned = clone_payroll_provider_schema_mapping_pack_for_actor(
+                employee,
+                item,
+                overrides=serializer.validated_data.get("overrides") or {},
+            )
+        except PayrollProviderSchemaMappingPackError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payload = build_hr_admin_payroll_provider_schema_mapping_pack_action_payload(cloned, "Payroll provider schema mapping pack cloned as a draft version.")
+        return response.Response(HrAdminPayrollProviderSchemaMappingPackActionResultSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminPayrollProviderSchemaMappingPackActivateView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = get_hr_admin_payroll_provider_schema_mapping_pack_or_404(employee, item_id)
+        if not item:
+            return response.Response({"detail": "Payroll provider schema mapping pack not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderSchemaMappingPackLifecycleRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        approval_snapshot = serializer.validated_data.get("approval_snapshot") or {}
+        if serializer.validated_data.get("approval_reason"):
+            approval_snapshot = {
+                **approval_snapshot,
+                "approval_reason": serializer.validated_data["approval_reason"],
+            }
+        try:
+            item = activate_payroll_provider_schema_mapping_pack_for_actor(
+                employee,
+                item,
+                approval_snapshot=approval_snapshot,
+            )
+        except PayrollProviderSchemaMappingPackError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payload = build_hr_admin_payroll_provider_schema_mapping_pack_action_payload(item, "Payroll provider schema mapping pack activated.")
+        return response.Response(HrAdminPayrollProviderSchemaMappingPackActionResultSerializer(payload).data)
+
+
+class HrAdminPayrollProviderSchemaMappingPackArchiveView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = get_hr_admin_payroll_provider_schema_mapping_pack_or_404(employee, item_id)
+        if not item:
+            return response.Response({"detail": "Payroll provider schema mapping pack not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderSchemaMappingPackLifecycleRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = archive_payroll_provider_schema_mapping_pack_for_actor(
+                employee,
+                item,
+                archive_reason=serializer.validated_data.get("archive_reason") or "",
+            )
+        except PayrollProviderSchemaMappingPackError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payload = build_hr_admin_payroll_provider_schema_mapping_pack_action_payload(item, "Payroll provider schema mapping pack archived.")
+        return response.Response(HrAdminPayrollProviderSchemaMappingPackActionResultSerializer(payload).data)
+
+
+class HrAdminPayrollProviderSchemaMappingPackSimulateView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = get_hr_admin_payroll_provider_schema_mapping_pack_or_404(employee, item_id)
+        if not item:
+            return response.Response({"detail": "Payroll provider schema mapping pack not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollProviderSchemaMappingPackSimulationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            simulation = simulate_payroll_provider_schema_mapping_pack_for_actor(
+                employee,
+                item,
+                request_snapshot=serializer.validated_data.get("request_snapshot"),
+                mapping_contract_overrides=serializer.validated_data.get("mapping_contract") or {},
+            )
+        except PayrollProviderSchemaMappingPackError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payload = {
+            "mapping_pack": build_hr_admin_payroll_provider_schema_mapping_pack_payload(item),
+            "simulation_run": build_hr_admin_payroll_provider_schema_mapping_simulation_payload(
+                PayrollProviderSchemaMappingSimulation.objects.get(id=simulation["simulation_run_id"])
+            ),
+            "simulation": simulation,
+            "detail": "Payroll provider schema mapping simulation completed.",
+        }
+        return response.Response(HrAdminPayrollProviderSchemaMappingPackSimulationResultSerializer(payload).data)
+
+
+class HrAdminPayrollProviderSchemaMappingPackExportView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = get_hr_admin_payroll_provider_schema_mapping_pack_or_404(employee, item_id)
+        if not item:
+            return response.Response({"detail": "Payroll provider schema mapping pack not found."}, status=status.HTTP_404_NOT_FOUND)
+        payload = {
+            "mapping_pack": build_hr_admin_payroll_provider_schema_mapping_pack_payload(item),
+            "export_payload": export_payroll_provider_schema_mapping_pack(item),
+            "detail": "Payroll provider schema mapping pack export prepared.",
+        }
+        return response.Response(HrAdminPayrollProviderSchemaMappingPackExportSerializer(payload).data)
+
+
 class HrAdminPayrollOutputBatchGenerateFinanceHandoffView(HrAdminContextMixin, APIView):
     def post(self, request, item_id):
         employee = self.get_employee()
@@ -11372,6 +12386,42 @@ class HrAdminPayrollFinanceHandoffTransmitView(HrAdminContextMixin, APIView):
             "accepted_by",
         ).get(id=handoff.id)
         return response.Response(HrAdminPayrollFinanceHandoffActionResultSerializer(build_hr_admin_payroll_finance_handoff_action_payload(handoff, "Payroll finance handoff transmitted.")).data)
+
+
+class HrAdminPayrollFinanceHandoffGenerateAuditPackView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        handoff = PayrollFinanceHandoff.objects.filter(tenant=employee.tenant, id=item_id).select_related(
+            "output_batch",
+            "payroll_run",
+            "review",
+            "generated_by",
+            "transmitted_by",
+            "accepted_by",
+        ).first()
+        if not handoff:
+            return response.Response({"detail": "Payroll finance handoff not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminPayrollGenerateProviderAuditPackRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            generate_payroll_provider_audit_pack(
+                handoff,
+                generated_by=request.user,
+                audit_pack_profile_ref=serializer.validated_data.get("audit_pack_profile_ref") or None,
+            )
+        except PayrollFinanceHandoffError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        handoff = PayrollFinanceHandoff.objects.select_related(
+            "output_batch",
+            "payroll_run",
+            "review",
+            "generated_by",
+            "transmitted_by",
+            "accepted_by",
+        ).get(id=handoff.id)
+        return response.Response(HrAdminPayrollFinanceHandoffActionResultSerializer(build_hr_admin_payroll_finance_handoff_action_payload(handoff, "Payroll provider audit pack generated.")).data)
 
 
 class HrAdminPayrollFinanceHandoffAcknowledgeView(HrAdminContextMixin, APIView):

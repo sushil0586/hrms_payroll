@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type React from "react";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -8,6 +9,7 @@ import type {
   HrAdminPayrollOutputArtifact,
   HrAdminPayrollProviderCallbackEvent,
   HrAdminPayrollProviderDelivery,
+  HrAdminPayrollProviderJob,
   HrAdminPayrollProviderRetryEvent,
 } from "@/lib/types";
 
@@ -16,8 +18,57 @@ type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
 };
 
+type EvidenceKind = "delivery" | "retry" | "job" | "callback";
+type EvidenceSelection = {
+  kind: EvidenceKind;
+  id: string;
+};
+type EvidenceRow = {
+  label: string;
+  value: unknown;
+};
+
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function parseEvidenceParam(value: SearchParamValue): EvidenceSelection | null {
+  const normalizedValue = normalizeParam(value);
+  if (!normalizedValue) {
+    return null;
+  }
+  const separatorIndex = normalizedValue.indexOf(":");
+  if (separatorIndex < 1) {
+    return null;
+  }
+  const kind = normalizedValue.slice(0, separatorIndex);
+  const id = normalizedValue.slice(separatorIndex + 1);
+  if ((kind === "delivery" || kind === "retry" || kind === "job" || kind === "callback") && id) {
+    return { kind, id };
+  }
+  return null;
+}
+
+function evidenceHref({
+  handoffId,
+  artifactId,
+  kind,
+  id,
+}: {
+  handoffId: string | null | undefined;
+  artifactId: string | null | undefined;
+  kind: EvidenceKind;
+  id: string;
+}) {
+  const params = new URLSearchParams();
+  if (handoffId) {
+    params.set("handoffId", handoffId);
+  }
+  if (artifactId) {
+    params.set("artifactId", artifactId);
+  }
+  params.set("evidence", `${kind}:${id}`);
+  return `/hr-admin/payroll-handoff?${params.toString()}`;
 }
 
 function titleCase(value: string) {
@@ -52,6 +103,26 @@ function formatFileSize(value: number) {
     return `${value} B`;
   }
   return `${(value / 1024).toFixed(1)} KB`;
+}
+
+function formatEvidenceValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "None";
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) {
+      return "None";
+    }
+    return value.map((item): string => formatEvidenceValue(item)).join(", ");
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "Configured";
+  }
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -102,6 +173,16 @@ function artifactAmount(artifact: HrAdminPayrollOutputArtifact | null) {
   return artifact.totals_snapshot.net_pay ?? artifact.totals_snapshot.statutory_total ?? artifact.totals_snapshot.gross_earnings ?? "0.00";
 }
 
+function artifactValueLabel(artifact: HrAdminPayrollOutputArtifact | null) {
+  if (!artifact) {
+    return formatMoney(0);
+  }
+  if (artifact.kind === "provider_audit_pack") {
+    return "Locked evidence";
+  }
+  return formatMoney(artifactAmount(artifact));
+}
+
 function snapshotText(snapshot: Record<string, unknown>, key: string, fallback = "Not configured") {
   const value = snapshot[key];
   return typeof value === "string" && value.trim() ? value : fallback;
@@ -115,8 +196,50 @@ function snapshotList(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
 }
 
+function responseRuntimeEvents(job: HrAdminPayrollProviderJob) {
+  return snapshotList(snapshotRecord(job.response_snapshot).runtime_events);
+}
+
+function EvidenceRows({ rows }: { rows: EvidenceRow[] }) {
+  return (
+    <div className="detail-grid">
+      {rows.map((row) => (
+        <div className="detail-row" key={row.label}>
+          <span className="detail-label">{row.label}</span>
+          <span className="detail-value">{formatEvidenceValue(row.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EvidenceBlock({
+  eyebrow,
+  title,
+  rows,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  rows?: EvidenceRow[];
+  children?: React.ReactNode;
+}) {
+  return (
+    <section className="payroll-rule-source-card payroll-handoff-audit-block">
+      <span className="workspace-card__eyebrow">{eyebrow}</span>
+      <h3>{title}</h3>
+      {rows ? <EvidenceRows rows={rows} /> : null}
+      {children}
+    </section>
+  );
+}
+
 function callbackSecuritySnapshot(event: HrAdminPayrollProviderCallbackEvent) {
   return snapshotRecord(event.verification_snapshot.callback_security);
+}
+
+function callbackSignatureAdapterSnapshot(event: HrAdminPayrollProviderCallbackEvent) {
+  return snapshotRecord(event.verification_snapshot.signature_adapter);
 }
 
 function filingSubtypeLabel(artifact: HrAdminPayrollOutputArtifact) {
@@ -147,8 +270,14 @@ function ArtifactDetail({
   const submissionContract = snapshotRecord(delivery?.request_snapshot.submission_contract ?? delivery?.config_snapshot.submission_contract);
   const certificationEvidence = snapshotRecord(delivery?.config_snapshot.certification_evidence);
   const providerRoute = snapshotRecord(delivery?.config_snapshot.provider_route);
+  const schemaMapping = snapshotRecord(submissionContract.schema_mapping ?? providerRoute.schema_mapping ?? delivery?.request_snapshot.schema_mapping);
   const providerConnectionGate = snapshotRecord(providerRoute.provider_connection_gate ?? submissionContract.provider_connection_gate);
   const executionAdapter = snapshotRecord(providerRoute.execution_adapter);
+  const httpAdapter = snapshotRecord(providerRoute.http_adapter);
+  const productionAdapter = snapshotRecord(providerRoute.production_adapter ?? submissionContract.production_adapter);
+  const bankPayout = snapshotRecord(delivery?.response_snapshot.bank_payout ?? providerRoute.bank_payout_adapter ?? submissionContract.bank_payout_adapter);
+  const accountingJournal = snapshotRecord(delivery?.response_snapshot.accounting_journal ?? providerRoute.accounting_journal_adapter ?? submissionContract.accounting_journal_adapter);
+  const statutoryFiling = snapshotRecord(delivery?.response_snapshot.statutory_filing ?? providerRoute.statutory_filing_adapter ?? submissionContract.statutory_filing_adapter);
   const retryState = snapshotRecord(delivery?.config_snapshot.retry_state);
   const deliveryRetryEvents = delivery ? retryEvents.filter((event) => event.provider_delivery_id === delivery.id) : [];
   const latestRetryEvent = deliveryRetryEvents[0] ?? null;
@@ -167,7 +296,7 @@ function ArtifactDetail({
 
       <div className="payroll-output-net-block payroll-handoff-value-block">
         <span className="workspace-card__eyebrow">Package value</span>
-        <strong>{formatMoney(artifactAmount(artifact))}</strong>
+        <strong>{artifactValueLabel(artifact)}</strong>
         <span>{artifact.file_name || artifact.artifact_key}</span>
         {artifact.download_url ? (
           <a className="button button--secondary payroll-output-download-link" href={artifact.download_url}>
@@ -212,6 +341,53 @@ function ArtifactDetail({
             <div className="detail-row"><span className="detail-label">Channel</span><span className="detail-value">{delivery.channel_ref}</span></div>
             <div className="detail-row"><span className="detail-label">Adapter</span><span className="detail-value">{snapshotText(submissionContract, "adapter_ref")}</span></div>
             <div className="detail-row"><span className="detail-label">Submission</span><span className="detail-value">{snapshotText(submissionContract, "submission_profile_ref")}</span></div>
+            {httpAdapter.endpoint_url ? (
+              <>
+                <div className="detail-row"><span className="detail-label">HTTP profile</span><span className="detail-value">{snapshotText(httpAdapter, "adapter_profile_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">HTTP method</span><span className="detail-value">{snapshotText(httpAdapter, "method", "POST")}</span></div>
+                <div className="detail-row"><span className="detail-label">HTTP transport</span><span className="detail-value">{snapshotText(httpAdapter, "transport_ref", "default")}</span></div>
+                <div className="detail-row"><span className="detail-label">HTTP auth</span><span className="detail-value">{snapshotText(httpAdapter, "auth_scheme", "none")}</span></div>
+              </>
+            ) : null}
+            {productionAdapter.adapter_pack_ref ? (
+              <>
+                <div className="detail-row"><span className="detail-label">Production pack</span><span className="detail-value">{snapshotText(productionAdapter, "adapter_pack_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Transport</span><span className="detail-value">{snapshotText(productionAdapter, "transport_mode")}</span></div>
+                <div className="detail-row"><span className="detail-label">Transport ref</span><span className="detail-value">{snapshotText(productionAdapter, "transport_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Operation</span><span className="detail-value">{snapshotText(productionAdapter, "operation_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Evidence profile</span><span className="detail-value">{snapshotText(productionAdapter, "evidence_profile_ref")}</span></div>
+              </>
+            ) : null}
+            {bankPayout.client_ref || bankPayout.payout_profile_ref ? (
+              <>
+                <div className="detail-row"><span className="detail-label">Live payout</span><span className="detail-value">{snapshotText(bankPayout, "payout_profile_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Bank client</span><span className="detail-value">{snapshotText(bankPayout, "client_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Operation</span><span className="detail-value">{snapshotText(bankPayout, "payment_operation_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Debit account</span><span className="detail-value">{snapshotText(bankPayout, "debit_account_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Payment date</span><span className="detail-value">{snapshotText(bankPayout, "payment_date")}</span></div>
+                <div className="detail-row"><span className="detail-label">UTR refs</span><span className="detail-value">{formatEvidenceValue(bankPayout.utr_refs)}</span></div>
+              </>
+            ) : null}
+            {accountingJournal.client_ref || accountingJournal.ledger_profile_ref ? (
+              <>
+                <div className="detail-row"><span className="detail-label">Live journal</span><span className="detail-value">{snapshotText(accountingJournal, "ledger_profile_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Accounting client</span><span className="detail-value">{snapshotText(accountingJournal, "client_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Operation</span><span className="detail-value">{snapshotText(accountingJournal, "journal_operation_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Company</span><span className="detail-value">{snapshotText(accountingJournal, "company_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Posting date</span><span className="detail-value">{snapshotText(accountingJournal, "posting_date")}</span></div>
+                <div className="detail-row"><span className="detail-label">Voucher refs</span><span className="detail-value">{formatEvidenceValue(accountingJournal.voucher_refs)}</span></div>
+              </>
+            ) : null}
+            {statutoryFiling.client_ref || statutoryFiling.filing_profile_ref ? (
+              <>
+                <div className="detail-row"><span className="detail-label">Live filing</span><span className="detail-value">{snapshotText(statutoryFiling, "filing_profile_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Statutory client</span><span className="detail-value">{snapshotText(statutoryFiling, "client_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Operation</span><span className="detail-value">{snapshotText(statutoryFiling, "filing_operation_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Authority</span><span className="detail-value">{snapshotText(statutoryFiling, "authority_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Registration</span><span className="detail-value">{snapshotText(statutoryFiling, "registration_ref")}</span></div>
+                <div className="detail-row"><span className="detail-label">Receipt refs</span><span className="detail-value">{formatEvidenceValue(statutoryFiling.receipt_refs)}</span></div>
+              </>
+            ) : null}
             <div className="detail-row"><span className="detail-label">External ref</span><span className="detail-value">{delivery.external_reference || "Pending"}</span></div>
             <div className="detail-row"><span className="detail-label">Retry policy</span><span className="detail-value">{delivery.retry_policy_ref}</span></div>
             <div className="detail-row"><span className="detail-label">Connection gate</span><span className="detail-value">{snapshotText(providerConnectionGate, "enforcement_mode", "warn")}</span></div>
@@ -267,6 +443,19 @@ function ArtifactDetail({
         </section>
       ) : null}
 
+      {delivery ? (
+        <section className="payroll-rule-source-card">
+          <span className="workspace-card__eyebrow">Schema mapping</span>
+          <div className="detail-grid">
+            <div className="detail-row"><span className="detail-label">Profile</span><span className="detail-value">{snapshotText(schemaMapping, "mapping_profile_ref")}</span></div>
+            <div className="detail-row"><span className="detail-label">Mode</span><span className="detail-value">{titleCase(snapshotText(schemaMapping, "enforcement_mode", "warn"))}</span></div>
+            <div className="detail-row"><span className="detail-label">Source</span><span className="detail-value">{snapshotText(schemaMapping, "source_schema_ref")}</span></div>
+            <div className="detail-row"><span className="detail-label">Target</span><span className="detail-value">{snapshotText(schemaMapping, "target_schema_ref")}</span></div>
+            <div className="detail-row"><span className="detail-label">Mapping hash</span><span className="detail-value">{snapshotText(schemaMapping, "source_hash", "Pending")}</span></div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="payroll-rule-source-card">
         <span className="workspace-card__eyebrow">Source hash</span>
         <code>{artifact.source_hash}</code>
@@ -287,20 +476,421 @@ function ArtifactDetail({
   );
 }
 
+function AuditGateList({ gates }: { gates: Record<string, unknown>[] }) {
+  if (!gates.length) {
+    return <span className="payroll-handoff-audit-empty">No gates recorded</span>;
+  }
+  return (
+    <div className="payroll-handoff-gate-list payroll-handoff-audit-gate-list">
+      {gates.slice(0, 8).map((gate, index) => (
+        <span className={gate.passed ? "is-passed" : "is-blocked"} key={`${String(gate.ref ?? "gate")}-${index}`}>
+          {String(gate.ref ?? `gate_${index + 1}`)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function AuditRuntimeEvents({ events }: { events: Record<string, unknown>[] }) {
+  if (!events.length) {
+    return <span className="payroll-handoff-audit-empty">No runtime events recorded</span>;
+  }
+  return (
+    <div className="payroll-handoff-audit-event-list">
+      {events.slice(0, 5).map((event, index) => {
+        const evidence = snapshotRecord(event.evidence);
+        return (
+          <div className="payroll-handoff-audit-event" key={`${String(event.event_type ?? "event")}-${index}`}>
+            <strong>{titleCase(String(event.event_type ?? `Runtime event ${index + 1}`))}</strong>
+            <span>{formatEvidenceValue(event.recorded_at)}</span>
+            {Object.keys(evidence).length ? <code>{formatEvidenceValue(evidence)}</code> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AuditEvidenceDetail({
+  selection,
+  selectedHandoff,
+  deliveries,
+  callbackEvents,
+  providerJobs,
+  retryEvents,
+}: {
+  selection: EvidenceSelection;
+  selectedHandoff: HrAdminPayrollFinanceHandoff | null;
+  deliveries: HrAdminPayrollProviderDelivery[];
+  callbackEvents: HrAdminPayrollProviderCallbackEvent[];
+  providerJobs: HrAdminPayrollProviderJob[];
+  retryEvents: HrAdminPayrollProviderRetryEvent[];
+}) {
+  const closeHref = selectedHandoff ? `/hr-admin/payroll-handoff?handoffId=${selectedHandoff.id}` : "/hr-admin/payroll-handoff";
+
+  if (selection.kind === "delivery") {
+    const delivery = deliveries.find((item) => item.id === selection.id);
+    if (!delivery) {
+      return null;
+    }
+    const submissionContract = snapshotRecord(delivery.request_snapshot.submission_contract ?? delivery.config_snapshot.submission_contract);
+    const providerRoute = snapshotRecord(delivery.config_snapshot.provider_route);
+    const schemaMapping = snapshotRecord(submissionContract.schema_mapping ?? providerRoute.schema_mapping ?? delivery.request_snapshot.schema_mapping);
+    const providerConnectionGate = snapshotRecord(providerRoute.provider_connection_gate ?? submissionContract.provider_connection_gate);
+    const productionAdapter = snapshotRecord(providerRoute.production_adapter ?? submissionContract.production_adapter);
+    const bankPayout = snapshotRecord(delivery.response_snapshot.bank_payout ?? providerRoute.bank_payout_adapter ?? submissionContract.bank_payout_adapter);
+    const accountingJournal = snapshotRecord(delivery.response_snapshot.accounting_journal ?? providerRoute.accounting_journal_adapter ?? submissionContract.accounting_journal_adapter);
+    const statutoryFiling = snapshotRecord(delivery.response_snapshot.statutory_filing ?? providerRoute.statutory_filing_adapter ?? submissionContract.statutory_filing_adapter);
+    const certificationEvidence = snapshotRecord(delivery.config_snapshot.certification_evidence);
+    const relatedJobs = providerJobs.filter((job) => job.provider_delivery_id === delivery.id);
+    const relatedRetryEvents = retryEvents.filter((event) => event.provider_delivery_id === delivery.id);
+    const relatedCallbacks = callbackEvents.filter((event) => event.provider_delivery_id === delivery.id);
+    return (
+      <aside className="payroll-setup-detail-panel payroll-output-detail-panel payroll-handoff-detail-panel payroll-handoff-audit-panel" aria-label="Delivery audit evidence">
+        <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+          <div>
+            <span className="workspace-card__eyebrow">Audit drilldown</span>
+            <h2>Delivery Evidence</h2>
+            <p className="section-copy section-copy-soft">{delivery.output_artifact_title}</p>
+          </div>
+          <StatusBadge status={delivery.status} />
+        </div>
+        <Link className="button button--secondary payroll-handoff-audit-close" href={closeHref}>Close evidence</Link>
+        <EvidenceBlock
+          eyebrow="Provider delivery"
+          title={delivery.provider_ref}
+          rows={[
+            { label: "Artifact", value: delivery.artifact_kind_label },
+            { label: "Channel", value: delivery.channel_ref },
+            { label: "Adapter", value: submissionContract.adapter_ref },
+            { label: "Submission", value: submissionContract.submission_profile_ref },
+            { label: "External ref", value: delivery.external_reference },
+            { label: "Payload checksum", value: delivery.payload_checksum_sha256 },
+            { label: "Attempts", value: delivery.attempt_count },
+            { label: "Retry policy", value: delivery.retry_policy_ref },
+          ]}
+        />
+        <EvidenceBlock
+          eyebrow="Schema mapping"
+          title={snapshotText(schemaMapping, "mapping_profile_ref", "Mapping pending")}
+          rows={[
+            { label: "Enforcement", value: schemaMapping.enforcement_mode ?? "warn" },
+            { label: "Source schema", value: schemaMapping.source_schema_ref },
+            { label: "Target schema", value: schemaMapping.target_schema_ref },
+            { label: "Mapping hash", value: schemaMapping.source_hash },
+            { label: "Connection mode", value: providerConnectionGate.enforcement_mode },
+            { label: "Connection status", value: providerConnectionGate.status },
+          ]}
+        />
+        {productionAdapter.adapter_pack_ref ? (
+          <EvidenceBlock
+            eyebrow="Production adapter"
+            title={snapshotText(productionAdapter, "adapter_pack_ref")}
+            rows={[
+              { label: "Transport", value: productionAdapter.transport_mode },
+              { label: "Operation", value: productionAdapter.operation_ref },
+              { label: "Domain contract", value: productionAdapter.domain_contract_ref },
+              { label: "Evidence profile", value: productionAdapter.evidence_profile_ref },
+              { label: "Credential ref", value: productionAdapter.requires_credential_ref },
+              { label: "Certified connection", value: productionAdapter.requires_certified_connection },
+            ]}
+          />
+        ) : null}
+        {bankPayout.client_ref || bankPayout.payout_profile_ref ? (
+          <EvidenceBlock
+            eyebrow="Bank payout"
+            title={snapshotText(bankPayout, "payout_profile_ref")}
+            rows={[
+              { label: "Client", value: bankPayout.client_ref },
+              { label: "Operation", value: bankPayout.payment_operation_ref },
+              { label: "Debit account", value: bankPayout.debit_account_ref },
+              { label: "Payment date", value: bankPayout.payment_date },
+              { label: "Total", value: bankPayout.total_amount },
+              { label: "Rows", value: bankPayout.payout_row_count },
+              { label: "Accepted", value: bankPayout.accepted_count },
+              { label: "Rejected", value: bankPayout.rejected_count },
+              { label: "UTR refs", value: bankPayout.utr_refs },
+              { label: "Evidence refs", value: bankPayout.evidence_refs },
+              { label: "Failure taxonomy", value: bankPayout.failure_taxonomy_ref },
+            ]}
+          />
+        ) : null}
+        {accountingJournal.client_ref || accountingJournal.ledger_profile_ref ? (
+          <EvidenceBlock
+            eyebrow="Accounting journal"
+            title={snapshotText(accountingJournal, "ledger_profile_ref")}
+            rows={[
+              { label: "Client", value: accountingJournal.client_ref },
+              { label: "Posting profile", value: accountingJournal.posting_profile_ref },
+              { label: "Operation", value: accountingJournal.journal_operation_ref },
+              { label: "Company", value: accountingJournal.company_ref },
+              { label: "Books", value: accountingJournal.books_ref },
+              { label: "Posting date", value: accountingJournal.posting_date },
+              { label: "Total", value: accountingJournal.total_amount },
+              { label: "Rows", value: accountingJournal.journal_row_count },
+              { label: "Posted", value: accountingJournal.posted_count },
+              { label: "Rejected", value: accountingJournal.rejected_count },
+              { label: "Voucher refs", value: accountingJournal.voucher_refs },
+              { label: "Document refs", value: accountingJournal.document_refs },
+              { label: "Evidence refs", value: accountingJournal.evidence_refs },
+              { label: "Failure taxonomy", value: accountingJournal.failure_taxonomy_ref },
+            ]}
+          />
+        ) : null}
+        {statutoryFiling.client_ref || statutoryFiling.filing_profile_ref ? (
+          <EvidenceBlock
+            eyebrow="Statutory filing"
+            title={snapshotText(statutoryFiling, "filing_profile_ref")}
+            rows={[
+              { label: "Client", value: statutoryFiling.client_ref },
+              { label: "Operation", value: statutoryFiling.filing_operation_ref },
+              { label: "Filing type", value: statutoryFiling.filing_type_ref },
+              { label: "Authority", value: statutoryFiling.authority_ref },
+              { label: "Registration", value: statutoryFiling.registration_ref },
+              { label: "Calendar", value: statutoryFiling.filing_calendar_ref },
+              { label: "Due date", value: statutoryFiling.due_date },
+              { label: "Total", value: statutoryFiling.total_amount },
+              { label: "Rows", value: statutoryFiling.filing_row_count },
+              { label: "Accepted", value: statutoryFiling.accepted_count },
+              { label: "Rejected", value: statutoryFiling.rejected_count },
+              { label: "Receipt refs", value: statutoryFiling.receipt_refs },
+              { label: "Challan refs", value: statutoryFiling.challan_refs },
+              { label: "Evidence refs", value: statutoryFiling.evidence_refs },
+              { label: "Failure taxonomy", value: statutoryFiling.failure_taxonomy_ref },
+            ]}
+          />
+        ) : null}
+        <EvidenceBlock
+          eyebrow="Certification"
+          title={titleCase(snapshotText(certificationEvidence, "status", "pending"))}
+          rows={[
+            { label: "Profile", value: certificationEvidence.certification_profile_ref },
+            { label: "Provider", value: certificationEvidence.provider_ref },
+            { label: "Adapter", value: certificationEvidence.adapter_ref },
+            { label: "Evidence refs", value: certificationEvidence.evidence_refs },
+          ]}
+        />
+        <EvidenceBlock
+          eyebrow="Evidence chain"
+          title="Linked provider records"
+          rows={[
+            { label: "Jobs", value: relatedJobs.length },
+            { label: "Retries", value: relatedRetryEvents.length },
+            { label: "Callbacks", value: relatedCallbacks.length },
+            { label: "Reconciled", value: formatDate(delivery.reconciled_at) },
+            { label: "Failure", value: delivery.failure_code || "None" },
+          ]}
+        />
+      </aside>
+    );
+  }
+
+  if (selection.kind === "retry") {
+    const retryEvent = retryEvents.find((item) => item.id === selection.id);
+    if (!retryEvent) {
+      return null;
+    }
+    const decision = snapshotRecord(retryEvent.decision_snapshot);
+    const request = snapshotRecord(retryEvent.request_snapshot);
+    const relatedJob = providerJobs.find((job) => job.retry_event_id === retryEvent.id);
+    return (
+      <aside className="payroll-setup-detail-panel payroll-output-detail-panel payroll-handoff-detail-panel payroll-handoff-audit-panel" aria-label="Retry audit evidence">
+        <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+          <div>
+            <span className="workspace-card__eyebrow">Audit drilldown</span>
+            <h2>Retry Evidence</h2>
+            <p className="section-copy section-copy-soft">{retryEvent.output_artifact_title}</p>
+          </div>
+          <StatusBadge status={retryEvent.status} />
+        </div>
+        <Link className="button button--secondary payroll-handoff-audit-close" href={closeHref}>Close evidence</Link>
+        <EvidenceBlock
+          eyebrow="Retry decision"
+          title={retryEvent.retry_policy_ref}
+          rows={[
+            { label: "Failure taxonomy", value: retryEvent.failure_taxonomy_ref },
+            { label: "Failure category", value: retryEvent.failure_category_ref },
+            { label: "Failure code", value: retryEvent.failure_code },
+            { label: "Reason", value: retryEvent.retry_reason || retryEvent.failure_reason },
+            { label: "Attempt", value: retryEvent.attempt_number },
+            { label: "Scheduled", value: formatDate(retryEvent.scheduled_for) },
+            { label: "Executed", value: formatDate(retryEvent.executed_at) },
+          ]}
+        />
+        <EvidenceBlock
+          eyebrow="Decision snapshot"
+          title={titleCase(formatEvidenceValue(decision.state ?? retryEvent.status))}
+          rows={[
+            { label: "Eligible", value: decision.eligible },
+            { label: "Max attempts", value: decision.max_attempts },
+            { label: "Current attempt", value: decision.current_attempt_count },
+            { label: "Next attempt", value: decision.next_attempt_number },
+            { label: "Backoff seconds", value: decision.backoff_seconds },
+            { label: "Requested for", value: request.requested_for },
+          ]}
+        />
+        {relatedJob ? (
+          <EvidenceBlock
+            eyebrow="Queue job"
+            title={relatedJob.queue_policy_ref}
+            rows={[
+              { label: "Worker", value: relatedJob.worker_profile_ref },
+              { label: "Status", value: relatedJob.status_label },
+              { label: "Recovered", value: relatedJob.recovery_count },
+              { label: "Last recovery", value: formatDate(relatedJob.last_recovered_at) },
+              { label: "Runtime", value: snapshotRecord(relatedJob.response_snapshot).queue_runtime_profile_ref },
+            ]}
+          />
+        ) : null}
+      </aside>
+    );
+  }
+
+  if (selection.kind === "job") {
+    const job = providerJobs.find((item) => item.id === selection.id);
+    if (!job) {
+      return null;
+    }
+    const queuePolicy = snapshotRecord(job.request_snapshot.queue_policy);
+    const leaseSnapshot = snapshotRecord(job.lease_snapshot);
+    const responseSnapshot = snapshotRecord(job.response_snapshot);
+    return (
+      <aside className="payroll-setup-detail-panel payroll-output-detail-panel payroll-handoff-detail-panel payroll-handoff-audit-panel" aria-label="Queue job audit evidence">
+        <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+          <div>
+            <span className="workspace-card__eyebrow">Audit drilldown</span>
+            <h2>Queue Runtime Evidence</h2>
+            <p className="section-copy section-copy-soft">{job.job_kind_label}</p>
+          </div>
+          <StatusBadge status={job.status} />
+        </div>
+        <Link className="button button--secondary payroll-handoff-audit-close" href={closeHref}>Close evidence</Link>
+        <EvidenceBlock
+          eyebrow="Queue contract"
+          title={job.queue_policy_ref}
+          rows={[
+            { label: "Worker", value: job.worker_profile_ref },
+            { label: "Provider", value: job.provider_ref },
+            { label: "Idempotency", value: job.idempotency_key },
+            { label: "Priority", value: job.priority },
+            { label: "Attempts", value: `${job.attempt_count}/${job.max_attempts}` },
+            { label: "Scheduled", value: formatDate(job.scheduled_for) },
+            { label: "Failure", value: job.failure_code || "None" },
+          ]}
+        />
+        <EvidenceBlock
+          eyebrow="Runtime policy"
+          title={snapshotText(queuePolicy, "worker_profile_ref", job.worker_profile_ref)}
+          rows={[
+            { label: "Lease seconds", value: queuePolicy.lease_seconds },
+            { label: "Heartbeat seconds", value: queuePolicy.heartbeat_seconds },
+            { label: "Max recoveries", value: queuePolicy.max_recoveries },
+            { label: "Recovery backoff", value: queuePolicy.stale_recovery_backoff_seconds },
+            { label: "Heartbeat count", value: job.heartbeat_count },
+            { label: "Recovery count", value: job.recovery_count },
+          ]}
+        />
+        <EvidenceBlock
+          eyebrow="Lease evidence"
+          title={snapshotText(leaseSnapshot, "heartbeat_profile_ref", "Lease pending")}
+          rows={[
+            { label: "Lease owner", value: job.lease_owner_ref || leaseSnapshot.lease_owner_ref },
+            { label: "Leased at", value: formatDate(job.leased_at) },
+            { label: "Leased until", value: formatDate(job.leased_until) },
+            { label: "Heartbeat at", value: formatDate(job.heartbeat_at) },
+            { label: "Recovered at", value: formatDate(job.last_recovered_at) },
+            { label: "Runtime profile", value: responseSnapshot.queue_runtime_profile_ref },
+          ]}
+        />
+        <EvidenceBlock eyebrow="Runtime events" title={titleCase(snapshotText(responseSnapshot, "last_runtime_event", "No event"))}>
+          <AuditRuntimeEvents events={responseRuntimeEvents(job)} />
+        </EvidenceBlock>
+      </aside>
+    );
+  }
+
+  const callbackEvent = callbackEvents.find((item) => item.id === selection.id);
+  if (!callbackEvent) {
+    return null;
+  }
+  const security = callbackSecuritySnapshot(callbackEvent);
+  const signatureAdapter = callbackSignatureAdapterSnapshot(callbackEvent);
+  const credentialSnapshot = snapshotRecord(signatureAdapter.credential_snapshot);
+  return (
+    <aside className="payroll-setup-detail-panel payroll-output-detail-panel payroll-handoff-detail-panel payroll-handoff-audit-panel" aria-label="Callback audit evidence">
+      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+        <div>
+          <span className="workspace-card__eyebrow">Audit drilldown</span>
+          <h2>Callback Evidence</h2>
+          <p className="section-copy section-copy-soft">{callbackEvent.output_artifact_title}</p>
+        </div>
+        <StatusBadge status={callbackEvent.status} />
+      </div>
+      <Link className="button button--secondary payroll-handoff-audit-close" href={closeHref}>Close evidence</Link>
+      <EvidenceBlock
+        eyebrow="Webhook identity"
+        title={callbackEvent.callback_verification_ref}
+        rows={[
+          { label: "Provider", value: callbackEvent.provider_ref },
+          { label: "External event", value: callbackEvent.external_event_id },
+          { label: "External ref", value: callbackEvent.external_reference },
+          { label: "Idempotency", value: callbackEvent.idempotency_key },
+          { label: "Payload checksum", value: callbackEvent.payload_checksum_sha256 },
+          { label: "Provider status", value: callbackEvent.provider_status_label },
+          { label: "Processed", value: formatDate(callbackEvent.processed_at) },
+        ]}
+      />
+      <EvidenceBlock
+        eyebrow="Signature adapter"
+        title={snapshotText(signatureAdapter, "signature_adapter_ref", "Adapter pending")}
+        rows={[
+          { label: "Algorithm", value: signatureAdapter.signature_algorithm_ref },
+          { label: "Encoding", value: signatureAdapter.signature_encoding },
+          { label: "Compare mode", value: signatureAdapter.compare_mode },
+          { label: "Key mode", value: signatureAdapter.key_material_mode },
+          { label: "Key ref", value: signatureAdapter.signature_key_ref },
+          { label: "Credential source", value: credentialSnapshot.source_ref },
+          { label: "Credential resolved", value: credentialSnapshot.resolved },
+        ]}
+      />
+      <EvidenceBlock
+        eyebrow="Webhook security"
+        title={snapshotText(security, "security_policy_ref", "Security policy pending")}
+        rows={[
+          { label: "Enforcement", value: security.enforcement_mode },
+          { label: "Source IP", value: security.source_ip },
+          { label: "Replay window", value: security.replay_window_seconds },
+          { label: "Rate limit", value: security.rate_limit_policy_ref },
+          { label: "Blocking gates", value: security.blocking_gate_refs },
+        ]}
+      >
+        <AuditGateList gates={snapshotList(security.gates)} />
+      </EvidenceBlock>
+    </aside>
+  );
+}
+
 function DeliveryLedger({
   deliveries,
   callbackEvents,
+  providerJobs,
   retryEvents,
   selectedHandoff,
+  selectedEvidence,
 }: {
   deliveries: HrAdminPayrollProviderDelivery[];
   callbackEvents: HrAdminPayrollProviderCallbackEvent[];
+  providerJobs: HrAdminPayrollProviderJob[];
   retryEvents: HrAdminPayrollProviderRetryEvent[];
   selectedHandoff: HrAdminPayrollFinanceHandoff | null;
+  selectedEvidence: EvidenceSelection | null;
 }) {
   const visibleDeliveries = selectedHandoff ? deliveries.filter((item) => item.handoff_id === selectedHandoff.id) : deliveries;
   const visibleEvents = selectedHandoff ? callbackEvents.filter((item) => item.handoff_id === selectedHandoff.id) : callbackEvents;
   const visibleRetryEvents = selectedHandoff ? retryEvents.filter((item) => item.handoff_id === selectedHandoff.id) : retryEvents;
+  const visibleJobs = selectedHandoff
+    ? providerJobs.filter((job) => visibleDeliveries.some((delivery) => delivery.id === job.provider_delivery_id))
+    : providerJobs;
   return (
     <>
       <section className="payroll-setup-assignment-panel payroll-handoff-delivery-panel">
@@ -313,7 +903,11 @@ function DeliveryLedger({
         </div>
         <div className="payroll-output-handoff-grid payroll-handoff-delivery-grid">
           {visibleDeliveries.map((delivery) => (
-            <article key={delivery.id}>
+            <Link
+              className={`payroll-handoff-evidence-card ${selectedEvidence?.kind === "delivery" && selectedEvidence.id === delivery.id ? "is-selected" : ""}`}
+              href={evidenceHref({ handoffId: selectedHandoff?.id, artifactId: delivery.output_artifact_id, kind: "delivery", id: delivery.id })}
+              key={delivery.id}
+            >
               <div className="payroll-delivery-card-heading">
                 <strong>{delivery.artifact_kind_label}</strong>
                 <StatusBadge status={delivery.status} />
@@ -324,7 +918,7 @@ function DeliveryLedger({
                 <span>{delivery.external_reference || "No external ref"}</span>
                 <span>{delivery.attempt_count} attempt</span>
               </div>
-            </article>
+            </Link>
           ))}
         </div>
       </section>
@@ -339,7 +933,11 @@ function DeliveryLedger({
         </div>
         <div className="payroll-output-handoff-grid payroll-handoff-delivery-grid">
           {visibleRetryEvents.map((event) => (
-            <article key={event.id}>
+            <Link
+              className={`payroll-handoff-evidence-card ${selectedEvidence?.kind === "retry" && selectedEvidence.id === event.id ? "is-selected" : ""}`}
+              href={evidenceHref({ handoffId: selectedHandoff?.id, artifactId: event.output_artifact_id, kind: "retry", id: event.id })}
+              key={event.id}
+            >
               <div className="payroll-delivery-card-heading">
                 <strong>{event.status_label}</strong>
                 <StatusBadge status={event.status} />
@@ -350,7 +948,57 @@ function DeliveryLedger({
                 <span>{event.failure_category_ref || event.failure_code || "Classified"}</span>
                 <span>Attempt {event.attempt_number}</span>
               </div>
-            </article>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="payroll-setup-assignment-panel payroll-handoff-job-panel">
+        <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+          <div>
+            <span className="workspace-card__eyebrow">Queue orchestration</span>
+            <h2>Provider jobs</h2>
+          </div>
+          <span className="payroll-setup-count">{visibleJobs.length} jobs</span>
+        </div>
+        <div className="payroll-output-handoff-grid payroll-handoff-delivery-grid">
+          {visibleJobs.map((job) => (
+            <Link
+              className={`payroll-handoff-evidence-card payroll-handoff-job-card ${selectedEvidence?.kind === "job" && selectedEvidence.id === job.id ? "is-selected" : ""}`}
+              href={evidenceHref({
+                handoffId: selectedHandoff?.id,
+                artifactId: visibleDeliveries.find((delivery) => delivery.id === job.provider_delivery_id)?.output_artifact_id,
+                kind: "job",
+                id: job.id,
+              })}
+              key={job.id}
+            >
+              <div className="payroll-delivery-card-heading">
+                <strong>{job.job_kind_label}</strong>
+                <StatusBadge status={job.status} />
+              </div>
+              <span>{job.provider_ref || "Provider pending"}</span>
+              <code>{job.queue_policy_ref}</code>
+              <div className="payroll-handoff-security-strip">
+                <span>Worker profile</span>
+                <strong>{job.worker_profile_ref}</strong>
+                <em>{job.lease_owner_ref || "Lease open"}</em>
+              </div>
+              <div className="payroll-input-run-card__counts">
+                <span>Attempt {job.attempt_count}/{job.max_attempts}</span>
+                <span>{formatDate(job.scheduled_for)}</span>
+              </div>
+              <div className="payroll-input-run-card__counts">
+                <span>Heartbeat {job.heartbeat_count}</span>
+                <span>Recovered {job.recovery_count}</span>
+              </div>
+              <div className="payroll-handoff-security-strip">
+                <span>Last heartbeat</span>
+                <strong>{formatDate(job.heartbeat_at)}</strong>
+                <em>{job.last_recovered_at ? `Recovered ${formatDate(job.last_recovered_at)}` : "No recovery"}</em>
+              </div>
+              <code>{String(snapshotRecord(job.lease_snapshot).heartbeat_profile_ref ?? snapshotRecord(job.response_snapshot).queue_runtime_profile_ref ?? "payroll.provider_queue.runtime.pending")}</code>
+            </Link>
           ))}
         </div>
       </section>
@@ -366,10 +1014,15 @@ function DeliveryLedger({
         <div className="payroll-output-handoff-grid payroll-handoff-delivery-grid">
           {visibleEvents.map((event) => {
             const security = callbackSecuritySnapshot(event);
+            const signatureAdapter = callbackSignatureAdapterSnapshot(event);
             const securityGates = snapshotList(security.gates);
             const blockingGateRefs = Array.isArray(security.blocking_gate_refs) ? security.blocking_gate_refs : [];
             return (
-              <article className="payroll-handoff-callback-card" key={event.id}>
+              <Link
+                className={`payroll-handoff-evidence-card payroll-handoff-callback-card ${selectedEvidence?.kind === "callback" && selectedEvidence.id === event.id ? "is-selected" : ""}`}
+                href={evidenceHref({ handoffId: selectedHandoff?.id, artifactId: event.output_artifact_id, kind: "callback", id: event.id })}
+                key={event.id}
+              >
                 <div className="payroll-delivery-card-heading">
                   <strong>{event.status_label}</strong>
                   <StatusBadge status={event.provider_status} />
@@ -380,6 +1033,11 @@ function DeliveryLedger({
                   <span>Webhook security</span>
                   <strong>{snapshotText(security, "security_policy_ref", "Policy pending")}</strong>
                   <em>{titleCase(snapshotText(security, "enforcement_mode", "warn"))}</em>
+                </div>
+                <div className="payroll-handoff-security-strip">
+                  <span>Signature adapter</span>
+                  <strong>{snapshotText(signatureAdapter, "signature_adapter_ref", "Adapter pending")}</strong>
+                  <em>{snapshotText(signatureAdapter, "signature_algorithm_ref", "Algorithm pending")}</em>
                 </div>
                 <div className="payroll-handoff-gate-list">
                   {securityGates.slice(0, 4).map((gate) => (
@@ -393,7 +1051,7 @@ function DeliveryLedger({
                   <span>{event.external_event_id || event.external_reference}</span>
                   <span>{formatDate(event.processed_at)}</span>
                 </div>
-              </article>
+              </Link>
             );
           })}
         </div>
@@ -406,6 +1064,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
   const currentParams = (await searchParams) ?? {};
   const selectedHandoffId = normalizeParam(currentParams.handoffId);
   const selectedArtifactId = normalizeParam(currentParams.artifactId);
+  const selectedEvidence = parseEvidenceParam(currentParams.evidence);
   const result = await getHrAdminPayrollFinanceHandoffSetup();
   const setup = result.data;
   const selectedHandoff = setup.handoffs.find((item) => item.id === selectedHandoffId) ?? setup.handoffs[0] ?? null;
@@ -418,6 +1077,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
     const subtype = artifact.config_snapshot.artifact_subtype;
     return artifact.kind === "statutory_report" && (subtype === "statutory_return" || subtype === "statutory_challan");
   });
+  const auditPackArtifacts = visibleArtifacts.filter((artifact) => artifact.kind === "provider_audit_pack");
 
   return (
     <main className="shell shell--payroll-setup shell--payroll-outputs shell--payroll-handoff">
@@ -455,6 +1115,8 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
           <MetricTile className="metric-tile-soft" label="Filing files" value={setup.summary.statutory_filing_artifact_count ?? 0} trend={`${setup.summary.statutory_filing_count ?? 0} filing calendars`} />
           <MetricTile className="metric-tile-soft" label="Callbacks" value={setup.summary.provider_callback_event_count ?? 0} trend={`${setup.summary.processed_provider_callback_event_count ?? 0} processed`} />
           <MetricTile className="metric-tile-soft" label="Retries" value={setup.summary.provider_retry_event_count ?? 0} trend={`${setup.summary.scheduled_provider_retry_event_count ?? 0} scheduled`} />
+          <MetricTile className="metric-tile-soft" label="Provider jobs" value={setup.summary.provider_job_count ?? 0} trend={`${setup.summary.queued_provider_job_count ?? 0} queued / ${setup.summary.recovered_provider_job_count ?? 0} recovered`} />
+          <MetricTile className="metric-tile-soft" label="Audit packs" value={setup.summary.provider_audit_pack_count ?? auditPackArtifacts.length} trend="Locked evidence" />
           <MetricTile className="metric-tile-soft" label="Reconciled" value={setup.summary.reconciled_delivery_count} trend={`${setup.summary.submitted_delivery_count} submitted`} />
           <MetricTile className="metric-tile-soft" label="Latest net pay" value={formatMoney(setup.summary.latest_net_pay)} trend="Handoff total" />
         </div>
@@ -517,7 +1179,46 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                 <strong>{String(summary.reconciled_delivery_count ?? setup.summary.reconciled_delivery_count ?? 0)}</strong>
                 <span>{String(summary.failed_delivery_count ?? 0)} failed</span>
               </div>
+              <div>
+                <span className="workspace-card__eyebrow">Audit pack</span>
+                <strong>{auditPackArtifacts.length ? "Locked" : "Pending"}</strong>
+                <form action={`/api/v1/hr-admin/payroll-finance-handoffs/${selectedHandoff?.id ?? ""}/generate-audit-pack/`} method="post">
+                  <button className="button button--secondary payroll-handoff-inline-button" type="submit">Generate pack</button>
+                </form>
+              </div>
             </div>
+
+            {auditPackArtifacts.length ? (
+              <section className="payroll-setup-assignment-panel payroll-handoff-audit-pack-panel">
+                <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+                  <div>
+                    <span className="workspace-card__eyebrow">Locked evidence</span>
+                    <h2>Provider audit pack</h2>
+                  </div>
+                  <span className="payroll-setup-count">{auditPackArtifacts.length} pack</span>
+                </div>
+                <div className="payroll-handoff-filing-grid">
+                  {auditPackArtifacts.map((artifact) => (
+                    <Link
+                      className={`payroll-handoff-filing-card payroll-handoff-audit-pack-card ${selectedArtifact?.id === artifact.id ? "is-selected" : ""}`}
+                      href={`/hr-admin/payroll-handoff?handoffId=${selectedHandoff?.id ?? ""}&artifactId=${artifact.id}`}
+                      key={artifact.id}
+                    >
+                      <div className="payroll-delivery-card-heading">
+                        <strong>{artifact.title}</strong>
+                        <StatusBadge status={artifact.status} />
+                      </div>
+                      <span>{String(artifact.totals_snapshot.delivery_count ?? 0)} deliveries / {String(artifact.totals_snapshot.provider_job_count ?? 0)} jobs</span>
+                      <code>{artifact.output_profile_ref}</code>
+                      <div className="payroll-input-run-card__counts">
+                        <span>hash {String(artifact.totals_snapshot.evidence_checksum_sha256 ?? artifact.checksum_sha256).slice(0, 12)}</span>
+                        <span>{artifact.retention_policy_ref}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <section className="payroll-setup-assignment-panel payroll-handoff-profile-panel">
               <div className="payroll-setup-panel__header">
@@ -606,7 +1307,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                         </td>
                         <td><StatusBadge status={artifact.kind} /></td>
                         <td><code>{artifact.output_profile_ref}</code></td>
-                        <td>{formatMoney(artifactAmount(artifact))}</td>
+                        <td>{artifactValueLabel(artifact)}</td>
                         <td><StatusBadge status={artifact.status} /></td>
                       </tr>
                     ))}
@@ -615,10 +1316,28 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
               </div>
             </div>
 
-            <DeliveryLedger deliveries={setup.deliveries} callbackEvents={setup.callback_events} retryEvents={setup.retry_events} selectedHandoff={selectedHandoff} />
+            <DeliveryLedger
+              deliveries={setup.deliveries}
+              callbackEvents={setup.callback_events}
+              providerJobs={setup.provider_jobs}
+              retryEvents={setup.retry_events}
+              selectedHandoff={selectedHandoff}
+              selectedEvidence={selectedEvidence}
+            />
           </div>
 
-          <ArtifactDetail artifact={selectedArtifact} delivery={selectedDelivery} retryEvents={setup.retry_events} />
+          {selectedEvidence ? (
+            <AuditEvidenceDetail
+              selection={selectedEvidence}
+              selectedHandoff={selectedHandoff}
+              deliveries={setup.deliveries}
+              callbackEvents={setup.callback_events}
+              providerJobs={setup.provider_jobs}
+              retryEvents={setup.retry_events}
+            />
+          ) : (
+            <ArtifactDetail artifact={selectedArtifact} delivery={selectedDelivery} retryEvents={setup.retry_events} />
+          )}
         </div>
       </section>
     </main>

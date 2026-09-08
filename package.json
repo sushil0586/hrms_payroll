@@ -11,7 +11,12 @@
     "test:web:e2e": "pnpm --dir web test:e2e",
     "test:web:e2e:live": "pnpm --dir web test:e2e:live",
     "test:web:visual": "pnpm --dir web test:visual",
-    "test:web:browser": "pnpm --dir web test:browser"
+    "test:web:browser": "pnpm --dir web test:browser",
+    "qa:launch-signoff": "python3 scripts/run-production-launch-signoff.py",
+    "qa:launch-signoff:staging": "python3 scripts/run-production-launch-signoff.py --mode staging",
+    "qa:launch-signoff:staging-preflight": "python3 scripts/run-production-launch-signoff.py --mode staging --preflight-only",
+    "qa:staging-seed": "cd backend && ../.venv/bin/python manage.py seed_staging_launch_data --output-file ../web/qa-artifacts/staging-launch-seed/manifest.json",
+    "qa:staging-seed:cleanup": "cd backend && ../.venv/bin/python manage.py seed_staging_launch_data --cleanup --output-file ../web/qa-artifacts/staging-launch-seed/cleanup-manifest.json"
   },
   "pnpm": {
     "overrides": {
