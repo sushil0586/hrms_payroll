@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
 const API_BASE_URL = process.env.HRMS_API_BASE_URL;
+const COOKIE_SECURE =
+  process.env.HRMS_COOKIE_SECURE === undefined
+    ? process.env.NODE_ENV === "production"
+    : process.env.HRMS_COOKIE_SECURE === "true";
 
 export async function POST(request: Request) {
   if (!API_BASE_URL) {
@@ -36,14 +40,14 @@ export async function POST(request: Request) {
   nextResponse.cookies.set("hrms_access_token", payload.token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: COOKIE_SECURE,
     path: "/",
     maxAge: 60 * 60 * 12,
   });
   nextResponse.cookies.set("hrms_user_name", payload.user.display_name || payload.user.first_name || payload.user.username, {
     httpOnly: false,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: COOKIE_SECURE,
     path: "/",
     maxAge: 60 * 60 * 12,
   });
