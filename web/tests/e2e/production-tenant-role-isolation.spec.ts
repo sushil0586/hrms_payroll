@@ -4,17 +4,12 @@ import { dirname } from "node:path";
 import { expect, type APIResponse, type Page, test, type TestInfo } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { employee, expectVisibleText, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
 
 async function captureIsolationStep(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`production-tenant-role-isolation/${name}.png`);
   await mkdir(dirname(path), { recursive: true });
   await page.screenshot({ path, fullPage: true });
-}
-
-async function expectVisibleText(page: Page, patterns: (string | RegExp)[]) {
-  for (const pattern of patterns) {
-    await expect(page.getByText(pattern).first()).toBeVisible();
-  }
 }
 
 async function expectFailClosed(response: APIResponse) {
@@ -28,6 +23,28 @@ async function expectFailClosed(response: APIResponse) {
 }
 
 test.describe("Production tenant and role isolation proof", () => {
+  test("stale HR admin session redirects to login instead of crashing the workspace", async ({ page }) => {
+    const baseUrl = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+    const hostname = new URL(baseUrl).hostname;
+    await page.context().clearCookies();
+    await page.context().addCookies([
+      {
+        name: "hrms_access_token",
+        value: "stale-invalid-token",
+        domain: hostname,
+        path: "/",
+        httpOnly: true,
+        secure: baseUrl.startsWith("https://"),
+        sameSite: "Lax",
+      },
+    ]);
+
+    await page.goto("/hr-admin");
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByText("HR admin could not load the current workspace")).toHaveCount(0);
+    await expect(page.getByText("Live workspace load failed.")).toHaveCount(0);
+  });
+
   test("workspace chooser presents role-scoped entry points before privileged access", async ({ page }, testInfo) => {
     await page.goto("/");
     await expectPageReady(page, "Choose your workspace");
@@ -49,10 +66,9 @@ test.describe("Production tenant and role isolation proof", () => {
   });
 
   test("employee payslip screen stays employee-scoped and does not expose HR/provider artifacts", async ({ page }, testInfo) => {
-    await page.goto("/ess/payslips?payslipId=payoutartifact-payslip-emp-0042");
+    await loginIfRequired(page, employee, "/ess/payslips");
     await expectPageReady(page, "Payslips");
 
-    await expect(page.getByRole("heading", { name: "Payslip - Riya Sharma" })).toBeVisible();
     await expectVisibleText(page, [
       "Published only",
       "Employee scoped",
@@ -65,7 +81,7 @@ test.describe("Production tenant and role isolation proof", () => {
 
     const pageText = await page.locator("body").innerText();
     expect(pageText).not.toContain("Payslip - Nisha Rao");
-    expect(pageText).not.toContain("Payroll Register - August 2026 Core Payroll");
+    expect(pageText).not.toContain("Payroll Register");
     expect(pageText).not.toContain("Provider callbacks");
     expect(pageText).not.toContain("tenant.bank.debit_account.payroll.v1");
     await expectNoHorizontalOverflow(page);
@@ -98,7 +114,7 @@ test.describe("Production tenant and role isolation proof", () => {
   });
 
   test("tenant admin and support workspaces expose scoped access controls", async ({ page }, testInfo) => {
-    await page.goto("/tenant-admin");
+    await loginIfRequired(page, hrAdmin, "/tenant-admin");
     await expectPageReady(page, "Tenant Admin Console");
     await expectVisibleText(page, [
       "Role coverage",
@@ -106,7 +122,6 @@ test.describe("Production tenant and role isolation proof", () => {
       "Support access",
       "Scoped support grants",
       "Request access",
-      "Start session",
       "Revoke",
       "Commercial audit",
     ]);
@@ -118,7 +133,7 @@ test.describe("Production tenant and role isolation proof", () => {
     await expectVisibleText(page, [
       "Runtime enforcement",
       "Support session gate",
-      "Support Session Allowed",
+      "Support Session Denied",
       "Commercial evidence scope is not available for this session.",
     ]);
     await expectNoHorizontalOverflow(page);

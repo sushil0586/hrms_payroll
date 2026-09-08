@@ -53,6 +53,79 @@ function statusBadgeClass(status: string) {
   return "readiness-badge readiness-badge--blocked";
 }
 
+function SupportDomainSnapshotDeniedPage({
+  tenantCode,
+  domainRef,
+  sessionRef,
+}: {
+  tenantCode: string;
+  domainRef: string;
+  sessionRef: string;
+}) {
+  return (
+    <main className="shell shell--workspace">
+      <PageIntro
+        eyebrow="Live support diagnostics"
+        title="Support Domain Snapshot"
+        description="Read-only tenant diagnostics for approved, time-boxed support sessions."
+        actions={
+          <>
+            <Link className="button button--secondary" href={`/support?tenant_code=${tenantCode}&session_ref=${sessionRef}`}>
+              Session console
+            </Link>
+            <Link className="button button--primary" href="/tenant-admin">
+              Tenant console
+            </Link>
+          </>
+        }
+        pills={[tenantCode, titleCase(domainRef), "Support Session Denied"]}
+        showPills
+      />
+
+      <section className="section">
+        <div className="metric-grid-modern">
+          <MetricTile label="Session" value="Denied" trend="Support access required" />
+          <MetricTile label="Domain" value={titleCase(domainRef)} trend="Scope-bound" />
+          <MetricTile label="Snapshot count" value="0" trend="Hidden" />
+          <MetricTile label="Agent" value="Not allowed" trend={sessionRef} valueClassName="support-session-metric-value" />
+        </div>
+      </section>
+
+      <section className="section support-session-grid">
+        <div className="panel-card-soft tenant-console-panel">
+          <div className="tenant-console-panel__header">
+            <div>
+              <span className="workspace-card__eyebrow">Runtime enforcement</span>
+              <h2>Scope-bound snapshot</h2>
+            </div>
+            <span className={statusBadgeClass("blocked")}>Support Session Denied</span>
+          </div>
+          <div className="tenant-console-list">
+            <div className="tenant-console-row">
+              <div>
+                <strong>{titleCase(domainRef)}</strong>
+                <span>Domain diagnostics stay hidden until a matching tenant-approved support grant is active.</span>
+              </div>
+              <span className="record-chip">Read only</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="panel-card-soft tenant-console-panel">
+          <div className="tenant-console-panel__header">
+            <div>
+              <span className="workspace-card__eyebrow">Status counts</span>
+              <h2>Operational mix</h2>
+            </div>
+            <span className="record-chip">Hidden</span>
+          </div>
+          <p className="tenant-console-empty">Payroll Support scope is not available for this session.</p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default async function SupportDomainSnapshotPage({ searchParams }: PageProps) {
   const currentParams = (await searchParams) ?? {};
   const tenantCode = normalizeParam(currentParams.tenant_code) || "northstar-foods";
@@ -62,7 +135,10 @@ export default async function SupportDomainSnapshotPage({ searchParams }: PagePr
     tenant_code: tenantCode,
     domain_ref: domainRef,
     session_ref: sessionRef,
-  });
+  }).catch(() => null);
+  if (!result) {
+    return <SupportDomainSnapshotDeniedPage tenantCode={tenantCode} domainRef={domainRef} sessionRef={sessionRef} />;
+  }
   const data = result.data;
   const actorLabel = data.support_session.actor_identifier.split("@")[0] || data.support_session.actor_identifier || "Unknown";
   const summary = objectFromRecord(data.snapshot, "summary");

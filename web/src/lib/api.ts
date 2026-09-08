@@ -92,8 +92,10 @@ import type {
 } from "@/lib/types";
 import { API_BASE_URL, BEARER_TOKEN, DEMO_DATA_ENABLED } from "@/lib/runtime-flags";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 type ApiState = "live" | "demo";
+const LOGIN_PATH = "/login";
 
 async function getAccessToken() {
   const cookieStore = await cookies();
@@ -115,7 +117,7 @@ async function apiGet<T>(path: string): Promise<{ data: T; state: ApiState }> {
 
   const token = await getAccessToken();
   if (!token) {
-    throw buildApiError(path, "No access token is available for this workspace request.");
+    redirect(LOGIN_PATH);
   }
 
   try {
@@ -125,6 +127,10 @@ async function apiGet<T>(path: string): Promise<{ data: T; state: ApiState }> {
       },
       cache: "no-store",
     });
+
+    if (result.status === 401) {
+      redirect(LOGIN_PATH);
+    }
 
     if (!result.ok) {
       throw buildApiError(path, `Live API request failed with status ${result.status}.`);

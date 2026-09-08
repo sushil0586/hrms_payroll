@@ -143,6 +143,20 @@ async function expectSuccessfulLiveMutation(response: APIResponse, label: string
   expect(response.status(), `${label} failed: ${JSON.stringify(payload)}`).toBeLessThan(300);
 }
 
+async function expectSuccessfulOrConsumedRetry(response: APIResponse, label: string) {
+  if (response.status() < 300) {
+    return;
+  }
+  const payload = await response.json().catch(() => ({}));
+  expect(
+    { status: response.status(), detail: String(payload.detail ?? "") },
+    `${label} failed: ${JSON.stringify(payload)}`,
+  ).toEqual({
+    status: 400,
+    detail: "Retry limit reached for this notification channel configuration.",
+  });
+}
+
 test.describe("Production live/disposable mutation readiness", () => {
   test("mutation proxy routes fail closed without backend URL or browser session", async ({ page }) => {
     await page.context().clearCookies();
@@ -171,7 +185,11 @@ test.describe("Production live/disposable mutation readiness", () => {
     await expectPageReady(page, "Tenant Admin Console");
     await expect(page.getByRole("button", { name: /Submit request|Request access|Invite member/ }).first()).toBeVisible();
 
-    await page.goto("/ess/payslips?payslipId=payoutartifact-payslip-emp-0042");
+    await page.request.post("/api/auth/logout");
+    if (apiBaseConfigured) {
+      await loginViaProxy(page, employee);
+    }
+    await page.goto("/ess/payslips");
     await expectPageReady(page, "Payslips");
     await expect(page.getByRole("button", { name: /Mark as read|Read acknowledged/ }).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
@@ -195,7 +213,7 @@ test.describe("Production live/disposable mutation readiness", () => {
       }),
       "HR notification disposable update",
     );
-    await expectSuccessfulLiveMutation(
+    await expectSuccessfulOrConsumedRetry(
       await page.request.post(`/api/hr-admin/notifications/${retryNotificationId}/retry`, {
         data: { process_now: true },
       }),

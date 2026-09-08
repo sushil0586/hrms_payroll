@@ -5,6 +5,7 @@ import { expect, type Page, test, type TestInfo } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import type { RouteExpectation } from "../helpers/routes";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 type LaunchViewport = {
   label: string;
@@ -31,18 +32,18 @@ const launchRoutes: RouteExpectation[] = [
   { path: "/hr-admin", heading: "Control center" },
   { path: "/hr-admin/payroll-readiness", heading: "Payroll Readiness" },
   { path: "/hr-admin/payroll-inputs", heading: "Payroll Inputs" },
-  { path: "/hr-admin/payroll-calculations?runId=payrun-aug-2026-core", heading: "Payroll Calculations" },
-  { path: "/hr-admin/payroll-review?runId=payrun-aug-2026-core", heading: "Payroll Review" },
-  { path: "/hr-admin/payroll-outputs?batchId=payoutbatch-aug-2026-core&artifactId=payoutartifact-payslip-emp-0001", heading: "Payroll Outputs" },
-  { path: "/hr-admin/payroll-handoff?handoffId=payroll-handoff-aug-2026-core&deliveryId=provider-delivery-bank-aug-2026-core", heading: "Payroll Handoff" },
+  { path: "/hr-admin/payroll-calculations", heading: "Payroll Calculations" },
+  { path: "/hr-admin/payroll-review", heading: "Payroll Review" },
+  { path: "/hr-admin/payroll-outputs", heading: "Payroll Outputs" },
+  { path: "/hr-admin/payroll-handoff", heading: "Payroll Handoff" },
   { path: "/hr-admin/payroll-providers", heading: "Payroll Providers" },
   { path: "/hr-admin/notifications?retry_state=retry_ready", heading: "Notification queue" },
   { path: "/hr-admin/notification-delivery", heading: "Notification delivery" },
   { path: "/tenant-admin", heading: "Tenant Admin Console" },
   { path: "/tenant-admin/security-readiness", heading: "Enterprise Security Readiness" },
   { path: "/support", heading: "Support Console" },
-  { path: "/ess/payslips?payslipId=payoutartifact-payslip-emp-0042", heading: "Payslips" },
-  { path: "/ess/notifications?subject_type=payroll_payslip&itemId=n-5", heading: "Notifications" },
+  { path: "/ess/payslips", heading: "Payslips" },
+  { path: "/ess/notifications?subject_type=payroll_payslip", heading: "Notifications" },
   { path: "/mss/approvals", heading: "Manager inbox" },
 ];
 
@@ -171,7 +172,11 @@ test.describe("Production responsive visual launch gate", () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
       for (const route of launchRoutes) {
-        await page.goto(route.path);
+        if (route.path === "/") {
+          await page.goto(route.path);
+        } else {
+          await gotoAuthenticated(page, route.path);
+        }
         await expectPageReady(page, route.heading);
         await expectNoHorizontalOverflow(page);
         const issues = await collectLayoutIssues(page);

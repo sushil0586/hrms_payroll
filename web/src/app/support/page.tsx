@@ -43,6 +43,71 @@ function statusBadgeClass(status: string) {
   return "readiness-badge readiness-badge--blocked";
 }
 
+function SupportSessionDeniedPage({ tenantCode, scopeRef, sessionRef }: { tenantCode: string; scopeRef: string; sessionRef: string }) {
+  return (
+    <main className="shell shell--workspace">
+      <PageIntro
+        eyebrow="Live support session"
+        title="Support Console"
+        description="Scoped tenant posture for approved, time-boxed support sessions."
+        actions={
+          <>
+            <Link className="button button--secondary" href="/">
+              Workspaces
+            </Link>
+            <Link className="button button--primary" href="/tenant-admin">
+              Tenant console
+            </Link>
+          </>
+        }
+        pills={[tenantCode, "Support Session Denied", titleCase(scopeRef)]}
+        showPills
+      />
+
+      <section className="section">
+        <div className="metric-grid-modern">
+          <MetricTile label="Session" value="Denied" trend={titleCase(scopeRef)} />
+          <MetricTile label="Tenant" value={tenantCode} trend="Support access required" />
+          <MetricTile label="Agent" value="Not allowed" trend={sessionRef} valueClassName="support-session-metric-value" />
+          <MetricTile label="Expires" value="Not granted" trend="No active session" />
+        </div>
+      </section>
+
+      <section className="section support-session-grid">
+        <div className="panel-card-soft tenant-console-panel">
+          <div className="tenant-console-panel__header">
+            <div>
+              <span className="workspace-card__eyebrow">Runtime enforcement</span>
+              <h2>Support session gate</h2>
+            </div>
+            <span className={statusBadgeClass("blocked")}>Support Session Denied</span>
+          </div>
+          <div className="tenant-console-list">
+            <div className="tenant-console-row">
+              <div>
+                <strong>No active support grant matches this session.</strong>
+                <span>Tenant diagnostics stay hidden until a tenant-approved support session is active.</span>
+              </div>
+              <span className="record-chip support-session-method-chip">GET</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="panel-card-soft tenant-console-panel">
+          <div className="tenant-console-panel__header">
+            <div>
+              <span className="workspace-card__eyebrow">Commercial evidence</span>
+              <h2>Not granted</h2>
+            </div>
+            <span className="record-chip">Hidden</span>
+          </div>
+          <p className="tenant-console-empty">Commercial evidence scope is not available for this session.</p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default async function SupportConsolePage({ searchParams }: PageProps) {
   const currentParams = (await searchParams) ?? {};
   const tenantCode = normalizeParam(currentParams.tenant_code) || "northstar-foods";
@@ -52,7 +117,10 @@ export default async function SupportConsolePage({ searchParams }: PageProps) {
     tenant_code: tenantCode,
     scope_ref: scopeRef,
     session_ref: sessionRef,
-  });
+  }).catch(() => null);
+  if (!result) {
+    return <SupportSessionDeniedPage tenantCode={tenantCode} scopeRef={scopeRef} sessionRef={sessionRef} />;
+  }
   const data = result.data;
   const account = data.account;
   const configurationHealth = data.configuration_health;
