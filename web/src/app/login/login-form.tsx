@@ -15,13 +15,20 @@ export function LoginForm() {
     setIsSubmitting(true);
     setError("");
 
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ identifier, password }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ identifier, password }),
+      });
+    } catch {
+      setError("Unable to reach the authentication service.");
+      setIsSubmitting(false);
+      return;
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {

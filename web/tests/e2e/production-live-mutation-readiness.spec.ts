@@ -72,7 +72,7 @@ const unauthenticatedMutationProbes: MutationProbe[] = [
     method: "post",
     path: "/api/tenant-admin/change-requests",
     data: {
-      request_type: "configuration_change",
+      request_type: "billing_contact",
       title: "PW_TEST unauthenticated mutation probe",
       description: "This request should not be accepted without a valid session.",
       target_ref: "pw-test",
@@ -154,6 +154,10 @@ test.describe("Production live/disposable mutation readiness", () => {
   });
 
   test("mutation-capable screens expose controls without silently mutating demo data", async ({ page }) => {
+    if (apiBaseConfigured) {
+      await loginViaProxy(page, hrAdmin);
+    }
+
     await page.goto("/hr-admin/notifications?retry_state=retry_ready");
     await expectPageReady(page, "Notification queue");
     await expect(page.getByRole("button", { name: /Retry selected/ })).toBeDisabled();
@@ -200,7 +204,7 @@ test.describe("Production live/disposable mutation readiness", () => {
     await expectSuccessfulLiveMutation(
       await page.request.post("/api/tenant-admin/change-requests", {
         data: {
-          request_type: "configuration_change",
+          request_type: "billing_contact",
           title: `PW_TEST live mutation ${Date.now()}`,
           description: "Disposable Playwright mutation-readiness request.",
           target_ref: "pw-test-live-mutation",

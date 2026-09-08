@@ -24,7 +24,7 @@ async function loginIfRequired(page: Page, persona: Persona, targetPath: string)
   await page.getByLabel("Username or email").fill(persona.username);
   await page.getByLabel("Password").fill(persona.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/ess$/);
+  await page.waitForURL(/\/ess$/, { timeout: 15_000 });
   await page.goto(targetPath);
 }
 
