@@ -934,7 +934,13 @@ Current Phase 9 progress:
 - Phase 9E provider rehearsal state: `3/3` lanes ready, `0` blocked lanes, `0` launch blockers.
 - Phase 9E residual: post-deployment provider-route backfill hotfix must be checked in; bank-account delete/archive is intentionally not part of this closure slice.
 - Evidence: `docs/qa/phase9e-final-warning-closure-2026-09-10.md`.
-- Next Phase 9 slice: check in the provider-route backfill hotfix, then run the broader staging release sign-off pack once more for final launch confidence.
+- Phase 9F full staging sign-off: done on 2026-09-10.
+- Phase 9F decision: `PILOT READY - STAGING CONTRACT PASS`.
+- Phase 9F browser result: production Playwright suites A-I passed with `32 passed` and `3 skipped`.
+- Phase 9F live staging audit state: tenant `northstar-foods` is `ready`, `can_launch: true`, `51/51` gates passed, `0` blockers, `0` warnings, and `0` release actions.
+- Phase 9F residual: real payroll provider callbacks, real identity-provider execution, real notification-provider delivery, production object-storage controls, and backup/restore/monitoring runbooks remain production-only evidence gates.
+- Evidence: `docs/qa/phase9f-full-staging-signoff-2026-09-10.md`.
+- Next Phase 9 slice: check in the test expectation updates, then move to production-readiness runbook execution for external providers and operations controls.
 
 Scope:
 
@@ -1054,6 +1060,7 @@ Current overall status:
 | 2026-09-09 | Phase 1C-A: Policy and governance master CRUD expansion | PASS, 8/8 Phase 1C-A tests; broader Phase 1 had 31/33 with affected org tests passing on targeted rerun | `docs/qa/phase1c-policy-governance-master-crud-report-2026-09-09.md` | Overall product confidence to 70% |
 | 2026-09-09 | Phase 1C-B: Salary setup CRUD expansion | PASS, 3/3 focused salary setup browser tests | `docs/qa/phase1c-salary-setup-crud-report-2026-09-09.md` | Overall product confidence to 72% |
 | 2026-09-10 | Phase 9E: Final warning closure implementation and staging certification | PASS on staging, 2/2 Phase 9E browser tests, tightened provider test pass, provider rehearsal ready, HRMS launch audit 51/51 | `docs/qa/phase9e-final-warning-closure-2026-09-10.md` | Phase 9 confidence to 98%, hotfix check-in pending |
+| 2026-09-10 | Phase 9F: Full staging launch sign-off | PASS, full sign-off decision `PILOT READY - STAGING CONTRACT PASS`; production Playwright A-I `32 passed`, `3 skipped`; live staging audit `51/51` | `docs/qa/phase9f-full-staging-signoff-2026-09-10.md` | Phase 9 confidence to 99% for staging contract |
 
 ## 18. Recommended Execution Order
 

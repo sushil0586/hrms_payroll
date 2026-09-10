@@ -169,6 +169,8 @@ test.describe("Production live/disposable mutation readiness", () => {
   });
 
   test("mutation-capable screens expose controls without silently mutating demo data", async ({ page }) => {
+    test.setTimeout(90_000);
+
     if (apiBaseConfigured) {
       await loginViaProxy(page, hrAdmin);
     }

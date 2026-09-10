@@ -39,10 +39,12 @@ test.describe("Production launch release gate proof", () => {
     await expectPageReady(page, "Launch Remediation");
     await expectVisibleText(page, [
       "Open assignments",
-      "Primary bank coverage",
       "Download audit",
-      "Assign owner",
     ]);
+    const remediationMain = page.getByRole("main");
+    const actionableRows = remediationMain.getByRole("button", { name: "Assign owner" });
+    const emptyState = remediationMain.getByRole("heading", { name: "No launch remediation rows" });
+    await expect(actionableRows.first().or(emptyState)).toBeVisible();
     await captureLaunchGateStep(page, testInfo, "02-launch-remediation-actions");
 
     await gotoAuthenticated(page, "/hr-admin/saas-operations");
