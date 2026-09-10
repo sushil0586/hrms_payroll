@@ -894,8 +894,10 @@ Current Phase 9 progress:
 - Phase 9A change: `/hr-admin` now renders from the consolidated dashboard payload only.
 - Phase 9A local optimized-frontend evidence: TypeScript passed, Phase 8A browser UX/accessibility passed, and Phase 8D performance passed against local frontend plus staging backend.
 - Phase 9A sample improvement target: `/hr-admin` page-ready measured `6396ms` in the optimized local frontend path versus the previous public staging sample of `12321ms`.
+- Phase 9A staging deployment: commit `1dd5b115131a352b6d3ef8661613124f07779126` deployed to `https://hrms.accerio.in`; backend/web services active; public HTTP `200 OK`; Phase 8A desktop smoke passed; Phase 8D public staging performance gate passed.
+- Phase 9A public staging result: `/hr-admin` improved from `12321ms` to `11589ms`; notification queue improved from `11382ms` to `7633ms`.
 - Evidence: `docs/qa/phase9a-hr-admin-performance-optimization-2026-09-10.md`.
-- Remaining Phase 9A work: commit, deploy, and rerun public staging Phase 8D to confirm the improvement on `https://hrms.accerio.in`.
+- Remaining Phase 9A work: deeper backend/dashboard selector optimization for `/hr-admin` if we want to push page-ready below `10000ms` before final launch sign-off.
 
 Scope:
 

@@ -85,8 +85,28 @@ Key samples:
 
 Phase 9A local optimized-frontend validation passed.
 
-Next verification step:
+Staging deployment verification:
 
-- Commit these changes.
-- Deploy to staging.
-- Rerun Phase 8D against `https://hrms.accerio.in` to confirm the public staging page-ready improvement.
+- Deployed commit: `1dd5b115131a352b6d3ef8661613124f07779126`
+- Backend service: active
+- Web service: active
+- Nginx config and reload: passed
+- Public HTTP check: `200 OK`
+- Phase 8A desktop browser smoke: `1 passed`
+- Phase 8D public staging performance gate: `1 passed`
+
+Public staging samples after deployment:
+
+| Route | Page Ready | Document | DOM Interactive | Load Complete |
+|---|---:|---:|---:|---:|
+| `/hr-admin` | `11589ms` | `1110ms` | `1154ms` | `1466ms` |
+| `/hr-admin/notifications?retry_state=retry_ready` | `7633ms` | `1056ms` | `1090ms` | `1421ms` |
+
+Before/after staging comparison:
+
+| Route | Before | After | Result |
+|---|---:|---:|---|
+| `/hr-admin` | `12321ms` | `11589ms` | Improved by `732ms`; still the slowest staging page-ready route. |
+| `/hr-admin/notifications?retry_state=retry_ready` | `11382ms` | `7633ms` | Improved by `3749ms`; now under the `8000ms` target band. |
+
+Phase 9A is staging verified. The remaining optimization target is deeper backend/dashboard selector work for `/hr-admin`, especially launch audit and remediation synchronization cost.
