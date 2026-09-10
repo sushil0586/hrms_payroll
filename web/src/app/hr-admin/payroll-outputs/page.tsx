@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollOutputSetup } from "@/lib/api";
 import type { HrAdminPayrollOutputArtifact, HrAdminPayrollOutputBatch } from "@/lib/types";
+import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -12,6 +13,14 @@ type PageProps = {
 
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function hrAdminArtifactDownloadUrl(artifact: HrAdminPayrollOutputArtifact) {
+  return `/api/hr-admin/payroll-output-artifacts/${artifact.id}/download`;
+}
+
+function hrAdminArtifactAccessAuditUrl(artifact: HrAdminPayrollOutputArtifact) {
+  return `/api/hr-admin/payroll-output-artifacts/${artifact.id}/access-audit-export`;
 }
 
 function titleCase(value: string) {
@@ -118,7 +127,7 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
         <strong>{formatMoney(artifact.totals_snapshot.net_pay)}</strong>
         <span>{artifact.file_name || artifact.artifact_key}</span>
         {artifact.download_url ? (
-          <a className="button button--secondary payroll-output-download-link" href={artifact.download_url}>
+          <a className="button button--secondary payroll-output-download-link" href={hrAdminArtifactDownloadUrl(artifact)}>
             Download file
           </a>
         ) : (
@@ -160,7 +169,7 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
           <div className="detail-row"><span className="detail-label">Downloads</span><span className="detail-value">{artifact.access_summary.download_count}</span></div>
           <div className="detail-row"><span className="detail-label">Latest expiry</span><span className="detail-value">{formatDate(artifact.access_summary.latest_signed_grant_expires_at)}</span></div>
         </div>
-        <a className="button button--ghost payroll-output-download-link" href={`/api/v1/hr-admin/payroll-output-artifacts/${artifact.id}/access-audit-export/`}>
+        <a className="button button--ghost payroll-output-download-link" href={hrAdminArtifactAccessAuditUrl(artifact)}>
           Export access audit
         </a>
       </section>
@@ -287,6 +296,31 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                 <span>{selectedBatch?.artifact_count ?? 0} artifacts</span>
               </div>
             </div>
+
+            <PayrollCloseActionsPanel
+              eyebrow="Payroll operations"
+              title="Output controls"
+              description="Publish generated payroll outputs and create downstream finance handoff packages from selected batches."
+              actions={[
+                {
+                  id: "publish-outputs",
+                  label: "Publish outputs",
+                  endpoint: selectedBatch ? `/api/hr-admin/payroll-output-batches/${selectedBatch.id}/publish` : "",
+                  disabled: !selectedBatch,
+                  disabledReason: "Select an output batch first.",
+                },
+                {
+                  id: "generate-finance-handoff",
+                  label: "Generate handoff",
+                  endpoint: selectedBatch ? `/api/hr-admin/payroll-output-batches/${selectedBatch.id}/generate-finance-handoff` : "",
+                  profileField: "handoff_profile_ref",
+                  profileLabel: "Handoff profile ref",
+                  defaultProfileRef: "tenant.payroll.finance.handoff.v1",
+                  disabled: !selectedBatch,
+                  disabledReason: "Select an output batch first.",
+                },
+              ]}
+            />
 
             <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">

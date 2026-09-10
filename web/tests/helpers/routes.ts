@@ -6,6 +6,7 @@ export type RouteExpectation = {
 export const tierZeroRoutes: RouteExpectation[] = [
   { path: "/", heading: "Choose your workspace" },
   { path: "/login", heading: "Sign in" },
+  { path: "/platform-admin", heading: "Platform Admin Console" },
   { path: "/hr-admin", heading: "Control center" },
   { path: "/tenant-admin", heading: "Tenant Admin Console" },
   { path: "/ess", heading: /self service|overview/i },
@@ -13,6 +14,7 @@ export const tierZeroRoutes: RouteExpectation[] = [
 ];
 
 export const tierOneRoutes: RouteExpectation[] = [
+  { path: "/platform-admin", heading: "Platform Admin Console" },
   { path: "/hr-admin/organization", heading: /organization setup/i },
   { path: "/hr-admin/policies", heading: "Policy control" },
   { path: "/hr-admin/attendance-operations", heading: "Attendance operations" },
@@ -52,6 +54,7 @@ export const tierOneRoutes: RouteExpectation[] = [
 ];
 
 export const operationalVisualRoutes: RouteExpectation[] = [
+  { path: "/platform-admin", heading: "Platform Admin Console" },
   { path: "/hr-admin/organization", heading: /organization setup/i },
   { path: "/hr-admin/policies", heading: "Policy control" },
   { path: "/hr-admin/attendance-operations", heading: "Attendance operations" },
@@ -119,6 +122,7 @@ export const workflowTraceVisualRoutes: RouteExpectation[] = [
 
 export const firstVisualRoutes: RouteExpectation[] = [
   { path: "/login", heading: "Sign in" },
+  { path: "/platform-admin", heading: "Platform Admin Console" },
   { path: "/hr-admin", heading: "Control center" },
   { path: "/hr-admin/employees", heading: /employee/i },
   { path: "/ess", heading: /self service|overview/i },

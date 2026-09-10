@@ -22,7 +22,15 @@ export const employee: Persona = {
   password: seedPassword,
 };
 
+export const platformAdmin: Persona = {
+  username: process.env.PLAYWRIGHT_LIVE_PLATFORM_ADMIN_USERNAME ?? "platform.admin",
+  password: seedPassword,
+};
+
 export function personaForRoute(path: string): Persona {
+  if (path.startsWith("/platform-admin")) {
+    return platformAdmin;
+  }
   if (path.startsWith("/ess")) {
     return employee;
   }
@@ -32,8 +40,34 @@ export function personaForRoute(path: string): Persona {
   return hrAdmin;
 }
 
+async function gotoWithRetry(page: Page, targetPath: string) {
+  const attempts = 2;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await page.goto(targetPath, { waitUntil: "domcontentloaded", timeout: 45_000 });
+      await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+      return;
+    } catch (error) {
+      if (attempt === attempts || !String(error).includes("ERR_NETWORK_IO_SUSPENDED")) {
+        throw error;
+      }
+      await page.waitForTimeout(1_000);
+    }
+  }
+}
+
+async function authenticateWithApiSession(page: Page, persona: Persona) {
+  const response = await page.request.post("/api/auth/login", {
+    data: {
+      identifier: persona.username,
+      password: persona.password,
+    },
+  });
+  await expect(response.ok()).toBeTruthy();
+}
+
 export async function loginIfRequired(page: Page, persona: Persona, targetPath: string) {
-  await page.goto(targetPath);
+  await gotoWithRetry(page, targetPath);
   const currentUrl = new URL(page.url());
   const targetUrl = new URL(targetPath, currentUrl.origin);
   if (!currentUrl.pathname.includes("/login") && currentUrl.pathname === targetUrl.pathname) {
@@ -43,14 +77,11 @@ export async function loginIfRequired(page: Page, persona: Persona, targetPath: 
   if (!currentUrl.pathname.includes("/login")) {
     await page.request.post("/api/auth/logout").catch(() => null);
     await page.context().clearCookies();
-    await page.goto(targetPath);
+    await gotoWithRetry(page, targetPath);
   }
 
-  await page.getByLabel("Username or email").fill(persona.username);
-  await page.getByLabel("Password").fill(persona.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL(/\/ess$/, { timeout: 15_000 });
-  await page.goto(targetPath);
+  await authenticateWithApiSession(page, persona);
+  await gotoWithRetry(page, targetPath);
 }
 
 export async function gotoAuthenticated(page: Page, path: string, persona = personaForRoute(path)) {

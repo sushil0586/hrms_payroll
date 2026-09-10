@@ -37,22 +37,28 @@ function formatFileSize(fileSizeBytes: number) {
 
 export function EmployeeDocumentReviewForm({ document, initialValue, options, itemId }: Props) {
   const router = useRouter();
-  const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function update<Key extends keyof HrAdminEmployeeDocumentWriteInput>(key: Key, value: HrAdminEmployeeDocumentWriteInput[Key]) {
-    setFormValue((current) => ({ ...current, [key]: value }));
-  }
-
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const nextValue: HrAdminEmployeeDocumentWriteInput = {
+      title: String(formData.get("title") ?? ""),
+      status: String(formData.get("status") ?? initialValue.status),
+      verification_status: String(formData.get("verification_status") ?? initialValue.verification_status),
+      document_number: String(formData.get("document_number") ?? ""),
+      issued_on: String(formData.get("issued_on") ?? "") || null,
+      expires_on: String(formData.get("expires_on") ?? "") || null,
+      reupload_requested: String(formData.get("reupload_requested") ?? "false") === "true",
+      rejection_reason: String(formData.get("rejection_reason") ?? ""),
+    };
     setError("");
     setIsSubmitting(true);
     const response = await fetch(`/api/hr-admin/employee-documents/${itemId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
+      body: JSON.stringify(nextValue),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -107,14 +113,14 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
 
         <FormSection description="Adjust the review outcome and document metadata in one structured panel." title="Review details">
           <div className="form-grid">
-            <label className="form-field"><span className="muted">Title</span><input className="input-control" value={formValue.title} onChange={(e) => update("title", e.target.value)} /></label>
-            <label className="form-field"><span className="muted">Status</span><select className="input-control" value={formValue.status} onChange={(e) => update("status", e.target.value)}>{options.employee_document_statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="form-field"><span className="muted">Verification status</span><select className="input-control" value={formValue.verification_status} onChange={(e) => update("verification_status", e.target.value)}>{options.verification_statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="form-field"><span className="muted">Document number</span><input className="input-control" value={formValue.document_number} onChange={(e) => update("document_number", e.target.value)} /></label>
-            <label className="form-field"><span className="muted">Issued on</span><input className="input-control" type="date" value={formValue.issued_on ?? ""} onChange={(e) => update("issued_on", e.target.value || null)} /></label>
-            <label className="form-field"><span className="muted">Expires on</span><input className="input-control" type="date" value={formValue.expires_on ?? ""} onChange={(e) => update("expires_on", e.target.value || null)} /></label>
-            <label className="form-field"><span className="muted">Re-upload requested</span><select className="input-control" value={String(formValue.reupload_requested)} onChange={(e) => update("reupload_requested", e.target.value === "true")}><option value="false">No</option><option value="true">Yes</option></select></label>
-            <label className="form-field form-field--full"><span className="muted">Rejection reason or review note</span><textarea className="input-control" rows={4} value={formValue.rejection_reason} onChange={(e) => update("rejection_reason", e.target.value)} /></label>
+            <label className="form-field"><span className="muted">Title</span><input className="input-control" name="title" defaultValue={initialValue.title} /></label>
+            <label className="form-field"><span className="muted">Status</span><select className="input-control" name="status" defaultValue={initialValue.status}>{options.employee_document_statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label className="form-field"><span className="muted">Verification status</span><select className="input-control" name="verification_status" defaultValue={initialValue.verification_status}>{options.verification_statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label className="form-field"><span className="muted">Document number</span><input className="input-control" name="document_number" defaultValue={initialValue.document_number} /></label>
+            <label className="form-field"><span className="muted">Issued on</span><input className="input-control" name="issued_on" type="date" defaultValue={initialValue.issued_on ?? ""} /></label>
+            <label className="form-field"><span className="muted">Expires on</span><input className="input-control" name="expires_on" type="date" defaultValue={initialValue.expires_on ?? ""} /></label>
+            <label className="form-field"><span className="muted">Re-upload requested</span><select className="input-control" name="reupload_requested" defaultValue={String(initialValue.reupload_requested)}><option value="false">No</option><option value="true">Yes</option></select></label>
+            <label className="form-field form-field--full"><span className="muted">Rejection reason or review note</span><textarea className="input-control" name="rejection_reason" rows={4} defaultValue={initialValue.rejection_reason} /></label>
           </div>
         </FormSection>
 

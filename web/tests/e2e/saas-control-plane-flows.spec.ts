@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("HR admin SaaS control plane", () => {
   test("shows plan, entitlement, and usage-limit readiness", async ({ page }) => {
-    await page.goto("/hr-admin/saas-control-plane");
+    await gotoAuthenticated(page, "/hr-admin/saas-control-plane");
     await expectPageReady(page, "SaaS Control Plane");
     await expect(page.getByText("Launch commercial gate")).toBeVisible();
     await expect(page.getByText("Northstar Foods")).toBeVisible();

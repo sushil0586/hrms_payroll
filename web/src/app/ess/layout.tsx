@@ -2,7 +2,7 @@ import { WorkspaceChrome } from "@/components/shell/workspace-chrome";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 export default async function EssLayout({ children }: { children: React.ReactNode }) {
-  const sessionUser = await requireWorkspaceAccess();
+  const sessionUser = await requireWorkspaceAccess({ workspace: "ess" });
   const userLabel =
     sessionUser?.display_name || sessionUser?.first_name || sessionUser?.username || null;
 

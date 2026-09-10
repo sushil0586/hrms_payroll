@@ -15,7 +15,8 @@ export async function GET(request: NextRequest, { params }: Props) {
   }
 
   const { itemId } = await params;
-  const upstreamResponse = await fetch(`${API_BASE_URL}/me/payroll-payslips/${itemId}/download/`, {
+  const query = request.nextUrl.search;
+  const upstreamResponse = await fetch(`${API_BASE_URL}/me/payroll-payslips/${itemId}/download/${query}`, {
     headers: {
       Authorization: `Token ${token}`,
     },

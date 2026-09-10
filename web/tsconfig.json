@@ -33,6 +33,7 @@
     "**/*.tsx",
     ".next/build/types/**/*.ts",
     ".next/dev/types/**/*.ts",
+    ".next/local-qa/types/**/*.ts",
     ".next/playwright-live/types/**/*.ts",
     ".next/playwright/types/**/*.ts",
     ".next/types/**/*.ts",

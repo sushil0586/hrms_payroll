@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollCalculationSetup } from "@/lib/api";
 import type { HrAdminPayrollCalculationLine, HrAdminPayrollRun, HrAdminPayrollRunCalculation, HrAdminPayrollValidationIssue } from "@/lib/types";
+import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -391,6 +392,34 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
             </div>
 
             <ValidationIssueRegister issues={visibleValidationIssues} />
+
+            <PayrollCloseActionsPanel
+              eyebrow="Payroll operations"
+              title="Calculation controls"
+              description="Run draft calculation and open review using tenant-scoped profile references."
+              actions={[
+                {
+                  id: "calculate-draft",
+                  label: "Calculate draft",
+                  endpoint: selectedRun ? `/api/hr-admin/payroll-runs/${selectedRun.id}/calculate-draft` : "",
+                  profileField: "calculation_profile_ref",
+                  profileLabel: "Calculation profile ref",
+                  defaultProfileRef: selectedCalculation?.calculation_profile_ref ?? "",
+                  disabled: !selectedRun,
+                  disabledReason: "Select a payroll run first.",
+                },
+                {
+                  id: "open-review",
+                  label: "Open review",
+                  endpoint: selectedRun ? `/api/hr-admin/payroll-runs/${selectedRun.id}/open-review` : "",
+                  profileField: "review_profile_ref",
+                  profileLabel: "Review profile ref",
+                  defaultProfileRef: "tenant.payroll.review.v1",
+                  disabled: !selectedRun,
+                  disabledReason: "Select a payroll run first.",
+                },
+              ]}
+            />
 
             <div className="payroll-table-scroll payroll-table-scroll--compact">
               <table className="payroll-readiness-table payroll-setup-table payroll-calc-attempt-table">

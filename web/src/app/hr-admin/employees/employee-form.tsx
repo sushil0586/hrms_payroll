@@ -16,8 +16,24 @@ type EmployeeFormProps = {
 type FieldErrors = Partial<Record<keyof HrAdminEmployeeWriteInput, string>>;
 
 function normalizePayload(value: HrAdminEmployeeWriteInput) {
+  const nullableFields = new Set([
+    "date_of_birth",
+    "date_of_joining",
+    "legal_entity_id",
+    "branch_id",
+    "location_id",
+    "department_id",
+    "business_unit_id",
+    "cost_center_id",
+    "designation_id",
+    "grade_id",
+    "employment_type_id",
+    "reporting_manager_id",
+    "probation_end_date",
+    "confirmation_date",
+  ]);
   return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [key, item === "" ? null : item]),
+    Object.entries(value).map(([key, item]) => [key, item === "" && nullableFields.has(key) ? null : item]),
   );
 }
 

@@ -141,6 +141,14 @@ function getOrganizationWarnings(item: HrAdminOrganizationItem, section: string)
         warnings.push("child departments exist");
       }
       break;
+    case "cost_centers":
+      if ((item.linked_employees_count ?? 0) > 0) {
+        warnings.push("employees mapped to this cost center");
+      }
+      if (!item.legal_entity) {
+        warnings.push("cost center legal entity not mapped");
+      }
+      break;
     case "grades":
       if ((item.designations_count ?? 0) > 0) {
         warnings.push("designations depend on this grade");
@@ -239,6 +247,12 @@ function buildItemDetailRows(item: HrAdminOrganizationItem, section: string) {
         { label: "Linked Employees", value: String(item.linked_employees_count ?? 0) },
         { label: "Child Departments", value: String(item.child_count ?? 0) },
       ];
+    case "cost_centers":
+      return [
+        ...baseRows,
+        { label: "Legal Entity", value: item.legal_entity || "Not set" },
+        { label: "Linked Employees", value: String(item.linked_employees_count ?? 0) },
+      ];
     case "grades":
       return [
         ...baseRows,
@@ -271,6 +285,7 @@ function getSections(snapshot: HrAdminOrganizationSnapshot) {
     branches: { label: "Branches", items: snapshot.branches },
     business_units: { label: "Business Units", items: snapshot.business_units },
     departments: { label: "Departments", items: snapshot.departments },
+    cost_centers: { label: "Cost Centers", items: snapshot.cost_centers },
     grades: { label: "Grades", items: snapshot.grades },
     designations: { label: "Designations", items: snapshot.designations },
     employment_types: { label: "Employment Types", items: snapshot.employment_types },
@@ -289,6 +304,8 @@ function itemMeta(item: HrAdminOrganizationItem, section: string) {
       return [item.parent];
     case "departments":
       return [item.business_unit, item.parent];
+    case "cost_centers":
+      return [item.legal_entity];
     case "grades":
       return [item.level ? `Level ${item.level}` : null];
     case "designations":
@@ -354,7 +371,7 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
         <div className="metric-grid-modern">
           <MetricTile label="Legal entities" value={snapshotResult.data.summary.legal_entities_count} trend="Legal structure" />
           <MetricTile label="Branches" value={snapshotResult.data.summary.branches_count} trend="Operational footprint" />
-          <MetricTile label="Departments" value={snapshotResult.data.summary.departments_count} trend="Org design" />
+          <MetricTile label="Cost centers" value={snapshotResult.data.summary.cost_centers_count} trend="Finance mapping" />
           <MetricTile label="Employment types" value={snapshotResult.data.summary.employment_types_count} trend="Workforce rules" />
         </div>
       </section>
@@ -506,6 +523,7 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
                 <DetailRow label="Branches" value={String(snapshotResult.data.summary.branches_count)} />
                 <DetailRow label="Business Units" value={String(snapshotResult.data.summary.business_units_count)} />
                 <DetailRow label="Departments" value={String(snapshotResult.data.summary.departments_count)} />
+                <DetailRow label="Cost Centers" value={String(snapshotResult.data.summary.cost_centers_count)} />
                 <DetailRow label="Grades" value={String(snapshotResult.data.summary.grades_count)} />
                 <DetailRow label="Designations" value={String(snapshotResult.data.summary.designations_count)} />
                 <DetailRow label="Employment Types" value={String(snapshotResult.data.summary.employment_types_count)} />

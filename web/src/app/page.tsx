@@ -8,14 +8,17 @@ import { sessionCanAccessWorkspace, sessionHasAnyRole } from "@/lib/workspace-ac
 
 export default async function HomePage() {
   const sessionUser = await getSessionUser();
+  const canAccessPlatformAdmin = sessionCanAccessWorkspace(sessionUser, "platform_admin");
+  const canAccessEss = sessionCanAccessWorkspace(sessionUser, "ess");
   const canAccessHrAdmin = sessionHasAnyRole(sessionUser, ["hr-admin"]);
   const canAccessMss = sessionCanAccessWorkspace(sessionUser, "mss");
   const canAccessTenantAdmin = sessionCanAccessWorkspace(sessionUser, "tenant_admin");
-  const accessibleWorkspaces = [true, canAccessHrAdmin, canAccessMss, canAccessTenantAdmin].filter(Boolean).length;
-  const hrAdminHref = sessionUser ? "/hr-admin" : "/login";
-  const tenantAdminHref = sessionUser ? "/tenant-admin" : "/login";
-  const essHref = sessionUser ? "/ess" : "/login";
-  const mssHref = sessionUser ? "/mss/approvals" : "/login";
+  const accessibleWorkspaces = [canAccessPlatformAdmin, canAccessHrAdmin, canAccessEss, canAccessMss, canAccessTenantAdmin].filter(Boolean).length;
+  const platformAdminHref = sessionUser ? (canAccessPlatformAdmin ? "/platform-admin" : "/") : "/login";
+  const hrAdminHref = sessionUser ? (canAccessHrAdmin ? "/hr-admin" : "/") : "/login";
+  const tenantAdminHref = sessionUser ? (canAccessTenantAdmin ? "/tenant-admin" : "/") : "/login";
+  const essHref = sessionUser ? (canAccessEss ? "/ess" : "/") : "/login";
+  const mssHref = sessionUser ? (canAccessMss ? "/mss/approvals" : "/") : "/login";
 
   return (
     <main className="shell public-shell">
@@ -27,6 +30,9 @@ export default async function HomePage() {
           <>
             <Link className="button button--primary" href={hrAdminHref}>
               Open HR admin
+            </Link>
+            <Link className="button button--secondary" href={platformAdminHref}>
+              Open Platform
             </Link>
             <Link className="button button--secondary" href={essHref}>
               Open ESS
@@ -54,13 +60,27 @@ export default async function HomePage() {
           {sessionUser ? (sessionUser.display_name || sessionUser.username) : "HR admin, ESS, and MSS"}
         </div>
         <div className="queue-summary-chip">
-          <strong>{canAccessHrAdmin ? "HR admin access" : "Queue-based routing"}</strong>
-          {canAccessHrAdmin ? "configuration and review" : "enter the workspace that fits the task"}
+          <strong>{canAccessPlatformAdmin ? "Platform access" : canAccessHrAdmin ? "HR admin access" : "Queue-based routing"}</strong>
+          {canAccessPlatformAdmin ? "tenant onboarding and activation" : canAccessHrAdmin ? "configuration and review" : "enter the workspace that fits the task"}
         </div>
       </section>
 
       <section className="section public-workspace-section">
         <div className="public-workspace-grid">
+          <WorkspaceCard
+            eyebrow="Platform admin"
+            title="Onboard tenants"
+            description="Create customers, provision first admins, adopt baselines, and activate handoff."
+            href={platformAdminHref}
+            cta={sessionUser ? (canAccessPlatformAdmin ? "Open platform console" : "Platform admin restricted") : "Sign in for platform admin"}
+            className="workspace-card--compact public-workspace-card"
+            descriptionClassName="section-copy-soft"
+            details={[
+              { label: "Best for", value: "SaaS operators" },
+              { label: "Focus", value: "Tenant setup and activation" },
+              { label: "Includes", value: "Policy packs, contacts, handoff" },
+            ]}
+          />
           <WorkspaceCard
             eyebrow="HR admin"
             title="Operate HR"
@@ -80,7 +100,7 @@ export default async function HomePage() {
             title="Employee self service"
             description="Attendance, balances, leave requests, and regularizations."
             href={essHref}
-            cta={sessionUser ? "Open ESS" : "Sign in for ESS"}
+            cta={sessionUser ? (canAccessEss ? "Open ESS" : "ESS restricted") : "Sign in for ESS"}
             className="workspace-card--compact public-workspace-card"
             descriptionClassName="section-copy-soft"
             details={[

@@ -21,6 +21,7 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   expect: {
+    timeout: 10_000,
     toHaveScreenshot: {
       maxDiffPixels: 120,
     },

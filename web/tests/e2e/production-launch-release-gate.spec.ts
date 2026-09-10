@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { expect, type APIResponse, type Page, test, type TestInfo } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { expectVisibleText, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
+import { expectVisibleText, gotoAuthenticated, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
 
 async function captureLaunchGateStep(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`production-launch-release-gate/${name}.png`);
@@ -35,7 +35,7 @@ test.describe("Production launch release gate proof", () => {
     ]);
     await captureLaunchGateStep(page, testInfo, "01-hr-control-launch-audit");
 
-    await page.goto("/hr-admin/launch-remediation");
+    await gotoAuthenticated(page, "/hr-admin/launch-remediation");
     await expectPageReady(page, "Launch Remediation");
     await expectVisibleText(page, [
       "Open assignments",
@@ -45,7 +45,7 @@ test.describe("Production launch release gate proof", () => {
     ]);
     await captureLaunchGateStep(page, testInfo, "02-launch-remediation-actions");
 
-    await page.goto("/hr-admin/saas-operations");
+    await gotoAuthenticated(page, "/hr-admin/saas-operations");
     await expectPageReady(page, "SaaS Operations");
     await expectVisibleText(page, [
       "Operations posture",
@@ -60,7 +60,7 @@ test.describe("Production launch release gate proof", () => {
     await expect(page.getByRole("main").getByRole("link", { name: "SLA ops", exact: true })).toBeVisible();
     await captureLaunchGateStep(page, testInfo, "03-saas-operations-posture");
 
-    await page.goto("/hr-admin/saas-resilience");
+    await gotoAuthenticated(page, "/hr-admin/saas-resilience");
     await expectPageReady(page, "SaaS Resilience");
     await expectVisibleText(page, [
       "Resilience posture",
@@ -73,7 +73,7 @@ test.describe("Production launch release gate proof", () => {
     ]);
     await captureLaunchGateStep(page, testInfo, "04-resilience-release-gates");
 
-    await page.goto("/hr-admin/saas-sla-operations");
+    await gotoAuthenticated(page, "/hr-admin/saas-sla-operations");
     await expectPageReady(page, "SaaS SLA Ops");
     await expectVisibleText(page, [
       "SLA posture",
@@ -104,7 +104,7 @@ test.describe("Production launch release gate proof", () => {
     await expect(page.getByRole("button", { name: "Save state" })).toBeVisible();
     await captureLaunchGateStep(page, testInfo, "06-commercial-control-plane");
 
-    await page.goto("/tenant-admin");
+    await gotoAuthenticated(page, "/tenant-admin");
     await expectPageReady(page, "Tenant Admin Console");
     await expectVisibleText(page, [
       "Commercial audit",
@@ -116,7 +116,7 @@ test.describe("Production launch release gate proof", () => {
     ]);
     await captureLaunchGateStep(page, testInfo, "07-tenant-admin-release-review");
 
-    await page.goto("/tenant-admin/security-readiness");
+    await gotoAuthenticated(page, "/tenant-admin/security-readiness");
     await expectPageReady(page, "Enterprise Security Readiness");
     await expectVisibleText(page, [
       "Launch posture",
@@ -128,7 +128,7 @@ test.describe("Production launch release gate proof", () => {
     ]);
     await captureLaunchGateStep(page, testInfo, "08-enterprise-security-readiness");
 
-    await page.goto("/tenant-admin/trust-audit");
+    await gotoAuthenticated(page, "/tenant-admin/trust-audit");
     await expectPageReady(page, "Tenant Trust Audit");
     await expectVisibleText(page, [
       "Event groups",
@@ -159,7 +159,7 @@ test.describe("Production launch release gate proof", () => {
     ]);
     await captureLaunchGateStep(page, testInfo, "10-provider-launch-rehearsal");
 
-    await page.goto("/hr-admin/payroll-handoff");
+    await gotoAuthenticated(page, "/hr-admin/payroll-handoff");
     await expectPageReady(page, "Payroll Handoff");
     await expectVisibleText(page, [
       "Finance artifacts",

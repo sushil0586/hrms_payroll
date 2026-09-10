@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PATH_PREFIXES = ["/ess", "/mss", "/hr-admin", "/tenant-admin", "/support"];
+const PROTECTED_PATH_PREFIXES = ["/ess", "/mss", "/hr-admin", "/tenant-admin", "/platform-admin", "/support"];
 const PUBLIC_APP_URL = process.env.HRMS_PUBLIC_APP_URL;
 
 function buildLoginUrl(request: NextRequest) {
@@ -38,5 +38,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/ess/:path*", "/mss/:path*", "/hr-admin/:path*", "/tenant-admin/:path*", "/support/:path*"],
+  matcher: ["/ess/:path*", "/mss/:path*", "/hr-admin/:path*", "/tenant-admin/:path*", "/platform-admin/:path*", "/support/:path*"],
 };

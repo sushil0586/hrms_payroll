@@ -4943,6 +4943,7 @@ export type HrAdminOrganizationSnapshot = {
     branches_count: number;
     business_units_count: number;
     departments_count: number;
+    cost_centers_count: number;
     grades_count: number;
     designations_count: number;
     employment_types_count: number;
@@ -4952,6 +4953,7 @@ export type HrAdminOrganizationSnapshot = {
   branches: HrAdminOrganizationItem[];
   business_units: HrAdminOrganizationItem[];
   departments: HrAdminOrganizationItem[];
+  cost_centers: HrAdminOrganizationItem[];
   grades: HrAdminOrganizationItem[];
   designations: HrAdminOrganizationItem[];
   employment_types: HrAdminOrganizationItem[];
@@ -4968,6 +4970,29 @@ export type LeaveBalance = {
   carry_forward_amount?: string;
   encashed_amount?: string;
   adjustment_amount?: string;
+};
+
+export type EssLeaveTypeOption = {
+  id: string;
+  code: string;
+  name: string;
+  short_code: string;
+  category: string;
+  unit: string;
+  requires_attachment: boolean;
+  allow_negative_balance: boolean;
+};
+
+export type EssAttendanceRecordOption = {
+  id: string;
+  attendance_date: string;
+  status: string;
+  shift: string | null;
+  check_in_at: string | null;
+  check_out_at: string | null;
+  is_regularized: boolean;
+  is_locked: boolean;
+  late_minutes: number;
 };
 
 export type HrAdminLeaveBalance = {
@@ -5362,6 +5387,7 @@ export type SessionWorkspaceAccess = {
   mss: boolean;
   hr_admin: boolean;
   tenant_admin: boolean;
+  platform_admin: boolean;
 };
 
 export type SessionUser = {
@@ -5375,4 +5401,102 @@ export type SessionUser = {
   default_membership: SessionMembership | null;
   memberships: SessionMembership[];
   workspace_access: SessionWorkspaceAccess;
+};
+
+export type PlatformTenantListItem = {
+  id: string;
+  code: string;
+  name: string;
+  legal_name: string;
+  status: string;
+  onboarding_status: string;
+  subscription_plan: string;
+  seed_pack: string;
+  primary_email: string;
+  primary_phone: string;
+  timezone: string;
+  country_code: string;
+  is_sandbox: boolean;
+  go_live_at: string | null;
+  primary_domain: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformOnboardingChecklistItem = {
+  id: string;
+  code: string;
+  label: string;
+  status: string;
+  completed_at: string | null;
+  completed_by_identifier: string;
+  notes: string;
+  sort_order: number;
+};
+
+export type PlatformOnboardingAdminContact = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone_number: string;
+  job_title: string;
+  is_primary: boolean;
+  provisioning_status: string;
+  user_id: string | null;
+  membership_id: string | null;
+  invited_at: string | null;
+  first_login_at: string | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformOnboardingEvent = {
+  id: string;
+  event_type: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  actor_identifier: string;
+  created_at: string;
+};
+
+export type PlatformTenantOnboarding = {
+  id: string;
+  tenant_id: string;
+  tenant_code: string;
+  tenant_name: string;
+  tenant_status: string;
+  tenant_onboarding_status: string;
+  owner_mode: string;
+  setup_style: string;
+  data_setup_style: string;
+  policy_control_style: string;
+  country_context: string;
+  industry_context: string;
+  notes: string;
+  internal_handoff_notes: string;
+  customer_handoff_notes: string;
+  first_login_verified_at: string | null;
+  baseline_published_at: string | null;
+  handoff_completed_at: string | null;
+  admin_contacts: PlatformOnboardingAdminContact[];
+  checklist_items: PlatformOnboardingChecklistItem[];
+  recent_events: PlatformOnboardingEvent[];
+};
+
+export type PlatformPolicyPackListItem = {
+  id: string;
+  code: string;
+  name: string;
+  domain: string;
+  country_code: string;
+  industry_tag: string;
+  description: string;
+  status: string;
+  version: number;
+  is_active: boolean;
+  published_at: string | null;
+  published_by_identifier: string;
+  item_count: number;
+  adoption_count: number;
 };

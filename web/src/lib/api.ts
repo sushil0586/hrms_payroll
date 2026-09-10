@@ -1,9 +1,11 @@
 import type {
   AttendanceRegularizationItem,
   EmployeeDashboard,
+  EssAttendanceRecordOption,
   EssAttendanceRegularizationListResponse,
   EssDocumentCenterResponse,
   EssLeaveRequestListResponse,
+  EssLeaveTypeOption,
   EssPayrollPayslipListResponse,
   EssStatutoryDeclarationListResponse,
   HrAdminDashboard,
@@ -83,6 +85,9 @@ import type {
   ManagerAttendanceApprovalListResponse,
   ManagerLeaveApprovalListResponse,
   ManagerTeamSummary,
+  PlatformPolicyPackListItem,
+  PlatformTenantListItem,
+  PlatformTenantOnboarding,
   SessionUser,
   SupportSessionDomainSnapshot,
   SupportSessionTenantConsole,
@@ -185,6 +190,19 @@ export async function getEssDashboard(params?: {
     leaveRequests: leaveRequests.data,
     regularizations: regularizations.data,
     state: dashboard.state === "live" && leaveRequests.state === "live" && regularizations.state === "live" ? "live" : "demo",
+  };
+}
+
+export async function getEssRequestOptions() {
+  const [leaveTypes, attendanceRecords] = await Promise.all([
+    apiGet<EssLeaveTypeOption[]>("/me/leave-types/"),
+    apiGet<EssAttendanceRecordOption[]>("/me/attendance-records/"),
+  ]);
+
+  return {
+    leaveTypes: leaveTypes.data,
+    attendanceRecords: attendanceRecords.data,
+    state: leaveTypes.state === "live" && attendanceRecords.state === "live" ? "live" : "demo",
   };
 }
 
@@ -294,6 +312,22 @@ export async function getHrAdminDashboard() {
 
 export async function getTenantAdminConsole() {
   return apiGet<TenantAdminConsole>("/tenant-admin/console/");
+}
+
+export async function getPlatformTenants() {
+  return apiGet<PlatformTenantListItem[]>("/platform/tenants/");
+}
+
+export async function getPlatformTenant(tenantId: string) {
+  return apiGet<PlatformTenantListItem>(`/platform/tenants/${tenantId}/`);
+}
+
+export async function getPlatformTenantOnboarding(tenantId: string) {
+  return apiGet<PlatformTenantOnboarding>(`/platform/tenants/${tenantId}/onboarding/`);
+}
+
+export async function getPlatformPolicyPacks() {
+  return apiGet<PlatformPolicyPackListItem[]>("/platform-policy-packs/");
 }
 
 export async function getTenantAdminTrustAuditReview(params?: {
@@ -1367,6 +1401,7 @@ function getDemoData<T>(path: string): T {
       branches_count: 1,
       business_units_count: 1,
       departments_count: 2,
+      cost_centers_count: 1,
       grades_count: 2,
       designations_count: 3,
       employment_types_count: 1,
@@ -1386,6 +1421,9 @@ function getDemoData<T>(path: string): T {
     departments: [
       { id: "dep-1", code: "people-ops", name: "People Operations", is_active: true, business_unit: "Corporate", parent: null },
       { id: "dep-2", code: "sales", name: "Sales", is_active: true, business_unit: "Corporate", parent: null },
+    ],
+    cost_centers: [
+      { id: "cc-1", code: "corp-finance", name: "Corporate Finance", is_active: true, legal_entity: "Northstar Foods Pvt Ltd", legal_entity_id: "le-1" },
     ],
     grades: [
       { id: "gr-1", code: "m1", name: "M1", is_active: true, level: 1 },

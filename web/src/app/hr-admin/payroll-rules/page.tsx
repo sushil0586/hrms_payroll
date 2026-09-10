@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollRulesSetup } from "@/lib/api";
 import type { HrAdminPayrollRuleDefinition, HrAdminPayrollRuleEvaluation, HrAdminPayrollRuleVersion } from "@/lib/types";
+import { PayrollRuleOperationsPanel } from "./payroll-rule-operations-panel";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -313,6 +314,8 @@ export default async function HrAdminPayrollRulesPage({ searchParams }: PageProp
           <RuleDetail rule={selectedRule} version={selectedVersion} evaluations={setup.evaluations} />
         </div>
       </section>
+
+      <PayrollRuleOperationsPanel initialSetup={setup} selectedRule={selectedRule} selectedVersion={selectedVersion} />
     </main>
   );
 }

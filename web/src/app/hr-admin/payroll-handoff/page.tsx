@@ -4,6 +4,7 @@ import type React from "react";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollFinanceHandoffSetup } from "@/lib/api";
+import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 import type {
   HrAdminPayrollFinanceHandoff,
   HrAdminPayrollOutputArtifact,
@@ -406,10 +407,10 @@ function ArtifactDetail({
         <section className="payroll-rule-source-card payroll-handoff-retry-command-card">
           <span className="workspace-card__eyebrow">Retry commands</span>
           <div className="payroll-handoff-retry-command-strip">
-            <form action={`/api/v1/hr-admin/payroll-provider-deliveries/${delivery.id}/schedule-retry/`} method="post">
+            <form action={`/api/hr-admin/payroll-provider-deliveries/${delivery.id}/schedule-retry`} method="post">
               <button className="button" type="submit">Schedule retry</button>
             </form>
-            <form action={`/api/v1/hr-admin/payroll-provider-deliveries/${delivery.id}/requeue/`} method="post">
+            <form action={`/api/hr-admin/payroll-provider-deliveries/${delivery.id}/requeue`} method="post">
               <button className="button button--secondary" type="submit">Requeue delivery</button>
             </form>
           </div>
@@ -1182,11 +1183,43 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
               <div>
                 <span className="workspace-card__eyebrow">Audit pack</span>
                 <strong>{auditPackArtifacts.length ? "Locked" : "Pending"}</strong>
-                <form action={`/api/v1/hr-admin/payroll-finance-handoffs/${selectedHandoff?.id ?? ""}/generate-audit-pack/`} method="post">
-                  <button className="button button--secondary payroll-handoff-inline-button" type="submit">Generate pack</button>
-                </form>
               </div>
             </div>
+
+            <PayrollCloseActionsPanel
+              eyebrow="Payroll operations"
+              title="Handoff controls"
+              description="Transmit, acknowledge, and lock provider audit-pack evidence using configurable handoff profiles."
+              actions={[
+                {
+                  id: "transmit-handoff",
+                  label: "Transmit handoff",
+                  endpoint: selectedHandoff ? `/api/hr-admin/payroll-finance-handoffs/${selectedHandoff.id}/transmit` : "",
+                  disabled: !selectedHandoff,
+                  disabledReason: "Select a finance handoff first.",
+                },
+                {
+                  id: "acknowledge-handoff",
+                  label: "Acknowledge handoff",
+                  endpoint: selectedHandoff ? `/api/hr-admin/payroll-finance-handoffs/${selectedHandoff.id}/acknowledge` : "",
+                  profileField: "acknowledgement_profile_ref",
+                  profileLabel: "Acknowledgement profile ref",
+                  defaultProfileRef: "tenant.payroll.finance.ack.v1",
+                  disabled: !selectedHandoff,
+                  disabledReason: "Select a finance handoff first.",
+                },
+                {
+                  id: "generate-audit-pack",
+                  label: "Generate audit pack",
+                  endpoint: selectedHandoff ? `/api/hr-admin/payroll-finance-handoffs/${selectedHandoff.id}/generate-audit-pack` : "",
+                  profileField: "audit_pack_profile_ref",
+                  profileLabel: "Audit pack profile ref",
+                  defaultProfileRef: "tenant.payroll.provider.audit.v1",
+                  disabled: !selectedHandoff,
+                  disabledReason: "Select a finance handoff first.",
+                },
+              ]}
+            />
 
             {auditPackArtifacts.length ? (
               <section className="payroll-setup-assignment-panel payroll-handoff-audit-pack-panel">

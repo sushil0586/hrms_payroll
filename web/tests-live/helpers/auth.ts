@@ -10,14 +10,19 @@ const seededUsers: Record<SeededPersona, { identifier: string; displayName: stri
 
 export const seededPassword = process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123";
 
+const landingUrlByPersona: Record<SeededPersona, RegExp> = {
+  employee: /\/ess$/,
+  manager: /\/mss\/approvals$/,
+  hrAdmin: /\/hr-admin$/,
+};
+
 export async function loginAs(page: Page, persona: SeededPersona) {
   const user = seededUsers[persona];
   await page.goto("/login");
   await page.getByLabel("Username or email").fill(user.identifier);
   await page.getByLabel("Password").fill(seededPassword);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/ess$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Self service" })).toBeVisible();
+  await expect(page).toHaveURL(landingUrlByPersona[persona]);
   await expect(page.getByText(user.displayName).first()).toBeVisible();
 }
 

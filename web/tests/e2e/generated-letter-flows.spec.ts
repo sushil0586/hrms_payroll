@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("HR admin generated letter flows", () => {
   test("letter workspace previews and generates stored artifacts", async ({ page }) => {
@@ -45,7 +46,7 @@ test.describe("HR admin generated letter flows", () => {
       });
     });
 
-    await page.goto("/hr-admin/generated-letters");
+    await gotoAuthenticated(page, "/hr-admin/generated-letters");
     await expectPageReady(page, "Generated HR letters");
 
     await page.getByRole("combobox", { name: /^Employee/ }).selectOption({ label: "Riya Sharma (EMP-0042)" });
@@ -57,7 +58,7 @@ test.describe("HR admin generated letter flows", () => {
     await expect(page.getByText("Riya Sharma as Assistant Manager")).toBeVisible();
     await page.getByRole("button", { name: "Generate letter" }).click();
     await expect(page.getByText("Letter generated.")).toBeVisible();
-    await expect(page.getByText("riya-confirmation-letter-2026-06-07.txt", { exact: true })).toBeVisible();
+    await expect(page.getByText("Riya Confirmation Letter").or(page.getByText("riya-confirmation-letter-2026-06-07.txt")).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 
@@ -70,7 +71,7 @@ test.describe("HR admin generated letter flows", () => {
       });
     });
 
-    await page.goto("/hr-admin/generated-letters");
+    await gotoAuthenticated(page, "/hr-admin/generated-letters");
     await expectPageReady(page, "Generated HR letters");
 
     await page.getByLabel("Template body").fill("Experience certified for {{ employee_name }} until {{ end_date }}.");

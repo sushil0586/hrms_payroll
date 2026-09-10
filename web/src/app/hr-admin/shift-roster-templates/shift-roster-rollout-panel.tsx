@@ -29,6 +29,26 @@ function selectOptions(items: HrAdminOptionItem[]) {
   ];
 }
 
+function formatApiError(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return "Unable to run roster rollout.";
+  }
+  if ("detail" in payload && typeof payload.detail === "string") {
+    return payload.detail;
+  }
+  const messages = Object.entries(payload)
+    .flatMap(([key, value]) => {
+      if (Array.isArray(value)) {
+        return value.map((item) => `${key}: ${String(item)}`);
+      }
+      if (typeof value === "string") {
+        return `${key}: ${value}`;
+      }
+      return [];
+    });
+  return messages[0] ?? "Unable to run roster rollout.";
+}
+
 export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props) {
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [legalEntityId, setLegalEntityId] = useState("");
@@ -59,14 +79,14 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
       const response = await fetch("/api/hr-admin/shift-roster-templates/rollout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            template_id: templateId,
-            employee_ids: employeeIds,
-            legal_entity_id: legalEntityId || null,
-            branch_id: branchId || null,
-            location_id: locationId || null,
-            department_id: departmentId || null,
-            effective_from: effectiveFrom,
+        body: JSON.stringify({
+          template_id: templateId,
+          employee_ids: employeeIds,
+          legal_entity_id: legalEntityId || null,
+          branch_id: branchId || null,
+          location_id: locationId || null,
+          department_id: departmentId || null,
+          effective_from: effectiveFrom,
           effective_to: effectiveTo || null,
           is_primary: isPrimary,
           dry_run: dryRun,
@@ -74,7 +94,7 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
       });
       const payload = (await response.json().catch(() => null)) as HrAdminShiftRosterTemplateRolloutResult | { detail?: string } | null;
       if (!response.ok || !payload || !("target_count" in payload)) {
-        setError((payload && "detail" in payload && payload.detail) || "Unable to run roster rollout.");
+        setError(formatApiError(payload));
         return;
       }
       setResult(payload);

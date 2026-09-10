@@ -17,11 +17,11 @@ from apps.tenants.models import Tenant
 
 
 class IsPlatformStaff(permissions.BasePermission):
-    message = "Platform staff access is required."
+    message = "Platform admin access is required."
 
     def has_permission(self, request, view):
         user = request.user
-        return bool(user and user.is_authenticated and user.is_staff)
+        return bool(user and user.is_authenticated and user.is_superuser)
 
 
 def _actor_identifier(request) -> str:

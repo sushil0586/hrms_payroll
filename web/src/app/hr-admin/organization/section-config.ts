@@ -6,6 +6,7 @@ export const ORGANIZATION_SECTION_CONFIG = {
   branches: { label: "Branches", singular: "Branch" },
   business_units: { label: "Business Units", singular: "Business Unit" },
   departments: { label: "Departments", singular: "Department" },
+  cost_centers: { label: "Cost Centers", singular: "Cost Center" },
   grades: { label: "Grades", singular: "Grade" },
   designations: { label: "Designations", singular: "Designation" },
   employment_types: { label: "Employment Types", singular: "Employment Type" },

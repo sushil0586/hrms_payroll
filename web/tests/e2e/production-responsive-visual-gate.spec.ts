@@ -113,9 +113,33 @@ async function collectLayoutIssues(page: Page): Promise<LayoutIssue[]> {
       return false;
     }
 
+    function visibleRectFor(element: Element, rect: DOMRect) {
+      let left = rect.left;
+      let right = rect.right;
+      let top = rect.top;
+      let bottom = rect.bottom;
+      let current = element.parentElement;
+      while (current && current !== document.body) {
+        const style = window.getComputedStyle(current);
+        const clipsContent = ["auto", "scroll", "hidden", "clip"].includes(style.overflowY) || ["auto", "scroll", "hidden", "clip"].includes(style.overflowX);
+        if (clipsContent) {
+          const ancestorRect = current.getBoundingClientRect();
+          left = Math.max(left, ancestorRect.left);
+          right = Math.min(right, ancestorRect.right);
+          top = Math.max(top, ancestorRect.top);
+          bottom = Math.min(bottom, ancestorRect.bottom);
+        }
+        current = current.parentElement;
+      }
+      return new DOMRect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+    }
+
     const controls = Array.from(document.querySelectorAll(interactiveSelector))
-      .map((element) => ({ element, rect: element.getBoundingClientRect(), label: labelFor(element) }))
-      .filter((entry) => isVisible(entry.element, entry.rect));
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { element, rawRect: rect, rect: visibleRectFor(element, rect), label: labelFor(element) };
+      })
+      .filter((entry) => isVisible(entry.element, entry.rawRect) && entry.rect.width > 1 && entry.rect.height > 1);
 
     for (const entry of controls) {
       const { rect } = entry;

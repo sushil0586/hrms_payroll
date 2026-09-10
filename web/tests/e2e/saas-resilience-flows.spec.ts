@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("SaaS resilience readiness", () => {
   test("shows backup, restore, retention, and evidence posture", async ({ page }) => {
-    await page.goto("/hr-admin/saas-resilience");
+    await gotoAuthenticated(page, "/hr-admin/saas-resilience");
     await expectPageReady(page, "SaaS Resilience");
     await expect(page.getByRole("main").getByText("Resilience posture", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Resilience gate review" })).toBeVisible();

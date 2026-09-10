@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { expect, type Page, test, type TestInfo } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, expectVisibleText, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
+import { employee, expectVisibleText, gotoAuthenticated, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
 
 async function captureNegativeStep(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`production-payroll-negative-controls/${name}.png`);
@@ -27,7 +27,7 @@ test.describe("Production payroll negative controls", () => {
     ]);
     await captureNegativeStep(page, testInfo, "01-readiness-blocked-source-data");
 
-    await page.goto("/hr-admin/payroll-inputs");
+    await gotoAuthenticated(page, "/hr-admin/payroll-inputs");
     await expectPageReady(page, "Payroll Inputs");
     await expectVisibleText(page, [
       "Employee snapshots",

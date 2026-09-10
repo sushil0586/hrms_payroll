@@ -17,6 +17,15 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to update attendance regularization.");
 }
 
+function formatDateTime(value: string | null, fallback: string) {
+  if (!value) return fallback;
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(value));
+}
+
 export function AttendanceRegularizationReviewForm({ item }: Props) {
   const router = useRouter();
   const [comment, setComment] = useState(item.status === "approved" ? item.manager_comment || "" : item.rejection_reason || item.manager_comment || "");
@@ -57,11 +66,11 @@ export function AttendanceRegularizationReviewForm({ item }: Props) {
           <div className="detail-row"><span className="detail-label">Shift</span><span className="detail-value">{item.shift || "No shift"}</span></div>
           <div className="detail-row"><span className="detail-label">Current to requested</span><span className="detail-value">{item.current_status} to {item.requested_status}</span></div>
           <div className="detail-row"><span className="detail-label">Current status</span><span className={`detail-value status status--${item.status}`}>{item.status}</span></div>
-          <div className="detail-row"><span className="detail-label">Actual check in</span><span className="detail-value">{item.actual_check_in_at ? new Date(item.actual_check_in_at).toLocaleString("en-IN") : "None"}</span></div>
-          <div className="detail-row"><span className="detail-label">Requested check in</span><span className="detail-value">{item.requested_check_in_at ? new Date(item.requested_check_in_at).toLocaleString("en-IN") : "No change"}</span></div>
-          <div className="detail-row"><span className="detail-label">Actual check out</span><span className="detail-value">{item.actual_check_out_at ? new Date(item.actual_check_out_at).toLocaleString("en-IN") : "None"}</span></div>
-          <div className="detail-row"><span className="detail-label">Requested check out</span><span className="detail-value">{item.requested_check_out_at ? new Date(item.requested_check_out_at).toLocaleString("en-IN") : "No change"}</span></div>
-          <div className="detail-row"><span className="detail-label">Applied at</span><span className="detail-value">{item.applied_at ? new Date(item.applied_at).toLocaleString("en-IN") : "Not submitted"}</span></div>
+          <div className="detail-row"><span className="detail-label">Actual check in</span><span className="detail-value">{formatDateTime(item.actual_check_in_at, "None")}</span></div>
+          <div className="detail-row"><span className="detail-label">Requested check in</span><span className="detail-value">{formatDateTime(item.requested_check_in_at, "No change")}</span></div>
+          <div className="detail-row"><span className="detail-label">Actual check out</span><span className="detail-value">{formatDateTime(item.actual_check_out_at, "None")}</span></div>
+          <div className="detail-row"><span className="detail-label">Requested check out</span><span className="detail-value">{formatDateTime(item.requested_check_out_at, "No change")}</span></div>
+          <div className="detail-row"><span className="detail-label">Applied at</span><span className="detail-value">{formatDateTime(item.applied_at, "Not submitted")}</span></div>
           <div className="detail-row"><span className="detail-label">Workflow reference</span><span className="detail-value">{item.workflow_reference || "Not linked"}</span></div>
         </div>
       </article>

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("HR admin launch remediation workspace", () => {
   test("lists launch assignments and acknowledges a row", async ({ page }) => {
@@ -37,11 +38,11 @@ test.describe("HR admin launch remediation workspace", () => {
       });
     });
 
-    await page.goto("/hr-admin/launch-remediation");
+    await gotoAuthenticated(page, "/hr-admin/launch-remediation");
     await expectPageReady(page, "Launch Remediation");
     await expect(page.getByText("Open assignments")).toBeVisible();
     await expect(page.getByText("Primary bank coverage")).toBeVisible();
-    await expect(page.locator(".record-card", { hasText: "Provider launch history" })).toBeVisible();
+    await expect(page.locator(".record-card", { hasText: "Provider launch history" }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Download audit" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Assign owner" }).first()).toBeVisible();
 

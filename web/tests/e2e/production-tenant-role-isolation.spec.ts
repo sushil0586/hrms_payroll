@@ -128,7 +128,7 @@ test.describe("Production tenant and role isolation proof", () => {
     await expectNoHorizontalOverflow(page);
     await captureIsolationStep(page, testInfo, "03-tenant-admin-role-controls");
 
-    await page.goto("/support");
+    await loginIfRequired(page, hrAdmin, "/support");
     await expectPageReady(page, "Support Console");
     await expectVisibleText(page, [
       "Runtime enforcement",

@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMembership, User
 from apps.tenant_onboarding.models import (
     AdminProvisioningStatus,
@@ -82,6 +83,41 @@ def _ensure_tenant_role(tenant, *, role_code: str, role_name: str = "") -> Role:
     return role
 
 
+def _next_admin_employee_code(tenant) -> str:
+    existing_count = Employee.objects.filter(tenant=tenant, employee_code__startswith="ADMIN-").count()
+    while True:
+        next_code = f"ADMIN-{existing_count + 1:04d}"
+        if not Employee.objects.filter(tenant=tenant, employee_code=next_code).exists():
+            return next_code
+        existing_count += 1
+
+
+def _ensure_first_admin_employee_context(contact: TenantOnboardingAdminContact, membership: TenantMembership) -> Employee:
+    employee_code = membership.employee_code or _next_admin_employee_code(contact.onboarding.tenant)
+    if membership.employee_code != employee_code:
+        membership.employee_code = employee_code
+        membership.save(update_fields=["employee_code", "updated_at"])
+
+    name_parts = contact.full_name.split(" ", 1)
+    employee, created = Employee.objects.get_or_create(
+        tenant=contact.onboarding.tenant,
+        membership=membership,
+        defaults={
+            "employee_code": employee_code,
+            "first_name": name_parts[0],
+            "last_name": name_parts[1] if len(name_parts) > 1 else "",
+            "preferred_name": name_parts[0],
+            "work_email": contact.email,
+            "phone_number": contact.phone_number,
+            "employment_status": EmploymentStatus.ACTIVE,
+        },
+    )
+    if not created and employee.employment_status != EmploymentStatus.ACTIVE:
+        employee.employment_status = EmploymentStatus.ACTIVE
+        employee.save(update_fields=["employment_status", "updated_at"])
+    return employee
+
+
 @transaction.atomic
 def provision_tenant_admin_contact(
     contact: TenantOnboardingAdminContact,
@@ -129,6 +165,7 @@ def provision_tenant_admin_contact(
         role=role,
         is_primary=True,
     )
+    employee = _ensure_first_admin_employee_context(contact, membership)
 
     contact.user = user
     contact.membership = membership
@@ -151,6 +188,8 @@ def provision_tenant_admin_contact(
             "contact_id": str(contact.id),
             "user_id": str(user.id),
             "membership_id": str(membership.id),
+            "employee_id": str(employee.id),
+            "employee_code": employee.employee_code,
             "role_code": role.code,
         },
     )

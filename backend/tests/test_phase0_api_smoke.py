@@ -479,6 +479,23 @@ def test_hr_admin_dashboard_returns_saas_launch_audit(api_client: APIClient, boo
 
 
 @pytest.mark.django_db
+def test_hr_admin_session_does_not_expose_platform_admin_workspace(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/auth/session/")
+
+    assert response.status_code == 200
+    assert response.json()["workspace_access"] == {
+        "ess": True,
+        "mss": True,
+        "hr_admin": True,
+        "tenant_admin": True,
+        "platform_admin": False,
+    }
+
+
+@pytest.mark.django_db
 def test_rehearse_hrms_saas_launch_command_exports_actionable_audit_pack(bootstrapped_workspace, tmp_path):
     tenant = Tenant.objects.get(code="northstar-foods")
     output_file = tmp_path / "hrms-saas-launch-audit.json"
@@ -4934,6 +4951,23 @@ def test_hr_admin_payroll_outputs_support_configured_signed_url_storage_strategy
         signed_access_grant=grant,
         event_type=PayrollArtifactAccessEventType.REVOKED,
     ).exists()
+
+    expiry_issue_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-artifacts/{published_payslip['id']}/signed-access/",
+        {"expires_in_seconds": 120, "max_access_count": 2},
+        format="json",
+        HTTP_X_REQUEST_ID="signed-grant-expiry-test-1",
+    )
+    assert expiry_issue_response.status_code == 201, expiry_issue_response.json()
+    expiry_payload = expiry_issue_response.json()
+    expired_grant = PayrollArtifactSignedAccessGrant.objects.get(id=expiry_payload["grant"]["id"])
+    expired_grant.expires_at = timezone.now() - timedelta(seconds=1)
+    expired_grant.save(update_fields=["expires_at", "updated_at"])
+    expired_download_response = api_client.get(expiry_payload["signed_url"], HTTP_X_REQUEST_ID="signed-grant-expiry-test-download")
+    assert expired_download_response.status_code == 403
+    assert "expired" in expired_download_response.json()["detail"]
+    expired_grant.refresh_from_db()
+    assert expired_grant.status == PayrollArtifactSignedAccessGrantStatus.EXPIRED
 
     audit_export_response = api_client.get(f"/api/v1/hr-admin/payroll-output-artifacts/{published_payslip['id']}/access-audit-export/")
     assert audit_export_response.status_code == 200
@@ -10231,6 +10265,36 @@ def test_manager_session_exposes_workspace_role_codes(api_client: APIClient, boo
         "mss": True,
         "hr_admin": False,
         "tenant_admin": False,
+        "platform_admin": False,
+    }
+
+
+@pytest.mark.django_db
+def test_platform_admin_session_exposes_platform_admin_workspace_access(api_client: APIClient, bootstrapped_workspace):
+    User.objects.create_user(
+        username="platform.session",
+        email="platform.session@hrms.example",
+        password=PASSWORD,
+        first_name="Platform",
+        last_name="Session",
+        display_name="Platform Session",
+        is_staff=True,
+        is_superuser=True,
+    )
+
+    token = login(api_client, "platform.session")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/auth/session/")
+
+    assert response.status_code == 200
+    assert response.json()["default_membership"] is None
+    assert response.json()["workspace_access"] == {
+        "ess": False,
+        "mss": False,
+        "hr_admin": False,
+        "tenant_admin": False,
+        "platform_admin": True,
     }
 
 
@@ -10297,6 +10361,7 @@ def test_workflow_approver_session_gets_mss_workspace_access(api_client: APIClie
         "mss": True,
         "hr_admin": False,
         "tenant_admin": False,
+        "platform_admin": False,
     }
 
 
@@ -13793,6 +13858,55 @@ def test_hr_admin_organization_snapshot_exposes_list_level_dependency_counts(api
 
 
 @pytest.mark.django_db
+def test_hr_admin_can_manage_cost_center_as_organization_master(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    legal_entity = LegalEntity.objects.get(tenant=tenant, code="northstar-pvt-ltd")
+
+    create_response = api_client.post(
+        "/api/v1/hr-admin/organization/cost_centers/",
+        {
+            "code": "phase1b-cost-center",
+            "name": "Phase 1B Cost Center",
+            "is_active": True,
+            "legal_entity_id": str(legal_entity.id),
+        },
+        format="json",
+    )
+
+    assert create_response.status_code == 201, create_response.json()
+    payload = create_response.json()
+    assert payload["code"] == "phase1b-cost-center"
+    assert payload["legal_entity"] == legal_entity.name
+
+    item_id = payload["id"]
+    detail_response = api_client.get(f"/api/v1/hr-admin/organization/cost_centers/{item_id}/")
+    assert detail_response.status_code == 200, detail_response.json()
+    assert detail_response.json()["legal_entity_id"] == str(legal_entity.id)
+
+    update_response = api_client.patch(
+        f"/api/v1/hr-admin/organization/cost_centers/{item_id}/",
+        {
+            "name": "Phase 1B Cost Center Updated",
+            "is_active": False,
+        },
+        format="json",
+    )
+
+    assert update_response.status_code == 200, update_response.json()
+    assert update_response.json()["name"] == "Phase 1B Cost Center Updated"
+    assert update_response.json()["is_active"] is False
+
+    snapshot_response = api_client.get("/api/v1/hr-admin/organization/")
+    assert snapshot_response.status_code == 200, snapshot_response.json()
+    snapshot = snapshot_response.json()
+    assert snapshot["summary"]["cost_centers_count"] >= 1
+    assert any(item["code"] == "phase1b-cost-center" for item in snapshot["cost_centers"])
+
+
+@pytest.mark.django_db
 def test_hr_admin_cannot_deactivate_department_with_linked_employees(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -15213,6 +15327,28 @@ def test_hr_admin_notification_template_preview_renders_sample_payload(api_clien
     assert payload["preview"]["body"] == "Hello Riya Sharma, status is approved."
     assert payload["preview"]["metadata"]["reply_to_label"] == "approved desk"
     assert payload["test_notification"] is None
+
+
+@pytest.mark.django_db
+def test_hr_admin_notification_template_preview_requires_body(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.post(
+        "/api/v1/hr-admin/notification-templates/preview/",
+        {
+            "channel": "email",
+            "subject_template": "Update for {employee_name}",
+            "title_template": "",
+            "body_template": "   ",
+            "metadata_template": {},
+            "sample_payload": {"employee_name": "Riya Sharma"},
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400, response.json()
+    assert response.json()["body_template"] == ["Template body is required for preview."]
 
 
 @pytest.mark.django_db

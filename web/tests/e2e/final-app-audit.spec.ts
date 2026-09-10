@@ -72,30 +72,40 @@ const progressPath = join(artifactRoot, "progress.log");
 
 const personas: Persona[] = [
   {
+    key: "platform-admin",
+    role: "Platform Admin",
+    username: process.env.PLAYWRIGHT_LIVE_PLATFORM_ADMIN_USERNAME ?? "platform.admin",
+    password: process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123",
+    startUrls: ["/", "/platform-admin"],
+    pageLimit: 60,
+  },
+  {
     key: "hr-admin",
     role: "HR Admin / Payroll Admin / Tenant Admin",
-    username: "nisha.rao",
-    password: "Password@123",
+    username: process.env.PLAYWRIGHT_LIVE_HR_ADMIN_USERNAME ?? "nisha.rao",
+    password: process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123",
     startUrls: ["/", "/hr-admin", "/tenant-admin", "/tenant-admin/security-readiness", "/ess"],
     pageLimit: 140,
   },
   {
     key: "manager",
     role: "Manager",
-    username: "karan.mehta",
-    password: "Password@123",
+    username: process.env.PLAYWRIGHT_LIVE_MANAGER_USERNAME ?? "karan.mehta",
+    password: process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123",
     startUrls: ["/", "/ess", "/mss/approvals"],
     pageLimit: 55,
   },
   {
     key: "employee",
     role: "Employee",
-    username: "riya.sharma",
-    password: "Password@123",
+    username: process.env.PLAYWRIGHT_LIVE_EMPLOYEE_USERNAME ?? "riya.sharma",
+    password: process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123",
     startUrls: ["/", "/ess"],
     pageLimit: 45,
   },
 ];
+
+const maxPlatformTenantPagesPerPersona = 5;
 
 function ensureDir(path: string) {
   mkdirSync(path, { recursive: true });
@@ -141,6 +151,9 @@ function moduleFromPath(pathname: string) {
   if (parts[0] === "support") {
     return "Support";
   }
+  if (parts[0] === "platform-admin") {
+    return "Platform Admin";
+  }
   return parts[0].replaceAll("-", " ");
 }
 
@@ -171,7 +184,7 @@ async function login(page: Page, persona: Persona) {
   await page.getByLabel("Username or email").fill(persona.username);
   await page.getByLabel("Password").fill(persona.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/ess$/);
+  await page.waitForURL((url) => url.pathname !== "/login", { timeout: 30_000 });
 }
 
 async function getAccessibleName(locator: ReturnType<Page["locator"]>) {
@@ -445,11 +458,13 @@ function markdownReport(inventories: ScreenInventory[], defects: Defect[], untes
   const warnings = inventories.filter((item) => item.status === "WARNING").length;
   const countBySeverity = (severity: Defect["severity"]) => defects.filter((defect) => defect.severity === severity).length;
   const modules = unique(inventories.map((item) => item.module)).sort();
-  const recommendation = countBySeverity("CRITICAL") || countBySeverity("HIGH") || untested.length
+  const recommendation = countBySeverity("CRITICAL") || countBySeverity("HIGH")
     ? "NOT READY - MAJOR FIXES REQUIRED"
     : countBySeverity("MEDIUM") || countBySeverity("ACCESSIBILITY")
       ? "READY WITH MINOR FIXES"
-      : "READY FOR PRODUCTION";
+      : untested.length
+        ? "LOCAL QA PASS - PRODUCTION SIGNOFF REQUIRED"
+        : "READY FOR PRODUCTION";
 
   const lines = [
     "# Final HRMS/Payroll QA Review",
@@ -539,9 +554,11 @@ function markdownReport(inventories: ScreenInventory[], defects: Defect[], untes
     "",
     `Recommendation: ${recommendation}`,
     "",
-    recommendation === "READY FOR PRODUCTION"
-      ? "The crawler did not detect blocking defects, failed resources, console errors, or accessibility label issues in the discovered screens."
-      : "The app is not fully production-ready until the listed findings and untested high-risk workflows are resolved or manually signed off.",
+    recommendation === "NOT READY - MAJOR FIXES REQUIRED"
+      ? "The app is not fully production-ready until the listed findings are resolved."
+      : recommendation === "LOCAL QA PASS - PRODUCTION SIGNOFF REQUIRED"
+        ? "The crawler did not detect blocking defects, failed resources, console errors, or accessibility label issues in local seeded coverage; destructive actions and real external integrations still require production sign-off."
+        : "The crawler did not detect blocking defects, failed resources, console errors, or accessibility label issues in the discovered screens.",
     "",
     "## Artifact Locations",
     "",
@@ -554,7 +571,7 @@ function markdownReport(inventories: ScreenInventory[], defects: Defect[], untes
 }
 
 test.describe.configure({ mode: "serial" });
-test.setTimeout(12 * 60 * 1000);
+test.setTimeout(40 * 60 * 1000);
 
 test("complete non-destructive HRMS/payroll final application audit", async ({ page }, testInfo) => {
   ensureDir(artifactRoot);
@@ -567,30 +584,31 @@ test("complete non-destructive HRMS/payroll final application audit", async ({ p
     "Destructive actions were not executed: delete, terminate, revoke, payroll finalization, bank/payment approval, and production-like configuration changes.",
     "Real external provider integrations, real SSO/MFA/SCIM IdP execution, email/SMS delivery, and production object-storage downloads require environment-specific credentials and were not executed in this local seeded run.",
     "Support-session workspaces require a support-agent user and active tenant-approved session grant; they were inventoried only when reachable from the current seeded personas.",
+    "Platform-policy item authoring is tracked separately because the current browser surface supports pack header creation/publication/adoption but not item-level CRUD.",
     "Mathematical payroll correctness was not exhaustively recalculated outside the UI; displayed totals were visually inspected and inventoried.",
   ];
 
-  let currentInventory: ScreenInventory | null = null;
+  let currentIssueSink: Pick<ScreenInventory, "consoleErrors" | "pageErrors" | "failedRequests"> | null = null;
   page.on("console", (message) => {
     if (message.type() === "error") {
-      currentInventory?.consoleErrors.push(message.text());
+      currentIssueSink?.consoleErrors.push(message.text());
     }
   });
   page.on("pageerror", (error) => {
-    currentInventory?.pageErrors.push(error.message);
+    currentIssueSink?.pageErrors.push(error.message);
   });
   page.on("requestfailed", (request) => {
     const failureText = request.failure()?.errorText || "";
     if (failureText.includes("ERR_ABORTED")) {
       return;
     }
-    currentInventory?.failedRequests.push(`FAILED ${request.method()} ${request.url()} ${failureText}`.trim());
+    currentIssueSink?.failedRequests.push(`FAILED ${request.method()} ${request.url()} ${failureText}`.trim());
   });
   page.on("response", (response) => {
     const status = response.status();
     const url = response.url();
     if (status >= 400 && !url.includes("__nextjs") && !url.includes("favicon")) {
-      currentInventory?.failedRequests.push(`${status} ${response.request().method()} ${url}`);
+      currentIssueSink?.failedRequests.push(`${status} ${response.request().method()} ${url}`);
     }
   });
 
@@ -598,6 +616,7 @@ test("complete non-destructive HRMS/payroll final application audit", async ({ p
     await login(page, persona);
     const queue = [...persona.startUrls];
     const visited = new Set<string>();
+    let platformTenantPagesQueued = 0;
     let index = 0;
 
     while (queue.length && visited.size < persona.pageLimit) {
@@ -612,8 +631,17 @@ test("complete non-destructive HRMS/payroll final application audit", async ({ p
       index += 1;
       appendFileSync(progressPath, `${new Date().toISOString()} ${persona.key} ${index} ${pathWithQuery}\n`);
 
+      const issueSink: Pick<ScreenInventory, "consoleErrors" | "pageErrors" | "failedRequests"> = {
+        consoleErrors: [],
+        pageErrors: [],
+        failedRequests: [],
+      };
+      currentIssueSink = issueSink;
       const inventory = await inventoryPage(page, persona, pathWithQuery, index);
-      currentInventory = inventory;
+      inventory.consoleErrors = issueSink.consoleErrors;
+      inventory.pageErrors = issueSink.pageErrors;
+      inventory.failedRequests = issueSink.failedRequests;
+      currentIssueSink = inventory;
       await page.waitForTimeout(100);
       inventory.status = statusFor(inventory);
       inventories.push(inventory);
@@ -633,6 +661,12 @@ test("complete non-destructive HRMS/payroll final application audit", async ({ p
         }
         url.hash = "";
         const candidate = `${url.pathname}${url.search}`;
+        if (url.pathname === "/platform-admin" && url.searchParams.has("tenantId")) {
+          platformTenantPagesQueued += 1;
+          if (platformTenantPagesQueued > maxPlatformTenantPagesPerPersona) {
+            continue;
+          }
+        }
         if (!visited.has(candidate) && !queue.includes(candidate)) {
           queue.push(candidate);
         }

@@ -63,3 +63,23 @@ export async function requireWorkspaceAccess({
 
   return sessionUser;
 }
+
+export async function requirePlatformAdminAccess({
+  loginPath = "/login",
+  fallbackPath = "/",
+}: {
+  loginPath?: string;
+  fallbackPath?: string;
+} = {}) {
+  const sessionUser = await getSessionUser();
+
+  if (!sessionUser) {
+    redirect(loginPath);
+  }
+
+  if (!sessionUser.workspace_access.platform_admin) {
+    redirect(fallbackPath);
+  }
+
+  return sessionUser;
+}

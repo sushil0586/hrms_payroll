@@ -25,6 +25,7 @@ def platform_staff_user(db):
         email="platform.admin@example.com",
         password=PASSWORD,
         is_staff=True,
+        is_superuser=True,
         is_active=True,
         display_name="Platform Admin",
     )
@@ -180,13 +181,22 @@ def test_platform_staff_can_provision_first_admin_and_activate_tenant(api_client
     assert activate_response.status_code == 200, activate_response.json()
 
     tenant.refresh_from_db()
-    membership = TenantMembership.objects.get(user__username="ava.patel", tenant=tenant)
+    provisioned_user = User.objects.get(username="ava.patel")
+    membership = TenantMembership.objects.get(user=provisioned_user, tenant=tenant)
     role = Role.objects.get(tenant=tenant, code="hr-admin")
+    employee = Employee.objects.get(membership=membership, tenant=tenant)
 
     assert tenant.status == TenantStatus.ACTIVE
     assert tenant.onboarding_status == TenantOnboardingStatus.ACTIVE
     assert membership.is_default is True
+    assert membership.employee_code == employee.employee_code
+    assert employee.work_email == "ava.patel@northstar.example"
+    assert employee.employment_status == EmploymentStatus.ACTIVE
     assert MembershipRole.objects.filter(membership=membership, role=role, is_primary=True).exists()
+
+    api_client.force_authenticate(user=provisioned_user)
+    hr_dashboard_response = api_client.get("/api/v1/hr-admin/dashboard/")
+    assert hr_dashboard_response.status_code == 200, hr_dashboard_response.json()
 
 
 @pytest.mark.django_db
@@ -907,12 +917,13 @@ def test_hr_admin_governance_rules_extend_to_cloned_runtime_masters(api_client: 
 
 
 @pytest.mark.django_db
-def test_non_staff_user_cannot_access_platform_tenant_endpoints(api_client: APIClient, db):
+def test_non_platform_admin_user_cannot_access_platform_tenant_endpoints(api_client: APIClient, db):
     user = User.objects.create_user(
         username="ordinary.user",
         email="ordinary.user@example.com",
         password=PASSWORD,
-        is_staff=False,
+        is_staff=True,
+        is_superuser=False,
         is_active=True,
     )
     api_client.force_authenticate(user=user)

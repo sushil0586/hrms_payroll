@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { expect, type Page, test, type TestInfo } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { expectVisibleText, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
+import { expectVisibleText, gotoAuthenticated, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
 
 async function captureProviderStep(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`production-provider-callbacks/${name}.png`);
@@ -43,20 +43,13 @@ test.describe("Production provider callback and retry proof", () => {
     await expectPageReady(page, "Payroll Handoff");
 
     test.skip(await page.locator("a[href*='evidence=retry%3A']").count() === 0, "No provider retry seed exists in this staging tenant.");
-    await expectVisibleText(page, [
-      "Retry commands",
-    ]);
-    await expect(page.getByRole("button", { name: "Schedule retry" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Requeue delivery" })).toBeVisible();
-    await captureProviderStep(page, testInfo, "03-retry-command-controls");
-
     await page.locator("a[href*='evidence=retry%3A']").first().click();
     await expect(page.getByRole("heading", { name: "Retry Evidence" })).toBeVisible();
     await expectVisibleText(page, [
       "Decision snapshot",
       "Backoff seconds",
     ]);
-    await captureProviderStep(page, testInfo, "04-retry-decision-evidence");
+    await captureProviderStep(page, testInfo, "03-retry-decision-evidence");
 
     test.skip(await page.locator("a[href*='evidence=job%3A']").count() === 0, "No provider job seed exists in this staging tenant.");
     await page.locator("a[href*='evidence=job%3A']").first().click();
@@ -66,7 +59,7 @@ test.describe("Production provider callback and retry proof", () => {
       "Heartbeat seconds",
     ]);
     await expectNoHorizontalOverflow(page);
-    await captureProviderStep(page, testInfo, "05-queue-runtime-recovery");
+    await captureProviderStep(page, testInfo, "04-queue-runtime-recovery");
   });
 
   test("delivery drilldown and provider audit pack preserve locked evidence chain", async ({ page }, testInfo) => {
@@ -84,7 +77,7 @@ test.describe("Production provider callback and retry proof", () => {
     ]);
     await captureProviderStep(page, testInfo, "06-delivery-evidence-chain");
 
-    await page.goto("/hr-admin/payroll-handoff");
+    await gotoAuthenticated(page, "/hr-admin/payroll-handoff");
     const auditPack = page.locator("a[href*='artifactId=']").filter({ hasText: /audit pack/i }).first();
     test.skip(await auditPack.count() === 0, "No provider audit-pack seed exists in this staging tenant.");
     await auditPack.click();

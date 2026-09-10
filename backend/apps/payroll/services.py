@@ -8477,6 +8477,21 @@ def ingest_payroll_provider_callback(
         if not accepted:
             return event, False
 
+        if delivery.status == PayrollProviderDeliveryStatus.RECONCILED and provider_status == PayrollProviderDeliveryStatus.RECONCILED:
+            event.status = PayrollProviderCallbackEventStatus.PROCESSED
+            event.processed_at = received_at
+            event.processing_snapshot = {
+                "delivery_id": str(delivery.id),
+                "handoff_id": str(delivery.handoff_id),
+                "delivery_status": delivery.status,
+                "handoff_status": delivery.handoff.status,
+                "processed_at": received_at.isoformat(),
+                "delivery_mutation_skipped": True,
+                "delivery_mutation_skip_reason": "reconciled_provider_deliveries_are_immutable",
+            }
+            event.save()
+            return event, False
+
         delivery.status = provider_status
         if provider_status in {PayrollProviderDeliveryStatus.ACKNOWLEDGED, PayrollProviderDeliveryStatus.RECONCILED}:
             delivery.acknowledged_at = received_at

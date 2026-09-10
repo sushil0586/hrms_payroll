@@ -5,6 +5,8 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollSetup } from "@/lib/api";
 import type { HrAdminPayGroup, HrAdminPayrollCalendar } from "@/lib/types";
 
+import { PayrollSetupCrudConsole } from "./payroll-setup-crud-console";
+
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
@@ -272,6 +274,8 @@ export default async function HrAdminPayrollSetupPage({ searchParams }: PageProp
           <PayGroupDetail payGroup={selectedPayGroup} />
         </div>
       </section>
+
+      <PayrollSetupCrudConsole initialSetup={setup} />
     </main>
   );
 }

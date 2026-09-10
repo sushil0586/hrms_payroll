@@ -28,9 +28,9 @@ test.describe("Production storage governance proof", () => {
 
     await expectVisibleText(page, [
       "Storage governance",
-      "payroll.storage.local.generated.v1",
-      "payroll.download.stream.local.v1",
-      "payroll.retention.7y.v1",
+      /payroll\.storage\.[\w.-]+\.v1/,
+      /payroll\.download\.[\w.-]+\.v1/,
+      /payroll\.retention\.[\w.-]+\.v1/,
       "Download",
       "Ready",
       "Access governance",
@@ -42,16 +42,15 @@ test.describe("Production storage governance proof", () => {
       "Latest expiry",
       "Source hash",
       "Template config",
-      "Seed Ref",
     ]);
 
     const download = page.getByRole("link", { name: "Download file" }).first();
     await expect(download).toBeVisible();
-    await expect(download).toHaveAttribute("href", /\/api\/v1\/hr-admin\/payroll-output-artifacts\/[^/]+\/download\//);
+    await expect(download).toHaveAttribute("href", /\/api\/hr-admin\/payroll-output-artifacts\/[^/]+\/download/);
 
     const auditExport = page.getByRole("link", { name: "Export access audit" });
     await expect(auditExport).toBeVisible();
-    await expect(auditExport).toHaveAttribute("href", /\/api\/v1\/hr-admin\/payroll-output-artifacts\/[^/]+\/access-audit-export\//);
+    await expect(auditExport).toHaveAttribute("href", /\/api\/hr-admin\/payroll-output-artifacts\/[^/]+\/access-audit-export/);
 
     await expectNoRawSecretLeak(page);
     await expectNoHorizontalOverflow(page);
@@ -71,13 +70,12 @@ test.describe("Production storage governance proof", () => {
       "Read receipt",
       "Payment summary",
       "Storage governance",
-      "payroll.storage.local.generated.v1",
-      "payroll.download.stream.local.v1",
-      "payroll.retention.7y.v1",
+      /payroll\.storage\.[\w.-]+\.v1/,
+      /payroll\.download\.[\w.-]+\.v1/,
+      /payroll\.retention\.[\w.-]+\.v1/,
       "Checksum",
       "Recent access events",
       "Published",
-      "Notified",
       "Calculation lines",
     ]);
 

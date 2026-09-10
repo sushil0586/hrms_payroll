@@ -3,6 +3,7 @@ import Link from "next/link";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReviewSetup } from "@/lib/api";
+import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 import type {
   HrAdminPayrollCalculationLine,
   HrAdminPayrollRun,
@@ -288,6 +289,48 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                 <span>{formatDate(selectedReview?.locked_at ?? null)}</span>
               </div>
             </div>
+
+            <PayrollCloseActionsPanel
+              eyebrow="Payroll operations"
+              title="Review controls"
+              description="Submit, approve, final-lock, and generate outputs through authenticated tenant action endpoints."
+              actions={[
+                {
+                  id: "submit-review",
+                  label: "Submit review",
+                  endpoint: selectedReview ? `/api/hr-admin/payroll-reviews/${selectedReview.id}/submit` : "",
+                  disabled: !selectedReview,
+                  disabledReason: "Select a payroll review first.",
+                },
+                {
+                  id: "approve-review",
+                  label: "Approve review",
+                  endpoint: selectedReview ? `/api/hr-admin/payroll-reviews/${selectedReview.id}/approve` : "",
+                  profileField: "approval_profile_ref",
+                  profileLabel: "Approval profile ref",
+                  defaultProfileRef: selectedReview?.review_profile_ref ?? "",
+                  disabled: !selectedReview,
+                  disabledReason: "Select a payroll review first.",
+                },
+                {
+                  id: "lock-review",
+                  label: "Final lock",
+                  endpoint: selectedReview ? `/api/hr-admin/payroll-reviews/${selectedReview.id}/lock` : "",
+                  disabled: !selectedReview,
+                  disabledReason: "Select a payroll review first.",
+                },
+                {
+                  id: "generate-outputs",
+                  label: "Generate outputs",
+                  endpoint: selectedReview ? `/api/hr-admin/payroll-reviews/${selectedReview.id}/generate-outputs` : "",
+                  profileField: "output_profile_ref",
+                  profileLabel: "Output profile ref",
+                  defaultProfileRef: "tenant.payroll.outputs.v1",
+                  disabled: !selectedReview,
+                  disabledReason: "Select a payroll review first.",
+                },
+              ]}
+            />
 
             <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">

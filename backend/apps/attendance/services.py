@@ -27,7 +27,7 @@ from apps.attendance.models import (
     ShiftRosterRolloutStatus,
     ShiftRosterTemplateStatus,
 )
-from apps.employees.models import EmploymentStatus
+from apps.employees.models import Employee, EmploymentStatus
 from apps.notifications.services import trigger_notification_event
 from apps.workflows.models import WorkflowAction, WorkflowModule
 from apps.workflows.services import create_workflow_instance, resolve_workflow_action

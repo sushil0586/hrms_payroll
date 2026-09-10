@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("SaaS SLA operations", () => {
   test("shows incident, SLA target, service-impact, and threshold posture", async ({ page }) => {
-    await page.goto("/hr-admin/saas-sla-operations");
+    await gotoAuthenticated(page, "/hr-admin/saas-sla-operations");
     await expectPageReady(page, "SaaS SLA Ops");
     await expect(page.getByRole("main").getByText("SLA posture", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Service-impact records" })).toBeVisible();

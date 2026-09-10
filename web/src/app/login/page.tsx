@@ -9,13 +9,13 @@ export default function LoginPage() {
       <PageIntro
         eyebrow="Authentication"
         title="Sign in"
-        description="One sign-in flow for HR admin, managers, and employees."
+        description="One sign-in flow for platform operators, tenant admins, HR admins, managers, and employees."
         actions={
           <Link className="button button--secondary" href="/">
             Home
           </Link>
         }
-        pills={["HR Admin", "Manager", "Employee"]}
+        pills={["Platform Admin", "Tenant Admin", "HR Admin", "Manager", "Employee"]}
         showPills
       />
 
@@ -25,8 +25,8 @@ export default function LoginPage() {
           access follows your assigned role
         </div>
         <div className="queue-summary-chip">
-          <strong>3 workspaces</strong>
-          HR admin, ESS, and MSS
+          <strong>5 workspaces</strong>
+          platform, tenant, HR admin, ESS, and MSS
         </div>
         <div className="queue-summary-chip">
           <strong>Post sign-in</strong>
@@ -44,12 +44,18 @@ export default function LoginPage() {
           </div>
 
           <div className="public-auth-panel__summary">
+            <span className="queue-summary-chip"><strong>Platform admin</strong> tenants, baseline, and activation</span>
+            <span className="queue-summary-chip"><strong>Tenant admin</strong> account, trust, and access</span>
             <span className="queue-summary-chip"><strong>HR admin</strong> setup, policy, and reviews</span>
             <span className="queue-summary-chip"><strong>ESS</strong> requests, balances, and attendance</span>
             <span className="queue-summary-chip"><strong>MSS</strong> approval queues and team decisions</span>
           </div>
 
           <div className="public-auth-panel__grid">
+            <div className="workspace-card__detail">
+              <span className="detail-label">Platform admin</span>
+              <span className="detail-value">Tenant onboarding, admin provisioning, baseline adoption, and activation.</span>
+            </div>
             <div className="workspace-card__detail">
               <span className="detail-label">HR admin</span>
               <span className="detail-value">Employee setup, lifecycle, policy, documents, and reports.</span>

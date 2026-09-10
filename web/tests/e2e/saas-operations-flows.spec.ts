@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("SaaS operations health", () => {
   test("shows tenant health, queue, support, and evidence signals", async ({ page }) => {
-    await page.goto("/hr-admin/saas-operations");
+    await gotoAuthenticated(page, "/hr-admin/saas-operations");
     await expectPageReady(page, "SaaS Operations");
     await expect(page.getByRole("main").getByText("Operations posture", { exact: true })).toBeVisible();
     await expect(page.getByRole("main").getByText("Operational triage", { exact: true })).toBeVisible();

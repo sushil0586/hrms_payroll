@@ -14,6 +14,8 @@ import type {
   HrAdminPayrollStatutoryPack,
 } from "@/lib/types";
 
+import { PayrollStatutoryCrudConsole } from "./payroll-statutory-crud-console";
+
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
@@ -428,6 +430,8 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
 
         <DeclarationDetail declaration={selectedDeclaration} profile={selectedProfile} proofItems={selectedProofItems} />
       </section>
+
+      <PayrollStatutoryCrudConsole initialSetup={setup} />
     </main>
   );
 }

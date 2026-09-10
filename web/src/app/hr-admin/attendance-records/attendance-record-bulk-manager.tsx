@@ -51,6 +51,15 @@ function buildQueryString(params: Record<string, string | number | boolean | und
   return queryString ? `?${queryString}` : "";
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return "Not marked";
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(value));
+}
+
 export function AttendanceRecordBulkManager({
   items,
   state,
@@ -126,6 +135,7 @@ export function AttendanceRecordBulkManager({
       return;
     }
     setSelectedIds([]);
+    setIsSubmitting(false);
     router.refresh();
   }
 
@@ -276,8 +286,8 @@ export function AttendanceRecordBulkManager({
                 </div>
               </div>
               <div className="detail-grid">
-                <div className="detail-row"><span className="detail-label">Check in</span><span className="detail-value">{item.check_in_at ? new Date(item.check_in_at).toLocaleString("en-IN") : "Not marked"}</span></div>
-                <div className="detail-row"><span className="detail-label">Check out</span><span className="detail-value">{item.check_out_at ? new Date(item.check_out_at).toLocaleString("en-IN") : "Not marked"}</span></div>
+                <div className="detail-row"><span className="detail-label">Check in</span><span className="detail-value">{formatDateTime(item.check_in_at)}</span></div>
+                <div className="detail-row"><span className="detail-label">Check out</span><span className="detail-value">{formatDateTime(item.check_out_at)}</span></div>
                 <div className="detail-row"><span className="detail-label">Late minutes</span><span className="detail-value">{item.late_minutes}</span></div>
                 <div className="detail-row"><span className="detail-label">Regularized</span><span className="detail-value">{item.is_regularized ? "Yes" : "No"}</span></div>
               </div>

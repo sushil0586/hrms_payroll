@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("Tenant enterprise security readiness", () => {
   test("shows MFA, SSO, SCIM, audit, and data protection posture", async ({ page }) => {
-    await page.goto("/tenant-admin/security-readiness");
+    await gotoAuthenticated(page, "/tenant-admin/security-readiness");
     await expectPageReady(page, "Enterprise Security Readiness");
     await expect(page.getByRole("main").getByText("Launch posture", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "MFA and SSO" })).toBeVisible();

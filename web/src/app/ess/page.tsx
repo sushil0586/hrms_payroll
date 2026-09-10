@@ -4,8 +4,9 @@ import { LogoutButton } from "@/app/components/logout-button";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
+import { EssRequestSubmissionPanel } from "@/app/ess/ess-request-submission-panel";
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
-import { getEssDashboard } from "@/lib/api";
+import { getEssDashboard, getEssRequestOptions } from "@/lib/api";
 import type {
   AttendanceRegularizationItem,
   EssAttendanceRegularizationListResponse,
@@ -299,6 +300,7 @@ function RegularizationSection({
             <DetailRow label="Requested Check-In" value={formatDateTime(selected.requested_check_in_at)} />
             <DetailRow label="Resolved At" value={formatDateTime(selected.resolved_at)} />
             <DetailRow label="Manager Comment" value={selected.manager_comment || "No manager comment yet."} />
+            <DetailRow label="Rejection Reason" value={selected.rejection_reason || "No rejection reason."} />
             <DetailRow label="Reason" value={selected.reason || "No reason provided."} />
           </div>
         ) : (
@@ -330,12 +332,15 @@ export default async function EssPage({ searchParams }: PageProps) {
   const regStatus = normalizeParam(currentParams.regStatus) ?? "all";
   const leavePage = Math.max(Number(normalizeParam(currentParams.leavePage) || "1") || 1, 1);
   const regPage = Math.max(Number(normalizeParam(currentParams.regPage) || "1") || 1, 1);
-  const { dashboard, leaveRequests, regularizations, state } = await getEssDashboard({
-    leave_status: leaveStatus,
-    leave_page: leavePage,
-    regularization_status: regStatus,
-    regularization_page: regPage,
-  });
+  const [{ dashboard, leaveRequests, regularizations, state }, requestOptions] = await Promise.all([
+    getEssDashboard({
+      leave_status: leaveStatus,
+      leave_page: leavePage,
+      regularization_status: regStatus,
+      regularization_page: regPage,
+    }),
+    getEssRequestOptions(),
+  ]);
 
   return (
     <main className="shell shell--workspace">
@@ -423,6 +428,12 @@ export default async function EssPage({ searchParams }: PageProps) {
           ))}
         </div>
       </section>
+
+      <EssRequestSubmissionPanel
+        attendanceRecords={requestOptions.attendanceRecords}
+        isDemo={state === "demo" || requestOptions.state === "demo"}
+        leaveTypes={requestOptions.leaveTypes}
+      />
 
       <LeaveRequestSection currentParams={currentParams} response={leaveRequests} isDemo={state === "demo"} />
       <RegularizationSection currentParams={currentParams} response={regularizations} />

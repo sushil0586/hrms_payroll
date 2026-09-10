@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { expect, type Page, test, type TestInfo } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, expectVisibleText, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
+import { employee, expectVisibleText, gotoAuthenticated, hrAdmin, loginIfRequired } from "../helpers/staging-auth";
 
 async function captureCloseStep(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`production-payroll-close/${name}.png`);
@@ -27,7 +27,7 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "01-source-readiness");
 
-    await page.goto("/hr-admin/payroll-inputs");
+    await gotoAuthenticated(page, "/hr-admin/payroll-inputs");
     await expectPageReady(page, "Payroll Inputs");
     await expectVisibleText(page, [
       "Locked inputs",
@@ -38,7 +38,7 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "02-input-snapshots-locked");
 
-    await page.goto("/hr-admin/payroll-rules");
+    await gotoAuthenticated(page, "/hr-admin/payroll-rules");
     await expectPageReady(page, "Payroll Rules");
     await expect(page.getByRole("heading", { name: "Catalog" })).toBeVisible();
     await expectVisibleText(page, [
@@ -48,7 +48,7 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "03-rule-engine-evidence");
 
-    await page.goto("/hr-admin/payroll-calculations");
+    await gotoAuthenticated(page, "/hr-admin/payroll-calculations");
     await expectPageReady(page, "Payroll Calculations");
     await expectVisibleText(page, [
       "Issue register",
@@ -60,7 +60,7 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "04-draft-calculation-trace");
 
-    await page.goto("/hr-admin/payroll-review");
+    await gotoAuthenticated(page, "/hr-admin/payroll-review");
     await expectPageReady(page, "Payroll Review");
     await expectVisibleText(page, [
       "Exception register",
@@ -72,7 +72,7 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "05-review-approval-final-lock");
 
-    await page.goto("/hr-admin/payroll-outputs");
+    await gotoAuthenticated(page, "/hr-admin/payroll-outputs");
     await expectPageReady(page, "Payroll Outputs");
     await expectVisibleText(page, [
       "Published",
@@ -87,7 +87,7 @@ test.describe("Production payroll close proof", () => {
     ]);
     await captureCloseStep(page, testInfo, "06-published-output-governance");
 
-    await page.goto("/hr-admin/payroll-handoff");
+    await gotoAuthenticated(page, "/hr-admin/payroll-handoff");
     await expectPageReady(page, "Payroll Handoff");
     await expectVisibleText(page, [
       "Finance artifacts",

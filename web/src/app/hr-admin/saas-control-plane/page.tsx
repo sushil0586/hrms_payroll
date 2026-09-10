@@ -128,6 +128,11 @@ export default async function HrAdminSaasControlPlanePage() {
                   <div>
                     <strong>{scope.label}</strong>
                     <span>{scope.entitlements.join(", ") || "No entitlement refs"}</span>
+                    {scope.blocking_reasons.length || scope.exceeded_usage_limits.length ? (
+                      <span>
+                        {[...scope.blocking_reasons, ...scope.exceeded_usage_limits].join(", ")}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="saas-enforcement-row__meta">
                     <span>{scope.methods.join("/") || "All methods"}</span>

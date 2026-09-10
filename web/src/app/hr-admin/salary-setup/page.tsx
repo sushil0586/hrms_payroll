@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminSalarySetup } from "@/lib/api";
 import type { HrAdminSalaryComponent, HrAdminSalaryStructure } from "@/lib/types";
+import { SalarySetupCrudConsole } from "./salary-setup-crud-console";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -317,6 +318,8 @@ export default async function HrAdminSalarySetupPage({ searchParams }: PageProps
           <StructureDetail structure={selectedStructure} />
         </div>
       </section>
+
+      <SalarySetupCrudConsole initialSetup={setup} />
     </main>
   );
 }

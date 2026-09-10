@@ -11,6 +11,8 @@ export type WorkspaceNavItem = {
   label: string;
   shortLabel: string;
   blurb?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 type Props = {
@@ -76,6 +78,24 @@ export function WorkspaceChrome({
             <div className="nav-group__items">
               {navItems.map((item) => {
                 const active = isActivePath(pathname, item.href);
+                if (item.disabled) {
+                  return (
+                    <div
+                      aria-disabled="true"
+                      aria-label={`${item.label} unavailable`}
+                      className="nav-item nav-item--disabled"
+                      key={item.href}
+                      title={item.disabledReason || `${item.label} is unavailable`}
+                    >
+                      <span className="nav-item__glyph" aria-hidden="true">{item.shortLabel}</span>
+                      <span className="nav-item__content">
+                        <strong>{item.label}</strong>
+                        {item.blurb ? <small>{item.blurb}</small> : null}
+                        {item.disabledReason ? <small>{item.disabledReason}</small> : null}
+                      </span>
+                    </div>
+                  );
+                }
                 return (
                   <Link
                     className={`nav-item${active ? " nav-item--active" : ""}`}

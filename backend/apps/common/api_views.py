@@ -1038,6 +1038,7 @@ ORGANIZATION_MODEL_MAP = {
     "branches": Branch,
     "business_units": BusinessUnit,
     "departments": Department,
+    "cost_centers": CostCenter,
     "grades": Grade,
     "designations": Designation,
     "employment_types": EmploymentType,
@@ -1079,6 +1080,8 @@ def _get_organization_deactivation_conflicts(*, tenant, section: str, item) -> l
         if Department.objects.filter(tenant=tenant, parent=item).exists():
             conflicts.append("child departments")
         return conflicts
+    if section == "cost_centers":
+        return ["linked employees"] if Employee.objects.filter(tenant=tenant, cost_center=item).exists() else []
     if section == "grades":
         conflicts = []
         if Employee.objects.filter(tenant=tenant, grade=item).exists():
@@ -1168,6 +1171,12 @@ def save_hr_admin_organization_item(actor, section: str, validated_data, *, item
             if validated_data["business_unit_id"] and not business_unit:
                 raise serializers.ValidationError({"business_unit_id": "Invalid selection."})
             item.business_unit = business_unit
+    elif section == "cost_centers":
+        if "legal_entity_id" in validated_data:
+            legal_entity = LegalEntity.objects.filter(id=validated_data["legal_entity_id"], tenant=tenant).first() if validated_data["legal_entity_id"] else None
+            if validated_data["legal_entity_id"] and not legal_entity:
+                raise serializers.ValidationError({"legal_entity_id": "Invalid selection."})
+            item.legal_entity = legal_entity
     elif section == "grades":
         if "level" in validated_data:
             item.level = validated_data["level"]
@@ -5522,6 +5531,19 @@ def save_hr_admin_notification_template(actor, validated_data, *, item=None):
     if item is None:
         item = NotificationTemplate(tenant=tenant)
 
+    next_code = validated_data.get("code", item.code)
+    next_channel = validated_data.get("channel", item.channel)
+    if next_code and next_channel:
+        duplicate = NotificationTemplate.objects.filter(
+            tenant=tenant,
+            code=next_code,
+            channel=next_channel,
+        )
+        if item.id:
+            duplicate = duplicate.exclude(id=item.id)
+        if duplicate.exists():
+            raise serializers.ValidationError({"code": "A notification template with this code and channel already exists."})
+
     for field in [
         "code",
         "name",
@@ -5573,6 +5595,13 @@ def save_hr_admin_notification_event(actor, validated_data, *, item=None):
         item = NotificationEventDefinition(tenant=tenant)
 
     effective_channel = validated_data.get("channel", item.channel)
+    next_code = validated_data.get("code", item.code)
+    if next_code:
+        duplicate = NotificationEventDefinition.objects.filter(tenant=tenant, code=next_code)
+        if item.id:
+            duplicate = duplicate.exclude(id=item.id)
+        if duplicate.exists():
+            raise serializers.ValidationError({"code": "A notification event with this code already exists."})
 
     if "template_id" in validated_data:
         template = NotificationTemplate.objects.filter(tenant=tenant, id=validated_data["template_id"]).first() if validated_data["template_id"] else None
@@ -6888,6 +6917,8 @@ class MeStatutoryDeclarationListView(EmployeeContextMixin, APIView):
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
         except serializers.ValidationError as exc:
             return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(MeStatutoryDeclarationSerializer(build_me_statutory_declaration_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
@@ -6918,6 +6949,8 @@ class MeStatutoryDeclarationDetailView(EmployeeContextMixin, APIView):
             item = save_me_statutory_declaration(employee, serializer.validated_data, item=item)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         except serializers.ValidationError as exc:
             return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(MeStatutoryDeclarationSerializer(build_me_statutory_declaration_payload(item)).data)
@@ -6960,6 +6993,8 @@ class MeStatutoryDeclarationProofUploadView(EmployeeContextMixin, APIView):
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
         except serializers.ValidationError as exc:
             return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         document = EmployeeDocument.objects.select_related("employee", "category", "artifact").get(id=document.id)
         return response.Response(
             {
@@ -6994,6 +7029,8 @@ class MeStatutoryDeclarationItemListCreateView(EmployeeContextMixin, APIView):
             item = save_me_statutory_declaration_item(employee, declaration, serializer.validated_data)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         except serializers.ValidationError as exc:
             return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(MeStatutoryDeclarationItemSerializer(build_me_statutory_declaration_item_payload(item)).data, status=status.HTTP_201_CREATED)
@@ -9833,6 +9870,8 @@ class HrAdminPayrollSettlementApplyView(HrAdminPayrollSettlementActionView):
 def save_hr_admin_payroll_run(actor, validated_data, *, item=None):
     if item is None:
         item = PayrollRun(tenant=actor.tenant)
+    elif item.status == PayrollRunStatus.LOCKED:
+        raise serializers.ValidationError({"detail": "Final locked payroll runs cannot be edited."})
     if "period_id" in validated_data:
         period = PayrollPeriod.objects.filter(tenant=actor.tenant, id=validated_data["period_id"]).first()
         if not period:
@@ -9856,6 +9895,8 @@ def save_hr_admin_payroll_run(actor, validated_data, *, item=None):
 def save_hr_admin_payroll_input_snapshot(actor, validated_data, *, item=None):
     if item is None:
         item = PayrollInputSnapshot(tenant=actor.tenant)
+    elif item.snapshot_status == PayrollInputSnapshotStatus.LOCKED:
+        raise serializers.ValidationError({"detail": "Locked payroll input snapshots cannot be edited."})
     if "payroll_run_id" in validated_data:
         payroll_run = PayrollRun.objects.filter(tenant=actor.tenant, id=validated_data["payroll_run_id"]).select_related("period").first()
         if not payroll_run:
@@ -9927,6 +9968,8 @@ class HrAdminPayrollRunListCreateView(HrAdminContextMixin, APIView):
             item = save_hr_admin_payroll_run(employee, serializer.validated_data)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         item = PayrollRun.objects.select_related("period", "pay_group", "locked_by").get(id=item.id)
         return response.Response(HrAdminPayrollRunSerializer(build_hr_admin_payroll_run_payload(item)).data, status=status.HTTP_201_CREATED)
 
@@ -9954,6 +9997,8 @@ class HrAdminPayrollRunDetailView(HrAdminContextMixin, APIView):
             item = save_hr_admin_payroll_run(employee, serializer.validated_data, item=item)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         item = PayrollRun.objects.select_related("period", "pay_group", "locked_by").get(id=item.id)
         return response.Response(HrAdminPayrollRunSerializer(build_hr_admin_payroll_run_payload(item)).data)
 
@@ -10029,6 +10074,8 @@ class HrAdminPayrollInputSnapshotListCreateView(HrAdminContextMixin, APIView):
             item = save_hr_admin_payroll_input_snapshot(employee, serializer.validated_data)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         item = PayrollInputSnapshot.objects.select_related(
             "payroll_run",
             "employee",
@@ -10066,6 +10113,8 @@ class HrAdminPayrollInputSnapshotDetailView(HrAdminContextMixin, APIView):
             item = save_hr_admin_payroll_input_snapshot(employee, serializer.validated_data, item=item)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         item = PayrollInputSnapshot.objects.select_related(
             "payroll_run",
             "employee",
@@ -10248,6 +10297,8 @@ class HrAdminPayrollRuleDefinitionListCreateView(HrAdminContextMixin, APIView):
             item = save_hr_admin_payroll_rule_definition(employee, serializer.validated_data)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(HrAdminPayrollRuleDefinitionSerializer(build_hr_admin_payroll_rule_definition_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
@@ -10274,6 +10325,8 @@ class HrAdminPayrollRuleDefinitionDetailView(HrAdminContextMixin, APIView):
             item = save_hr_admin_payroll_rule_definition(employee, serializer.validated_data, item=item)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(HrAdminPayrollRuleDefinitionSerializer(build_hr_admin_payroll_rule_definition_payload(item)).data)
 
 
@@ -10295,6 +10348,8 @@ class HrAdminPayrollRuleVersionListCreateView(HrAdminContextMixin, APIView):
             item = save_hr_admin_payroll_rule_version(employee, serializer.validated_data)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         item = PayrollRuleVersion.objects.select_related("rule").get(id=item.id)
         return response.Response(HrAdminPayrollRuleVersionSerializer(build_hr_admin_payroll_rule_version_payload(item)).data, status=status.HTTP_201_CREATED)
 
@@ -10322,6 +10377,8 @@ class HrAdminPayrollRuleVersionDetailView(HrAdminContextMixin, APIView):
             item = save_hr_admin_payroll_rule_version(employee, serializer.validated_data, item=item)
         except DjangoValidationError as exc:
             return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
+        except serializers.ValidationError as exc:
+            return response.Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
         item = PayrollRuleVersion.objects.select_related("rule").get(id=item.id)
         return response.Response(HrAdminPayrollRuleVersionSerializer(build_hr_admin_payroll_rule_version_payload(item)).data)
 
@@ -14529,15 +14586,18 @@ class HrAdminLeaveBalanceActionView(HrAdminContextMixin, APIView):
         if not leave_policy:
             return response.Response({"leave_policy_id": ["Leave policy not found."]}, status=status.HTTP_400_BAD_REQUEST)
 
-        mutation_result = apply_leave_balance_admin_action(
-            actor=employee,
-            employee=target_employee,
-            leave_policy=leave_policy,
-            action=serializer.validated_data["action"],
-            units=serializer.validated_data["units"],
-            effective_date=serializer.validated_data.get("effective_date") or timezone.localdate(),
-            reason=serializer.validated_data.get("reason", ""),
-        )
+        try:
+            mutation_result = apply_leave_balance_admin_action(
+                actor=employee,
+                employee=target_employee,
+                leave_policy=leave_policy,
+                action=serializer.validated_data["action"],
+                units=serializer.validated_data["units"],
+                effective_date=serializer.validated_data.get("effective_date") or timezone.localdate(),
+                reason=serializer.validated_data.get("reason", ""),
+            )
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
         balance = LeaveBalance.objects.select_related("employee", "leave_policy", "leave_policy__leave_type").get(id=mutation_result["balance"].id)
         transaction_item = (
             LeaveBalanceTransaction.objects.filter(id=mutation_result["transaction"].id)
@@ -14569,12 +14629,15 @@ class HrAdminLeaveBalanceTransactionReviewView(HrAdminContextMixin, APIView):
         if not transaction_item:
             return response.Response({"detail": "Leave balance transaction not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        mutation_result = review_leave_balance_transaction(
-            actor=employee,
-            transaction_item=transaction_item,
-            decision=serializer.validated_data["decision"],
-            rejection_reason=serializer.validated_data.get("rejection_reason", ""),
-        )
+        try:
+            mutation_result = review_leave_balance_transaction(
+                actor=employee,
+                transaction_item=transaction_item,
+                decision=serializer.validated_data["decision"],
+                rejection_reason=serializer.validated_data.get("rejection_reason", ""),
+            )
+        except DjangoValidationError as exc:
+            return response.Response(_django_validation_error_payload(exc), status=status.HTTP_400_BAD_REQUEST)
         balance = LeaveBalance.objects.select_related("employee", "leave_policy", "leave_policy__leave_type").get(id=mutation_result["balance"].id)
         updated_transaction = (
             LeaveBalanceTransaction.objects.filter(id=mutation_result["transaction"].id)
@@ -16625,6 +16688,11 @@ class HrAdminNotificationTemplatePreviewView(HrAdminContextMixin, APIView):
         serializer = HrAdminNotificationTemplatePreviewRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
+        if not (validated.get("body_template") or "").strip():
+            return response.Response(
+                {"body_template": ["Template body is required for preview."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         membership = _get_notification_preview_membership(tenant=employee.tenant, membership_id=validated.get("membership_id"))
         preview = _build_notification_template_preview(
             channel=validated["channel"],
@@ -16646,6 +16714,11 @@ class HrAdminNotificationTemplateTestSendView(HrAdminContextMixin, APIView):
         serializer = HrAdminNotificationTemplatePreviewRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
+        if not (validated.get("body_template") or "").strip():
+            return response.Response(
+                {"body_template": ["Template body is required for preview."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         membership = _get_notification_preview_membership(tenant=employee.tenant, membership_id=validated.get("membership_id"))
         if not membership:
             return response.Response({"detail": "Choose a test membership before sending a template test notification."}, status=status.HTTP_400_BAD_REQUEST)

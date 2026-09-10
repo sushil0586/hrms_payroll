@@ -1,6 +1,7 @@
 import { expect, test, type Locator } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 async function expectRequiredFieldInvalid(field: Locator) {
   await expect
@@ -20,7 +21,7 @@ async function selectFirstNonEmptyOption(field: Locator) {
 
 test.describe("HR admin configuration form flows", () => {
   test("employee create form keeps required fields and date warnings visible", async ({ page }) => {
-    await page.goto("/hr-admin/employees/new");
+    await gotoAuthenticated(page, "/hr-admin/employees/new");
     await expectPageReady(page, "Create employee");
 
     await page.getByRole("button", { name: "Create employee" }).click();
@@ -34,7 +35,7 @@ test.describe("HR admin configuration form flows", () => {
   });
 
   test("organization department form exposes hierarchy fields and required validation", async ({ page }) => {
-    await page.goto("/hr-admin/organization/departments/new");
+    await gotoAuthenticated(page, "/hr-admin/organization/departments/new");
     await expectPageReady(page, "Create department");
 
     await expect(page.getByRole("heading", { name: "Core identity" })).toBeVisible();
@@ -47,7 +48,7 @@ test.describe("HR admin configuration form flows", () => {
   });
 
   test("leave policy preview explains missing leave type before saving", async ({ page }) => {
-    await page.goto("/hr-admin/leave-policies/new");
+    await gotoAuthenticated(page, "/hr-admin/leave-policies/new");
     await expectPageReady(page, "Create leave policy");
 
     await page.getByRole("button", { name: "Preview route" }).click();
@@ -60,7 +61,7 @@ test.describe("HR admin configuration form flows", () => {
   });
 
   test("attendance policy preview explains missing date before saving", async ({ page }) => {
-    await page.goto("/hr-admin/attendance-policies/new");
+    await gotoAuthenticated(page, "/hr-admin/attendance-policies/new");
     await expectPageReady(page, "Create attendance policy");
 
     await page.getByRole("button", { name: "Preview attendance outcome" }).click();
@@ -72,7 +73,7 @@ test.describe("HR admin configuration form flows", () => {
   });
 
   test("workflow template form can add and remove approval steps", async ({ page }) => {
-    await page.goto("/hr-admin/workflow-templates/new");
+    await gotoAuthenticated(page, "/hr-admin/workflow-templates/new");
     await expectPageReady(page, "Create workflow template");
 
     await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
@@ -85,7 +86,7 @@ test.describe("HR admin configuration form flows", () => {
   });
 
   test("notification template form adapts message fields by channel", async ({ page }) => {
-    await page.goto("/hr-admin/notification-templates/new");
+    await gotoAuthenticated(page, "/hr-admin/notification-templates/new");
     await expectPageReady(page, "Create notification template");
 
     await expect(page.getByLabel("Subject template")).toBeDisabled();
@@ -95,8 +96,10 @@ test.describe("HR admin configuration form flows", () => {
     await expect(page.getByLabel("Subject template")).toBeEnabled();
     await expect(page.getByLabel("Title template")).toBeDisabled();
 
+    await page.getByLabel("Body template").fill("");
     await page.getByRole("button", { name: "Preview" }).click();
-    await expect(page.getByText("Template body is required for preview.").or(page.getByText("Preview failed."))).toBeVisible();
+    await expect(page.getByText("Preview failed.")).toBeVisible();
+    await expect(page.getByText("Template body is required for preview.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 });

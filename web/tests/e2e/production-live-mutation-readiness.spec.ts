@@ -1,6 +1,7 @@
 import { expect, type APIResponse, type Page, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 type Persona = {
   username: string;
@@ -172,16 +173,16 @@ test.describe("Production live/disposable mutation readiness", () => {
       await loginViaProxy(page, hrAdmin);
     }
 
-    await page.goto("/hr-admin/notifications?retry_state=retry_ready");
+    await gotoAuthenticated(page, "/hr-admin/notifications?retry_state=retry_ready");
     await expectPageReady(page, "Notification queue");
     await expect(page.getByRole("button", { name: /Retry selected/ })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Save review" }).first()).toBeVisible();
 
-    await page.goto("/hr-admin/payroll-providers");
+    await gotoAuthenticated(page, "/hr-admin/payroll-providers");
     await expectPageReady(page, "Payroll Providers");
     await expect(page.getByRole("button", { name: "Run rehearsal" })).toBeVisible();
 
-    await page.goto("/tenant-admin");
+    await gotoAuthenticated(page, "/tenant-admin");
     await expectPageReady(page, "Tenant Admin Console");
     await expect(page.getByRole("button", { name: /Submit request|Request access|Invite member/ }).first()).toBeVisible();
 
@@ -189,7 +190,7 @@ test.describe("Production live/disposable mutation readiness", () => {
     if (apiBaseConfigured) {
       await loginViaProxy(page, employee);
     }
-    await page.goto("/ess/payslips");
+    await gotoAuthenticated(page, "/ess/payslips");
     await expectPageReady(page, "Payslips");
     await expect(page.getByRole("button", { name: /Mark as read|Read acknowledged/ }).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);

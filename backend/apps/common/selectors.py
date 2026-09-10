@@ -7,6 +7,8 @@ import uuid
 from copy import deepcopy
 from datetime import date, timedelta
 
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
@@ -4700,8 +4702,23 @@ def sync_hrms_saas_launch_remediation_assignments(tenant, launch_audit: dict) ->
             "last_seen_at": now,
             "assignment_snapshot": action,
         }
-        assignment = HrmsLaunchRemediationAssignment.objects.filter(tenant=tenant, gate_ref=gate_ref).first()
-        if assignment:
+        try:
+            assignment, created = HrmsLaunchRemediationAssignment.objects.get_or_create(
+                tenant=tenant,
+                gate_ref=gate_ref,
+                defaults={
+                    "status": HrmsLaunchRemediationStatus.OPEN,
+                    "due_at": now + timedelta(days=sla_days),
+                    "due_source_ref": "launch_audit.sla_days",
+                    **defaults,
+                },
+            )
+        except (IntegrityError, ValidationError):
+            assignment = HrmsLaunchRemediationAssignment.objects.get(tenant=tenant, gate_ref=gate_ref)
+            created = False
+        if created:
+            opened_count += 1
+        else:
             for field, value in defaults.items():
                 setattr(assignment, field, value)
             if assignment.status == HrmsLaunchRemediationStatus.CLOSED:
@@ -4712,16 +4729,6 @@ def sync_hrms_saas_launch_remediation_assignments(tenant, launch_audit: dict) ->
                 assignment.due_source_ref = "launch_audit.sla_days"
             assignment.save()
             updated_count += 1
-        else:
-            HrmsLaunchRemediationAssignment.objects.create(
-                tenant=tenant,
-                gate_ref=gate_ref,
-                status=HrmsLaunchRemediationStatus.OPEN,
-                due_at=now + timedelta(days=sla_days),
-                due_source_ref="launch_audit.sla_days",
-                **defaults,
-            )
-            opened_count += 1
 
     close_queryset = HrmsLaunchRemediationAssignment.objects.filter(
         tenant=tenant,
@@ -6236,6 +6243,7 @@ def get_hr_admin_organization_item_detail(employee: Employee, section: str, item
         "branches": Branch.objects.filter(tenant=tenant).select_related("legal_entity", "location"),
         "business_units": BusinessUnit.objects.filter(tenant=tenant).select_related("parent"),
         "departments": Department.objects.filter(tenant=tenant).select_related("business_unit", "parent"),
+        "cost_centers": CostCenter.objects.filter(tenant=tenant).select_related("legal_entity"),
         "grades": Grade.objects.filter(tenant=tenant),
         "designations": Designation.objects.filter(tenant=tenant).select_related("grade"),
         "employment_types": EmploymentType.objects.filter(tenant=tenant),
@@ -6308,6 +6316,15 @@ def get_hr_admin_organization_item_detail(employee: Employee, section: str, item
                 "parent": item.parent.name if item.parent else None,
                 "linked_employees_count": Employee.objects.filter(tenant=tenant, department=item).count(),
                 "child_count": Department.objects.filter(tenant=tenant, parent=item).count(),
+            },
+        )
+    if section == "cost_centers":
+        return _organization_item_payload(
+            item,
+            extra={
+                "legal_entity_id": item.legal_entity_id,
+                "legal_entity": item.legal_entity.name if item.legal_entity else None,
+                "linked_employees_count": Employee.objects.filter(tenant=tenant, cost_center=item).count(),
             },
         )
     if section == "grades":
@@ -6407,6 +6424,17 @@ def get_hr_admin_organization_snapshot(employee: Employee) -> dict:
         )
         for item in Department.objects.filter(tenant=tenant).select_related("business_unit", "parent").order_by("name")
     ]
+    cost_centers = [
+        _organization_item_payload(
+            item,
+            extra={
+                "legal_entity": item.legal_entity.name if item.legal_entity else None,
+                "legal_entity_id": item.legal_entity_id,
+                "linked_employees_count": Employee.objects.filter(tenant=tenant, cost_center=item).count(),
+            },
+        )
+        for item in CostCenter.objects.filter(tenant=tenant).select_related("legal_entity").order_by("name")
+    ]
     grades = [
         _organization_item_payload(
             item,
@@ -6446,6 +6474,7 @@ def get_hr_admin_organization_snapshot(employee: Employee) -> dict:
             "branches_count": len(branches),
             "business_units_count": len(business_units),
             "departments_count": len(departments),
+            "cost_centers_count": len(cost_centers),
             "grades_count": len(grades),
             "designations_count": len(designations),
             "employment_types_count": len(employment_types),
@@ -6455,6 +6484,7 @@ def get_hr_admin_organization_snapshot(employee: Employee) -> dict:
         "branches": branches,
         "business_units": business_units,
         "departments": departments,
+        "cost_centers": cost_centers,
         "grades": grades,
         "designations": designations,
         "employment_types": employment_types,

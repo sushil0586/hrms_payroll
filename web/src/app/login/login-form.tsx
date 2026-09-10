@@ -3,6 +3,22 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+function workspaceHrefFor(user: {
+  workspace_access?: {
+    platform_admin?: boolean;
+    hr_admin?: boolean;
+    tenant_admin?: boolean;
+    mss?: boolean;
+    ess?: boolean;
+  };
+}) {
+  if (user.workspace_access?.platform_admin) return "/platform-admin";
+  if (user.workspace_access?.hr_admin) return "/hr-admin";
+  if (user.workspace_access?.tenant_admin) return "/tenant-admin";
+  if (user.workspace_access?.mss) return "/mss/approvals";
+  return "/ess";
+}
+
 export function LoginForm() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
@@ -37,7 +53,7 @@ export function LoginForm() {
       return;
     }
 
-    router.push("/ess");
+    router.push(workspaceHrefFor(payload.user ?? {}));
     router.refresh();
   }
 
@@ -45,11 +61,13 @@ export function LoginForm() {
     <form className="form-shell-card auth-form-shell" onSubmit={handleSubmit}>
       <div className="form-shell-card__intro">
         <h2 className="section-heading-soft">Sign in</h2>
-        <p className="section-copy section-copy-soft">Use the same account for HR admin, manager, and employee workspaces.</p>
+        <p className="section-copy section-copy-soft">Use the same account for platform, tenant, HR admin, manager, and employee workspaces.</p>
       </div>
 
       <div className="auth-role-strip" aria-label="Available workspaces after sign in">
+        <span className="auth-role-chip">Platform Admin</span>
         <span className="auth-role-chip">HR Admin</span>
+        <span className="auth-role-chip">Tenant Admin</span>
         <span className="auth-role-chip">Manager</span>
         <span className="auth-role-chip">Employee</span>
       </div>

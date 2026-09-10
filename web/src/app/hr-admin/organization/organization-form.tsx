@@ -73,7 +73,10 @@ function getDeactivationGuidance(item: HrAdminOrganizationItem | undefined, sect
 }
 
 function normalizePayload(value: HrAdminOrganizationWriteInput) {
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, item === "" ? null : item]));
+  const nullableFields = new Set(["legal_entity_id", "location_id", "parent_id", "business_unit_id", "grade_id", "level"]);
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, item === "" && nullableFields.has(key) ? null : item]),
+  );
 }
 
 function extractErrors(payload: unknown): { message: string; fieldErrors: OrganizationFieldErrors } {
@@ -339,6 +342,20 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
                     {selectOptions(filteredDepartments)}
                   </select>
                   <FieldError message={fieldErrors.parent_id} />
+                </label>
+              </div>
+            </FormSection>
+          ) : null}
+
+          {section === "cost_centers" ? (
+            <FormSection title="Cost center mapping" description="Connect finance-facing cost centers to legal entities so payroll and reporting stay aligned.">
+              <div className="form-grid">
+                <label className="form-field">
+                  <span className="muted">Legal entity</span>
+                  <select className="input-control" value={formValue.legal_entity_id ?? ""} onChange={(event) => updateField("legal_entity_id", event.target.value || null)}>
+                    {selectOptions(options.legal_entities)}
+                  </select>
+                  <FieldError message={fieldErrors.legal_entity_id} />
                 </label>
               </div>
             </FormSection>

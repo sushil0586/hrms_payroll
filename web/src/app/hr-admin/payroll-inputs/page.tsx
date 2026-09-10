@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
 import type { HrAdminPayrollInputSnapshot, HrAdminPayrollRun } from "@/lib/types";
+import { PayrollInputOperationsPanel } from "./payroll-input-operations-panel";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -283,6 +284,8 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
           <SnapshotDetail snapshot={selectedSnapshot} />
         </div>
       </section>
+
+      <PayrollInputOperationsPanel initialSetup={setup} selectedRun={selectedRun} selectedSnapshot={selectedSnapshot} />
     </main>
   );
 }

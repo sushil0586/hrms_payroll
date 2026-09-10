@@ -41,6 +41,15 @@ function buildQueryString(params: Record<string, string | number | boolean | und
   return queryString ? `?${queryString}` : "";
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return "Not submitted";
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(value));
+}
+
 export function AttendanceRegularizationQueue({
   items,
   regularizationStatusOptions,
@@ -157,7 +166,7 @@ export function AttendanceRegularizationQueue({
               </div>
             </div>
             <div className="detail-grid">
-              <div className="detail-row"><span className="detail-label">Applied at</span><span className="detail-value">{item.applied_at ? new Date(item.applied_at).toLocaleString("en-IN") : "Not submitted"}</span></div>
+              <div className="detail-row"><span className="detail-label">Applied at</span><span className="detail-value">{formatDateTime(item.applied_at)}</span></div>
               <div className="detail-row"><span className="detail-label">Reason</span><span className="detail-value">{item.reason || "No reason"}</span></div>
               <div className="detail-row"><span className="detail-label">Manager comment</span><span className="detail-value">{item.manager_comment || "None"}</span></div>
               <div className="detail-row"><span className="detail-label">Workflow reference</span><span className="detail-value">{item.workflow_reference || "Not linked"}</span></div>

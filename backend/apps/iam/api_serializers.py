@@ -49,6 +49,7 @@ class WorkspaceAccessSerializer(serializers.Serializer):
     mss = serializers.BooleanField()
     hr_admin = serializers.BooleanField()
     tenant_admin = serializers.BooleanField()
+    platform_admin = serializers.BooleanField()
 
 
 class SessionUserSerializer(serializers.Serializer):
@@ -90,7 +91,7 @@ def _membership_has_pending_mss_assignment(membership: TenantMembership | None) 
     ).filter(Q(membership=membership) | Q(actor_identifier__in=actor_identifiers)).exists()
 
 
-def build_workspace_access_payload(default_membership: TenantMembership | None) -> dict:
+def build_workspace_access_payload(user: User, default_membership: TenantMembership | None) -> dict:
     role_codes = set(_membership_role_codes(default_membership))
     has_employee_context = bool(default_membership and getattr(default_membership, "employee", None))
     hr_admin_access = "hr-admin" in role_codes
@@ -102,6 +103,7 @@ def build_workspace_access_payload(default_membership: TenantMembership | None) 
         "mss": mss_access,
         "hr_admin": hr_admin_access,
         "tenant_admin": tenant_admin_access,
+        "platform_admin": bool(user.is_superuser),
     }
 
 
@@ -137,5 +139,5 @@ def build_session_user_payload(user: User) -> dict:
         "must_change_password": user.must_change_password,
         "default_membership": build_membership_payload(default_membership) if default_membership else None,
         "memberships": [build_membership_payload(membership) for membership in memberships],
-        "workspace_access": build_workspace_access_payload(default_membership),
+        "workspace_access": build_workspace_access_payload(user, default_membership),
     }

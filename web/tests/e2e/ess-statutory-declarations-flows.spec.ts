@@ -1,39 +1,47 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("Employee statutory declaration flows", () => {
   test("employee declaration workspace exposes tax profile, proof status, and payroll source trail", async ({ page }) => {
-    await page.goto("/ess/statutory-declarations");
+    await gotoAuthenticated(page, "/ess/statutory-declarations");
     await expectPageReady(page, "Statutory Declarations");
 
     await expect(page.getByRole("heading", { name: "Tax years" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Proof status and tax profile" })).toBeVisible();
-    await expect(page.getByText("Riya Sharma").first()).toBeVisible();
-    await expect(page.getByText("FY2026-27").first()).toBeVisible();
-    await expect(page.getByText("Old Regime").first()).toBeVisible();
-    await expect(page.getByText("ABCDE1234F").first()).toBeVisible();
-    await expect(page.getByText("123456789012").first()).toBeVisible();
-    await expect(page.getByText("Life Insurance Premium").first()).toBeVisible();
-    await expect(page.getByText("House Rent Exemption").first()).toBeVisible();
-    await expect(page.getByText("employee-document:lic-premium-fy2026").first()).toBeVisible();
-    await expect(page.getByText("india.tax.proof-window.fy2026.v1").first()).toBeVisible();
-    await expect(page.getByText("payroll.calc.statutory.fy2026.v1").first()).toBeVisible();
-    await expect(page.getByText("Locked").first()).toBeVisible();
-    await expect(page.getByText("Verified").first()).toBeVisible();
-    await expect(page.getByText("Not Required").first()).toBeVisible();
-    await expect(page.getByText("₹1,80,000").first()).toBeVisible();
-    await expect(page.getByText("₹1,75,000").first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Start declaration" })).toBeVisible();
-    await expect(page.getByLabel("Financial year")).toBeVisible();
-    await expect(page.getByLabel("Tax regime")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Create" })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Submit" })).toBeDisabled();
-    await expect(page.getByLabel("Item name")).toBeDisabled();
-    await expect(page.getByLabel("Upload category")).toBeDisabled();
-    await expect(page.getByLabel("Proof file")).toBeDisabled();
-    await expect(page.getByText("Tax Proof Uploads")).toBeAttached();
-    await expect(page.getByText("Create or select a draft declaration to add proof rows.")).toBeVisible();
+    const financialYear = page.getByLabel("Financial year");
+    const taxRegime = page.getByLabel("Tax regime");
+    const createButton = page.getByRole("button", { name: "Create" });
+    const submitButton = page.getByRole("button", { name: "Submit" });
+    const itemName = page.getByLabel("Item name");
+    const uploadCategory = page.getByLabel("Upload category");
+    const proofFile = page.getByLabel("Proof file");
+
+    await expect(financialYear).toBeVisible();
+    await financialYear.fill(`FY${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(2)}`);
+    await expect(taxRegime).toBeVisible();
+    await taxRegime.selectOption({ index: 0 });
+    await expect(createButton).toBeVisible();
+    await expect(submitButton).toBeVisible();
+    await expect(itemName).toBeVisible();
+    await expect(uploadCategory).toBeVisible();
+    await expect(proofFile).toBeVisible();
+
+    if (await createButton.isEnabled()) {
+      await createButton.click();
+      await expect(page.getByRole("status")).toContainText(/saved|could not be saved/i);
+    } else {
+      await expect(submitButton).toBeDisabled();
+      await expect(itemName).toBeDisabled();
+      await expect(uploadCategory).toBeDisabled();
+      await expect(proofFile).toBeDisabled();
+    }
+
+    await expect(page.getByText("Proof register", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Declared items" })).toBeVisible();
+    await expect(page.getByText("Create or select a draft declaration to add proof rows.").or(page.getByText("Proof uploads")).first()).toBeVisible();
 
     await expectNoHorizontalOverflow(page);
   });

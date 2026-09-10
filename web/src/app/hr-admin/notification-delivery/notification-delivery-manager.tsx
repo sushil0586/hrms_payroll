@@ -26,8 +26,9 @@ type SaveState = {
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save notification delivery settings.";
-  for (const [, value] of Object.entries(payload as Record<string, unknown>)) {
-    if (Array.isArray(value) && value.length) return String(value[0]);
+  for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+    if (Array.isArray(value) && value.length) return `${key}: ${String(value[0])}`;
+    if (typeof value === "string") return `${key}: ${value}`;
   }
   return String((payload as Record<string, unknown>).detail || "Unable to save notification delivery settings.");
 }
