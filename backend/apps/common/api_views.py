@@ -62,6 +62,8 @@ from apps.common.api_serializers import (
     HrAdminEmployeeAccessDetailSerializer,
     HrAdminEmployeeAccessOptionsSerializer,
     HrAdminEmployeeAccessWriteSerializer,
+    HrAdminEmployeeBankAccountSerializer,
+    HrAdminEmployeeBankAccountWriteSerializer,
     HrAdminEmployeeSalaryAssignmentSerializer,
     HrAdminEmployeeSalaryAssignmentWriteSerializer,
     EmployeeProfileSerializer,
@@ -311,7 +313,7 @@ from apps.common.api_serializers import (
     BulkMutationResultSerializer,
     MutationResultSerializer,
 )
-from apps.employees.models import Employee, EmploymentStatus
+from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, ScopeType, TenantMembership, User
 from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, EmploymentType, Grade, LegalEntity, Location
 from apps.payroll.models import (
@@ -13504,6 +13506,87 @@ class HrAdminEmployeeDetailView(HrAdminContextMixin, APIView):
         item = save_hr_admin_employee(employee, serializer.validated_data, item=item)
         payload = get_hr_admin_employee_detail(employee, item.id)
         return response.Response(HrAdminEmployeeDetailSerializer(payload).data)
+
+
+def build_hr_admin_employee_bank_account_payload(item: EmployeeBankAccount) -> dict:
+    return {
+        "id": item.id,
+        "employee_id": item.employee_id,
+        "employee_code": item.employee.employee_code,
+        "employee_name": _employee_display_name(item.employee),
+        "account_holder_name": item.account_holder_name,
+        "bank_name": item.bank_name,
+        "account_number": item.account_number,
+        "ifsc_code": item.ifsc_code,
+        "branch_name": item.branch_name,
+        "is_primary": item.is_primary,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+class HrAdminEmployeeBankAccountListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request, employee_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        employee_record = Employee.objects.filter(tenant=employee.tenant, id=employee_id).first()
+        if not employee_record:
+            return response.Response({"detail": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
+        items = employee_record.bank_accounts.select_related("employee").order_by("-is_primary", "bank_name", "created_at")
+        return response.Response(HrAdminEmployeeBankAccountSerializer([build_hr_admin_employee_bank_account_payload(item) for item in items], many=True).data)
+
+    @transaction.atomic
+    def post(self, request, employee_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        employee_record = Employee.objects.filter(tenant=employee.tenant, id=employee_id).first()
+        if not employee_record:
+            return response.Response({"detail": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminEmployeeBankAccountWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        if data.get("is_primary", True):
+            employee_record.bank_accounts.filter(is_primary=True).update(is_primary=False)
+        item = EmployeeBankAccount.objects.create(
+            employee=employee_record,
+            account_holder_name=data["account_holder_name"],
+            bank_name=data["bank_name"],
+            account_number=data["account_number"],
+            ifsc_code=data.get("ifsc_code", ""),
+            branch_name=data.get("branch_name", ""),
+            is_primary=data.get("is_primary", True),
+        )
+        return response.Response(HrAdminEmployeeBankAccountSerializer(build_hr_admin_employee_bank_account_payload(item)).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminEmployeeBankAccountDetailView(HrAdminContextMixin, APIView):
+    def _get_item(self, actor, employee_id, item_id):
+        return EmployeeBankAccount.objects.filter(
+            employee__tenant=actor.tenant,
+            employee_id=employee_id,
+            id=item_id,
+        ).select_related("employee").first()
+
+    @transaction.atomic
+    def patch(self, request, employee_id, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        item = self._get_item(employee, employee_id, item_id)
+        if not item:
+            return response.Response({"detail": "Bank account not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminEmployeeBankAccountWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        if data.get("is_primary") is True:
+            item.employee.bank_accounts.exclude(id=item.id).filter(is_primary=True).update(is_primary=False)
+        for field_name in ["account_holder_name", "bank_name", "account_number", "ifsc_code", "branch_name", "is_primary"]:
+            if field_name in data:
+                setattr(item, field_name, data[field_name])
+        item.save()
+        return response.Response(HrAdminEmployeeBankAccountSerializer(build_hr_admin_employee_bank_account_payload(item)).data)
 
 
 class HrAdminEmployeeFormOptionsView(HrAdminContextMixin, APIView):

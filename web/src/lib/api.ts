@@ -17,6 +17,7 @@ import type {
   HrAdminShiftRosterTemplate,
   HrAdminShiftRosterRollout,
   HrAdminEmployeeDetail,
+  HrAdminEmployeeBankAccount,
   HrAdminEmployeeAccessDetail,
   HrAdminEmployeeAccessOptions,
   HrAdminEmployeeFormOptions,
@@ -482,6 +483,10 @@ export async function getEssStatutoryDeclarations(params?: {
 
 export async function getHrAdminEmployeeDetail(employeeId: string) {
   return apiGet<HrAdminEmployeeDetail>(`/hr-admin/employees/${employeeId}/`);
+}
+
+export async function getHrAdminEmployeeBankAccounts(employeeId: string) {
+  return apiGet<HrAdminEmployeeBankAccount[]>(`/hr-admin/employees/${employeeId}/bank-accounts/`);
 }
 
 export async function getHrAdminOrganizationSnapshot() {

@@ -898,6 +898,40 @@ Current Phase 9 progress:
 - Phase 9A public staging result: `/hr-admin` improved from `12321ms` to `11589ms`; notification queue improved from `11382ms` to `7633ms`.
 - Evidence: `docs/qa/phase9a-hr-admin-performance-optimization-2026-09-10.md`.
 - Remaining Phase 9A work: deeper backend/dashboard selector optimization for `/hr-admin` if we want to push page-ready below `10000ms` before final launch sign-off.
+- Phase 9B-1 staging release preflight: done on 2026-09-10.
+- Phase 9B-1 deployment: commit `44eefe293b4a99d9acd6e8a42ac14980156e3ff9` deployed at `/var/www/hrms-payroll-saas/release-20260910025407`.
+- Phase 9B-1 checks: Django check passed, no pending migrations, static collection completed, Next production build passed, backend/web services active, nginx config/reload passed, public HTTP `200 OK`.
+- Phase 9B-1 browser preflight: Phase 8A workspace shell/accessibility plus Phase 8D performance passed against `https://hrms.accerio.in` with `HRMS_ENABLE_DEMO_DATA=false`.
+- Phase 9B-1 performance snapshot: `/hr-admin` `10674ms`, `/hr-admin/payroll-outputs` `8601ms`, `/hr-admin/payroll-calculations` `8151ms`, and notification queue `7636ms`.
+- Evidence: `docs/qa/phase9b-1-staging-release-preflight-2026-09-10.md`.
+- Phase 9B-2 full role and workflow release rehearsal: done on 2026-09-10.
+- Phase 9B-2 command: `pnpm qa:launch-signoff:staging` against `https://hrms.accerio.in` with demo fallback disabled.
+- Phase 9B-2 decision: `PILOT READY - STAGING CONTRACT PASS`.
+- Phase 9B-2 evidence: Django check passed, migration dry run passed, launch audit command passed, provider launch rehearsal command passed, SaaS usage snapshot passed, backend launch tests `12 passed`, web typecheck passed, web lint passed, and production Playwright suites A-I `32 passed`, `3 skipped`.
+- Phase 9B-2 launch audit state: tenant `northstar-foods` remains business-config blocked with `39/51` gates passed, `6` blockers, `6` warnings, and `12` release actions.
+- Phase 9B-2 blocker refs: `attendance.policies`, `workflows.active_templates`, `documents.categories`, `documents.mandatory_rules`, `payroll.salary_components`, and `payroll.structure_versions`.
+- Evidence: `docs/qa/phase9b-2-full-role-workflow-release-rehearsal-2026-09-10.md`.
+- Phase 9C tenant launch-audit blocker closure: done on 2026-09-10.
+- Phase 9C browser evidence: `phase9c-launch-audit-blocker-closure.spec.ts` passed against staging with demo fallback disabled.
+- Phase 9C launch audit state: tenant `northstar-foods` is now launch-capable with `can_launch: true`, `46/51` gates passed, `0` blockers, `5` warnings, and `5` release actions.
+- Phase 9C closed blocker refs: `attendance.policies`, `workflows.active_templates`, `documents.categories`, `documents.mandatory_rules`, `payroll.salary_components`, `payroll.structure_versions`, and `payroll.rule_versions`.
+- Phase 9C remaining warning refs: `employees.manager_mapping`, `employees.primary_bank`, `leave.pending_requests`, `attendance.pending_regularizations`, and `provider.rehearsal_ready`.
+- Evidence: `docs/qa/phase9c-launch-audit-blocker-closure-2026-09-10.md`.
+- Phase 9D browser warning closure: done on 2026-09-10.
+- Phase 9D browser evidence: `phase9d-launch-warning-closure.spec.ts` passed against staging with demo fallback disabled.
+- Phase 9D launch audit state: tenant `northstar-foods` remains launch-capable with `can_launch: true`, `49/51` gates passed, `0` blockers, `2` warnings, and `2` release actions.
+- Phase 9D closed warning refs: `employees.manager_mapping`, `leave.pending_requests`, and `attendance.pending_regularizations`.
+- Phase 9D remaining warning refs: `employees.primary_bank` and `provider.rehearsal_ready`.
+- Phase 9D product note: primary bank coverage is not currently closable through the HRMS SaaS browser UI; the backend model exists, but HR admin bank-account maintenance needs an app surface.
+- Evidence: `docs/qa/phase9d-launch-warning-closure-2026-09-10.md`.
+- Phase 9E final warning closure: implemented locally on 2026-09-10.
+- Phase 9E browser evidence: `phase9e-bank-account-readiness.spec.ts` and `phase9e-provider-ready-rehearsal.spec.ts` passed locally with demo fallback disabled.
+- Phase 9E product change: HR admin can now manage employee bank accounts through `/hr-admin/employees/[employeeId]/bank-accounts`, including create, update, primary-account selection, masked list review, and responsive page checks.
+- Phase 9E provider change: provider launch rehearsal readiness is certified through browser-visible certification/rehearsal actions on `/hr-admin/payroll-providers`.
+- Phase 9E local checks: Django system check passed, TypeScript passed, and ESLint passed.
+- Phase 9E residual: staging deployment and final staging launch audit are pending; bank-account delete/archive is intentionally not part of this closure slice.
+- Evidence: `docs/qa/phase9e-final-warning-closure-2026-09-10.md`.
+- Next Phase 9 slice: deploy Phase 9E to staging, rerun the Phase 9E browser specs against `https://hrms.accerio.in`, then rerun the `northstar-foods` launch audit and capture the final `0 blocker / 0 warning` evidence pack.
 
 Scope:
 
@@ -1016,6 +1050,7 @@ Current overall status:
 | 2026-09-08 | Phase 1B: Organization master CRUD expansion | PASS, 25/25 Phase 1 browser tests and 249/249 final audit screen visits | `docs/qa/phase1b-organization-master-crud-report-2026-09-08.md` | Overall product confidence to 68% |
 | 2026-09-09 | Phase 1C-A: Policy and governance master CRUD expansion | PASS, 8/8 Phase 1C-A tests; broader Phase 1 had 31/33 with affected org tests passing on targeted rerun | `docs/qa/phase1c-policy-governance-master-crud-report-2026-09-09.md` | Overall product confidence to 70% |
 | 2026-09-09 | Phase 1C-B: Salary setup CRUD expansion | PASS, 3/3 focused salary setup browser tests | `docs/qa/phase1c-salary-setup-crud-report-2026-09-09.md` | Overall product confidence to 72% |
+| 2026-09-10 | Phase 9E: Final warning closure implementation | PASS locally, 2/2 Phase 9E browser tests plus Django check, TypeScript, and ESLint | `docs/qa/phase9e-final-warning-closure-2026-09-10.md` | Phase 9 confidence to 96% local, staging pending |
 
 ## 18. Recommended Execution Order
 

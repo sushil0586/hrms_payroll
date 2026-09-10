@@ -473,6 +473,11 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                       title: "Manage access",
                       description: "Review roles, login state, and membership access.",
                     },
+                    {
+                      href: `/hr-admin/employees/${detail.id}/bank-accounts`,
+                      title: "Manage bank accounts",
+                      description: "Maintain payout account coverage for payroll readiness.",
+                    },
                   ]}
                 />
               </div>

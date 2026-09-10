@@ -200,6 +200,30 @@ export type HrAdminEmployeeAccessWriteInput = {
   password: string;
 };
 
+export type HrAdminEmployeeBankAccount = {
+  id: string;
+  employee_id: string;
+  employee_code: string;
+  employee_name: string;
+  account_holder_name: string;
+  bank_name: string;
+  account_number: string;
+  ifsc_code: string;
+  branch_name: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrAdminEmployeeBankAccountWriteInput = {
+  account_holder_name: string;
+  bank_name: string;
+  account_number: string;
+  ifsc_code: string;
+  branch_name: string;
+  is_primary: boolean;
+};
+
 export type HrAdminOrganizationItem = {
   id: string;
   code: string;

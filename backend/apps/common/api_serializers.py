@@ -247,6 +247,30 @@ class HrAdminEmployeeDetailSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField()
 
 
+class HrAdminEmployeeBankAccountSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    employee_id = serializers.UUIDField()
+    employee_code = serializers.CharField()
+    employee_name = serializers.CharField()
+    account_holder_name = serializers.CharField()
+    bank_name = serializers.CharField()
+    account_number = serializers.CharField()
+    ifsc_code = serializers.CharField(allow_blank=True)
+    branch_name = serializers.CharField(allow_blank=True)
+    is_primary = serializers.BooleanField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminEmployeeBankAccountWriteSerializer(serializers.Serializer):
+    account_holder_name = serializers.CharField(max_length=255)
+    bank_name = serializers.CharField(max_length=255)
+    account_number = serializers.CharField(max_length=64)
+    ifsc_code = serializers.CharField(max_length=20, allow_blank=True, required=False)
+    branch_name = serializers.CharField(max_length=255, allow_blank=True, required=False)
+    is_primary = serializers.BooleanField(required=False, default=True)
+
+
 class HrAdminOptionItemSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     name = serializers.CharField()
