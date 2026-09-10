@@ -369,6 +369,8 @@ from apps.payroll.models import (
     PayrollProviderSchemaMappingSimulation,
     PayrollProviderSchemaMappingPack,
     PayrollProviderSchemaMappingPackStatus,
+    PayrollReportExportAudit,
+    PayrollReportExportAuditType,
     PayrollCalendar,
     PayrollConfigStatus,
     PayrollFrequency,
@@ -13500,6 +13502,95 @@ class HrAdminReportExportView(HrAdminContextMixin, APIView):
         csv_response = HttpResponse(output.getvalue(), content_type="text/csv")
         csv_response["Content-Disposition"] = f'attachment; filename="{config["filename"]}"'
         return csv_response
+
+
+class HrAdminReportExportAuditSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    actor_display = serializers.CharField(required=False, allow_blank=True)
+    report_key = serializers.SlugField(max_length=120)
+    export_type = serializers.ChoiceField(choices=PayrollReportExportAuditType.choices)
+    filters = serializers.DictField(required=False)
+    row_count = serializers.IntegerField(min_value=0)
+    checksum_sha256 = serializers.RegexField(r"^[a-f0-9]{64}$")
+    content_type = serializers.CharField(max_length=120)
+    source_endpoints = serializers.ListField(child=serializers.CharField(), required=False)
+    evidence_columns = serializers.ListField(child=serializers.CharField(), required=False)
+    request_identifier = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    user_agent = serializers.CharField(required=False, allow_blank=True)
+    generated_at = serializers.DateTimeField(required=False)
+    source_hash = serializers.CharField(read_only=True)
+
+
+def _payroll_report_export_audit_payload(item: PayrollReportExportAudit) -> dict:
+    return {
+        "id": item.id,
+        "actor_display": item.actor_display,
+        "report_key": item.report_key,
+        "export_type": item.export_type,
+        "filters": item.filters,
+        "row_count": item.row_count,
+        "checksum_sha256": item.checksum_sha256,
+        "content_type": item.content_type,
+        "source_endpoints": item.source_endpoints,
+        "evidence_columns": item.evidence_columns,
+        "request_identifier": item.request_identifier,
+        "user_agent": item.user_agent,
+        "generated_at": item.generated_at,
+        "source_hash": item.source_hash,
+    }
+
+
+class HrAdminReportExportAuditListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        queryset = PayrollReportExportAudit.objects.filter(tenant=employee.tenant)
+        report_key = request.query_params.get("report_key")
+        export_type = request.query_params.get("export_type")
+        query = request.query_params.get("q")
+        if report_key:
+            queryset = queryset.filter(report_key=report_key)
+        if export_type:
+            queryset = queryset.filter(export_type=export_type)
+        if query:
+            queryset = queryset.filter(
+                Q(actor_display__icontains=query)
+                | Q(report_key__icontains=query)
+                | Q(checksum_sha256__icontains=query)
+                | Q(request_identifier__icontains=query)
+            )
+        items = [_payroll_report_export_audit_payload(item) for item in queryset[:200]]
+        return response.Response({
+            "items": HrAdminReportExportAuditSerializer(items, many=True).data,
+            "count": queryset.count(),
+        })
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminReportExportAuditSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        membership = getattr(employee, "membership", None)
+        item = PayrollReportExportAudit.objects.create(
+            tenant=employee.tenant,
+            actor_user=request.user,
+            actor_membership_ref=str(membership.id) if membership else "",
+            actor_display=serializer.validated_data.get("actor_display") or employee.employee_code,
+            report_key=serializer.validated_data["report_key"],
+            export_type=serializer.validated_data["export_type"],
+            filters=serializer.validated_data.get("filters") or {},
+            row_count=serializer.validated_data["row_count"],
+            checksum_sha256=serializer.validated_data["checksum_sha256"],
+            content_type=serializer.validated_data["content_type"],
+            source_endpoints=serializer.validated_data.get("source_endpoints") or [],
+            evidence_columns=serializer.validated_data.get("evidence_columns") or [],
+            request_identifier=serializer.validated_data.get("request_identifier") or "",
+            user_agent=serializer.validated_data.get("user_agent") or "",
+            generated_at=serializer.validated_data.get("generated_at") or timezone.now(),
+        )
+        return response.Response(HrAdminReportExportAuditSerializer(_payroll_report_export_audit_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
 class HrAdminEmployeeListView(HrAdminContextMixin, APIView):

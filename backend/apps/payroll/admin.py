@@ -23,6 +23,7 @@ from apps.payroll.models import (
     PayrollProviderRetryEvent,
     PayrollProviderSchemaMappingSimulation,
     PayrollProviderSchemaMappingPack,
+    PayrollReportExportAudit,
     PayrollRunCalculation,
     PayrollInputSnapshot,
     PayrollOutputArtifact,
@@ -356,3 +357,10 @@ class PayrollProviderCertificationRunAdmin(admin.ModelAdmin):
     list_display = ("provider_connection", "tenant", "status", "scenario_count", "passed_count", "failed_count", "started_at", "completed_at")
     list_filter = ("status", "provider_kind", "environment_ref", "certification_profile_ref")
     search_fields = ("provider_connection__provider_name", "provider_ref", "run_profile_ref", "scenario_profile_ref", "source_hash")
+
+
+@admin.register(PayrollReportExportAudit)
+class PayrollReportExportAuditAdmin(admin.ModelAdmin):
+    list_display = ("report_key", "tenant", "export_type", "row_count", "actor_display", "generated_at", "checksum_sha256")
+    list_filter = ("export_type", "report_key", "generated_at")
+    search_fields = ("report_key", "tenant__name", "tenant__code", "actor_display", "checksum_sha256", "request_identifier", "source_hash")

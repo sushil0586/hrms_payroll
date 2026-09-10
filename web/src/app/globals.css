@@ -707,6 +707,52 @@ select.input-control {
   gap: var(--space-4);
 }
 
+.app-sidebar__nav {
+  align-content: start;
+  max-height: calc(100vh - 250px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.nav-group--collapsible {
+  gap: var(--space-3);
+}
+
+.nav-group__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  list-style: none;
+}
+
+.nav-group__summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-group__summary:focus-visible {
+  outline: 3px solid rgb(var(--workspace-accent-rgb) / 0.24);
+  outline-offset: 2px;
+}
+
+.nav-group__chevron {
+  color: var(--color-text-tertiary);
+  font-size: 14px;
+  line-height: 1;
+  transform: rotate(-90deg);
+  transition: transform 160ms ease;
+}
+
+.nav-group[open] .nav-group__chevron {
+  transform: rotate(0deg);
+}
+
 .app-main {
   display: grid;
   gap: 0;
@@ -2025,6 +2071,201 @@ select.input-control {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.report-catalog-workspace {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid #e1e7f2;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.07);
+}
+
+.report-catalog-toolbar {
+  display: grid;
+  gap: 12px;
+}
+
+.report-catalog-toolbar label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: #63708a;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.report-category-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.report-category-tab {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d9e2f1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #344256;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.report-category-tab[aria-selected="true"] {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.report-catalog-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.compliance-hub-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.compliance-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.compliance-hub-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e1e7f2;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.compliance-hub-card .workspace-card__header {
+  gap: 4px;
+}
+
+.compliance-hub-card h2 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.report-catalog-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e5ebf5;
+  border-radius: 8px;
+}
+
+.report-catalog-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+}
+
+.report-catalog-table th,
+.report-catalog-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid #edf2f7;
+  text-align: left;
+  vertical-align: top;
+}
+
+.report-catalog-table th {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.report-catalog-table td {
+  color: #263247;
+  font-size: 13px;
+}
+
+.report-catalog-table td:first-child {
+  display: grid;
+  gap: 5px;
+  min-width: 260px;
+}
+
+.report-catalog-table td:first-child span {
+  color: #6b748c;
+  line-height: 1.45;
+}
+
+.report-catalog-table code {
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+}
+
+.report-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.payroll-register-report {
+  gap: 18px;
+}
+
+.payroll-register-toolbar {
+  grid-template-columns: 1fr;
+}
+
+.payroll-register-stack {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.payroll-register-stack span {
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.payroll-register-table {
+  min-width: 1120px;
+}
+
+.salary-variance-report {
+  gap: 18px;
+}
+
+.salary-variance-toolbar {
+  grid-template-columns: 1fr;
+}
+
+.salary-variance-table {
+  min-width: 1180px;
+}
+
+.statutory-deductions-report {
+  gap: 18px;
+}
+
+.statutory-deductions-toolbar {
+  grid-template-columns: 1fr;
+}
+
+.statutory-deductions-table {
+  min-width: 1240px;
 }
 
 .reports-export-card__meta,
@@ -6373,6 +6614,23 @@ select.input-control {
   .reports-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
+  }
+
+  .report-catalog-toolbar {
+    grid-template-columns: minmax(0, 1.4fr) minmax(190px, 0.8fr) minmax(180px, 0.7fr);
+    align-items: end;
+  }
+
+  .payroll-register-toolbar {
+    grid-template-columns: minmax(0, 1.3fr) minmax(160px, 0.6fr) minmax(160px, 0.6fr) minmax(190px, 0.7fr);
+  }
+
+  .salary-variance-toolbar {
+    grid-template-columns: minmax(0, 1.4fr) minmax(190px, 0.7fr) minmax(190px, 0.7fr);
+  }
+
+  .statutory-deductions-toolbar {
+    grid-template-columns: minmax(0, 1.35fr) minmax(170px, 0.55fr) minmax(210px, 0.75fr) minmax(180px, 0.55fr);
   }
 
   .page-intro {

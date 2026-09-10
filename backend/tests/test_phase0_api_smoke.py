@@ -126,6 +126,7 @@ from apps.payroll.models import (
     PayrollProviderSchemaMappingSimulation,
     PayrollProviderSchemaMappingPack,
     PayrollProviderSchemaMappingPackStatus,
+    PayrollReportExportAudit,
     PayrollReviewStatus,
     PayrollRuleDefinition,
     PayrollRuleEvaluation,
@@ -476,6 +477,57 @@ def test_hr_admin_dashboard_returns_saas_launch_audit(api_client: APIClient, boo
         "payroll.structure_versions",
         "payroll.rule_versions",
     }
+
+
+@pytest.mark.django_db
+def test_hr_admin_can_persist_and_filter_report_export_audits(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    payload = {
+        "actor_display": "Nisha Rao",
+        "report_key": "challan-reconciliation",
+        "export_type": "manifest",
+        "filters": {"sort": "status", "format": "manifest"},
+        "row_count": 1,
+        "checksum_sha256": "a" * 64,
+        "content_type": "application/json",
+        "source_endpoints": [
+            "/hr-admin/payroll-statutory-setup/",
+            "/hr-admin/payroll-finance-handoff-setup/",
+        ],
+        "evidence_columns": ["filing_code", "source_hash"],
+        "request_identifier": "req-report-audit-001",
+        "user_agent": "pytest",
+    }
+
+    create_response = api_client.post("/api/v1/hr-admin/reports/export-audits/", payload, format="json")
+
+    assert create_response.status_code == 201, create_response.json()
+    created = create_response.json()
+    assert created["report_key"] == "challan-reconciliation"
+    assert created["export_type"] == "manifest"
+    assert created["source_hash"]
+    audit = PayrollReportExportAudit.objects.get(id=created["id"])
+    assert audit.tenant.code == "northstar-foods"
+    assert audit.actor_user.username == "nisha.rao"
+
+    list_response = api_client.get("/api/v1/hr-admin/reports/export-audits/?report_key=challan-reconciliation&export_type=manifest&q=req-report-audit")
+
+    assert list_response.status_code == 200, list_response.json()
+    list_payload = list_response.json()
+    assert list_payload["count"] == 1
+    assert list_payload["items"][0]["checksum_sha256"] == "a" * 64
+
+
+@pytest.mark.django_db
+def test_employee_cannot_access_report_export_audits(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/hr-admin/reports/export-audits/")
+
+    assert response.status_code == 403
 
 
 @pytest.mark.django_db

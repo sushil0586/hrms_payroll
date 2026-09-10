@@ -56,10 +56,28 @@ test.describe("HR admin payroll statutory flows", () => {
 
     await expect(page.getByRole("heading", { name: "Proof review queue" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Declarations and proof evidence" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "TDS e-file report" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Registration coverage" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Upcoming filing obligations" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Statutory component catalog" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Statutory setup controls" })).toBeVisible();
+    const tdsReport = page.getByTestId("tds-compliance-report");
+    await expect(tdsReport).toBeVisible();
+    for (const text of [
+      "Return profile",
+      "Deductee coverage",
+      "Form reference",
+      "FVU profile",
+      "Challan mapping",
+      "Provider route",
+      "PAN ready",
+      "TDS component",
+      "Form 24Q calendar",
+      "Production filing guard",
+    ]) {
+      await expect(page.getByText(text, { exact: false }).first()).toBeVisible();
+    }
+    await expect(tdsReport.getByText(/Ready|Needs setup/).first()).toBeVisible();
     for (const header of ["Employee", "Year", "Status", "Tax Regime", "Declared", "Verified", "Proofs"]) {
       await expect(page.getByRole("columnheader", { name: header }).first()).toBeVisible();
     }

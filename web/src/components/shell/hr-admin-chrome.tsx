@@ -2,19 +2,21 @@
 
 import { hrAdminNavigation } from "@/lib/ui/navigation";
 import { WorkspaceChrome } from "@/components/shell/workspace-chrome";
-import type { WorkspaceNavItem } from "@/components/shell/workspace-chrome";
+import type { WorkspaceNavGroup, WorkspaceNavItem } from "@/components/shell/workspace-chrome";
 
 type Props = {
   children: React.ReactNode;
+  navGroups?: WorkspaceNavGroup[];
   navItems?: WorkspaceNavItem[];
   userLabel?: string | null;
 };
 
-export function HrAdminChrome({ children, navItems, userLabel }: Props) {
+export function HrAdminChrome({ children, navGroups, navItems, userLabel }: Props) {
   return (
     <WorkspaceChrome
       footerDescription="Governance, policy execution, and lifecycle control in one sober workspace."
       navItems={navItems ?? hrAdminNavigation.flatMap((group) => group.items)}
+      navGroups={navGroups}
       productLabel="Nexora"
       quickLinks={[
         { href: "/ess", label: "ESS" },

@@ -261,6 +261,11 @@ class PayrollProviderCertificationRunStatus(models.TextChoices):
     SKIPPED = "skipped", "Skipped"
 
 
+class PayrollReportExportAuditType(models.TextChoices):
+    CSV = "csv", "CSV"
+    MANIFEST = "manifest", "Manifest"
+
+
 class PayrollArtifactAccessEventType(models.TextChoices):
     PUBLISHED = "published", "Published"
     NOTIFIED = "notified", "Notified"
@@ -268,6 +273,83 @@ class PayrollArtifactAccessEventType(models.TextChoices):
     DOWNLOADED = "downloaded", "Downloaded"
     READ_ACKNOWLEDGED = "read_acknowledged", "Read Acknowledged"
     REVOKED = "revoked", "Revoked"
+
+
+class PayrollReportExportAudit(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Tenant-scoped evidence record for HR admin report exports."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="payroll_report_export_audits")
+    actor_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="payroll_report_export_audits",
+        blank=True,
+        null=True,
+    )
+    actor_membership_ref = models.CharField(max_length=120, blank=True)
+    actor_display = models.CharField(max_length=180, blank=True)
+    report_key = models.SlugField(max_length=120)
+    export_type = models.CharField(max_length=20, choices=PayrollReportExportAuditType.choices)
+    filters = models.JSONField(default=dict, blank=True)
+    row_count = models.PositiveIntegerField(default=0)
+    checksum_sha256 = models.CharField(max_length=64)
+    content_type = models.CharField(max_length=120)
+    source_endpoints = models.JSONField(default=list, blank=True)
+    evidence_columns = models.JSONField(default=list, blank=True)
+    request_identifier = models.CharField(max_length=120, blank=True)
+    user_agent = models.TextField(blank=True)
+    generated_at = models.DateTimeField(default=timezone.now)
+    source_hash = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ["-generated_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "-generated_at"]),
+            models.Index(fields=["tenant", "report_key", "-generated_at"]),
+            models.Index(fields=["tenant", "export_type", "-generated_at"]),
+            models.Index(fields=["tenant", "checksum_sha256"]),
+        ]
+        verbose_name = "Payroll Report Export Audit"
+        verbose_name_plural = "Payroll Report Export Audits"
+
+    def _audit_digest(self) -> str:
+        payload = {
+            "tenant_id": str(self.tenant_id or ""),
+            "actor_membership_ref": self.actor_membership_ref,
+            "actor_display": self.actor_display,
+            "report_key": self.report_key,
+            "export_type": self.export_type,
+            "filters": self.filters,
+            "row_count": self.row_count,
+            "checksum_sha256": self.checksum_sha256,
+            "content_type": self.content_type,
+            "source_endpoints": self.source_endpoints,
+            "evidence_columns": self.evidence_columns,
+            "request_identifier": self.request_identifier,
+            "generated_at": self.generated_at,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+    def clean(self):
+        errors = {}
+        if not isinstance(self.filters, dict):
+            errors["filters"] = "Filters must be an object."
+        if not isinstance(self.source_endpoints, list):
+            errors["source_endpoints"] = "Source endpoints must be a list."
+        if not isinstance(self.evidence_columns, list):
+            errors["evidence_columns"] = "Evidence columns must be a list."
+        if self.checksum_sha256 and len(self.checksum_sha256) != 64:
+            errors["checksum_sha256"] = "Checksum must be a SHA-256 hex digest."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.source_hash = self._audit_digest()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.tenant_id}:{self.report_key}:{self.export_type}:{self.checksum_sha256[:12]}"
 
 
 class PayrollArtifactAccessEventStatus(models.TextChoices):

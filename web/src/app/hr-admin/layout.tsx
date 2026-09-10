@@ -1,5 +1,5 @@
 import { HrAdminChrome } from "@/components/shell/hr-admin-chrome";
-import type { WorkspaceNavItem } from "@/components/shell/workspace-chrome";
+import type { WorkspaceNavGroup } from "@/components/shell/workspace-chrome";
 import { getHrAdminSaasCommercialControl } from "@/lib/api";
 import { hrAdminNavigation } from "@/lib/ui/navigation";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
@@ -34,7 +34,7 @@ function disabledReasonForScope(scope: {
   return "Unavailable on current plan";
 }
 
-async function getCommercialAwareHrAdminNavigation(): Promise<WorkspaceNavItem[]> {
+async function getCommercialAwareHrAdminNavigation(): Promise<WorkspaceNavGroup[]> {
   try {
     const result = await getHrAdminSaasCommercialControl();
     const scopes = new Map(result.data.enforcement.scopes.map((scope) => [scope.scope_ref, scope]));
@@ -51,17 +51,20 @@ async function getCommercialAwareHrAdminNavigation(): Promise<WorkspaceNavItem[]
       missing_entitlements: [],
     });
 
-    return hrAdminNavigation.flatMap((group) => group.items).map((item) => {
-      const disabledReason =
-        PAYROLL_PROVIDER_NAV_PATHS.has(item.href)
-          ? payrollProviderReason
-          : PAYROLL_CORE_NAV_PATHS.has(item.href)
-            ? payrollCoreReason
-            : null;
-      return disabledReason ? { ...item, disabled: true, disabledReason } : item;
-    });
+    return hrAdminNavigation.map((group) => ({
+      ...group,
+      items: group.items.map((item) => {
+        const disabledReason =
+          PAYROLL_PROVIDER_NAV_PATHS.has(item.href)
+            ? payrollProviderReason
+            : PAYROLL_CORE_NAV_PATHS.has(item.href)
+              ? payrollCoreReason
+              : null;
+        return disabledReason ? { ...item, disabled: true, disabledReason } : item;
+      }),
+    }));
   } catch {
-    return hrAdminNavigation.flatMap((group) => group.items);
+    return hrAdminNavigation;
   }
 }
 
@@ -69,7 +72,7 @@ export default async function HrAdminLayout({ children }: { children: React.Reac
   const sessionUser = await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
   const userLabel =
     sessionUser?.display_name || sessionUser?.first_name || sessionUser?.username || null;
-  const navItems = await getCommercialAwareHrAdminNavigation();
+  const navGroups = await getCommercialAwareHrAdminNavigation();
 
-  return <HrAdminChrome navItems={navItems} userLabel={userLabel}>{children}</HrAdminChrome>;
+  return <HrAdminChrome navGroups={navGroups} userLabel={userLabel}>{children}</HrAdminChrome>;
 }

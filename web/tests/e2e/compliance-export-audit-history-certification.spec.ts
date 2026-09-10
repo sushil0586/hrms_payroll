@@ -1,0 +1,78 @@
+import { expect, test } from "@playwright/test";
+
+import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+
+test.describe("Phase R4-L compliance export audit history certification", () => {
+  test("HR admin can create and review persisted report export audit history", async ({ page }) => {
+    await gotoAuthenticated(page, "/hr-admin/reports/compliance", hrAdmin);
+    await expectPageReady(page, "Compliance Reports");
+
+    const exportPaths = [
+      "/api/hr-admin/reports/challan-reconciliation?sort=status",
+      "/api/hr-admin/reports/challan-reconciliation?sort=status&format=manifest",
+      "/api/hr-admin/reports/statutory-filing-status?sort=artifacts",
+      "/api/hr-admin/reports/provider-filing-receipts?sort=callbacks&format=manifest",
+    ];
+    for (const path of exportPaths) {
+      const response = await page.request.get(path);
+      expect(response.status()).toBe(200);
+      expect(response.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
+    }
+
+    await Promise.all([
+      page.waitForURL(/\/hr-admin\/reports\/export-audits/),
+      page.getByRole("link", { name: "Export audit history" }).click(),
+    ]);
+    await expectPageReady(page, "Export Audit History");
+
+    const workspace = page.getByTestId("report-export-audit-workspace");
+    await expect(workspace).toBeVisible();
+    for (const metric of ["Audit records", "CSV exports", "Manifests", "Reports"]) {
+      await expect(workspace.locator(".metric-tile").filter({ hasText: metric })).toBeVisible();
+    }
+    for (const column of ["Generated", "Report", "Type", "Rows", "Checksum", "Filters", "Evidence", "Actor"]) {
+      await expect(workspace.getByRole("columnheader", { name: column })).toBeVisible();
+    }
+
+    await expect(workspace.getByText("challan-reconciliation").first()).toBeVisible();
+    await expect(workspace.getByText("provider-filing-receipts").first()).toBeVisible();
+    await expect(workspace.getByText("manifest").first()).toBeVisible();
+    await expect(workspace.locator("code").filter({ hasText: /^[a-f0-9]{20}$/ }).first()).toBeVisible();
+
+    await workspace.getByLabel("Export type").selectOption("manifest");
+    await expect(workspace.getByText("Manifest").first()).toBeVisible();
+    await expect(workspace.getByText(/Showing/)).toBeVisible();
+
+    await workspace.getByLabel("Report key").selectOption("challan-reconciliation");
+    await expect(workspace.getByText("challan-reconciliation").first()).toBeVisible();
+    await expect(workspace.getByText(/Showing/)).toBeVisible();
+
+    await workspace.getByPlaceholder("Search report, checksum, filters, request").fill("no-such-export-audit-row");
+    await expect(workspace.getByText("No export audit records match the selected filters.")).toBeVisible();
+    await workspace.getByPlaceholder("Search report, checksum, filters, request").fill("");
+    await expect(workspace.getByText(/Showing/)).toBeVisible();
+
+    await expect(workspace.locator(".pagination-bar")).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "Previous" })).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "Next" })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("employee cannot read HR admin report export audit history", async ({ page }) => {
+    await gotoAuthenticated(page, "/ess", employee);
+    await expectPageReady(page, "Self Service");
+
+    const response = await page.request.get("/api/hr-admin/reports/export-audits");
+    expect([401, 403]).toContain(response.status());
+    const body = JSON.stringify(await response.json().catch(() => ({}))).toLowerCase();
+    expect(body).not.toContain("token");
+    expect(body).not.toContain("password");
+    expect(body).not.toContain("secret");
+
+    await page.goto("/hr-admin/reports/export-audits", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+    await expect(page.getByTestId("report-export-audit-workspace")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
+  });
+});

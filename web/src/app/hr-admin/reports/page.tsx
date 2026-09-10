@@ -4,6 +4,9 @@ import { ActionMenu } from "@/components/patterns/action-menu";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDashboard } from "@/lib/api";
+import { reportCatalog } from "@/lib/report-catalog";
+
+import { ReportCatalogWorkspace } from "./report-catalog-workspace";
 
 function InsightPanel({
   title,
@@ -87,6 +90,12 @@ export default async function HrAdminReportsPage() {
               <span className="queue-summary-chip"><strong>CSV</strong> share-ready output</span>
             </div>
             <div className="reports-export-bar">
+              <Link className="button button--secondary" href="/hr-admin/reports/compliance">
+                Compliance hub
+              </Link>
+              <Link className="button button--secondary" href="/hr-admin/reports/export-audits">
+                Export audit history
+              </Link>
               <Link className="button button--primary" href="/api/hr-admin/reports/workforce" prefetch={false}>
                 Workforce CSV
               </Link>
@@ -123,6 +132,8 @@ export default async function HrAdminReportsPage() {
           </div>
         </div>
       </section>
+
+      <ReportCatalogWorkspace reports={reportCatalog} />
 
       <section className="section">
         <div className="reports-grid">

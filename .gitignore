@@ -29,6 +29,7 @@ test-results/
 web/playwright-report/
 web/playwright-live-report/
 web/test-results/
+web/.hrms-data/
 web/qa-artifacts/
 
 # Env and secrets

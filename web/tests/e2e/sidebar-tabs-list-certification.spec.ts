@@ -28,6 +28,9 @@ function uniqueByHref(items: Array<{ href: string; label: string }>) {
 }
 
 async function visibleSidebarLinks(page: Page) {
+  await page.locator(".app-sidebar__nav details.nav-group--collapsible:not([open]) summary").evaluateAll((summaries) => {
+    summaries.forEach((summary) => (summary as HTMLElement).click());
+  });
   const links = page.locator(".app-sidebar__nav a.nav-item");
   const count = await links.count();
   const items: Array<{ href: string; label: string }> = [];
@@ -86,6 +89,7 @@ test.describe("Certification: sidebar, tabs, lists, and pagination", () => {
 
       await gotoAuthenticated(page, workspace.entryPath, workspace.persona);
       await expectPageReady(page, workspace.heading);
+      await expect(page.locator(".app-sidebar__nav details.nav-group--collapsible").first()).toBeVisible();
 
       const links = await visibleSidebarLinks(page);
       expect(links.length, `${workspace.name} sidebar link count`).toBeGreaterThan(0);

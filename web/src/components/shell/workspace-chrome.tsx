@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import { LogoutButton } from "@/app/components/logout-button";
 
@@ -15,6 +15,11 @@ export type WorkspaceNavItem = {
   disabledReason?: string;
 };
 
+export type WorkspaceNavGroup = {
+  title: string;
+  items: WorkspaceNavItem[];
+};
+
 type Props = {
   children: React.ReactNode;
   roleLabel: string;
@@ -25,6 +30,7 @@ type Props = {
   userLabel?: string | null;
   navTitle?: string;
   navItems: WorkspaceNavItem[];
+  navGroups?: WorkspaceNavGroup[];
   quickLinks?: Array<{ href: string; label: string }>;
   footerTitle?: string;
   footerDescription?: string;
@@ -32,6 +38,48 @@ type Props = {
 
 function isActivePath(pathname: string, href: string) {
   return href === pathname || pathname.startsWith(`${href}/`);
+}
+
+function NavEntry({
+  item,
+  pathname,
+  router,
+}: {
+  item: WorkspaceNavItem;
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const active = isActivePath(pathname, item.href);
+  if (item.disabled) {
+    return (
+      <div
+        aria-disabled="true"
+        aria-label={`${item.label} unavailable`}
+        className="nav-item nav-item--disabled"
+        title={item.disabledReason || `${item.label} is unavailable`}
+      >
+        <span className="nav-item__glyph" aria-hidden="true">{item.shortLabel}</span>
+        <span className="nav-item__content">
+          <strong>{item.label}</strong>
+          {item.blurb ? <small>{item.blurb}</small> : null}
+          {item.disabledReason ? <small>{item.disabledReason}</small> : null}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <Link
+      className={`nav-item${active ? " nav-item--active" : ""}`}
+      href={item.href}
+      onMouseEnter={() => router.prefetch(item.href)}
+    >
+      <span className="nav-item__glyph" aria-hidden="true">{item.shortLabel}</span>
+      <span className="nav-item__content">
+        <strong>{item.label}</strong>
+        {item.blurb ? <small>{item.blurb}</small> : null}
+      </span>
+    </Link>
+  );
 }
 
 export function WorkspaceChrome({
@@ -44,17 +92,23 @@ export function WorkspaceChrome({
   userLabel,
   navTitle = "Workspace",
   navItems,
+  navGroups,
   quickLinks = [],
   footerTitle,
   footerDescription,
 }: Props) {
   const pathname = usePathname();
   const router = useRouter();
+  const groups = useMemo(
+    () => (navGroups?.length ? navGroups : [{ title: navTitle, items: navItems }]),
+    [navGroups, navItems, navTitle],
+  );
+  const prefetchItems = useMemo(() => groups.flatMap((group) => group.items), [groups]);
 
   useEffect(() => {
-    navItems.forEach((item) => router.prefetch(item.href));
+    prefetchItems.forEach((item) => router.prefetch(item.href));
     quickLinks.forEach((item) => router.prefetch(item.href));
-  }, [navItems, quickLinks, router]);
+  }, [prefetchItems, quickLinks, router]);
 
   return (
     <div className={`app-shell app-shell--workspace workspace-tone workspace-tone--${workspaceTone}`}>
@@ -73,46 +127,22 @@ export function WorkspaceChrome({
         </div>
 
         <nav className="app-sidebar__nav" aria-label={`${roleLabel} navigation`}>
-          <section className="nav-group">
-            <span className="nav-group__title">{navTitle}</span>
-            <div className="nav-group__items">
-              {navItems.map((item) => {
-                const active = isActivePath(pathname, item.href);
-                if (item.disabled) {
-                  return (
-                    <div
-                      aria-disabled="true"
-                      aria-label={`${item.label} unavailable`}
-                      className="nav-item nav-item--disabled"
-                      key={item.href}
-                      title={item.disabledReason || `${item.label} is unavailable`}
-                    >
-                      <span className="nav-item__glyph" aria-hidden="true">{item.shortLabel}</span>
-                      <span className="nav-item__content">
-                        <strong>{item.label}</strong>
-                        {item.blurb ? <small>{item.blurb}</small> : null}
-                        {item.disabledReason ? <small>{item.disabledReason}</small> : null}
-                      </span>
-                    </div>
-                  );
-                }
-                return (
-                  <Link
-                    className={`nav-item${active ? " nav-item--active" : ""}`}
-                    href={item.href}
-                    key={item.href}
-                    onMouseEnter={() => router.prefetch(item.href)}
-                  >
-                    <span className="nav-item__glyph" aria-hidden="true">{item.shortLabel}</span>
-                    <span className="nav-item__content">
-                      <strong>{item.label}</strong>
-                      {item.blurb ? <small>{item.blurb}</small> : null}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </section>
+          {groups.map((group, index) => {
+            const activeInGroup = group.items.some((item) => isActivePath(pathname, item.href));
+            return (
+              <details className="nav-group nav-group--collapsible" key={group.title} open={activeInGroup || index === 0}>
+                <summary className="nav-group__summary">
+                  <span className="nav-group__title">{group.title}</span>
+                  <span className="nav-group__chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div className="nav-group__items">
+                  {group.items.map((item) => (
+                    <NavEntry item={item} key={item.href} pathname={pathname} router={router} />
+                  ))}
+                </div>
+              </details>
+            );
+          })}
         </nav>
 
         <div className="app-sidebar__footer">

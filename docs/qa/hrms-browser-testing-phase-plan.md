@@ -266,6 +266,17 @@ Latest local certification:
 - `production-platform-admin-onboarding-flows.spec.ts`: passed, including five tenant/admin onboarding cycles
 - Combined Platform Admin certification run: passed, `5 passed`
 
+Latest focused Platform Admin retest:
+
+- Date: 2026-09-10
+- Environment under test: local Next.js at `http://127.0.0.1:3000` with live staging API `https://hrms.accerio.in/api/v1`
+- Demo fallback: disabled with `HRMS_ENABLE_DEMO_DATA=false`
+- `platform-admin-tabs-pagination-certification.spec.ts`: passed
+- `platform-admin-negative-security-certification.spec.ts`: passed
+- `platform-admin-audit-evidence-certification.spec.ts`: passed
+- Focused Platform Admin certification pack: passed, `4 passed`
+- `production-platform-admin-onboarding-flows.spec.ts`: passed, including five browser-created tenants, first-admin provisioning, policy-pack adoption, activation gates, tenant-admin login, and no horizontal overflow
+
 Confidence after bridge:
 
 - Platform admin UX confidence: 90%
@@ -751,6 +762,67 @@ Current Phase 5 progress:
 - Payroll output artifact certification confidence: 94%.
 - Payroll finance handoff certification confidence: 94%.
 - Payroll close regression bundle confidence: 96%.
+- Phase 5Q TDS compliance report: started locally on 2026-09-10.
+- Phase 5Q product fix: HR admin Payroll Statutory now includes a `TDS e-file report` panel for TDS component readiness, Form 24Q filing-calendar readiness, PAN coverage, tax-regime coverage, locked declaration coverage, configurable FVU/e-file validation profile, challan mapping, provider route, and production filing guard.
+- Phase 5Q evidence plan: `docs/qa/phase5q-tds-compliance-report-plan-2026-09-10.md`.
+- Phase 5Q local browser evidence: backend check passed, TypeScript passed, and `payroll-statutory-flows.spec.ts` passed `3/3` against local frontend plus staging API.
+- Reporting expansion plan: `docs/qa/hrms-reporting-phase-plan-2026-09-10.md` now defines the phase-wise HR admin, payroll finance, compliance, SaaS, export, and browser-certification roadmap for launch-grade reports; every reporting phase is a development-plus-Playwright automation phase with a named certification spec.
+- Reporting Phase R0-A: done locally on 2026-09-10 with typed catalog, HR admin report catalog workspace, filters, category tabs, pagination, export/drilldown actions, and controlled live export failure statuses.
+- Reporting Phase R0-A evidence: TypeScript passed, `reporting-foundation-certification.spec.ts` passed `2/2`, and `sidebar-tabs-list-certification.spec.ts` passed `5/5` against local frontend plus staging API.
+- Reporting Phase R3-A payroll register report: done locally on 2026-09-10 with `/hr-admin/reports/payroll-register`, summary totals, search, batch/artifact status filters, sort, pagination, output profile, storage/source-hash evidence, artifact export, and drilldown to payroll outputs.
+- Reporting Phase R3-A evidence: TypeScript passed, `payroll-finance-report-certification.spec.ts` passed `2/2`; combined reporting regression passed `4/4`; sidebar/tabs/list regression passed `5/5` against local frontend plus staging API.
+- Reporting Phase R3-B salary variance report: done locally on 2026-09-10 with `/hr-admin/reports/salary-variance`, employee-level summary totals, search, variance-band filter, sort, pagination, gross/deduction/current-net/baseline-net columns, variance amount/percentage, source-hash evidence, and drilldown to payroll review.
+- Reporting Phase R3-B evidence: TypeScript passed, `salary-variance-report-certification.spec.ts` passed `2/2`; reporting foundation, payroll register, and salary variance specs passed together `6/6` against local frontend plus staging API.
+- Reporting Phase R4-A statutory deduction summary report: done locally on 2026-09-10 with `/hr-admin/reports/statutory-deductions`, summary totals, search, statutory-type/provider filters, sort, pagination, registration/provider/evidence columns, empty state, conditional artifact export, and drilldown to Payroll Statutory.
+- Reporting Phase R4-A evidence: TypeScript passed, `statutory-deductions-report-certification.spec.ts` passed `2/2`; reporting foundation, payroll register, salary variance, and statutory deductions specs passed together `8/8` against local frontend plus staging API.
+- Reporting Phase R4-A artifact proof rerun: done locally on 2026-09-10 after extending the disposable payroll close browser flow to create configurable TDS statutory pack, TDS component, TAN employer registration, Form 24Q filing calendar, and TDS tax rule before calculation.
+- Reporting Phase R4-A artifact evidence: updated `phase5c-disposable-payroll-close-browser-flow.spec.ts` passed `1/1`; `statutory-deductions-report-certification.spec.ts` passed `2/2`; combined close/report pack passed `3/3`.
+- Reporting Phase R4-A mapped compliance evidence: browser report search proved the generated TDS component row, `Tax Deducted At Source` statutory type, TAN registration number, `income_tax_department` authority, `payroll.provider.tds.fvu.phase5q` provider route, visible source hash, export link, CSV download `200`, and `x-payroll-artifact-checksum`.
+- Reporting Phase R4-A SaaS evidence: Northstar staging tenant was upgraded through Platform Admin browser flow from `growth` to `enterprise` after the real commercial guard blocked further payroll runs with `Limit exceeded: payroll_runs_per_month`.
+- Reporting Phase R4-A remaining richness note: statutory summary compliance is now mapped and export-certified; separate return/challan artifact rendering should still be expanded when dedicated Form 24Q/FVU provider packages are implemented.
+- Reporting Phase R4-B TDS e-file package: started locally on 2026-09-10 with same-origin HR admin route `/api/hr-admin/reports/tds-efile-package` and Payroll Statutory action `Download TDS e-file package`.
+- Reporting Phase R4-B product behavior: the package generator fetches live statutory setup plus finance handoff artifacts, emits a guarded Form 24Q-ready CSV package with a SHA-256 package checksum header, and blocks with explicit reasons when published TDS rows, TAN, filing authority, provider route, or source hash evidence is missing.
+- Reporting Phase R4-B browser evidence: `tds-efile-package-certification.spec.ts` passed `2/2`; combined R4 regression pack `phase5c-disposable-payroll-close-browser-flow.spec.ts`, `statutory-deductions-report-certification.spec.ts`, and `tds-efile-package-certification.spec.ts` passed `5/5` against local frontend plus staging API.
+- Reporting Phase R4-B access evidence: HR admin can access the package route and employee access is denied without token/password/secret leakage.
+- Reporting Phase R4-B integrity evidence: package download exposes `x-hrms-package-checksum`, and Playwright recomputes the SHA-256 from the downloaded CSV body before accepting the export.
+- Reporting Phase R4-B integrity retest on 2026-09-10: TypeScript passed; focused `tds-efile-package-certification.spec.ts` passed `2/2` against local frontend plus staging API after checksum hardening.
+- Reporting Phase R4-B regression note on 2026-09-10: the combined R4 pack passed all four report/export tests but hit one transient `page.goto` timeout in the long disposable payroll-close setup; immediate isolated rerun of `phase5c-disposable-payroll-close-browser-flow.spec.ts` passed `1/1`.
+- TDS e-file package generation confidence: 85%.
+- TDS compliance readiness report confidence: 90%.
+- TDS e-file production submission confidence: 55%.
+- Reporting Phase R4-C challan reconciliation report: done locally on 2026-09-10 with `/hr-admin/reports/challan-reconciliation`, catalog discovery, filing-calendar reconciliation, payment readiness status, matched deduction amount, registration/authority/provider evidence, source-hash evidence, search, payment-status filter, provider filter, sort, pagination, artifact export, and statutory setup drilldown.
+- Reporting Phase R4-C browser evidence: TypeScript passed and `challan-reconciliation-report-certification.spec.ts` passed `2/2` against local frontend plus staging API, including HR admin coverage and employee denial.
+- Challan reconciliation report confidence: 84%.
+- Reporting Phase R4-D statutory filing status report: done locally on 2026-09-10 with `/hr-admin/reports/statutory-filing-status`, catalog discovery, filing due status, open/due/overdue/acknowledged tracking, published artifact evidence counts, registration/authority/provider/output-profile/source-hash evidence, search, due-status filter, provider filter, sort, pagination, Payroll Handoff drilldown, and Payroll Statutory drilldown.
+- Reporting Phase R4-D browser evidence: TypeScript passed and `statutory-filing-status-report-certification.spec.ts` passed `2/2` against local frontend plus staging API, including HR admin coverage and employee denial.
+- Statutory filing status report confidence: 86%.
+- Reporting Phase R4-E provider filing receipts report: done locally on 2026-09-10 with `/hr-admin/reports/provider-filing-receipts`, catalog discovery, provider delivery status, provider callback status, external receipt reference, submitted/acknowledged/reconciled timeline, callback/retry/job counts, payload checksum evidence, failure code/reason, search, delivery-status filter, provider-status filter, provider filter, sort, pagination, and Payroll Handoff evidence drilldown.
+- Reporting Phase R4-E browser evidence: TypeScript passed and `provider-filing-receipts-report-certification.spec.ts` passed `2/2` against local frontend plus staging API, including HR admin coverage and employee denial.
+- Provider filing receipts report confidence: 86%.
+- Reporting Phase R4-F compliance export hardening: done locally on 2026-09-10 for `challan-reconciliation`, `statutory-filing-status`, and `provider-filing-receipts` same-origin CSV exports with generated timestamp, source row count, report key, SHA-256 checksum header, and live source data from statutory setup plus finance handoff setup.
+- Reporting Phase R4-F browser evidence: TypeScript passed and `compliance-report-export-certification.spec.ts` passed `4/4` against local frontend plus staging API, including HR admin checksum recomputation for all three exports and employee export denial without token/password/secret leakage.
+- Compliance report export confidence: 88%.
+- Reporting Phase R4-G filter-aware export hardening: done locally on 2026-09-10 for the same compliance CSV exports. Report pages now expose `Export filtered CSV` actions carrying active search/status/provider/sort state, and the export route applies those filters server-side while returning `x-hrms-report-filters` audit metadata.
+- Reporting Phase R4-G browser evidence: TypeScript passed and `compliance-report-export-certification.spec.ts` passed `4/4` against local frontend plus staging API after driving each report UI search field, validating the filtered export link, recomputing CSV checksum, and asserting the filter metadata header.
+- Filter-aware compliance export confidence: 90%.
+- Reporting Phase R4-H compliance report hub: done locally on 2026-09-10 with `/hr-admin/reports/compliance`, Reports page entry point, compliance metrics, report cards for statutory deductions, challan reconciliation, statutory filing status, provider filing receipts, and TDS e-file readiness, plus Open/Export actions where available.
+- Reporting Phase R4-H browser evidence: TypeScript passed and `compliance-report-hub-certification.spec.ts` passed `2/2` against local frontend plus staging API, including hub metrics, report-card visibility, audited export route validation, drilldown, no horizontal overflow, and employee denial.
+- Compliance report hub confidence: 88%.
+- Reporting Phase R4-I compliance hub polish: done locally on 2026-09-10 with grouped hub tabs for All, Deductions, Filing & Challans, Provider Evidence, and TDS Package; card-level health signals; and hub-level audited exports for blocked provider items and overdue statutory filings.
+- Reporting Phase R4-I browser evidence: TypeScript passed and `compliance-report-hub-certification.spec.ts` passed `2/2` against local frontend plus staging API after clicking every hub tab, proving per-tab card visibility, validating hub-level export URLs and audit headers, validating report-card export headers, exercising drilldown, checking no horizontal overflow, and proving employee denial.
+- Compliance report hub confidence: 91%.
+- Reporting Phase R4-J compliance export manifest: done locally on 2026-09-10 with `format=manifest` support for audited compliance report exports. Manifests expose report key, schema version, generated timestamp, filters, row count, CSV checksum, source endpoints, and evidence columns while sharing the CSV checksum header.
+- Reporting Phase R4-J browser evidence: TypeScript passed and `compliance-report-manifest-certification.spec.ts` passed `4/4` against local frontend plus staging API, including CSV checksum recomputation, manifest checksum equality, row-count equality, filter proof, source endpoint proof, evidence-column shape, and employee denial without token/password/secret leakage.
+- Compliance export manifest confidence: 90%.
+- Reporting Phase R4-K compliance manifest UI access: done locally on 2026-09-10 with visible HR admin manifest actions on the challan reconciliation, statutory filing status, provider filing receipts, and compliance hub workspaces. Each report page exposes the manifest beside the filtered CSV export, and the hub exposes manifest actions for blocked provider items, overdue statutory filings, and eligible compliance report cards.
+- Reporting Phase R4-K browser evidence: TypeScript passed and the affected certification pack passed `8/8` against local frontend plus staging API, including browser-discovered manifest links, JSON manifest validation, report key/header validation, source endpoint proof, filtered hub manifest proof, drilldown preservation, no horizontal overflow, and employee denial.
+- Compliance manifest UI access confidence: 92%.
+- Reporting Phase R4-L persisted export audit history: done locally on 2026-09-10 with server-side audit capture for HR admin compliance CSV and manifest exports, plus `/hr-admin/reports/export-audits` for reviewing actor, report key, export type, filters, row count, checksum, source endpoints, evidence columns, and request metadata.
+- Reporting Phase R4-L browser evidence: TypeScript passed and `compliance-export-audit-history-certification.spec.ts` passed `2/2` against local frontend plus staging API after creating CSV/manifest exports, loading the audit-history UI, validating metrics, columns, search, report-key filter, export-type filter, pagination controls, checksum visibility, source/evidence metadata, no horizontal overflow, and employee API/UI denial without token/password/secret leakage.
+- Export audit history confidence: 88%.
+- Reporting Phase R4-M backend export audit persistence: done locally on 2026-09-10 with `PayrollReportExportAudit`, database migration, Django admin registration, and `/api/v1/hr-admin/reports/export-audits/` list/create endpoint. The web export route now prefers backend audit persistence and backend audit listing when available, while retaining bounded local fallback for undeployed staging routes.
+- Reporting Phase R4-M backend evidence: Django system check passed, migration `payroll.0033_payrollreportexportaudit` applied locally, and `pytest backend/tests/test_phase0_api_smoke.py -k 'report_export_audits'` passed `2/2`, covering HR admin create/list/filter, tenant and actor ownership, source hash creation, and employee denial.
+- Backend export audit persistence confidence: 90%.
 - Current Phase 5 confidence: 99%.
 - Remaining Phase 5 work: no known launch-critical payroll setup-to-close residual; repeat the full phase on staging with production-like data volume before release sign-off.
 
@@ -1046,6 +1118,15 @@ Current Phase 8 progress:
 - Phase 8D shared workspace product fix: Manager Inbox now defaults leave and attendance approval queue payloads to `5` rows each while preserving existing pagination controls.
 - Phase 8D shared workspace evidence: backend check passed, TypeScript passed, and `phase8d-performance-budget.spec.ts` passed `1/1` against local frontend plus staging API. Because the backend changes are not deployed yet, the delivery-scope payload savings need staging rerun after check-in/deploy.
 - Phase 8D shared workspace latest local/staging-API slowest samples: `/ess/payslips` `7226ms`, `/hr-admin` `6374ms`, `/hr-admin/payroll-calculations` `5889ms`, `/hr-admin/payroll-outputs` `5379ms`, and `/hr-admin/payroll-handoff` `5254ms`.
+- Phase 8D shared workspace staging deployment: done on 2026-09-10 at deployed commit `bc00e851a56dfd024d4baf2694cb4f72b83724be`.
+- Phase 8D shared workspace staging deploy evidence: release `/var/www/hrms-payroll-saas/release-20260910113342`; Django check passed; migrations had no pending operations; backend and web services restarted active; `/health/` returned `{"status": "ok", "service": "hrms-backend"}`.
+- Phase 8D shared workspace final staging browser evidence: `phase8d-performance-budget.spec.ts`, `phase8a-workspace-shell-ux-accessibility.spec.ts`, `payroll-warning-calculation-review-trace-certification.spec.ts`, `payroll-review-exception-decision-certification.spec.ts`, and `payroll-output-artifact-certification.spec.ts` passed together against `https://hrms.accerio.in`, `7/7`.
+- Phase 8D shared workspace final staging timing samples: `/hr-admin` `10292ms`, `/hr-admin/payroll-handoff` `8299ms`, `/hr-admin/payroll-review` `8153ms`, `/hr-admin/payroll-outputs` `7950ms`, `/hr-admin/payroll-calculations` `7792ms`, `/hr-admin/payroll-providers` `7552ms`, `/hr-admin/payroll-inputs` `7514ms`, `/hr-admin/notifications?retry_state=retry_ready` `7331ms`, `/hr-admin/notification-delivery` `7322ms`, `/hr-admin/payroll-readiness` `7267ms`, `/ess/payslips` `6732ms`, and `/ess/notifications?subject_type=payroll_payslip` `4910ms`.
+- Phase 8D shared workspace staging log review: no fresh server crash tracebacks were found; platform tenant API `403` entries were observed during role-boundary browser coverage and treated as expected authorization behavior.
+- Phase 8E sidebar ergonomics update: done locally on 2026-09-10.
+- Phase 8E product fix: workspace sidebars now support collapsible navigation categories, with HR admin navigation grouped by Workspace, Operations, and Governance instead of showing one long list.
+- Phase 8E product fix: the active navigation group opens automatically, category headers are keyboard-focusable through native disclosure controls, and the sidebar navigation area scrolls independently when categories are expanded.
+- Phase 8E browser evidence: `phase8a-workspace-shell-ux-accessibility.spec.ts` and `sidebar-tabs-list-certification.spec.ts` passed together against local frontend plus staging API, `7/7`.
 - Phase 8 staging certification: done on 2026-09-10 against `https://hrms.accerio.in` at deployed commit `027becb613b349538d210c084bb617d96ba6fc96`.
 - Phase 8 staging evidence: workspace shell plus dense form accessibility `6 passed`; responsive visual launch gate `6 passed` across `102` page-viewport combinations; performance timing gate `1 passed`.
 - Phase 8 staging harness fix: remote URL runs now get staging-appropriate timeouts and performance budgets while preserving the same assertions.

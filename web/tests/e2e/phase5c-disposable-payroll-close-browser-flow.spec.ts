@@ -52,6 +52,119 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
 
 test.describe("Phase 5F disposable payroll close browser flow", () => {
   test("creates disposable run, publishes outputs, generates handoff evidence, and proves ESS payslip access", async ({ page }) => {
+    await gotoAuthenticated(page, "/hr-admin/payroll-statutory", hrAdmin);
+    await expectPageReady(page, "Payroll Statutory");
+
+    const statutoryPackForm = form(page, "statutory-pack-form");
+    const statutoryComponentForm = form(page, "statutory-component-form");
+    const statutoryRegistrationForm = form(page, "statutory-registration-form");
+    const statutoryFilingForm = form(page, "statutory-filing-form");
+    const statutoryPackCode = uniqueCode("TDS_PACK");
+    const statutoryComponentCode = uniqueCode("TDS_COMPONENT");
+    const statutoryTreatmentRef = `payroll.statutory.tds.${statutoryComponentCode.toLowerCase()}.v1`;
+
+    const statutoryPackResult = await submitAndCapture<{ id: string; code: string }>(
+      page,
+      /\/api\/hr-admin\/payroll-statutory-packs$/,
+      "POST",
+      async () => {
+        await field(statutoryPackForm, "Code").fill(statutoryPackCode);
+        await field(statutoryPackForm, "Name").fill(`Browser ${statutoryPackCode}`);
+        await field(statutoryPackForm, "Country code").fill("IN");
+        await field(statutoryPackForm, "Jurisdiction reference").fill("country:IN");
+        await field(statutoryPackForm, "Status").selectOption("active");
+        await field(statutoryPackForm, "Effective from").fill("2026-01-01");
+        await field(statutoryPackForm, "Effective to").fill("2026-12-31");
+        await field(statutoryPackForm, "Currency code").fill("INR");
+        await field(statutoryPackForm, "Statutory profile reference").fill(`payroll.statutory.${statutoryPackCode}.v1`);
+        await field(statutoryPackForm, "Validation profile reference").fill(`payroll.statutory.validation.${statutoryPackCode}.v1`);
+        await field(statutoryPackForm, "Config profile reference").fill("statutory.pack.phase5q.close.v1");
+        await statutoryPackForm.getByRole("button", { name: "Create pack" }).click();
+      },
+    );
+    expect(statutoryPackResult.ok).toBeTruthy();
+
+    const statutoryComponentResult = await submitAndCapture<{ id: string; code: string }>(
+      page,
+      /\/api\/hr-admin\/payroll-statutory-components$/,
+      "POST",
+      async () => {
+        await field(statutoryComponentForm, "Statutory pack").selectOption(statutoryPackResult.payload.id);
+        await field(statutoryComponentForm, "Salary component").selectOption("");
+        await field(statutoryComponentForm, "Code").fill(statutoryComponentCode);
+        await field(statutoryComponentForm, "Name").fill("Browser TDS Compliance Deduction");
+        await field(statutoryComponentForm, "Statutory type").selectOption("tax_deducted_at_source");
+        await field(statutoryComponentForm, "Contribution owner").selectOption("employee");
+        await field(statutoryComponentForm, "Calculation method").selectOption("formula");
+        await field(statutoryComponentForm, "Wage base reference").fill("salary.monthly_gross");
+        await field(statutoryComponentForm, "Statutory treatment reference").fill(statutoryTreatmentRef);
+        await field(statutoryComponentForm, "Registration reference").fill("tds.tan");
+        await field(statutoryComponentForm, "Applicability profile reference").fill("payroll.statutory.tds.applicability.phase5q.v1");
+        await field(statutoryComponentForm, "Rounding rule reference").fill("payroll.round.nearest_rupee.v1");
+        await field(statutoryComponentForm, "Formula reference").fill("payroll.formula.tds.monthly_gross_10_percent.phase5q.v1");
+        await field(statutoryComponentForm, "Status").selectOption("active");
+        await field(statutoryComponentForm, "Config profile reference").fill("statutory.component.phase5q.close.v1");
+        await statutoryComponentForm.getByRole("button", { name: "Create component" }).click();
+      },
+    );
+    expect(statutoryComponentResult.ok).toBeTruthy();
+
+    const statutoryRegistrationResult = await submitAndCapture<{ id: string; registration_number: string }>(
+      page,
+      /\/api\/hr-admin\/payroll-statutory-employer-registrations$/,
+      "POST",
+      async () => {
+        await field(statutoryRegistrationForm, "Statutory pack").selectOption(statutoryPackResult.payload.id);
+        await field(statutoryRegistrationForm, "Statutory component").selectOption(statutoryComponentResult.payload.id);
+        await field(statutoryRegistrationForm, "Legal entity").selectOption({ index: 1 });
+        await field(statutoryRegistrationForm, "Branch").selectOption({ index: 1 });
+        await field(statutoryRegistrationForm, "Location").selectOption({ index: 1 });
+        await field(statutoryRegistrationForm, "Code").fill(uniqueCode("TDS_REG"));
+        await field(statutoryRegistrationForm, "Name").fill("Browser TDS TAN Registration");
+        await field(statutoryRegistrationForm, "Registration type reference").fill("tds.tan");
+        await field(statutoryRegistrationForm, "Registration number").fill(`TAN${Date.now()}`.slice(0, 16));
+        await field(statutoryRegistrationForm, "Employer identifier").fill(`EMP${Date.now()}`.slice(0, 16));
+        await field(statutoryRegistrationForm, "Jurisdiction reference").fill("country:IN");
+        await field(statutoryRegistrationForm, "Filing authority reference").fill("income_tax_department");
+        await field(statutoryRegistrationForm, "Provider reference").fill("payroll.provider.tds.fvu.phase5q");
+        await field(statutoryRegistrationForm, "Status").selectOption("active");
+        await field(statutoryRegistrationForm, "Effective from").fill("2026-01-01");
+        await field(statutoryRegistrationForm, "Source reference").fill("browser-tds-registration");
+        await field(statutoryRegistrationForm, "Config profile reference").fill("statutory.registration.phase5q.close.v1");
+        await statutoryRegistrationForm.getByRole("button", { name: "Create registration" }).click();
+      },
+    );
+    expect(statutoryRegistrationResult.ok).toBeTruthy();
+
+    const statutoryFilingResult = await submitAndCapture<{ id: string; code: string }>(
+      page,
+      /\/api\/hr-admin\/payroll-statutory-filing-calendars$/,
+      "POST",
+      async () => {
+        await field(statutoryFilingForm, "Statutory pack").selectOption(statutoryPackResult.payload.id);
+        await field(statutoryFilingForm, "Statutory component").selectOption(statutoryComponentResult.payload.id);
+        await field(statutoryFilingForm, "Employer registration").selectOption(statutoryRegistrationResult.payload.id);
+        await field(statutoryFilingForm, "Code").fill(uniqueCode("TDS_FILE"));
+        await field(statutoryFilingForm, "Name").fill("Browser Form 24Q Filing");
+        await field(statutoryFilingForm, "Filing type reference").fill("tds.form_24q");
+        await field(statutoryFilingForm, "Filing frequency").selectOption("monthly");
+        await field(statutoryFilingForm, "Period start").fill("2026-01-01");
+        await field(statutoryFilingForm, "Period end").fill("2026-12-31");
+        await field(statutoryFilingForm, "Due date").fill("2026-07-15");
+        await field(statutoryFilingForm, "Grace due date").fill("2026-07-20");
+        await field(statutoryFilingForm, "Filing window start").fill("2026-07-01");
+        await field(statutoryFilingForm, "Filing window end").fill("2026-07-15");
+        await field(statutoryFilingForm, "Status").selectOption("due");
+        await field(statutoryFilingForm, "Filing authority reference").fill("income_tax_department");
+        await field(statutoryFilingForm, "Provider reference").fill("payroll.provider.tds.fvu.phase5q");
+        await field(statutoryFilingForm, "Output profile reference").fill("payroll.output.tds.form24q.phase5q.v1");
+        await field(statutoryFilingForm, "Source reference").fill("browser-tds-filing");
+        await field(statutoryFilingForm, "Config profile reference").fill("statutory.filing.phase5q.close.v1");
+        await statutoryFilingForm.getByRole("button", { name: "Create filing" }).click();
+      },
+    );
+    expect(statutoryFilingResult.ok).toBeTruthy();
+
     await gotoAuthenticated(page, "/hr-admin/payroll-rules", hrAdmin);
     await expectPageReady(page, "Payroll Rules");
 
@@ -118,6 +231,61 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       },
     );
     expect(ruleVersionResult.ok).toBeTruthy();
+    await expect(page.getByText("payroll rule version saved.").first()).toBeVisible();
+
+    await ruleDefinitionForm.getByRole("button", { name: "New" }).click();
+    const taxRuleCode = uniqueCode("TDS_RULE");
+    const taxRuleResult = await submitAndCapture<{ id: string; code: string }>(
+      page,
+      /\/api\/hr-admin\/payroll-rule-definitions$/,
+      "POST",
+      async () => {
+        await field(ruleDefinitionForm, "Code").fill(taxRuleCode);
+        await field(ruleDefinitionForm, "Name").fill(`Browser ${taxRuleCode}`);
+        await field(ruleDefinitionForm, "Rule type").selectOption("formula");
+        await field(ruleDefinitionForm, "Description").fill("Browser-created statutory tax deduction rule for compliance report evidence.");
+        await field(ruleDefinitionForm, "Tags JSON").fill(JSON.stringify(["browser", "phase5q", "tds", "statutory_report"]));
+        await field(ruleDefinitionForm, "Config profile reference").fill("tenant.payroll.rule.tds.phase5q.v1");
+        await ruleDefinitionForm.getByRole("button", { name: "Create rule" }).click();
+      },
+    );
+    expect(taxRuleResult.ok).toBeTruthy();
+    await expect(page.getByText(taxRuleCode).first()).toBeVisible();
+
+    await ruleVersionForm.getByRole("button", { name: "New" }).click();
+    const taxRuleVersionResult = await submitAndCapture<{ id: string; status: string }>(
+      page,
+      /\/api\/hr-admin\/payroll-rule-versions$/,
+      "POST",
+      async () => {
+        await field(ruleVersionForm, "Rule").selectOption(taxRuleResult.payload.id);
+        await field(ruleVersionForm, "Version").fill("1");
+        await field(ruleVersionForm, "Status").selectOption("active");
+        await field(ruleVersionForm, "Expression").fill("salary.monthly_gross * 0.1");
+        await field(ruleVersionForm, "Effective from").fill("2026-01-01");
+        await field(ruleVersionForm, "Effective to").fill("");
+        await field(ruleVersionForm, "Rounding rule reference").fill("payroll.round.nearest_rupee.v1");
+        await field(ruleVersionForm, "Input schema JSON").fill(JSON.stringify({ required_paths: ["salary.monthly_gross"] }));
+        await field(ruleVersionForm, "Output schema JSON").fill(JSON.stringify({ result_path: `components.${statutoryComponentCode.toLowerCase()}` }));
+        await field(ruleVersionForm, "Config snapshot JSON").fill(JSON.stringify({
+          component_code: statutoryComponentCode,
+          component_name: "TDS Compliance Deduction",
+          component_type: "tax",
+          line_type: "tax",
+          calculation_order: 20,
+          output_path: `components.${statutoryComponentCode.toLowerCase()}`,
+          statutory_pack_id: statutoryPackResult.payload.id,
+          statutory_pack_code: statutoryPackCode,
+          statutory_component_id: statutoryComponentResult.payload.id,
+          statutory_component_code: statutoryComponentCode,
+          statutory_type: "tds",
+          statutory_treatment_ref: statutoryTreatmentRef,
+          profile_ref: "tenant.payroll.rule.version.tds.phase5q.v1",
+        }));
+        await ruleVersionForm.getByRole("button", { name: "Create version" }).click();
+      },
+    );
+    expect(taxRuleVersionResult.ok).toBeTruthy();
     await expect(page.getByText("payroll rule version saved.").first()).toBeVisible();
 
     await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
@@ -358,6 +526,19 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(handoffResponse.ok).toBeTruthy();
     await expect(page.getByRole("status").first()).toContainText(/Payroll finance handoff generated/);
 
+    await gotoAuthenticated(page, "/hr-admin/reports/statutory-deductions", hrAdmin);
+    await expectPageReady(page, "Statutory Deduction Summary");
+    const statutoryReport = page.getByTestId("statutory-deductions-report");
+    await statutoryReport.getByPlaceholder("Search component, employee, provider, hash").fill(statutoryComponentCode);
+    const mappedTdsRow = statutoryReport.locator("tbody tr").filter({ hasText: statutoryComponentCode }).first();
+    await expect(mappedTdsRow).toBeVisible();
+    await expect(mappedTdsRow).toContainText("Tax Deducted At Source");
+    await expect(mappedTdsRow).toContainText(statutoryRegistrationResult.payload.registration_number);
+    await expect(mappedTdsRow).toContainText("income_tax_department");
+    await expect(mappedTdsRow).toContainText("payroll.provider.tds.fvu.phase5q");
+    await expect(mappedTdsRow.locator("code").last()).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+
     await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoffResponse.payload.handoff.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Handoff");
     const handoffPanel = page.getByLabel("Handoff controls");
@@ -372,6 +553,21 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     );
     expect(transmitResponse.ok).toBeTruthy();
     await expect(page.getByRole("status").first()).toContainText(/Payroll finance handoff transmitted/);
+
+    await gotoAuthenticated(page, "/hr-admin/reports/statutory-deductions", hrAdmin);
+    await expectPageReady(page, "Statutory Deduction Summary");
+    const transmittedStatutoryReport = page.getByTestId("statutory-deductions-report");
+    await transmittedStatutoryReport.getByPlaceholder("Search component, employee, provider, hash").fill(statutoryComponentCode);
+    const transmittedMappedTdsRow = transmittedStatutoryReport.locator("tbody tr").filter({ hasText: statutoryComponentCode }).first();
+    await expect(transmittedMappedTdsRow).toContainText("Published");
+    const statutoryExport = transmittedMappedTdsRow.getByRole("link", { name: "Export" });
+    await expect(statutoryExport).toHaveAttribute("href", /\/api\/hr-admin\/payroll-output-artifacts\/.+\/download/);
+    const statutoryExportHref = await statutoryExport.getAttribute("href");
+    const statutoryExportResponse = await page.request.get(statutoryExportHref ?? "");
+    expect(statutoryExportResponse.status()).toBe(200);
+    expect(statutoryExportResponse.headers()["x-payroll-artifact-checksum"]).toBeTruthy();
+    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoffResponse.payload.handoff.id}`, hrAdmin);
+    await expectPageReady(page, "Payroll Handoff");
 
     const acknowledgeResponse = await submitAndCapture<{ handoff: { id: string; status: string }; detail?: string }>(
       page,

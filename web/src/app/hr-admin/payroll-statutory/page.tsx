@@ -304,6 +304,111 @@ function FilingCalendarPanel({
   );
 }
 
+function readConfigString(config: Record<string, unknown>, keys: string[], fallback = "Not configured") {
+  for (const key of keys) {
+    const value = config[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+  return fallback;
+}
+
+function TdsComplianceReport({
+  components,
+  filingCalendars,
+  employeeProfiles,
+  declarations,
+}: {
+  components: HrAdminPayrollStatutoryComponent[];
+  filingCalendars: HrAdminPayrollStatutoryFilingCalendar[];
+  employeeProfiles: HrAdminEmployeeStatutoryProfile[];
+  declarations: HrAdminEmployeeStatutoryDeclaration[];
+}) {
+  const tdsComponents = components.filter((component) => component.statutory_type === "tax_deducted_at_source");
+  const tdsFilings = filingCalendars.filter((filing) => {
+    const marker = `${filing.filing_type_ref} ${filing.output_profile_ref} ${filing.name} ${filing.code}`.toLowerCase();
+    return filing.statutory_type === "tax_deducted_at_source" || marker.includes("tds") || marker.includes("24q") || marker.includes("form_24q");
+  });
+  const panReady = employeeProfiles.filter((profile) => profile.pan_number.trim()).length;
+  const taxRegimeReady = employeeProfiles.filter((profile) => profile.tax_regime !== "not_declared").length;
+  const lockedDeclarations = declarations.filter((declaration) => declaration.status === "locked");
+  const reportConfig = tdsFilings[0]?.config_snapshot ?? tdsComponents[0]?.config_snapshot ?? {};
+  const formRef = readConfigString(reportConfig, ["form_ref", "form_reference", "tds_form_ref"], "india.tds.form_24q.configurable");
+  const fvuProfileRef = readConfigString(reportConfig, ["fvu_profile_ref", "efile_profile_ref", "validation_profile_ref"], "tds.fvu.validation.profile.pending");
+  const challanStrategyRef = readConfigString(reportConfig, ["challan_strategy_ref", "challan_mapping_ref"], "tds.challan.mapping.pending");
+  const providerRouteRef = tdsFilings.find((filing) => filing.provider_ref)?.provider_ref || readConfigString(reportConfig, ["provider_route_ref"], "tds.provider.route.pending");
+  const readinessItems = [
+    { label: "TDS component", ready: tdsComponents.some((component) => component.status === "active"), value: `${tdsComponents.length} configured` },
+    { label: "Form 24Q calendar", ready: tdsFilings.length > 0, value: `${tdsFilings.length} obligations` },
+    { label: "PAN coverage", ready: employeeProfiles.length > 0 && panReady === employeeProfiles.length, value: `${panReady}/${employeeProfiles.length}` },
+    { label: "Tax regime", ready: employeeProfiles.length > 0 && taxRegimeReady === employeeProfiles.length, value: `${taxRegimeReady}/${employeeProfiles.length}` },
+    { label: "Proof lock", ready: lockedDeclarations.length > 0, value: `${lockedDeclarations.length}/${declarations.length}` },
+    { label: "Provider route", ready: providerRouteRef !== "tds.provider.route.pending", value: providerRouteRef },
+  ];
+  const readyCount = readinessItems.filter((item) => item.ready).length;
+
+  return (
+    <section className="payroll-statutory-operations-panel" aria-label="TDS compliance report">
+      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+        <div>
+          <span className="workspace-card__eyebrow">India payroll compliance</span>
+          <h2>TDS e-file report</h2>
+        </div>
+        <span className="payroll-setup-count">{readyCount}/{readinessItems.length} checks ready</span>
+      </div>
+
+      <div className="payroll-statutory-operations-grid" data-testid="tds-compliance-report">
+        <article className="payroll-statutory-filing-card">
+          <div>
+            <strong>Return profile</strong>
+            <span>Quarterly salary TDS report package</span>
+          </div>
+          <div className="detail-grid">
+            <DetailRow label="Form reference" value={<code>{formRef}</code>} />
+            <DetailRow label="FVU profile" value={<code>{fvuProfileRef}</code>} />
+            <DetailRow label="Challan mapping" value={<code>{challanStrategyRef}</code>} />
+            <DetailRow label="Provider route" value={<code>{providerRouteRef}</code>} />
+          </div>
+        </article>
+
+        <article className="payroll-statutory-filing-card">
+          <div>
+            <strong>Deductee coverage</strong>
+            <span>PAN, tax regime, and proof lock readiness</span>
+          </div>
+          <div className="payroll-statutory-filing-meta">
+            <span>{panReady}/{employeeProfiles.length} PAN ready</span>
+            <span>{taxRegimeReady}/{employeeProfiles.length} regimes</span>
+            <span>{lockedDeclarations.length}/{declarations.length} declarations locked</span>
+          </div>
+          <code>source:employee_statutory_profiles</code>
+        </article>
+
+        {readinessItems.map((item) => (
+          <article className="payroll-statutory-filing-card" key={item.label}>
+            <div>
+              <strong>{item.label}</strong>
+              <span>{item.value}</span>
+            </div>
+            <StatusBadge status={item.ready ? "ready" : "warning"} label={item.ready ? "Ready" : "Needs setup"} />
+          </article>
+        ))}
+      </div>
+
+      <div className="notice">
+        <strong>Production filing guard.</strong>
+        <span className="muted">
+          This report certifies tenant data readiness for TDS e-file generation. Final Form 24Q/FVU file output and TRACES/TIN submission must be enabled through configured provider packages and separately certified against official utilities.
+        </span>
+        <Link className="button button--secondary" href="/api/hr-admin/reports/tds-efile-package" prefetch={false}>
+          Download TDS e-file package
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 function PackSummary({ pack }: { pack: HrAdminPayrollStatutoryPack | null }) {
   if (!pack) {
     return null;
@@ -390,6 +495,12 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
           </div>
 
           <PackSummary pack={activePack} />
+          <TdsComplianceReport
+            components={setup.statutory_components}
+            declarations={setup.declarations}
+            employeeProfiles={setup.employee_profiles}
+            filingCalendars={setup.filing_calendars}
+          />
           <EmployerRegistrationPanel registrations={setup.employer_registrations} />
           <FilingCalendarPanel filingCalendars={setup.filing_calendars} />
 
