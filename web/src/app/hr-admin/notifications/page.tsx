@@ -18,7 +18,6 @@ function normalizeParam(value: SearchParamValue) {
 export default async function HrAdminNotificationsPage({ searchParams }: PageProps) {
   const currentParams = (await searchParams) ?? {};
   const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
-  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "25") || 25, 1), 100);
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
   const channel = normalizeParam(currentParams.channel) ?? "";
@@ -27,6 +26,8 @@ export default async function HrAdminNotificationsPage({ searchParams }: PagePro
   const moduleFilter = normalizeParam(currentParams.module) ?? "";
   const subjectType = normalizeParam(currentParams.subject_type) ?? "";
   const retryState = normalizeParam(currentParams.retry_state) ?? "";
+  const defaultPageSize = retryState === "retry_ready" ? 10 : 25;
+  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || String(defaultPageSize)) || defaultPageSize, 1), 100);
 
   const [result, optionsResult] = await Promise.all([
     getHrAdminNotifications({

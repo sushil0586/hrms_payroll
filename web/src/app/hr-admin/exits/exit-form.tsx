@@ -182,7 +182,7 @@ export function ExitForm({ initialValue, lifecycleTemplates, mode, options, item
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form aria-label="Exit record form" className="section form-layout-modern" data-testid="exit-record-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>{mode === "create" ? "Create exit record" : "Edit exit record"}</h2>

@@ -10,6 +10,9 @@ type PayrollAction = {
   profileField?: string;
   profileLabel?: string;
   defaultProfileRef?: string;
+  commentField?: string;
+  commentLabel?: string;
+  defaultComment?: string;
   disabled?: boolean;
   disabledReason?: string;
 };
@@ -30,7 +33,12 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
     () => Object.fromEntries(actions.map((action) => [action.id, action.defaultProfileRef ?? ""])),
     [actions],
   );
+  const initialComments = useMemo(
+    () => Object.fromEntries(actions.map((action) => [action.id, action.defaultComment ?? ""])),
+    [actions],
+  );
   const [profileRefs, setProfileRefs] = useState<Record<string, string>>(initialRefs);
+  const [comments, setComments] = useState<Record<string, string>>(initialComments);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -39,9 +47,10 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
     setMessage("");
     setError("");
     setBusyAction(action.id);
-    const body = action.profileField && profileRefs[action.id]
-      ? { [action.profileField]: profileRefs[action.id] }
-      : {};
+    const body = {
+      ...(action.profileField && profileRefs[action.id] ? { [action.profileField]: profileRefs[action.id] } : {}),
+      ...(action.commentField && comments[action.id] ? { [action.commentField]: comments[action.id] } : {}),
+    };
 
     try {
       const response = await fetch(action.endpoint, {
@@ -93,6 +102,20 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
               ) : (
                 <p className="section-copy section-copy-soft">{action.disabledReason ?? "Uses the selected payroll record and tenant configuration."}</p>
               )}
+              {action.commentField ? (
+                <label className="form-field" htmlFor={`${action.id}-comment`}>
+                  <span className="muted">{action.commentLabel ?? "Comment"}</span>
+                  <textarea
+                    className="input-control"
+                    id={`${action.id}-comment`}
+                    name={action.commentField}
+                    onChange={(event) => setComments((current) => ({ ...current, [action.id]: event.target.value }))}
+                    placeholder="Capture reviewer note"
+                    rows={3}
+                    value={comments[action.id] ?? ""}
+                  />
+                </label>
+              ) : null}
               <button
                 className="button button--primary"
                 disabled={isDisabled}

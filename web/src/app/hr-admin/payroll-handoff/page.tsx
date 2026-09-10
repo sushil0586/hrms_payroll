@@ -2,6 +2,7 @@ import Link from "next/link";
 import type React from "react";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollFinanceHandoffSetup } from "@/lib/api";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
@@ -31,6 +32,37 @@ type EvidenceRow = {
 
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function numberParam(value: SearchParamValue, fallback: number) {
+  const parsed = Number(normalizeParam(value));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function buildHref(
+  basePath: string,
+  currentParams: Record<string, SearchParamValue>,
+  updates: Record<string, string | undefined>,
+) {
+  const params = new URLSearchParams();
+
+  Object.entries(currentParams).forEach(([key, value]) => {
+    const normalized = normalizeParam(value);
+    if (normalized) {
+      params.set(key, normalized);
+    }
+  });
+
+  Object.entries(updates).forEach(([key, value]) => {
+    if (value) {
+      params.set(key, value);
+    } else {
+      params.delete(key);
+    }
+  });
+
+  const queryString = params.toString();
+  return queryString ? `${basePath}?${queryString}` : basePath;
 }
 
 function parseEvidenceParam(value: SearchParamValue): EvidenceSelection | null {
@@ -133,10 +165,19 @@ function StatusBadge({ status }: { status: string }) {
 function HandoffRail({
   handoffs,
   selectedHandoff,
+  allHandoffs,
+  currentParams,
+  page,
+  pageSize,
 }: {
   handoffs: HrAdminPayrollFinanceHandoff[];
   selectedHandoff: HrAdminPayrollFinanceHandoff | null;
+  allHandoffs: HrAdminPayrollFinanceHandoff[];
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageSize: number;
 }) {
+  const totalPages = Math.max(1, Math.ceil(allHandoffs.length / pageSize));
   return (
     <aside className="payroll-setup-rail payroll-output-rail payroll-handoff-rail">
       <div className="payroll-setup-panel__header">
@@ -163,6 +204,17 @@ function HandoffRail({
           </Link>
         ))}
       </div>
+      <PaginationBar
+        firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: "1", handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
+        hasNext={page < totalPages}
+        hasPrevious={page > 1}
+        lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: String(totalPages), handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
+        nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: String(page + 1), handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
+        page={page}
+        pageSize={pageSize}
+        previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: String(page - 1), handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
+        totalCount={allHandoffs.length}
+      />
     </aside>
   );
 }
@@ -1066,11 +1118,19 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
   const selectedHandoffId = normalizeParam(currentParams.handoffId);
   const selectedArtifactId = normalizeParam(currentParams.artifactId);
   const selectedEvidence = parseEvidenceParam(currentParams.evidence);
+  const handoffPageSize = Math.min(numberParam(currentParams.handoffPageSize, 8), 25);
+  const artifactPageSize = Math.min(numberParam(currentParams.artifactPageSize, 8), 25);
   const result = await getHrAdminPayrollFinanceHandoffSetup();
   const setup = result.data;
-  const selectedHandoff = setup.handoffs.find((item) => item.id === selectedHandoffId) ?? setup.handoffs[0] ?? null;
+  const handoffTotalPages = Math.max(1, Math.ceil(setup.handoffs.length / handoffPageSize));
+  const handoffPage = Math.min(numberParam(currentParams.handoffPage, 1), handoffTotalPages);
+  const pagedHandoffs = setup.handoffs.slice((handoffPage - 1) * handoffPageSize, handoffPage * handoffPageSize);
+  const selectedHandoff = setup.handoffs.find((item) => item.id === selectedHandoffId) ?? pagedHandoffs[0] ?? setup.handoffs[0] ?? null;
   const visibleArtifacts = selectedHandoff ? setup.artifacts.filter((item) => item.output_batch_id === selectedHandoff.output_batch_id) : setup.artifacts;
-  const selectedArtifact = visibleArtifacts.find((item) => item.id === selectedArtifactId) ?? visibleArtifacts[0] ?? null;
+  const artifactTotalPages = Math.max(1, Math.ceil(visibleArtifacts.length / artifactPageSize));
+  const artifactPage = Math.min(numberParam(currentParams.artifactPage, 1), artifactTotalPages);
+  const pagedArtifacts = visibleArtifacts.slice((artifactPage - 1) * artifactPageSize, artifactPage * artifactPageSize);
+  const selectedArtifact = visibleArtifacts.find((item) => item.id === selectedArtifactId) ?? pagedArtifacts[0] ?? visibleArtifacts[0] ?? null;
   const selectedDelivery = selectedArtifact ? setup.deliveries.find((item) => item.output_artifact_id === selectedArtifact.id) ?? null : null;
   const totals = selectedHandoff?.totals_snapshot ?? {};
   const summary = selectedHandoff?.handoff_summary_snapshot ?? {};
@@ -1125,7 +1185,14 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
 
       <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-output-workspace payroll-handoff-workspace">
-          <HandoffRail handoffs={setup.handoffs} selectedHandoff={selectedHandoff} />
+          <HandoffRail
+            allHandoffs={setup.handoffs}
+            currentParams={currentParams}
+            handoffs={pagedHandoffs}
+            page={handoffPage}
+            pageSize={handoffPageSize}
+            selectedHandoff={selectedHandoff}
+          />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -1328,7 +1395,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleArtifacts.map((artifact) => (
+                    {pagedArtifacts.map((artifact) => (
                       <tr className={selectedArtifact?.id === artifact.id ? "is-selected" : ""} key={artifact.id}>
                         <td>
                           <Link href={`/hr-admin/payroll-handoff?handoffId=${selectedHandoff?.id ?? ""}&artifactId=${artifact.id}`}>
@@ -1347,6 +1414,17 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   </tbody>
                 </table>
               </div>
+              <PaginationBar
+                firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: "1", artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
+                hasNext={artifactPage < artifactTotalPages}
+                hasPrevious={artifactPage > 1}
+                lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: String(artifactTotalPages), artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
+                nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: String(artifactPage + 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
+                page={artifactPage}
+                pageSize={artifactPageSize}
+                previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: String(artifactPage - 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
+                totalCount={visibleArtifacts.length}
+              />
             </div>
 
             <DeliveryLedger

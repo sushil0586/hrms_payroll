@@ -286,7 +286,10 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
   const selectedRunId = normalizeParam(currentParams.runId);
   const selectedCalculationId = normalizeParam(currentParams.calculationId);
   const selectedLineId = normalizeParam(currentParams.lineId);
-  const result = await getHrAdminPayrollCalculationSetup();
+  const result = await getHrAdminPayrollCalculationSetup({
+    run_id: selectedRunId,
+    calculation_id: selectedCalculationId,
+  });
   const setup = result.data;
   const selectedRun = setup.runs.find((item) => item.id === selectedRunId) ?? setup.runs.find((item) => item.status === "calculated") ?? setup.runs[0] ?? null;
   const visibleCalculations = selectedRun

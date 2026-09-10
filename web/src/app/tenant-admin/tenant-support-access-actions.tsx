@@ -110,7 +110,7 @@ export function TenantSupportAccessActions({ data }: Props) {
   }
 
   return (
-    <div className="tenant-support-access-actions">
+    <div aria-label="Tenant support access form" className="tenant-support-access-actions" data-testid="tenant-support-access-form">
       <div className="tenant-console-panel__header">
         <div>
           <span className="workspace-card__eyebrow">Support access</span>

@@ -141,7 +141,7 @@ export function AttendanceRecordBulkManager({
 
   return (
     <section className="section queue-layout">
-      <section className="queue-toolbar panel-card-soft">
+      <section aria-label="Attendance records toolbar" className="queue-toolbar panel-card-soft" data-testid="attendance-records-toolbar">
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Attendance records</h2>

@@ -346,7 +346,9 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
   const regPage = Math.max(Number(normalizeParam(currentParams.regPage) || "1") || 1, 1);
   const { summary, pendingLeave, pendingRegularizations, state } = await getMssApprovalInbox({
     leave_page: leavePage,
+    leave_page_size: 5,
     regularization_page: regPage,
+    regularization_page_size: 5,
   });
   const inboxState = state === "live" ? "live" : "demo";
 

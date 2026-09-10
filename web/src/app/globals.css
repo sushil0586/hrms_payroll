@@ -3031,6 +3031,22 @@ select.input-control {
 
 .salary-setup-rail {
   align-content: start;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.salary-setup-detail-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.salary-setup-detail-panel .detail-row,
+.salary-setup-detail-panel .detail-label,
+.salary-setup-detail-panel .detail-value,
+.salary-setup-detail-panel .workspace-card__eyebrow {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .salary-component-stack {
@@ -3141,7 +3157,7 @@ select.input-control {
 
 .salary-crud-form__header {
   display: flex;
-  align-items: start;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
 }
@@ -3948,6 +3964,17 @@ select.input-control {
 .payroll-output-rail,
 .payroll-output-detail-panel {
   align-content: start;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.payroll-output-detail-panel .payroll-setup-panel__header,
+.payroll-output-detail-panel .payroll-setup-panel__header > *,
+.payroll-output-detail-panel .payroll-output-net-block,
+.payroll-output-detail-panel .payroll-output-net-block > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .payroll-output-card {
@@ -6415,7 +6442,7 @@ select.input-control {
   }
 
   .payroll-output-workspace {
-    grid-template-columns: minmax(220px, 250px) minmax(0, 1fr) minmax(320px, 360px);
+    grid-template-columns: minmax(220px, 250px) minmax(0, 1fr) minmax(280px, 320px);
   }
 
   .payroll-output-detail-panel {

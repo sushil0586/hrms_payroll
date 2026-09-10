@@ -7066,11 +7066,11 @@ class MeStatutoryDeclarationItemDetailView(EmployeeContextMixin, APIView):
         return response.Response(MeStatutoryDeclarationItemSerializer(build_me_statutory_declaration_item_payload(item)).data)
 
 
-def build_me_payroll_payslip_payload(item: PayrollOutputArtifact) -> dict:
+def build_me_payroll_payslip_payload(item: PayrollOutputArtifact, *, include_detail: bool = True) -> dict:
     can_download = item.status == PayrollOutputArtifactStatus.PUBLISHED and item.is_downloadable
-    signed_url = get_payroll_artifact_signed_url(item) if can_download else None
+    signed_url = get_payroll_artifact_signed_url(item) if can_download and include_detail else None
     period = item.payroll_run.period if item.payroll_run_id else None
-    recent_events = list(item.access_events.order_by("-created_at")[:8])
+    recent_events = list(item.access_events.order_by("-created_at")[:8]) if include_detail else []
     return {
         "id": item.id,
         "payroll_run_id": item.payroll_run_id,
@@ -7094,7 +7094,7 @@ def build_me_payroll_payslip_payload(item: PayrollOutputArtifact) -> dict:
         "signed_download_url": signed_url.url if signed_url else None,
         "signed_download_expires_at": signed_url.expires_at if signed_url else None,
         "totals_snapshot": item.totals_snapshot,
-        "line_snapshot": item.line_snapshot,
+        "line_snapshot": item.line_snapshot if include_detail else [],
         "access_summary": _payroll_artifact_access_summary(item),
         "access_events": [_payroll_access_event_payload(event) for event in recent_events],
         "source_hash": item.source_hash,
@@ -7109,6 +7109,7 @@ def _build_me_payroll_payslip_list_payload(employee: Employee, request) -> dict:
     page, page_size = _get_page_params(request)
     search_value = (request.query_params.get("q") or "").strip()
     year_value = (request.query_params.get("year") or "").strip()
+    selected_payslip_id = (request.query_params.get("selected_id") or "").strip()
     queryset = PayrollOutputArtifact.objects.filter(
         tenant=employee.tenant,
         employee=employee,
@@ -7138,6 +7139,7 @@ def _build_me_payroll_payslip_list_payload(employee: Employee, request) -> dict:
     offset = (page - 1) * page_size
     items = list(queryset.order_by("-payroll_run__period__pay_date", "-published_at", "-created_at")[offset : offset + page_size])
     latest = all_payslips.order_by("-payroll_run__period__pay_date", "-published_at", "-created_at").first()
+    detail_item_id = selected_payslip_id or (str(items[0].id) if items else "")
     latest_net_pay = Decimal("0.00")
     if latest:
         try:
@@ -7161,7 +7163,7 @@ def _build_me_payroll_payslip_list_payload(employee: Employee, request) -> dict:
             "latest_period_name": latest.payroll_run.period.name if latest and latest.payroll_run.period_id else "",
             "available_years": years,
         },
-        "items": [build_me_payroll_payslip_payload(item) for item in items],
+        "items": [build_me_payroll_payslip_payload(item, include_detail=str(item.id) == detail_item_id) for item in items],
         "total_count": total_count,
         "page": page,
         "page_size": page_size,
@@ -7345,14 +7347,24 @@ class HrAdminDashboardView(HrAdminContextMixin, APIView):
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         payload = get_hr_admin_dashboard(employee)
-        remediation_summary = sync_hrms_saas_launch_remediation_assignments(employee.tenant, payload["launch_audit"])
-        payload["launch_audit"]["remediation_assignments"] = remediation_summary["items"]
-        payload["launch_audit"]["remediation_assignment_summary"] = {
-            "open_count": remediation_summary["open_count"],
-            "opened_count": remediation_summary["opened_count"],
-            "updated_count": remediation_summary["updated_count"],
-            "closed_count": remediation_summary["closed_count"],
-        }
+        sync_remediation = str(request.query_params.get("sync_remediation", "")).lower() in {"1", "true", "yes"}
+        if sync_remediation:
+            remediation_summary = sync_hrms_saas_launch_remediation_assignments(employee.tenant, payload["launch_audit"])
+            payload["launch_audit"]["remediation_assignments"] = remediation_summary["items"]
+            payload["launch_audit"]["remediation_assignment_summary"] = {
+                "open_count": remediation_summary["open_count"],
+                "opened_count": remediation_summary["opened_count"],
+                "updated_count": remediation_summary["updated_count"],
+                "closed_count": remediation_summary["closed_count"],
+            }
+        else:
+            payload["launch_audit"]["remediation_assignments"] = []
+            payload["launch_audit"]["remediation_assignment_summary"] = {
+                "open_count": len(payload["launch_audit"].get("release_actions", [])),
+                "opened_count": 0,
+                "updated_count": 0,
+                "closed_count": 0,
+            }
         return response.Response(HrAdminDashboardSerializer(payload).data)
 
 
@@ -10533,8 +10545,10 @@ def build_hr_admin_payroll_validation_issue_payload(item: PayrollValidationIssue
     }
 
 
-def get_hr_admin_payroll_calculation_setup_payload(actor) -> dict:
+def get_hr_admin_payroll_calculation_setup_payload(actor, request=None) -> dict:
     tenant = actor.tenant
+    selected_run_id = (request.query_params.get("run_id") or "").strip() if request else ""
+    selected_calculation_id = (request.query_params.get("calculation_id") or "").strip() if request else ""
     runs = PayrollRun.objects.filter(tenant=tenant).select_related("period", "pay_group", "locked_by").order_by("-period__start_date", "name")
     calculations = PayrollRunCalculation.objects.filter(tenant=tenant).select_related(
         "payroll_run__period",
@@ -10550,6 +10564,15 @@ def get_hr_admin_payroll_calculation_setup_payload(actor) -> dict:
         "rule_version__rule",
         "adjustment",
     ).order_by("-calculation__created_at", "employee__employee_code", "calculation_order", "component_code")
+    selected_calculation = None
+    if selected_calculation_id:
+        selected_calculation = calculations.filter(id=selected_calculation_id).first()
+    if not selected_calculation and selected_run_id:
+        selected_calculation = calculations.filter(payroll_run_id=selected_run_id).first()
+    if not selected_calculation:
+        selected_calculation = latest_calculation
+    if selected_calculation:
+        lines = lines.filter(calculation=selected_calculation)
     active_versions = PayrollRuleVersion.objects.filter(
         tenant=tenant,
         status=PayrollRuleVersionStatus.ACTIVE,
@@ -10611,7 +10634,7 @@ class HrAdminPayrollCalculationSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
-        return response.Response(HrAdminPayrollCalculationSetupSerializer(get_hr_admin_payroll_calculation_setup_payload(employee)).data)
+        return response.Response(HrAdminPayrollCalculationSetupSerializer(get_hr_admin_payroll_calculation_setup_payload(employee, request)).data)
 
 
 class HrAdminPayrollRunDraftCalculateView(HrAdminContextMixin, APIView):
@@ -10744,8 +10767,9 @@ def build_hr_admin_payroll_review_action_payload(review: PayrollRunReview, detai
     }
 
 
-def get_hr_admin_payroll_review_setup_payload(actor) -> dict:
+def get_hr_admin_payroll_review_setup_payload(actor, request=None) -> dict:
     tenant = actor.tenant
+    selected_review_id = (request.query_params.get("review_id") or "").strip() if request else ""
     runs = PayrollRun.objects.filter(tenant=tenant).select_related("period", "pay_group", "locked_by", "final_locked_by").order_by("-period__start_date", "name")
     calculations = PayrollRunCalculation.objects.filter(tenant=tenant).select_related(
         "payroll_run__period",
@@ -10762,14 +10786,18 @@ def get_hr_admin_payroll_review_setup_payload(actor) -> dict:
         "approved_by",
         "locked_by",
     ).order_by("-created_at")
+    selected_review = reviews.filter(id=selected_review_id).first() if selected_review_id else reviews.first()
     exceptions = PayrollRunException.objects.filter(tenant=tenant).select_related(
         "review",
         "employee",
         "input_snapshot",
         "calculation_line",
         "decided_by",
-    ).order_by("severity", "employee__employee_code", "category")[:200]
-    approvals = PayrollRunApproval.objects.filter(tenant=tenant).select_related("review", "approver").order_by("-created_at")[:100]
+    ).order_by("severity", "employee__employee_code", "category")
+    approvals = PayrollRunApproval.objects.filter(tenant=tenant).select_related("review", "approver").order_by("-created_at")
+    if selected_review:
+        exceptions = exceptions.filter(review=selected_review)
+        approvals = approvals.filter(review=selected_review)
     latest_review = reviews.first()
     lines = PayrollCalculationLine.objects.filter(tenant=tenant).select_related(
         "calculation",
@@ -10778,7 +10806,9 @@ def get_hr_admin_payroll_review_setup_payload(actor) -> dict:
         "payroll_run",
         "rule_version__rule",
     ).order_by("-calculation__created_at", "employee__employee_code", "calculation_order", "component_code")
-    if latest_review:
+    if selected_review:
+        lines = lines.filter(calculation=selected_review.calculation)
+    elif latest_review:
         lines = lines.filter(calculation=latest_review.calculation)
 
     return {
@@ -10797,8 +10827,8 @@ def get_hr_admin_payroll_review_setup_payload(actor) -> dict:
         "runs": [build_hr_admin_payroll_run_payload(item) for item in runs],
         "calculations": [build_hr_admin_payroll_calculation_payload(item) for item in calculations[:50]],
         "reviews": [build_hr_admin_payroll_review_payload(item) for item in reviews[:50]],
-        "exceptions": [build_hr_admin_payroll_exception_payload(item) for item in exceptions],
-        "approvals": [build_hr_admin_payroll_approval_payload(item) for item in approvals],
+        "exceptions": [build_hr_admin_payroll_exception_payload(item) for item in exceptions[:200]],
+        "approvals": [build_hr_admin_payroll_approval_payload(item) for item in approvals[:100]],
         "lines": [build_hr_admin_payroll_calculation_line_payload(item) for item in lines[:200]],
         "options": {
             "payroll_run_statuses": [{"value": value, "label": label} for value, label in PayrollRunStatus.choices],
@@ -10815,7 +10845,7 @@ class HrAdminPayrollReviewSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
-        return response.Response(HrAdminPayrollReviewSetupSerializer(get_hr_admin_payroll_review_setup_payload(employee)).data)
+        return response.Response(HrAdminPayrollReviewSetupSerializer(get_hr_admin_payroll_review_setup_payload(employee, request)).data)
 
 
 class HrAdminPayrollRunOpenReviewView(HrAdminContextMixin, APIView):
@@ -11013,11 +11043,11 @@ def build_hr_admin_payroll_output_batch_payload(item: PayrollOutputBatch) -> dic
     }
 
 
-def build_hr_admin_payroll_output_artifact_payload(item: PayrollOutputArtifact) -> dict:
+def build_hr_admin_payroll_output_artifact_payload(item: PayrollOutputArtifact, *, include_detail: bool = True) -> dict:
     employee = item.employee
     can_download = item.status == PayrollOutputArtifactStatus.PUBLISHED and item.is_downloadable
-    signed_url = get_payroll_artifact_signed_url(item) if can_download else None
-    recent_events = list(item.access_events.order_by("-created_at")[:8])
+    signed_url = get_payroll_artifact_signed_url(item) if can_download and include_detail else None
+    recent_events = list(item.access_events.order_by("-created_at")[:8]) if include_detail else []
     return {
         "id": item.id,
         "output_batch_id": item.output_batch_id,
@@ -11051,13 +11081,13 @@ def build_hr_admin_payroll_output_artifact_payload(item: PayrollOutputArtifact) 
         "signed_download_expires_at": signed_url.expires_at if signed_url else None,
         "output_profile_ref": item.output_profile_ref,
         "totals_snapshot": item.totals_snapshot,
-        "line_snapshot": item.line_snapshot,
+        "line_snapshot": item.line_snapshot if include_detail else [],
         "access_summary": _payroll_artifact_access_summary(item),
         "access_events": [_payroll_access_event_payload(event) for event in recent_events],
         "source_hash": item.source_hash,
         "published_at": item.published_at,
         "published_by_name": str(item.published_by) if item.published_by else None,
-        "config_snapshot": item.config_snapshot,
+        "config_snapshot": item.config_snapshot if include_detail else {},
         "created_at": item.created_at,
         "updated_at": item.updated_at,
     }
@@ -11072,8 +11102,10 @@ def build_hr_admin_payroll_output_action_payload(batch: PayrollOutputBatch, deta
     }
 
 
-def get_hr_admin_payroll_output_setup_payload(actor) -> dict:
+def get_hr_admin_payroll_output_setup_payload(actor, request=None) -> dict:
     tenant = actor.tenant
+    selected_batch_id = (request.query_params.get("batch_id") or "").strip() if request else ""
+    selected_artifact_id = (request.query_params.get("artifact_id") or "").strip() if request else ""
     runs = PayrollRun.objects.filter(tenant=tenant).select_related("period", "pay_group", "locked_by", "final_locked_by").order_by("-period__start_date", "name")
     reviews = PayrollRunReview.objects.filter(tenant=tenant).select_related(
         "payroll_run",
@@ -11089,6 +11121,7 @@ def get_hr_admin_payroll_output_setup_payload(actor) -> dict:
         "generated_by",
         "published_by",
     ).order_by("-created_at")
+    selected_batch = batches.filter(id=selected_batch_id).first() if selected_batch_id else batches.first()
     artifacts = PayrollOutputArtifact.objects.filter(tenant=tenant).select_related(
         "output_batch",
         "payroll_run",
@@ -11096,8 +11129,12 @@ def get_hr_admin_payroll_output_setup_payload(actor) -> dict:
         "employee",
         "input_snapshot",
         "published_by",
-    ).order_by("kind", "artifact_key")[:200]
+    ).order_by("kind", "artifact_key")
+    if selected_batch:
+        artifacts = artifacts.filter(output_batch=selected_batch)
+    artifacts = artifacts[:200]
     latest_batch = batches.first()
+    detail_artifact_id = selected_artifact_id or (str(artifacts[0].id) if artifacts else "")
     return {
         "summary": {
             "run_count": runs.count(),
@@ -11114,7 +11151,7 @@ def get_hr_admin_payroll_output_setup_payload(actor) -> dict:
         "runs": [build_hr_admin_payroll_run_payload(item) for item in runs],
         "reviews": [build_hr_admin_payroll_review_payload(item) for item in reviews[:50]],
         "output_batches": [build_hr_admin_payroll_output_batch_payload(item) for item in batches[:50]],
-        "artifacts": [build_hr_admin_payroll_output_artifact_payload(item) for item in artifacts],
+        "artifacts": [build_hr_admin_payroll_output_artifact_payload(item, include_detail=str(item.id) == detail_artifact_id) for item in artifacts],
         "options": {
             "output_batch_statuses": [{"value": value, "label": label} for value, label in PayrollOutputBatchStatus.choices],
             "output_artifact_kinds": [{"value": value, "label": label} for value, label in PayrollOutputArtifactKind.choices],
@@ -11128,7 +11165,7 @@ class HrAdminPayrollOutputSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
-        return response.Response(HrAdminPayrollOutputSetupSerializer(get_hr_admin_payroll_output_setup_payload(employee)).data)
+        return response.Response(HrAdminPayrollOutputSetupSerializer(get_hr_admin_payroll_output_setup_payload(employee, request)).data)
 
 
 class HrAdminPayrollReviewGenerateOutputsView(HrAdminContextMixin, APIView):
@@ -16921,7 +16958,28 @@ class HrAdminNotificationDiagnosticsView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
 
         tenant = employee.tenant
+        scope = (request.query_params.get("scope") or "").strip().lower()
         notifications = Notification.objects.filter(tenant=tenant)
+        if scope == "delivery":
+            payload = {
+                "overview": {
+                    "total_templates": NotificationTemplate.objects.filter(tenant=tenant).count(),
+                    "active_templates": NotificationTemplate.objects.filter(tenant=tenant, status=NotificationTemplateStatus.ACTIVE).count(),
+                    "total_events": NotificationEventDefinition.objects.filter(tenant=tenant).count(),
+                    "active_events": NotificationEventDefinition.objects.filter(tenant=tenant, is_active=True).count(),
+                    "live_notifications": notifications.count(),
+                    "failed_notifications": notifications.filter(status=NotificationStatus.FAILED).count(),
+                    "preview_test_notifications": notifications.filter(payload__preview_mode__in=["template_test_send", "event_test_send"]).count(),
+                },
+                "alerts": [],
+                "recommendations": [],
+                "channel_diagnostics": build_hr_admin_notification_channel_diagnostics(tenant=tenant),
+                "template_diagnostics": [],
+                "event_diagnostics": [],
+                "recent_test_notifications": [],
+            }
+            return response.Response(HrAdminNotificationDiagnosticsSerializer(payload).data)
+
         templates = list(NotificationTemplate.objects.filter(tenant=tenant).order_by("channel", "name"))
         events = list(NotificationEventDefinition.objects.filter(tenant=tenant).select_related("template").order_by("module", "trigger_key", "channel"))
 

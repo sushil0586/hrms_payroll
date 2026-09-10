@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminOrganizationItem, getHrAdminOrganizationSnapshot } from "@/lib/api";
 import type { HrAdminOrganizationItem, HrAdminOrganizationSnapshot } from "@/lib/types";
@@ -325,7 +326,12 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
   const activeSection = sections[sectionKey] ?? sections.departments;
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "all";
+  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "10") || 10, 1), 50);
   const filteredItems = filterByQuery(filterByStatus(activeSection.items, status), q);
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+  const requestedPage = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
+  const page = Math.min(requestedPage, totalPages);
+  const pagedItems = filteredItems.slice((page - 1) * pageSize, page * pageSize);
   const selectedItem = resolveSelectedItem(filteredItems, normalizeParam(currentParams.itemId));
   const selectedDetailResult =
     selectedItem && isOrganizationSectionKey(sectionKey)
@@ -396,6 +402,7 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
           <form action="/hr-admin/organization" className="directory-filter-bar">
             <input name="section" type="hidden" value={sectionKey} />
             <input name="itemId" type="hidden" value={selectedItem?.id ?? ""} />
+            <input name="page" type="hidden" value="1" />
             <label className="form-field">
               <span className="text-label-premium">Search</span>
               <input className="input-control" defaultValue={q} name="q" placeholder="Name, code, parent, location" />
@@ -408,6 +415,14 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
                 <option value="inactive">Inactive only</option>
               </select>
             </label>
+            <label className="form-field">
+              <span className="text-label-premium">Page size</span>
+              <select className="input-control" defaultValue={String(pageSize)} name="page_size">
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </label>
             <div className="directory-filter-bar__actions">
               <button className="button button--primary" type="submit">Apply</button>
               <Link className="button button--ghost" href={buildHref("/hr-admin/organization", currentParams, { q: undefined, status: undefined, itemId: undefined })}>Reset</Link>
@@ -418,7 +433,7 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
               {Object.entries(sections).map(([key, value]) => (
                 <Link
                   className={`filter-chip-link${sectionKey === key ? " filter-chip-link--active" : ""}`}
-                  href={buildHref("/hr-admin/organization", currentParams, { section: key, itemId: undefined })}
+                  href={buildHref("/hr-admin/organization", currentParams, { section: key, itemId: undefined, page: "1" })}
                   key={key}
                 >
                   <span>{value.label}</span>
@@ -431,7 +446,7 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
             {statusTabs.map((tab) => (
               <Link
                 className={`filter-chip-link${status === tab.key ? " filter-chip-link--active" : ""}`}
-                href={buildHref("/hr-admin/organization", currentParams, { status: tab.key, itemId: undefined })}
+                href={buildHref("/hr-admin/organization", currentParams, { status: tab.key, itemId: undefined, page: "1" })}
                 key={tab.key}
               >
                 <span>{tab.label}</span>
@@ -442,7 +457,7 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
 
           <div className="employee-directory-list">
             {filteredItems.length ? (
-              filteredItems.map((item) => {
+              pagedItems.map((item) => {
                 const warnings = getOrganizationWarnings(item, sectionKey);
                 return (
                   <div
@@ -492,6 +507,17 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
               </div>
             )}
           </div>
+          <PaginationBar
+            firstHref={buildHref("/hr-admin/organization", currentParams, { page: "1" })}
+            hasNext={page < totalPages}
+            hasPrevious={page > 1}
+            lastHref={buildHref("/hr-admin/organization", currentParams, { page: String(totalPages) })}
+            nextHref={buildHref("/hr-admin/organization", currentParams, { page: String(page + 1) })}
+            page={page}
+            pageSize={pageSize}
+            previousHref={buildHref("/hr-admin/organization", currentParams, { page: String(page - 1) })}
+            totalCount={filteredItems.length}
+          />
         </article>
 
         <article className="record-card">

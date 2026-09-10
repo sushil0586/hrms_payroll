@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReadiness } from "@/lib/api";
 import type { HrAdminPayrollReadinessItem } from "@/lib/types";
@@ -140,14 +141,16 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
   const periodStart = normalizeParam(currentParams.period_start);
   const periodEnd = normalizeParam(currentParams.period_end);
   const selectedEmployeeId = normalizeParam(currentParams.employeeId);
+  const page = Math.max(Number(normalizeParam(currentParams.page) ?? "1") || 1, 1);
+  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) ?? "20") || 20, 1), 100);
 
   const readinessResult = await getHrAdminPayrollReadiness({
     q,
     status,
     period_start: periodStart,
     period_end: periodEnd,
-    page: 1,
-    page_size: 50,
+    page,
+    page_size: pageSize,
   });
   const readiness = readinessResult.data;
   const selectedItem =
@@ -210,9 +213,17 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
               </div>
               <form className="payroll-filter-form" action="/hr-admin/payroll-readiness">
                 <input type="hidden" name="status" value={status} />
+                <input type="hidden" name="page" value="1" />
                 <input aria-label="Search" className="input-control" defaultValue={q} name="q" placeholder="Search employee, entity, cost center" />
                 <input aria-label="Period start" className="input-control" defaultValue={readiness.period.start} name="period_start" type="date" />
                 <input aria-label="Period end" className="input-control" defaultValue={readiness.period.end} name="period_end" type="date" />
+                <select aria-label="Page size" className="input-control" defaultValue={String(readiness.page_size)} name="page_size">
+                  {[10, 20, 50, 100].map((size) => (
+                    <option key={size} value={size}>
+                      {size} / page
+                    </option>
+                  ))}
+                </select>
                 <button className="button button--primary" type="submit">Apply</button>
               </form>
             </div>
@@ -221,7 +232,12 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
               {statusTabs.map((tab) => (
                 <Link
                   className={`status-tab ${status === tab.value ? "status-tab--active" : ""}`}
-                  href={buildHref("/hr-admin/payroll-readiness", currentParams, { status: tab.value, employeeId: undefined })}
+                  href={buildHref("/hr-admin/payroll-readiness", currentParams, {
+                    status: tab.value,
+                    employeeId: undefined,
+                    page: "1",
+                    page_size: String(readiness.page_size),
+                  })}
                   key={tab.value}
                 >
                   <span>{tab.label}</span>
@@ -270,6 +286,22 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
                 <span className="muted">Adjust the search or status filter.</span>
               </div>
             ) : null}
+
+            <PaginationBar
+              firstHref={buildHref("/hr-admin/payroll-readiness", currentParams, { page: "1", page_size: String(readiness.page_size), employeeId: undefined })}
+              hasNext={readiness.has_next}
+              hasPrevious={readiness.has_previous}
+              lastHref={buildHref("/hr-admin/payroll-readiness", currentParams, {
+                page: String(Math.max(1, Math.ceil(readiness.total_count / Math.max(readiness.page_size, 1)))),
+                page_size: String(readiness.page_size),
+                employeeId: undefined,
+              })}
+              nextHref={buildHref("/hr-admin/payroll-readiness", currentParams, { page: String(readiness.page + 1), page_size: String(readiness.page_size), employeeId: undefined })}
+              page={readiness.page}
+              pageSize={readiness.page_size}
+              previousHref={buildHref("/hr-admin/payroll-readiness", currentParams, { page: String(readiness.page - 1), page_size: String(readiness.page_size), employeeId: undefined })}
+              totalCount={readiness.total_count}
+            />
           </div>
 
           <DetailPanel item={selectedItem} />

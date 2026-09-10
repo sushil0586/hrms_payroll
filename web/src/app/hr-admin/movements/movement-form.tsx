@@ -61,7 +61,7 @@ export function MovementForm({ initialValue, mode, options, itemId }: Props) {
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form aria-label="Movement event form" className="section form-layout-modern" data-testid="movement-event-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>

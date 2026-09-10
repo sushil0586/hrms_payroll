@@ -130,7 +130,7 @@ export function NotificationQueue({
 
   return (
     <section className="section queue-layout">
-      <section className="card panel queue-toolbar panel-card-soft">
+      <section aria-label="Notification queue toolbar" className="card panel queue-toolbar panel-card-soft" data-testid="notification-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Notifications</h2>

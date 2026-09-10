@@ -65,7 +65,7 @@ test.describe("Phase 5A payroll control room certification", () => {
     await expect(main(page).getByLabel("Period end")).toHaveValue(/\d{4}-\d{2}-\d{2}/);
     await expect(main(page).getByRole("button", { name: "Apply" })).toBeVisible();
     for (const tab of ["All", "Ready", "Warning", "Blocked"]) {
-      await expect(main(page).getByRole("link", { name: new RegExp(tab) })).toBeVisible();
+      await expect(main(page).locator(".status-tab-row").getByRole("link", { name: new RegExp(`^${tab}\\b`) })).toBeVisible();
     }
     await expectTableHeaders(table(page, "payroll-readiness-table"), ["Employee", "Status", "Entity", "Cost Center", "Attendance", "Pending", "Bank"]);
     const employeeLink = table(page, "payroll-readiness-table").locator("tbody a").first();

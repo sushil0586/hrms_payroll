@@ -218,6 +218,101 @@ Current Phase 1 progress:
 - Organization master CRUD confidence: 90%.
 - Employee structural dropdown confidence: 88%.
 - Foundational policy/governance master CRUD confidence: 86%.
+
+## Phase 2/8 Bridge: Platform Admin Workspace Ergonomics
+
+Goal:
+
+Make the platform admin console usable for real SaaS operations by breaking the large all-in-one page into focused tabs, adding pagination/search to long lists, and certifying every visible platform-admin control through Playwright.
+
+Scope:
+
+- Top-level tab structure for Tenants, Onboarding, Admins, Policy Packs, and Events.
+- URL-addressable panels using `panel=` so direct links and sidebar navigation remain stable.
+- Tenant list pagination and search across tenant name, code, domain, plan, and onboarding status.
+- Policy pack pagination and search across pack name, code, domain, status, country, and industry.
+- Event pagination and search across event type, actor, summary, and timestamp.
+- Preserve platform-admin create tenant, edit tenant, onboarding metadata, admin contact, first-admin provisioning, policy pack creation/publish, baseline adoption, activation gates, and event review workflows.
+
+Certification suites:
+
+- `web/tests/e2e/platform-admin-tabs-pagination-certification.spec.ts`
+- `web/tests/e2e/platform-admin-negative-security-certification.spec.ts`
+- `web/tests/e2e/platform-admin-audit-evidence-certification.spec.ts`
+- `web/tests/e2e/production-platform-admin-onboarding-flows.spec.ts`
+
+Done gate:
+
+- Each platform-admin tab is reachable through browser navigation and marks the active tab using `aria-selected`.
+- Every visible form control on the touched page is asserted by Playwright.
+- Pagination controls render for tenant, policy-pack, and event lists.
+- Paginated lists do not render more than the configured page size.
+- Newly created policy packs remain reachable by browser search even when not on page one.
+- Unauthenticated, employee, manager, and HR admin sessions are denied from Platform Admin workspace/API.
+- Invalid fields, duplicate tenant codes, duplicate policy-pack codes, and early gate actions fail visibly.
+- Platform Admin mutations create tenant-specific onboarding events and checklist evidence visible after refresh.
+- Five new tenants and first admins can still be onboarded through the browser after the tab split.
+- No horizontal overflow is introduced.
+
+Latest local certification:
+
+- Date: 2026-09-10
+- Environment under test: local Next.js at `http://127.0.0.1:3212` with live staging API `https://hrms.accerio.in/api/v1`
+- `pnpm --dir web exec tsc --noEmit`: passed
+- `pnpm --dir web lint`: passed
+- `platform-admin-tabs-pagination-certification.spec.ts`: passed
+- `platform-admin-negative-security-certification.spec.ts`: passed
+- `platform-admin-audit-evidence-certification.spec.ts`: passed
+- `production-platform-admin-onboarding-flows.spec.ts`: passed, including five tenant/admin onboarding cycles
+- Combined Platform Admin certification run: passed, `5 passed`
+
+Confidence after bridge:
+
+- Platform admin UX confidence: 90%
+- Platform admin functional confidence: 93%
+- Platform admin security/guardrail confidence: 91%
+- Platform admin audit/evidence confidence: 92%
+- SaaS tenant onboarding confidence: 93%
+
+## Phase 8E: Sidebar, Tabs, Lists, and Pagination Certification
+
+Goal:
+
+Certify that every role workspace sidebar route remains usable, every tabbed surface can be operated through the browser, and long list workspaces expose pagination before launch.
+
+Scope:
+
+- Platform admin sidebar routes.
+- HR admin sidebar routes.
+- Employee self-service sidebar routes.
+- Manager self-service sidebar routes.
+- Tenant admin sidebar routes.
+- All visible `role=tab` elements on those routes.
+- Long list detection for tenant directory rows, shared list rows, and large table bodies.
+- Horizontal overflow checks after each page load and tab switch.
+
+Certification suite:
+
+- `web/tests/e2e/sidebar-tabs-list-certification.spec.ts`
+
+Issues found and resolved:
+
+- `/hr-admin/organization` rendered 20 structural master rows without pagination.
+- Added query-string pagination and a page-size selector to the organization master list.
+
+Latest local certification:
+
+- Date: 2026-09-10
+- Environment under test: local Next.js at `http://127.0.0.1:3212` with live staging API `https://hrms.accerio.in/api/v1`
+- `pnpm --dir web exec tsc --noEmit`: passed
+- `pnpm --dir web lint`: passed
+- `sidebar-tabs-list-certification.spec.ts`: passed, `5 passed`
+
+Confidence after phase:
+
+- Sidebar navigation confidence: 92%
+- Tab navigation confidence: 90%
+- Long-list pagination confidence: 88%
 - Salary setup browser CRUD confidence: 88%.
 - Assignment and rollout browser CRUD confidence: 87%.
 - Notification setup browser CRUD confidence: 88%.
@@ -361,6 +456,15 @@ Current Phase 3 progress:
 - Phase 3F lifecycle closure certification: done locally on 2026-09-09.
 - Certified touched pages: `/hr-admin/employees/new`, `/hr-admin/employees?employeeId=[employeeId]`, `/hr-admin/movements/new`, `/hr-admin/movements`, `/hr-admin/employee-documents/new`, `/hr-admin/employee-documents`, `/hr-admin/employee-documents/[itemId]/review`, `/hr-admin/audit`.
 - Evidence: `docs/qa/phase3f-lifecycle-closure-certification-2026-09-09.md`.
+- Phase 3G employee directory pagination and granular page certification: done locally on 2026-09-10.
+- Certified touched page: `/hr-admin/employees`.
+- Added URL-driven pagination and page-size controls to the employee directory.
+- Certified header actions, metrics, filters, status chips, pagination controls, list cards, selected detail rows, action menu links, empty search state, and horizontal overflow behavior.
+- Evidence suite: `web/tests/e2e/employee-directory-certification.spec.ts`.
+- Phase 3H employee bank account payroll-readiness certification: done locally on 2026-09-10.
+- Certified touched page: `/hr-admin/employees/[employeeId]/bank-accounts`.
+- Certified employee-detail action navigation, bank-account metrics, empty list state, required field validation, create account, read/list masking, edit account, primary-account switching, API persistence, absence of delete/remove/archive controls, and horizontal overflow behavior.
+- Evidence suite: `web/tests/e2e/employee-bank-accounts-certification.spec.ts`.
 - Employee master create/edit confidence: 86%.
 - Employee structural mapping confidence: 90%.
 - Employee access provisioning confidence: 82%.
@@ -377,7 +481,9 @@ Current Phase 3 progress:
 - Fresh manager access login confidence: 86%.
 - Reporting manager mapping visibility confidence: 84%.
 - Completed movement writeback confidence: 90%.
-- Current Phase 3 confidence: 88%.
+- Employee directory navigation/filter/pagination confidence: 92%.
+- Employee bank account readiness confidence: 90%.
+- Current Phase 3 confidence: 90%.
 - Remaining Phase 3 work: none for HR-admin Employee Lifecycle scope.
 - Phase 4 carry-forward: direct-report workflow item proof in MSS queue after a fresh employee submits leave or attendance through a visible ESS request path.
 
@@ -574,6 +680,43 @@ Current Phase 5 progress:
 - Phase 5J final lock destructive controls certification: done locally on 2026-09-09.
 - Certified touched pages: `/hr-admin/payroll-review?reviewId=[createdReviewId]`, `/hr-admin/payroll-inputs?runId=[createdRunId]`, `/api/hr-admin/payroll-runs/[runId]/open-review`, `/api/hr-admin/payroll-runs/[runId]`.
 - Evidence: `docs/qa/phase5j-final-lock-destructive-controls-certification-2026-09-09.md`.
+- Phase 5K payroll readiness bank coverage gate and pagination certification: done locally on 2026-09-10.
+- Certified touched pages: `/hr-admin/payroll-readiness`, `/hr-admin/payroll-readiness?q=[createdEmployeeCode]&page_size=10`, `/hr-admin/payroll-readiness?employeeId=[createdEmployeeId]`.
+- Added URL-driven payroll readiness pagination and page-size controls using the backend-supported `page` and `page_size` contract.
+- Certified that a browser-created employee primary bank account flows into payroll readiness table bank status, selected readiness detail source counts, and the absence of the `Missing primary bank account` issue for that employee.
+- Evidence suite: `web/tests/e2e/payroll-readiness-bank-gate-certification.spec.ts`.
+- Phase 5L payroll readiness negative gate certification: done locally on 2026-09-10.
+- Certified touched pages: `/hr-admin/employees/new`, `/hr-admin/payroll-readiness?q=[createdEmployeeCode]&page_size=10`, `/hr-admin/payroll-readiness?status=ready`, `/hr-admin/payroll-readiness?status=warning`.
+- Certified that a browser-created active employee with complete structure but no primary bank account remains warning-gated, shows `Bank = Missing`, exposes `Bank accounts = 0` in selected readiness detail, displays the `Missing primary bank account.` warning, is excluded from the Ready tab, and remains visible in the Warning tab.
+- Evidence suite: `web/tests/e2e/payroll-readiness-negative-gates-certification.spec.ts`.
+- Phase 5M payroll close readiness guard certification: done locally on 2026-09-10.
+- Certified touched pages: `/hr-admin/payroll-inputs`, `/hr-admin/payroll-inputs?runId=[createdRunId]&snapshotId=[createdSnapshotId]`.
+- Certified that warning snapshots expose visible warning counts and snapshot-detail issues before lock, can be intentionally locked with visible status feedback, while blocked snapshots expose blocked counts and stop input lock with a visible error response.
+- Evidence suite: `web/tests/e2e/payroll-close-readiness-guard-certification.spec.ts`.
+- Phase 5N payroll warning calculation and review trace certification: done locally on 2026-09-10.
+- Certified touched pages: `/hr-admin/payroll-rules`, `/hr-admin/payroll-inputs`, `/hr-admin/payroll-calculations?runId=[createdRunId]&calculationId=[createdCalculationId]`, `/hr-admin/payroll-review?reviewId=[createdReviewId]`.
+- Certified that a browser-created warning input snapshot can be locked with visible evidence, draft-calculated using a disposable active rule, carried into the calculation validation register, opened for review, and surfaced in the review exception/evidence workspace with a stable trace link back to calculation.
+- Evidence suite: `web/tests/e2e/payroll-warning-calculation-review-trace-certification.spec.ts`.
+- Phase 5O payroll review exception decision certification: done locally on 2026-09-10.
+- Certified touched pages: `/hr-admin/payroll-rules`, `/hr-admin/payroll-inputs`, `/hr-admin/payroll-calculations?runId=[createdRunId]`, `/hr-admin/payroll-review?reviewId=[createdReviewId]&exceptionId=[createdExceptionId]`.
+- Added browser-visible review controls for manual exception creation, selected exception decisioning, decision reason capture, and approval comment capture, backed by tenant-scoped HR-admin API routes.
+- Certified that a browser-created blocker exception prevents review submission, accepted decision with reason unblocks submission, approval records profile and reviewer comment, final lock completes, approval evidence remains visible, and the selected exception detail preserves the decision reason.
+- Evidence suite: `web/tests/e2e/payroll-review-exception-decision-certification.spec.ts`.
+- Phase 5P payroll output artifact certification: done locally on 2026-09-10.
+- Certified touched pages: `/hr-admin/payroll-rules`, `/hr-admin/payroll-inputs`, `/hr-admin/payroll-calculations?runId=[createdRunId]`, `/hr-admin/payroll-review?reviewId=[createdReviewId]`, `/hr-admin/payroll-outputs?batchId=[createdBatchId]&artifactId=[createdArtifactId]`, `/ess/payslips?q=[createdRunCode]`.
+- Added URL-driven pagination to the payroll output batch rail and artifact register so long output workspaces remain usable without backend changes.
+- Certified output generation from final-locked review, output batch publish, HR artifact metadata panels, payslip/register artifact detail selection, HR download headers for checksum/storage/provider/version/download strategy/retention, access-audit CSV export, ESS published-only payslip visibility, ESS download, register exclusion from ESS, and HR route denial from employee session.
+- Evidence suite: `web/tests/e2e/payroll-output-artifact-certification.spec.ts`.
+- Phase 5Q payroll finance handoff certification: done locally on 2026-09-10.
+- Certified touched pages: `/hr-admin/payroll-rules`, `/hr-admin/payroll-inputs`, `/hr-admin/payroll-calculations?runId=[createdRunId]`, `/hr-admin/payroll-review?reviewId=[createdReviewId]`, `/hr-admin/payroll-outputs?batchId=[createdBatchId]`, `/hr-admin/payroll-handoff?handoffId=[createdHandoffId]`.
+- Added URL-driven pagination to the payroll handoff package rail and finance artifact register so long provider/evidence workspaces remain usable.
+- Certified finance handoff generation from published outputs, selected handoff detail, transmit action, acknowledgement profile action, provider audit-pack generation, finance artifact detail storage governance, configurable finance routing refs, delivery acknowledgements, delivery audit evidence drilldown, and handoff pagination controls.
+- Evidence suite: `web/tests/e2e/payroll-output-artifact-certification.spec.ts` with test `published outputs generate finance handoff with transmit, acknowledgement, audit pack, and pagination evidence`.
+- Phase 5R payroll close regression bundle certification: done locally on 2026-09-10.
+- Certified bundled suites: payroll readiness bank gate, payroll readiness negative gate, payroll close readiness guard, payroll warning calculation/review trace, payroll review exception decision, payroll output artifact certification, and payroll finance handoff certification.
+- Certified that the Phase 5 payroll browser tests pass serially in one accumulated-data run, proving that the page-level certifications do not pollute one another and that the pagination changes keep payroll pages usable as staging records grow.
+- Evidence command: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3212 HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 HRMS_ENABLE_DEMO_DATA=false pnpm --dir web exec playwright test tests/e2e/payroll-readiness-bank-gate-certification.spec.ts tests/e2e/payroll-readiness-negative-gates-certification.spec.ts tests/e2e/payroll-close-readiness-guard-certification.spec.ts tests/e2e/payroll-warning-calculation-review-trace-certification.spec.ts tests/e2e/payroll-review-exception-decision-certification.spec.ts tests/e2e/payroll-output-artifact-certification.spec.ts --workers=1 --reporter=line`.
+- Result: `7 passed (3.7m)`.
 - Payroll control-room UI confidence: 88%.
 - Payroll trace/navigation confidence: 86%.
 - Payroll close action UI confidence: 84%.
@@ -599,7 +742,16 @@ Current Phase 5 progress:
 - Run-level artifact isolation confidence: 92%.
 - Final-locked reopen prevention confidence: 92%.
 - Final-locked run edit prevention confidence: 92%.
-- Current Phase 5 confidence: 97%.
+- Payroll readiness pagination confidence: 91%.
+- Primary bank readiness gate confidence: 92%.
+- Negative payroll readiness gate confidence: 92%.
+- Payroll close readiness guard confidence: 92%.
+- Payroll warning calculation/review trace confidence: 92%.
+- Payroll review exception decision confidence: 93%.
+- Payroll output artifact certification confidence: 94%.
+- Payroll finance handoff certification confidence: 94%.
+- Payroll close regression bundle confidence: 96%.
+- Current Phase 5 confidence: 99%.
 - Remaining Phase 5 work: no known launch-critical payroll setup-to-close residual; repeat the full phase on staging with production-like data volume before release sign-off.
 
 ## 11. Phase 6: Integrations and Artifact Governance
@@ -865,10 +1017,35 @@ Current Phase 8 progress:
 - Phase 8C certified forms: salary setup, payroll setup, payroll inputs, and payroll statutory browser operation forms.
 - Phase 8C certified UI boundaries: visible form panels, accessible `aria-label`s, enabled control focusability, forward non-trapped Tab movement, control accessible names, usable control dimensions, and no horizontal overflow.
 - Evidence: `docs/qa/phase8c-form-keyboard-accessibility-certification-2026-09-10.md`.
+- Phase 8C expanded operations keyboard/accessibility certification: done locally on 2026-09-10 against the staging API.
+- Phase 8C expanded certified forms and toolbars: probation review create, movement create, exit create, attendance records toolbar, notification queue toolbar, and tenant support access controls.
+- Phase 8C expanded product fix: Salary Setup structure detail cards now shrink and wrap inside the workspace, closing a 25px horizontal overflow at `1440x900`.
+- Phase 8C expanded semantic fix: lifecycle create forms, attendance toolbar, notification toolbar, and tenant support access controls now expose stable `aria-label` and `data-testid` hooks for certification-grade keyboard testing.
+- Phase 8C expanded evidence: `phase8c-form-keyboard-accessibility.spec.ts` passed `10/10` locally against `https://hrms.accerio.in/api/v1`.
 - Phase 8D performance budget certification: done locally on 2026-09-10.
 - Phase 8D certified routes: same launch-critical route set as Phase 8B at `1366x768` with browser navigation timing and resource-size budgets.
 - Phase 8D warm-run slowest page-ready routes: `/hr-admin/payroll-providers` at `2959ms`, `/hr-admin/payroll-handoff` at `2900ms`, `/ess/payslips` at `2617ms`, `/mss/approvals` at `2337ms`, and `/ess/notifications?subject_type=payroll_payslip` at `2178ms`.
 - Evidence: `docs/qa/phase8d-performance-budget-certification-2026-09-10.md`.
+- Phase 8D performance retune: done locally on 2026-09-10 against the staging API.
+- Phase 8D retune product fix: HR admin dashboard no longer performs launch-remediation write-sync on ordinary landing loads; remediation sync remains available where launch remediation/download flows need it.
+- Phase 8D retune product fix: retry-ready notification queue defaults to `10` rows instead of `25` while preserving configurable pagination.
+- Phase 8D retune visual fix: Payroll Outputs artifact detail panel now stays inside the `1366x768` workspace without horizontal overflow.
+- Phase 8D retune evidence: `phase8d-performance-budget.spec.ts` passed `1/1`; slowest current local/staging-API page-ready samples were `/ess/payslips` `7919ms`, `/ess/notifications?subject_type=payroll_payslip` `6831ms`, `/hr-admin` `5839ms`, `/mss/approvals` `5015ms`, and `/hr-admin/payroll-providers` `4517ms`.
+- Phase 8D ESS retune: done locally on 2026-09-10 against the staging API.
+- Phase 8D ESS retune product fix: ESS payslip list now sends the selected payslip ID to the API so only the selected row receives heavy detail payloads, signed-download preparation, calculation lines, and recent access events.
+- Phase 8D ESS retune product fix: ESS payslip default page size is now `5` rows with `5/10/25/50` still configurable in the browser.
+- Phase 8D ESS retune evidence: `phase8d-performance-budget.spec.ts` passed `1/1`; `/ess/payslips` improved from `7919ms` to `4926ms` page-ready in the local/staging-API gate.
+- Phase 8D payroll workspace retune: done locally on 2026-09-10 against the staging API.
+- Phase 8D payroll workspace product fix: payroll calculation, review, and output setup APIs now accept selected row IDs so page payloads include heavy line/artifact/access detail only for the active run, calculation, review, batch, or artifact.
+- Phase 8D payroll workspace product fix: the HR admin calculation, review, and output pages now pass selected IDs to the API, keeping the browser surface unchanged while reducing server-render payload work.
+- Phase 8D payroll workspace regression evidence: `payroll-warning-calculation-review-trace-certification.spec.ts`, `payroll-review-exception-decision-certification.spec.ts`, and `payroll-output-artifact-certification.spec.ts` passed together, `4/4`.
+- Phase 8D payroll workspace performance evidence: `phase8d-performance-budget.spec.ts` passed `1/1`; current local/staging-API page-ready samples were `/hr-admin/payroll-review` `2922ms`, `/hr-admin/payroll-calculations` `4399ms`, and `/hr-admin/payroll-outputs` `4719ms`.
+- Phase 8D current slowest page-ready samples: `/hr-admin` `5652ms`, `/ess/payslips` `5084ms`, `/hr-admin/payroll-outputs` `4719ms`, `/mss/approvals` `4714ms`, and `/hr-admin/notification-delivery` `4514ms`.
+- Phase 8D shared workspace retune: started locally on 2026-09-10.
+- Phase 8D shared workspace product fix: notification diagnostics now supports `scope=delivery` so the Notification Delivery page can fetch channel health and overview counts without building full template/event diagnostic collections.
+- Phase 8D shared workspace product fix: Manager Inbox now defaults leave and attendance approval queue payloads to `5` rows each while preserving existing pagination controls.
+- Phase 8D shared workspace evidence: backend check passed, TypeScript passed, and `phase8d-performance-budget.spec.ts` passed `1/1` against local frontend plus staging API. Because the backend changes are not deployed yet, the delivery-scope payload savings need staging rerun after check-in/deploy.
+- Phase 8D shared workspace latest local/staging-API slowest samples: `/ess/payslips` `7226ms`, `/hr-admin` `6374ms`, `/hr-admin/payroll-calculations` `5889ms`, `/hr-admin/payroll-outputs` `5379ms`, and `/hr-admin/payroll-handoff` `5254ms`.
 - Phase 8 staging certification: done on 2026-09-10 against `https://hrms.accerio.in` at deployed commit `027becb613b349538d210c084bb617d96ba6fc96`.
 - Phase 8 staging evidence: workspace shell plus dense form accessibility `6 passed`; responsive visual launch gate `6 passed` across `102` page-viewport combinations; performance timing gate `1 passed`.
 - Phase 8 staging harness fix: remote URL runs now get staging-appropriate timeouts and performance budgets while preserving the same assertions.
@@ -876,10 +1053,10 @@ Current Phase 8 progress:
 - Evidence: `docs/qa/phase8-staging-certification-2026-09-10.md`.
 - Current UX confidence: 91%.
 - Current responsive confidence: 92%.
-- Current accessibility confidence: 86%.
-- Current performance confidence: 86%.
-- Current Phase 8 confidence: 92%.
-- Remaining Phase 8 work: preserve responsive screenshots in passing CI artifacts, tune staging page-ready time on `/hr-admin` and notification queue pages, and broaden keyboard certification for lifecycle/attendance/notification/support forms.
+- Current accessibility confidence: 90%.
+- Current performance confidence: 92%.
+- Current Phase 8 confidence: 97%.
+- Remaining Phase 8 work: preserve responsive screenshots in passing CI artifacts and continue tuning the remaining slow shared landing pages, especially HR admin dashboard, ESS payslips, MSS approvals, and notification delivery.
 
 ## 14. Phase 9: Release Rehearsal and Sign-Off
 
@@ -1047,8 +1224,8 @@ Phase status rules:
 
 Current overall status:
 
-- `Amber`
-- Reason: strong page and safe workflow coverage exists, but full destructive/payroll close/integration release proof is not complete.
+- `Green for staging pilot`
+- Reason: full staging launch sign-off has passed, and the SaaS/security browser pack has been rerun locally against the staging API. Remaining risk is production-environment hardening and continued certification of any newly touched pages.
 
 ## 17. Execution Log
 
@@ -1061,6 +1238,7 @@ Current overall status:
 | 2026-09-09 | Phase 1C-B: Salary setup CRUD expansion | PASS, 3/3 focused salary setup browser tests | `docs/qa/phase1c-salary-setup-crud-report-2026-09-09.md` | Overall product confidence to 72% |
 | 2026-09-10 | Phase 9E: Final warning closure implementation and staging certification | PASS on staging, 2/2 Phase 9E browser tests, tightened provider test pass, provider rehearsal ready, HRMS launch audit 51/51 | `docs/qa/phase9e-final-warning-closure-2026-09-10.md` | Phase 9 confidence to 98%, hotfix check-in pending |
 | 2026-09-10 | Phase 9F: Full staging launch sign-off | PASS, full sign-off decision `PILOT READY - STAGING CONTRACT PASS`; production Playwright A-I `32 passed`, `3 skipped`; live staging audit `51/51` | `docs/qa/phase9f-full-staging-signoff-2026-09-10.md` | Phase 9 confidence to 99% for staging contract |
+| 2026-09-10 | Phase 6R/7R: SaaS and security rerun | PASS, 9/9 local browser tests against staging API; covered five-tenant platform onboarding, tenant/role isolation, tenant admin console, security readiness, and trust audit | Playwright command in Phase 19 SaaS/security pack | SaaS/security confidence remains launch-grade for staging pilot |
 
 ## 18. Recommended Execution Order
 

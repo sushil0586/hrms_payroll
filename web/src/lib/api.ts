@@ -223,6 +223,7 @@ export async function getEssPayrollPayslips(params?: {
   page_size?: number;
   q?: string;
   year?: string;
+  selected_id?: string;
 }) {
   return apiGet<EssPayrollPayslipListResponse>(`/me/payroll-payslips/${buildQueryString(params ?? {})}`);
 }
@@ -451,16 +452,24 @@ export async function getHrAdminPayrollRulesSetup() {
   return apiGet<HrAdminPayrollRulesSetupResponse>("/hr-admin/payroll-rules-setup/");
 }
 
-export async function getHrAdminPayrollCalculationSetup() {
-  return apiGet<HrAdminPayrollCalculationSetupResponse>("/hr-admin/payroll-calculation-setup/");
+export async function getHrAdminPayrollCalculationSetup(params?: {
+  run_id?: string;
+  calculation_id?: string;
+}) {
+  return apiGet<HrAdminPayrollCalculationSetupResponse>(`/hr-admin/payroll-calculation-setup/${buildQueryString(params ?? {})}`);
 }
 
-export async function getHrAdminPayrollReviewSetup() {
-  return apiGet<HrAdminPayrollReviewSetupResponse>("/hr-admin/payroll-review-setup/");
+export async function getHrAdminPayrollReviewSetup(params?: {
+  review_id?: string;
+}) {
+  return apiGet<HrAdminPayrollReviewSetupResponse>(`/hr-admin/payroll-review-setup/${buildQueryString(params ?? {})}`);
 }
 
-export async function getHrAdminPayrollOutputSetup() {
-  return apiGet<HrAdminPayrollOutputSetupResponse>("/hr-admin/payroll-output-setup/");
+export async function getHrAdminPayrollOutputSetup(params?: {
+  batch_id?: string;
+  artifact_id?: string;
+}) {
+  return apiGet<HrAdminPayrollOutputSetupResponse>(`/hr-admin/payroll-output-setup/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminPayrollFinanceHandoffSetup() {
@@ -820,8 +829,8 @@ export async function getHrAdminNotifications(params?: {
   return apiGet<HrAdminNotificationListResponse>(`/hr-admin/notifications/${buildQueryString(params ?? {})}`);
 }
 
-export async function getHrAdminNotificationDiagnostics() {
-  return apiGet<HrAdminNotificationDiagnostics>("/hr-admin/notification-diagnostics/");
+export async function getHrAdminNotificationDiagnostics(params?: { scope?: string }) {
+  return apiGet<HrAdminNotificationDiagnostics>(`/hr-admin/notification-diagnostics/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminNotification(itemId: string) {

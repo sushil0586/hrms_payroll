@@ -54,7 +54,7 @@ export function ProbationReviewForm({ initialValue, mode, options, itemId }: Pro
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form aria-label="Probation review form" className="section form-layout-modern" data-testid="probation-review-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>

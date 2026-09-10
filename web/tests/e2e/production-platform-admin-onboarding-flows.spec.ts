@@ -15,6 +15,11 @@ function notice(page: Page): Locator {
   return page.locator(".notice").first();
 }
 
+async function openPlatformTab(page: Page, name: "Tenants" | "Onboarding" | "Admins" | "Policy Packs" | "Events") {
+  await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();
+  await expect(page.getByRole("tab", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-selected", "true");
+}
+
 function uniqueRunRef() {
   return new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14).toLowerCase();
 }
@@ -29,6 +34,7 @@ test.describe("Production platform admin onboarding proof", () => {
     await expectPageReady(page, "Platform Admin Console");
     await expectNoHorizontalOverflow(page);
 
+    await openPlatformTab(page, "Policy Packs");
     const packCode = `qa-pack-${runRef}`;
     const packName = `QA Browser Baseline ${runRef}`;
     const policyPackCard = card(page, "Policy packs");
@@ -43,10 +49,12 @@ test.describe("Production platform admin onboarding proof", () => {
     await policyPackCard.getByRole("button", { name: "Create pack" }).click();
     await expect(notice(page).getByText("Policy pack created.", { exact: true })).toBeVisible();
     await page.reload();
+    await namedControl(policyPackCard, "policy_pack_search").fill(packCode);
     await expect(page.getByText(packCode)).toBeVisible();
     await page.locator(".tenant-support-access-row").filter({ hasText: packCode }).getByRole("button", { name: "Publish" }).click();
     await expect(notice(page).getByText("Policy pack published.", { exact: true })).toBeVisible();
     await page.reload();
+    await namedControl(policyPackCard, "policy_pack_search").fill(packCode);
     await expect(card(page, "Policy packs").locator(".tenant-support-access-row").filter({ hasText: packCode }).getByText("Published", { exact: true })).toBeVisible();
 
     for (let index = 1; index <= 5; index += 1) {
@@ -57,6 +65,7 @@ test.describe("Production platform admin onboarding proof", () => {
       const adminEmail = `qa.pa.${runRef}.${padded}@example.test`;
       const adminUsername = `qa.pa.${runRef}.${padded}`;
 
+      await openPlatformTab(page, "Tenants");
       const createTenantCard = card(page, "Create tenant");
       await namedControl(createTenantCard, "code").fill(tenantCode);
       await namedControl(createTenantCard, "name").fill(tenantName);
@@ -72,6 +81,7 @@ test.describe("Production platform admin onboarding proof", () => {
       await createTenantCard.getByRole("button", { name: "Create tenant" }).click();
       await expect(notice(page).getByText("Tenant created.", { exact: true })).toBeVisible();
       await expect(page).toHaveURL(/tenantId=/);
+      await expect(page).toHaveURL(/panel=onboarding/);
       await expect(page.getByText(tenantName).first()).toBeVisible();
 
       const onboardingCard = card(page, "Onboarding metadata");
@@ -88,6 +98,7 @@ test.describe("Production platform admin onboarding proof", () => {
       await expect(notice(page).getByText("Onboarding metadata updated.", { exact: true })).toBeVisible();
       await page.reload();
 
+      await openPlatformTab(page, "Admins");
       const contactsCard = card(page, "Admin contacts");
       await namedControl(contactsCard, "full_name").fill(adminName);
       await namedControl(contactsCard, "email").fill(adminEmail);
@@ -116,6 +127,7 @@ test.describe("Production platform admin onboarding proof", () => {
         card(page, "Admin contacts").locator(".tenant-support-access-row").filter({ hasText: adminEmail }).getByText("Provisioned", { exact: true }),
       ).toBeVisible();
 
+      await openPlatformTab(page, "Policy Packs");
       const adoptCard = card(page, "Adopt baseline");
       await namedControl(adoptCard, "policy_pack_id").selectOption({ label: `${packName} - ${packCode}` });
       await namedControl(adoptCard, "adoption_mode").selectOption("clone_to_tenant_records");
@@ -123,6 +135,7 @@ test.describe("Production platform admin onboarding proof", () => {
       await adoptCard.getByRole("button", { name: "Adopt pack" }).click();
       await expect(notice(page).getByText("Policy pack adopted for tenant.", { exact: true })).toBeVisible();
       await page.reload();
+      await openPlatformTab(page, "Onboarding");
       await expect(card(page, tenantName).getByText("baseline_published").or(page.getByText("Baseline Published")).first()).toBeVisible();
 
       const gatesCard = card(page, "Activation gates");
@@ -151,6 +164,7 @@ test.describe("Production platform admin onboarding proof", () => {
       await page.context().clearCookies();
       await gotoAuthenticated(page, "/platform-admin", platformAdmin);
       await expectPageReady(page, "Platform Admin Console");
+      await openPlatformTab(page, "Policy Packs");
     }
 
     await expectNoHorizontalOverflow(page);

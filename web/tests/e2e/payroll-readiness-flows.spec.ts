@@ -12,7 +12,7 @@ test.describe("HR admin payroll readiness flows", () => {
     await expect(page.getByRole("columnheader", { name: "Employee" })).toBeVisible();
     await expect(page.getByText("Source data readiness")).toBeVisible();
 
-    await page.getByRole("link", { name: /Warning/ }).click();
+    await page.locator(".status-tab-row").getByRole("link", { name: /^Warning\b/ }).click();
     await expect(page).toHaveURL(/status=warning/);
     await expect(page.getByText("Warning").or(page.getByText("No employees")).first()).toBeVisible();
 

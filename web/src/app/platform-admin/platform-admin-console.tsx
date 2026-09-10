@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type {
   PlatformOnboardingAdminContact,
   PlatformPolicyPackListItem,
@@ -14,6 +15,7 @@ import type {
 } from "@/lib/types";
 
 type Props = {
+  initialPanel: PlatformPanel;
   tenants: PlatformTenantListItem[];
   selectedTenant: PlatformTenantListItem | null;
   onboarding: PlatformTenantOnboarding | null;
@@ -21,6 +23,17 @@ type Props = {
 };
 
 type MutationMethod = "POST" | "PATCH";
+type PlatformPanel = "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
+
+const PAGE_SIZE = 8;
+
+const platformTabs: { panel: PlatformPanel; label: string; countKey: "tenants" | "onboarding" | "admins" | "policyPacks" | "events" }[] = [
+  { panel: "tenants", label: "Tenants", countKey: "tenants" },
+  { panel: "onboarding", label: "Onboarding", countKey: "onboarding" },
+  { panel: "admins", label: "Admins", countKey: "admins" },
+  { panel: "policy-packs", label: "Policy Packs", countKey: "policyPacks" },
+  { panel: "events", label: "Events", countKey: "events" },
+];
 
 function titleCase(value: string) {
   return value
@@ -68,12 +81,40 @@ function StatusChip({ value }: { value: string }) {
   return <span className={`record-chip${isReady ? " record-chip--accent" : ""}`}>{titleCase(value)}</span>;
 }
 
-export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, policyPacks }: Props) {
+function clampPage(page: number, totalCount: number) {
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  return Math.min(Math.max(page, 1), totalPages);
+}
+
+function paginate<T>(items: T[], page: number) {
+  const safePage = clampPage(page, items.length);
+  const start = (safePage - 1) * PAGE_SIZE;
+  return {
+    items: items.slice(start, start + PAGE_SIZE),
+    page: safePage,
+    hasPrevious: safePage > 1,
+    hasNext: safePage * PAGE_SIZE < items.length,
+  };
+}
+
+function buildPanelHref(panel: PlatformPanel, selectedTenantId?: string) {
+  const params = new URLSearchParams({ panel });
+  if (selectedTenantId) params.set("tenantId", selectedTenantId);
+  return `/platform-admin?${params.toString()}`;
+}
+
+export function PlatformAdminConsole({ initialPanel, tenants, selectedTenant, onboarding, policyPacks }: Props) {
   const router = useRouter();
   const [busyRef, setBusyRef] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState("");
+  const [tenantQuery, setTenantQuery] = useState("");
+  const [policyPackQuery, setPolicyPackQuery] = useState("");
+  const [eventQuery, setEventQuery] = useState("");
+  const [tenantPage, setTenantPage] = useState(1);
+  const [policyPackPage, setPolicyPackPage] = useState(1);
+  const [eventPage, setEventPage] = useState(1);
 
   const tenantCounts = useMemo(() => {
     return {
@@ -87,6 +128,29 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
   const provisionableContacts = onboarding?.admin_contacts.filter((contact) => !contact.membership_id) ?? [];
   const primaryContact = onboarding?.admin_contacts.find((contact) => contact.is_primary) ?? onboarding?.admin_contacts[0] ?? null;
   const publishedPacks = policyPacks.filter((pack) => pack.status === "published");
+  const events = onboarding?.recent_events ?? [];
+  const normalizedTenantQuery = tenantQuery.trim().toLowerCase();
+  const normalizedPolicyPackQuery = policyPackQuery.trim().toLowerCase();
+  const normalizedEventQuery = eventQuery.trim().toLowerCase();
+  const filteredTenants = normalizedTenantQuery
+    ? tenants.filter((tenant) => [tenant.name, tenant.code, tenant.primary_domain, tenant.subscription_plan, tenant.onboarding_status].join(" ").toLowerCase().includes(normalizedTenantQuery))
+    : tenants;
+  const filteredPolicyPacks = normalizedPolicyPackQuery
+    ? policyPacks.filter((pack) => [pack.name, pack.code, pack.domain, pack.status, pack.country_code, pack.industry_tag].join(" ").toLowerCase().includes(normalizedPolicyPackQuery))
+    : policyPacks;
+  const filteredEvents = normalizedEventQuery
+    ? events.filter((event) => [event.event_type, event.summary, event.actor_identifier, event.created_at].join(" ").toLowerCase().includes(normalizedEventQuery))
+    : events;
+  const tenantPageData = paginate(filteredTenants, tenantPage);
+  const policyPackPageData = paginate(filteredPolicyPacks, policyPackPage);
+  const eventPageData = paginate(filteredEvents, eventPage);
+  const tabCounts = {
+    tenants: tenants.length,
+    onboarding: selectedTenant && onboarding ? 2 : 0,
+    admins: onboarding?.admin_contacts.length ?? 0,
+    policyPacks: policyPacks.length,
+    events: events.length,
+  };
 
   async function mutate<T>(path: string, method: MutationMethod, body: Record<string, unknown>, successMessage: string): Promise<T> {
     setBusyRef(path);
@@ -130,7 +194,7 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
         },
         "Tenant created.",
       );
-      router.push(`/platform-admin?tenantId=${payload.id}`);
+      router.push(buildPanelHref("onboarding", payload.id));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Tenant creation failed.");
     }
@@ -353,7 +417,25 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
         </section>
       ) : null}
 
-      <section className="section employee-master-layout">
+      <section className="section">
+        <div className="tabbar" role="tablist" aria-label="Platform admin sections">
+          {platformTabs.map((item) => (
+            <Link
+              aria-selected={initialPanel === item.panel}
+              className={`tab ${initialPanel === item.panel ? "tab--active" : ""}`}
+              href={buildPanelHref(item.panel, selectedTenant?.id)}
+              key={item.panel}
+              role="tab"
+            >
+              {item.label}
+              <span>{tabCounts[item.countKey]}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {initialPanel === "tenants" ? (
+      <section className="section employee-master-layout" data-testid="platform-admin-tenants-panel">
         <article className="queue-toolbar">
           <div className="queue-toolbar__header">
             <div>
@@ -362,11 +444,24 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
             </div>
             <span className="queue-summary-chip"><strong>{tenantCounts.sandbox}</strong> sandbox tenants</span>
           </div>
+          <label className="queue-toolbar__search">
+            <span>Search</span>
+            <input
+              className="input-control"
+              name="tenant_search"
+              onChange={(event) => {
+                setTenantQuery(event.target.value);
+                setTenantPage(1);
+              }}
+              placeholder="Tenant, domain, plan, status"
+              value={tenantQuery}
+            />
+          </label>
 
           <div className="employee-directory-list">
-            {tenants.map((tenant) => (
+            {tenantPageData.items.map((tenant) => (
               <div className={`employee-directory-item${selectedTenant?.id === tenant.id ? " employee-directory-item--active" : ""}`} key={tenant.id}>
-                <Link href={`/platform-admin?tenantId=${tenant.id}`}>
+                <Link href={buildPanelHref("onboarding", tenant.id)}>
                   <div className="employee-directory-item__header">
                     <div>
                       <strong>{tenant.name}</strong>
@@ -382,13 +477,24 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
                 </Link>
               </div>
             ))}
-            {!tenants.length ? (
+            {!filteredTenants.length ? (
               <div className="notice">
                 <strong>No tenants yet.</strong>
-                <span className="muted">Create the first tenant from the setup panel.</span>
+                <span className="muted">Create a tenant or clear the search.</span>
               </div>
             ) : null}
           </div>
+          <PaginationBar
+            hasNext={tenantPageData.hasNext}
+            hasPrevious={tenantPageData.hasPrevious}
+            onFirst={() => setTenantPage(1)}
+            onLast={() => setTenantPage(Math.max(1, Math.ceil(filteredTenants.length / PAGE_SIZE)))}
+            onNext={() => setTenantPage((current) => clampPage(current + 1, filteredTenants.length))}
+            onPrevious={() => setTenantPage((current) => clampPage(current - 1, filteredTenants.length))}
+            page={tenantPageData.page}
+            pageSize={PAGE_SIZE}
+            totalCount={filteredTenants.length}
+          />
         </article>
 
         <article className="record-card">
@@ -419,10 +525,12 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
           </form>
         </article>
       </section>
+      ) : null}
 
       {selectedTenant && onboarding ? (
         <>
-          <section className="section support-session-grid">
+          {initialPanel === "onboarding" ? (
+          <section className="section support-session-grid" data-testid="platform-admin-onboarding-panel">
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
@@ -463,7 +571,9 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
               </div>
             </article>
           </section>
+          ) : null}
 
+          {initialPanel === "onboarding" ? (
           <section className="section support-session-grid">
             <article className="record-card">
               <div className="record-card__title-wrap">
@@ -515,8 +625,10 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
               </form>
             </article>
           </section>
+          ) : null}
 
-          <section className="section support-session-grid">
+          {initialPanel === "admins" ? (
+          <section className="section support-session-grid" data-testid="platform-admin-admins-panel">
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
@@ -575,8 +687,10 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
               </form>
             </article>
           </section>
+          ) : null}
 
-          <section className="section support-session-grid">
+          {initialPanel === "policy-packs" ? (
+          <section className="section support-session-grid" data-testid="platform-admin-policy-packs-panel">
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
@@ -585,8 +699,21 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
                 </div>
                 <p className="section-copy">Platform-owned baseline packs available for tenant adoption.</p>
               </div>
+              <label className="queue-toolbar__search">
+                <span>Search</span>
+                <input
+                  className="input-control"
+                  name="policy_pack_search"
+                  onChange={(event) => {
+                    setPolicyPackQuery(event.target.value);
+                    setPolicyPackPage(1);
+                  }}
+                  placeholder="Pack, code, domain, status"
+                  value={policyPackQuery}
+                />
+              </label>
               <div className="tenant-support-access-list">
-                {policyPacks.map((pack) => (
+                {policyPackPageData.items.map((pack) => (
                   <div className="tenant-support-access-row" key={pack.id}>
                     <div>
                       <strong>{pack.name}</strong>
@@ -596,7 +723,24 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
                     <button className="button button--secondary" disabled={Boolean(busyRef) || pack.status === "published"} type="button" onClick={() => handlePublishPack(pack.id)}>Publish</button>
                   </div>
                 ))}
+                {!filteredPolicyPacks.length ? (
+                  <div className="notice">
+                    <strong>No policy packs match this view.</strong>
+                    <span className="muted">Create a pack or clear the search.</span>
+                  </div>
+                ) : null}
               </div>
+              <PaginationBar
+                hasNext={policyPackPageData.hasNext}
+                hasPrevious={policyPackPageData.hasPrevious}
+                onFirst={() => setPolicyPackPage(1)}
+                onLast={() => setPolicyPackPage(Math.max(1, Math.ceil(filteredPolicyPacks.length / PAGE_SIZE)))}
+                onNext={() => setPolicyPackPage((current) => clampPage(current + 1, filteredPolicyPacks.length))}
+                onPrevious={() => setPolicyPackPage((current) => clampPage(current - 1, filteredPolicyPacks.length))}
+                page={policyPackPageData.page}
+                pageSize={PAGE_SIZE}
+                totalCount={filteredPolicyPacks.length}
+              />
               <form className="form-grid" onSubmit={handlePolicyPackCreate}>
                 <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-baseline-pack" /></label>
                 <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Baseline Pack" /></label>
@@ -639,8 +783,10 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
               </div>
             </article>
           </section>
+          ) : null}
 
-          <section className="section">
+          {initialPanel === "events" ? (
+          <section className="section" data-testid="platform-admin-events-panel">
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
@@ -649,8 +795,21 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
                 </div>
                 <p className="section-copy">Latest platform-side evidence for the selected tenant.</p>
               </div>
+              <label className="queue-toolbar__search">
+                <span>Search</span>
+                <input
+                  className="input-control"
+                  name="event_search"
+                  onChange={(event) => {
+                    setEventQuery(event.target.value);
+                    setEventPage(1);
+                  }}
+                  placeholder="Event, actor, summary"
+                  value={eventQuery}
+                />
+              </label>
               <div className="tenant-support-access-list">
-                {onboarding.recent_events.map((event) => (
+                {eventPageData.items.map((event) => (
                   <div className="tenant-support-access-row" key={event.id}>
                     <div>
                       <strong>{titleCase(event.event_type)}</strong>
@@ -660,9 +819,27 @@ export function PlatformAdminConsole({ tenants, selectedTenant, onboarding, poli
                     <span className="record-chip">{formatDateTime(event.created_at)}</span>
                   </div>
                 ))}
+                {!filteredEvents.length ? (
+                  <div className="notice">
+                    <strong>No onboarding events match this view.</strong>
+                    <span className="muted">Clear the search or select a tenant with recorded events.</span>
+                  </div>
+                ) : null}
               </div>
+              <PaginationBar
+                hasNext={eventPageData.hasNext}
+                hasPrevious={eventPageData.hasPrevious}
+                onFirst={() => setEventPage(1)}
+                onLast={() => setEventPage(Math.max(1, Math.ceil(filteredEvents.length / PAGE_SIZE)))}
+                onNext={() => setEventPage((current) => clampPage(current + 1, filteredEvents.length))}
+                onPrevious={() => setEventPage((current) => clampPage(current - 1, filteredEvents.length))}
+                page={eventPageData.page}
+                pageSize={PAGE_SIZE}
+                totalCount={filteredEvents.length}
+              />
             </article>
           </section>
+          ) : null}
         </>
       ) : null}
     </main>

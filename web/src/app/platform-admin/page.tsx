@@ -20,6 +20,14 @@ function resolveSelectedTenantId(params: Record<string, SearchParamValue>, tenan
   return tenants[0]?.id ?? "";
 }
 
+function resolvePanel(params: Record<string, SearchParamValue>) {
+  const requested = normalizeParam(params.panel);
+  if (["tenants", "onboarding", "admins", "policy-packs", "events"].includes(requested ?? "")) {
+    return requested as "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
+  }
+  return "tenants";
+}
+
 export default async function PlatformAdminPage({ searchParams }: PageProps) {
   const currentParams = (await searchParams) ?? {};
   const [tenantResult, policyPackResult] = await Promise.all([
@@ -36,6 +44,7 @@ export default async function PlatformAdminPage({ searchParams }: PageProps) {
 
   return (
     <PlatformAdminConsole
+      initialPanel={resolvePanel(currentParams)}
       onboarding={onboardingResult?.data ?? null}
       policyPacks={policyPackResult.data}
       selectedTenant={selectedTenantResult?.data ?? null}

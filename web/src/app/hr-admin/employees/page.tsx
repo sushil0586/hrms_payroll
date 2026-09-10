@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { ActionMenu } from "@/components/patterns/action-menu";
 import { MetricTile } from "@/components/patterns/metric-tile";
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeDetail, getHrAdminEmployees } from "@/lib/api";
 import type { HrAdminEmployeeDetail, HrAdminEmployeeListItem } from "@/lib/types";
@@ -273,6 +274,8 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const q = normalizeParam(currentParams.q) ?? "";
   const department = normalizeParam(currentParams.department) ?? "all";
   const managerView = normalizeParam(currentParams.managerView) ?? "all";
+  const page = Math.max(Number(normalizeParam(currentParams.page) ?? "1") || 1, 1);
+  const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) ?? "8") || 8, 1), 50);
 
   const employeesResult = await getHrAdminEmployees();
   const departmentOptions = Array.from(new Set(employeesResult.data.map((employee) => employee.department).filter(Boolean))).sort();
@@ -280,7 +283,13 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
     filterByDepartment(filterByQuery(filterByStatus(employeesResult.data, status), q), department),
     managerView,
   );
-  const selectedListItem = resolveSelectedItem(filteredEmployees, normalizeParam(currentParams.employeeId));
+  const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedEmployees = filteredEmployees.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const selectedListItem = resolveSelectedItem(
+    filteredEmployees,
+    normalizeParam(currentParams.employeeId) ?? pagedEmployees[0]?.id,
+  );
   const detailResult = selectedListItem ? await getHrAdminEmployeeDetail(selectedListItem.id) : null;
   const detail = detailResult?.data ?? null;
   const state =
@@ -348,6 +357,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
 
           <form action="/hr-admin/employees" className="directory-filter-bar">
             <input name="status" type="hidden" value={status} />
+            <input name="page" type="hidden" value="1" />
             <label className="form-field">
               <span className="text-label-premium">Search</span>
               <input className="input-control" defaultValue={q} name="q" placeholder="Name, code, email, manager" />
@@ -371,6 +381,16 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                 <option value="needs_reassignment">Needs reassignment</option>
               </select>
             </label>
+            <label className="form-field">
+              <span className="text-label-premium">Page size</span>
+              <select className="input-control" defaultValue={String(pageSize)} name="page_size">
+                {[5, 8, 10, 25, 50].map((size) => (
+                  <option key={size} value={size}>
+                    {size} / page
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="directory-filter-bar__actions">
               <button className="button button--primary" type="submit">Apply</button>
               <Link className="button button--ghost" href="/hr-admin/employees">Reset</Link>
@@ -384,9 +404,11 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                   href={buildHref("/hr-admin/employees", currentParams, {
                     status: tabStatus,
                     employeeId: undefined,
+                    page: "1",
                     q: q || undefined,
                     department: department !== "all" ? department : undefined,
                     managerView: managerView !== "all" ? managerView : undefined,
+                    page_size: String(pageSize),
                   })}
                   key={tabStatus}
                 >
@@ -398,7 +420,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
 
           <div className="employee-directory-list">
             {filteredEmployees.length ? (
-              filteredEmployees.map((employee) => {
+              pagedEmployees.map((employee) => {
                 const warnings = getEmployeeWarnings(employee);
                 return (
                 <Link
@@ -448,6 +470,18 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
               </div>
             )}
           </div>
+
+          <PaginationBar
+            firstHref={buildHref("/hr-admin/employees", currentParams, { page: "1", page_size: String(pageSize), employeeId: undefined })}
+            hasNext={safePage < totalPages}
+            hasPrevious={safePage > 1}
+            lastHref={buildHref("/hr-admin/employees", currentParams, { page: String(totalPages), page_size: String(pageSize), employeeId: undefined })}
+            nextHref={buildHref("/hr-admin/employees", currentParams, { page: String(safePage + 1), page_size: String(pageSize), employeeId: undefined })}
+            page={safePage}
+            pageSize={pageSize}
+            previousHref={buildHref("/hr-admin/employees", currentParams, { page: String(safePage - 1), page_size: String(pageSize), employeeId: undefined })}
+            totalCount={filteredEmployees.length}
+          />
         </article>
 
         <article className="record-card panel-card-soft">

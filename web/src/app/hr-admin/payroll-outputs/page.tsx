@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollOutputSetup } from "@/lib/api";
 import type { HrAdminPayrollOutputArtifact, HrAdminPayrollOutputBatch } from "@/lib/types";
@@ -13,6 +14,37 @@ type PageProps = {
 
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function numberParam(value: SearchParamValue, fallback: number) {
+  const parsed = Number(normalizeParam(value));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function buildHref(
+  basePath: string,
+  currentParams: Record<string, SearchParamValue>,
+  updates: Record<string, string | undefined>,
+) {
+  const params = new URLSearchParams();
+
+  Object.entries(currentParams).forEach(([key, value]) => {
+    const normalized = normalizeParam(value);
+    if (normalized) {
+      params.set(key, normalized);
+    }
+  });
+
+  Object.entries(updates).forEach(([key, value]) => {
+    if (value) {
+      params.set(key, value);
+    } else {
+      params.delete(key);
+    }
+  });
+
+  const queryString = params.toString();
+  return queryString ? `${basePath}?${queryString}` : basePath;
 }
 
 function hrAdminArtifactDownloadUrl(artifact: HrAdminPayrollOutputArtifact) {
@@ -64,10 +96,19 @@ function StatusBadge({ status }: { status: string }) {
 function BatchRail({
   batches,
   selectedBatch,
+  allBatches,
+  currentParams,
+  page,
+  pageSize,
 }: {
   batches: HrAdminPayrollOutputBatch[];
   selectedBatch: HrAdminPayrollOutputBatch | null;
+  allBatches: HrAdminPayrollOutputBatch[];
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageSize: number;
 }) {
+  const totalPages = Math.max(1, Math.ceil(allBatches.length / pageSize));
   return (
     <aside className="payroll-setup-rail payroll-output-rail">
       <div className="payroll-setup-panel__header">
@@ -94,6 +135,17 @@ function BatchRail({
           </Link>
         ))}
       </div>
+      <PaginationBar
+        firstHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: "1", batchPageSize: String(pageSize), batchId: undefined })}
+        hasNext={page < totalPages}
+        hasPrevious={page > 1}
+        lastHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: String(totalPages), batchPageSize: String(pageSize), batchId: undefined })}
+        nextHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: String(page + 1), batchPageSize: String(pageSize), batchId: undefined })}
+        page={page}
+        pageSize={pageSize}
+        previousHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: String(page - 1), batchPageSize: String(pageSize), batchId: undefined })}
+        totalCount={allBatches.length}
+      />
     </aside>
   );
 }
@@ -198,11 +250,22 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
   const currentParams = (await searchParams) ?? {};
   const selectedBatchId = normalizeParam(currentParams.batchId);
   const selectedArtifactId = normalizeParam(currentParams.artifactId);
-  const result = await getHrAdminPayrollOutputSetup();
+  const batchPageSize = Math.min(numberParam(currentParams.batchPageSize, 8), 25);
+  const artifactPageSize = Math.min(numberParam(currentParams.artifactPageSize, 8), 25);
+  const result = await getHrAdminPayrollOutputSetup({
+    batch_id: selectedBatchId,
+    artifact_id: selectedArtifactId,
+  });
   const setup = result.data;
-  const selectedBatch = setup.output_batches.find((item) => item.id === selectedBatchId) ?? setup.output_batches[0] ?? null;
+  const batchTotalPages = Math.max(1, Math.ceil(setup.output_batches.length / batchPageSize));
+  const batchPage = Math.min(numberParam(currentParams.batchPage, 1), batchTotalPages);
+  const pagedBatches = setup.output_batches.slice((batchPage - 1) * batchPageSize, batchPage * batchPageSize);
+  const selectedBatch = setup.output_batches.find((item) => item.id === selectedBatchId) ?? pagedBatches[0] ?? setup.output_batches[0] ?? null;
   const visibleArtifacts = selectedBatch ? setup.artifacts.filter((item) => item.output_batch_id === selectedBatch.id) : setup.artifacts;
-  const selectedArtifact = visibleArtifacts.find((item) => item.id === selectedArtifactId) ?? visibleArtifacts[0] ?? null;
+  const artifactTotalPages = Math.max(1, Math.ceil(visibleArtifacts.length / artifactPageSize));
+  const artifactPage = Math.min(numberParam(currentParams.artifactPage, 1), artifactTotalPages);
+  const pagedArtifacts = visibleArtifacts.slice((artifactPage - 1) * artifactPageSize, artifactPage * artifactPageSize);
+  const selectedArtifact = visibleArtifacts.find((item) => item.id === selectedArtifactId) ?? pagedArtifacts[0] ?? visibleArtifacts[0] ?? null;
   const totals = selectedBatch?.totals_snapshot ?? {};
   const summary = selectedBatch?.artifact_summary_snapshot ?? {};
 
@@ -249,7 +312,14 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
 
       <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-output-workspace">
-          <BatchRail batches={setup.output_batches} selectedBatch={selectedBatch} />
+          <BatchRail
+            allBatches={setup.output_batches}
+            batches={pagedBatches}
+            currentParams={currentParams}
+            page={batchPage}
+            pageSize={batchPageSize}
+            selectedBatch={selectedBatch}
+          />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -342,7 +412,7 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleArtifacts.map((artifact) => (
+                    {pagedArtifacts.map((artifact) => (
                       <tr className={selectedArtifact?.id === artifact.id ? "is-selected" : ""} key={artifact.id}>
                         <td>
                           <Link href={`/hr-admin/payroll-outputs?batchId=${artifact.output_batch_id}&artifactId=${artifact.id}`}>
@@ -364,6 +434,17 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   </tbody>
                 </table>
               </div>
+              <PaginationBar
+                firstHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: "1", artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
+                hasNext={artifactPage < artifactTotalPages}
+                hasPrevious={artifactPage > 1}
+                lastHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: String(artifactTotalPages), artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
+                nextHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: String(artifactPage + 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
+                page={artifactPage}
+                pageSize={artifactPageSize}
+                previousHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: String(artifactPage - 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
+                totalCount={visibleArtifacts.length}
+              />
             </div>
 
             <section className="payroll-setup-assignment-panel payroll-output-handoff-panel">

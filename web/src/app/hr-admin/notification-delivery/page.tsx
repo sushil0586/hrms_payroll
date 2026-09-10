@@ -9,7 +9,7 @@ import { formatNotificationDateTime } from "@/lib/notification-observability";
 export default async function HrAdminNotificationDeliveryPage() {
   const [result, diagnosticsResult] = await Promise.all([
     getHrAdminNotificationOptions(),
-    getHrAdminNotificationDiagnostics(),
+    getHrAdminNotificationDiagnostics({ scope: "delivery" }),
   ]);
   const enabledChannels = result.data.channel_configurations.filter((item) => item.is_enabled).length;
   const emailEnabled = result.data.channel_configurations.some((item) => item.channel === "email" && item.is_enabled);

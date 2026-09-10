@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReviewSetup } from "@/lib/api";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
+import { PayrollReviewExceptionActions } from "./payroll-review-exception-actions";
 import type {
   HrAdminPayrollCalculationLine,
   HrAdminPayrollRun,
@@ -182,7 +183,9 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
   const currentParams = (await searchParams) ?? {};
   const selectedReviewId = normalizeParam(currentParams.reviewId);
   const selectedExceptionId = normalizeParam(currentParams.exceptionId);
-  const result = await getHrAdminPayrollReviewSetup();
+  const result = await getHrAdminPayrollReviewSetup({
+    review_id: selectedReviewId,
+  });
   const setup = result.data;
   const selectedReview =
     setup.reviews.find((item) => item.id === selectedReviewId) ??
@@ -309,6 +312,8 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   profileField: "approval_profile_ref",
                   profileLabel: "Approval profile ref",
                   defaultProfileRef: selectedReview?.review_profile_ref ?? "",
+                  commentField: "comment",
+                  commentLabel: "Approval comment",
                   disabled: !selectedReview,
                   disabledReason: "Select a payroll review first.",
                 },
@@ -373,6 +378,13 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                 </table>
               </div>
             </div>
+
+            <PayrollReviewExceptionActions
+              reviewId={selectedReview?.id ?? null}
+              selectedException={selectedException}
+              lines={visibleLines}
+              severityOptions={setup.options.exception_severities}
+            />
 
             <ApprovalTimeline approvals={visibleApprovals} />
 

@@ -256,13 +256,14 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
   const q = normalizeParam(currentParams.q) ?? "";
   const year = normalizeParam(currentParams.year) ?? "";
   const page = Number(normalizeParam(currentParams.page) ?? 1);
-  const pageSize = Number(normalizeParam(currentParams.page_size) ?? 10);
+  const pageSize = Number(normalizeParam(currentParams.page_size) ?? 5);
   const selectedPayslipId = normalizeParam(currentParams.payslipId);
   const result = await getEssPayrollPayslips({
     q,
     year,
     page: Number.isFinite(page) && page > 0 ? page : 1,
-    page_size: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10,
+    page_size: Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 5,
+    selected_id: selectedPayslipId,
   });
   const data = result.data;
   const selectedPayslip = data.items.find((item) => item.id === selectedPayslipId) ?? data.items[0] ?? null;
@@ -324,6 +325,7 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
                 ))}
               </select>
               <select className="input-control" defaultValue={String(pageSize)} name="page_size">
+                <option value="5">5 / page</option>
                 <option value="10">10 / page</option>
                 <option value="25">25 / page</option>
                 <option value="50">50 / page</option>

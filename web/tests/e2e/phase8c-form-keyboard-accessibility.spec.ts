@@ -71,6 +71,54 @@ const formRoutes: FormRoute[] = [
       { testId: "statutory-declaration-item-form", label: "Employee statutory declaration item form", minimumControls: 14 },
     ],
   },
+  {
+    path: "/hr-admin/probation-reviews/new",
+    heading: "Create probation review",
+    consoleHeading: "Create probation review",
+    expectedForms: [
+      { testId: "probation-review-form", label: "Probation review form", minimumControls: 10 },
+    ],
+  },
+  {
+    path: "/hr-admin/movements/new",
+    heading: "Create movement",
+    consoleHeading: "Create movement event",
+    expectedForms: [
+      { testId: "movement-event-form", label: "Movement event form", minimumControls: 13 },
+    ],
+  },
+  {
+    path: "/hr-admin/exits/new",
+    heading: "Create exit record",
+    consoleHeading: "Create exit record",
+    expectedForms: [
+      { testId: "exit-record-form", label: "Exit record form", minimumControls: 16 },
+    ],
+  },
+  {
+    path: "/hr-admin/attendance-records",
+    heading: "Attendance records review window.",
+    consoleHeading: "Attendance records",
+    expectedForms: [
+      { testId: "attendance-records-toolbar", label: "Attendance records toolbar", minimumControls: 11 },
+    ],
+  },
+  {
+    path: "/hr-admin/notifications",
+    heading: "Notification queue",
+    consoleHeading: "Notifications",
+    expectedForms: [
+      { testId: "notification-queue-toolbar", label: "Notification queue toolbar", minimumControls: 11 },
+    ],
+  },
+  {
+    path: "/tenant-admin",
+    heading: "Tenant Admin Console",
+    consoleHeading: "Scoped support grants",
+    expectedForms: [
+      { testId: "tenant-support-access-form", label: "Tenant support access form", minimumControls: 7 },
+    ],
+  },
 ];
 
 const visibleControlSelector = [
@@ -241,8 +289,7 @@ test.describe("Phase 8C form keyboard and accessibility certification", () => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await gotoAuthenticated(page, route.path);
       await expectPageReady(page, route.heading);
-      await expect(page.getByRole("heading", { name: route.consoleHeading })).toBeVisible();
-
+      await expect(page.getByRole("heading", { name: route.consoleHeading }).first()).toBeVisible();
       for (const formExpectation of route.expectedForms) {
         const form = page.getByTestId(formExpectation.testId);
         await expectFormControlsAreFocusable(form, formExpectation.label, formExpectation.minimumControls);
