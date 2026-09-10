@@ -47,6 +47,9 @@ const launchRoutes: RouteExpectation[] = [
   { path: "/mss/approvals", heading: "Manager inbox" },
 ];
 
+const isRemoteStagingRun = /^https?:\/\//.test(process.env.PLAYWRIGHT_BASE_URL || "");
+const responsiveGateTimeoutMs = isRemoteStagingRun ? 300_000 : 120_000;
+
 function safeScreenshotName(routePath: string, viewportLabel: string) {
   const routeName = routePath === "/"
     ? "home"
@@ -192,7 +195,7 @@ async function collectLayoutIssues(page: Page): Promise<LayoutIssue[]> {
 test.describe("Production responsive visual launch gate", () => {
   for (const viewport of launchViewports) {
     test(`launch-critical screens hold layout at ${viewport.label}`, async ({ page }, testInfo) => {
-      test.setTimeout(120_000);
+      test.setTimeout(responsiveGateTimeoutMs);
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
       for (const route of launchRoutes) {

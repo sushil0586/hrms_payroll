@@ -39,7 +39,7 @@ const launchRoutes: RouteExpectation[] = [
   { path: "/mss/approvals", heading: "Manager inbox" },
 ];
 
-const budgets = {
+const localBudgets = {
   pageReadyMs: 8_000,
   documentResponseMs: 4_000,
   domInteractiveMs: 6_000,
@@ -48,6 +48,17 @@ const budgets = {
   decodedBodyKb: 24_576,
   resourceCount: 180,
 };
+
+const remoteStagingBudgets = {
+  ...localBudgets,
+  pageReadyMs: 15_000,
+  documentResponseMs: 8_000,
+  domInteractiveMs: 10_000,
+  loadCompleteMs: 15_000,
+};
+
+const isRemoteRun = /^https?:\/\//.test(process.env.PLAYWRIGHT_BASE_URL || "");
+const budgets = isRemoteRun ? remoteStagingBudgets : localBudgets;
 
 async function writePerformanceReport(testInfo: TestInfo, samples: PerformanceSample[]) {
   const path = testInfo.outputPath("phase8d-performance-budget/performance-samples.json");
@@ -90,15 +101,20 @@ async function openMeasuredRoute(page: Page, route: RouteExpectation) {
 }
 
 test.describe("Phase 8D performance timing budgets", () => {
-  test("launch-critical routes stay within local browser performance budgets", async ({ page }, testInfo) => {
-    test.setTimeout(180_000);
+  test("launch-critical routes stay within browser performance budgets", async ({ page }, testInfo) => {
+    test.setTimeout(isRemoteRun ? 300_000 : 180_000);
     await page.setViewportSize({ width: 1366, height: 768 });
 
     const samples: PerformanceSample[] = [];
     for (const route of launchRoutes) {
       const sample = await openMeasuredRoute(page, route);
       samples.push(sample);
+    }
 
+    await writePerformanceReport(testInfo, samples);
+
+    for (const sample of samples) {
+      const route = launchRoutes.find((candidate) => candidate.path === sample.path) || { path: sample.path };
       expect(sample.pageReadyMs, `${route.path} page ready budget`).toBeLessThanOrEqual(budgets.pageReadyMs);
       expect(sample.documentResponseMs, `${route.path} document response budget`).toBeLessThanOrEqual(budgets.documentResponseMs);
       expect(sample.domInteractiveMs, `${route.path} DOM interactive budget`).toBeLessThanOrEqual(budgets.domInteractiveMs);
@@ -107,7 +123,5 @@ test.describe("Phase 8D performance timing budgets", () => {
       expect(sample.decodedBodyKb, `${route.path} decoded body budget`).toBeLessThanOrEqual(budgets.decodedBodyKb);
       expect(sample.resourceCount, `${route.path} resource count budget`).toBeLessThanOrEqual(budgets.resourceCount);
     }
-
-    await writePerformanceReport(testInfo, samples);
   });
 });

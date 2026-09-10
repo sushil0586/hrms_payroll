@@ -5,17 +5,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { WorkspaceCard } from "@/components/patterns/workspace-card";
 import { hrAdminModuleMetadata } from "@/lib/ui/module-metadata";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
-import {
-  getHrAdminAttendancePolicies,
-  getHrAdminDashboard,
-  getHrAdminDocumentCategories,
-  getHrAdminEmployees,
-  getHrAdminLeaveTypes,
-  getHrAdminNotificationTemplates,
-  getHrAdminOnboardings,
-  getHrAdminOrganizationSnapshot,
-  getHrAdminWorkflowTemplates,
-} from "@/lib/api";
+import { getHrAdminDashboard } from "@/lib/api";
 import type { HrAdminLaunchAuditModule } from "@/lib/types";
 
 const launchAuditStatusLabel = {
@@ -37,34 +27,11 @@ function launchAuditChipClass(status: HrAdminLaunchAuditModule["status"]) {
 export default async function HrAdminLandingPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
-  const [dashboardResult, employeesResult, organizationResult, leaveTypesResult, attendancePoliciesResult, workflowTemplatesResult, documentCategoriesResult, onboardingsResult, notificationTemplatesResult] = await Promise.all([
-    getHrAdminDashboard(),
-    getHrAdminEmployees(),
-    getHrAdminOrganizationSnapshot(),
-    getHrAdminLeaveTypes(),
-    getHrAdminAttendancePolicies(),
-    getHrAdminWorkflowTemplates(),
-    getHrAdminDocumentCategories(),
-    getHrAdminOnboardings({ page: 1, page_size: 1 }),
-    getHrAdminNotificationTemplates(),
-  ]);
+  const dashboardResult = await getHrAdminDashboard();
 
   const dashboard = dashboardResult.data;
-  const employees = employeesResult.data;
-  const organization = organizationResult.data;
-  const state =
-    dashboardResult.state === "live" &&
-    employeesResult.state === "live" &&
-    organizationResult.state === "live" &&
-    leaveTypesResult.state === "live" &&
-    attendancePoliciesResult.state === "live" &&
-    workflowTemplatesResult.state === "live" &&
-    documentCategoriesResult.state === "live" &&
-    onboardingsResult.state === "live" &&
-    notificationTemplatesResult.state === "live"
-      ? "live"
-      : "demo";
-  const activeEmployees = employees.filter((employee) => employee.employment_status === "active").length;
+  const state = dashboardResult.state;
+  const activeEmployees = dashboard.overview.active_employees;
   const launchAudit = dashboard.launch_audit;
   const launchAuditModules = launchAudit.modules.slice(0, 8);
   const launchAuditActions = launchAudit.release_actions.slice(0, 4);
@@ -99,8 +66,8 @@ export default async function HrAdminLandingPage() {
       <section className="section">
         <div className="metric-grid-modern">
           <MetricTile label="Employees in workspace" value={dashboard.overview.total_employees} trend="People coverage snapshot" />
-          <MetricTile label="Active employees" value={dashboard.overview.active_employees || activeEmployees} trend="Healthy operating baseline" />
-          <MetricTile label="Departments configured" value={organization.summary.departments_count} trend="Org structure depth" />
+          <MetricTile label="Active employees" value={activeEmployees} trend="Healthy operating baseline" />
+          <MetricTile label="Departments configured" value={dashboard.overview.configured_departments} trend="Org structure depth" />
           <MetricTile label="Pending approvals" value={dashboard.overview.pending_approvals} trend="Cross-module action load" />
           <MetricTile label="Launch audit" value={launchAuditStatusLabel[launchAudit.status]} trend={`${launchAudit.passed_gate_count}/${launchAudit.gate_count} gates passed`} />
         </div>
@@ -176,7 +143,7 @@ export default async function HrAdminLandingPage() {
             href={hrAdminModuleMetadata.attendance.href}
             cta="Explore attendance"
             details={[
-              { label: "Attendance policies", value: attendancePoliciesResult.data.length },
+              { label: "Attendance policies", value: dashboard.governance.active_attendance_policies },
               { label: "Operational layer", value: "Shifts and calendars" },
             ]}
           />
@@ -214,9 +181,9 @@ export default async function HrAdminLandingPage() {
             href={hrAdminModuleMetadata.employees.href}
             cta="Explore employees"
             details={[
-              { label: "Profiles loaded", value: employees.length },
+              { label: "Profiles loaded", value: dashboard.overview.total_employees },
               { label: "Active employees", value: activeEmployees },
-              { label: "Preview", value: employees[0]?.full_name || "No records yet" },
+              { label: "Managers mapped", value: dashboard.workforce.managers_with_reports },
             ]}
           />
 
@@ -227,9 +194,9 @@ export default async function HrAdminLandingPage() {
             href={hrAdminModuleMetadata.organization.href}
             cta="Explore organization"
             details={[
-              { label: "Legal entities", value: organization.summary.legal_entities_count },
-              { label: "Branches", value: organization.summary.branches_count },
-              { label: "Employment types", value: organization.summary.employment_types_count },
+              { label: "Departments", value: dashboard.overview.configured_departments },
+              { label: "Branches", value: dashboard.overview.active_branches },
+              { label: "Active memberships", value: dashboard.overview.active_memberships },
             ]}
           />
 
@@ -240,8 +207,8 @@ export default async function HrAdminLandingPage() {
             href={hrAdminModuleMetadata.policies.href}
             cta="Explore policies"
             details={[
-              { label: "Leave types", value: leaveTypesResult.data.length },
-              { label: "Attendance policies", value: attendancePoliciesResult.data.length },
+              { label: "Leave policies", value: dashboard.governance.active_leave_policies },
+              { label: "Attendance policies", value: dashboard.governance.active_attendance_policies },
             ]}
           />
 
@@ -252,8 +219,8 @@ export default async function HrAdminLandingPage() {
             href={hrAdminModuleMetadata.workflows.href}
             cta="Explore workflows"
             details={[
-              { label: "Workflow templates", value: workflowTemplatesResult.data.length },
-              { label: "Approval steps", value: workflowTemplatesResult.data.reduce((sum, item) => sum + item.steps.length, 0) },
+              { label: "Workflow templates", value: dashboard.governance.workflow_templates },
+              { label: "Pending approvals", value: dashboard.overview.pending_approvals },
             ]}
           />
 
@@ -264,7 +231,7 @@ export default async function HrAdminLandingPage() {
             href={hrAdminModuleMetadata.documents.href}
             cta="Explore documents"
             details={[
-              { label: "Document categories", value: documentCategoriesResult.data.length },
+              { label: "Document categories", value: dashboard.documents.active_document_categories },
               { label: "Upload governance", value: "Configured by category" },
             ]}
           />
@@ -276,7 +243,7 @@ export default async function HrAdminLandingPage() {
             href={hrAdminModuleMetadata.lifecycle.href}
             cta="Explore lifecycle"
             details={[
-              { label: "Active onboardings", value: onboardingsResult.data.total_count },
+              { label: "Active onboardings", value: dashboard.operations.pending_onboardings },
               { label: "Coverage", value: "Join to exit" },
             ]}
           />
@@ -288,7 +255,7 @@ export default async function HrAdminLandingPage() {
             href={hrAdminModuleMetadata.notifications.href}
             cta="Explore notifications"
             details={[
-              { label: "Templates", value: notificationTemplatesResult.data.length },
+              { label: "Templates", value: dashboard.governance.active_notification_templates },
               { label: "Mode", value: "Event-driven" },
             ]}
           />

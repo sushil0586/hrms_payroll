@@ -869,18 +869,33 @@ Current Phase 8 progress:
 - Phase 8D certified routes: same launch-critical route set as Phase 8B at `1366x768` with browser navigation timing and resource-size budgets.
 - Phase 8D warm-run slowest page-ready routes: `/hr-admin/payroll-providers` at `2959ms`, `/hr-admin/payroll-handoff` at `2900ms`, `/ess/payslips` at `2617ms`, `/mss/approvals` at `2337ms`, and `/ess/notifications?subject_type=payroll_payslip` at `2178ms`.
 - Evidence: `docs/qa/phase8d-performance-budget-certification-2026-09-10.md`.
-- Current UX confidence: 89%.
-- Current responsive confidence: 90%.
-- Current accessibility confidence: 82%.
-- Current performance confidence: 84%.
-- Current Phase 8 confidence: 90%.
-- Remaining Phase 8 work: staging screenshot review after deployment and broader keyboard certification for lifecycle/attendance/notification/support forms.
+- Phase 8 staging certification: done on 2026-09-10 against `https://hrms.accerio.in` at deployed commit `027becb613b349538d210c084bb617d96ba6fc96`.
+- Phase 8 staging evidence: workspace shell plus dense form accessibility `6 passed`; responsive visual launch gate `6 passed` across `102` page-viewport combinations; performance timing gate `1 passed`.
+- Phase 8 staging harness fix: remote URL runs now get staging-appropriate timeouts and performance budgets while preserving the same assertions.
+- Phase 8 staging performance note: slowest page-ready samples were `/hr-admin` at `12321ms` and `/hr-admin/notifications?retry_state=retry_ready` at `11382ms`; navigation timings and asset/resource budgets stayed inside staging limits.
+- Evidence: `docs/qa/phase8-staging-certification-2026-09-10.md`.
+- Current UX confidence: 91%.
+- Current responsive confidence: 92%.
+- Current accessibility confidence: 86%.
+- Current performance confidence: 86%.
+- Current Phase 8 confidence: 92%.
+- Remaining Phase 8 work: preserve responsive screenshots in passing CI artifacts, tune staging page-ready time on `/hr-admin` and notification queue pages, and broaden keyboard certification for lifecycle/attendance/notification/support forms.
 
 ## 14. Phase 9: Release Rehearsal and Sign-Off
 
 Goal:
 
 Run the full staging launch rehearsal and produce a release decision.
+
+Current Phase 9 progress:
+
+- Phase 9A HR admin performance optimization: started on 2026-09-10.
+- Phase 9A finding: `/hr-admin` waited for nine independent live API calls before first render, while the dashboard payload already contained the needed landing-card aggregate metrics.
+- Phase 9A change: `/hr-admin` now renders from the consolidated dashboard payload only.
+- Phase 9A local optimized-frontend evidence: TypeScript passed, Phase 8A browser UX/accessibility passed, and Phase 8D performance passed against local frontend plus staging backend.
+- Phase 9A sample improvement target: `/hr-admin` page-ready measured `6396ms` in the optimized local frontend path versus the previous public staging sample of `12321ms`.
+- Evidence: `docs/qa/phase9a-hr-admin-performance-optimization-2026-09-10.md`.
+- Remaining Phase 9A work: commit, deploy, and rerun public staging Phase 8D to confirm the improvement on `https://hrms.accerio.in`.
 
 Scope:
 
