@@ -44,6 +44,8 @@ test.describe("Phase 9E provider ready rehearsal", () => {
     ]);
     const payload = await response.json().catch(() => ({}));
     expect(response.ok(), `Launch rehearsal failed with ${response.status()}: ${JSON.stringify(payload)}`).toBeTruthy();
+    expect(payload.launch_rehearsal_run?.status, `Launch rehearsal did not record ready state: ${JSON.stringify(payload)}`).toBe("ready");
+    expect(payload.launch_rehearsal_run?.blocked_lane_count, `Launch rehearsal still has blocked lanes: ${JSON.stringify(payload)}`).toBe(0);
     await expect(page.getByRole("status").filter({ hasText: "Launch rehearsal recorded." })).toBeVisible();
 
     await page.reload({ waitUntil: "domcontentloaded" });

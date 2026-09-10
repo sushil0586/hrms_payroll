@@ -106,7 +106,16 @@ from apps.payroll.models import (
     PayrollValidationSeverity,
 )
 from apps.payroll.providers import (
+    PAYROLL_ACCOUNTING_FIXTURE_CLIENT_REF,
+    PAYROLL_ACCOUNTING_FIXTURE_PACKAGE_REF,
+    PAYROLL_ACCOUNTING_LIVE_JOURNAL_ADAPTER_REF,
+    PAYROLL_BANK_FIXTURE_CLIENT_REF,
+    PAYROLL_BANK_FIXTURE_PACKAGE_REF,
+    PAYROLL_BANK_LIVE_PAYOUT_ADAPTER_REF,
     PAYROLL_PROVIDER_LAUNCH_READINESS_COMMAND_REF,
+    PAYROLL_STATUTORY_FIXTURE_CLIENT_REF,
+    PAYROLL_STATUTORY_FIXTURE_PACKAGE_REF,
+    PAYROLL_STATUTORY_LIVE_FILING_ADAPTER_REF,
     PayrollProviderAdapterError,
     PayrollProviderSubmissionRequest,
     PayrollProviderSubmissionResult,
@@ -310,6 +319,122 @@ DEFAULT_PAYROLL_PROVIDER_CONNECTION_BLUEPRINTS = [
         "certification_profile_ref": "clear-statutory.pt.challan.receipt.v1",
     },
 ]
+
+DEFAULT_PAYROLL_PROVIDER_ROUTE_LAUNCH_CONFIGS = {
+    PayrollProviderConnectionKind.BANK: {
+        "adapter_ref": PAYROLL_BANK_LIVE_PAYOUT_ADAPTER_REF,
+        "provider_package_ref": PAYROLL_BANK_FIXTURE_PACKAGE_REF,
+        "adapter_config_key": "bank_payout_adapter",
+        "adapter_config": {
+            "client_ref": PAYROLL_BANK_FIXTURE_CLIENT_REF,
+            "debit_account_ref": "payroll.bank_account.default.v1",
+            "payment_date": "payroll.period.payment_date",
+        },
+    },
+    PayrollProviderConnectionKind.ACCOUNTING: {
+        "adapter_ref": PAYROLL_ACCOUNTING_LIVE_JOURNAL_ADAPTER_REF,
+        "provider_package_ref": PAYROLL_ACCOUNTING_FIXTURE_PACKAGE_REF,
+        "adapter_config_key": "accounting_journal_adapter",
+        "adapter_config": {
+            "client_ref": PAYROLL_ACCOUNTING_FIXTURE_CLIENT_REF,
+            "company_ref": "payroll.accounting.company.default.v1",
+            "posting_date": "payroll.period.payment_date",
+        },
+    },
+    PayrollProviderConnectionKind.STATUTORY: {
+        "adapter_ref": PAYROLL_STATUTORY_LIVE_FILING_ADAPTER_REF,
+        "provider_package_ref": PAYROLL_STATUTORY_FIXTURE_PACKAGE_REF,
+        "adapter_config_key": "statutory_filing_adapter",
+        "adapter_config": {
+            "client_ref": PAYROLL_STATUTORY_FIXTURE_CLIENT_REF,
+            "authority_ref": "payroll.statutory.authority.default.v1",
+            "registration_ref": "payroll.statutory.registration.default.v1",
+            "filing_type_ref": "payroll.statutory.filing_type.default.v1",
+        },
+    },
+}
+
+
+def _default_payroll_provider_route_config(blueprint: dict[str, Any]) -> dict[str, Any]:
+    provider_kind = blueprint["provider_kind"]
+    launch_config = DEFAULT_PAYROLL_PROVIDER_ROUTE_LAUNCH_CONFIGS.get(provider_kind, {})
+    adapter_config_key = str(launch_config.get("adapter_config_key") or "").strip()
+    adapter_config = dict(launch_config.get("adapter_config") or {})
+    route = {
+        "provider_ref": blueprint["provider_ref"],
+        "adapter_ref": launch_config.get("adapter_ref") or blueprint["adapter_ref"],
+        "provider_package_ref": launch_config.get("provider_package_ref") or "",
+        "channel_ref": blueprint["channel_ref"],
+        "credential_ref": blueprint["credential_ref"],
+        "credential_required": blueprint["credential_required"],
+        "credential_profile_ref": blueprint["credential_profile_ref"],
+        "callback_profile_ref": blueprint["callback_profile_ref"],
+        "callback_verification_ref": blueprint["callback_verification_ref"],
+        "callback_security_policy": {
+            "security_policy_ref": f"payroll.callback_security.{provider_kind}.standard.v1",
+            "enforcement_mode": "warn",
+            "signature_algorithm_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ALGORITHM_REF,
+            "signature_adapter_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ADAPTER_REF,
+            "signature_material_fields": list(DEFAULT_PROVIDER_CALLBACK_SIGNATURE_MATERIAL_FIELDS),
+            "signature_key_ref": f"payroll.callback_signature_key.{provider_kind}.configured.v1",
+            "signature_key_resolution_mode": "reference",
+            "require_runtime_signature_key": False,
+            "signature_encoding": "hex",
+            "secret_rotation_ref": f"payroll.callback_secret_rotation.{provider_kind}.standard.v1",
+            "replay_window_seconds": 900,
+            "timestamp_required": False,
+            "source_ip_required": False,
+            "allowed_ip_refs": [f"payroll.provider_ip_allowlist.{provider_kind}.managed.v1"],
+            "rate_limit_policy_ref": f"payroll.callback_rate_limit.{provider_kind}.standard.v1",
+            "rate_limit_window_seconds": 60,
+            "rate_limit_max_events": 60,
+        },
+        "retry_policy_ref": blueprint["retry_policy_ref"],
+        "certification_profile_ref": blueprint["certification_profile_ref"],
+        "provider_connection_policy": {
+            "mode": "certified",
+            "enforcement_mode": "certified",
+            "required_certification_status": PayrollProviderCertificationStatus.PASSED,
+        },
+        "adapter_contract": {
+            "contract_profile_ref": f"payroll.provider_contract.{provider_kind}.sandbox_adapter.v1",
+            "enforcement_mode": "warn",
+            "expected_adapter_ref": blueprint["adapter_ref"],
+            "expected_provider_ref": blueprint["provider_ref"],
+            "response_snapshot_required_fields": ["adapter_ref", "response_schema_ref", "domain_contract_ref"],
+        },
+    }
+    if adapter_config_key:
+        route[adapter_config_key] = adapter_config
+    return route
+
+
+def _sync_default_payroll_provider_route_config(connection: PayrollProviderConnection, blueprint: dict[str, Any]) -> bool:
+    config = dict(connection.config_snapshot) if isinstance(connection.config_snapshot, dict) else {}
+    route = dict(config.get("provider_route")) if isinstance(config.get("provider_route"), dict) else {}
+    default_route = _default_payroll_provider_route_config(blueprint)
+    changed = False
+    for key, value in default_route.items():
+        if key not in route or route.get(key) in ("", None, {}, []):
+            route[key] = value
+            changed = True
+        elif isinstance(value, dict) and isinstance(route.get(key), dict):
+            merged = dict(route[key])
+            for nested_key, nested_value in value.items():
+                if nested_key not in merged or merged.get(nested_key) in ("", None, {}, []):
+                    merged[nested_key] = nested_value
+                    changed = True
+            route[key] = merged
+    if config.get("source") != "payroll_provider_connection_blueprint.v1":
+        config["source"] = config.get("source") or "payroll_provider_connection_blueprint.v1"
+        changed = True
+    if changed or config.get("provider_route") != route:
+        config["provider_route"] = route
+        connection.config_snapshot = config
+        connection.updated_by = connection.updated_by or connection.created_by
+        connection.save(update_fields=["config_snapshot", "updated_by", "updated_at"])
+        return True
+    return False
 
 DEFAULT_PAYROLL_PROVIDER_CERTIFICATION_SCENARIOS = {
     PayrollProviderConnectionKind.BANK: [
@@ -970,49 +1095,13 @@ def ensure_default_payroll_provider_connections(tenant, *, created_by=None) -> l
                 "certification_status": PayrollProviderCertificationStatus.PENDING,
                 "config_snapshot": {
                     "source": "payroll_provider_connection_blueprint.v1",
-                    "provider_route": {
-                        "provider_ref": blueprint["provider_ref"],
-                        "adapter_ref": blueprint["adapter_ref"],
-                        "channel_ref": blueprint["channel_ref"],
-                        "credential_ref": blueprint["credential_ref"],
-                        "credential_required": blueprint["credential_required"],
-                        "credential_profile_ref": blueprint["credential_profile_ref"],
-                        "callback_profile_ref": blueprint["callback_profile_ref"],
-                        "callback_verification_ref": blueprint["callback_verification_ref"],
-                        "callback_security_policy": {
-                            "security_policy_ref": f"payroll.callback_security.{blueprint['provider_kind']}.standard.v1",
-                            "enforcement_mode": "warn",
-                            "signature_algorithm_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ALGORITHM_REF,
-                            "signature_adapter_ref": PAYROLL_PROVIDER_CALLBACK_SIGNATURE_SHA256_ADAPTER_REF,
-                            "signature_material_fields": list(DEFAULT_PROVIDER_CALLBACK_SIGNATURE_MATERIAL_FIELDS),
-                            "signature_key_ref": f"payroll.callback_signature_key.{blueprint['provider_kind']}.configured.v1",
-                            "signature_key_resolution_mode": "reference",
-                            "require_runtime_signature_key": False,
-                            "signature_encoding": "hex",
-                            "secret_rotation_ref": f"payroll.callback_secret_rotation.{blueprint['provider_kind']}.standard.v1",
-                            "replay_window_seconds": 900,
-                            "timestamp_required": False,
-                            "source_ip_required": False,
-                            "allowed_ip_refs": [f"payroll.provider_ip_allowlist.{blueprint['provider_kind']}.managed.v1"],
-                            "rate_limit_policy_ref": f"payroll.callback_rate_limit.{blueprint['provider_kind']}.standard.v1",
-                            "rate_limit_window_seconds": 60,
-                            "rate_limit_max_events": 60,
-                        },
-                        "retry_policy_ref": blueprint["retry_policy_ref"],
-                        "certification_profile_ref": blueprint["certification_profile_ref"],
-                        "adapter_contract": {
-                            "contract_profile_ref": f"payroll.provider_contract.{blueprint['provider_kind']}.sandbox_adapter.v1",
-                            "enforcement_mode": "warn",
-                            "expected_adapter_ref": blueprint["adapter_ref"],
-                            "expected_provider_ref": blueprint["provider_ref"],
-                            "response_snapshot_required_fields": ["adapter_ref", "response_schema_ref", "domain_contract_ref"],
-                        },
-                    },
+                    "provider_route": _default_payroll_provider_route_config(blueprint),
                 },
                 "created_by": created_by,
                 "updated_by": created_by,
             },
         )
+        route_config_changed = _sync_default_payroll_provider_route_config(connection, blueprint)
         artifact_kind = {
             PayrollProviderConnectionKind.BANK: PayrollOutputArtifactKind.BANK_ADVICE,
             PayrollProviderConnectionKind.ACCOUNTING: PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
@@ -1044,7 +1133,7 @@ def ensure_default_payroll_provider_connections(tenant, *, created_by=None) -> l
                 "updated_by": created_by,
             },
         )
-        if created or not isinstance(connection.readiness_snapshot, dict) or not connection.readiness_snapshot:
+        if created or route_config_changed or not isinstance(connection.readiness_snapshot, dict) or not connection.readiness_snapshot:
             connection = sync_payroll_provider_connection_readiness(connection)
         connections.append(connection)
     return connections

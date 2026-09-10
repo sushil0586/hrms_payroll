@@ -924,14 +924,17 @@ Current Phase 9 progress:
 - Phase 9D remaining warning refs: `employees.primary_bank` and `provider.rehearsal_ready`.
 - Phase 9D product note: primary bank coverage is not currently closable through the HRMS SaaS browser UI; the backend model exists, but HR admin bank-account maintenance needs an app surface.
 - Evidence: `docs/qa/phase9d-launch-warning-closure-2026-09-10.md`.
-- Phase 9E final warning closure: implemented locally on 2026-09-10.
-- Phase 9E browser evidence: `phase9e-bank-account-readiness.spec.ts` and `phase9e-provider-ready-rehearsal.spec.ts` passed locally with demo fallback disabled.
+- Phase 9E final warning closure: implemented locally and deployed to staging on 2026-09-10.
+- Phase 9E deployment: release `/var/www/hrms-payroll-saas/release-20260910045731`, commit `ba05fc19bd14f69b13163a68e4f182008d904a17`, plus a backend provider-route backfill hotfix applied to the active staging release.
+- Phase 9E browser evidence: `phase9e-bank-account-readiness.spec.ts` and `phase9e-provider-ready-rehearsal.spec.ts` passed locally and on staging with demo fallback disabled.
 - Phase 9E product change: HR admin can now manage employee bank accounts through `/hr-admin/employees/[employeeId]/bank-accounts`, including create, update, primary-account selection, masked list review, and responsive page checks.
 - Phase 9E provider change: provider launch rehearsal readiness is certified through browser-visible certification/rehearsal actions on `/hr-admin/payroll-providers`.
-- Phase 9E local checks: Django system check passed, TypeScript passed, and ESLint passed.
-- Phase 9E residual: staging deployment and final staging launch audit are pending; bank-account delete/archive is intentionally not part of this closure slice.
+- Phase 9E checks: Django system check passed, TypeScript passed, ESLint passed, staging backend/web services active, and public HTTP returned `200 OK`.
+- Phase 9E launch audit state: tenant `northstar-foods` is ready with `can_launch: true`, `51/51` gates passed, `0` blockers, `0` warnings, and `0` release actions.
+- Phase 9E provider rehearsal state: `3/3` lanes ready, `0` blocked lanes, `0` launch blockers.
+- Phase 9E residual: post-deployment provider-route backfill hotfix must be checked in; bank-account delete/archive is intentionally not part of this closure slice.
 - Evidence: `docs/qa/phase9e-final-warning-closure-2026-09-10.md`.
-- Next Phase 9 slice: deploy Phase 9E to staging, rerun the Phase 9E browser specs against `https://hrms.accerio.in`, then rerun the `northstar-foods` launch audit and capture the final `0 blocker / 0 warning` evidence pack.
+- Next Phase 9 slice: check in the provider-route backfill hotfix, then run the broader staging release sign-off pack once more for final launch confidence.
 
 Scope:
 
@@ -1050,7 +1053,7 @@ Current overall status:
 | 2026-09-08 | Phase 1B: Organization master CRUD expansion | PASS, 25/25 Phase 1 browser tests and 249/249 final audit screen visits | `docs/qa/phase1b-organization-master-crud-report-2026-09-08.md` | Overall product confidence to 68% |
 | 2026-09-09 | Phase 1C-A: Policy and governance master CRUD expansion | PASS, 8/8 Phase 1C-A tests; broader Phase 1 had 31/33 with affected org tests passing on targeted rerun | `docs/qa/phase1c-policy-governance-master-crud-report-2026-09-09.md` | Overall product confidence to 70% |
 | 2026-09-09 | Phase 1C-B: Salary setup CRUD expansion | PASS, 3/3 focused salary setup browser tests | `docs/qa/phase1c-salary-setup-crud-report-2026-09-09.md` | Overall product confidence to 72% |
-| 2026-09-10 | Phase 9E: Final warning closure implementation | PASS locally, 2/2 Phase 9E browser tests plus Django check, TypeScript, and ESLint | `docs/qa/phase9e-final-warning-closure-2026-09-10.md` | Phase 9 confidence to 96% local, staging pending |
+| 2026-09-10 | Phase 9E: Final warning closure implementation and staging certification | PASS on staging, 2/2 Phase 9E browser tests, tightened provider test pass, provider rehearsal ready, HRMS launch audit 51/51 | `docs/qa/phase9e-final-warning-closure-2026-09-10.md` | Phase 9 confidence to 98%, hotfix check-in pending |
 
 ## 18. Recommended Execution Order
 
