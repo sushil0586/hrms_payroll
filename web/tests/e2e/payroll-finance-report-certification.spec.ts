@@ -41,11 +41,41 @@ test.describe("Phase R3-A payroll finance report certification", () => {
     await report.getByLabel("Sort").selectOption("net_pay_desc");
     await expect(report.getByText(/Showing/)).toBeVisible();
 
+    const filteredExportLink = report.getByRole("link", { name: "Export filtered CSV" });
+    await expect(filteredExportLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-register\?.*sort=net_pay_desc/);
+    const filteredExportHref = await filteredExportLink.getAttribute("href");
+    expect(filteredExportHref).toBeTruthy();
+    const filteredExportResponse = await page.request.get(filteredExportHref ?? "");
+    expect(filteredExportResponse.status()).toBe(200);
+    expect(filteredExportResponse.headers()["content-type"]).toContain("text/csv");
+    expect(filteredExportResponse.headers()["x-hrms-report-key"]).toBe("payroll-register");
+    expect(filteredExportResponse.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(filteredExportResponse.headers()["x-hrms-report-filters"]).toContain("net_pay_desc");
+    const filteredExportBody = await filteredExportResponse.text();
+    expect(filteredExportBody).toContain("payroll_run_name");
+    expect(filteredExportBody).toContain("source_hash");
+
+    const manifestLink = report.getByRole("link", { name: "Manifest" });
+    await expect(manifestLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-register\?.*format=manifest/);
+    const manifestHref = await manifestLink.getAttribute("href");
+    expect(manifestHref).toBeTruthy();
+    const manifestResponse = await page.request.get(manifestHref ?? "");
+    expect(manifestResponse.status()).toBe(200);
+    expect(manifestResponse.headers()["content-type"]).toContain("application/json");
+    expect(manifestResponse.headers()["x-hrms-report-key"]).toBe("payroll-register");
+    expect(manifestResponse.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
+    const manifest = await manifestResponse.json();
+    expect(manifest.export_schema_version).toBe("hrms.report.export.manifest.v1");
+    expect(manifest.csv_checksum_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(manifest.source_endpoints).toContain("/hr-admin/payroll-output-setup/");
+    expect(manifest.evidence_columns).toContain("checksum_sha256");
+    expect(manifest.evidence_columns).toContain("source_hash");
+
     await expect(report.locator(".pagination-bar")).toBeVisible();
     await expect(report.getByRole("button", { name: "Previous" })).toBeVisible();
     await expect(report.getByRole("button", { name: "Next" })).toBeVisible();
 
-    const exportLink = report.getByRole("link", { name: "Export" }).first();
+    const exportLink = report.getByRole("link", { name: "Export", exact: true }).first();
     await expect(exportLink).toHaveAttribute("href", /\/api\/hr-admin\/payroll-output-artifacts\/.+\/download/);
     const exportHref = await exportLink.getAttribute("href");
     expect(exportHref).toBeTruthy();
@@ -73,5 +103,10 @@ test.describe("Phase R3-A payroll finance report certification", () => {
     await expect(page.getByTestId("payroll-register-report")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
     await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+
+    const csvResponse = await page.request.get("/api/hr-admin/reports/payroll-register?sort=net_pay_desc");
+    expect([401, 403]).toContain(csvResponse.status());
+    const manifestResponse = await page.request.get("/api/hr-admin/reports/payroll-register?sort=net_pay_desc&format=manifest");
+    expect([401, 403]).toContain(manifestResponse.status());
   });
 });

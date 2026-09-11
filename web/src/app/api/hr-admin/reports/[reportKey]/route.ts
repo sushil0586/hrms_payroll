@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type {
   HrAdminPayrollFinanceHandoffSetupResponse,
   HrAdminPayrollOutputArtifact,
+  HrAdminPayrollOutputSetupResponse,
   HrAdminPayrollStatutoryFilingCalendar,
   HrAdminPayrollStatutorySetupResponse,
 } from "@/lib/types";
@@ -121,6 +122,10 @@ function applyExportFilters(reportKey: string, rows: Array<Record<string, unknow
       if (filters.provider_status && row.provider_status !== filters.provider_status) return false;
       if (filters.provider_ref && row.provider_ref !== filters.provider_ref) return false;
     }
+    if (reportKey === "payroll-register") {
+      if (filters.batch_status && row.batch_status !== filters.batch_status) return false;
+      if (filters.artifact_status && row.artifact_status !== filters.artifact_status) return false;
+    }
     return true;
   });
 }
@@ -129,6 +134,12 @@ const COMPLIANCE_SOURCE_ENDPOINTS = [
   "/hr-admin/payroll-statutory-setup/",
   "/hr-admin/payroll-finance-handoff-setup/",
 ];
+const PAYROLL_REGISTER_SOURCE_ENDPOINTS = ["/hr-admin/payroll-output-setup/"];
+
+function sourceEndpointsForReport(reportKey: string) {
+  if (reportKey === "payroll-register") return PAYROLL_REGISTER_SOURCE_ENDPOINTS;
+  return COMPLIANCE_SOURCE_ENDPOINTS;
+}
 
 function requestIdentifier(request: NextRequest) {
   return request.headers.get("x-request-id") || createHash("sha256").update(`${Date.now()}:${Math.random()}`).digest("hex").slice(0, 24);
@@ -180,6 +191,7 @@ async function reportResponse(reportKey: string, rows: Array<Record<string, unkn
   const csv = toCsv(rows);
   const filterSnapshot = JSON.stringify(filters);
   const checksum = createHash("sha256").update(csv).digest("hex");
+  const sourceEndpoints = sourceEndpointsForReport(reportKey);
   await recordExportAudit({
     auditContext,
     checksum,
@@ -188,7 +200,7 @@ async function reportResponse(reportKey: string, rows: Array<Record<string, unkn
     filters,
     reportKey,
     rows,
-    sourceEndpoints: COMPLIANCE_SOURCE_ENDPOINTS,
+    sourceEndpoints,
   });
   return new NextResponse(csv, {
     status: 200,
@@ -207,6 +219,7 @@ async function reportResponse(reportKey: string, rows: Array<Record<string, unkn
 async function manifestResponse(reportKey: string, rows: Array<Record<string, unknown>>, filters: ExportFilters = {}, auditContext?: ExportAuditContext) {
   const csv = toCsv(rows);
   const checksum = createHash("sha256").update(csv).digest("hex");
+  const sourceEndpoints = sourceEndpointsForReport(reportKey);
   await recordExportAudit({
     auditContext,
     checksum,
@@ -215,7 +228,7 @@ async function manifestResponse(reportKey: string, rows: Array<Record<string, un
     filters,
     reportKey,
     rows,
-    sourceEndpoints: COMPLIANCE_SOURCE_ENDPOINTS,
+    sourceEndpoints,
   });
   return NextResponse.json(
     {
@@ -226,7 +239,7 @@ async function manifestResponse(reportKey: string, rows: Array<Record<string, un
       row_count: rows.length,
       csv_checksum_sha256: checksum,
       csv_content_type: "text/csv",
-      source_endpoints: COMPLIANCE_SOURCE_ENDPOINTS,
+      source_endpoints: sourceEndpoints,
       evidence_columns: Object.keys(rows[0] ?? {}),
     },
     {
@@ -348,6 +361,44 @@ async function getComplianceExportRows(reportKey: string, token: string) {
         source_hash: matchedLines[0]?.line.source_hash || matchedLines[0]?.artifact.source_hash || filing.source_hash || "",
       };
     }),
+  };
+}
+
+async function getPayrollRegisterExportRows(reportKey: string, token: string) {
+  if (reportKey !== "payroll-register") return null;
+
+  const outputResult = await upstreamJson<HrAdminPayrollOutputSetupResponse>("/hr-admin/payroll-output-setup/", token);
+  if (!outputResult.ok) return { error: outputResult };
+
+  const output = outputResult.data;
+  if (!output) return { error: { ok: false, status: 502, data: null, detail: "Live payroll register source data is unavailable." } };
+
+  const batchById = new Map(output.output_batches.map((batch) => [batch.id, batch]));
+  return {
+    rows: output.artifacts
+      .filter((artifact) => artifact.kind === "register")
+      .map((artifact) => {
+        const batch = batchById.get(artifact.output_batch_id);
+        return {
+          payroll_run_name: batch?.payroll_run_name || artifact.title,
+          output_batch_id: artifact.output_batch_id,
+          artifact_id: artifact.id,
+          artifact_key: artifact.artifact_key,
+          file_name: artifact.file_name,
+          batch_status: batch?.status || "",
+          artifact_status: artifact.status,
+          published_at: artifact.published_at || "",
+          gross_earnings: numberValue(artifact.totals_snapshot.gross_earnings),
+          employee_deductions: numberValue(artifact.totals_snapshot.employee_deductions),
+          net_pay: numberValue(artifact.totals_snapshot.net_pay),
+          output_profile_ref: artifact.output_profile_ref,
+          storage_provider_ref: artifact.storage_provider_ref,
+          storage_object_version: artifact.storage_object_version,
+          checksum_sha256: artifact.checksum_sha256,
+          source_hash: artifact.source_hash,
+          is_downloadable: artifact.is_downloadable,
+        };
+      }),
   };
 }
 
@@ -489,6 +540,17 @@ export async function GET(request: NextRequest, { params }: Props) {
         }
       }
       return exportResponse(request, reportKey, applyExportFilters(reportKey, complianceExport.rows, filters), filters, auditContext);
+    }
+
+    const payrollRegisterExport = await getPayrollRegisterExportRows(reportKey, token);
+    if (payrollRegisterExport) {
+      if ("error" in payrollRegisterExport) {
+        const exportError = payrollRegisterExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, payrollRegisterExport.rows, filters), filters, auditContext);
     }
 
     const upstream = await fetch(`${API_BASE_URL}/hr-admin/reports/exports/${reportKey}/`, {

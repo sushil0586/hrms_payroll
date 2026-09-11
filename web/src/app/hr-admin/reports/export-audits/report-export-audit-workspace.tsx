@@ -189,6 +189,8 @@ export function ReportExportAuditWorkspace() {
                     <div className="payroll-register-stack">
                       <span>{item.source_endpoints.length} sources</span>
                       <span>{item.evidence_columns.length} columns</span>
+                      <span>{item.source_endpoints.join(", ") || "No source endpoint"}</span>
+                      <code>{item.evidence_columns.join(", ") || "No evidence columns"}</code>
                       <code>{item.request_identifier}</code>
                     </div>
                   </td>
@@ -221,4 +223,3 @@ export function ReportExportAuditWorkspace() {
     </section>
   );
 }
-

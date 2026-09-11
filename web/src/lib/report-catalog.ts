@@ -81,6 +81,7 @@ export const reportCatalog: ReportCatalogItem[] = [
     exports: ["CSV", "XLSX"],
     status: "Ready",
     route: "/hr-admin/reports/payroll-register",
+    exportRoute: "/api/hr-admin/reports/payroll-register",
   },
   {
     key: "salary-variance",

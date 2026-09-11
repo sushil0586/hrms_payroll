@@ -13,6 +13,8 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
       "/api/hr-admin/reports/challan-reconciliation?sort=status&format=manifest",
       "/api/hr-admin/reports/statutory-filing-status?sort=artifacts",
       "/api/hr-admin/reports/provider-filing-receipts?sort=callbacks&format=manifest",
+      "/api/hr-admin/reports/payroll-register?sort=net_pay_desc",
+      "/api/hr-admin/reports/payroll-register?sort=net_pay_desc&format=manifest",
     ];
     for (const path of exportPaths) {
       const response = await page.request.get(path);
@@ -37,6 +39,10 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
 
     await expect(workspace.getByText("challan-reconciliation").first()).toBeVisible();
     await expect(workspace.getByText("provider-filing-receipts").first()).toBeVisible();
+    await expect(workspace.getByText("payroll-register").first()).toBeVisible();
+    await expect(workspace.getByText("/hr-admin/payroll-output-setup/").first()).toBeVisible();
+    await expect(workspace.getByText("checksum_sha256").first()).toBeVisible();
+    await expect(workspace.getByText("source_hash").first()).toBeVisible();
     await expect(workspace.getByText("manifest").first()).toBeVisible();
     await expect(workspace.locator("code").filter({ hasText: /^[a-f0-9]{20}$/ }).first()).toBeVisible();
 
@@ -47,6 +53,21 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
     await workspace.getByLabel("Report key").selectOption("challan-reconciliation");
     await expect(workspace.getByText("challan-reconciliation").first()).toBeVisible();
     await expect(workspace.getByText(/Showing/)).toBeVisible();
+
+    await workspace.getByLabel("Report key").selectOption("payroll-register");
+    await expect(workspace.getByText("payroll-register").first()).toBeVisible();
+    await expect(workspace.getByText("/hr-admin/payroll-output-setup/").first()).toBeVisible();
+    await expect(workspace.getByText("checksum_sha256").first()).toBeVisible();
+    await expect(workspace.getByText("source_hash").first()).toBeVisible();
+    await expect(workspace.getByText(/Showing/)).toBeVisible();
+
+    const payrollAuditResponse = await page.request.get("/api/hr-admin/reports/export-audits?report_key=payroll-register");
+    expect(payrollAuditResponse.status()).toBe(200);
+    const payrollAuditPayload = await payrollAuditResponse.json();
+    expect(payrollAuditPayload.items.length).toBeGreaterThanOrEqual(2);
+    expect(payrollAuditPayload.items.some((item: { export_type: string }) => item.export_type === "csv")).toBeTruthy();
+    expect(payrollAuditPayload.items.some((item: { export_type: string }) => item.export_type === "manifest")).toBeTruthy();
+    expect(payrollAuditPayload.items[0].source_endpoints).toContain("/hr-admin/payroll-output-setup/");
 
     await workspace.getByPlaceholder("Search report, checksum, filters, request").fill("no-such-export-audit-row");
     await expect(workspace.getByText("No export audit records match the selected filters.")).toBeVisible();

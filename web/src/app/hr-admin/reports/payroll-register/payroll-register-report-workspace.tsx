@@ -113,6 +113,15 @@ export function PayrollRegisterReportWorkspace({
   const totalNetPay = filteredRows.reduce((sum, row) => sum + Number(row.artifact.totals_snapshot.net_pay ?? 0), 0);
   const totalGross = filteredRows.reduce((sum, row) => sum + Number(row.artifact.totals_snapshot.gross_earnings ?? 0), 0);
   const totalDeductions = filteredRows.reduce((sum, row) => sum + Number(row.artifact.totals_snapshot.employee_deductions ?? 0), 0);
+  const exportHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (batchStatus !== "All") params.set("batch_status", batchStatus);
+    if (artifactStatus !== "All") params.set("artifact_status", artifactStatus);
+    params.set("sort", sortBy);
+    return `/api/hr-admin/reports/payroll-register?${params.toString()}`;
+  }, [artifactStatus, batchStatus, query, sortBy]);
+  const manifestHref = `${exportHref}&format=manifest`;
 
   function updateFilter(action: () => void) {
     action();
@@ -197,6 +206,12 @@ export function PayrollRegisterReportWorkspace({
           <span className="queue-summary-chip">
             <strong>{currentPage}</strong> of {pageCount} pages
           </span>
+          <Link className="button button--secondary" href={exportHref} prefetch={false}>
+            Export filtered CSV
+          </Link>
+          <Link className="button button--ghost" href={manifestHref} prefetch={false}>
+            Manifest
+          </Link>
         </div>
 
         <div className="report-catalog-table-wrap">
