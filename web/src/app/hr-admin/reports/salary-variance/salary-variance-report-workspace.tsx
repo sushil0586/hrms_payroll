@@ -152,6 +152,14 @@ export function SalaryVarianceReportWorkspace({
   const visibleRows = filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
   const totalCurrentNet = filteredRows.reduce((sum, row) => sum + row.netPay, 0);
   const totalVariance = filteredRows.reduce((sum, row) => sum + (row.varianceAmount ?? 0), 0);
+  const exportHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (band !== "All") params.set("variance_band", band);
+    params.set("sort", sortBy);
+    return `/api/hr-admin/reports/salary-variance?${params.toString()}`;
+  }, [band, query, sortBy]);
+  const manifestHref = `${exportHref}&format=manifest`;
 
   function updateFilter(action: () => void) {
     action();
@@ -226,6 +234,12 @@ export function SalaryVarianceReportWorkspace({
           <span className="queue-summary-chip">
             <strong>{currentPage}</strong> of {pageCount} pages
           </span>
+          <Link className="button button--secondary" href={exportHref} prefetch={false}>
+            Export filtered CSV
+          </Link>
+          <Link className="button button--ghost" href={manifestHref} prefetch={false}>
+            Manifest
+          </Link>
         </div>
 
         <div className="report-catalog-table-wrap">

@@ -25,6 +25,7 @@ export const reportCatalog: ReportCatalogItem[] = [
     filters: ["Legal entity", "Branch", "Department", "Manager", "Status"],
     exports: ["CSV"],
     status: "Ready",
+    route: "/hr-admin/reports/workforce",
     exportRoute: "/api/hr-admin/reports/workforce",
   },
   {
@@ -93,6 +94,7 @@ export const reportCatalog: ReportCatalogItem[] = [
     exports: ["CSV", "XLSX"],
     status: "Planned",
     route: "/hr-admin/reports/salary-variance",
+    exportRoute: "/api/hr-admin/reports/salary-variance",
   },
   {
     key: "bank-advice",
@@ -102,8 +104,9 @@ export const reportCatalog: ReportCatalogItem[] = [
     description: "Payout-ready employees, bank validation exceptions, and payment handoff state.",
     filters: ["Payroll period", "Bank", "Validation status", "Payment status"],
     exports: ["CSV", "XLSX"],
-    status: "Planned",
-    route: "/hr-admin/payroll-handoff",
+    status: "Ready",
+    route: "/hr-admin/reports/bank-advice",
+    exportRoute: "/api/hr-admin/reports/bank-advice",
   },
   {
     key: "tds-efile-readiness",

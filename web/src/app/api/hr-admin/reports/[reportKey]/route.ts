@@ -2,11 +2,14 @@ import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import type {
+  HrAdminPayrollCalculationLine,
   HrAdminPayrollFinanceHandoffSetupResponse,
   HrAdminPayrollOutputArtifact,
   HrAdminPayrollOutputSetupResponse,
+  HrAdminPayrollReviewSetupResponse,
   HrAdminPayrollStatutoryFilingCalendar,
   HrAdminPayrollStatutorySetupResponse,
+  HrAdminEmployeeListItem,
 } from "@/lib/types";
 
 import {
@@ -126,6 +129,20 @@ function applyExportFilters(reportKey: string, rows: Array<Record<string, unknow
       if (filters.batch_status && row.batch_status !== filters.batch_status) return false;
       if (filters.artifact_status && row.artifact_status !== filters.artifact_status) return false;
     }
+    if (reportKey === "salary-variance") {
+      if (filters.variance_band && row.variance_band !== filters.variance_band) return false;
+    }
+    if (reportKey === "bank-advice") {
+      if (filters.handoff_status && row.handoff_status !== filters.handoff_status) return false;
+      if (filters.delivery_status && row.delivery_status !== filters.delivery_status) return false;
+      if (filters.provider_ref && row.provider_ref !== filters.provider_ref) return false;
+    }
+    if (reportKey === "workforce") {
+      if (filters.employment_status && row.employment_status !== filters.employment_status) return false;
+      if (filters.department && row.department !== filters.department) return false;
+      if (filters.manager_view === "managers" && numberValue(row.direct_reports_count) <= 0) return false;
+      if (filters.manager_view === "needs_reassignment" && row.reporting_manager) return false;
+    }
     return true;
   });
 }
@@ -135,9 +152,15 @@ const COMPLIANCE_SOURCE_ENDPOINTS = [
   "/hr-admin/payroll-finance-handoff-setup/",
 ];
 const PAYROLL_REGISTER_SOURCE_ENDPOINTS = ["/hr-admin/payroll-output-setup/"];
+const SALARY_VARIANCE_SOURCE_ENDPOINTS = ["/hr-admin/payroll-review-setup/"];
+const BANK_ADVICE_SOURCE_ENDPOINTS = ["/hr-admin/payroll-finance-handoff-setup/"];
+const WORKFORCE_SOURCE_ENDPOINTS = ["/hr-admin/employees/"];
 
 function sourceEndpointsForReport(reportKey: string) {
+  if (reportKey === "workforce") return WORKFORCE_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-register") return PAYROLL_REGISTER_SOURCE_ENDPOINTS;
+  if (reportKey === "salary-variance") return SALARY_VARIANCE_SOURCE_ENDPOINTS;
+  if (reportKey === "bank-advice") return BANK_ADVICE_SOURCE_ENDPOINTS;
   return COMPLIANCE_SOURCE_ENDPOINTS;
 }
 
@@ -402,6 +425,163 @@ async function getPayrollRegisterExportRows(reportKey: string, token: string) {
   };
 }
 
+function calculationLineAmount(line: HrAdminPayrollCalculationLine) {
+  return numberValue(line.amount);
+}
+
+function baselineNetPayForLines(lines: HrAdminPayrollCalculationLine[]) {
+  for (const line of lines) {
+    const baseline = line.context_snapshot.previous_net_pay ?? line.context_snapshot.baseline_net_pay ?? line.context_snapshot.prior_period_net_pay;
+    if (baseline !== undefined && baseline !== null && Number.isFinite(Number(baseline))) return Number(baseline);
+  }
+  return null;
+}
+
+async function getSalaryVarianceExportRows(reportKey: string, token: string) {
+  if (reportKey !== "salary-variance") return null;
+
+  const reviewResult = await upstreamJson<HrAdminPayrollReviewSetupResponse>("/hr-admin/payroll-review-setup/", token);
+  if (!reviewResult.ok) return { error: reviewResult };
+
+  const reviewSetup = reviewResult.data;
+  if (!reviewSetup) return { error: { ok: false, status: 502, data: null, detail: "Live salary variance source data is unavailable." } };
+
+  const reviewByCalculationId = new Map(reviewSetup.reviews.map((review) => [review.calculation_id, review]));
+  const grouped = new Map<string, HrAdminPayrollCalculationLine[]>();
+  for (const line of reviewSetup.lines) {
+    const key = `${line.calculation_id}:${line.employee_id}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), line]);
+  }
+
+  return {
+    rows: Array.from(grouped.values()).map((group) => {
+      const first = group[0];
+      const review = reviewByCalculationId.get(first.calculation_id) ?? null;
+      const gross_earnings = group
+        .filter((line) => line.line_type === "earning" || line.line_type === "gross" || calculationLineAmount(line) > 0)
+        .reduce((sum, line) => sum + Math.max(0, calculationLineAmount(line)), 0);
+      const employee_deductions = Math.abs(
+        group
+          .filter((line) => line.line_type === "deduction" || calculationLineAmount(line) < 0)
+          .reduce((sum, line) => sum + calculationLineAmount(line), 0),
+      );
+      const explicitNet = group.find((line) => line.line_type === "net_pay" || line.component_code.toLowerCase() === "net_pay");
+      const current_net_pay = explicitNet ? calculationLineAmount(explicitNet) : gross_earnings - employee_deductions;
+      const baseline_net_pay = baselineNetPayForLines(group);
+      const variance_amount = baseline_net_pay == null ? null : current_net_pay - baseline_net_pay;
+      const variance_percent = baseline_net_pay == null || baseline_net_pay === 0 || variance_amount == null ? null : (variance_amount / baseline_net_pay) * 100;
+      const variance_band =
+        variance_amount == null
+          ? "Baseline pending"
+          : variance_amount > 0
+            ? "Increase"
+            : variance_amount < 0
+              ? "Decrease"
+              : "No change";
+
+      return {
+        employee_code: first.employee_code,
+        employee_name: first.employee_name,
+        payroll_run_name: review?.payroll_run_name ?? first.payroll_run_id,
+        payroll_run_id: first.payroll_run_id,
+        review_id: review?.id ?? "",
+        review_status: review?.status ?? "",
+        calculation_id: first.calculation_id,
+        gross_earnings,
+        employee_deductions,
+        current_net_pay,
+        baseline_net_pay,
+        variance_amount,
+        variance_percent,
+        variance_band,
+        calculation_line_count: group.length,
+        source_hash: first.source_hash,
+      };
+    }),
+  };
+}
+
+async function getBankAdviceExportRows(reportKey: string, token: string) {
+  if (reportKey !== "bank-advice") return null;
+
+  const handoffResult = await upstreamJson<HrAdminPayrollFinanceHandoffSetupResponse>("/hr-admin/payroll-finance-handoff-setup/", token);
+  if (!handoffResult.ok) return { error: handoffResult };
+
+  const handoffSetup = handoffResult.data;
+  if (!handoffSetup) return { error: { ok: false, status: 502, data: null, detail: "Live bank advice source data is unavailable." } };
+
+  const handoffByBatchId = new Map(handoffSetup.handoffs.map((handoff) => [handoff.output_batch_id, handoff]));
+  const deliveryByArtifactId = new Map(handoffSetup.deliveries.map((delivery) => [delivery.output_artifact_id, delivery]));
+  return {
+    rows: handoffSetup.artifacts
+      .filter((artifact) => artifact.kind === "bank_advice")
+      .map((artifact) => {
+        const handoff = handoffByBatchId.get(artifact.output_batch_id) ?? null;
+        const delivery = deliveryByArtifactId.get(artifact.id) ?? null;
+        return {
+          payroll_run_name: handoff?.payroll_run_name ?? artifact.title,
+          payroll_run_id: artifact.payroll_run_id,
+          handoff_id: handoff?.id ?? "",
+          handoff_status: handoff?.status ?? "",
+          bank_file_profile_ref: handoff?.bank_file_profile_ref ?? "",
+          handoff_profile_ref: handoff?.handoff_profile_ref ?? "",
+          artifact_id: artifact.id,
+          artifact_key: artifact.artifact_key,
+          file_name: artifact.file_name,
+          artifact_status: artifact.status,
+          bank_advice_total: numberValue(artifact.totals_snapshot.bank_advice_total ?? artifact.totals_snapshot.net_pay),
+          employee_count: numberValue(artifact.totals_snapshot.employee_count ?? artifact.line_snapshot.length),
+          provider_ref: delivery?.provider_ref ?? "",
+          delivery_status: delivery?.status ?? "pending",
+          external_reference: delivery?.external_reference ?? "",
+          submitted_at: delivery?.submitted_at ?? "",
+          acknowledged_at: delivery?.acknowledged_at ?? "",
+          reconciled_at: delivery?.reconciled_at ?? "",
+          payload_checksum_sha256: delivery?.payload_checksum_sha256 ?? "",
+          checksum_sha256: artifact.checksum_sha256,
+          source_hash: artifact.source_hash,
+        };
+      }),
+  };
+}
+
+async function getWorkforceExportRows(reportKey: string, token: string) {
+  if (reportKey !== "workforce") return null;
+
+  const employeeResult = await upstreamJson<HrAdminEmployeeListItem[]>("/hr-admin/employees/", token);
+  if (!employeeResult.ok) return { error: employeeResult };
+
+  const employees = employeeResult.data;
+  if (!employees) return { error: { ok: false, status: 502, data: null, detail: "Live workforce source data is unavailable." } };
+
+  return {
+    rows: employees.map((item) => ({
+      employee_code: item.employee_code,
+      full_name: item.full_name,
+      work_email: item.work_email,
+      phone_number: item.phone_number,
+      employment_status: item.employment_status,
+      date_of_joining: item.date_of_joining,
+      legal_entity: item.legal_entity,
+      branch: item.branch,
+      location: item.location,
+      business_unit: item.business_unit,
+      department: item.department,
+      cost_center: item.cost_center,
+      designation: item.designation,
+      grade: item.grade,
+      employment_type: item.employment_type,
+      reporting_manager: item.reporting_manager,
+      has_access: item.has_access,
+      membership_status: item.membership_status,
+      assigned_role_count: item.assigned_role_count,
+      direct_reports_count: item.direct_reports_count,
+      manager_coverage_status: item.reporting_manager || item.direct_reports_count > 0 ? "Mapped" : "Needs reassignment",
+      access_coverage_status: item.has_access ? "Provisioned" : "Pending",
+    })),
+  };
+}
+
 async function getDemoRows(reportKey: string) {
   switch (reportKey) {
     case "workforce": {
@@ -551,6 +731,39 @@ export async function GET(request: NextRequest, { params }: Props) {
         }
       }
       return exportResponse(request, reportKey, applyExportFilters(reportKey, payrollRegisterExport.rows, filters), filters, auditContext);
+    }
+
+    const salaryVarianceExport = await getSalaryVarianceExportRows(reportKey, token);
+    if (salaryVarianceExport) {
+      if ("error" in salaryVarianceExport) {
+        const exportError = salaryVarianceExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, salaryVarianceExport.rows, filters), filters, auditContext);
+    }
+
+    const bankAdviceExport = await getBankAdviceExportRows(reportKey, token);
+    if (bankAdviceExport) {
+      if ("error" in bankAdviceExport) {
+        const exportError = bankAdviceExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, bankAdviceExport.rows, filters), filters, auditContext);
+    }
+
+    const workforceExport = await getWorkforceExportRows(reportKey, token);
+    if (workforceExport) {
+      if ("error" in workforceExport) {
+        const exportError = workforceExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, workforceExport.rows, filters), filters, auditContext);
     }
 
     const upstream = await fetch(`${API_BASE_URL}/hr-admin/reports/exports/${reportKey}/`, {
