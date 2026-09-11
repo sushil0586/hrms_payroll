@@ -26,7 +26,9 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await search.fill("");
     await catalog.getByLabel("Owner role").selectOption("Payroll Finance Manager");
     await expect(catalog.getByText("Payroll register")).toBeVisible();
+    await search.fill("tds");
     await expect(catalog.getByText("TDS e-file readiness report")).toBeVisible();
+    await search.fill("");
 
     await catalog.getByLabel("Status").selectOption("Ready");
     await expect(catalog.getByText("Payroll register")).toBeVisible();
@@ -40,11 +42,40 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await expect(catalog.getByText("Statutory deduction summary")).toBeVisible();
 
     await catalog.getByRole("tab", { name: "All" }).click();
-    await expect(catalog.getByText(/of 15/)).toBeVisible();
+    await expect(catalog.getByText(/of 19/)).toBeVisible();
     await catalog.getByRole("button", { name: "Next" }).click();
     await expect(catalog.getByText("Salary variance report")).toBeVisible();
     await catalog.getByRole("button", { name: "Previous" }).click();
     await expect(catalog.getByText("Employee master report")).toBeVisible();
+
+    await search.fill("lifecycle aging");
+    await expect(catalog.getByText("Lifecycle aging and SLA report")).toBeVisible();
+    await search.fill("");
+
+    await search.fill("daily attendance");
+    await expect(catalog.getByText("Daily attendance register")).toBeVisible();
+    await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/attendance-register/);
+    await search.fill("");
+
+    await search.fill("leave balance");
+    await expect(catalog.getByText("Leave balance report")).toBeVisible();
+    await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/leave-balance/);
+    await search.fill("");
+
+    await search.fill("attendance exceptions");
+    await expect(catalog.getByText("Attendance exceptions SLA report")).toBeVisible();
+    await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/attendance-exceptions/);
+    await search.fill("");
+
+    await search.fill("payroll input exceptions");
+    await expect(catalog.getByText("Payroll input exceptions report")).toBeVisible();
+    await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-input-exceptions/);
+    await search.fill("");
+
+    await search.fill("payroll review exceptions");
+    await expect(catalog.getByText("Payroll review exceptions report")).toBeVisible();
+    await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-review-exceptions/);
+    await search.fill("");
 
     await expect(catalog.getByRole("link", { name: "Export" }).first()).toHaveAttribute("href", /\/api\/hr-admin\/reports\//);
     const workforceExport = await page.request.get("/api/hr-admin/reports/workforce");

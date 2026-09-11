@@ -21,6 +21,22 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
       "/api/hr-admin/reports/bank-advice?sort=delivery_status&format=manifest",
       "/api/hr-admin/reports/workforce?sort=name",
       "/api/hr-admin/reports/workforce?sort=name&format=manifest",
+      "/api/hr-admin/reports/document-compliance?sort=risk",
+      "/api/hr-admin/reports/document-compliance?sort=risk&format=manifest",
+      "/api/hr-admin/reports/lifecycle-queue?sort=attention",
+      "/api/hr-admin/reports/lifecycle-queue?sort=attention&format=manifest",
+      "/api/hr-admin/reports/lifecycle-aging?sort=overdue",
+      "/api/hr-admin/reports/lifecycle-aging?sort=overdue&format=manifest",
+      "/api/hr-admin/reports/attendance-register?sort=date_desc",
+      "/api/hr-admin/reports/attendance-register?sort=date_desc&format=manifest",
+      "/api/hr-admin/reports/leave-balance?sort=risk",
+      "/api/hr-admin/reports/leave-balance?sort=risk&format=manifest",
+      "/api/hr-admin/reports/attendance-exceptions?sort=aging",
+      "/api/hr-admin/reports/attendance-exceptions?sort=aging&format=manifest",
+      "/api/hr-admin/reports/payroll-input-exceptions?sort=risk",
+      "/api/hr-admin/reports/payroll-input-exceptions?sort=risk&format=manifest",
+      "/api/hr-admin/reports/payroll-review-exceptions?sort=risk",
+      "/api/hr-admin/reports/payroll-review-exceptions?sort=risk&format=manifest",
     ];
     for (const path of exportPaths) {
       const response = await page.request.get(path);
@@ -74,6 +90,46 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
         key: "workforce",
         source: "/hr-admin/employees/",
         evidence: "manager_coverage_status",
+      },
+      {
+        key: "document-compliance",
+        source: "/hr-admin/employee-documents/",
+        evidence: "compliance_risk",
+      },
+      {
+        key: "lifecycle-queue",
+        source: "/hr-admin/lifecycle-queue/",
+        evidence: "lifecycle_risk",
+      },
+      {
+        key: "lifecycle-aging",
+        source: "/hr-admin/lifecycle-queue/",
+        evidence: "sla_risk",
+      },
+      {
+        key: "attendance-register",
+        source: "/hr-admin/attendance-records/",
+        evidence: "payroll_readiness",
+      },
+      {
+        key: "leave-balance",
+        source: "/hr-admin/leave-balances/",
+        evidence: "liability_risk",
+      },
+      {
+        key: "attendance-exceptions",
+        source: "/hr-admin/attendance-regularizations/",
+        evidence: "payroll_impact",
+      },
+      {
+        key: "payroll-input-exceptions",
+        source: "/hr-admin/payroll-input-snapshot-setup/",
+        evidence: "readiness_risk",
+      },
+      {
+        key: "payroll-review-exceptions",
+        source: "/hr-admin/payroll-review-setup/",
+        evidence: "review_exception_risk",
       },
     ];
 

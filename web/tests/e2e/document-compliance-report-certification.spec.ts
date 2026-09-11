@@ -1,0 +1,125 @@
+import { expect, test } from "@playwright/test";
+
+import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+
+test.describe("Phase R2-B document compliance report certification", () => {
+  test("HR admin can certify document compliance filters, pagination, export evidence, and review drilldown", async ({ page }) => {
+    await gotoAuthenticated(page, "/hr-admin/reports/document-compliance", hrAdmin);
+    await expectPageReady(page, "Document Compliance Report");
+
+    const report = page.getByTestId("document-compliance-report");
+    await expect(report).toBeVisible();
+    for (const column of ["Employee", "Document", "Verification", "Expiry", "Evidence", "Risk", "Actions"]) {
+      await expect(report.getByRole("columnheader", { name: column })).toBeVisible();
+    }
+
+    for (const metric of ["Documents", "Pending verification", "Expiry risk", "Re-upload requests"]) {
+      await expect(report.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+    }
+
+    const search = report.getByPlaceholder("Search employee, category, title, number");
+    await search.fill("no-such-document-compliance-row");
+    await expect(report.getByText("No document compliance rows match the selected filters.")).toBeVisible();
+    await search.fill("");
+
+    const verificationOptions = await report.getByLabel("Verification status").locator("option").count();
+    if (verificationOptions > 1) {
+      await report.getByLabel("Verification status").selectOption({ index: 1 });
+      await expect(report.getByText(/Showing|No document compliance rows/).first()).toBeVisible();
+      await report.getByLabel("Verification status").selectOption("All");
+    }
+
+    const recordOptions = await report.getByLabel("Record status").locator("option").count();
+    if (recordOptions > 1) {
+      await report.getByLabel("Record status").selectOption({ index: 1 });
+      await expect(report.getByText(/Showing|No document compliance rows/).first()).toBeVisible();
+      await report.getByLabel("Record status").selectOption("All");
+    }
+
+    const categoryOptions = await report.getByLabel("Category").locator("option").count();
+    if (categoryOptions > 1) {
+      await report.getByLabel("Category").selectOption({ index: 1 });
+      await expect(report.getByText(/Showing|No document compliance rows/).first()).toBeVisible();
+      await report.getByLabel("Category").selectOption("All");
+    }
+
+    for (const expiryFocus of ["expiring", "expired", "missing_expiry", "All"]) {
+      await report.getByLabel("Expiry focus").selectOption(expiryFocus);
+      await expect(report.getByText(/Showing|No document compliance rows/).first()).toBeVisible();
+    }
+
+    for (const sort of ["employee", "verification", "expiry", "category", "risk"]) {
+      await report.getByLabel("Sort").selectOption(sort);
+      await expect(report.getByText(/Showing|No document compliance rows/).first()).toBeVisible();
+    }
+
+    const filteredExportLink = report.getByRole("link", { name: "Export filtered CSV" });
+    await expect(filteredExportLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/document-compliance\?.*sort=risk/);
+    const filteredExportHref = await filteredExportLink.getAttribute("href");
+    expect(filteredExportHref).toBeTruthy();
+    const filteredExportResponse = await page.request.get(filteredExportHref ?? "");
+    expect(filteredExportResponse.status()).toBe(200);
+    expect(filteredExportResponse.headers()["content-type"]).toContain("text/csv");
+    expect(filteredExportResponse.headers()["x-hrms-report-key"]).toBe("document-compliance");
+    expect(filteredExportResponse.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(filteredExportResponse.headers()["x-hrms-source-row-count"]).toMatch(/^\d+$/);
+    const filteredExportBody = await filteredExportResponse.text();
+    expect(filteredExportBody).toContain("employee_code");
+    expect(filteredExportBody).toContain("verification_status");
+    expect(filteredExportBody).toContain("compliance_risk");
+
+    const manifestHref = await report.getByRole("link", { name: "Manifest" }).getAttribute("href");
+    expect(manifestHref).toBeTruthy();
+    const manifestResponse = await page.request.get(manifestHref ?? "");
+    expect(manifestResponse.status()).toBe(200);
+    expect(manifestResponse.headers()["content-type"]).toContain("application/json");
+    expect(manifestResponse.headers()["x-hrms-report-key"]).toBe("document-compliance");
+    const manifest = await manifestResponse.json();
+    expect(manifest.export_schema_version).toBe("hrms.report.export.manifest.v1");
+    expect(manifest.source_endpoints).toContain("/hr-admin/employee-documents/");
+    expect(manifest.evidence_columns).toContain("employee_code");
+    expect(manifest.evidence_columns).toContain("verification_status");
+    expect(manifest.evidence_columns).toContain("compliance_risk");
+
+    const auditResponse = await page.request.get("/api/hr-admin/reports/export-audits?report_key=document-compliance");
+    expect(auditResponse.status()).toBe(200);
+    const auditPayload = await auditResponse.json();
+    expect(auditPayload.items.length).toBeGreaterThanOrEqual(2);
+    expect(auditPayload.items.some((item: { export_type: string }) => item.export_type === "csv")).toBeTruthy();
+    expect(auditPayload.items.some((item: { export_type: string }) => item.export_type === "manifest")).toBeTruthy();
+    expect(auditPayload.items[0].source_endpoints).toContain("/hr-admin/employee-documents/");
+
+    await expect(report.locator(".pagination-bar")).toBeVisible();
+    await expect(report.getByRole("button", { name: "Previous" })).toBeVisible();
+    await expect(report.getByRole("button", { name: "Next" })).toBeVisible();
+
+    const reviewLink = report.getByRole("link", { name: "Review" }).first();
+    if ((await reviewLink.count()) > 0) {
+      await expect(reviewLink).toHaveAttribute("href", /\/hr-admin\/employee-documents\/.+\/review/);
+      await reviewLink.click();
+      await expect(page).toHaveURL(/\/hr-admin\/employee-documents\/.+\/review/);
+      await expectPageReady(page, "Review employee document");
+      await expectNoHorizontalOverflow(page);
+    } else {
+      await expect(report.getByText("No document compliance rows match the selected filters.")).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+    }
+  });
+
+  test("employee cannot access document compliance report or exports", async ({ page }) => {
+    await gotoAuthenticated(page, "/ess", employee);
+    await expectPageReady(page, "Self Service");
+
+    await page.goto("/hr-admin/reports/document-compliance", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+    await expect(page.getByTestId("document-compliance-report")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+
+    const csvResponse = await page.request.get("/api/hr-admin/reports/document-compliance?sort=risk");
+    expect([401, 403]).toContain(csvResponse.status());
+    const manifestResponse = await page.request.get("/api/hr-admin/reports/document-compliance?sort=risk&format=manifest");
+    expect([401, 403]).toContain(manifestResponse.status());
+  });
+});

@@ -3,20 +3,33 @@ import { NextRequest, NextResponse } from "next/server";
 
 import type {
   HrAdminPayrollCalculationLine,
+  HrAdminAttendanceRecordListResponse,
+  HrAdminAttendanceRegularizationListResponse,
+  HrAdminLeaveBalance,
   HrAdminPayrollFinanceHandoffSetupResponse,
+  HrAdminPayrollInputSnapshot,
+  HrAdminPayrollInputSnapshotSetupResponse,
   HrAdminPayrollOutputArtifact,
   HrAdminPayrollOutputSetupResponse,
   HrAdminPayrollReviewSetupResponse,
   HrAdminPayrollStatutoryFilingCalendar,
   HrAdminPayrollStatutorySetupResponse,
   HrAdminEmployeeListItem,
+  HrAdminEmployeeDocumentListResponse,
+  HrAdminLifecycleQueueItem,
+  HrAdminLifecycleQueueListResponse,
 } from "@/lib/types";
 
 import {
+  getHrAdminAttendanceRecords,
+  getHrAdminAttendanceRegularizations,
   getHrAdminEmployeeDocuments,
   getHrAdminEmployees,
   getHrAdminLifecycleQueue,
+  getHrAdminLeaveBalances,
   getHrAdminNotifications,
+  getHrAdminPayrollInputSnapshotSetup,
+  getHrAdminPayrollReviewSetup,
   getMssApprovalInbox,
 } from "@/lib/api";
 import { actorTokenHash, appendBackendReportExportAudit, appendReportExportAudit, type ReportExportAuditInput } from "@/lib/report-export-audit-store";
@@ -34,19 +47,241 @@ type ExportAuditContext = {
   request: NextRequest;
 };
 
-function toCsv(rows: Array<Record<string, unknown>>) {
-  if (!rows.length) {
+const REPORT_EVIDENCE_COLUMNS: Record<string, string[]> = {
+  "document-compliance": [
+    "employee_code",
+    "employee_name",
+    "category",
+    "title",
+    "document_number",
+    "file_name",
+    "mime_type",
+    "file_size_bytes",
+    "status",
+    "verification_status",
+    "issued_on",
+    "expires_on",
+    "expiry_state",
+    "expiry_label",
+    "days_until_expiry",
+    "is_expired",
+    "is_expiring_soon",
+    "reupload_requested",
+    "uploaded_by_identifier",
+    "verified_by_identifier",
+    "verified_at",
+    "rejection_reason",
+    "version_number",
+    "review_history_count",
+    "artifact_available",
+    "compliance_risk",
+  ],
+  "lifecycle-queue": [
+    "item_type",
+    "item_label",
+    "employee_code",
+    "employee_name",
+    "status",
+    "status_label",
+    "primary_date_label",
+    "primary_date",
+    "secondary_date_label",
+    "secondary_date",
+    "owner_value",
+    "owner_label",
+    "workflow_reference",
+    "summary",
+    "detail_href",
+    "document_attention_state",
+    "document_attention_summary",
+    "missing_required_document_count",
+    "future_due_document_count",
+    "expired_document_count",
+    "expiring_document_count",
+    "attention_state",
+    "attention_rank",
+    "attention_item_count",
+    "attention_summary",
+    "attention_due_on",
+    "next_due_on",
+    "next_escalation_on",
+    "bulk_status_warning",
+    "created_at",
+    "lifecycle_risk",
+  ],
+  "lifecycle-aging": [
+    "item_type",
+    "item_label",
+    "employee_code",
+    "employee_name",
+    "status",
+    "status_label",
+    "owner_value",
+    "owner_label",
+    "workflow_reference",
+    "created_at",
+    "primary_date_label",
+    "primary_date",
+    "next_due_on",
+    "next_escalation_on",
+    "age_days",
+    "age_bucket",
+    "days_overdue",
+    "sla_state",
+    "sla_risk",
+    "owner_gap",
+    "document_blocker_count",
+    "document_attention_state",
+    "attention_rank",
+    "attention_summary",
+    "detail_href",
+  ],
+  "attendance-register": [
+    "employee_code",
+    "employee_name",
+    "department",
+    "designation",
+    "attendance_date",
+    "status",
+    "source",
+    "shift",
+    "holiday",
+    "check_in_at",
+    "check_out_at",
+    "work_duration_hours",
+    "overtime_hours",
+    "late_minutes",
+    "early_exit_minutes",
+    "is_regularized",
+    "is_locked",
+    "exception_type",
+    "payroll_readiness",
+    "notes",
+    "detail_href",
+  ],
+  "leave-balance": [
+    "employee_code",
+    "employee_name",
+    "leave_policy_name",
+    "leave_type_name",
+    "period_year",
+    "opening_balance",
+    "accrued_amount",
+    "carry_forward_amount",
+    "consumed_amount",
+    "reserved_amount",
+    "encashed_amount",
+    "adjustment_amount",
+    "closing_balance",
+    "available_after_reserved",
+    "utilization_percent",
+    "liability_state",
+    "liability_risk",
+  ],
+  "attendance-exceptions": [
+    "employee_code",
+    "employee_name",
+    "department",
+    "designation",
+    "attendance_date",
+    "current_status",
+    "requested_status",
+    "status",
+    "shift",
+    "actual_check_in_at",
+    "actual_check_out_at",
+    "requested_check_in_at",
+    "requested_check_out_at",
+    "reason",
+    "manager_comment",
+    "workflow_reference",
+    "applied_at",
+    "resolved_at",
+    "aging_days",
+    "sla_state",
+    "sla_risk",
+    "payroll_impact",
+    "detail_href",
+  ],
+  "payroll-input-exceptions": [
+    "employee_code",
+    "employee_name",
+    "payroll_run_name",
+    "payroll_run_id",
+    "run_status",
+    "pay_group_name",
+    "salary_structure_name",
+    "salary_structure_version",
+    "snapshot_status",
+    "issue_type",
+    "readiness_risk",
+    "blocker_count",
+    "warning_count",
+    "issue_count",
+    "lock_state",
+    "locked_at",
+    "period_start",
+    "period_end",
+    "attendance_present_days",
+    "attendance_working_days",
+    "attendance_days",
+    "input_profile_ref",
+    "source_collected_at",
+    "source_hash",
+    "first_blocker",
+    "first_warning",
+    "detail_href",
+  ],
+  "payroll-review-exceptions": [
+    "payroll_run_name",
+    "payroll_run_id",
+    "review_id",
+    "review_status",
+    "review_profile_ref",
+    "exception_id",
+    "employee_code",
+    "employee_name",
+    "component_code",
+    "category",
+    "severity",
+    "severity_label",
+    "status",
+    "status_label",
+    "title",
+    "detail",
+    "decision_state",
+    "decision_reason",
+    "decided_at",
+    "decided_by_name",
+    "calculation_line_id",
+    "input_snapshot_id",
+    "exception_age_days",
+    "review_exception_risk",
+    "detail_href",
+  ],
+};
+
+function evidenceColumnsForReport(reportKey: string, rows: Array<Record<string, unknown>>) {
+  return Object.keys(rows[0] ?? {}).length ? Object.keys(rows[0] ?? {}) : REPORT_EVIDENCE_COLUMNS[reportKey] ?? [];
+}
+
+function toCsv(rows: Array<Record<string, unknown>>, headers?: string[]) {
+  const csvHeaders = headers?.length ? headers : Object.keys(rows[0] ?? {});
+  if (!csvHeaders.length) {
     return "message\nNo data available\n";
   }
+  if (!rows.length) {
+    const escapeHeader = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    return `${csvHeaders.map(escapeHeader).join(",")}\n`;
+  }
 
-  const headers = Object.keys(rows[0]);
   const escapeValue = (value: unknown) => {
     const raw = value == null ? "" : String(value);
     return `"${raw.replace(/"/g, '""')}"`;
   };
 
-  const headerLine = headers.map(escapeValue).join(",");
-  const lines = rows.map((row) => headers.map((header) => escapeValue(row[header])).join(","));
+  const headerLine = csvHeaders.map(escapeValue).join(",");
+  const lines = rows.map((row) => csvHeaders.map((header) => escapeValue(row[header])).join(","));
   return [headerLine, ...lines].join("\n");
 }
 
@@ -143,6 +378,67 @@ function applyExportFilters(reportKey: string, rows: Array<Record<string, unknow
       if (filters.manager_view === "managers" && numberValue(row.direct_reports_count) <= 0) return false;
       if (filters.manager_view === "needs_reassignment" && row.reporting_manager) return false;
     }
+    if (reportKey === "document-compliance") {
+      if (filters.verification_status && row.verification_status !== filters.verification_status) return false;
+      if (filters.status && row.status !== filters.status) return false;
+      if (filters.category && row.category !== filters.category) return false;
+      if (filters.expiry_focus === "expiring" && row.is_expiring_soon !== true) return false;
+      if (filters.expiry_focus === "expired" && row.is_expired !== true) return false;
+      if (filters.expiry_focus === "missing_expiry" && row.expires_on) return false;
+    }
+    if (reportKey === "lifecycle-queue") {
+      if (filters.item_type && row.item_type !== filters.item_type) return false;
+      if (filters.status && row.status !== filters.status) return false;
+      if (filters.owner && row.owner_value !== filters.owner) return false;
+      if (filters.attention_state && row.attention_state !== filters.attention_state) return false;
+      if (filters.document_attention_state && row.document_attention_state !== filters.document_attention_state) return false;
+    }
+    if (reportKey === "lifecycle-aging") {
+      if (filters.item_type && row.item_type !== filters.item_type) return false;
+      if (filters.status && row.status !== filters.status) return false;
+      if (filters.owner && row.owner_value !== filters.owner) return false;
+      if (filters.age_bucket && row.age_bucket !== filters.age_bucket) return false;
+      if (filters.sla_risk && row.sla_risk !== filters.sla_risk) return false;
+      if (filters.escalation === "scheduled" && !row.next_escalation_on) return false;
+      if (filters.escalation === "missing" && row.next_escalation_on) return false;
+    }
+    if (reportKey === "attendance-register") {
+      if (filters.status && row.status !== filters.status) return false;
+      if (filters.source && row.source !== filters.source) return false;
+      if (filters.department && row.department !== filters.department) return false;
+      if (filters.lock_state === "locked" && row.is_locked !== true) return false;
+      if (filters.lock_state === "unlocked" && row.is_locked !== false) return false;
+      if (filters.regularized_state === "regularized" && row.is_regularized !== true) return false;
+      if (filters.regularized_state === "pending" && row.is_regularized !== false) return false;
+      if (filters.exception_type && row.exception_type !== filters.exception_type) return false;
+    }
+    if (reportKey === "leave-balance") {
+      if (filters.leave_policy && row.leave_policy_name !== filters.leave_policy) return false;
+      if (filters.leave_type && row.leave_type_name !== filters.leave_type) return false;
+      if (filters.period_year && String(row.period_year) !== filters.period_year) return false;
+      if (filters.liability_risk && row.liability_risk !== filters.liability_risk) return false;
+    }
+    if (reportKey === "attendance-exceptions") {
+      if (filters.status && row.status !== filters.status) return false;
+      if (filters.requested_status && row.requested_status !== filters.requested_status) return false;
+      if (filters.current_status && row.current_status !== filters.current_status) return false;
+      if (filters.sla_risk && row.sla_risk !== filters.sla_risk) return false;
+      if (filters.payroll_impact && row.payroll_impact !== filters.payroll_impact) return false;
+    }
+    if (reportKey === "payroll-input-exceptions") {
+      if (filters.payroll_run_id && row.payroll_run_id !== filters.payroll_run_id) return false;
+      if (filters.snapshot_status && row.snapshot_status !== filters.snapshot_status) return false;
+      if (filters.pay_group && row.pay_group_name !== filters.pay_group) return false;
+      if (filters.lock_state && row.lock_state !== filters.lock_state) return false;
+      if (filters.issue_type && row.issue_type !== filters.issue_type) return false;
+    }
+    if (reportKey === "payroll-review-exceptions") {
+      if (filters.payroll_run_id && row.payroll_run_id !== filters.payroll_run_id) return false;
+      if (filters.severity && row.severity !== filters.severity) return false;
+      if (filters.status && row.status !== filters.status) return false;
+      if (filters.category && row.category !== filters.category) return false;
+      if (filters.decision_state && row.decision_state !== filters.decision_state) return false;
+    }
     return true;
   });
 }
@@ -155,9 +451,23 @@ const PAYROLL_REGISTER_SOURCE_ENDPOINTS = ["/hr-admin/payroll-output-setup/"];
 const SALARY_VARIANCE_SOURCE_ENDPOINTS = ["/hr-admin/payroll-review-setup/"];
 const BANK_ADVICE_SOURCE_ENDPOINTS = ["/hr-admin/payroll-finance-handoff-setup/"];
 const WORKFORCE_SOURCE_ENDPOINTS = ["/hr-admin/employees/"];
+const DOCUMENT_COMPLIANCE_SOURCE_ENDPOINTS = ["/hr-admin/employee-documents/"];
+const LIFECYCLE_QUEUE_SOURCE_ENDPOINTS = ["/hr-admin/lifecycle-queue/"];
+const ATTENDANCE_REGISTER_SOURCE_ENDPOINTS = ["/hr-admin/attendance-records/"];
+const LEAVE_BALANCE_SOURCE_ENDPOINTS = ["/hr-admin/leave-balances/"];
+const ATTENDANCE_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/attendance-regularizations/"];
+const PAYROLL_INPUT_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-input-snapshot-setup/"];
+const PAYROLL_REVIEW_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-review-setup/"];
 
 function sourceEndpointsForReport(reportKey: string) {
   if (reportKey === "workforce") return WORKFORCE_SOURCE_ENDPOINTS;
+  if (reportKey === "document-compliance") return DOCUMENT_COMPLIANCE_SOURCE_ENDPOINTS;
+  if (reportKey === "lifecycle-queue" || reportKey === "lifecycle-aging") return LIFECYCLE_QUEUE_SOURCE_ENDPOINTS;
+  if (reportKey === "attendance-register") return ATTENDANCE_REGISTER_SOURCE_ENDPOINTS;
+  if (reportKey === "leave-balance") return LEAVE_BALANCE_SOURCE_ENDPOINTS;
+  if (reportKey === "attendance-exceptions") return ATTENDANCE_EXCEPTIONS_SOURCE_ENDPOINTS;
+  if (reportKey === "payroll-input-exceptions") return PAYROLL_INPUT_EXCEPTIONS_SOURCE_ENDPOINTS;
+  if (reportKey === "payroll-review-exceptions") return PAYROLL_REVIEW_EXCEPTIONS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-register") return PAYROLL_REGISTER_SOURCE_ENDPOINTS;
   if (reportKey === "salary-variance") return SALARY_VARIANCE_SOURCE_ENDPOINTS;
   if (reportKey === "bank-advice") return BANK_ADVICE_SOURCE_ENDPOINTS;
@@ -188,6 +498,7 @@ async function recordExportAudit({
   sourceEndpoints: string[];
 }) {
   if (!auditContext) return;
+  const evidenceColumns = evidenceColumnsForReport(reportKey, rows);
   const auditRecord: ReportExportAuditInput = {
     tenant_ref: "current-workspace",
     actor_display: auditContext.actorDisplay || "HR admin",
@@ -199,7 +510,7 @@ async function recordExportAudit({
     checksum_sha256: checksum,
     content_type: contentType,
     source_endpoints: sourceEndpoints,
-    evidence_columns: Object.keys(rows[0] ?? {}),
+    evidence_columns: evidenceColumns,
     request_identifier: requestIdentifier(auditContext.request),
     user_agent: auditContext.request.headers.get("user-agent") || "",
   };
@@ -211,7 +522,8 @@ async function recordExportAudit({
 }
 
 async function reportResponse(reportKey: string, rows: Array<Record<string, unknown>>, filters: ExportFilters = {}, auditContext?: ExportAuditContext) {
-  const csv = toCsv(rows);
+  const evidenceColumns = evidenceColumnsForReport(reportKey, rows);
+  const csv = toCsv(rows, evidenceColumns);
   const filterSnapshot = JSON.stringify(filters);
   const checksum = createHash("sha256").update(csv).digest("hex");
   const sourceEndpoints = sourceEndpointsForReport(reportKey);
@@ -240,7 +552,8 @@ async function reportResponse(reportKey: string, rows: Array<Record<string, unkn
 }
 
 async function manifestResponse(reportKey: string, rows: Array<Record<string, unknown>>, filters: ExportFilters = {}, auditContext?: ExportAuditContext) {
-  const csv = toCsv(rows);
+  const evidenceColumns = evidenceColumnsForReport(reportKey, rows);
+  const csv = toCsv(rows, evidenceColumns);
   const checksum = createHash("sha256").update(csv).digest("hex");
   const sourceEndpoints = sourceEndpointsForReport(reportKey);
   await recordExportAudit({
@@ -263,7 +576,7 @@ async function manifestResponse(reportKey: string, rows: Array<Record<string, un
       csv_checksum_sha256: checksum,
       csv_content_type: "text/csv",
       source_endpoints: sourceEndpoints,
-      evidence_columns: Object.keys(rows[0] ?? {}),
+      evidence_columns: evidenceColumns,
     },
     {
       headers: {
@@ -582,6 +895,495 @@ async function getWorkforceExportRows(reportKey: string, token: string) {
   };
 }
 
+async function getDocumentComplianceExportRows(reportKey: string, token: string) {
+  if (reportKey !== "document-compliance") return null;
+
+  const documentResult = await upstreamJson<HrAdminEmployeeDocumentListResponse>("/hr-admin/employee-documents/?page=1&page_size=500", token);
+  if (!documentResult.ok) return { error: documentResult };
+
+  const documents = documentResult.data;
+  if (!documents) return { error: { ok: false, status: 502, data: null, detail: "Live document compliance source data is unavailable." } };
+
+  return {
+    rows: documents.items.map((item) => ({
+      employee_code: item.employee_code,
+      employee_name: item.employee_name,
+      category: item.category_name,
+      title: item.title,
+      document_number: item.document_number,
+      file_name: item.file_name,
+      mime_type: item.mime_type,
+      file_size_bytes: item.file_size_bytes,
+      status: item.status,
+      verification_status: item.verification_status,
+      issued_on: item.issued_on,
+      expires_on: item.expires_on,
+      expiry_state: item.expiry_state,
+      expiry_label: item.expiry_label,
+      days_until_expiry: item.days_until_expiry,
+      is_expired: item.is_expired,
+      is_expiring_soon: item.is_expiring_soon,
+      reupload_requested: item.reupload_requested,
+      uploaded_by_identifier: item.uploaded_by_identifier,
+      verified_by_identifier: item.verified_by_identifier,
+      verified_at: item.verified_at,
+      rejection_reason: item.rejection_reason,
+      version_number: item.version_number,
+      review_history_count: item.review_history.length,
+      artifact_available: Boolean(item.artifact_id),
+      compliance_risk:
+        item.is_expired || item.verification_status === "rejected"
+          ? "High"
+          : item.is_expiring_soon || item.verification_status === "pending"
+            ? "Medium"
+            : "Low",
+    })),
+  };
+}
+
+function lifecycleRisk(item: { attention_rank: number; document_attention_state: string; bulk_status_warning: string }) {
+  if (item.attention_rank >= 80 || item.document_attention_state === "blocked" || item.bulk_status_warning) return "High";
+  if (item.attention_rank >= 40 || item.document_attention_state === "warning" || item.document_attention_state === "upcoming") return "Medium";
+  return "Low";
+}
+
+function dateOnly(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function daysSince(value: string | null | undefined) {
+  const date = dateOnly(value);
+  if (!date) return 0;
+  const today = dateOnly(new Date().toISOString()) ?? new Date();
+  return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86_400_000));
+}
+
+function daysOverdue(value: string | null | undefined) {
+  const date = dateOnly(value);
+  if (!date) return 0;
+  const today = dateOnly(new Date().toISOString()) ?? new Date();
+  return Math.max(0, Math.floor((today.getTime() - date.getTime()) / 86_400_000));
+}
+
+function lifecycleAgeBucket(ageDays: number) {
+  if (ageDays >= 30) return "30+ days";
+  if (ageDays >= 15) return "15-29 days";
+  if (ageDays >= 8) return "8-14 days";
+  return "0-7 days";
+}
+
+function lifecycleSlaState(item: HrAdminLifecycleQueueItem) {
+  const overdue = daysOverdue(item.next_due_on ?? item.attention_due_on);
+  if (overdue > 0) return "Overdue";
+  if (item.next_escalation_on) return "Escalation scheduled";
+  if (!item.owner_value) return "Owner missing";
+  if (item.document_attention_state === "blocked") return "Document blocked";
+  return "On track";
+}
+
+function lifecycleSlaRisk(item: HrAdminLifecycleQueueItem) {
+  const overdue = daysOverdue(item.next_due_on ?? item.attention_due_on);
+  if (overdue >= 3 || item.document_attention_state === "blocked" || !item.owner_value) return "High";
+  if (overdue > 0 || item.next_escalation_on || item.attention_rank >= 40 || item.document_attention_state === "warning") return "Medium";
+  return "Low";
+}
+
+async function getLifecycleQueueExportRows(reportKey: string, token: string) {
+  if (reportKey !== "lifecycle-queue" && reportKey !== "lifecycle-aging") return null;
+
+  const lifecycleResult = await upstreamJson<HrAdminLifecycleQueueListResponse>("/hr-admin/lifecycle-queue/?page=1&page_size=500", token);
+  if (!lifecycleResult.ok) return { error: lifecycleResult };
+
+  const lifecycle = lifecycleResult.data;
+  if (!lifecycle) return { error: { ok: false, status: 502, data: null, detail: "Live lifecycle queue source data is unavailable." } };
+
+  if (reportKey === "lifecycle-aging") {
+    return {
+      rows: lifecycle.items.map((item) => {
+        const ageDays = daysSince(item.created_at);
+        const overdue = daysOverdue(item.next_due_on ?? item.attention_due_on);
+        return {
+          item_type: item.item_type,
+          item_label: item.item_label,
+          employee_code: item.employee_code,
+          employee_name: item.employee_name,
+          status: item.status,
+          status_label: item.status_label,
+          owner_value: item.owner_value,
+          owner_label: item.owner_label,
+          workflow_reference: item.workflow_reference,
+          created_at: item.created_at,
+          primary_date_label: item.primary_date_label,
+          primary_date: item.primary_date,
+          next_due_on: item.next_due_on,
+          next_escalation_on: item.next_escalation_on,
+          age_days: ageDays,
+          age_bucket: lifecycleAgeBucket(ageDays),
+          days_overdue: overdue,
+          sla_state: lifecycleSlaState(item),
+          sla_risk: lifecycleSlaRisk(item),
+          owner_gap: !item.owner_value,
+          document_blocker_count: item.missing_required_document_count + item.expired_document_count,
+          document_attention_state: item.document_attention_state,
+          attention_rank: item.attention_rank,
+          attention_summary: item.attention_summary,
+          detail_href: item.detail_href,
+        };
+      }),
+    };
+  }
+
+  return {
+    rows: lifecycle.items.map((item) => ({
+      item_type: item.item_type,
+      item_label: item.item_label,
+      employee_code: item.employee_code,
+      employee_name: item.employee_name,
+      status: item.status,
+      status_label: item.status_label,
+      primary_date_label: item.primary_date_label,
+      primary_date: item.primary_date,
+      secondary_date_label: item.secondary_date_label,
+      secondary_date: item.secondary_date,
+      owner_value: item.owner_value,
+      owner_label: item.owner_label,
+      workflow_reference: item.workflow_reference,
+      summary: item.summary,
+      detail_href: item.detail_href,
+      document_attention_state: item.document_attention_state,
+      document_attention_summary: item.document_attention_summary,
+      missing_required_document_count: item.missing_required_document_count,
+      future_due_document_count: item.future_due_document_count,
+      expired_document_count: item.expired_document_count,
+      expiring_document_count: item.expiring_document_count,
+      attention_state: item.attention_state,
+      attention_rank: item.attention_rank,
+      attention_item_count: item.attention_item_count,
+      attention_summary: item.attention_summary,
+      attention_due_on: item.attention_due_on,
+      next_due_on: item.next_due_on,
+      next_escalation_on: item.next_escalation_on,
+      bulk_status_warning: item.bulk_status_warning,
+      created_at: item.created_at,
+      lifecycle_risk: lifecycleRisk(item),
+    })),
+  };
+}
+
+function attendanceExceptionType(item: {
+  late_minutes: number;
+  early_exit_minutes: number;
+  status: string;
+  is_regularized: boolean;
+}) {
+  if (item.status === "absent") return "Absent";
+  if (item.late_minutes > 0 && item.early_exit_minutes > 0) return "Late and early exit";
+  if (item.late_minutes > 0) return "Late";
+  if (item.early_exit_minutes > 0) return "Early exit";
+  if (item.is_regularized) return "Regularized";
+  return "Clear";
+}
+
+function attendancePayrollReadiness(item: {
+  is_locked: boolean;
+  status: string;
+  late_minutes: number;
+  early_exit_minutes: number;
+  is_regularized: boolean;
+}) {
+  if (!item.is_locked) return "Open";
+  if (item.status === "absent" || item.late_minutes > 0 || item.early_exit_minutes > 0) {
+    return item.is_regularized ? "Ready with regularization" : "Exception review";
+  }
+  return "Ready";
+}
+
+async function getAttendanceRegisterExportRows(reportKey: string, token: string) {
+  if (reportKey !== "attendance-register") return null;
+
+  const attendanceResult = await upstreamJson<HrAdminAttendanceRecordListResponse>("/hr-admin/attendance-records/?page=1&page_size=500", token);
+  if (!attendanceResult.ok) return { error: attendanceResult };
+
+  const attendance = attendanceResult.data;
+  if (!attendance) return { error: { ok: false, status: 502, data: null, detail: "Live attendance record source data is unavailable." } };
+
+  return {
+    rows: attendance.items.map((item) => ({
+      employee_code: item.employee_code,
+      employee_name: item.employee_name,
+      department: item.department,
+      designation: item.designation,
+      attendance_date: item.attendance_date,
+      status: item.status,
+      source: item.source,
+      shift: item.shift,
+      holiday: item.holiday,
+      check_in_at: item.check_in_at,
+      check_out_at: item.check_out_at,
+      work_duration_hours: item.work_duration_hours,
+      overtime_hours: item.overtime_hours,
+      late_minutes: item.late_minutes,
+      early_exit_minutes: item.early_exit_minutes,
+      is_regularized: item.is_regularized,
+      is_locked: item.is_locked,
+      exception_type: attendanceExceptionType(item),
+      payroll_readiness: attendancePayrollReadiness(item),
+      notes: item.notes,
+      detail_href: `/hr-admin/attendance-records/${item.id}/edit`,
+    })),
+  };
+}
+
+function availableLeaveUnits(item: HrAdminLeaveBalance) {
+  return Number(item.closing_balance) - Number(item.reserved_amount);
+}
+
+function leaveUtilizationPercent(item: HrAdminLeaveBalance) {
+  const earned = Number(item.opening_balance) + Number(item.accrued_amount) + Number(item.carry_forward_amount) + Number(item.adjustment_amount);
+  if (!earned) return 0;
+  return Math.round((Number(item.consumed_amount) / earned) * 100);
+}
+
+function leaveLiabilityRisk(item: HrAdminLeaveBalance) {
+  const available = availableLeaveUnits(item);
+  if (available < 0) return "High";
+  if (Number(item.reserved_amount) > 0 || available <= 2) return "Medium";
+  return "Low";
+}
+
+function leaveLiabilityState(item: HrAdminLeaveBalance) {
+  const available = availableLeaveUnits(item);
+  if (available < 0) return "Overdrawn";
+  if (Number(item.reserved_amount) > 0) return "Reserved";
+  if (available <= 2) return "Low balance";
+  return "Healthy";
+}
+
+async function getLeaveBalanceExportRows(reportKey: string, token: string) {
+  if (reportKey !== "leave-balance") return null;
+
+  const leaveResult = await upstreamJson<HrAdminLeaveBalance[]>("/hr-admin/leave-balances/", token);
+  if (!leaveResult.ok) return { error: leaveResult };
+
+  const balances = leaveResult.data;
+  if (!balances) return { error: { ok: false, status: 502, data: null, detail: "Live leave balance source data is unavailable." } };
+
+  return {
+    rows: balances.map((item) => ({
+      employee_code: item.employee_code,
+      employee_name: item.employee_name,
+      leave_policy_name: item.leave_policy_name,
+      leave_type_name: item.leave_type_name,
+      period_year: item.period_year,
+      opening_balance: item.opening_balance,
+      accrued_amount: item.accrued_amount,
+      carry_forward_amount: item.carry_forward_amount,
+      consumed_amount: item.consumed_amount,
+      reserved_amount: item.reserved_amount,
+      encashed_amount: item.encashed_amount,
+      adjustment_amount: item.adjustment_amount,
+      closing_balance: item.closing_balance,
+      available_after_reserved: availableLeaveUnits(item).toFixed(2),
+      utilization_percent: leaveUtilizationPercent(item),
+      liability_state: leaveLiabilityState(item),
+      liability_risk: leaveLiabilityRisk(item),
+    })),
+  };
+}
+
+function attendanceExceptionAgingDays(appliedAt: string | null, createdAt: string, resolvedAt?: string | null) {
+  const start = dateOnly(appliedAt ?? createdAt);
+  const end = dateOnly(resolvedAt ?? new Date().toISOString());
+  if (!start || !end) return 0;
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86_400_000));
+}
+
+function attendanceExceptionSlaRisk(status: string, agingDays: number) {
+  if (status === "pending" && agingDays >= 3) return "High";
+  if (status === "pending" || agingDays >= 2) return "Medium";
+  return "Low";
+}
+
+function attendanceExceptionSlaState(status: string, agingDays: number) {
+  if (status === "pending" && agingDays >= 3) return "Overdue";
+  if (status === "pending") return "Pending review";
+  if (status === "applied") return "Resolved";
+  if (status === "rejected") return "Rejected";
+  return "Tracked";
+}
+
+function attendanceExceptionPayrollImpact(currentStatus: string, requestedStatus: string) {
+  if (currentStatus === requestedStatus) return "No status change";
+  if ([currentStatus, requestedStatus].includes("absent")) return "LOP impact";
+  if ([currentStatus, requestedStatus].includes("half_day")) return "Partial day impact";
+  return "Attendance correction";
+}
+
+async function getAttendanceExceptionsExportRows(reportKey: string, token: string) {
+  if (reportKey !== "attendance-exceptions") return null;
+
+  const regularizationResult = await upstreamJson<HrAdminAttendanceRegularizationListResponse>("/hr-admin/attendance-regularizations/?page=1&page_size=500", token);
+  if (!regularizationResult.ok) return { error: regularizationResult };
+
+  const regularizations = regularizationResult.data;
+  if (!regularizations) return { error: { ok: false, status: 502, data: null, detail: "Live attendance regularization source data is unavailable." } };
+
+  return {
+    rows: regularizations.items.map((item) => {
+      const agingDays = attendanceExceptionAgingDays(item.applied_at, item.created_at, item.resolved_at);
+      return {
+        employee_code: item.employee_code,
+        employee_name: item.employee_name,
+        department: item.department,
+        designation: item.designation,
+        attendance_date: item.attendance_date,
+        current_status: item.current_status,
+        requested_status: item.requested_status,
+        status: item.status,
+        shift: item.shift,
+        actual_check_in_at: item.actual_check_in_at,
+        actual_check_out_at: item.actual_check_out_at,
+        requested_check_in_at: item.requested_check_in_at,
+        requested_check_out_at: item.requested_check_out_at,
+        reason: item.reason,
+        manager_comment: item.manager_comment,
+        workflow_reference: item.workflow_reference,
+        applied_at: item.applied_at,
+        resolved_at: item.resolved_at,
+        aging_days: agingDays,
+        sla_state: attendanceExceptionSlaState(item.status, agingDays),
+        sla_risk: attendanceExceptionSlaRisk(item.status, agingDays),
+        payroll_impact: attendanceExceptionPayrollImpact(item.current_status, item.requested_status),
+        detail_href: `/hr-admin/attendance-regularizations/${item.id}/review`,
+      };
+    }),
+  };
+}
+
+function snapshotIssueType(snapshot: HrAdminPayrollInputSnapshot) {
+  if (snapshot.blockers.length > 0) return "Blocked";
+  if (snapshot.warnings.length > 0) return "Warning";
+  return "Ready";
+}
+
+async function getPayrollInputExceptionsExportRows(reportKey: string, token: string) {
+  if (reportKey !== "payroll-input-exceptions") return null;
+
+  const inputResult = await upstreamJson<HrAdminPayrollInputSnapshotSetupResponse>("/hr-admin/payroll-input-snapshot-setup/", token);
+  if (!inputResult.ok) return { error: inputResult };
+
+  const inputSetup = inputResult.data;
+  if (!inputSetup) return { error: { ok: false, status: 502, data: null, detail: "Live payroll input exception source data is unavailable." } };
+
+  const runsById = new Map(inputSetup.runs.map((run) => [run.id, run]));
+  return {
+    rows: inputSetup.snapshots.map((snapshot) => {
+      const run = runsById.get(snapshot.payroll_run_id);
+      const issueType = snapshotIssueType(snapshot);
+      const attendancePresentDays = numberValue(snapshot.attendance_snapshot.present_days);
+      const attendanceWorkingDays = numberValue(snapshot.attendance_snapshot.working_days);
+      return {
+        employee_code: snapshot.employee_code,
+        employee_name: snapshot.employee_name,
+        payroll_run_name: snapshot.payroll_run_name,
+        payroll_run_id: snapshot.payroll_run_id,
+        run_status: run?.status ?? "unknown",
+        pay_group_name: snapshot.pay_group_name ?? "",
+        salary_structure_name: snapshot.salary_structure_name ?? "",
+        salary_structure_version: snapshot.salary_structure_version ?? "",
+        snapshot_status: snapshot.snapshot_status,
+        issue_type: issueType,
+        readiness_risk: issueType === "Blocked" ? "High" : issueType === "Warning" ? "Medium" : "Low",
+        blocker_count: snapshot.blockers.length,
+        warning_count: snapshot.warnings.length,
+        issue_count: snapshot.blockers.length + snapshot.warnings.length,
+        lock_state: snapshot.locked_at ? "Locked" : "Unlocked",
+        locked_at: snapshot.locked_at ?? "",
+        period_start: snapshot.period_start,
+        period_end: snapshot.period_end,
+        attendance_present_days: attendancePresentDays,
+        attendance_working_days: attendanceWorkingDays,
+        attendance_days: `${attendancePresentDays}/${attendanceWorkingDays}`,
+        input_profile_ref: snapshot.input_profile_ref,
+        source_collected_at: snapshot.source_collected_at,
+        source_hash: snapshot.source_hash,
+        first_blocker: snapshot.blockers[0] ?? "",
+        first_warning: snapshot.warnings[0] ?? "",
+        detail_href: `/hr-admin/payroll-inputs?runId=${snapshot.payroll_run_id}&snapshotId=${snapshot.id}`,
+      };
+    }),
+  };
+}
+
+function exceptionAgeDays(createdAt: string, decidedAt: string | null) {
+  const start = dateOnly(createdAt);
+  const end = dateOnly(decidedAt ?? new Date().toISOString());
+  if (!start || !end) return 0;
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86_400_000));
+}
+
+function reviewExceptionRisk(severity: string, status: string, ageDays: number) {
+  if (status === "open" && ["critical", "blocker", "high"].includes(severity.toLowerCase())) return "High";
+  if (status === "open" && ageDays >= 2) return "High";
+  if (status === "open" || ["warning", "medium"].includes(severity.toLowerCase())) return "Medium";
+  return "Low";
+}
+
+function reviewExceptionDecisionState(status: string, decidedAt: string | null) {
+  if (decidedAt) return "Decided";
+  if (status === "resolved" || status === "waived" || status === "approved") return "Closed";
+  return "Pending";
+}
+
+async function getPayrollReviewExceptionsExportRows(reportKey: string, token: string) {
+  if (reportKey !== "payroll-review-exceptions") return null;
+
+  const reviewResult = await upstreamJson<HrAdminPayrollReviewSetupResponse>("/hr-admin/payroll-review-setup/", token);
+  if (!reviewResult.ok) return { error: reviewResult };
+
+  const reviewSetup = reviewResult.data;
+  if (!reviewSetup) return { error: { ok: false, status: 502, data: null, detail: "Live payroll review exception source data is unavailable." } };
+
+  const reviewById = new Map(reviewSetup.reviews.map((review) => [review.id, review]));
+  return {
+    rows: reviewSetup.exceptions.map((exception) => {
+      const review = reviewById.get(exception.review_id);
+      const ageDays = exceptionAgeDays(exception.created_at, exception.decided_at);
+      const decisionState = reviewExceptionDecisionState(exception.status, exception.decided_at);
+      return {
+        payroll_run_name: review?.payroll_run_name ?? "",
+        payroll_run_id: exception.payroll_run_id,
+        review_id: exception.review_id,
+        review_status: review?.status ?? "",
+        review_profile_ref: review?.review_profile_ref ?? "",
+        exception_id: exception.id,
+        employee_code: exception.employee_code ?? "",
+        employee_name: exception.employee_name ?? "",
+        component_code: exception.component_code ?? "",
+        category: exception.category,
+        severity: exception.severity,
+        severity_label: exception.severity_label,
+        status: exception.status,
+        status_label: exception.status_label,
+        title: exception.title,
+        detail: exception.detail,
+        decision_state: decisionState,
+        decision_reason: exception.decision_reason,
+        decided_at: exception.decided_at ?? "",
+        decided_by_name: exception.decided_by_name ?? "",
+        calculation_line_id: exception.calculation_line_id ?? "",
+        input_snapshot_id: exception.input_snapshot_id ?? "",
+        exception_age_days: ageDays,
+        review_exception_risk: reviewExceptionRisk(exception.severity, exception.status, ageDays),
+        detail_href: `/hr-admin/payroll-review?reviewId=${exception.review_id}&exceptionId=${exception.id}`,
+      };
+    }),
+  };
+}
+
 async function getDemoRows(reportKey: string) {
   switch (reportKey) {
     case "workforce": {
@@ -691,6 +1493,160 @@ async function getDemoRows(reportKey: string) {
         detail_href: item.detail_href,
       }));
     }
+    case "attendance-register": {
+      const result = await getHrAdminAttendanceRecords({ page: 1, page_size: 500 });
+      return result.data.items.map((item) => ({
+        employee_code: item.employee_code,
+        employee_name: item.employee_name,
+        department: item.department,
+        designation: item.designation,
+        attendance_date: item.attendance_date,
+        status: item.status,
+        source: item.source,
+        shift: item.shift,
+        holiday: item.holiday,
+        check_in_at: item.check_in_at,
+        check_out_at: item.check_out_at,
+        work_duration_hours: item.work_duration_hours,
+        overtime_hours: item.overtime_hours,
+        late_minutes: item.late_minutes,
+        early_exit_minutes: item.early_exit_minutes,
+        is_regularized: item.is_regularized,
+        is_locked: item.is_locked,
+        exception_type: attendanceExceptionType(item),
+        payroll_readiness: attendancePayrollReadiness(item),
+        notes: item.notes,
+        detail_href: `/hr-admin/attendance-records/${item.id}/edit`,
+      }));
+    }
+    case "leave-balance": {
+      const result = await getHrAdminLeaveBalances();
+      return result.data.map((item) => ({
+        employee_code: item.employee_code,
+        employee_name: item.employee_name,
+        leave_policy_name: item.leave_policy_name,
+        leave_type_name: item.leave_type_name,
+        period_year: item.period_year,
+        opening_balance: item.opening_balance,
+        accrued_amount: item.accrued_amount,
+        carry_forward_amount: item.carry_forward_amount,
+        consumed_amount: item.consumed_amount,
+        reserved_amount: item.reserved_amount,
+        encashed_amount: item.encashed_amount,
+        adjustment_amount: item.adjustment_amount,
+        closing_balance: item.closing_balance,
+        available_after_reserved: availableLeaveUnits(item).toFixed(2),
+        utilization_percent: leaveUtilizationPercent(item),
+        liability_state: leaveLiabilityState(item),
+        liability_risk: leaveLiabilityRisk(item),
+      }));
+    }
+    case "attendance-exceptions": {
+      const result = await getHrAdminAttendanceRegularizations({ page: 1, page_size: 500 });
+      return result.data.items.map((item) => {
+        const agingDays = attendanceExceptionAgingDays(item.applied_at, item.created_at, item.resolved_at);
+        return {
+          employee_code: item.employee_code,
+          employee_name: item.employee_name,
+          department: item.department,
+          designation: item.designation,
+          attendance_date: item.attendance_date,
+          current_status: item.current_status,
+          requested_status: item.requested_status,
+          status: item.status,
+          shift: item.shift,
+          actual_check_in_at: item.actual_check_in_at,
+          actual_check_out_at: item.actual_check_out_at,
+          requested_check_in_at: item.requested_check_in_at,
+          requested_check_out_at: item.requested_check_out_at,
+          reason: item.reason,
+          manager_comment: item.manager_comment,
+          workflow_reference: item.workflow_reference,
+          applied_at: item.applied_at,
+          resolved_at: item.resolved_at,
+          aging_days: agingDays,
+          sla_state: attendanceExceptionSlaState(item.status, agingDays),
+          sla_risk: attendanceExceptionSlaRisk(item.status, agingDays),
+          payroll_impact: attendanceExceptionPayrollImpact(item.current_status, item.requested_status),
+          detail_href: `/hr-admin/attendance-regularizations/${item.id}/review`,
+        };
+      });
+    }
+    case "payroll-input-exceptions": {
+      const result = await getHrAdminPayrollInputSnapshotSetup();
+      const runsById = new Map(result.data.runs.map((run) => [run.id, run]));
+      return result.data.snapshots.map((snapshot) => {
+        const run = runsById.get(snapshot.payroll_run_id);
+        const issueType = snapshotIssueType(snapshot);
+        const attendancePresentDays = numberValue(snapshot.attendance_snapshot.present_days);
+        const attendanceWorkingDays = numberValue(snapshot.attendance_snapshot.working_days);
+        return {
+          employee_code: snapshot.employee_code,
+          employee_name: snapshot.employee_name,
+          payroll_run_name: snapshot.payroll_run_name,
+          payroll_run_id: snapshot.payroll_run_id,
+          run_status: run?.status ?? "unknown",
+          pay_group_name: snapshot.pay_group_name ?? "",
+          salary_structure_name: snapshot.salary_structure_name ?? "",
+          salary_structure_version: snapshot.salary_structure_version ?? "",
+          snapshot_status: snapshot.snapshot_status,
+          issue_type: issueType,
+          readiness_risk: issueType === "Blocked" ? "High" : issueType === "Warning" ? "Medium" : "Low",
+          blocker_count: snapshot.blockers.length,
+          warning_count: snapshot.warnings.length,
+          issue_count: snapshot.blockers.length + snapshot.warnings.length,
+          lock_state: snapshot.locked_at ? "Locked" : "Unlocked",
+          locked_at: snapshot.locked_at ?? "",
+          period_start: snapshot.period_start,
+          period_end: snapshot.period_end,
+          attendance_present_days: attendancePresentDays,
+          attendance_working_days: attendanceWorkingDays,
+          attendance_days: `${attendancePresentDays}/${attendanceWorkingDays}`,
+          input_profile_ref: snapshot.input_profile_ref,
+          source_collected_at: snapshot.source_collected_at,
+          source_hash: snapshot.source_hash,
+          first_blocker: snapshot.blockers[0] ?? "",
+          first_warning: snapshot.warnings[0] ?? "",
+          detail_href: `/hr-admin/payroll-inputs?runId=${snapshot.payroll_run_id}&snapshotId=${snapshot.id}`,
+        };
+      });
+    }
+    case "payroll-review-exceptions": {
+      const result = await getHrAdminPayrollReviewSetup();
+      const reviewById = new Map(result.data.reviews.map((review) => [review.id, review]));
+      return result.data.exceptions.map((exception) => {
+        const review = reviewById.get(exception.review_id);
+        const ageDays = exceptionAgeDays(exception.created_at, exception.decided_at);
+        const decisionState = reviewExceptionDecisionState(exception.status, exception.decided_at);
+        return {
+          payroll_run_name: review?.payroll_run_name ?? "",
+          payroll_run_id: exception.payroll_run_id,
+          review_id: exception.review_id,
+          review_status: review?.status ?? "",
+          review_profile_ref: review?.review_profile_ref ?? "",
+          exception_id: exception.id,
+          employee_code: exception.employee_code ?? "",
+          employee_name: exception.employee_name ?? "",
+          component_code: exception.component_code ?? "",
+          category: exception.category,
+          severity: exception.severity,
+          severity_label: exception.severity_label,
+          status: exception.status,
+          status_label: exception.status_label,
+          title: exception.title,
+          detail: exception.detail,
+          decision_state: decisionState,
+          decision_reason: exception.decision_reason,
+          decided_at: exception.decided_at ?? "",
+          decided_by_name: exception.decided_by_name ?? "",
+          calculation_line_id: exception.calculation_line_id ?? "",
+          input_snapshot_id: exception.input_snapshot_id ?? "",
+          exception_age_days: ageDays,
+          review_exception_risk: reviewExceptionRisk(exception.severity, exception.status, ageDays),
+          detail_href: `/hr-admin/payroll-review?reviewId=${exception.review_id}&exceptionId=${exception.id}`,
+        };
+      });
+    }
     default:
       return null;
   }
@@ -764,6 +1720,83 @@ export async function GET(request: NextRequest, { params }: Props) {
         }
       }
       return exportResponse(request, reportKey, applyExportFilters(reportKey, workforceExport.rows, filters), filters, auditContext);
+    }
+
+    const documentComplianceExport = await getDocumentComplianceExportRows(reportKey, token);
+    if (documentComplianceExport) {
+      if ("error" in documentComplianceExport) {
+        const exportError = documentComplianceExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, documentComplianceExport.rows, filters), filters, auditContext);
+    }
+
+    const lifecycleQueueExport = await getLifecycleQueueExportRows(reportKey, token);
+    if (lifecycleQueueExport) {
+      if ("error" in lifecycleQueueExport) {
+        const exportError = lifecycleQueueExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, lifecycleQueueExport.rows, filters), filters, auditContext);
+    }
+
+    const attendanceRegisterExport = await getAttendanceRegisterExportRows(reportKey, token);
+    if (attendanceRegisterExport) {
+      if ("error" in attendanceRegisterExport) {
+        const exportError = attendanceRegisterExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, attendanceRegisterExport.rows, filters), filters, auditContext);
+    }
+
+    const leaveBalanceExport = await getLeaveBalanceExportRows(reportKey, token);
+    if (leaveBalanceExport) {
+      if ("error" in leaveBalanceExport) {
+        const exportError = leaveBalanceExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, leaveBalanceExport.rows, filters), filters, auditContext);
+    }
+
+    const attendanceExceptionsExport = await getAttendanceExceptionsExportRows(reportKey, token);
+    if (attendanceExceptionsExport) {
+      if ("error" in attendanceExceptionsExport) {
+        const exportError = attendanceExceptionsExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, attendanceExceptionsExport.rows, filters), filters, auditContext);
+    }
+
+    const payrollInputExceptionsExport = await getPayrollInputExceptionsExportRows(reportKey, token);
+    if (payrollInputExceptionsExport) {
+      if ("error" in payrollInputExceptionsExport) {
+        const exportError = payrollInputExceptionsExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, payrollInputExceptionsExport.rows, filters), filters, auditContext);
+    }
+
+    const payrollReviewExceptionsExport = await getPayrollReviewExceptionsExportRows(reportKey, token);
+    if (payrollReviewExceptionsExport) {
+      if ("error" in payrollReviewExceptionsExport) {
+        const exportError = payrollReviewExceptionsExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, payrollReviewExceptionsExport.rows, filters), filters, auditContext);
     }
 
     const upstream = await fetch(`${API_BASE_URL}/hr-admin/reports/exports/${reportKey}/`, {
