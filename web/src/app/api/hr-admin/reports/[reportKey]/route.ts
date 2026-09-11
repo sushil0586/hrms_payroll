@@ -7,6 +7,7 @@ import type {
   HrAdminAttendanceRegularizationListResponse,
   HrAdminLeaveBalance,
   HrAdminPayrollFinanceHandoffSetupResponse,
+  HrAdminPayrollAdjustmentSetupResponse,
   HrAdminPayrollInputSnapshot,
   HrAdminPayrollInputSnapshotSetupResponse,
   HrAdminPayrollOutputArtifact,
@@ -28,6 +29,7 @@ import {
   getHrAdminLifecycleQueue,
   getHrAdminLeaveBalances,
   getHrAdminNotifications,
+  getHrAdminPayrollAdjustmentSetup,
   getHrAdminPayrollInputSnapshotSetup,
   getHrAdminPayrollReviewSetup,
   getMssApprovalInbox,
@@ -259,6 +261,37 @@ const REPORT_EVIDENCE_COLUMNS: Record<string, string[]> = {
     "review_exception_risk",
     "detail_href",
   ],
+  "payroll-adjustments": [
+    "employee_code",
+    "employee_name",
+    "payroll_run_name",
+    "payroll_run_id",
+    "component_code",
+    "component_name",
+    "kind",
+    "kind_label",
+    "direction",
+    "direction_label",
+    "status",
+    "status_label",
+    "approval_state",
+    "amount",
+    "currency_code",
+    "amount_risk",
+    "effective_date",
+    "source_period_start",
+    "source_period_end",
+    "adjustment_profile_ref",
+    "approval_profile_ref",
+    "source_ref",
+    "reason",
+    "submitted_at",
+    "approved_at",
+    "rejected_at",
+    "applied_at",
+    "source_hash",
+    "detail_href",
+  ],
 };
 
 function evidenceColumnsForReport(reportKey: string, rows: Array<Record<string, unknown>>) {
@@ -439,6 +472,14 @@ function applyExportFilters(reportKey: string, rows: Array<Record<string, unknow
       if (filters.category && row.category !== filters.category) return false;
       if (filters.decision_state && row.decision_state !== filters.decision_state) return false;
     }
+    if (reportKey === "payroll-adjustments") {
+      if (filters.payroll_run_id && row.payroll_run_id !== filters.payroll_run_id) return false;
+      if (filters.kind && row.kind !== filters.kind) return false;
+      if (filters.direction && row.direction !== filters.direction) return false;
+      if (filters.status && row.status !== filters.status) return false;
+      if (filters.approval_state && row.approval_state !== filters.approval_state) return false;
+      if (filters.amount_risk && row.amount_risk !== filters.amount_risk) return false;
+    }
     return true;
   });
 }
@@ -458,6 +499,7 @@ const LEAVE_BALANCE_SOURCE_ENDPOINTS = ["/hr-admin/leave-balances/"];
 const ATTENDANCE_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/attendance-regularizations/"];
 const PAYROLL_INPUT_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-input-snapshot-setup/"];
 const PAYROLL_REVIEW_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-review-setup/"];
+const PAYROLL_ADJUSTMENTS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-adjustment-setup/"];
 
 function sourceEndpointsForReport(reportKey: string) {
   if (reportKey === "workforce") return WORKFORCE_SOURCE_ENDPOINTS;
@@ -468,6 +510,7 @@ function sourceEndpointsForReport(reportKey: string) {
   if (reportKey === "attendance-exceptions") return ATTENDANCE_EXCEPTIONS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-input-exceptions") return PAYROLL_INPUT_EXCEPTIONS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-review-exceptions") return PAYROLL_REVIEW_EXCEPTIONS_SOURCE_ENDPOINTS;
+  if (reportKey === "payroll-adjustments") return PAYROLL_ADJUSTMENTS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-register") return PAYROLL_REGISTER_SOURCE_ENDPOINTS;
   if (reportKey === "salary-variance") return SALARY_VARIANCE_SOURCE_ENDPOINTS;
   if (reportKey === "bank-advice") return BANK_ADVICE_SOURCE_ENDPOINTS;
@@ -1384,6 +1427,69 @@ async function getPayrollReviewExceptionsExportRows(reportKey: string, token: st
   };
 }
 
+function adjustmentApprovalState(status: string, approvedAt: string | null, rejectedAt: string | null, appliedAt: string | null) {
+  if (appliedAt) return "Applied";
+  if (approvedAt) return "Approved";
+  if (rejectedAt) return "Rejected";
+  if (status === "submitted") return "Submitted";
+  return "Draft";
+}
+
+function adjustmentAmountRisk(amount: unknown) {
+  const absoluteAmount = Math.abs(numberValue(amount));
+  if (absoluteAmount >= 100000) return "High";
+  if (absoluteAmount >= 25000) return "Medium";
+  return "Low";
+}
+
+function payrollAdjustmentReportRow(adjustment: HrAdminPayrollAdjustmentSetupResponse["adjustments"][number]) {
+  return {
+    employee_code: adjustment.employee_code,
+    employee_name: adjustment.employee_name,
+    payroll_run_name: adjustment.payroll_run_name,
+    payroll_run_id: adjustment.payroll_run_id,
+    component_code: adjustment.component_code,
+    component_name: adjustment.component_name,
+    kind: adjustment.kind,
+    kind_label: adjustment.kind_label,
+    direction: adjustment.direction,
+    direction_label: adjustment.direction_label,
+    status: adjustment.status,
+    status_label: adjustment.status_label,
+    approval_state: adjustmentApprovalState(adjustment.status, adjustment.approved_at, adjustment.rejected_at, adjustment.applied_at),
+    amount: numberValue(adjustment.amount),
+    currency_code: adjustment.currency_code,
+    amount_risk: adjustmentAmountRisk(adjustment.amount),
+    effective_date: adjustment.effective_date,
+    source_period_start: adjustment.source_period_start ?? "",
+    source_period_end: adjustment.source_period_end ?? "",
+    adjustment_profile_ref: adjustment.adjustment_profile_ref,
+    approval_profile_ref: adjustment.approval_profile_ref,
+    source_ref: adjustment.source_ref,
+    reason: adjustment.reason,
+    submitted_at: adjustment.submitted_at ?? "",
+    approved_at: adjustment.approved_at ?? "",
+    rejected_at: adjustment.rejected_at ?? "",
+    applied_at: adjustment.applied_at ?? "",
+    source_hash: adjustment.source_hash,
+    detail_href: `/hr-admin/payroll-adjustments?runId=${adjustment.payroll_run_id}&adjustmentId=${adjustment.id}`,
+  };
+}
+
+async function getPayrollAdjustmentsExportRows(reportKey: string, token: string) {
+  if (reportKey !== "payroll-adjustments") return null;
+
+  const adjustmentResult = await upstreamJson<HrAdminPayrollAdjustmentSetupResponse>("/hr-admin/payroll-adjustment-setup/", token);
+  if (!adjustmentResult.ok) return { error: adjustmentResult };
+
+  const adjustmentSetup = adjustmentResult.data;
+  if (!adjustmentSetup) return { error: { ok: false, status: 502, data: null, detail: "Live payroll adjustment source data is unavailable." } };
+
+  return {
+    rows: adjustmentSetup.adjustments.map(payrollAdjustmentReportRow),
+  };
+}
+
 async function getDemoRows(reportKey: string) {
   switch (reportKey) {
     case "workforce": {
@@ -1647,6 +1753,10 @@ async function getDemoRows(reportKey: string) {
         };
       });
     }
+    case "payroll-adjustments": {
+      const result = await getHrAdminPayrollAdjustmentSetup();
+      return result.data.adjustments.map(payrollAdjustmentReportRow);
+    }
     default:
       return null;
   }
@@ -1797,6 +1907,17 @@ export async function GET(request: NextRequest, { params }: Props) {
         }
       }
       return exportResponse(request, reportKey, applyExportFilters(reportKey, payrollReviewExceptionsExport.rows, filters), filters, auditContext);
+    }
+
+    const payrollAdjustmentsExport = await getPayrollAdjustmentsExportRows(reportKey, token);
+    if (payrollAdjustmentsExport) {
+      if ("error" in payrollAdjustmentsExport) {
+        const exportError = payrollAdjustmentsExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, payrollAdjustmentsExport.rows, filters), filters, auditContext);
     }
 
     const upstream = await fetch(`${API_BASE_URL}/hr-admin/reports/exports/${reportKey}/`, {

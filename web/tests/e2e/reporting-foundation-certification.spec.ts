@@ -42,7 +42,7 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await expect(catalog.getByText("Statutory deduction summary")).toBeVisible();
 
     await catalog.getByRole("tab", { name: "All" }).click();
-    await expect(catalog.getByText(/of 19/)).toBeVisible();
+    await expect(catalog.getByText(/of 20/)).toBeVisible();
     await catalog.getByRole("button", { name: "Next" }).click();
     await expect(catalog.getByText("Salary variance report")).toBeVisible();
     await catalog.getByRole("button", { name: "Previous" }).click();
@@ -75,6 +75,11 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await search.fill("payroll review exceptions");
     await expect(catalog.getByText("Payroll review exceptions report")).toBeVisible();
     await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-review-exceptions/);
+    await search.fill("");
+
+    await search.fill("payroll adjustments");
+    await expect(catalog.getByText("Payroll adjustments report")).toBeVisible();
+    await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-adjustments/);
     await search.fill("");
 
     await expect(catalog.getByRole("link", { name: "Export" }).first()).toHaveAttribute("href", /\/api\/hr-admin\/reports\//);

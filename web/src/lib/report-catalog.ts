@@ -149,6 +149,18 @@ export const reportCatalog: ReportCatalogItem[] = [
     exportRoute: "/api/hr-admin/reports/payroll-review-exceptions",
   },
   {
+    key: "payroll-adjustments",
+    title: "Payroll adjustments report",
+    category: "Payroll Finance",
+    primaryPersona: "Payroll Finance Manager",
+    description: "One-time payroll adjustments by kind, direction, approval state, effective date, source reference, and hash evidence.",
+    filters: ["Payroll run", "Kind", "Direction", "Status", "Approval state"],
+    exports: ["CSV"],
+    status: "Ready",
+    route: "/hr-admin/reports/payroll-adjustments",
+    exportRoute: "/api/hr-admin/reports/payroll-adjustments",
+  },
+  {
     key: "bank-advice",
     title: "Bank advice report",
     category: "Payroll Finance",

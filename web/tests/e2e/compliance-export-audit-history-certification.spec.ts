@@ -37,6 +37,8 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
       "/api/hr-admin/reports/payroll-input-exceptions?sort=risk&format=manifest",
       "/api/hr-admin/reports/payroll-review-exceptions?sort=risk",
       "/api/hr-admin/reports/payroll-review-exceptions?sort=risk&format=manifest",
+      "/api/hr-admin/reports/payroll-adjustments?sort=amount_desc",
+      "/api/hr-admin/reports/payroll-adjustments?sort=amount_desc&format=manifest",
     ];
     for (const path of exportPaths) {
       const response = await page.request.get(path);
@@ -130,6 +132,11 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
         key: "payroll-review-exceptions",
         source: "/hr-admin/payroll-review-setup/",
         evidence: "review_exception_risk",
+      },
+      {
+        key: "payroll-adjustments",
+        source: "/hr-admin/payroll-adjustment-setup/",
+        evidence: "amount_risk",
       },
     ];
 
