@@ -53,7 +53,7 @@ export function ReportExportAuditWorkspace() {
     if (query.trim()) params.set("q", query.trim());
     if (reportKey !== "All") params.set("report_key", reportKey);
     if (exportType !== "All") params.set("export_type", exportType);
-    setStatus("loading");
+    queueMicrotask(() => setStatus("loading"));
     fetch(`/api/hr-admin/reports/export-audits?${params.toString()}`, {
       cache: "no-store",
       signal: controller.signal,
