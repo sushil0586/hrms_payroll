@@ -67,7 +67,7 @@ test.describe("P100-3 pilot 100 workforce certification", () => {
     await loginAsSeededUser(page, `${usernamePrefix}.e011`, "/ess");
     await expectPageReady(page, "Self service");
     await expect(page.getByText(`${seedPrefix}_E011`).first()).toBeVisible();
-    await expect(page.getByText(`${seedPrefix}_E001`).first()).toBeVisible();
+    await expect(page.getByText(/Reporting manager: Aarav Sharma001/).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await loginAsSeededUser(page, `${usernamePrefix}.e001`, "/mss/approvals");

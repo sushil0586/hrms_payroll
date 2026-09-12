@@ -2741,7 +2741,21 @@ select.input-control {
 }
 
 .payroll-readiness-detail-panel__header {
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.payroll-readiness-detail-panel__header > .workspace-card__eyebrow {
+  grid-column: 1 / -1;
+}
+
+.payroll-readiness-detail-panel__header > div {
+  min-width: 0;
+}
+
+.payroll-readiness-detail-panel__header .section-copy {
+  overflow-wrap: anywhere;
 }
 
 .payroll-readiness-detail-panel h2,

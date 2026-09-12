@@ -101,7 +101,7 @@ DEFAULT_PAYROLL_READINESS_PROFILE = {
         {"field": "grade", "label": "Grade", "severity": "warning"},
         {"field": "employment_type", "label": "Employment type", "severity": "blocker"},
     ],
-    "bank_account": {"required": True, "severity": "warning", "label": "Primary bank account"},
+    "bank_account": {"required": True, "severity": "blocker", "label": "Primary bank account"},
     "pending_sources": {
         "leave_request_statuses": [LeaveRequestStatus.PENDING],
         "attendance_regularization_statuses": [RegularizationStatus.PENDING],
