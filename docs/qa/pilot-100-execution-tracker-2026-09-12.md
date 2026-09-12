@@ -40,8 +40,8 @@ If a phase fails:
 |---|---|---|---|---|---|
 | P100-0 | Safety and data strategy | Passed - seed manifest pending | Tenant, services, route health, manifest strategy | No accidental mutation of canonical data | Rerun route/auth smoke after any environment change. |
 | P100-1 | Organization masters | Passed with observations | Create/search/edit/deactivate masters | Required fields, duplicates, inactive dropdown exclusion | Rerun employee create dropdown checks after master fix. |
-| P100-2 | Policy and payroll setup | Not started | Salary, leave, attendance, statutory, pay group, provider config | Duplicate setup, missing required config, invalid formulas | Rerun payroll setup and report catalog checks. |
-| P100-3 | 100 employees and access matrix | Not started | 100 employees, manager hierarchy, pay/bank/statutory assignment | Role denial, invalid bank, missing mapping | Rerun directory, employee detail, manager/ESS access checks. |
+| P100-2 | Policy and payroll setup | Passed | Salary, leave, attendance, statutory, pay group, provider config | Duplicate setup, missing required config, invalid formulas | Rerun payroll setup and report catalog checks. |
+| P100-3 | 100 employees and access matrix | In progress - seed command local validated | 100 employees, manager hierarchy, pay/bank/statutory assignment | Role denial, invalid bank, missing mapping | Rerun directory, employee detail, manager/ESS access checks. |
 | P100-4 | Attendance/leave/lifecycle inputs | Not started | ESS/MSS/HR inputs for scenario distribution | Unauthorized approvals, invalid dates, rejected requests | Rerun affected input and report checks. |
 | P100-5 | Payroll input snapshot and lock | Not started | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
 | P100-6 | Calculation and review | Not started | Draft calculation, line review, exceptions, decisions | Invalid lock, unauthorized decision, stale calculation | Rerun calculation/review/report pack. |
@@ -167,9 +167,9 @@ Execution result - 2026-09-12:
   - If an HR admin selects a legal entity with no active branch or cost-center mappings, employee onboarding becomes blocked by empty dependent dropdowns.
   - Action taken: employee onboarding now shows a `Structure review needed.` notice when the selected legal entity has no active branches or no active cost centers.
   - Local browser verification against live backend data passed: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/employee-lifecycle-certification-flows.spec.ts --grep "employee create warns" --workers=1 --reporter=line --timeout=300000`.
-  - Staging warning verification is pending deployment. The same test failed on staging before deploy because the patch was not deployed yet; the normal employee create flow still passed on staging.
+  - Staging post-deploy verification passed: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/employee-lifecycle-certification-flows.spec.ts --grep "employee create warns|employee master create" --workers=1 --reporter=line --timeout=900000` returned `2/2` passed.
   - Organization CRUD certification is slow on staging. Keep it as a certification pack, not a fast smoke pack.
-- Confidence after phase: 92% for organization master CRUD and employee mapping after the UX warning fix. Remaining gaps: staging deploy/rerun for the warning and manifest-backed `PILOT100_YYYYMMDD` seed identity for the upcoming 100-employee dataset.
+- Confidence after phase: 94% for organization master CRUD and employee mapping after the UX warning fix. Remaining gap: manifest-backed `PILOT100_YYYYMMDD` seed identity for the upcoming 100-employee dataset.
 
 ## Phase P100-2: Policy And Payroll Setup
 
@@ -203,6 +203,25 @@ Exit gate:
 
 - Payroll run can be opened for the target period.
 
+Execution result - 2026-09-12:
+
+- Environment: staging, `https://hrms.accerio.in`.
+- Direct payroll setup certification:
+  - Command: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/payroll-setup-flows.spec.ts tests/e2e/salary-setup-flows.spec.ts tests/e2e/payroll-statutory-flows.spec.ts --workers=1 --reporter=line --timeout=2400000`
+  - Result: `9/9` passed.
+- Policy and governance setup certification:
+  - Command: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/policy-governance-master-crud-flows.spec.ts tests/e2e/governance-assignment-form-flows.spec.ts --workers=1 --reporter=line --timeout=3600000`
+  - Result: `20/20` passed.
+- Positive evidence:
+  - Payroll setup workspace, payroll calendars, payroll periods, pay groups, pay group assignments, payroll runs, rules, salary components, salary structures, salary versions, salary lines, salary assignments, statutory packs, employer registrations, filing calendars, statutory slabs/components, employee statutory declarations, and proof actions were certified through browser automation.
+  - Leave types, shifts, holiday calendars, leave policies, attendance policies, workflow templates, document categories, document requirements, leave policy assignments, attendance policy assignments, workflow assignments, employee shift assignments, and shift roster rollout were certified through browser automation.
+  - Desktop and mobile usability checks passed for payroll setup, salary setup, and statutory setup.
+- Negative evidence:
+  - Duplicate validation, JSON validation, preview validation, server validation messages, inactive guidance, conflict governance, scoped requirement controls, and invalid setup cases were exercised by the browser packs.
+- Real-user observation:
+  - The setup model is broad but usable. The largest usability risk is speed/volume of certification rather than an obvious page failure; these should remain phase certification packs, not every-commit smoke tests.
+- Confidence after phase: 93% for policy/payroll setup. Remaining gap: a manifest-backed 100-employee pilot seed must prove the setup can support realistic volume and scenario distribution.
+
 ## Phase P100-3: 100 Employees And Access Matrix
 
 Real-user intent:
@@ -235,6 +254,37 @@ Observations to record:
 Exit gate:
 
 - 100 employees visible and scenario distribution matches plan.
+
+Execution result - 2026-09-12:
+
+- Implementation added:
+  - Backend management command: `python manage.py seed_pilot_100_workforce --prefix PILOT100_20260912 --output-file <manifest.json>`.
+  - Browser certification spec: `web/tests/e2e/pilot-100-workforce-certification.spec.ts`.
+- Seed command behavior:
+  - Calls the existing demo bootstrap unless `--skip-bootstrap` is supplied.
+  - Cleans only users, memberships, membership roles, employees, and employee-owned dependent data for the selected pilot prefix.
+  - Creates 100 users/memberships/employees.
+  - Creates 10 manager personas and 90 employee personas.
+  - Assigns manager/employee roles.
+  - Creates 95 primary bank-account-ready employees and 5 intentional missing-bank blockers.
+  - Creates pay group assignments when an active pay group exists.
+  - Creates salary assignments when an active salary structure version exists.
+  - Creates statutory profiles when an active statutory pack exists.
+  - Writes a portable manifest with counts, setup references, scenario distribution, employee IDs, usernames, reporting manager links, and blocker flags.
+- Local command verification:
+  - Seed command succeeded with prefix `PILOT100_LOCALQA`.
+  - Manifest counts: 100 employees, 10 managers, 95 valid-bank employees, 5 missing-bank employees, 100 pay group assignments, 100 statutory profiles.
+  - Local salary assignments were `0` because the local database had no active salary structure version; the manifest records this explicitly.
+  - Cleanup command succeeded and local employee count for `PILOT100_LOCALQA` returned `0`.
+- Browser spec verification status:
+  - TypeScript passed.
+  - Full browser execution is pending deploy plus staging seed execution, because the spec intentionally requires seeded pilot data to exist.
+- Next staging commands after check-in/deploy:
+  - `cd /var/www/hrms-payroll-saas/current/backend && ./.venv/bin/python manage.py seed_pilot_100_workforce --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-staging-manifest.json`
+  - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-workforce-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
+- Real-user observation:
+  - This phase must be certified against manifest-backed data, not ad hoc browser-created employees. Otherwise payroll readiness, bank blockers, access roles, and reporting hierarchy cannot be trusted as a reproducible pilot baseline.
+- Confidence after current local work: 70% for P100-3 foundation. It should rise only after staging seed plus browser certification pass.
 
 ## Phase P100-4: Attendance, Leave, Lifecycle, And Inputs
 
