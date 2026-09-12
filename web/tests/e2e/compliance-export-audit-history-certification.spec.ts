@@ -39,6 +39,10 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
       "/api/hr-admin/reports/payroll-review-exceptions?sort=risk&format=manifest",
       "/api/hr-admin/reports/payroll-adjustments?sort=amount_desc",
       "/api/hr-admin/reports/payroll-adjustments?sort=amount_desc&format=manifest",
+      "/api/hr-admin/reports/payroll-settlements?sort=net_desc",
+      "/api/hr-admin/reports/payroll-settlements?sort=net_desc&format=manifest",
+      "/api/hr-admin/reports/payroll-close-readiness?sort=risk",
+      "/api/hr-admin/reports/payroll-close-readiness?sort=risk&format=manifest",
     ];
     for (const path of exportPaths) {
       const response = await page.request.get(path);
@@ -137,6 +141,16 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
         key: "payroll-adjustments",
         source: "/hr-admin/payroll-adjustment-setup/",
         evidence: "amount_risk",
+      },
+      {
+        key: "payroll-settlements",
+        source: "/hr-admin/payroll-settlement-setup/",
+        evidence: "net_amount_risk",
+      },
+      {
+        key: "payroll-close-readiness",
+        source: "/hr-admin/payroll-input-snapshot-setup/",
+        evidence: "close_readiness_risk",
       },
     ];
 

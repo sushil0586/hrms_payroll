@@ -29,8 +29,17 @@ export async function GET(request: NextRequest) {
   if (API_BASE_URL) {
     const backendPayload = await listBackendReportExportAudits(API_BASE_URL, token, filters).catch(() => null);
     if (backendPayload) {
+      const localRows = await listReportExportAudits({
+        actorTokenHash: actorTokenHash(token),
+        ...filters,
+      });
+      const backendItems = Array.isArray(backendPayload.items) ? backendPayload.items : [];
+      const mergedById = new Map([...backendItems, ...localRows].map((item) => [item.id, item]));
+      const mergedItems = Array.from(mergedById.values()).sort((left, right) => right.generated_at.localeCompare(left.generated_at));
       return NextResponse.json({
         ...backendPayload,
+        items: mergedItems,
+        count: mergedItems.length,
         filters: {
           export_type: params.get("export_type") || "All",
           report_key: params.get("report_key") || "All",

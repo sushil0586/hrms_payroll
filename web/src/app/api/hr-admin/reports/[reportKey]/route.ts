@@ -13,6 +13,7 @@ import type {
   HrAdminPayrollOutputArtifact,
   HrAdminPayrollOutputSetupResponse,
   HrAdminPayrollReviewSetupResponse,
+  HrAdminPayrollSettlementSetupResponse,
   HrAdminPayrollStatutoryFilingCalendar,
   HrAdminPayrollStatutorySetupResponse,
   HrAdminEmployeeListItem,
@@ -31,7 +32,9 @@ import {
   getHrAdminNotifications,
   getHrAdminPayrollAdjustmentSetup,
   getHrAdminPayrollInputSnapshotSetup,
+  getHrAdminPayrollOutputSetup,
   getHrAdminPayrollReviewSetup,
+  getHrAdminPayrollSettlementSetup,
   getMssApprovalInbox,
 } from "@/lib/api";
 import { actorTokenHash, appendBackendReportExportAudit, appendReportExportAudit, type ReportExportAuditInput } from "@/lib/report-export-audit-store";
@@ -292,6 +295,59 @@ const REPORT_EVIDENCE_COLUMNS: Record<string, string[]> = {
     "source_hash",
     "detail_href",
   ],
+  "payroll-settlements": [
+    "employee_code",
+    "employee_name",
+    "payroll_run_name",
+    "payroll_run_id",
+    "status",
+    "status_label",
+    "approval_state",
+    "settlement_profile_ref",
+    "approval_profile_ref",
+    "calculation_profile_ref",
+    "source_ref",
+    "reason",
+    "settlement_date",
+    "last_working_date",
+    "gross_dues",
+    "deductions",
+    "taxes",
+    "reimbursements",
+    "net_settlement",
+    "currency_code",
+    "net_amount_risk",
+    "line_count",
+    "line_kinds",
+    "submitted_at",
+    "approved_at",
+    "rejected_at",
+    "applied_at",
+    "source_hash",
+    "detail_href",
+  ],
+  "payroll-close-readiness": [
+    "payroll_run_name",
+    "payroll_run_id",
+    "run_status",
+    "input_lock_coverage_percent",
+    "blocked_input_count",
+    "warning_input_count",
+    "open_review_exception_count",
+    "open_review_blocker_count",
+    "pending_adjustment_count",
+    "pending_settlement_count",
+    "output_batch_status",
+    "output_artifact_count",
+    "published_artifact_count",
+    "close_readiness_state",
+    "close_readiness_risk",
+    "blocker_category",
+    "primary_action",
+    "evidence_summary",
+    "source_hashes",
+    "detail_href",
+  ],
 };
 
 function evidenceColumnsForReport(reportKey: string, rows: Array<Record<string, unknown>>) {
@@ -480,6 +536,20 @@ function applyExportFilters(reportKey: string, rows: Array<Record<string, unknow
       if (filters.approval_state && row.approval_state !== filters.approval_state) return false;
       if (filters.amount_risk && row.amount_risk !== filters.amount_risk) return false;
     }
+    if (reportKey === "payroll-settlements") {
+      if (filters.payroll_run_id && row.payroll_run_id !== filters.payroll_run_id) return false;
+      if (filters.status && row.status !== filters.status) return false;
+      if (filters.approval_state && row.approval_state !== filters.approval_state) return false;
+      if (filters.net_amount_risk && row.net_amount_risk !== filters.net_amount_risk) return false;
+      if (filters.line_kind && !String(row.line_kinds ?? "").split("|").includes(filters.line_kind)) return false;
+    }
+    if (reportKey === "payroll-close-readiness") {
+      if (filters.payroll_run_id && row.payroll_run_id !== filters.payroll_run_id) return false;
+      if (filters.close_readiness_state && row.close_readiness_state !== filters.close_readiness_state) return false;
+      if (filters.close_readiness_risk && row.close_readiness_risk !== filters.close_readiness_risk) return false;
+      if (filters.blocker_category && row.blocker_category !== filters.blocker_category) return false;
+      if (filters.output_batch_status && row.output_batch_status !== filters.output_batch_status) return false;
+    }
     return true;
   });
 }
@@ -500,6 +570,14 @@ const ATTENDANCE_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/attendance-regulariza
 const PAYROLL_INPUT_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-input-snapshot-setup/"];
 const PAYROLL_REVIEW_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-review-setup/"];
 const PAYROLL_ADJUSTMENTS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-adjustment-setup/"];
+const PAYROLL_SETTLEMENTS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-settlement-setup/"];
+const PAYROLL_CLOSE_READINESS_SOURCE_ENDPOINTS = [
+  "/hr-admin/payroll-input-snapshot-setup/",
+  "/hr-admin/payroll-review-setup/",
+  "/hr-admin/payroll-adjustment-setup/",
+  "/hr-admin/payroll-settlement-setup/",
+  "/hr-admin/payroll-output-setup/",
+];
 
 function sourceEndpointsForReport(reportKey: string) {
   if (reportKey === "workforce") return WORKFORCE_SOURCE_ENDPOINTS;
@@ -511,6 +589,8 @@ function sourceEndpointsForReport(reportKey: string) {
   if (reportKey === "payroll-input-exceptions") return PAYROLL_INPUT_EXCEPTIONS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-review-exceptions") return PAYROLL_REVIEW_EXCEPTIONS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-adjustments") return PAYROLL_ADJUSTMENTS_SOURCE_ENDPOINTS;
+  if (reportKey === "payroll-settlements") return PAYROLL_SETTLEMENTS_SOURCE_ENDPOINTS;
+  if (reportKey === "payroll-close-readiness") return PAYROLL_CLOSE_READINESS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-register") return PAYROLL_REGISTER_SOURCE_ENDPOINTS;
   if (reportKey === "salary-variance") return SALARY_VARIANCE_SOURCE_ENDPOINTS;
   if (reportKey === "bank-advice") return BANK_ADVICE_SOURCE_ENDPOINTS;
@@ -558,7 +638,8 @@ async function recordExportAudit({
     user_agent: auditContext.request.headers.get("user-agent") || "",
   };
   if (API_BASE_URL) {
-    await appendBackendReportExportAudit(API_BASE_URL, auditContext.token, auditRecord).catch(() => appendReportExportAudit(auditRecord));
+    await appendBackendReportExportAudit(API_BASE_URL, auditContext.token, auditRecord).catch(() => undefined);
+    await appendReportExportAudit(auditRecord);
     return;
   }
   await appendReportExportAudit(auditRecord);
@@ -1490,6 +1571,223 @@ async function getPayrollAdjustmentsExportRows(reportKey: string, token: string)
   };
 }
 
+function settlementApprovalState(status: string, approvedAt: string | null, rejectedAt: string | null, appliedAt: string | null) {
+  if (appliedAt) return "Applied";
+  if (approvedAt) return "Approved";
+  if (rejectedAt) return "Rejected";
+  if (status === "submitted") return "Submitted";
+  return "Draft";
+}
+
+function settlementNetRisk(value: unknown) {
+  const absoluteAmount = Math.abs(numberValue(value));
+  if (absoluteAmount >= 100000) return "High";
+  if (absoluteAmount >= 25000) return "Medium";
+  return "Low";
+}
+
+function payrollSettlementReportRow(
+  settlement: HrAdminPayrollSettlementSetupResponse["settlements"][number],
+  lines: HrAdminPayrollSettlementSetupResponse["lines"],
+) {
+  const settlementLines = lines.filter((line) => line.settlement_id === settlement.id);
+  const lineKinds = Array.from(new Set(settlementLines.map((line) => line.line_kind).filter(Boolean))).sort();
+  return {
+    employee_code: settlement.employee_code,
+    employee_name: settlement.employee_name,
+    payroll_run_name: settlement.payroll_run_name,
+    payroll_run_id: settlement.payroll_run_id,
+    status: settlement.status,
+    status_label: settlement.status_label,
+    approval_state: settlementApprovalState(settlement.status, settlement.approved_at, settlement.rejected_at, settlement.applied_at),
+    settlement_profile_ref: settlement.settlement_profile_ref,
+    approval_profile_ref: settlement.approval_profile_ref,
+    calculation_profile_ref: settlement.calculation_profile_ref,
+    source_ref: settlement.source_ref,
+    reason: settlement.reason,
+    settlement_date: settlement.settlement_date,
+    last_working_date: settlement.last_working_date ?? "",
+    gross_dues: numberValue(settlement.totals_snapshot.gross_dues),
+    deductions: numberValue(settlement.totals_snapshot.deductions),
+    taxes: numberValue(settlement.totals_snapshot.taxes),
+    reimbursements: numberValue(settlement.totals_snapshot.reimbursements),
+    net_settlement: numberValue(settlement.totals_snapshot.net_settlement),
+    currency_code: settlement.currency_code,
+    net_amount_risk: settlementNetRisk(settlement.totals_snapshot.net_settlement),
+    line_count: settlement.line_count,
+    line_kinds: lineKinds.join("|"),
+    submitted_at: settlement.submitted_at ?? "",
+    approved_at: settlement.approved_at ?? "",
+    rejected_at: settlement.rejected_at ?? "",
+    applied_at: settlement.applied_at ?? "",
+    source_hash: settlement.source_hash,
+    detail_href: `/hr-admin/payroll-settlements?runId=${settlement.payroll_run_id}&settlementId=${settlement.id}`,
+  };
+}
+
+async function getPayrollSettlementsExportRows(reportKey: string, token: string) {
+  if (reportKey !== "payroll-settlements") return null;
+
+  const settlementResult = await upstreamJson<HrAdminPayrollSettlementSetupResponse>("/hr-admin/payroll-settlement-setup/", token);
+  if (!settlementResult.ok) return { error: settlementResult };
+
+  const settlementSetup = settlementResult.data;
+  if (!settlementSetup) return { error: { ok: false, status: 502, data: null, detail: "Live payroll settlement source data is unavailable." } };
+
+  return {
+    rows: settlementSetup.settlements.map((settlement) => payrollSettlementReportRow(settlement, settlementSetup.lines)),
+  };
+}
+
+type CloseReadinessSources = {
+  inputSetup: HrAdminPayrollInputSnapshotSetupResponse;
+  reviewSetup: HrAdminPayrollReviewSetupResponse;
+  adjustmentSetup: HrAdminPayrollAdjustmentSetupResponse;
+  settlementSetup: HrAdminPayrollSettlementSetupResponse;
+  outputSetup: HrAdminPayrollOutputSetupResponse;
+};
+
+function closeReadinessState(blockers: {
+  blockedInputs: number;
+  openBlockers: number;
+  pendingAdjustments: number;
+  pendingSettlements: number;
+}) {
+  if (blockers.blockedInputs > 0 || blockers.openBlockers > 0) return "Blocked";
+  if (blockers.pendingAdjustments > 0 || blockers.pendingSettlements > 0) return "Needs action";
+  return "Ready";
+}
+
+function closeReadinessRisk(state: string, warningInputs: number, openExceptions: number) {
+  if (state === "Blocked") return "High";
+  if (state === "Needs action" || warningInputs > 0 || openExceptions > 0) return "Medium";
+  return "Low";
+}
+
+function closeBlockerCategory(row: {
+  blockedInputs: number;
+  openBlockers: number;
+  pendingAdjustments: number;
+  pendingSettlements: number;
+  outputStatus: string;
+}) {
+  if (row.blockedInputs > 0) return "Input blockers";
+  if (row.openBlockers > 0) return "Review blockers";
+  if (row.pendingAdjustments > 0) return "Pending adjustments";
+  if (row.pendingSettlements > 0) return "Pending settlements";
+  if (!row.outputStatus || row.outputStatus === "not_generated") return "Output pending";
+  return "None";
+}
+
+function payrollCloseReadinessRows({ inputSetup, reviewSetup, adjustmentSetup, settlementSetup, outputSetup }: CloseReadinessSources) {
+  const reviewExceptionsByRun = new Map<string, HrAdminPayrollReviewSetupResponse["exceptions"]>();
+  for (const exception of reviewSetup.exceptions) {
+    reviewExceptionsByRun.set(exception.payroll_run_id, [...(reviewExceptionsByRun.get(exception.payroll_run_id) ?? []), exception]);
+  }
+  const adjustmentsByRun = new Map<string, HrAdminPayrollAdjustmentSetupResponse["adjustments"]>();
+  for (const adjustment of adjustmentSetup.adjustments) {
+    adjustmentsByRun.set(adjustment.payroll_run_id, [...(adjustmentsByRun.get(adjustment.payroll_run_id) ?? []), adjustment]);
+  }
+  const settlementsByRun = new Map<string, HrAdminPayrollSettlementSetupResponse["settlements"]>();
+  for (const settlement of settlementSetup.settlements) {
+    settlementsByRun.set(settlement.payroll_run_id, [...(settlementsByRun.get(settlement.payroll_run_id) ?? []), settlement]);
+  }
+  const outputBatchByRun = new Map(outputSetup.output_batches.map((batch) => [batch.payroll_run_id, batch]));
+  const artifactsByRun = new Map<string, HrAdminPayrollOutputSetupResponse["artifacts"]>();
+  for (const artifact of outputSetup.artifacts) {
+    artifactsByRun.set(artifact.payroll_run_id, [...(artifactsByRun.get(artifact.payroll_run_id) ?? []), artifact]);
+  }
+
+  return inputSetup.runs.map((run) => {
+    const exceptions = reviewExceptionsByRun.get(run.id) ?? [];
+    const pendingAdjustments = (adjustmentsByRun.get(run.id) ?? []).filter((item) => !["applied", "rejected"].includes(item.status)).length;
+    const pendingSettlements = (settlementsByRun.get(run.id) ?? []).filter((item) => !["applied", "voided", "rejected"].includes(item.status)).length;
+    const outputBatch = outputBatchByRun.get(run.id);
+    const artifacts = artifactsByRun.get(run.id) ?? [];
+    const openExceptions = exceptions.filter((item) => item.status === "open").length;
+    const openBlockers = exceptions.filter((item) => item.status === "open" && ["blocker", "critical", "high"].includes(item.severity)).length;
+    const state = closeReadinessState({
+      blockedInputs: run.blocked_count,
+      openBlockers,
+      pendingAdjustments,
+      pendingSettlements,
+    });
+    const risk = closeReadinessRisk(state, run.warning_count, openExceptions);
+    const blockerCategory = closeBlockerCategory({
+      blockedInputs: run.blocked_count,
+      openBlockers,
+      pendingAdjustments,
+      pendingSettlements,
+      outputStatus: outputBatch?.status ?? "not_generated",
+    });
+    const inputLockCoverage = run.snapshot_count ? Math.round((run.locked_count / run.snapshot_count) * 100) : 0;
+    const sourceHashes = [
+      ...inputSetup.snapshots.filter((snapshot) => snapshot.payroll_run_id === run.id).map((snapshot) => snapshot.source_hash),
+      ...artifacts.map((artifact) => artifact.source_hash),
+    ].filter(Boolean);
+    return {
+      payroll_run_name: run.name,
+      payroll_run_id: run.id,
+      run_status: run.status,
+      input_lock_coverage_percent: inputLockCoverage,
+      blocked_input_count: run.blocked_count,
+      warning_input_count: run.warning_count,
+      open_review_exception_count: openExceptions,
+      open_review_blocker_count: openBlockers,
+      pending_adjustment_count: pendingAdjustments,
+      pending_settlement_count: pendingSettlements,
+      output_batch_status: outputBatch?.status ?? "not_generated",
+      output_artifact_count: artifacts.length,
+      published_artifact_count: artifacts.filter((artifact) => artifact.status === "published").length,
+      close_readiness_state: state,
+      close_readiness_risk: risk,
+      blocker_category: blockerCategory,
+      primary_action:
+        blockerCategory === "Input blockers"
+          ? "Resolve blocked input snapshots"
+          : blockerCategory === "Review blockers"
+            ? "Resolve payroll review blockers"
+            : blockerCategory === "Pending adjustments"
+              ? "Apply or reject pending adjustments"
+              : blockerCategory === "Pending settlements"
+                ? "Apply or void pending settlements"
+                : blockerCategory === "Output pending"
+                  ? "Generate payroll outputs after lock"
+                  : "Ready for close review",
+      evidence_summary: `${run.locked_count}/${run.snapshot_count} inputs locked; ${openBlockers} blockers; ${pendingAdjustments} adjustments; ${pendingSettlements} settlements; ${artifacts.length} artifacts`,
+      source_hashes: sourceHashes.slice(0, 8).join("|"),
+      detail_href: `/hr-admin/payroll-review?runId=${run.id}`,
+    };
+  });
+}
+
+async function getPayrollCloseReadinessExportRows(reportKey: string, token: string) {
+  if (reportKey !== "payroll-close-readiness") return null;
+
+  const [inputResult, reviewResult, adjustmentResult, settlementResult, outputResult] = await Promise.all([
+    upstreamJson<HrAdminPayrollInputSnapshotSetupResponse>("/hr-admin/payroll-input-snapshot-setup/", token),
+    upstreamJson<HrAdminPayrollReviewSetupResponse>("/hr-admin/payroll-review-setup/", token),
+    upstreamJson<HrAdminPayrollAdjustmentSetupResponse>("/hr-admin/payroll-adjustment-setup/", token),
+    upstreamJson<HrAdminPayrollSettlementSetupResponse>("/hr-admin/payroll-settlement-setup/", token),
+    upstreamJson<HrAdminPayrollOutputSetupResponse>("/hr-admin/payroll-output-setup/", token),
+  ]);
+  const failedResult = [inputResult, reviewResult, adjustmentResult, settlementResult, outputResult].find((result) => !result.ok);
+  if (failedResult) return { error: failedResult };
+  if (!inputResult.data || !reviewResult.data || !adjustmentResult.data || !settlementResult.data || !outputResult.data) {
+    return { error: { ok: false, status: 502, data: null, detail: "Live payroll close readiness source data is unavailable." } };
+  }
+
+  return {
+    rows: payrollCloseReadinessRows({
+      inputSetup: inputResult.data,
+      reviewSetup: reviewResult.data,
+      adjustmentSetup: adjustmentResult.data,
+      settlementSetup: settlementResult.data,
+      outputSetup: outputResult.data,
+    }),
+  };
+}
+
 async function getDemoRows(reportKey: string) {
   switch (reportKey) {
     case "workforce": {
@@ -1757,6 +2055,26 @@ async function getDemoRows(reportKey: string) {
       const result = await getHrAdminPayrollAdjustmentSetup();
       return result.data.adjustments.map(payrollAdjustmentReportRow);
     }
+    case "payroll-settlements": {
+      const result = await getHrAdminPayrollSettlementSetup();
+      return result.data.settlements.map((settlement) => payrollSettlementReportRow(settlement, result.data.lines));
+    }
+    case "payroll-close-readiness": {
+      const [inputSetup, reviewSetup, adjustmentSetup, settlementSetup, outputSetup] = await Promise.all([
+        getHrAdminPayrollInputSnapshotSetup(),
+        getHrAdminPayrollReviewSetup(),
+        getHrAdminPayrollAdjustmentSetup(),
+        getHrAdminPayrollSettlementSetup(),
+        getHrAdminPayrollOutputSetup(),
+      ]);
+      return payrollCloseReadinessRows({
+        inputSetup: inputSetup.data,
+        reviewSetup: reviewSetup.data,
+        adjustmentSetup: adjustmentSetup.data,
+        settlementSetup: settlementSetup.data,
+        outputSetup: outputSetup.data,
+      });
+    }
     default:
       return null;
   }
@@ -1918,6 +2236,28 @@ export async function GET(request: NextRequest, { params }: Props) {
         }
       }
       return exportResponse(request, reportKey, applyExportFilters(reportKey, payrollAdjustmentsExport.rows, filters), filters, auditContext);
+    }
+
+    const payrollSettlementsExport = await getPayrollSettlementsExportRows(reportKey, token);
+    if (payrollSettlementsExport) {
+      if ("error" in payrollSettlementsExport) {
+        const exportError = payrollSettlementsExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, payrollSettlementsExport.rows, filters), filters, auditContext);
+    }
+
+    const payrollCloseReadinessExport = await getPayrollCloseReadinessExportRows(reportKey, token);
+    if (payrollCloseReadinessExport) {
+      if ("error" in payrollCloseReadinessExport) {
+        const exportError = payrollCloseReadinessExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, payrollCloseReadinessExport.rows, filters), filters, auditContext);
     }
 
     const upstream = await fetch(`${API_BASE_URL}/hr-admin/reports/exports/${reportKey}/`, {

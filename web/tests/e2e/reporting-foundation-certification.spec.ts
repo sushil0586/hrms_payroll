@@ -42,7 +42,7 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await expect(catalog.getByText("Statutory deduction summary")).toBeVisible();
 
     await catalog.getByRole("tab", { name: "All" }).click();
-    await expect(catalog.getByText(/of 20/)).toBeVisible();
+    await expect(catalog.getByText(/of 22/)).toBeVisible();
     await catalog.getByRole("button", { name: "Next" }).click();
     await expect(catalog.getByText("Salary variance report")).toBeVisible();
     await catalog.getByRole("button", { name: "Previous" }).click();
@@ -80,6 +80,16 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await search.fill("payroll adjustments");
     await expect(catalog.getByText("Payroll adjustments report")).toBeVisible();
     await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-adjustments/);
+    await search.fill("");
+
+    await search.fill("payroll settlements");
+    await expect(catalog.getByText("Payroll settlements report")).toBeVisible();
+    await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-settlements/);
+    await search.fill("");
+
+    await search.fill("payroll close readiness");
+    await expect(catalog.getByText("Payroll close readiness report")).toBeVisible();
+    await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-close-readiness/);
     await search.fill("");
 
     await expect(catalog.getByRole("link", { name: "Export" }).first()).toHaveAttribute("href", /\/api\/hr-admin\/reports\//);

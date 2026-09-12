@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { reportCatalog } from "@/lib/report-catalog";
+
 type ExportAudit = {
   id: string;
   actor_display: string;
@@ -72,7 +74,10 @@ export function ReportExportAuditWorkspace() {
     return () => controller.abort();
   }, [exportType, query, reportKey]);
 
-  const reportKeys = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.report_key))).sort()], [items]);
+  const reportKeys = useMemo(
+    () => ["All", ...Array.from(new Set([...reportCatalog.map((item) => item.key), ...items.map((item) => item.report_key)])).sort()],
+    [items],
+  );
   const exportTypes = ["All", "csv", "manifest"];
   const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
