@@ -42,7 +42,7 @@ If a phase fails:
 | P100-1 | Organization masters | Passed with observations | Create/search/edit/deactivate masters | Required fields, duplicates, inactive dropdown exclusion | Rerun employee create dropdown checks after master fix. |
 | P100-2 | Policy and payroll setup | Passed | Salary, leave, attendance, statutory, pay group, provider config | Duplicate setup, missing required config, invalid formulas | Rerun payroll setup and report catalog checks. |
 | P100-3 | 100 employees and access matrix | Passed | 100 employees, manager hierarchy, pay/bank/salary assignment | Role denial, missing-bank blocker, missing mapping | Rerun directory, ESS/MSS, payroll readiness after seed/config changes. |
-| P100-4 | Attendance/leave/lifecycle inputs | Local passed - staging pending | ESS/MSS/HR inputs for scenario distribution | Unauthorized approvals, invalid dates, rejected requests | Rerun affected input and report checks. |
+| P100-4 | Attendance/leave/lifecycle inputs | Passed | ESS/MSS/HR inputs for scenario distribution | Unauthorized approvals, invalid dates, rejected requests | Rerun affected input and report checks. |
 | P100-5 | Payroll input snapshot and lock | Not started | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
 | P100-6 | Calculation and review | Not started | Draft calculation, line review, exceptions, decisions | Invalid lock, unauthorized decision, stale calculation | Rerun calculation/review/report pack. |
 | P100-7 | Adjustments, settlements, readiness | Not started | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
@@ -373,7 +373,17 @@ Implementation and local execution result - 2026-09-12:
 - Staging deployment commands after check-in:
   - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_inputs --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-inputs-staging-manifest.json`
   - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-inputs-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
-- Confidence after local certification: 88% for P100-4. Staging confidence remains pending until these changes are checked in, deployed, seeded on PostgreSQL `hrms_stage`, and rerun against `https://hrms.accerio.in`.
+- Staging deployment and certification:
+  - Deployed commit: `36d73836151adb5a75bcb48016f982b275a6ec3f`.
+  - Build note: the first build attempt failed because `HRMS_API_BASE_URL` was not loaded into the build environment while demo mode was disabled. Rerun succeeded after sourcing `/var/www/hrms-payroll-saas/shared/web.env`.
+  - Services after deploy: `hrms-payroll-backend.service` active, `hrms-payroll-web.service` active.
+  - Staging seed command:
+    - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_inputs --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-inputs-staging-manifest.json`
+  - Staging seed counts: `2200` attendance records, `100` leave balances, `15` leave requests, `5` attendance regularizations, `1` onboarding, `1` probation review, `1` movement, `2` exits.
+  - Staging browser command:
+    - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-inputs-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
+  - Result: `4/4` passed in 1.1m.
+- Confidence after final staging certification: 93% for P100-4. Residual risk: statutory declaration variation is only reserved in the workforce scenario distribution; active statutory pack/profile data is still deferred to the statutory/compliance data phase.
 
 ## Phase P100-5: Payroll Input Snapshot And Lock
 
