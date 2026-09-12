@@ -41,8 +41,8 @@ If a phase fails:
 | P100-0 | Safety and data strategy | Passed - seed manifest pending | Tenant, services, route health, manifest strategy | No accidental mutation of canonical data | Rerun route/auth smoke after any environment change. |
 | P100-1 | Organization masters | Passed with observations | Create/search/edit/deactivate masters | Required fields, duplicates, inactive dropdown exclusion | Rerun employee create dropdown checks after master fix. |
 | P100-2 | Policy and payroll setup | Passed | Salary, leave, attendance, statutory, pay group, provider config | Duplicate setup, missing required config, invalid formulas | Rerun payroll setup and report catalog checks. |
-| P100-3 | 100 employees and access matrix | In progress - staging seed corrected, rerun pending deploy | 100 employees, manager hierarchy, pay/bank/statutory assignment | Role denial, invalid bank, missing mapping | Rerun directory, ESS/MSS, payroll readiness after deploy. |
-| P100-4 | Attendance/leave/lifecycle inputs | Not started | ESS/MSS/HR inputs for scenario distribution | Unauthorized approvals, invalid dates, rejected requests | Rerun affected input and report checks. |
+| P100-3 | 100 employees and access matrix | Passed | 100 employees, manager hierarchy, pay/bank/salary assignment | Role denial, missing-bank blocker, missing mapping | Rerun directory, ESS/MSS, payroll readiness after seed/config changes. |
+| P100-4 | Attendance/leave/lifecycle inputs | Local passed - staging pending | ESS/MSS/HR inputs for scenario distribution | Unauthorized approvals, invalid dates, rejected requests | Rerun affected input and report checks. |
 | P100-5 | Payroll input snapshot and lock | Not started | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
 | P100-6 | Calculation and review | Not started | Draft calculation, line review, exceptions, decisions | Invalid lock, unauthorized decision, stale calculation | Rerun calculation/review/report pack. |
 | P100-7 | Adjustments, settlements, readiness | Not started | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
@@ -288,12 +288,25 @@ Execution result - 2026-09-12:
   - Passed after spec correction: seeded employee ESS and seeded manager MSS role surfaces. ESS shows reporting manager name, not manager employee code.
   - Failed before fixes: payroll readiness rendered but had 13px horizontal overflow in the detail status pill, and missing primary bank was classified as `Warning` instead of payout-blocking.
   - Product fix prepared: payroll readiness detail header wraps safely; default missing primary bank severity changed from `warning` to `blocker`.
+- Final staging browser certification:
+  - Deployed commit: `1f072af67d4966d4255d880e33a0388b3ffca504`.
+  - Services: `hrms-payroll-web.service` active, `hrms-payroll-backend.service` active.
+  - Live seed check: `PILOT100_20260912` returned 100 employees in PostgreSQL `hrms_stage`.
+  - Commercial gate: Northstar Foods set to `enterprise`; exceeded usage limits empty.
+  - Command:
+    - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-workforce-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
+  - Result: `3/3` passed in 50.8s.
+  - Certified:
+    - HR admin can search the 100-employee seed, paginate 50/50, and filter 10 managers.
+    - Seeded employee can open ESS with self-service profile and reporting-manager context.
+    - Seeded manager can open MSS approval workspace.
+    - Payroll readiness exposes the intentional missing-bank blocker for `PILOT100_20260912_E096` without horizontal overflow.
 - Next staging commands after check-in/deploy:
   - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_workforce --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-staging-manifest.json`
   - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-workforce-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
 - Real-user observation:
   - This phase must be certified against manifest-backed data, not ad hoc browser-created employees. Otherwise payroll readiness, bank blockers, access roles, and reporting hierarchy cannot be trusted as a reproducible pilot baseline.
-- Confidence after current work: 82% for P100-3 foundation. It should rise after the prepared bank-blocker and overflow fixes are deployed and the staging browser spec passes `3/3`.
+- Confidence after final staging certification: 94% for P100-3. Residual risk: statutory profiles remain `0` until an active statutory pack exists on staging, so statutory/compliance proof is deferred to the statutory data phase.
 
 ## Phase P100-4: Attendance, Leave, Lifecycle, And Inputs
 
@@ -324,6 +337,43 @@ Observations to record:
 Exit gate:
 
 - Payroll source data exists for all 100 employees.
+
+Implementation and local execution result - 2026-09-12:
+
+- Implementation added:
+  - Backend management command: `python manage.py seed_pilot_100_inputs --prefix PILOT100_20260912 --output-file <manifest.json>`.
+  - Browser certification spec: `web/tests/e2e/pilot-100-inputs-certification.spec.ts`.
+- Seed command behavior:
+  - Requires exactly 100 employees for the selected pilot prefix before mutation.
+  - Cleans only prefixed pilot input data for selected employees and period.
+  - Creates September 2026 workday attendance rows for all 100 employees.
+  - Seeds approved leave/LOP cases, pending leave cases, approved/rejected/pending regularizations, overtime rows, late/exception rows, and lifecycle onboarding/probation/movement/exit rows.
+  - Creates 100 leave balance rows for report and ESS visibility.
+  - Writes a manifest with counts, scenario labels, period, tenant, cleanup counts, and generation timestamp.
+- Local seed verification:
+  - Prefix: `P100LOCAL_P4`.
+  - Attendance records: `2200`.
+  - Leave balances: `100`.
+  - Leave requests: `15` (`10` approved, `5` pending).
+  - Attendance regularizations: `5`.
+  - Lifecycle records: `1` onboarding, `1` probation, `1` movement, `2` exits.
+  - Cleanup command succeeded for both inputs and workforce after local browser proof.
+- Local browser certification:
+  - Command:
+    - `HRMS_API_BASE_URL=http://127.0.0.1:8001/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_PILOT100_PREFIX=P100LOCAL_P4 PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/pilot-100-inputs-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
+  - Result: `4/4` passed in 18.9s.
+  - Certified:
+    - Attendance register report opens, searches pilot rows, sorts overtime rows, filters regularized rows, paginates, and exports CSV with checksum headers.
+    - Leave balance report opens, searches pilot balances, verifies export manifest evidence, and seeded employee ESS shows pending leave.
+    - Seeded managers can see their actual direct-report leave and attendance approval queues.
+    - Lifecycle aging report exposes pilot onboarding, probation, movement, and exit risk rows with export evidence.
+- Test-design observation:
+  - Manager approval proof must follow the seeded reporting hierarchy. `E001` owns the pending leave case, while pending attendance regularization proof uses the responsible manager for that employee (`E008` in the local run).
+  - Playwright local runs must pass `HRMS_API_BASE_URL`; the Playwright web server env overrides `.env.local` when the variable is not explicit.
+- Staging deployment commands after check-in:
+  - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_inputs --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-inputs-staging-manifest.json`
+  - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-inputs-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
+- Confidence after local certification: 88% for P100-4. Staging confidence remains pending until these changes are checked in, deployed, seeded on PostgreSQL `hrms_stage`, and rerun against `https://hrms.accerio.in`.
 
 ## Phase P100-5: Payroll Input Snapshot And Lock
 
