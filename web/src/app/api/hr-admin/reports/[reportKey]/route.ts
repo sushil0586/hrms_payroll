@@ -31,6 +31,7 @@ import {
   getHrAdminLeaveBalances,
   getHrAdminNotifications,
   getHrAdminPayrollAdjustmentSetup,
+  getHrAdminPayrollFinanceHandoffSetup,
   getHrAdminPayrollInputSnapshotSetup,
   getHrAdminPayrollOutputSetup,
   getHrAdminPayrollReviewSetup,
@@ -348,6 +349,84 @@ const REPORT_EVIDENCE_COLUMNS: Record<string, string[]> = {
     "source_hashes",
     "detail_href",
   ],
+  "payslip-publication": [
+    "employee_code",
+    "employee_name",
+    "payroll_run_name",
+    "payroll_run_id",
+    "output_batch_id",
+    "artifact_id",
+    "batch_status",
+    "review_status",
+    "artifact_status",
+    "artifact_key",
+    "title",
+    "file_name",
+    "published_at",
+    "published_by_name",
+    "notification_count",
+    "signed_url_issued_count",
+    "download_count",
+    "read_acknowledgement_count",
+    "revoked_event_count",
+    "active_signed_grant_count",
+    "revoked_signed_grant_count",
+    "expired_signed_grant_count",
+    "latest_downloaded_at",
+    "first_read_at",
+    "latest_notification_at",
+    "latest_signed_grant_expires_at",
+    "latest_revoked_at",
+    "is_read_acknowledged",
+    "acknowledgement",
+    "publication_state",
+    "access_risk",
+    "checksum_sha256",
+    "source_hash",
+    "storage_provider_ref",
+    "download_strategy_ref",
+    "detail_href",
+  ],
+  "finance-handoff-exceptions": [
+    "payroll_run_name",
+    "payroll_run_id",
+    "handoff_id",
+    "handoff_status",
+    "handoff_status_label",
+    "handoff_profile_ref",
+    "artifact_id",
+    "artifact_kind",
+    "artifact_title",
+    "artifact_status",
+    "provider_delivery_id",
+    "delivery_status",
+    "provider_ref",
+    "channel_ref",
+    "external_reference",
+    "submitted_at",
+    "acknowledged_at",
+    "reconciled_at",
+    "attempt_count",
+    "callback_count",
+    "processed_callback_count",
+    "retry_count",
+    "scheduled_retry_count",
+    "executed_retry_count",
+    "job_count",
+    "queued_job_count",
+    "running_job_count",
+    "dead_lettered_job_count",
+    "latest_retry_reason",
+    "failure_code",
+    "failure_reason",
+    "blocker_category",
+    "handoff_risk",
+    "next_action",
+    "audit_pack_ready",
+    "payload_checksum_sha256",
+    "source_hash",
+    "detail_href",
+  ],
 };
 
 function evidenceColumnsForReport(reportKey: string, rows: Array<Record<string, unknown>>) {
@@ -550,6 +629,20 @@ function applyExportFilters(reportKey: string, rows: Array<Record<string, unknow
       if (filters.blocker_category && row.blocker_category !== filters.blocker_category) return false;
       if (filters.output_batch_status && row.output_batch_status !== filters.output_batch_status) return false;
     }
+    if (reportKey === "payslip-publication") {
+      if (filters.payroll_run_id && row.payroll_run_id !== filters.payroll_run_id) return false;
+      if (filters.publication_state && row.publication_state !== filters.publication_state) return false;
+      if (filters.access_risk && row.access_risk !== filters.access_risk) return false;
+      if (filters.artifact_status && row.artifact_status !== filters.artifact_status) return false;
+      if (filters.acknowledgement && row.acknowledgement !== filters.acknowledgement) return false;
+    }
+    if (reportKey === "finance-handoff-exceptions") {
+      if (filters.handoff_status && row.handoff_status !== filters.handoff_status) return false;
+      if (filters.delivery_status && row.delivery_status !== filters.delivery_status) return false;
+      if (filters.provider_ref && row.provider_ref !== filters.provider_ref) return false;
+      if (filters.handoff_risk && row.handoff_risk !== filters.handoff_risk) return false;
+      if (filters.blocker_category && row.blocker_category !== filters.blocker_category) return false;
+    }
     return true;
   });
 }
@@ -561,6 +654,7 @@ const COMPLIANCE_SOURCE_ENDPOINTS = [
 const PAYROLL_REGISTER_SOURCE_ENDPOINTS = ["/hr-admin/payroll-output-setup/"];
 const SALARY_VARIANCE_SOURCE_ENDPOINTS = ["/hr-admin/payroll-review-setup/"];
 const BANK_ADVICE_SOURCE_ENDPOINTS = ["/hr-admin/payroll-finance-handoff-setup/"];
+const FINANCE_HANDOFF_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-finance-handoff-setup/"];
 const WORKFORCE_SOURCE_ENDPOINTS = ["/hr-admin/employees/"];
 const DOCUMENT_COMPLIANCE_SOURCE_ENDPOINTS = ["/hr-admin/employee-documents/"];
 const LIFECYCLE_QUEUE_SOURCE_ENDPOINTS = ["/hr-admin/lifecycle-queue/"];
@@ -578,6 +672,7 @@ const PAYROLL_CLOSE_READINESS_SOURCE_ENDPOINTS = [
   "/hr-admin/payroll-settlement-setup/",
   "/hr-admin/payroll-output-setup/",
 ];
+const PAYSLIP_PUBLICATION_SOURCE_ENDPOINTS = ["/hr-admin/payroll-output-setup/"];
 
 function sourceEndpointsForReport(reportKey: string) {
   if (reportKey === "workforce") return WORKFORCE_SOURCE_ENDPOINTS;
@@ -591,9 +686,11 @@ function sourceEndpointsForReport(reportKey: string) {
   if (reportKey === "payroll-adjustments") return PAYROLL_ADJUSTMENTS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-settlements") return PAYROLL_SETTLEMENTS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-close-readiness") return PAYROLL_CLOSE_READINESS_SOURCE_ENDPOINTS;
+  if (reportKey === "payslip-publication") return PAYSLIP_PUBLICATION_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-register") return PAYROLL_REGISTER_SOURCE_ENDPOINTS;
   if (reportKey === "salary-variance") return SALARY_VARIANCE_SOURCE_ENDPOINTS;
   if (reportKey === "bank-advice") return BANK_ADVICE_SOURCE_ENDPOINTS;
+  if (reportKey === "finance-handoff-exceptions") return FINANCE_HANDOFF_EXCEPTIONS_SOURCE_ENDPOINTS;
   return COMPLIANCE_SOURCE_ENDPOINTS;
 }
 
@@ -980,6 +1077,186 @@ async function getBankAdviceExportRows(reportKey: string, token: string) {
         };
       }),
   };
+}
+
+function handoffBlockerCategory(row: {
+  deliveryStatus: string;
+  handoffStatus: string;
+  retryCount: number;
+  scheduledRetryCount: number;
+  queuedJobCount: number;
+  deadLetteredJobCount: number;
+  hasDelivery: boolean;
+  failureCode: string;
+}) {
+  if (!row.hasDelivery) return "Missing provider delivery";
+  if (["failed", "rejected"].includes(row.deliveryStatus) || row.failureCode) return "Provider failure";
+  if (row.deadLetteredJobCount > 0) return "Dead-lettered job";
+  if (row.scheduledRetryCount > 0 || row.retryCount > 0) return "Retry pending";
+  if (row.queuedJobCount > 0) return "Queued worker";
+  if (["generated", "pending"].includes(row.handoffStatus) || ["pending", "queued"].includes(row.deliveryStatus)) return "Transmission pending";
+  return "None";
+}
+
+function handoffRisk(category: string, deliveryStatus: string) {
+  if (["Provider failure", "Dead-lettered job", "Missing provider delivery"].includes(category)) return "High";
+  if (["Retry pending", "Queued worker", "Transmission pending"].includes(category)) return "Medium";
+  if (["acknowledged", "reconciled", "submitted", "transmitted", "accepted"].includes(deliveryStatus)) return "Low";
+  return "Medium";
+}
+
+function handoffNextAction(category: string) {
+  if (category === "Missing provider delivery") return "Generate or attach provider delivery";
+  if (category === "Provider failure") return "Review provider response and retry";
+  if (category === "Dead-lettered job") return "Recover worker job or escalate";
+  if (category === "Retry pending") return "Monitor scheduled retry";
+  if (category === "Queued worker") return "Monitor worker queue";
+  if (category === "Transmission pending") return "Transmit finance handoff";
+  return "Ready for finance review";
+}
+
+function financeHandoffExceptionRows(handoffSetup: HrAdminPayrollFinanceHandoffSetupResponse) {
+  const artifactById = new Map(handoffSetup.artifacts.map((artifact) => [artifact.id, artifact]));
+  const handoffById = new Map(handoffSetup.handoffs.map((handoff) => [handoff.id, handoff]));
+  const deliveriesByHandoff = new Map<string, HrAdminPayrollFinanceHandoffSetupResponse["deliveries"]>();
+  for (const delivery of handoffSetup.deliveries) {
+    deliveriesByHandoff.set(delivery.handoff_id, [...(deliveriesByHandoff.get(delivery.handoff_id) ?? []), delivery]);
+  }
+
+  const deliveryRows = handoffSetup.deliveries.map((delivery) => {
+    const handoff = handoffById.get(delivery.handoff_id);
+    const artifact = artifactById.get(delivery.output_artifact_id);
+    const callbacks = handoffSetup.callback_events.filter((event) => event.provider_delivery_id === delivery.id);
+    const retries = handoffSetup.retry_events.filter((event) => event.provider_delivery_id === delivery.id);
+    const jobs = handoffSetup.provider_jobs.filter((job) => job.provider_delivery_id === delivery.id);
+    const queuedJobCount = jobs.filter((job) => job.status === "queued").length;
+    const runningJobCount = jobs.filter((job) => job.status === "running").length;
+    const deadLetteredJobCount = jobs.filter((job) => job.status === "dead_lettered").length;
+    const scheduledRetryCount = retries.filter((retry) => retry.status === "scheduled").length;
+    const executedRetryCount = retries.filter((retry) => retry.executed_at).length;
+    const blockerCategory = handoffBlockerCategory({
+      deliveryStatus: delivery.status,
+      handoffStatus: handoff?.status ?? "pending",
+      retryCount: retries.length,
+      scheduledRetryCount,
+      queuedJobCount,
+      deadLetteredJobCount,
+      hasDelivery: true,
+      failureCode: delivery.failure_code,
+    });
+    const risk = handoffRisk(blockerCategory, delivery.status);
+    return {
+      payroll_run_name: handoff?.payroll_run_name ?? delivery.output_artifact_title,
+      payroll_run_id: delivery.payroll_run_id,
+      handoff_id: delivery.handoff_id,
+      handoff_status: handoff?.status ?? "pending",
+      handoff_status_label: handoff?.status_label ?? "",
+      handoff_profile_ref: handoff?.handoff_profile_ref ?? "",
+      artifact_id: delivery.output_artifact_id,
+      artifact_kind: delivery.artifact_kind,
+      artifact_title: delivery.output_artifact_title,
+      artifact_status: artifact?.status ?? "",
+      provider_delivery_id: delivery.id,
+      delivery_status: delivery.status,
+      provider_ref: delivery.provider_ref,
+      channel_ref: delivery.channel_ref,
+      external_reference: delivery.external_reference,
+      submitted_at: delivery.submitted_at ?? "",
+      acknowledged_at: delivery.acknowledged_at ?? "",
+      reconciled_at: delivery.reconciled_at ?? "",
+      attempt_count: delivery.attempt_count,
+      callback_count: callbacks.length,
+      processed_callback_count: callbacks.filter((event) => event.status === "processed").length,
+      retry_count: retries.length,
+      scheduled_retry_count: scheduledRetryCount,
+      executed_retry_count: executedRetryCount,
+      job_count: jobs.length,
+      queued_job_count: queuedJobCount,
+      running_job_count: runningJobCount,
+      dead_lettered_job_count: deadLetteredJobCount,
+      latest_retry_reason: retries[0]?.retry_reason ?? "",
+      failure_code: delivery.failure_code || callbacks[0]?.failure_code || retries[0]?.failure_code || "",
+      failure_reason: delivery.failure_reason || callbacks[0]?.failure_reason || retries[0]?.failure_reason || "",
+      blocker_category: blockerCategory,
+      handoff_risk: risk,
+      next_action: handoffNextAction(blockerCategory),
+      audit_pack_ready: Boolean((delivery.payload_checksum_sha256 || callbacks[0]?.payload_checksum_sha256 || artifact?.checksum_sha256) && artifact?.source_hash),
+      payload_checksum_sha256: delivery.payload_checksum_sha256 || callbacks[0]?.payload_checksum_sha256 || artifact?.checksum_sha256 || "",
+      source_hash: artifact?.source_hash ?? "",
+      detail_href: `/hr-admin/payroll-handoff?handoffId=${delivery.handoff_id}&artifactId=${delivery.output_artifact_id}&evidence=delivery%3A${delivery.id}`,
+    };
+  });
+
+  const missingDeliveryRows = handoffSetup.handoffs
+    .filter((handoff) => (deliveriesByHandoff.get(handoff.id) ?? []).length === 0)
+    .map((handoff) => {
+      const artifacts = handoffSetup.artifacts.filter((artifact) => artifact.output_batch_id === handoff.output_batch_id);
+      const artifact = artifacts[0];
+      const blockerCategory = handoffBlockerCategory({
+        deliveryStatus: "pending",
+        handoffStatus: handoff.status,
+        retryCount: 0,
+        scheduledRetryCount: 0,
+        queuedJobCount: 0,
+        deadLetteredJobCount: 0,
+        hasDelivery: false,
+        failureCode: "",
+      });
+      return {
+        payroll_run_name: handoff.payroll_run_name,
+        payroll_run_id: handoff.payroll_run_id,
+        handoff_id: handoff.id,
+        handoff_status: handoff.status,
+        handoff_status_label: handoff.status_label,
+        handoff_profile_ref: handoff.handoff_profile_ref,
+        artifact_id: artifact?.id ?? "",
+        artifact_kind: artifact?.kind ?? "artifact.pending",
+        artifact_title: artifact?.title ?? "Provider delivery pending",
+        artifact_status: artifact?.status ?? "",
+        provider_delivery_id: "",
+        delivery_status: "pending",
+        provider_ref: "",
+        channel_ref: "",
+        external_reference: "",
+        submitted_at: "",
+        acknowledged_at: "",
+        reconciled_at: "",
+        attempt_count: 0,
+        callback_count: 0,
+        processed_callback_count: 0,
+        retry_count: 0,
+        scheduled_retry_count: 0,
+        executed_retry_count: 0,
+        job_count: 0,
+        queued_job_count: 0,
+        running_job_count: 0,
+        dead_lettered_job_count: 0,
+        latest_retry_reason: "",
+        failure_code: "",
+        failure_reason: "",
+        blocker_category: blockerCategory,
+        handoff_risk: handoffRisk(blockerCategory, "pending"),
+        next_action: handoffNextAction(blockerCategory),
+        audit_pack_ready: false,
+        payload_checksum_sha256: artifact?.checksum_sha256 ?? "",
+        source_hash: artifact?.source_hash ?? "",
+        detail_href: `/hr-admin/payroll-handoff?handoffId=${handoff.id}`,
+      };
+    });
+
+  return [...deliveryRows, ...missingDeliveryRows];
+}
+
+async function getFinanceHandoffExceptionExportRows(reportKey: string, token: string) {
+  if (reportKey !== "finance-handoff-exceptions") return null;
+
+  const handoffResult = await upstreamJson<HrAdminPayrollFinanceHandoffSetupResponse>("/hr-admin/payroll-finance-handoff-setup/", token);
+  if (!handoffResult.ok) return { error: handoffResult };
+
+  const handoffSetup = handoffResult.data;
+  if (!handoffSetup) return { error: { ok: false, status: 502, data: null, detail: "Live finance handoff exception source data is unavailable." } };
+
+  return { rows: financeHandoffExceptionRows(handoffSetup) };
 }
 
 async function getWorkforceExportRows(reportKey: string, token: string) {
@@ -1788,6 +2065,85 @@ async function getPayrollCloseReadinessExportRows(reportKey: string, token: stri
   };
 }
 
+function payslipPublicationState(artifact: HrAdminPayrollOutputArtifact) {
+  if (artifact.access_summary.is_read_acknowledged || artifact.access_summary.read_acknowledgement_count > 0) return "Acknowledged";
+  if (artifact.access_summary.download_count > 0) return "Downloaded";
+  if (artifact.status === "published" || artifact.published_at) return "Published";
+  return "Generated";
+}
+
+function payslipAccessRisk(artifact: HrAdminPayrollOutputArtifact, publicationState: string) {
+  if (artifact.access_summary.revoked_event_count > 0 || artifact.access_summary.expired_signed_grant_count > 0) return "High";
+  if (publicationState === "Generated") return "High";
+  if (publicationState === "Published" && artifact.access_summary.download_count === 0 && artifact.access_summary.read_acknowledgement_count === 0) return "Medium";
+  return "Low";
+}
+
+function payslipPublicationRows(outputSetup: HrAdminPayrollOutputSetupResponse) {
+  const batchById = new Map(outputSetup.output_batches.map((batch) => [batch.id, batch]));
+  const runById = new Map(outputSetup.runs.map((run) => [run.id, run]));
+  return outputSetup.artifacts
+    .filter((artifact) => artifact.kind === "payslip")
+    .map((artifact) => {
+      const batch = batchById.get(artifact.output_batch_id);
+      const run = runById.get(artifact.payroll_run_id);
+      const publicationState = payslipPublicationState(artifact);
+      const acknowledgement = artifact.access_summary.is_read_acknowledged || artifact.access_summary.read_acknowledgement_count > 0 ? "Acknowledged" : "Pending";
+      return {
+        employee_code: artifact.employee_code ?? "",
+        employee_name: artifact.employee_name ?? "",
+        payroll_run_name: batch?.payroll_run_name ?? run?.name ?? artifact.payroll_run_id,
+        payroll_run_id: artifact.payroll_run_id,
+        output_batch_id: artifact.output_batch_id,
+        artifact_id: artifact.id,
+        batch_status: batch?.status ?? "",
+        review_status: batch?.review_status ?? "",
+        artifact_status: artifact.status,
+        artifact_key: artifact.artifact_key,
+        title: artifact.title,
+        file_name: artifact.file_name,
+        published_at: artifact.published_at ?? "",
+        published_by_name: artifact.published_by_name ?? batch?.published_by_name ?? "",
+        notification_count: artifact.access_summary.notification_count,
+        signed_url_issued_count: artifact.access_summary.signed_url_issued_count,
+        download_count: artifact.access_summary.download_count,
+        read_acknowledgement_count: artifact.access_summary.read_acknowledgement_count,
+        revoked_event_count: artifact.access_summary.revoked_event_count,
+        active_signed_grant_count: artifact.access_summary.active_signed_grant_count,
+        revoked_signed_grant_count: artifact.access_summary.revoked_signed_grant_count,
+        expired_signed_grant_count: artifact.access_summary.expired_signed_grant_count,
+        latest_downloaded_at: artifact.access_summary.latest_downloaded_at ?? "",
+        first_read_at: artifact.access_summary.first_read_at ?? "",
+        latest_notification_at: artifact.access_summary.latest_notification_at ?? "",
+        latest_signed_grant_expires_at: artifact.access_summary.latest_signed_grant_expires_at ?? "",
+        latest_revoked_at: artifact.access_summary.latest_revoked_at ?? "",
+        is_read_acknowledged: artifact.access_summary.is_read_acknowledged,
+        acknowledgement,
+        publication_state: publicationState,
+        access_risk: payslipAccessRisk(artifact, publicationState),
+        checksum_sha256: artifact.checksum_sha256,
+        source_hash: artifact.source_hash,
+        storage_provider_ref: artifact.storage_provider_ref,
+        download_strategy_ref: artifact.download_strategy_ref,
+        detail_href: `/hr-admin/payroll-outputs?batchId=${artifact.output_batch_id}&artifactId=${artifact.id}`,
+      };
+    });
+}
+
+async function getPayslipPublicationExportRows(reportKey: string, token: string) {
+  if (reportKey !== "payslip-publication") return null;
+
+  const outputResult = await upstreamJson<HrAdminPayrollOutputSetupResponse>("/hr-admin/payroll-output-setup/", token);
+  if (!outputResult.ok) return { error: outputResult };
+
+  const outputSetup = outputResult.data;
+  if (!outputSetup) return { error: { ok: false, status: 502, data: null, detail: "Live payslip publication source data is unavailable." } };
+
+  return {
+    rows: payslipPublicationRows(outputSetup),
+  };
+}
+
 async function getDemoRows(reportKey: string) {
   switch (reportKey) {
     case "workforce": {
@@ -2075,6 +2431,14 @@ async function getDemoRows(reportKey: string) {
         outputSetup: outputSetup.data,
       });
     }
+    case "payslip-publication": {
+      const result = await getHrAdminPayrollOutputSetup();
+      return payslipPublicationRows(result.data);
+    }
+    case "finance-handoff-exceptions": {
+      const result = await getHrAdminPayrollFinanceHandoffSetup();
+      return financeHandoffExceptionRows(result.data);
+    }
     default:
       return null;
   }
@@ -2137,6 +2501,17 @@ export async function GET(request: NextRequest, { params }: Props) {
         }
       }
       return exportResponse(request, reportKey, applyExportFilters(reportKey, bankAdviceExport.rows, filters), filters, auditContext);
+    }
+
+    const financeHandoffExceptionExport = await getFinanceHandoffExceptionExportRows(reportKey, token);
+    if (financeHandoffExceptionExport) {
+      if ("error" in financeHandoffExceptionExport) {
+        const exportError = financeHandoffExceptionExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, financeHandoffExceptionExport.rows, filters), filters, auditContext);
     }
 
     const workforceExport = await getWorkforceExportRows(reportKey, token);
@@ -2258,6 +2633,17 @@ export async function GET(request: NextRequest, { params }: Props) {
         }
       }
       return exportResponse(request, reportKey, applyExportFilters(reportKey, payrollCloseReadinessExport.rows, filters), filters, auditContext);
+    }
+
+    const payslipPublicationExport = await getPayslipPublicationExportRows(reportKey, token);
+    if (payslipPublicationExport) {
+      if ("error" in payslipPublicationExport) {
+        const exportError = payslipPublicationExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, payslipPublicationExport.rows, filters), filters, auditContext);
     }
 
     const upstream = await fetch(`${API_BASE_URL}/hr-admin/reports/exports/${reportKey}/`, {
