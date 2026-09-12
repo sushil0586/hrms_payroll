@@ -2,9 +2,9 @@
 
 Generated: 2026-09-12  
 Owner: HRMS Payroll SaaS QA / Delivery  
-Current pilot readiness estimate: 87%  
+Current pilot readiness estimate: 90%  
 Current local build certified through: R5-G Payroll Finance Handoff Exception Report  
-Current staging build certified through: R5-E Payroll Close Readiness  
+Current staging build certified through: R5-G Payroll Finance Handoff Exception Report  
 
 ## Purpose
 
@@ -19,8 +19,8 @@ Already certified on staging:
 - R5-C Payroll Adjustments Report.
 - R5-D Payroll Settlements Report.
 - R5-E Payroll Close Readiness Report.
-- R5-F Payslip Publication And Acknowledgement Report certified locally.
-- R5-G Payroll Finance Handoff Exception Report certified locally.
+- R5-F Payslip Publication And Acknowledgement Report.
+- R5-G Payroll Finance Handoff Exception Report.
 - Report catalog includes the new payroll reports.
 - Export audit history captures CSV and manifest evidence.
 - HR admin positive flows and employee denial flows passed for the latest focused report pack.
@@ -28,9 +28,10 @@ Already certified on staging:
 Latest staging evidence:
 
 - Date: 2026-09-12.
-- Commit: `09fcb8b0c8d357d639ee07d93a0b4abbe049b3c4`.
-- Test pack: settlements, close readiness, report catalog, export audit history.
-- Result: `8/8 passed`.
+- Commit: `0a8b47cc03c39dbfc5eb929df3fede3ab103ac93`.
+- Remediation: staging source already contained R5-F/R5-G, but the web route manifest was stale. Rebuilt with `/var/www/hrms-payroll-saas/shared/web.env` loaded and restarted `hrms-payroll-web.service`.
+- Test pack: payslip publication, finance handoff exceptions, report catalog, export audit history.
+- Result: R5-F/R5-G focused staging `4/4 passed`; catalog/audit staging regression `4/4 passed`.
 - Staging services: backend active, web active.
 
 Latest local evidence:
@@ -48,15 +49,15 @@ Latest local evidence:
 
 | Area | Current Confidence | Status | Notes |
 |---|---:|---|---|
-| Report framework and export audit governance | 92% | Strong | CSV, manifest, checksum, source endpoints, evidence columns, and audit history are repeatedly certified. |
+| Report framework and export audit governance | 94% | Strong | CSV, manifest, checksum, source endpoints, evidence columns, and audit history are repeatedly certified locally and on staging. |
 | Payroll setup-to-close visibility | 88% | Strong | Inputs, review exceptions, adjustments, settlements, and close readiness are now visible through reports. |
-| Payroll output and payslip visibility | 84% | Strong locally | Payslip publication report now covers published state, acknowledgement, signed URL/download/revocation/expiry counters, and source hash evidence locally; staging deployment still pending. |
-| Finance handoff exception visibility | 87% | Strong locally | Finance handoff exception report now covers delivery status, retries, callbacks, queue jobs, blocker category, risk, audit-pack readiness, and source evidence locally; staging deployment still pending. |
+| Payroll output and payslip visibility | 90% | Strong | Payslip publication report covers published state, acknowledgement, signed URL/download/revocation/expiry counters, and source hash evidence locally and on staging. |
+| Finance handoff exception visibility | 90% | Strong | Finance handoff exception report covers delivery status, retries, callbacks, queue jobs, blocker category, risk, audit-pack readiness, and source evidence locally and on staging. |
 | Full local regression after latest reports | 82% | Pending | Focused packs and catalog/audit regression pass; full report pack should be rerun before staging sign-off. |
 | Staging pilot-data rehearsal | 65% | Pending | Needs realistic tenant/payroll run with seeded or real pilot data. |
 | Operational pilot readiness | 70% | Pending | Backup, restore, rollback, monitoring, credentials, and support runbook need final rehearsal. |
 
-Overall pilot readiness: 87%.
+Overall pilot readiness: 90%.
 
 ## Open Pendencies
 
@@ -66,10 +67,10 @@ These must be done before any customer-facing pilot payroll run.
 
 | ID | Pendency | Owner | Status | Exit Criteria |
 |---|---|---|---|---|
-| P0-1 | Payslip publication and acknowledgement report | Engineering / QA | Done locally | HR admin can see published payslips, employee read acknowledgement, downloads, signed URL grants, revoked/expired access, and failed access events. Staging deployment/certification pending under P0-4. |
-| P0-2 | Payroll finance handoff exception report | Engineering / QA | Done locally | HR admin / finance manager can see failed, queued, retried, transmitted, acknowledged, and audit-pack-ready handoff exceptions. Staging deployment/certification pending under P0-4. |
+| P0-1 | Payslip publication and acknowledgement report | Engineering / QA | Done on staging | HR admin can see published payslips, employee read acknowledgement, downloads, signed URL grants, revoked/expired access, and failed access events. |
+| P0-2 | Payroll finance handoff exception report | Engineering / QA | Done on staging | HR admin / finance manager can see failed, queued, retried, transmitted, acknowledged, and audit-pack-ready handoff exceptions. |
 | P0-3 | Full report regression after R5-F/R5-G | QA | Pending | Full local report/compliance Playwright pack passes with all current report specs. |
-| P0-4 | Staging certification after final payroll report slice | QA | Pending | Focused staging pack and relevant regression pack pass on `https://hrms.accerio.in`. |
+| P0-4 | Staging certification after final payroll report slice | QA | Done | Focused staging pack and relevant regression pack pass on `https://hrms.accerio.in`. |
 | P0-5 | Pilot payroll rehearsal with realistic data | Delivery / QA | Pending | One tenant can run payroll from configured master data through inputs, review, close readiness, output, payslip publication, and finance handoff. |
 
 ### P1: Strongly Recommended Before Pilot
@@ -182,12 +183,12 @@ Scope:
 
 Done Gate:
 
-- Deployed commit matches `origin/main`.
-- Services active.
-- Route manifest includes new report pages.
-- Focused staging Playwright pack passes.
+- Deployed commit matches `origin/main`. Done on 2026-09-12 with `0a8b47cc03c39dbfc5eb929df3fede3ab103ac93`.
+- Services active. Done on 2026-09-12.
+- Route manifest includes new report pages. Done on 2026-09-12 after env-backed web rebuild.
+- Focused staging Playwright pack passes. Done on 2026-09-12 with `4/4 passed`.
 
-Confidence target after phase: 90%.
+Confidence after phase: 90%.
 
 ### Phase P1: Pilot Tenant And Data Rehearsal
 
@@ -252,6 +253,7 @@ Confidence target after phase: 95%.
 | 2026-09-12 | R5-D/R5-E staging certification | Staging | Settlements, close readiness, report catalog, export audit history | `8/8 passed` | 80% |
 | 2026-09-12 | R5-F payslip publication certification | Local with live staging API | TypeScript, payslip publication, report catalog, export audit history | `tsc passed`; `2/2 passed`; `4/4 passed` | 84% |
 | 2026-09-12 | R5-G finance handoff exception certification | Local with live staging API | TypeScript, finance handoff exceptions, report catalog, export audit history | `tsc passed`; `2/2 passed`; `4/4 passed` | 87% |
+| 2026-09-12 | R5-F/R5-G staging certification | Staging | Payslip publication, finance handoff exceptions, report catalog, export audit history | `4/4 passed`; `4/4 passed` | 90% |
 
 ## Update Protocol
 
