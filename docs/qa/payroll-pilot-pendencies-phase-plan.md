@@ -12,6 +12,10 @@ This is the living pilot-readiness tracker for the HRMS Payroll SaaS product. Up
 
 The goal is to keep the remaining work visible at a granular level and make the pilot decision evidence-based instead of feeling-based.
 
+Detailed 1 organization / 100 employee rehearsal plan:
+
+- `docs/qa/full-realistic-payroll-run-100-employees-phase-plan-2026-09-12.md`
+
 ## Current Position
 
 Already certified on staging:
@@ -71,7 +75,7 @@ These must be done before any customer-facing pilot payroll run.
 | P0-2 | Payroll finance handoff exception report | Engineering / QA | Done on staging | HR admin / finance manager can see failed, queued, retried, transmitted, acknowledged, and audit-pack-ready handoff exceptions. |
 | P0-3 | Full report regression after R5-F/R5-G | QA | Pending | Full local report/compliance Playwright pack passes with all current report specs. |
 | P0-4 | Staging certification after final payroll report slice | QA | Done | Focused staging pack and relevant regression pack pass on `https://hrms.accerio.in`. |
-| P0-5 | Pilot payroll rehearsal with realistic data | Delivery / QA | Pending | One tenant can run payroll from configured master data through inputs, review, close readiness, output, payslip publication, and finance handoff. |
+| P0-5 | Pilot payroll rehearsal with realistic data | Delivery / QA | Planned | One tenant can run payroll from configured master data through inputs, review, close readiness, output, payslip publication, and finance handoff. Detailed P100 plan created for 1 org / 100 employees. |
 
 ### P1: Strongly Recommended Before Pilot
 
@@ -221,6 +225,30 @@ Done Gate:
 
 Confidence target after phase: 93%.
 
+### Phase P100: Full Realistic Payroll Rehearsal, 1 Org / 100 Employees
+
+Goal:
+
+Prove pilot readiness with one realistic organization, 100 employees, broad payroll scenarios, full browser-based certification, and complete export/audit evidence.
+
+Plan:
+
+- Use `docs/qa/full-realistic-payroll-run-100-employees-phase-plan-2026-09-12.md`.
+- Execute P100-0 through P100-13.
+- Build repeatable seed manifest before any staging mutation.
+- Run locally first, then staging.
+- Retain/archive/cleanup decision must be recorded after evidence export.
+
+Done Gate:
+
+- 100 employees seeded or created with scenario distribution.
+- Payroll cycle completes through inputs, calculation, review, close readiness, outputs, payslip publication, ESS proof, and finance handoff.
+- Full report and export audit pack passes.
+- Security, UX, and performance checks pass or residuals are explicitly accepted.
+- Final evidence report is produced.
+
+Confidence target after phase: 96%.
+
 ### Phase P2: Operational Readiness Rehearsal
 
 Goal:
@@ -254,6 +282,7 @@ Confidence target after phase: 95%.
 | 2026-09-12 | R5-F payslip publication certification | Local with live staging API | TypeScript, payslip publication, report catalog, export audit history | `tsc passed`; `2/2 passed`; `4/4 passed` | 84% |
 | 2026-09-12 | R5-G finance handoff exception certification | Local with live staging API | TypeScript, finance handoff exceptions, report catalog, export audit history | `tsc passed`; `2/2 passed`; `4/4 passed` | 87% |
 | 2026-09-12 | R5-F/R5-G staging certification | Staging | Payslip publication, finance handoff exceptions, report catalog, export audit history | `4/4 passed`; `4/4 passed` | 90% |
+| 2026-09-12 | P100 rehearsal plan | Documentation | 1 org / 100 employee full payroll rehearsal phase plan | Plan created | 90% |
 
 ## Update Protocol
 
