@@ -246,6 +246,12 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
   if (formValue.designation_id && !formValue.grade_id) {
     mappingWarnings.push("designation should be paired with a grade");
   }
+  if (formValue.legal_entity_id && filteredBranches.length === 0) {
+    mappingWarnings.push("no active branches are mapped to the selected legal entity");
+  }
+  if (formValue.legal_entity_id && filteredCostCenters.length === 0) {
+    mappingWarnings.push("no active cost centers are mapped to the selected legal entity");
+  }
 
   function updateField<Key extends keyof HrAdminEmployeeWriteInput>(key: Key, value: HrAdminEmployeeWriteInput[Key]) {
     setFieldErrors((current) => ({ ...current, [key]: undefined }));

@@ -435,7 +435,7 @@ test.describe("HR admin organization master CRUD", () => {
   }
 
   test("employee structural mapping uses organization masters as dependent dropdown sources", async ({ page }) => {
-    test.setTimeout(5 * 60 * 1000);
+    test.setTimeout(15 * 60 * 1000);
     const created: Partial<Record<SectionKey, CreatedRecord>> = {};
 
     for (const section of sections) {

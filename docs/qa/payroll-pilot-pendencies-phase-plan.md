@@ -15,6 +15,7 @@ The goal is to keep the remaining work visible at a granular level and make the 
 Detailed 1 organization / 100 employee rehearsal plan:
 
 - `docs/qa/full-realistic-payroll-run-100-employees-phase-plan-2026-09-12.md`
+- `docs/qa/pilot-100-execution-tracker-2026-09-12.md`
 
 ## Current Position
 
@@ -234,6 +235,7 @@ Prove pilot readiness with one realistic organization, 100 employees, broad payr
 Plan:
 
 - Use `docs/qa/full-realistic-payroll-run-100-employees-phase-plan-2026-09-12.md`.
+- Use `docs/qa/pilot-100-execution-tracker-2026-09-12.md` while executing the run.
 - Execute P100-0 through P100-13.
 - Build repeatable seed manifest before any staging mutation.
 - Run locally first, then staging.

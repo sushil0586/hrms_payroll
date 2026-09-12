@@ -43,6 +43,60 @@ async function selectFirstNonEmptyOption(locator: Locator) {
   return value;
 }
 
+async function selectLegalEntityWithStructuralMappings(page: Page) {
+  const legalEntity = field(page, "Legal entity");
+  const options = await legalEntity.evaluate((element) => {
+    const select = element as HTMLSelectElement;
+    return Array.from(select.options)
+      .filter((option) => option.value)
+      .map((option) => option.value);
+  });
+
+  for (const value of options) {
+    await legalEntity.selectOption(value);
+    const branchCount = await field(page, "Branch").evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      return Array.from(select.options).filter((option) => option.value).length;
+    });
+    const costCenterCount = await field(page, "Cost center").evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      return Array.from(select.options).filter((option) => option.value).length;
+    });
+    if (branchCount > 0 && costCenterCount > 0) {
+      return value;
+    }
+  }
+
+  throw new Error("No legal entity has both branch and cost center mappings for employee onboarding.");
+}
+
+async function selectLegalEntityWithoutStructuralMappings(page: Page) {
+  const legalEntity = field(page, "Legal entity");
+  const options = await legalEntity.evaluate((element) => {
+    const select = element as HTMLSelectElement;
+    return Array.from(select.options)
+      .filter((option) => option.value)
+      .map((option) => option.value);
+  });
+
+  for (const value of options) {
+    await legalEntity.selectOption(value);
+    const branchCount = await field(page, "Branch").evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      return Array.from(select.options).filter((option) => option.value).length;
+    });
+    const costCenterCount = await field(page, "Cost center").evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      return Array.from(select.options).filter((option) => option.value).length;
+    });
+    if (branchCount === 0 || costCenterCount === 0) {
+      return { branchCount, costCenterCount };
+    }
+  }
+
+  return null;
+}
+
 async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "PATCH", action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => item.url().includes(`/api/hr-admin/${path}`) && item.request().method() === method),
@@ -113,6 +167,27 @@ async function expectEmployeeFormCertified(page: Page, mode: "create" | "edit") 
 }
 
 test.describe("Phase 3 employee lifecycle page certification", () => {
+  test("employee create warns when selected legal entity has no branch or cost center mapping", async ({ page }) => {
+    await gotoAuthenticated(page, "/hr-admin/employees/new");
+    await expectPageReady(page, "Create employee");
+    await expect(page.getByRole("heading", { name: "Structural mapping" })).toBeVisible();
+
+    const missingMapping = await selectLegalEntityWithoutStructuralMappings(page);
+    if (!missingMapping) {
+      test.skip(true, "Seed data has no legal entity without branch or cost-center mappings.");
+      return;
+    }
+
+    await expect(page.getByText("Structure review needed.")).toBeVisible();
+    if (missingMapping.branchCount === 0) {
+      await expect(page.getByText("no active branches are mapped to the selected legal entity")).toBeVisible();
+    }
+    if (missingMapping.costCenterCount === 0) {
+      await expect(page.getByText("no active cost centers are mapped to the selected legal entity")).toBeVisible();
+    }
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("employee master create, edit, directory detail, dependent dropdowns, and access provisioning are certified", async ({ page }) => {
     test.setTimeout(5 * 60 * 1000);
     const code = uniqueCode("EMP");
@@ -149,7 +224,7 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     await field(page, "Personal email").fill(`${username}.personal@example.test`);
     await field(page, "Phone number").fill("+91 98765 43210");
 
-    const legalEntity = await selectFirstNonEmptyOption(field(page, "Legal entity"));
+    const legalEntity = await selectLegalEntityWithStructuralMappings(page);
     await expectSelectHasOptions(field(page, "Branch"));
     await expectSelectHasOptions(field(page, "Cost center"));
     const branch = await selectFirstNonEmptyOption(field(page, "Branch"));

@@ -5,6 +5,10 @@ Target environment: local first, then staging `https://hrms.accerio.in`
 Target tenant shape: one pilot organization with 100 employees  
 Primary goal: prove the HRMS payroll SaaS can run a realistic monthly payroll cycle end to end with broad scenario coverage and browser-certified evidence.
 
+Execution tracker:
+
+- `docs/qa/pilot-100-execution-tracker-2026-09-12.md`
+
 ## Non-Negotiable Principles
 
 - Use a dedicated pilot rehearsal tenant or clearly prefixed disposable data: `PILOT100_`.
@@ -586,4 +590,3 @@ Done gate:
 | P100-9 output/payslip/handoff complete | 93% |
 | P100-12 full regression/performance complete | 95% |
 | P100-13 sign-off complete | 96% |
-
