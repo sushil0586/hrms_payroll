@@ -2,7 +2,7 @@
 
 Date: 2026-09-13  
 Environment: staging, `https://hrms.accerio.in`  
-Certified commit: `1efce7e5dbf91867d6abbce2bf5288192608efb9`  
+Certified commit: `95466df8e6d111772ca9df276ccd1ee527fd3f07`  
 Primary tracker: `docs/qa/pilot-100-execution-tracker-2026-09-12.md`
 
 ## Decision
@@ -16,6 +16,7 @@ This is not yet a 100% unattended production-payroll launch sign-off. The remain
 ## What Is Certified
 
 - P100-0 through P100-16 have been executed or accepted with documented limitations.
+- P100-17 provider rehearsal is in progress: provider workspace and launch rehearsal progressed, but provider audit-pack evidence needed a clearer checksum label. The UI fix is locally verified and pending check-in/deployment for final staging rerun.
 - 1 organization / 100 employee payroll rehearsal data exists under the `PILOT100_20260912` identity.
 - Organization masters, policy setup, payroll setup, 100-employee access matrix, attendance/leave/lifecycle inputs, payroll input snapshot/lock, calculation/review, adjustments, settlements, outputs, payslips, finance handoff, reporting, security/isolation, UX/performance, and release-gate evidence are browser-certified.
 - Final staging release-gate rerun passed: `5/5`.
@@ -84,6 +85,14 @@ Cleanup should run only after stakeholder review confirms the evidence pack is n
 2. Review monitoring/log routine after the pilot rehearsal.
 3. Review known limitations with pilot stakeholders.
 4. Confirm retain/cleanup decision for `PILOT100_20260912`.
+
+## Provider Rehearsal Evidence
+
+- Staging provider pack on commit `95466df8e6d111772ca9df276ccd1ee527fd3f07`: provider workspace and launch rehearsal progressed; callback/retry tests without seed data were skipped as designed; audit-pack proof failed on missing visible label `Evidence Checksum Sha256`.
+- Classification: product evidence-clarity issue, not a live provider execution failure.
+- Local fix: selected payroll handoff artifact detail now exposes `Checksum Sha256`, `Evidence Checksum Sha256` for provider audit packs, and `Source hash`.
+- Local verification against staging API passed: `production-provider-callback-flows.spec.ts --grep "delivery drilldown"` returned `1/1` passed.
+- Required next step: check in and deploy the UI evidence-label fix, then rerun the full provider pack on staging.
 
 ## Backup / Restore Evidence
 

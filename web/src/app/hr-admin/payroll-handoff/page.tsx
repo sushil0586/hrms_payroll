@@ -335,6 +335,7 @@ function ArtifactDetail({
   const deliveryRetryEvents = delivery ? retryEvents.filter((event) => event.provider_delivery_id === delivery.id) : [];
   const latestRetryEvent = deliveryRetryEvents[0] ?? null;
   const retryableDelivery = delivery?.status === "failed" || delivery?.status === "rejected";
+  const evidenceChecksum = String(artifact.totals_snapshot.evidence_checksum_sha256 ?? artifact.checksum_sha256 ?? "");
 
   return (
     <aside className="payroll-setup-detail-panel payroll-output-detail-panel payroll-handoff-detail-panel" aria-label={`${artifact.title} finance artifact`}>
@@ -383,6 +384,11 @@ function ArtifactDetail({
           <div className="detail-row"><span className="detail-label">Signed URL</span><span className="detail-value">{artifact.supports_signed_url ? `${artifact.signed_url_expires_in_seconds}s` : "Streamed"}</span></div>
           <div className="detail-row"><span className="detail-label">Retention</span><span className="detail-value">{artifact.retention_policy_ref}</span></div>
           <div className="detail-row"><span className="detail-label">Download</span><span className="detail-value">{artifact.is_downloadable ? "Ready" : "Blocked"}</span></div>
+          <div className="detail-row"><span className="detail-label">Checksum Sha256</span><span className="detail-value">{artifact.checksum_sha256 || "Pending"}</span></div>
+          {artifact.kind === "provider_audit_pack" ? (
+            <div className="detail-row"><span className="detail-label">Evidence Checksum Sha256</span><span className="detail-value">{evidenceChecksum || "Pending"}</span></div>
+          ) : null}
+          <div className="detail-row"><span className="detail-label">Source hash</span><span className="detail-value">{artifact.source_hash || "Pending"}</span></div>
         </div>
       </section>
 

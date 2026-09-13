@@ -55,6 +55,7 @@ If a phase fails:
 | P100-14 | Pilot credential matrix | Passed on staging | Named login, workspace access, role denial | Low-privilege API denial, wrong workspace denial | Rerun after any credential, role, or workspace-access change. |
 | P100-15 | Backup and restore drill | Passed on staging | Timestamped backup, checksum, scratch restore, data verification | No live DB restore, scratch cleanup | Rerun before customer-facing production payroll. |
 | P100-16 | Rollback and roll-forward drill | Passed on staging with readiness observation | Symlink rollback, service restart, roll-forward, HTTP health | No DB rollback, no destructive release deletion | Add readiness wait/retry to runbook. |
+| P100-17 | Provider rehearsal and evidence clarity | In progress - local fix verified | Provider lanes, launch rehearsal, callbacks, retry, audit-pack evidence | No real statutory or bank filing, no unsafe live rail execution | Deploy evidence-label fix, then rerun provider pack on staging. |
 
 ## Phase P100-0: Safety And Data Strategy
 
@@ -1130,3 +1131,53 @@ Execution result - 2026-09-13:
   - Rollback works, but the operational runbook should include a readiness wait/retry loop before declaring HTTP health failed.
   - Suggested readiness rule: wait up to 30 seconds for `/login` to return `200` after restarting `hrms-payroll-web.service`.
 - Confidence after staging certification: 98% for controlled staging pilot operations. Remaining gates: real-provider rehearsal, monitoring/log review routine, stakeholder acceptance, and final retain/cleanup decision.
+
+## Phase P100-17: Provider Rehearsal And Evidence Clarity
+
+Real-user intent:
+
+An HR/payroll operations lead needs to prove provider readiness and evidence traceability without sending real bank payments or statutory filings.
+
+Positive scenarios:
+
+- Open payroll provider workspace on staging.
+- Verify provider readiness gates, certification controls, and launch rehearsal controls.
+- Run certification for visible provider connections.
+- Record launch rehearsal and confirm ready status with zero blocked lanes.
+- Open provider callback/retry/delivery evidence where seed data exists.
+- Open provider audit pack and confirm locked evidence plus checksum proof.
+
+Negative scenarios:
+
+- Do not execute a real payment/statutory filing rail.
+- Skip callback/retry proof only when staging has no seed for that evidence type.
+- Treat missing evidence labels as a product evidence-clarity defect, not as a silent pass.
+
+Execution result - 2026-09-13:
+
+- Environment: staging, `https://hrms.accerio.in`.
+- Deployed commit before this phase: `95466df8e6d111772ca9df276ccd1ee527fd3f07`.
+- Deployment health before provider run:
+  - `hrms-payroll-backend.service`: active.
+  - `hrms-payroll-web.service`: active.
+  - `/login`: HTTP `200`.
+  - `/`: HTTP `200`.
+- Staging provider command:
+  - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/phase9e-provider-ready-rehearsal.spec.ts tests/e2e/payroll-providers-flows.spec.ts tests/e2e/production-provider-callback-flows.spec.ts --project=chromium --workers=1 --reporter=line --timeout=900000`
+- Initial staging result: `2` passed, `2` skipped, `1` failed.
+- Failure:
+  - Spec: `production-provider-callback-flows.spec.ts`.
+  - Scenario: `delivery drilldown and provider audit pack preserve locked evidence chain`.
+  - Missing visible label: `Evidence Checksum Sha256`.
+  - Classification: product evidence-clarity issue. The provider audit pack existed and showed locked evidence, but the selected artifact detail did not expose the evidence checksum with a clear, certification-grade label.
+- Fix:
+  - Added explicit checksum rows to the payroll handoff artifact detail panel.
+  - Provider audit packs now show `Evidence Checksum Sha256` in addition to `Checksum Sha256` and `Source hash`.
+- Local proof against staging API:
+  - `pnpm --dir web exec tsc --noEmit` passed.
+  - `PLAYWRIGHT_PORT=3100 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/production-provider-callback-flows.spec.ts --grep "delivery drilldown" --project=chromium --workers=1 --reporter=line --timeout=420000`
+  - Result: `1/1` passed in 26.4s.
+- Status:
+  - Waiting for check-in and deployment of the UI evidence-label fix.
+  - After deployment, rerun the full provider pack above on staging.
+- Confidence after local fix: 98% overall remains unchanged until the full provider pack is green on staging.
