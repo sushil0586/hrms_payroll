@@ -54,6 +54,7 @@ If a phase fails:
 | P100-13 | Evidence and sign-off | Pilot-ready with accepted limitations | Evidence pack, run ids, export ids, cleanup decision | No cleanup before evidence review | Rerun sign-off summary after any late rerun. |
 | P100-14 | Pilot credential matrix | Passed on staging | Named login, workspace access, role denial | Low-privilege API denial, wrong workspace denial | Rerun after any credential, role, or workspace-access change. |
 | P100-15 | Backup and restore drill | Passed on staging | Timestamped backup, checksum, scratch restore, data verification | No live DB restore, scratch cleanup | Rerun before customer-facing production payroll. |
+| P100-16 | Rollback and roll-forward drill | Passed on staging with readiness observation | Symlink rollback, service restart, roll-forward, HTTP health | No DB rollback, no destructive release deletion | Add readiness wait/retry to runbook. |
 
 ## Phase P100-0: Safety And Data Strategy
 
@@ -1079,3 +1080,53 @@ Execution result - 2026-09-13:
   - Payroll output artifacts: `158`.
   - SaaS commercial audit events: `185`.
 - Confidence after staging certification: 97% for recoverability of the current staging pilot dataset. Remaining operational gaps: rollback drill, real-provider rehearsal, monitoring/log review routine, and stakeholder acceptance.
+
+## Phase P100-16: Rollback And Roll-Forward Drill
+
+Real-user intent:
+
+Operations can move from the current release to the previous release and forward again without damaging data or leaving services stopped.
+
+Positive scenarios:
+
+- Identify current release symlink and current commit.
+- Identify previous release directory and previous commit.
+- Switch `current` symlink to previous release.
+- Restart backend and web services.
+- Verify services are active.
+- Switch `current` symlink back to the current release.
+- Restart backend and web services.
+- Verify services are active and public pages return HTTP 200 after readiness wait.
+
+Negative scenarios:
+
+- Do not delete releases.
+- Do not run DB rollback or destructive migration changes.
+- Do not leave staging on previous release.
+- Capture any readiness lag instead of hiding it.
+
+Execution result - 2026-09-13:
+
+- Environment: staging, `https://hrms.accerio.in`.
+- Current release before drill: `/var/www/hrms-payroll-saas/release-20260913062101`.
+- Current commit before drill: `1efce7e5dbf91867d6abbce2bf5288192608efb9`.
+- Previous release used for rollback: `/var/www/hrms-payroll-saas/release-20260913060836`.
+- Previous release commit: `00110139cf13c788e8b736b2aebd0d608b8602f0`.
+- Rollback step:
+  - `current` symlink changed to previous release.
+  - `hrms-payroll-backend.service`: active.
+  - `hrms-payroll-web.service`: active.
+  - `current` resolved to `/var/www/hrms-payroll-saas/release-20260913060836`.
+- Roll-forward step:
+  - `current` symlink changed back to `/var/www/hrms-payroll-saas/release-20260913062101`.
+  - `hrms-payroll-backend.service`: active.
+  - `hrms-payroll-web.service`: active.
+  - `current` commit after forward: `1efce7e5dbf91867d6abbce2bf5288192608efb9`.
+- HTTP health:
+  - Immediate `curl` during restart returned `502` for `/login`, which indicates reverse-proxy readiness lag immediately after service restart.
+  - After an 8-second wait, `/login` returned `200`.
+  - After an 8-second wait, `/` returned `200`.
+- Runbook observation:
+  - Rollback works, but the operational runbook should include a readiness wait/retry loop before declaring HTTP health failed.
+  - Suggested readiness rule: wait up to 30 seconds for `/login` to return `200` after restarting `hrms-payroll-web.service`.
+- Confidence after staging certification: 98% for controlled staging pilot operations. Remaining gates: real-provider rehearsal, monitoring/log review routine, stakeholder acceptance, and final retain/cleanup decision.

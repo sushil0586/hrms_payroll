@@ -9,19 +9,20 @@ Primary tracker: `docs/qa/pilot-100-execution-tracker-2026-09-12.md`
 
 Status: `Pilot-ready with accepted limitations`
 
-Confidence: 97% for a controlled staging pilot rehearsal / internal pilot run.
+Confidence: 98% for a controlled staging pilot rehearsal / internal pilot run.
 
 This is not yet a 100% unattended production-payroll launch sign-off. The remaining gaps are operational and external-provider gates, not core browser flow blockers.
 
 ## What Is Certified
 
-- P100-0 through P100-15 have been executed or accepted with documented limitations.
+- P100-0 through P100-16 have been executed or accepted with documented limitations.
 - 1 organization / 100 employee payroll rehearsal data exists under the `PILOT100_20260912` identity.
 - Organization masters, policy setup, payroll setup, 100-employee access matrix, attendance/leave/lifecycle inputs, payroll input snapshot/lock, calculation/review, adjustments, settlements, outputs, payslips, finance handoff, reporting, security/isolation, UX/performance, and release-gate evidence are browser-certified.
 - Final staging release-gate rerun passed: `5/5`.
 - Final P100 UX/performance staging rerun passed: `3/3`.
 - Pilot credential matrix staging rerun passed: `10/10`.
 - Backup/restore drill passed with scratch restore verification.
+- Rollback and roll-forward drill passed with readiness-wait observation.
 - Backend and frontend staging services were active at final verification.
 
 ## Evidence Commands
@@ -61,7 +62,7 @@ Post-deploy expanded named finance/support result on commit `1efce7e5dbf91867d6a
 - Mobile is certified for review/smoke usage, but dense payroll administration should be done on desktop.
 - Staging deterministic cross-tenant object-pair mutation was intentionally not run to avoid extra staging tenant mutation; role/API/artifact isolation was certified on the active pilot tenant.
 - Real external provider filing/payment rails are not production-certified by this run; provider rehearsal and finance handoff evidence are certified.
-- Rollback runbook still requires an operations drill before customer-facing production payroll.
+- Rollback runbook passed on staging, with a required readiness wait/retry after web restart.
 - Customer acceptance sign-off remains a business readiness task.
 
 ## Retention Decision
@@ -79,8 +80,8 @@ Cleanup should run only after stakeholder review confirms the evidence pack is n
 
 ## Next Required Gates
 
-1. Run rollback drill.
-2. Validate real provider credentials in a non-production rehearsal mode.
+1. Validate real provider credentials in a non-production rehearsal mode.
+2. Review monitoring/log routine after the pilot rehearsal.
 3. Review known limitations with pilot stakeholders.
 4. Confirm retain/cleanup decision for `PILOT100_20260912`.
 
@@ -90,3 +91,12 @@ Cleanup should run only after stakeholder review confirms the evidence pack is n
 - SHA-256: `38e4d3a03265d2b49277878da5d309e81ed6ff04d06e709f6f2356313bbbebfb`.
 - Scratch DB restored and verified: `hrms_stage_restore_drill_20260913084114`.
 - Scratch DB was dropped after verification.
+
+## Rollback Evidence
+
+- Rolled back from `/var/www/hrms-payroll-saas/release-20260913062101` at commit `1efce7e5dbf91867d6abbce2bf5288192608efb9`.
+- Previous release used: `/var/www/hrms-payroll-saas/release-20260913060836` at commit `00110139cf13c788e8b736b2aebd0d608b8602f0`.
+- Backend and web services were active after rollback and after roll-forward.
+- Rolled forward to commit `1efce7e5dbf91867d6abbce2bf5288192608efb9`.
+- `/login` and `/` returned HTTP `200` after an 8-second readiness wait.
+- Operational note: immediate HTTP checks during restart may return `502`; use a readiness wait/retry loop before declaring rollback unhealthy.
