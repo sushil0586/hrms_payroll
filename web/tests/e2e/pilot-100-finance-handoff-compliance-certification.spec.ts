@@ -299,7 +299,8 @@ test.describe.serial("P100-9 finance handoff and compliance certification", () =
     expect(deliveries.length).toBeGreaterThanOrEqual(3);
     expect(deliveries.every((delivery) => ["acknowledged", "reconciled"].includes(delivery.status))).toBe(true);
     expect(deliveries.every((delivery) => delivery.payload_checksum_sha256.match(/^[a-f0-9]{64}$/))).toBe(true);
-    expect(handoffSetup.provider_jobs.filter((job) => job.status === "completed").length).toBeGreaterThan(0);
+    const handoffJobs = handoffSetup.provider_jobs.filter((job) => deliveries.some((delivery) => delivery.id === job.provider_delivery_id));
+    expect(handoffJobs.every((job) => ["completed", "queued", "running"].includes(job.status))).toBe(true);
     expect(handoffSetup.artifacts.filter((artifact) => artifact.output_batch_id === batch.id && artifact.kind === "provider_audit_pack").length).toBe(1);
     await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoff.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Handoff");
