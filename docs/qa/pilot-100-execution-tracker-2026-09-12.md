@@ -43,7 +43,7 @@ If a phase fails:
 | P100-2 | Policy and payroll setup | Passed | Salary, leave, attendance, statutory, pay group, provider config | Duplicate setup, missing required config, invalid formulas | Rerun payroll setup and report catalog checks. |
 | P100-3 | 100 employees and access matrix | Passed | 100 employees, manager hierarchy, pay/bank/salary assignment | Role denial, missing-bank blocker, missing mapping | Rerun directory, ESS/MSS, payroll readiness after seed/config changes. |
 | P100-4 | Attendance/leave/lifecycle inputs | Passed | ESS/MSS/HR inputs for scenario distribution | Unauthorized approvals, invalid dates, rejected requests | Rerun affected input and report checks. |
-| P100-5 | Payroll input snapshot and lock | Not started | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
+| P100-5 | Payroll input snapshot and lock | Local passed - staging pending | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
 | P100-6 | Calculation and review | Not started | Draft calculation, line review, exceptions, decisions | Invalid lock, unauthorized decision, stale calculation | Rerun calculation/review/report pack. |
 | P100-7 | Adjustments, settlements, readiness | Not started | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
 | P100-8 | Outputs, payslips, ESS proof | Not started | Generate/publish outputs, read/download payslips | Cross-employee payslip denial, revoked/expired grants | Rerun output, ESS, payslip publication, artifact audit tests. |
@@ -413,6 +413,48 @@ Observations to record:
 Exit gate:
 
 - Inputs are locked or residual blockers are explicitly documented.
+
+Implementation and local execution result - 2026-09-12:
+
+- Implementation added:
+  - Backend management command: `python manage.py seed_pilot_100_snapshots --prefix PILOT100_20260912 --output-file <manifest.json>`.
+  - Browser certification spec: `web/tests/e2e/pilot-100-payroll-input-snapshot-certification.spec.ts`.
+  - Authenticated Next proxy for `/api/hr-admin/payroll-input-snapshot-setup/`.
+  - `GET` support for `/api/hr-admin/payroll-input-snapshots?payroll_run_id=<id>` through the existing payroll config proxy.
+  - Payroll input setup payload ordering now returns newest payroll-run snapshots first before applying the 200-row cap.
+- Seed command behavior:
+  - Requires exactly 100 pilot employees for the selected prefix.
+  - Cleans only the selected prefix's pilot snapshot runs.
+  - Creates a blocked gate run with 100 snapshots, including 5 blockers and 12 warning snapshots.
+  - Creates a lockable run with 100 snapshots, including 0 blockers and 17 warning snapshots.
+  - Captures employee, organization, salary, attendance, leave, lifecycle, document, banking, validation, config snapshots, and source hashes.
+  - Writes a manifest with run IDs, counts, period, tenant, cleanup counts, and generation timestamp.
+- Local seed verification:
+  - Prefix: `P100LOCAL_P5`.
+  - Blocked run snapshots: `100`.
+  - Lockable run snapshots: `100`.
+  - Blocked snapshots: `5`.
+  - Blocked-run warning snapshots: `12`.
+  - Lockable-run warning snapshots: `17`.
+- Local environment note:
+  - Repeated local certification had exceeded the `growth` plan's `payroll_runs_per_month` meter. For local pilot certification, Northstar Foods was set to `enterprise` after seeding so the commercial gate stayed active but no longer blocked payroll proof.
+- Local browser certification:
+  - Command:
+    - `HRMS_API_BASE_URL=http://127.0.0.1:8001/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_PILOT100_PREFIX=P100LOCAL_P5 PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/pilot-100-payroll-input-snapshot-certification.spec.ts --workers=1`
+  - Result: `4/4` passed in 20.3s.
+  - Certified:
+    - Blocked gate run shows 100 snapshots, 5 blocked inputs, source hash evidence, and rejects input lock with `Cannot lock payroll inputs while blocked snapshots exist.`
+    - Lockable run shows 100 snapshots, 0 blocked inputs, 17 warning inputs, locks all non-locked snapshots, and prevents later mutation of locked snapshot data.
+    - Payroll input exceptions report supports search, issue filter, lock-state filter, CSV export, manifest export, export audit history, and drilldown back to payroll inputs.
+    - Employee persona cannot access the payroll input exceptions report or export API.
+- Real-user observation:
+  - The payroll input workspace/report source was originally capped at the first 200 snapshots sorted by employee code. In environments with older payroll artifacts, deep pilot exception rows could fall outside the browser payload.
+  - Action taken: setup payload ordering now prioritizes newest payroll runs before employee code, making the latest active collection/rehearsal visible first.
+  - Remaining UX recommendation: add explicit search/filter/pagination directly to the payroll inputs workspace itself, matching the payroll input exceptions report. Current certification proves the lock workflow and report evidence; workspace-level page controls are still lighter than the report surface.
+- Staging deployment commands after check-in:
+  - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_snapshots --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-snapshots-staging-manifest.json`
+  - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-payroll-input-snapshot-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
+- Confidence after local certification: 91% for P100-5 locally. Residual risk: staging still needs deploy, snapshot seed, and the same browser certification run.
 
 ## Phase P100-6: Calculation And Review
 

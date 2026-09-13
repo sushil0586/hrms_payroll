@@ -9348,7 +9348,7 @@ def get_hr_admin_payroll_input_snapshot_setup_payload(actor) -> dict:
         "employee",
         "pay_group_assignment__pay_group",
         "salary_assignment__structure_version__structure",
-    ).order_by("employee__employee_code")
+    ).order_by("-payroll_run__created_at", "employee__employee_code")
     employees = Employee.objects.filter(tenant=tenant).order_by("employee_code")
 
     return {
