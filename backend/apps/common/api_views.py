@@ -11,7 +11,7 @@ from io import StringIO
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
 from django.http import FileResponse, HttpResponse
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -9503,6 +9503,8 @@ def save_hr_admin_payroll_adjustment(actor, validated_data) -> PayrollAdjustment
             created_by=actor.membership.user if getattr(actor, "membership", None) else None,
             config_snapshot=validated_data.get("config_snapshot", {}),
         )
+    except (DjangoValidationError, IntegrityError) as exc:
+        raise serializers.ValidationError({"detail": "A payroll adjustment with this source reference and component already exists for this employee and run."}) from exc
     except PayrollAdjustmentError as exc:
         raise serializers.ValidationError({"detail": str(exc)}) from exc
 
@@ -9750,6 +9752,8 @@ def save_hr_admin_payroll_settlement(actor, validated_data) -> PayrollSettlement
             created_by=actor.membership.user if getattr(actor, "membership", None) else None,
             config_snapshot=validated_data.get("config_snapshot", {}),
         )
+    except (DjangoValidationError, IntegrityError) as exc:
+        raise serializers.ValidationError({"detail": "A payroll settlement with this source reference already exists for this employee and run."}) from exc
     except PayrollSettlementError as exc:
         raise serializers.ValidationError({"detail": str(exc)}) from exc
 
@@ -9775,6 +9779,8 @@ def save_hr_admin_payroll_settlement_line(actor, settlement: PayrollSettlement, 
             trace_snapshot=validated_data.get("trace_snapshot", {}),
             config_snapshot=validated_data.get("config_snapshot", {}),
         )
+    except (DjangoValidationError, IntegrityError) as exc:
+        raise serializers.ValidationError({"detail": "A payroll settlement line with this source reference and component already exists."}) from exc
     except PayrollSettlementError as exc:
         raise serializers.ValidationError({"detail": str(exc)}) from exc
 

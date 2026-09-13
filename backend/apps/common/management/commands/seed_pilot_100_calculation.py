@@ -16,6 +16,7 @@ from apps.payroll.models import (
     PayrollCalculationLine,
     PayrollConfigStatus,
     PayrollExpressionLanguage,
+    PayrollAdjustment,
     PayrollInputSnapshot,
     PayrollInputSnapshotStatus,
     PayrollRuleDefinition,
@@ -28,6 +29,8 @@ from apps.payroll.models import (
     PayrollRunException,
     PayrollRunReview,
     PayrollRunStatus,
+    PayrollSettlement,
+    PayrollSettlementLine,
     PayrollValidationIssue,
 )
 from apps.tenants.models import Tenant
@@ -47,6 +50,10 @@ class Command(BaseCommand):
         parser.add_argument("--prefix", default=DEFAULT_PREFIX, help="Pilot workforce prefix.")
         parser.add_argument("--period-start", default=DEFAULT_PERIOD_START.isoformat(), help="Payroll period start date.")
         parser.add_argument("--period-end", default=DEFAULT_PERIOD_END.isoformat(), help="Payroll period end date.")
+        parser.add_argument("--run-code-suffix", default="calc-review", help="Target payroll run code suffix.")
+        parser.add_argument("--run-name-suffix", default="Payroll Calculation - Review Gate", help="Target payroll run display suffix.")
+        parser.add_argument("--scenario", default="calculation_review_gate", help="Scenario marker stored on the run config snapshot.")
+        parser.add_argument("--input-profile-ref", default="tenant.payroll.input.pilot100.calculation.v1", help="Input profile reference for the target run.")
         parser.add_argument("--output-file", default="", help="Optional JSON manifest output path.")
         parser.add_argument("--cleanup", action="store_true", help="Delete this prefix's pilot calculation run instead of seeding.")
 
@@ -59,11 +66,12 @@ class Command(BaseCommand):
         prefix = self._normalize_prefix(options["prefix"])
         period_start = date.fromisoformat(options["period_start"])
         period_end = date.fromisoformat(options["period_end"])
+        run_code_suffix = self._normalize_suffix(options["run_code_suffix"])
         employees = list(Employee.objects.filter(tenant=tenant, employee_code__startswith=f"{prefix}_E").order_by("employee_code"))
         if len(employees) != 100:
             raise CommandError(f"Expected 100 pilot employees for {prefix}; found {len(employees)}.")
 
-        cleanup_summary = self._cleanup(tenant=tenant, prefix=prefix)
+        cleanup_summary = self._cleanup(tenant=tenant, prefix=prefix, run_code_suffix=run_code_suffix)
         if options["cleanup"]:
             manifest = self._manifest(
                 tenant=tenant,
@@ -102,15 +110,15 @@ class Command(BaseCommand):
             tenant=tenant,
             period=source_run.period,
             pay_group=source_run.pay_group,
-            code=f"{prefix.lower()}-calc-review",
-            name=f"{prefix} Payroll Calculation - Review Gate",
+            code=f"{prefix.lower()}-{run_code_suffix}",
+            name=f"{prefix} {options['run_name_suffix']}",
             status=PayrollRunStatus.INPUTS_LOCKED,
-            input_profile_ref="tenant.payroll.input.pilot100.calculation.v1",
+            input_profile_ref=options["input_profile_ref"],
             snapshot_schema_ref="tenant.payroll.snapshot.pilot100.v1",
             locked_at=timezone.now(),
             config_snapshot={
                 "seed_ref": prefix,
-                "scenario": "calculation_review_gate",
+                "scenario": options["scenario"],
                 "source_run_id": str(source_run.id),
                 "calculation_profile_ref": "tenant.payroll.calc.pilot100.v1",
                 "calculation_profile": {"rule_codes": rule_codes},
@@ -155,7 +163,7 @@ class Command(BaseCommand):
                 config_snapshot={
                     **(source.config_snapshot if isinstance(source.config_snapshot, dict) else {}),
                     "seed_ref": prefix,
-                    "surface": "pilot_100_calculation",
+                    "surface": f"pilot_100_{options['scenario']}",
                     "source_run_id": str(source_run.id),
                     "source_snapshot_id": str(source.id),
                     "source_hash": source.source_hash,
@@ -176,14 +184,16 @@ class Command(BaseCommand):
             counts=counts,
             run_id=str(target_run.id),
             run_code=target_run.code,
+            run_code_suffix=run_code_suffix,
             source_run_id=str(source_run.id),
             rule_codes=rule_codes,
+            surface=f"pilot_100_{options['scenario']}",
         )
         self._write_manifest(options["output_file"], manifest)
         self.stdout.write(self.style.SUCCESS(f"Seeded pilot calculation run for {prefix}: {json.dumps(counts, sort_keys=True)}"))
 
-    def _cleanup(self, *, tenant: Tenant, prefix: str) -> dict[str, int]:
-        run_code = f"{prefix.lower()}-calc-review"
+    def _cleanup(self, *, tenant: Tenant, prefix: str, run_code_suffix: str) -> dict[str, int]:
+        run_code = f"{prefix.lower()}-{run_code_suffix}"
         runs = list(PayrollRun.objects.filter(tenant=tenant, code=run_code))
         if not runs:
             return {
@@ -195,6 +205,9 @@ class Command(BaseCommand):
                 "calculations": 0,
                 "snapshots": 0,
                 "runs": 0,
+                "adjustments": 0,
+                "settlement_lines": 0,
+                "settlements": 0,
                 "rule_versions": 0,
                 "rule_definitions": 0,
             }
@@ -209,6 +222,9 @@ class Command(BaseCommand):
             "validation_issues": PayrollValidationIssue.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
             "lines": PayrollCalculationLine.objects.filter(id__in=list(line_ids)).delete()[0],
             "calculations": calculations.delete()[0],
+            "adjustments": PayrollAdjustment.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
+            "settlement_lines": PayrollSettlementLine.objects.filter(tenant=tenant, settlement__payroll_run__in=runs).delete()[0],
+            "settlements": PayrollSettlement.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
             "snapshots": PayrollInputSnapshot.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
             "runs": PayrollRun.objects.filter(id__in=[run.id for run in runs]).delete()[0],
             "rule_versions": 0,
@@ -311,7 +327,7 @@ class Command(BaseCommand):
         return {
             "seed_ref": prefix,
             "tenant_code": tenant.code,
-            "surface": "pilot_100_calculation",
+            "surface": extra.pop("surface", "pilot_100_calculation"),
             "period_start": period_start.isoformat(),
             "period_end": period_end.isoformat(),
             "cleanup": cleanup,
@@ -331,4 +347,11 @@ class Command(BaseCommand):
         normalized = "".join(character if character.isalnum() or character == "_" else "_" for character in prefix.strip().upper())
         if not normalized:
             raise CommandError("prefix must not be empty.")
+        return normalized
+
+    def _normalize_suffix(self, suffix: str) -> str:
+        normalized = "".join(character if character.isalnum() or character in {"-", "_"} else "-" for character in suffix.strip().lower())
+        normalized = "-".join(part for part in normalized.split("-") if part)
+        if not normalized:
+            raise CommandError("run-code-suffix must not be empty.")
         return normalized

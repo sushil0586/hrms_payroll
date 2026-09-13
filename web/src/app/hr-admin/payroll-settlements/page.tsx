@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollSettlementSetup } from "@/lib/api";
 import type { HrAdminPayrollRun, HrAdminPayrollSettlement, HrAdminPayrollSettlementLine } from "@/lib/types";
+import { PayrollSettlementActionsPanel } from "./payroll-settlement-actions-panel";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -248,6 +249,8 @@ export default async function HrAdminPayrollSettlementsPage({ searchParams }: Pa
                 </article>
               </div>
             </section>
+
+            <PayrollSettlementActionsPanel setup={setup} selectedRun={selectedRun} selectedSettlement={selectedSettlement} />
 
             <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">

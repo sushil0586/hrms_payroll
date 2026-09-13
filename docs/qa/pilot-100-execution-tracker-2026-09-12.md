@@ -45,7 +45,7 @@ If a phase fails:
 | P100-4 | Attendance/leave/lifecycle inputs | Passed | ESS/MSS/HR inputs for scenario distribution | Unauthorized approvals, invalid dates, rejected requests | Rerun affected input and report checks. |
 | P100-5 | Payroll input snapshot and lock | Passed | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
 | P100-6 | Calculation and review | Passed on staging | Draft calculation, line review, exceptions, decisions | Invalid lock, employee denial, report export evidence | Rerun calculation/review/report pack after related payroll engine/report changes. |
-| P100-7 | Adjustments, settlements, readiness | Not started | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
+| P100-7 | Adjustments, settlements, readiness | Passed locally | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
 | P100-8 | Outputs, payslips, ESS proof | Not started | Generate/publish outputs, read/download payslips | Cross-employee payslip denial, revoked/expired grants | Rerun output, ESS, payslip publication, artifact audit tests. |
 | P100-9 | Finance handoff/provider evidence | Not started | Bank advice, delivery, retries, callbacks, audit pack | Failed provider/retry/dead-letter visibility | Rerun handoff, bank advice, finance exception reports. |
 | P100-10 | Full report/export regression | Not started | Every report page, CSV, manifest, export audit | Employee denial for every HR report/API | Rerun full report pack after any report fix. |
@@ -567,6 +567,35 @@ Observations to record:
 Exit gate:
 
 - Close readiness is green or accepted residual warnings are recorded.
+
+Execution result - 2026-09-13:
+
+- Environment: local dev, `http://localhost:3000` web against `http://127.0.0.1:8000/api/v1`.
+- Pilot prefix used locally: `P100LOCAL_P5`.
+- Dedicated editable run seed:
+  - Command: `cd backend && ../.venv/bin/python manage.py seed_pilot_100_calculation --prefix P100LOCAL_P5 --run-code-suffix adjust-settle-close --run-name-suffix "Adjustments Settlements Close Gate" --scenario adjustments_settlements_close_gate --input-profile-ref tenant.payroll.input.pilot100.adjustments.v1 --output-file ../web/test-results/pilot-100-adjustments-settlements-local-manifest.json`
+  - Counts: `100` locked snapshots, `83` ready snapshots, `17` warning snapshots, `3` scoped payroll rules.
+- Browser certification command:
+  - `PLAYWRIGHT_BASE_URL=http://localhost:3000 HRMS_API_BASE_URL=http://127.0.0.1:8000/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=P100LOCAL_P5 pnpm --dir web exec playwright test tests/e2e/pilot-100-adjustments-settlements-close-certification.spec.ts --workers=1 --reporter=line --timeout=600000`
+  - Result: `1/1` passed in 20.9s.
+- Positive evidence:
+  - HR admin created a one-time bonus adjustment through the payroll adjustment workspace and verified source hash evidence.
+  - HR admin submitted, approved, and applied the adjustment from browser-visible controls.
+  - HR admin created a full-and-final settlement package through the payroll settlement workspace.
+  - Settlement creation produced two lines: gross due and recovery, with source-hash evidence.
+  - HR admin submitted, approved, and applied the settlement; applied settlement lines generated applied payroll adjustments for calculation consumption.
+  - Payroll adjustments, payroll settlements, and payroll close readiness reports were opened through the browser and CSV/manifest exports returned checksum evidence.
+- Negative evidence:
+  - Applying an unapproved adjustment returned `400` and an inline message: only approved adjustments can be applied.
+  - Creating a duplicate adjustment with the same payroll run, employee, source reference, and component is now rejected as a controlled `400` validation response instead of a server error.
+- Real-user observations and fixes:
+  - Adjustment and settlement pages were register/audit views only. Action taken: added compact certification action panels for create, submit, approve, and apply workflows.
+  - Browser mutations needed same-origin API routes. Action taken: added Next proxy routes for adjustment and settlement setup, create, line create, submit, approve, reject, and apply actions.
+  - Duplicate adjustment source refs initially surfaced as a backend `500` from model validation. Action taken: model validation/uniqueness failures now return clear DRF validation messages.
+  - Settlement line creation originally refreshed the workspace after the first line and could interrupt the second line. Action taken: settlement line creation batches without refresh and refreshes only after both lines are created.
+- Accepted residual:
+  - Close readiness for this run is expected to show remaining output/close work because payslip/output generation belongs to P100-8. P100-7 exit is accepted because pending adjustments and settlements are cleared, and the close-readiness report/export evidence is present.
+- Confidence after local certification: 91% for P100-7 locally. Staging deploy, seed, and browser rerun are pending after check-in.
 
 ## Phase P100-8: Outputs, Payslips, ESS Proof
 
