@@ -46,7 +46,7 @@ If a phase fails:
 | P100-5 | Payroll input snapshot and lock | Passed | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
 | P100-6 | Calculation and review | Passed on staging | Draft calculation, line review, exceptions, decisions | Invalid lock, employee denial, report export evidence | Rerun calculation/review/report pack after related payroll engine/report changes. |
 | P100-7 | Adjustments, settlements, readiness | Passed locally | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
-| P100-8 | Outputs, payslips, ESS proof | Not started | Generate/publish outputs, read/download payslips | Cross-employee payslip denial, revoked/expired grants | Rerun output, ESS, payslip publication, artifact audit tests. |
+| P100-8 | Outputs, payslips, ESS proof | Passed locally - staging pending | Generate/publish outputs, read/download payslips | Cross-employee payslip denial, signed grant access-limit denial | Rerun output, ESS, payslip publication, artifact audit tests. |
 | P100-9 | Finance handoff/provider evidence | Not started | Bank advice, delivery, retries, callbacks, audit pack | Failed provider/retry/dead-letter visibility | Rerun handoff, bank advice, finance exception reports. |
 | P100-10 | Full report/export regression | Not started | Every report page, CSV, manifest, export audit | Employee denial for every HR report/API | Rerun full report pack after any report fix. |
 | P100-11 | Security/isolation | Not started | Role scoped access works | Cross-role, cross-tenant, direct API denial | Rerun impacted role matrix plus no-leak checks. |
@@ -638,6 +638,36 @@ Observations to record:
 Exit gate:
 
 - Payslip publication report proves publication/read/download/access evidence.
+
+Execution result - 2026-09-13:
+
+- Environment: local dev, `http://127.0.0.1:3000` with backend `http://127.0.0.1:8012/api/v1`.
+- Setup commands:
+  - `cd backend && ../.venv/bin/python manage.py seed_pilot_100_workforce --prefix PILOT100_20260912 --password Password@123 --output-file ../web/test-results/pilot-100-workforce-local-manifest.json`
+  - `cd backend && ../.venv/bin/python manage.py seed_pilot_100_inputs --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-inputs-local-manifest.json`
+  - `cd backend && ../.venv/bin/python manage.py seed_pilot_100_snapshots --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-snapshots-local-manifest.json`
+  - Local source run `pilot100_20260912-inputs-lockable` was locked for setup, then `seed_pilot_100_calculation --run-code-suffix output-payslip --run-name-suffix "Output Payslip ESS Gate"` created the disposable P100-8 run.
+- Browser certification:
+  - Command: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-output-payslip-ess-certification.spec.ts --workers=1 --reporter=line --timeout=900000`
+  - Result: `1/1` passed.
+- Positive evidence:
+  - HR admin calculated 100 employees into 300 calculation lines, opened review, submitted, approved, final locked, generated outputs, and published the output batch through browser controls.
+  - Output batch produced `101` artifacts: `100` employee payslips and `1` register.
+  - Pilot employee `pilot100_20260912.e001` opened ESS payslips, viewed storage/source/calculation evidence, downloaded their payslip, and recorded read acknowledgement.
+  - Payslip publication report showed the employee row and CSV export for the run returned at least `100` rows with source-hash evidence.
+  - Artifact audit CSV exported with artifact checksum evidence.
+- Negative evidence:
+  - Pilot employee could not call HR admin artifact download API.
+  - Pilot employee could not download another employee payslip through the ESS API.
+  - Employee signed access grant with `max_access_count=1` allowed the first signed download and rejected the second download.
+- Fix made during phase:
+  - `seed_pilot_100_calculation` cleanup now removes output batches, artifacts, access events, signed grants, handoffs, and provider rows for the disposable run before deleting reviews/calculations. This makes output-phase reruns repeatable after publication.
+  - The P100 calculation seed now carries a configurable signed storage profile under `output_profile.storage_profile` instead of relying on hardcoded test behavior.
+- Local environment note:
+  - Local tenant `northstar-foods` was switched from `growth` to `enterprise` for the rehearsal because local seed volume exceeded the `payroll_runs_per_month` plan gate.
+- Staging status:
+  - Pending check-in, deployment, staging seed for `output-payslip`, and staging rerun of the same Playwright spec.
+- Confidence after local certification: 90% for P100-8 functionality locally. Remaining risk: staging deployment/seed rerun and any staging-specific latency or commercial gate differences.
 
 ## Phase P100-9: Finance Handoff And Provider Evidence
 

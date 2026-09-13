@@ -17,8 +17,16 @@ from apps.payroll.models import (
     PayrollConfigStatus,
     PayrollExpressionLanguage,
     PayrollAdjustment,
+    PayrollArtifactAccessEvent,
+    PayrollArtifactSignedAccessGrant,
+    PayrollFinanceHandoff,
     PayrollInputSnapshot,
     PayrollInputSnapshotStatus,
+    PayrollOutputArtifact,
+    PayrollOutputBatch,
+    PayrollProviderCallbackEvent,
+    PayrollProviderDelivery,
+    PayrollProviderRetryEvent,
     PayrollRuleDefinition,
     PayrollRuleType,
     PayrollRuleVersion,
@@ -132,6 +140,16 @@ class Command(BaseCommand):
                     "require_locked_snapshots": True,
                     "missing_dependency_severity": "warning",
                 },
+                "output_profile": {
+                    "output_profile_ref": "tenant.payroll.outputs.pilot100.v1",
+                    "storage_profile": {
+                        "provider_ref": "payroll.storage.signed_url.placeholder.v1",
+                        "download_strategy_ref": "payroll.download.signed_url.v1",
+                        "signed_url_expires_in_seconds": 300,
+                        "key_prefix": "pilot100-payroll",
+                        "retention_policy_ref": "payroll.retention.10y.v1",
+                    },
+                },
             },
         )
 
@@ -206,6 +224,14 @@ class Command(BaseCommand):
                 "snapshots": 0,
                 "runs": 0,
                 "adjustments": 0,
+                "artifact_access_events": 0,
+                "artifact_signed_access_grants": 0,
+                "finance_handoffs": 0,
+                "output_artifacts": 0,
+                "output_batches": 0,
+                "provider_callback_events": 0,
+                "provider_deliveries": 0,
+                "provider_retry_events": 0,
                 "settlement_lines": 0,
                 "settlements": 0,
                 "rule_versions": 0,
@@ -215,9 +241,18 @@ class Command(BaseCommand):
         reviews = PayrollRunReview.objects.filter(tenant=tenant, payroll_run__in=runs)
         calculations = PayrollRunCalculation.objects.filter(tenant=tenant, payroll_run__in=runs)
         line_ids = PayrollCalculationLine.objects.filter(tenant=tenant, payroll_run__in=runs).values_list("id", flat=True)
+        output_artifacts = PayrollOutputArtifact.objects.filter(tenant=tenant, payroll_run__in=runs)
         counts = {
             "approvals": PayrollRunApproval.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
             "exceptions": PayrollRunException.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
+            "provider_retry_events": PayrollProviderRetryEvent.objects.filter(tenant=tenant, output_artifact__in=output_artifacts).delete()[0],
+            "provider_callback_events": PayrollProviderCallbackEvent.objects.filter(tenant=tenant, output_artifact__in=output_artifacts).delete()[0],
+            "provider_deliveries": PayrollProviderDelivery.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
+            "artifact_access_events": PayrollArtifactAccessEvent.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
+            "artifact_signed_access_grants": PayrollArtifactSignedAccessGrant.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
+            "finance_handoffs": PayrollFinanceHandoff.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
+            "output_artifacts": output_artifacts.delete()[0],
+            "output_batches": PayrollOutputBatch.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
             "reviews": reviews.delete()[0],
             "validation_issues": PayrollValidationIssue.objects.filter(tenant=tenant, payroll_run__in=runs).delete()[0],
             "lines": PayrollCalculationLine.objects.filter(id__in=list(line_ids)).delete()[0],
