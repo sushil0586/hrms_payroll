@@ -152,7 +152,7 @@ export function PayrollInputOperationsPanel({
       selectedPeriod?.calendar_id
         ? setup.options.pay_groups.filter((item) => item.calendar_id === selectedPeriod.calendar_id)
         : setup.options.pay_groups,
-    [selectedPeriod?.calendar_id, setup.options.pay_groups],
+    [selectedPeriod, setup.options.pay_groups],
   );
   const selectedPayGroup = useMemo(() => setup.options.pay_groups.find((item) => item.id === runForm.pay_group_id), [runForm.pay_group_id, setup.options.pay_groups]);
   const periodOptions = useMemo(() => setup.options.periods.map((item) => ({ value: item.id, label: item.name })), [setup.options.periods]);
