@@ -338,6 +338,8 @@ test.describe("HR admin governance and assignment forms", () => {
 
     await page.getByRole("combobox", { name: /^Assignment mode/ }).selectOption("weekly_rotation");
     await expect(page.getByRole("heading", { name: "Rotation design" })).toBeVisible();
+    await expect(page.getByText("Choose the employee whose shift coverage should resolve for attendance.")).toBeVisible();
+    await expect(page.getByText("Choose the default shift for fixed, override, and rotation coverage.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Add rotation step" })).toBeVisible();
     await page.getByRole("button", { name: "Add rotation step" }).click();
     await expect(page.getByText("Step 2")).toBeVisible();

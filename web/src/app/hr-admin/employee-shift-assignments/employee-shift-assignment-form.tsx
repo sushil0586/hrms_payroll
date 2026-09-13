@@ -40,6 +40,10 @@ function selectOptions(items: Array<{ id: string; name: string }>) {
   ];
 }
 
+function FieldHint({ children, tone = "default" }: { children: string; tone?: "default" | "warning" }) {
+  return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
+}
+
 export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemId }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
@@ -47,6 +51,8 @@ export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemI
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminEmployeeShiftAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
+  const employeeWarning = options.employees.length === 0 ? "No active employees are available for shift assignment." : null;
+  const shiftWarning = options.shifts.length === 0 ? "No active shifts are available. Create a shift before assigning coverage." : null;
 
   function update<Key extends keyof HrAdminEmployeeShiftAssignmentWriteInput>(key: Key, value: HrAdminEmployeeShiftAssignmentWriteInput[Key]) {
     setConflictCheck(null);
@@ -194,8 +200,8 @@ export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemI
         <div className="form-shell-card__grid">
           <FormSection title="Coverage window" description="Choose the employee, base shift, assignment mode, and date window.">
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Employee</span><select className="input-control" value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
-              <label className="form-field"><span className="muted">Base shift</span><select className="input-control" value={formValue.shift_id ?? ""} onChange={(e) => update("shift_id", e.target.value || null)}>{selectOptions(options.shifts)}</select></label>
+              <label className="form-field"><span className="muted">Employee</span><select className="input-control" disabled={Boolean(employeeWarning)} value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select><FieldHint tone={employeeWarning ? "warning" : "default"}>{employeeWarning ?? "Choose the employee whose shift coverage should resolve for attendance."}</FieldHint></label>
+              <label className="form-field"><span className="muted">Base shift</span><select className="input-control" disabled={Boolean(shiftWarning)} value={formValue.shift_id ?? ""} onChange={(e) => update("shift_id", e.target.value || null)}>{selectOptions(options.shifts)}</select><FieldHint tone={shiftWarning ? "warning" : "default"}>{shiftWarning ?? "Choose the default shift for fixed, override, and rotation coverage."}</FieldHint></label>
               <label className="form-field">
                 <span className="muted">Assignment mode</span>
                 <select className="input-control" value={formValue.assignment_kind} onChange={(e) => update("assignment_kind", e.target.value as HrAdminEmployeeShiftAssignmentWriteInput["assignment_kind"])}>
@@ -248,7 +254,7 @@ export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemI
                     <span className="detail-label">Step {index + 1}</span>
                     <span className="detail-value">
                       <span className="inline-form-row">
-                        <select className="input-control" value={entry.shift_id ?? ""} onChange={(e) => updateRotationEntry(index, "shift_id", e.target.value || null)}>
+                        <select className="input-control" disabled={Boolean(shiftWarning)} value={entry.shift_id ?? ""} onChange={(e) => updateRotationEntry(index, "shift_id", e.target.value || null)}>
                           {selectOptions(options.shifts)}
                         </select>
                         <input className="input-control" min={1} type="number" value={entry.span_days} onChange={(e) => updateRotationEntry(index, "span_days", Number(e.target.value))} />
@@ -261,7 +267,7 @@ export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemI
                 ))}
               </div>
               <div className="form-actions-bar">
-                <span className="muted">{rotationSummary || "No rotation steps configured yet."}</span>
+                <span className={shiftWarning ? "field-help-text field-help-text--warning" : "muted"}>{shiftWarning ?? (rotationSummary || "No rotation steps configured yet.")}</span>
                 <div className="form-actions-bar__buttons">
                   <button className="button button--secondary" onClick={addRotationEntry} type="button">
                     Add rotation step
