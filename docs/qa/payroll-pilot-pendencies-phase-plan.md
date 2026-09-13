@@ -2,9 +2,9 @@
 
 Generated: 2026-09-12  
 Owner: HRMS Payroll SaaS QA / Delivery  
-Current pilot readiness estimate: 90%  
-Current local build certified through: R5-G Payroll Finance Handoff Exception Report  
-Current staging build certified through: R5-G Payroll Finance Handoff Exception Report  
+Current pilot readiness estimate: 95%  
+Current local build certified through: P100-12 UX/performance  
+Current staging build certified through: P100-14 pilot credential matrix  
 
 ## Purpose
 
@@ -16,8 +16,20 @@ Detailed 1 organization / 100 employee rehearsal plan:
 
 - `docs/qa/full-realistic-payroll-run-100-employees-phase-plan-2026-09-12.md`
 - `docs/qa/pilot-100-execution-tracker-2026-09-12.md`
+- `docs/qa/pilot-100-final-signoff-2026-09-13.md`
 
 ## Current Position
+
+Latest P100 pilot rehearsal status:
+
+- Date: 2026-09-13.
+- Commit: `e5c075e35a070662af7166a53cc11947b51585bb`.
+- Decision: `Pilot-ready with accepted limitations`.
+- P100-0 through P100-14 are certified or accepted with documented limitations.
+- Final staging UX/performance result: `3/3` passed.
+- Final staging production launch release-gate result: `5/5` passed.
+- Final staging pilot credential matrix result: `6/6` passed.
+- Retention decision: keep `PILOT100_20260912` data and evidence until stakeholder review is complete.
 
 Already certified on staging:
 
@@ -58,11 +70,11 @@ Latest local evidence:
 | Payroll setup-to-close visibility | 88% | Strong | Inputs, review exceptions, adjustments, settlements, and close readiness are now visible through reports. |
 | Payroll output and payslip visibility | 90% | Strong | Payslip publication report covers published state, acknowledgement, signed URL/download/revocation/expiry counters, and source hash evidence locally and on staging. |
 | Finance handoff exception visibility | 90% | Strong | Finance handoff exception report covers delivery status, retries, callbacks, queue jobs, blocker category, risk, audit-pack readiness, and source evidence locally and on staging. |
-| Full local regression after latest reports | 82% | Pending | Focused packs and catalog/audit regression pass; full report pack should be rerun before staging sign-off. |
-| Staging pilot-data rehearsal | 65% | Pending | Needs realistic tenant/payroll run with seeded or real pilot data. |
-| Operational pilot readiness | 70% | Pending | Backup, restore, rollback, monitoring, credentials, and support runbook need final rehearsal. |
+| Full report/export regression | 94% | Strong | P100 full report/export regression and export audit coverage passed on staging. |
+| Staging pilot-data rehearsal | 94% | Strong | P100 realistic 1 organization / 100 employee rehearsal is signed off with accepted limitations. |
+| Operational pilot readiness | 82% | Needs drill | Core named users passed; separate finance/support users, backup, restore, rollback, and real-provider rehearsal remain before customer-facing production payroll. |
 
-Overall pilot readiness: 90%.
+Overall pilot readiness: 95%.
 
 ## Open Pendencies
 
@@ -74,15 +86,15 @@ These must be done before any customer-facing pilot payroll run.
 |---|---|---|---|---|
 | P0-1 | Payslip publication and acknowledgement report | Engineering / QA | Done on staging | HR admin can see published payslips, employee read acknowledgement, downloads, signed URL grants, revoked/expired access, and failed access events. |
 | P0-2 | Payroll finance handoff exception report | Engineering / QA | Done on staging | HR admin / finance manager can see failed, queued, retried, transmitted, acknowledged, and audit-pack-ready handoff exceptions. |
-| P0-3 | Full report regression after R5-F/R5-G | QA | Pending | Full local report/compliance Playwright pack passes with all current report specs. |
+| P0-3 | Full report regression after R5-F/R5-G | QA | Done on staging | Full P100 report/export regression and export audit checks pass with all current report specs. |
 | P0-4 | Staging certification after final payroll report slice | QA | Done | Focused staging pack and relevant regression pack pass on `https://hrms.accerio.in`. |
-| P0-5 | Pilot payroll rehearsal with realistic data | Delivery / QA | Planned | One tenant can run payroll from configured master data through inputs, review, close readiness, output, payslip publication, and finance handoff. Detailed P100 plan created for 1 org / 100 employees. |
+| P0-5 | Pilot payroll rehearsal with realistic data | Delivery / QA | Done with accepted limitations | One tenant can run payroll from configured master data through inputs, review, close readiness, output, payslip publication, finance handoff, reports, security, UX/performance, and final release-gate evidence. |
 
 ### P1: Strongly Recommended Before Pilot
 
 | ID | Pendency | Status | Exit Criteria |
 |---|---|---|---|
-| P1-1 | Pilot user credential and role matrix | Pending | Named pilot users mapped to platform admin, HR admin, finance manager, manager, employee, and support roles. |
+| P1-1 | Pilot user credential and role matrix | Partially done | Platform admin, HR admin, manager, seed employee, and pure P100 employee passed. Separate finance manager and support-agent users still need creation and rerun. |
 | P1-2 | Pilot known limitations list | Pending | Business-facing document lists accepted gaps and non-pilot features. |
 | P1-3 | Backup and restore drill | Pending | Backup can be taken and restored in a verified environment. |
 | P1-4 | Rollback rehearsal | Pending | Previous release can be restored and services verified. |

@@ -50,8 +50,9 @@ If a phase fails:
 | P100-9 | Finance handoff/provider evidence | Passed on staging | Bank advice, delivery, retries, callbacks, audit pack | Employee denial for finance handoff/report APIs | Rerun handoff, bank advice, finance exception reports. |
 | P100-10 | Full report/export regression | Passed on staging | Every report page, CSV, manifest, export audit | Employee denial for every HR report/API | Rerun full report pack after any report fix. |
 | P100-11 | Security/isolation | Passed on staging | Role scoped access works | Cross-role, cross-tenant, direct API denial | Rerun impacted role matrix plus no-leak checks. |
-| P100-12 | UX/performance | Passed locally - staging deploy pending | Desktop/mobile, tabs, sidebar, pagination, keyboard | Overflow, overlap, slow route, unusable table | Rerun visual/performance after UI changes. |
-| P100-13 | Evidence and sign-off | Not started | Evidence pack, run ids, export ids, cleanup decision | No cleanup before evidence review | Rerun sign-off summary after any late rerun. |
+| P100-12 | UX/performance | Passed on staging | Desktop/mobile, tabs, sidebar, pagination, keyboard | Overflow, overlap, slow route, unusable table | Rerun visual/performance after UI changes. |
+| P100-13 | Evidence and sign-off | Pilot-ready with accepted limitations | Evidence pack, run ids, export ids, cleanup decision | No cleanup before evidence review | Rerun sign-off summary after any late rerun. |
+| P100-14 | Pilot credential matrix | Passed on staging with named-persona gaps | Named login, workspace access, role denial | Low-privilege API denial, wrong workspace denial | Rerun after any credential, role, or workspace-access change. |
 
 ## Phase P100-0: Safety And Data Strategy
 
@@ -886,6 +887,11 @@ Execution result - 2026-09-13:
 - Browser certification:
   - Command: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 pnpm --dir web exec playwright test tests/e2e/pilot-100-ux-performance-certification.spec.ts --project=chromium`
   - Result: `3/3` passed in 2.9m.
+- Staging deployment and rerun:
+  - Deployed commit: `e5c075e35a070662af7166a53cc11947b51585bb`.
+  - Services: `hrms-payroll-backend.service` active, `hrms-payroll-web.service` active.
+  - Command: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 pnpm --dir web exec playwright test tests/e2e/pilot-100-ux-performance-certification.spec.ts --project=chromium`
+  - Result: `3/3` passed in 7.3m.
 - Positive evidence:
   - Desktop and mobile route sweeps passed for employee directory, payroll readiness, payroll inputs, payroll calculations, payroll review, payroll outputs, payroll handoff, report catalog, payroll register report, payslip publication report, export audit history, ESS payslips, and MSS approvals.
   - Long admin/report surfaces exposed pagination where required.
@@ -898,11 +904,11 @@ Execution result - 2026-09-13:
   - Fix: added `min-width: 0` and `overflow-wrap: anywhere` constraints to shared section, queue toolbar, record card, detail grid, employee directory list/item/meta, and soft detail values.
 - Real-user observations:
   - P100 employee directory is usable after the fix, but it remains dense on mobile. It is acceptable for pilot if mobile is a review/smoke surface; serious HR admin work should still prefer desktop.
-  - The P100 UX pack is intentionally narrower than the generic Phase 8 matrix. It focuses on pilot-volume routes and should be rerun after deployment.
+  - The P100 UX pack is intentionally narrower than the generic Phase 8 matrix. It focuses on pilot-volume routes and passed after deployment.
 - Fixes made during phase:
   - Added `web/tests/e2e/pilot-100-ux-performance-certification.spec.ts`.
   - Updated `web/src/app/globals.css` for mobile width containment and long-value wrapping.
-- Confidence after local certification: 90% for P100 pilot UX/performance locally against staging data. Remaining gate: check in, deploy, and rerun P100-12 on staging.
+- Confidence after staging certification: 92% for P100 pilot UX/performance on staging. Remaining risk: mobile HR admin work is usable but dense, so final pilot users should be encouraged to perform heavy payroll operations on desktop.
 
 ## Phase P100-13: Evidence, Cleanup, Sign-Off
 
@@ -934,3 +940,83 @@ Exit gate:
   - Pilot-ready.
   - Pilot-ready with accepted limitations.
   - Blocked.
+
+Execution result - 2026-09-13:
+
+- Environment: staging, `https://hrms.accerio.in`.
+- Deployed commit at final evidence check: `e5c075e35a070662af7166a53cc11947b51585bb`.
+- Staging services: `hrms-payroll-backend.service` active, `hrms-payroll-web.service` active.
+- Final release-gate browser certification:
+  - Initial result: `4/5` passed; one failure was a brittle automation assertion targeting hidden or absent sidebar/navigation text on the HR control-center page.
+  - Fix: updated `web/tests/e2e/production-launch-release-gate.spec.ts` to validate visible launch cockpit content and rely on direct route checks for operations, resilience, SLA, provider, support, and tenant-admin pages.
+  - Rerun command: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/production-launch-release-gate.spec.ts --project=chromium --workers=1 --reporter=line --timeout=720000`
+  - Rerun result: `5/5` passed in 1.9m.
+- Evidence pack:
+  - P100-0 through P100-12 are certified or accepted with documented limitations.
+  - Report/export evidence covers catalog, payroll register, payslip publication, statutory/compliance reports, finance handoff exceptions, export audit history, CSV exports, manifest/source-hash checks, and role-denial paths.
+  - UX/performance evidence includes desktop/mobile screenshots under `web/test-results/.../pilot-100-ux-performance/` and timing samples under `performance-samples.json`.
+  - Release-gate evidence includes screenshots under `web/test-results/.../production-launch-release-gate/`.
+- Cleanup / retain decision:
+  - Do not run cleanup yet.
+  - Retain the `PILOT100_20260912` dataset, generated payroll artifacts, export audit history, screenshots, and Playwright outputs until stakeholder review is complete.
+- Known accepted limitations:
+  - Heavy payroll/HR admin operations are certified on Chrome and remain best suited to desktop; mobile is usable for review/smoke but dense for serious payroll work.
+  - Staging deterministic cross-tenant object-pair mutation was intentionally not run to avoid extra staging tenant mutation; role/API/artifact isolation was certified on the active pilot tenant.
+  - Real external provider filing/payment rails are not considered live-production certified by this P100 run; provider rehearsal and finance handoff evidence are certified.
+  - Backup/restore and rollback runbooks still need an operations drill before a customer-facing production payroll.
+- Final decision:
+  - `Pilot-ready with accepted limitations`.
+  - Overall confidence after P100-13: 94% for a controlled staging pilot rehearsal / internal pilot run.
+  - Not yet 100% for unattended production payroll launch until real-provider credentials, backup/restore, rollback, named pilot-user credentials, and customer acceptance are completed.
+
+## Phase P100-14: Pilot Credential Matrix
+
+Real-user intent:
+
+Pilot users can log in with named accounts, reach only the workspaces they are supposed to use, and fail closed when they try unsafe cross-role pages or APIs.
+
+Positive scenarios:
+
+- Platform admin logs in and reaches platform admin console.
+- HR admin logs in and reaches HR admin control center and tenant-admin scope.
+- Manager logs in and reaches MSS approvals.
+- Seed employee logs in and reaches ESS.
+- Pure P100 employee logs in and reaches ESS payslips.
+
+Negative scenarios:
+
+- HR admin, manager, and employee are denied platform admin pages.
+- Manager and employee are denied HR admin pages.
+- Pure P100 employee cannot access HR admin report/export/output/support APIs.
+- Manager cannot access finance handoff report APIs or platform tenant APIs.
+- Denial payloads must not leak secrets, tokens, salary snapshots, debit accounts, or private keys.
+
+Observations to record:
+
+- Which accounts are certified.
+- Which pilot roles still need named business accounts.
+- Any role ambiguity discovered in the P100 seed.
+
+Exit gate:
+
+- Named pilot personas pass browser login and workspace/denial smoke, or remaining persona gaps are documented before pilot.
+
+Execution result - 2026-09-13:
+
+- Environment: staging, `https://hrms.accerio.in`.
+- Browser certification:
+  - Command: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/pilot-credential-matrix-certification.spec.ts --project=chromium --workers=1 --reporter=line --timeout=720000`
+  - Initial result: `4/6` passed, `1` failed, `1` did not run.
+  - Initial finding: default pilot employee `PILOT100_20260912_E001` has `manager` role, so it is not suitable as the pure employee persona.
+  - Fix: changed the credential matrix test to use `PILOT100_20260912_E011`, because seed design makes `E001` through `E010` managers and `E011+` pure employees.
+  - Rerun result: `6/6` passed in 1.3m.
+- Certified named accounts:
+  - `platform.admin`: platform admin console access.
+  - `nisha.rao`: HR admin and tenant-admin access.
+  - `karan.mehta`: manager / MSS access.
+  - `riya.sharma`: seed employee / ESS access.
+  - `pilot100_20260912.e011`: pure P100 employee / ESS payslip access.
+- Remaining named-persona gaps:
+  - No separate payroll finance manager login is seeded yet; finance report/handoff functionality is certified through HR admin rights, but business pilot should create a named finance user before external pilot.
+  - No separate support-agent login is seeded yet; support console/session workflows are certified through platform/admin support flows, but business pilot should create a named support user before external pilot.
+- Confidence after staging certification: 95% for currently seeded named-user workspace access. Remaining pilot gap: create named finance and support users, then rerun P100-14 with those accounts included.

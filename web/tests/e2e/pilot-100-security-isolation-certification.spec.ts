@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin, manager, platformAdmin, type Pers
 
 type PayrollOutputArtifact = {
   id: string;
+  output_batch_id: string;
   kind: string;
   status: string;
   employee_code: string | null;

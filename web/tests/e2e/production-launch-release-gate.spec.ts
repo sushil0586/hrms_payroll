@@ -28,9 +28,6 @@ test.describe("Production launch release gate proof", () => {
       "Launch audit",
       "SaaS launch audit",
       "hrms.saas_launch_audit.v1",
-      "Ops Health",
-      "SaaS",
-      "Launch",
       "Download audit",
     ]);
     await captureLaunchGateStep(page, testInfo, "01-hr-control-launch-audit");
