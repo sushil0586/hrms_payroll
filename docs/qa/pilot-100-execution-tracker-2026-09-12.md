@@ -47,10 +47,10 @@ If a phase fails:
 | P100-6 | Calculation and review | Passed on staging | Draft calculation, line review, exceptions, decisions | Invalid lock, employee denial, report export evidence | Rerun calculation/review/report pack after related payroll engine/report changes. |
 | P100-7 | Adjustments, settlements, readiness | Passed locally | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
 | P100-8 | Outputs, payslips, ESS proof | Passed on staging | Generate/publish outputs, read/download payslips | Cross-employee payslip denial, signed grant access-limit denial | Rerun output, ESS, payslip publication, artifact audit tests. |
-| P100-9 | Finance handoff/provider evidence | Passed locally - staging pending | Bank advice, delivery, retries, callbacks, audit pack | Employee denial for finance handoff/report APIs | Rerun handoff, bank advice, finance exception reports. |
-| P100-10 | Full report/export regression | Not started | Every report page, CSV, manifest, export audit | Employee denial for every HR report/API | Rerun full report pack after any report fix. |
-| P100-11 | Security/isolation | Not started | Role scoped access works | Cross-role, cross-tenant, direct API denial | Rerun impacted role matrix plus no-leak checks. |
-| P100-12 | UX/performance | Not started | Desktop/mobile, tabs, sidebar, pagination, keyboard | Overflow, overlap, slow route, unusable table | Rerun visual/performance after UI changes. |
+| P100-9 | Finance handoff/provider evidence | Passed on staging | Bank advice, delivery, retries, callbacks, audit pack | Employee denial for finance handoff/report APIs | Rerun handoff, bank advice, finance exception reports. |
+| P100-10 | Full report/export regression | Passed on staging | Every report page, CSV, manifest, export audit | Employee denial for every HR report/API | Rerun full report pack after any report fix. |
+| P100-11 | Security/isolation | Passed on staging | Role scoped access works | Cross-role, cross-tenant, direct API denial | Rerun impacted role matrix plus no-leak checks. |
+| P100-12 | UX/performance | Passed locally - staging deploy pending | Desktop/mobile, tabs, sidebar, pagination, keyboard | Overflow, overlap, slow route, unusable table | Rerun visual/performance after UI changes. |
 | P100-13 | Evidence and sign-off | Not started | Evidence pack, run ids, export ids, cleanup decision | No cleanup before evidence review | Rerun sign-off summary after any late rerun. |
 
 ## Phase P100-0: Safety And Data Strategy
@@ -762,6 +762,37 @@ Exit gate:
 
 - Full report pack passes.
 
+Execution result - 2026-09-13:
+
+- Environment: staging, `https://hrms.accerio.in`.
+- Prerequisites:
+  - P100-8 output batch for `PILOT100_20260912 Output Payslip ESS Gate` was published.
+  - P100-9 finance handoff/provider evidence was accepted and audit-pack-ready.
+- Browser certification:
+  - Command: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 pnpm --dir web exec playwright test tests/e2e/pilot-100-full-report-export-regression.spec.ts --project=chromium`
+  - Result: `3/3` passed in 5.9m.
+- Positive evidence:
+  - HR admin opened the report catalog and every HR admin ready report page through browser automation.
+  - Certified report pages: workforce, document compliance, lifecycle queue, lifecycle aging, attendance register, leave balance, attendance exceptions, payroll register, payroll input exceptions, salary variance, payroll review exceptions, payroll adjustments, payroll settlements, payroll close readiness, payslip publication, bank advice, finance handoff exceptions, challan reconciliation, statutory filing status, provider filing receipts, and statutory deductions.
+  - Each page exposed its report workspace, table, search zero-state path, at least one dropdown where available, and pagination controls without horizontal overflow.
+  - CSV and manifest exports were certified for every ready report with an `exportRoute`.
+  - Export contract checks covered report key, checksum header, CSV header, manifest schema version, manifest checksum, row count, source endpoint, and evidence columns.
+  - P100 payroll-finance reports were required to include the `PILOT100_20260912` evidence string in exported CSV.
+  - TDS e-file package endpoint was checked as either ready CSV output or a controlled readiness-blocker response with blocking reasons.
+  - Export audit API showed CSV and manifest records for every exportable report.
+- Negative evidence:
+  - Employee session could not access every HR admin report page.
+  - Employee session could not call every HR admin report export API.
+  - Employee session could not call export audit history or TDS e-file package endpoints.
+- Real-user observations:
+  - `document-compliance` export is currently a valid zero-row report on staging. The product handles it with headers/manifests, but the pilot dataset should add document compliance rows before final business demo.
+  - Statutory deductions still depend on published statutory deduction artifacts. UI/functionality is certified, but richer source-hash proof improves after statutory artifacts are generated for the P100 run.
+  - The full report pack is intentionally slow because it visits every report page through a browser. Keep this as a release/pilot certification pack, not a fast smoke test.
+- Fixes made during phase:
+  - Added `web/tests/e2e/pilot-100-full-report-export-regression.spec.ts`.
+  - Hardened the report pack for real product copy, valid zero-state exports, manifest `row_count`, and audit API validation.
+- Confidence after staging certification: 94% for HR admin reporting/export regression. Residual risk: richer document/statutory seed coverage and real external provider filing/e-file integrations.
+
 ## Phase P100-11: Security And Isolation
 
 Real-user intent:
@@ -788,6 +819,35 @@ Observations to record:
 Exit gate:
 
 - No sensitive-data leakage.
+
+Execution result - 2026-09-13:
+
+- Environment: staging, `https://hrms.accerio.in`.
+- Browser certification:
+  - Command: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 pnpm --dir web exec playwright test tests/e2e/pilot-100-security-isolation-certification.spec.ts --project=chromium`
+  - Result: `4/4` passed in 1.7m.
+- Positive evidence:
+  - HR admin can use authenticated P100 output setup APIs and download the P100 payroll register/payslip artifacts through HR admin routes.
+  - Pilot employee can open ESS payslips and download only their own P100 payslip through the employee-scoped route.
+  - Session API confirms HR admin, pilot employee, and pilot manager remain in the same tenant context for the pilot run.
+- Negative evidence:
+  - Public access to protected workspaces redirects to login without workspace load errors.
+  - Stale token access redirects to login.
+  - Pilot employee cannot open HR admin workspace.
+  - Pilot manager cannot open platform admin workspace.
+  - HR admin cannot open platform admin workspace.
+  - Platform admin cannot open HR admin workspace.
+  - Employee and manager sessions are denied direct HR admin report, payroll output, finance handoff, tenant admin, support, export audit, and TDS package APIs.
+  - Anonymous privileged mutation is denied.
+  - Employee cannot download the HR admin payroll register artifact, cannot download their own payslip through the HR admin artifact route, and cannot download another employee's ESS payslip.
+  - Denial payload checks confirmed no `password`, `secret`, `token`, salary snapshot, debit-account, or live provider strings leaked.
+- Real-user observations:
+  - P100 employee `E001` is also a manager, so the security proof treats it as a pilot user with ESS plus MSS access and focuses on HR/platform/payroll-artifact denial boundaries. Use `E011` or another non-manager employee if a pure employee-only UX proof is needed.
+  - Deterministic cross-tenant fixture creation was intentionally not run on staging in this phase to avoid mutating extra tenants. Existing Phase 7B remains the local deterministic cross-tenant object isolation proof; staging P100-11 certifies role/API/artifact isolation on the active pilot tenant.
+- Fixes made during phase:
+  - Added `web/tests/e2e/pilot-100-security-isolation-certification.spec.ts`.
+  - Hardened the test to use live artifact kind `register`, backend `/auth/session/`, and the root session payload shape.
+- Confidence after staging certification: 93% for active-tenant role/API/artifact isolation. Residual risk: staging deterministic cross-tenant object-pair attack proof remains pending by choice to avoid extra staging tenant mutation.
 
 ## Phase P100-12: UX And Performance
 
@@ -819,6 +879,30 @@ Observations to record:
 Exit gate:
 
 - UX/performance residuals classified and accepted or fixed.
+
+Execution result - 2026-09-13:
+
+- Environment: local web `http://127.0.0.1:3100` against staging backend `https://hrms.accerio.in/api/v1`.
+- Browser certification:
+  - Command: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 pnpm --dir web exec playwright test tests/e2e/pilot-100-ux-performance-certification.spec.ts --project=chromium`
+  - Result: `3/3` passed in 2.9m.
+- Positive evidence:
+  - Desktop and mobile route sweeps passed for employee directory, payroll readiness, payroll inputs, payroll calculations, payroll review, payroll outputs, payroll handoff, report catalog, payroll register report, payslip publication report, export audit history, ESS payslips, and MSS approvals.
+  - Long admin/report surfaces exposed pagination where required.
+  - No horizontal overflow after the employee-directory mobile fix.
+  - No tiny command/field or viewport-outside layout issues were detected by the pilot UX collector.
+  - Timing budgets passed for the pilot-scale route set.
+- Negative evidence:
+  - Initial staging run found a real mobile overflow on `/hr-admin/employees?q=PILOT100_20260912&page_size=50`: document width exceeded mobile viewport by `68px`.
+  - Root cause: shared card/detail/filter layouts could retain min-content width on mobile, and long pilot employee codes/emails widened employee detail panels.
+  - Fix: added `min-width: 0` and `overflow-wrap: anywhere` constraints to shared section, queue toolbar, record card, detail grid, employee directory list/item/meta, and soft detail values.
+- Real-user observations:
+  - P100 employee directory is usable after the fix, but it remains dense on mobile. It is acceptable for pilot if mobile is a review/smoke surface; serious HR admin work should still prefer desktop.
+  - The P100 UX pack is intentionally narrower than the generic Phase 8 matrix. It focuses on pilot-volume routes and should be rerun after deployment.
+- Fixes made during phase:
+  - Added `web/tests/e2e/pilot-100-ux-performance-certification.spec.ts`.
+  - Updated `web/src/app/globals.css` for mobile width containment and long-value wrapping.
+- Confidence after local certification: 90% for P100 pilot UX/performance locally against staging data. Remaining gate: check in, deploy, and rerun P100-12 on staging.
 
 ## Phase P100-13: Evidence, Cleanup, Sign-Off
 
