@@ -53,6 +53,7 @@ If a phase fails:
 | P100-12 | UX/performance | Passed on staging | Desktop/mobile, tabs, sidebar, pagination, keyboard | Overflow, overlap, slow route, unusable table | Rerun visual/performance after UI changes. |
 | P100-13 | Evidence and sign-off | Pilot-ready with accepted limitations | Evidence pack, run ids, export ids, cleanup decision | No cleanup before evidence review | Rerun sign-off summary after any late rerun. |
 | P100-14 | Pilot credential matrix | Passed on staging | Named login, workspace access, role denial | Low-privilege API denial, wrong workspace denial | Rerun after any credential, role, or workspace-access change. |
+| P100-15 | Backup and restore drill | Passed on staging | Timestamped backup, checksum, scratch restore, data verification | No live DB restore, scratch cleanup | Rerun before customer-facing production payroll. |
 
 ## Phase P100-0: Safety And Data Strategy
 
@@ -1022,6 +1023,7 @@ Execution result - 2026-09-13:
   - Added `support.agent` with `support-agent` role and support-session identifier matching.
   - Expanded command: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/pilot-credential-matrix-certification.spec.ts --project=chromium --workers=1 --reporter=line --timeout=900000`
   - Result: `10/10` passed in 2.2m.
+  - Post-deploy result on commit `1efce7e5dbf91867d6abbce2bf5288192608efb9`: `10/10` passed in 2.3m.
 - Certified named accounts:
   - `platform.admin`: platform admin console access.
   - `nisha.rao`: HR admin and tenant-admin access.
@@ -1031,3 +1033,49 @@ Execution result - 2026-09-13:
   - `payroll.finance`: payroll finance manager / payroll handoff and finance report evidence access.
   - `support.agent`: support-agent login, approved `configuration_health` support scope access, ungranted `payroll_support` denial.
 - Confidence after staging certification: 96% for named-user workspace access and support/finance operational personas. Remaining pilot gaps are now operational drills: backup/restore, rollback, real-provider rehearsal, and stakeholder acceptance.
+
+## Phase P100-15: Backup And Restore Drill
+
+Real-user intent:
+
+Operations can recover the pilot dataset if staging data or release state is damaged.
+
+Positive scenarios:
+
+- Take timestamped PostgreSQL backup from staging.
+- Record app commit, backup path, size, checksum, and restore catalog count.
+- Restore into a scratch database only.
+- Verify tenant, pilot employees, named users, payroll runs, output artifacts, and audit evidence exist in the restored database.
+- Run Django migration check against the scratch database.
+- Drop scratch database after verification.
+
+Negative scenarios:
+
+- Do not restore over live staging database.
+- Do not leave scratch databases behind after verification.
+- Do not expose database passwords in logs.
+
+Execution result - 2026-09-13:
+
+- Environment: staging, `https://hrms.accerio.in`.
+- App commit: `1efce7e5dbf91867d6abbce2bf5288192608efb9`.
+- Backup:
+  - Source DB: `hrms_stage` on `127.0.0.1`.
+  - Backup file: `/var/backups/hrms-payroll-saas/hrms_stage_p100_20260913T084053Z.dump`.
+  - Size: `2428598` bytes.
+  - SHA-256: `38e4d3a03265d2b49277878da5d309e81ed6ff04d06e709f6f2356313bbbebfb`.
+  - Restore catalog entries: `1521`.
+- Scratch restore:
+  - Scratch DB: `hrms_stage_restore_drill_20260913084114`.
+  - Restore command completed successfully with `pg_restore`.
+  - Django `migrate --check --noinput` passed against the scratch DB.
+  - Scratch DB was dropped after verification.
+- Restored-data verification:
+  - `northstar-foods` tenant count: `1`.
+  - Named users `payroll.finance` and `support.agent`: `2`.
+  - `PILOT100_20260912` employees: `100`.
+  - Finance employee context `PILOT-FIN-001`: `1`.
+  - P100 payroll runs: `5`.
+  - Payroll output artifacts: `158`.
+  - SaaS commercial audit events: `185`.
+- Confidence after staging certification: 97% for recoverability of the current staging pilot dataset. Remaining operational gaps: rollback drill, real-provider rehearsal, monitoring/log review routine, and stakeholder acceptance.

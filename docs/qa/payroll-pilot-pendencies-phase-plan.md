@@ -2,9 +2,9 @@
 
 Generated: 2026-09-12  
 Owner: HRMS Payroll SaaS QA / Delivery  
-Current pilot readiness estimate: 96%  
+Current pilot readiness estimate: 97%  
 Current local build certified through: P100-12 UX/performance  
-Current staging build certified through: P100-14 pilot credential matrix  
+Current staging build certified through: P100-15 backup and restore drill  
 
 ## Purpose
 
@@ -25,10 +25,11 @@ Latest P100 pilot rehearsal status:
 - Date: 2026-09-13.
 - Deployed app commit: `05fe1f583f55641d56fe973d13e48430445ef48d`.
 - Decision: `Pilot-ready with accepted limitations`.
-- P100-0 through P100-14 are certified or accepted with documented limitations.
+- P100-0 through P100-15 are certified or accepted with documented limitations.
 - Final staging UX/performance result: `3/3` passed.
 - Final staging production launch release-gate result: `5/5` passed.
 - Final staging pilot credential matrix result: `10/10` passed.
+- Final staging backup/restore drill: passed with scratch DB restore and verification.
 - Retention decision: keep `PILOT100_20260912` data and evidence until stakeholder review is complete.
 
 Already certified on staging:
@@ -72,9 +73,9 @@ Latest local evidence:
 | Finance handoff exception visibility | 90% | Strong | Finance handoff exception report covers delivery status, retries, callbacks, queue jobs, blocker category, risk, audit-pack readiness, and source evidence locally and on staging. |
 | Full report/export regression | 94% | Strong | P100 full report/export regression and export audit coverage passed on staging. |
 | Staging pilot-data rehearsal | 94% | Strong | P100 realistic 1 organization / 100 employee rehearsal is signed off with accepted limitations. |
-| Operational pilot readiness | 86% | Needs drill | Named users passed; backup, restore, rollback, real-provider rehearsal, and stakeholder acceptance remain before customer-facing production payroll. |
+| Operational pilot readiness | 90% | Needs drill | Named users and backup/restore passed; rollback, real-provider rehearsal, monitoring/log review, and stakeholder acceptance remain before customer-facing production payroll. |
 
-Overall pilot readiness: 96%.
+Overall pilot readiness: 97%.
 
 ## Open Pendencies
 
@@ -96,7 +97,7 @@ These must be done before any customer-facing pilot payroll run.
 |---|---|---|---|
 | P1-1 | Pilot user credential and role matrix | Done on staging | Platform admin, HR admin, payroll finance manager, manager, seed employee, pure P100 employee, and support-agent flows passed. |
 | P1-2 | Pilot known limitations list | Pending | Business-facing document lists accepted gaps and non-pilot features. |
-| P1-3 | Backup and restore drill | Pending | Backup can be taken and restored in a verified environment. |
+| P1-3 | Backup and restore drill | Done on staging | Backup was taken, checksum recorded, restored into scratch DB, verified, migration-checked, and scratch DB dropped. |
 | P1-4 | Rollback rehearsal | Pending | Previous release can be restored and services verified. |
 | P1-5 | Monitoring and log review routine | Pending | Basic web/backend service logs and error patterns are reviewed after test payroll run. |
 
