@@ -46,8 +46,8 @@ If a phase fails:
 | P100-5 | Payroll input snapshot and lock | Passed | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
 | P100-6 | Calculation and review | Passed on staging | Draft calculation, line review, exceptions, decisions | Invalid lock, employee denial, report export evidence | Rerun calculation/review/report pack after related payroll engine/report changes. |
 | P100-7 | Adjustments, settlements, readiness | Passed locally | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
-| P100-8 | Outputs, payslips, ESS proof | Passed locally - staging pending | Generate/publish outputs, read/download payslips | Cross-employee payslip denial, signed grant access-limit denial | Rerun output, ESS, payslip publication, artifact audit tests. |
-| P100-9 | Finance handoff/provider evidence | Not started | Bank advice, delivery, retries, callbacks, audit pack | Failed provider/retry/dead-letter visibility | Rerun handoff, bank advice, finance exception reports. |
+| P100-8 | Outputs, payslips, ESS proof | Passed on staging | Generate/publish outputs, read/download payslips | Cross-employee payslip denial, signed grant access-limit denial | Rerun output, ESS, payslip publication, artifact audit tests. |
+| P100-9 | Finance handoff/provider evidence | Passed locally - staging pending | Bank advice, delivery, retries, callbacks, audit pack | Employee denial for finance handoff/report APIs | Rerun handoff, bank advice, finance exception reports. |
 | P100-10 | Full report/export regression | Not started | Every report page, CSV, manifest, export audit | Employee denial for every HR report/API | Rerun full report pack after any report fix. |
 | P100-11 | Security/isolation | Not started | Role scoped access works | Cross-role, cross-tenant, direct API denial | Rerun impacted role matrix plus no-leak checks. |
 | P100-12 | UX/performance | Not started | Desktop/mobile, tabs, sidebar, pagination, keyboard | Overflow, overlap, slow route, unusable table | Rerun visual/performance after UI changes. |
@@ -665,9 +665,16 @@ Execution result - 2026-09-13:
   - The P100 calculation seed now carries a configurable signed storage profile under `output_profile.storage_profile` instead of relying on hardcoded test behavior.
 - Local environment note:
   - Local tenant `northstar-foods` was switched from `growth` to `enterprise` for the rehearsal because local seed volume exceeded the `payroll_runs_per_month` plan gate.
-- Staging status:
-  - Pending check-in, deployment, staging seed for `output-payslip`, and staging rerun of the same Playwright spec.
-- Confidence after local certification: 90% for P100-8 functionality locally. Remaining risk: staging deployment/seed rerun and any staging-specific latency or commercial gate differences.
+- Staging deployment and certification:
+  - Deployed commit: `c2f7310aec500d6d2633c1b7049e2fd86a22bdde`.
+  - Services after deploy: `hrms-payroll-backend.service` active, `hrms-payroll-web.service` active.
+  - Staging seed command:
+    - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_calculation --prefix PILOT100_20260912 --run-code-suffix output-payslip --run-name-suffix "Output Payslip ESS Gate" --scenario output_payslip_ess_gate --input-profile-ref tenant.payroll.input.pilot100.outputs.v1 --output-file ../web/test-results/pilot-100-output-payslip-staging-manifest.json`
+  - Staging seed counts: `100` snapshots, `83` ready snapshots, `17` warning snapshots, `3` scoped payroll rules.
+  - Staging browser command:
+    - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-output-payslip-ess-certification.spec.ts --workers=1 --reporter=line --timeout=900000`
+  - Result: `1/1` passed in 1.8m.
+- Confidence after staging certification: 93% for P100-8. Residual risk: real external storage/provider IAM is still outside this staging placeholder-storage certification.
 
 ## Phase P100-9: Finance Handoff And Provider Evidence
 
@@ -698,6 +705,33 @@ Observations to record:
 Exit gate:
 
 - Handoff and expected exception states are visible and auditable.
+
+Execution result - 2026-09-13:
+
+- Environment: local dev, `http://127.0.0.1:3100` with backend `http://127.0.0.1:8012/api/v1`.
+- Prerequisite: P100-8 output batch for `PILOT100_20260912 Output Payslip ESS Gate` was already published.
+- Browser certification:
+  - Command: `PLAYWRIGHT_PORT=3100 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-finance-handoff-compliance-certification.spec.ts --workers=1 --reporter=line --timeout=900000`
+  - Result: `1/1` passed in 22.6s after test locator hardening.
+- Positive evidence:
+  - HR admin opened the published output batch and generated or resumed the finance handoff through browser-visible controls.
+  - HR admin opened Payroll Handoff, transmitted the handoff when needed, acknowledged provider delivery evidence when needed, and generated the provider audit pack when missing.
+  - Handoff setup evidence showed accepted handoff status, reconciled delivery evidence, completed provider jobs, checksum/source-hash evidence, and one provider audit pack artifact.
+  - Bank advice artifact downloaded with payroll artifact checksum headers and employee-code CSV content.
+  - Bank Advice Report was certified through browser search, handoff-status filter, delivery-status filter, pagination, CSV export, and manifest export.
+  - Finance Handoff Exceptions Report was certified through browser search, risk filter, CSV export, and manifest export.
+  - Payroll Register Report was rechecked for the P100 run with browser search and CSV export evidence.
+- Negative evidence:
+  - Employee session cannot read backend finance handoff setup.
+  - Employee session cannot read bank advice report export.
+  - Employee session cannot generate finance handoff for the output batch.
+- Real-user observations:
+  - Finance report pages are usable, but their client search state is not initialized from URL `q` parameters. Direct links such as `/hr-admin/reports/finance-handoff-exceptions?q=<run>` open the page but do not prefill the visible search field. This is not blocking because typed search works, but it is a report deep-link UX improvement.
+  - P100-9 certification is state-aware: reruns can resume from generated/transmitted/accepted handoff state without failing on duplicate handoff creation.
+- Fixes made during phase:
+  - Added `web/tests/e2e/pilot-100-finance-handoff-compliance-certification.spec.ts`.
+  - Hardened the test to use backend-authenticated setup APIs for output/handoff setup, exact heading matching for run names that also prefix artifact names, lifecycle-aware artifact counts after handoff generation, and accessible-role locators for the Finance Handoff Exceptions search box.
+- Confidence after local certification: 91% for P100-9 locally. Remaining risk: staging deployment/seed rerun and real external bank/accounting/statutory provider integrations.
 
 ## Phase P100-10: Full Report And Export Regression
 
