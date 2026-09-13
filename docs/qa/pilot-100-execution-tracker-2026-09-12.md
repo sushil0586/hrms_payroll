@@ -52,7 +52,7 @@ If a phase fails:
 | P100-11 | Security/isolation | Passed on staging | Role scoped access works | Cross-role, cross-tenant, direct API denial | Rerun impacted role matrix plus no-leak checks. |
 | P100-12 | UX/performance | Passed on staging | Desktop/mobile, tabs, sidebar, pagination, keyboard | Overflow, overlap, slow route, unusable table | Rerun visual/performance after UI changes. |
 | P100-13 | Evidence and sign-off | Pilot-ready with accepted limitations | Evidence pack, run ids, export ids, cleanup decision | No cleanup before evidence review | Rerun sign-off summary after any late rerun. |
-| P100-14 | Pilot credential matrix | Passed on staging with named-persona gaps | Named login, workspace access, role denial | Low-privilege API denial, wrong workspace denial | Rerun after any credential, role, or workspace-access change. |
+| P100-14 | Pilot credential matrix | Passed on staging | Named login, workspace access, role denial | Low-privilege API denial, wrong workspace denial | Rerun after any credential, role, or workspace-access change. |
 
 ## Phase P100-0: Safety And Data Strategy
 
@@ -982,6 +982,8 @@ Positive scenarios:
 - Manager logs in and reaches MSS approvals.
 - Seed employee logs in and reaches ESS.
 - Pure P100 employee logs in and reaches ESS payslips.
+- Payroll finance manager logs in and reaches finance handoff/report evidence.
+- Support agent logs in and can read approved support scope only.
 
 Negative scenarios:
 
@@ -989,17 +991,18 @@ Negative scenarios:
 - Manager and employee are denied HR admin pages.
 - Pure P100 employee cannot access HR admin report/export/output/support APIs.
 - Manager cannot access finance handoff report APIs or platform tenant APIs.
+- Payroll finance manager cannot access platform APIs.
+- Support agent cannot access HR payroll APIs and cannot read ungranted support scopes.
 - Denial payloads must not leak secrets, tokens, salary snapshots, debit accounts, or private keys.
 
 Observations to record:
 
 - Which accounts are certified.
-- Which pilot roles still need named business accounts.
 - Any role ambiguity discovered in the P100 seed.
 
 Exit gate:
 
-- Named pilot personas pass browser login and workspace/denial smoke, or remaining persona gaps are documented before pilot.
+- Named pilot personas pass browser login, workspace/denial smoke, finance evidence checks, and scoped support-session checks.
 
 Execution result - 2026-09-13:
 
@@ -1010,13 +1013,21 @@ Execution result - 2026-09-13:
   - Initial finding: default pilot employee `PILOT100_20260912_E001` has `manager` role, so it is not suitable as the pure employee persona.
   - Fix: changed the credential matrix test to use `PILOT100_20260912_E011`, because seed design makes `E001` through `E010` managers and `E011+` pure employees.
   - Rerun result: `6/6` passed in 1.3m.
+- Post-deploy verification:
+  - Deployed commit: `05fe1f583f55641d56fe973d13e48430445ef48d`.
+  - Services: `hrms-payroll-backend.service` active, `hrms-payroll-web.service` active.
+  - Rerun result: `6/6` passed in 1.2m.
+- Expanded named finance/support certification:
+  - Added `payroll.finance` with `hr-admin` and `payroll-finance-manager` roles plus employee context `PILOT-FIN-001`.
+  - Added `support.agent` with `support-agent` role and support-session identifier matching.
+  - Expanded command: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/pilot-credential-matrix-certification.spec.ts --project=chromium --workers=1 --reporter=line --timeout=900000`
+  - Result: `10/10` passed in 2.2m.
 - Certified named accounts:
   - `platform.admin`: platform admin console access.
   - `nisha.rao`: HR admin and tenant-admin access.
   - `karan.mehta`: manager / MSS access.
   - `riya.sharma`: seed employee / ESS access.
   - `pilot100_20260912.e011`: pure P100 employee / ESS payslip access.
-- Remaining named-persona gaps:
-  - No separate payroll finance manager login is seeded yet; finance report/handoff functionality is certified through HR admin rights, but business pilot should create a named finance user before external pilot.
-  - No separate support-agent login is seeded yet; support console/session workflows are certified through platform/admin support flows, but business pilot should create a named support user before external pilot.
-- Confidence after staging certification: 95% for currently seeded named-user workspace access. Remaining pilot gap: create named finance and support users, then rerun P100-14 with those accounts included.
+  - `payroll.finance`: payroll finance manager / payroll handoff and finance report evidence access.
+  - `support.agent`: support-agent login, approved `configuration_health` support scope access, ungranted `payroll_support` denial.
+- Confidence after staging certification: 96% for named-user workspace access and support/finance operational personas. Remaining pilot gaps are now operational drills: backup/restore, rollback, real-provider rehearsal, and stakeholder acceptance.

@@ -27,6 +27,16 @@ export const platformAdmin: Persona = {
   password: seedPassword,
 };
 
+export const payrollFinanceManager: Persona = {
+  username: process.env.PLAYWRIGHT_LIVE_PAYROLL_FINANCE_USERNAME ?? "payroll.finance",
+  password: seedPassword,
+};
+
+export const supportAgent: Persona = {
+  username: process.env.PLAYWRIGHT_LIVE_SUPPORT_AGENT_USERNAME ?? "support.agent",
+  password: seedPassword,
+};
+
 export function personaForRoute(path: string): Persona {
   if (path.startsWith("/platform-admin")) {
     return platformAdmin;

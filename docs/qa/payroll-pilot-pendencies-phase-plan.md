@@ -2,7 +2,7 @@
 
 Generated: 2026-09-12  
 Owner: HRMS Payroll SaaS QA / Delivery  
-Current pilot readiness estimate: 95%  
+Current pilot readiness estimate: 96%  
 Current local build certified through: P100-12 UX/performance  
 Current staging build certified through: P100-14 pilot credential matrix  
 
@@ -23,12 +23,12 @@ Detailed 1 organization / 100 employee rehearsal plan:
 Latest P100 pilot rehearsal status:
 
 - Date: 2026-09-13.
-- Commit: `e5c075e35a070662af7166a53cc11947b51585bb`.
+- Deployed app commit: `05fe1f583f55641d56fe973d13e48430445ef48d`.
 - Decision: `Pilot-ready with accepted limitations`.
 - P100-0 through P100-14 are certified or accepted with documented limitations.
 - Final staging UX/performance result: `3/3` passed.
 - Final staging production launch release-gate result: `5/5` passed.
-- Final staging pilot credential matrix result: `6/6` passed.
+- Final staging pilot credential matrix result: `10/10` passed.
 - Retention decision: keep `PILOT100_20260912` data and evidence until stakeholder review is complete.
 
 Already certified on staging:
@@ -72,9 +72,9 @@ Latest local evidence:
 | Finance handoff exception visibility | 90% | Strong | Finance handoff exception report covers delivery status, retries, callbacks, queue jobs, blocker category, risk, audit-pack readiness, and source evidence locally and on staging. |
 | Full report/export regression | 94% | Strong | P100 full report/export regression and export audit coverage passed on staging. |
 | Staging pilot-data rehearsal | 94% | Strong | P100 realistic 1 organization / 100 employee rehearsal is signed off with accepted limitations. |
-| Operational pilot readiness | 82% | Needs drill | Core named users passed; separate finance/support users, backup, restore, rollback, and real-provider rehearsal remain before customer-facing production payroll. |
+| Operational pilot readiness | 86% | Needs drill | Named users passed; backup, restore, rollback, real-provider rehearsal, and stakeholder acceptance remain before customer-facing production payroll. |
 
-Overall pilot readiness: 95%.
+Overall pilot readiness: 96%.
 
 ## Open Pendencies
 
@@ -94,7 +94,7 @@ These must be done before any customer-facing pilot payroll run.
 
 | ID | Pendency | Status | Exit Criteria |
 |---|---|---|---|
-| P1-1 | Pilot user credential and role matrix | Partially done | Platform admin, HR admin, manager, seed employee, and pure P100 employee passed. Separate finance manager and support-agent users still need creation and rerun. |
+| P1-1 | Pilot user credential and role matrix | Done on staging | Platform admin, HR admin, payroll finance manager, manager, seed employee, pure P100 employee, and support-agent flows passed. |
 | P1-2 | Pilot known limitations list | Pending | Business-facing document lists accepted gaps and non-pilot features. |
 | P1-3 | Backup and restore drill | Pending | Backup can be taken and restored in a verified environment. |
 | P1-4 | Rollback rehearsal | Pending | Previous release can be restored and services verified. |
