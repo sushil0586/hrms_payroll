@@ -43,7 +43,7 @@ If a phase fails:
 | P100-2 | Policy and payroll setup | Passed | Salary, leave, attendance, statutory, pay group, provider config | Duplicate setup, missing required config, invalid formulas | Rerun payroll setup and report catalog checks. |
 | P100-3 | 100 employees and access matrix | Passed | 100 employees, manager hierarchy, pay/bank/salary assignment | Role denial, missing-bank blocker, missing mapping | Rerun directory, ESS/MSS, payroll readiness after seed/config changes. |
 | P100-4 | Attendance/leave/lifecycle inputs | Passed | ESS/MSS/HR inputs for scenario distribution | Unauthorized approvals, invalid dates, rejected requests | Rerun affected input and report checks. |
-| P100-5 | Payroll input snapshot and lock | Local passed - staging pending | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
+| P100-5 | Payroll input snapshot and lock | Passed | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
 | P100-6 | Calculation and review | Not started | Draft calculation, line review, exceptions, decisions | Invalid lock, unauthorized decision, stale calculation | Rerun calculation/review/report pack. |
 | P100-7 | Adjustments, settlements, readiness | Not started | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
 | P100-8 | Outputs, payslips, ESS proof | Not started | Generate/publish outputs, read/download payslips | Cross-employee payslip denial, revoked/expired grants | Rerun output, ESS, payslip publication, artifact audit tests. |
@@ -454,7 +454,17 @@ Implementation and local execution result - 2026-09-12:
 - Staging deployment commands after check-in:
   - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_snapshots --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-snapshots-staging-manifest.json`
   - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-payroll-input-snapshot-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
-- Confidence after local certification: 91% for P100-5 locally. Residual risk: staging still needs deploy, snapshot seed, and the same browser certification run.
+- Staging deployment and certification:
+  - Deployed commit: `266257b00497d4ff6fff555b862c3f652eb21058`.
+  - Services after deploy: `hrms-payroll-backend.service` active, `hrms-payroll-web.service` active.
+  - Staging seed command:
+    - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_snapshots --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-snapshots-staging-manifest.json`
+  - Staging seed counts: `100` blocked-run snapshots, `100` lockable-run snapshots, `5` blockers, `12` blocked-run warnings, `17` lockable-run warnings.
+  - SaaS commercial gate: Northstar Foods plan `enterprise`; exceeded usage limits empty.
+  - Staging browser command:
+    - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-payroll-input-snapshot-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
+  - Result: `4/4` passed in 1.6m.
+- Confidence after final staging certification: 93% for P100-5. Residual risk: payroll inputs workspace still needs native search/filter/pagination improvements for long-running tenants, although report-level search/filter/export proof is certified.
 
 ## Phase P100-6: Calculation And Review
 
