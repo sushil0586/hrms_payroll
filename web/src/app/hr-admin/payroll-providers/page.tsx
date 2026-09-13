@@ -193,6 +193,9 @@ function ProviderRail({
             </Link>
           );
         })}
+        {connections.length === 0 ? (
+          <div className="empty-state">No provider connections are configured yet. Add bank, accounting, or statutory provider routes before certifying launch readiness.</div>
+        ) : null}
       </div>
     </aside>
   );
@@ -394,6 +397,9 @@ function ConnectionDetail({
               <StatusBadge status={gate.passed ? "passed" : "pending"} label={gate.passed ? "Passed" : "Pending"} />
             </article>
           ))}
+          {gates.length === 0 ? (
+            <div className="empty-state">No readiness gates are recorded for this provider connection yet.</div>
+          ) : null}
         </div>
       </section>
     </aside>
@@ -636,6 +642,9 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                     <code>{gate.ref}</code>
                   </article>
                 ))}
+                {selectedGates.length === 0 ? (
+                  <div className="empty-state">No certification gates are available for the selected provider.</div>
+                ) : null}
               </div>
             </section>
 
@@ -920,6 +929,13 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                         </tr>
                       );
                     })}
+                    {!selectedMappingPacks.length ? (
+                      <tr>
+                        <td colSpan={7}>
+                          <div className="empty-state">No schema mapping packs are available for this provider yet.</div>
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               </div>
@@ -1002,6 +1018,13 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                         <td>{formatDate(run.completed_at)} / {run.executed_by_name ?? "Pending"}</td>
                       </tr>
                     ))}
+                    {!selectedCertificationRuns.length ? (
+                      <tr>
+                        <td colSpan={5}>
+                          <div className="empty-state">No certification runs have been recorded for this provider yet.</div>
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               </div>
@@ -1053,6 +1076,13 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                         <td><StatusBadge status={connection.status} label={connection.status_label} /></td>
                       </tr>
                     ))}
+                    {!setup.connections.length ? (
+                      <tr>
+                        <td colSpan={7}>
+                          <div className="empty-state">No provider connections are configured yet.</div>
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               </div>

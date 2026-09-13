@@ -134,6 +134,9 @@ function BatchRail({
             <code>{batch.output_profile_ref}</code>
           </Link>
         ))}
+        {batches.length === 0 ? (
+          <div className="empty-state">No output batches are available yet. Generate outputs from a locked payroll review to populate this rail.</div>
+        ) : null}
       </div>
       <PaginationBar
         firstHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: "1", batchPageSize: String(pageSize), batchId: undefined })}
@@ -431,6 +434,13 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                         <td><StatusBadge status={artifact.status} /></td>
                       </tr>
                     ))}
+                    {pagedArtifacts.length === 0 ? (
+                      <tr>
+                        <td colSpan={5}>
+                          <div className="empty-state">No artifacts are available for this selection. Generate or select an output batch with payslip or register artifacts.</div>
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               </div>

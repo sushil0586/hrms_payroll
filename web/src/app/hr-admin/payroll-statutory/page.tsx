@@ -109,6 +109,9 @@ function DeclarationRail({
             <code>{declaration.source_hash.slice(0, 18)}</code>
           </Link>
         ))}
+        {declarations.length === 0 ? (
+          <div className="empty-state">No statutory declarations are in review yet. Employee declarations will appear here after profiles and proof windows are configured.</div>
+        ) : null}
       </div>
     </aside>
   );
@@ -190,6 +193,9 @@ function DeclarationDetail({
               <code>{item.source_hash.slice(0, 18)}</code>
             </article>
           ))}
+          {proofItems.length === 0 ? (
+            <div className="empty-state">No proof rows are attached to this declaration yet.</div>
+          ) : null}
         </div>
       </section>
 
@@ -231,6 +237,9 @@ function ComponentRegister({ components }: { components: HrAdminPayrollStatutory
             <code>{component.statutory_treatment_ref}</code>
           </article>
         ))}
+        {components.length === 0 ? (
+          <div className="empty-state">No statutory components are configured yet. Add PF, ESI, PT, TDS, or other statutory components before payroll calculation uses this module.</div>
+        ) : null}
       </div>
     </section>
   );
@@ -265,6 +274,9 @@ function EmployerRegistrationPanel({
             <code>{registration.registration_type_ref}</code>
           </article>
         ))}
+        {registrations.length === 0 ? (
+          <div className="empty-state">No employer statutory registrations are configured yet. Add registrations to enable filing calendars and compliance handoff evidence.</div>
+        ) : null}
       </div>
     </section>
   );
@@ -299,6 +311,9 @@ function FilingCalendarPanel({
             <code>{filing.output_profile_ref || filing.filing_type_ref}</code>
           </article>
         ))}
+        {filingCalendars.length === 0 ? (
+          <div className="empty-state">No statutory filing calendar rows are configured yet. Add due dates before compliance reports can prove filing readiness.</div>
+        ) : null}
       </div>
     </section>
   );
@@ -532,6 +547,13 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
                     <td>{declaration.verified_item_count}/{declaration.item_count}</td>
                   </tr>
                 ))}
+                {setup.declarations.length === 0 ? (
+                  <tr>
+                    <td colSpan={7}>
+                      <div className="empty-state">No statutory declaration rows are available yet.</div>
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
