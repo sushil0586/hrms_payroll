@@ -15,7 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
 WEB = ROOT / "web"
-DEFAULT_PYTHON = ROOT / ".venv" / "bin" / "python"
+BACKEND_VENV_PYTHON = BACKEND / ".venv" / "bin" / "python"
+ROOT_VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
 CRITICAL_BROWSER_SUITES = [
     "tests/e2e/production-launch-release-gate.spec.ts",
     "tests/e2e/pilot-credential-matrix-certification.spec.ts",
@@ -27,10 +28,11 @@ CRITICAL_BROWSER_SUITES = [
 
 
 def parse_args() -> argparse.Namespace:
+    default_python = BACKEND_VENV_PYTHON if BACKEND_VENV_PYTHON.exists() else ROOT_VENV_PYTHON if ROOT_VENV_PYTHON.exists() else Path("python3")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=["local", "staging", "production"], default="staging")
     parser.add_argument("--artifact-dir", default="")
-    parser.add_argument("--python", default=str(DEFAULT_PYTHON if DEFAULT_PYTHON.exists() else "python3"))
+    parser.add_argument("--python", default=str(default_python))
     parser.add_argument("--base-url", default=os.environ.get("PLAYWRIGHT_BASE_URL", "https://hrms.accerio.in"))
     parser.add_argument("--api-base-url", default=os.environ.get("HRMS_API_BASE_URL", "https://hrms.accerio.in/api/v1"))
     parser.add_argument("--seed-password", default=os.environ.get("PLAYWRIGHT_LIVE_SEED_PASSWORD", "Password@123"))
