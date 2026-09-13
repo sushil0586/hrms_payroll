@@ -4,7 +4,7 @@ Generated: 2026-09-12
 Owner: HRMS Payroll SaaS QA / Delivery  
 Current pilot readiness estimate: 98%  
 Current local build certified through: P100-12 UX/performance  
-Current staging build certified through: P100-18 monitoring, logs, and disk review  
+Current staging build certified through: P100-21 role and menu certification  
 
 ## Purpose
 
@@ -17,6 +17,12 @@ Detailed 1 organization / 100 employee rehearsal plan:
 - `docs/qa/full-realistic-payroll-run-100-employees-phase-plan-2026-09-12.md`
 - `docs/qa/pilot-100-execution-tracker-2026-09-12.md`
 - `docs/qa/pilot-100-final-signoff-2026-09-13.md`
+- `docs/qa/pilot-100-stakeholder-acceptance-pack-2026-09-13.md`
+- `docs/qa/pilot-user-guide-and-api-procurement-plan-2026-09-13.md`
+- `docs/qa/user-guides/README.md`
+- `docs/qa/public-launch-readiness-phase-plan-2026-09-13.md`
+- `docs/qa/public-launch-scope-freeze-matrix-2026-09-13.md`
+- `docs/qa/public-launch-aws-production-hardening-checklist-2026-09-13.md`
 
 ## Current Position
 
@@ -28,9 +34,17 @@ Latest P100 pilot rehearsal status:
 - P100-0 through P100-16 are certified or accepted with documented limitations.
 - P100-17 provider rehearsal passed on staging with expected callback/retry seed-data skips.
 - P100-18 monitoring/log review passed on staging; disk pressure was remediated from `98%` used to `73%` used by pruning old inactive releases.
+- P100-19 release-retention/disk-alert runbook is documented at `docs/qa/release-retention-disk-alert-runbook-2026-09-13.md`.
+- P100-21 role and menu certification passed on staging: `15/15` passed in `6.8m`.
+- Stakeholder acceptance pack is drafted at `docs/qa/pilot-100-stakeholder-acceptance-pack-2026-09-13.md`; signatures remain pending.
+- Role-wise pilot guide and external API procurement plan is drafted at `docs/qa/pilot-user-guide-and-api-procurement-plan-2026-09-13.md`.
+- Separate self-explaining user guides for each pilot role are drafted under `docs/qa/user-guides/`.
+- Public launch readiness phase plan is drafted at `docs/qa/public-launch-readiness-phase-plan-2026-09-13.md`.
+- Public launch scope-freeze matrix is drafted at `docs/qa/public-launch-scope-freeze-matrix-2026-09-13.md`.
+- Public launch AWS production hardening checklist is drafted at `docs/qa/public-launch-aws-production-hardening-checklist-2026-09-13.md`.
 - Final staging UX/performance result: `3/3` passed.
 - Final staging production launch release-gate result: `5/5` passed.
-- Final staging pilot credential matrix result: `10/10` passed.
+- Final staging role/menu certification result: `15/15` passed.
 - Final staging backup/restore drill: passed with scratch DB restore and verification.
 - Final staging rollback/roll-forward drill: passed with readiness wait/retry observation.
 - Retention decision: keep `PILOT100_20260912` data and evidence until stakeholder review is complete.
@@ -76,7 +90,7 @@ Latest local evidence:
 | Finance handoff exception visibility | 90% | Strong | Finance handoff exception report covers delivery status, retries, callbacks, queue jobs, blocker category, risk, audit-pack readiness, and source evidence locally and on staging. |
 | Full report/export regression | 94% | Strong | P100 full report/export regression and export audit coverage passed on staging. |
 | Staging pilot-data rehearsal | 94% | Strong | P100 realistic 1 organization / 100 employee rehearsal is signed off with accepted limitations. |
-| Operational pilot readiness | 97% | Strong | Named users, backup/restore, rollback, provider rehearsal, and monitoring/log review passed on staging; stakeholder acceptance and release-retention runbook remain before customer-facing production payroll. |
+| Operational pilot readiness | 98% | Strong | Named users, backup/restore, rollback, provider rehearsal, monitoring/log review, and release-retention runbook are complete; stakeholder acceptance remains before customer-facing production payroll. |
 
 Overall pilot readiness: 98%.
 
@@ -99,12 +113,12 @@ These must be done before any customer-facing pilot payroll run.
 | ID | Pendency | Status | Exit Criteria |
 |---|---|---|---|
 | P1-1 | Pilot user credential and role matrix | Done on staging | Platform admin, HR admin, payroll finance manager, manager, seed employee, pure P100 employee, and support-agent flows passed. |
-| P1-2 | Pilot known limitations list | Pending | Business-facing document lists accepted gaps and non-pilot features. |
+| P1-2 | Pilot known limitations list and stakeholder acceptance pack | Drafted, signatures pending | Business-facing document lists accepted gaps, non-pilot features, go/no-go checklist, and stakeholder sign-off rows. |
 | P1-3 | Backup and restore drill | Done on staging | Backup was taken, checksum recorded, restored into scratch DB, verified, migration-checked, and scratch DB dropped. |
 | P1-4 | Rollback rehearsal | Done on staging | Previous release was activated, services restarted, then current release restored. Public HTTP health passed after readiness wait. |
 | P1-5 | Provider rehearsal evidence clarity | Done on staging with seed-data skips | Provider launch rehearsal and audit-pack evidence passed on staging with visible checksum/source-hash proof and no real live rail execution. |
 | P1-6 | Monitoring and log review routine | Done on staging with observations | Basic web/backend/nginx logs were reviewed, expected negative-test/restart noise was classified, and disk pressure was remediated. |
-| P1-7 | Release retention and disk alert runbook | Pending | Define retained release count, cleanup cadence, disk alert threshold, and operator action steps. |
+| P1-7 | Release retention and disk alert runbook | Done | Defines retained release count, cleanup cadence, disk alert threshold, dry-run cleanup, safe prune commands, and post-cleanup health checks. |
 
 ### P2: Can Follow Pilot Start
 

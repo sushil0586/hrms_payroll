@@ -27,6 +27,11 @@ export const platformAdmin: Persona = {
   password: seedPassword,
 };
 
+export const tenantAdmin: Persona = {
+  username: process.env.PLAYWRIGHT_LIVE_TENANT_ADMIN_USERNAME ?? process.env.PLAYWRIGHT_LIVE_HR_ADMIN_USERNAME ?? "nisha.rao",
+  password: seedPassword,
+};
+
 export const payrollFinanceManager: Persona = {
   username: process.env.PLAYWRIGHT_LIVE_PAYROLL_FINANCE_USERNAME ?? "payroll.finance",
   password: seedPassword,

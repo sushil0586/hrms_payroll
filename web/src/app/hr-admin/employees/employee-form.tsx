@@ -78,8 +78,8 @@ function selectOptions(items: Array<{ id: string; name: string }>) {
   ];
 }
 
-function FieldHint({ children }: { children: string }) {
-  return <span className="muted">{children}</span>;
+function FieldHint({ children, tone = "default" }: { children: string; tone?: "default" | "warning" }) {
+  return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
 }
 
 function FieldError({ message }: { message?: string }) {
@@ -190,11 +190,13 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
+  const selectedBranch = options.branches.find((branch) => branch.id === formValue.branch_id);
+  const selectedDesignation = options.designations.find((designation) => designation.id === formValue.designation_id);
+
   const filteredBranches = options.branches.filter(
     (item) => !formValue.legal_entity_id || item.legal_entity_id === formValue.legal_entity_id,
   );
   const filteredLocations = options.locations.filter((item) => {
-    const selectedBranch = options.branches.find((branch) => branch.id === formValue.branch_id);
     if (selectedBranch?.location_id) {
       return item.id === selectedBranch.location_id;
     }
@@ -217,7 +219,6 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
     (item) => !formValue.grade_id || item.grade_id === formValue.grade_id,
   );
   const filteredGrades = options.grades.filter((item) => {
-    const selectedDesignation = options.designations.find((designation) => designation.id === formValue.designation_id);
     if (selectedDesignation?.grade_id) {
       return item.id === selectedDesignation.grade_id;
     }
@@ -246,12 +247,26 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
   if (formValue.designation_id && !formValue.grade_id) {
     mappingWarnings.push("designation should be paired with a grade");
   }
-  if (formValue.legal_entity_id && filteredBranches.length === 0) {
-    mappingWarnings.push("no active branches are mapped to the selected legal entity");
-  }
-  if (formValue.legal_entity_id && filteredCostCenters.length === 0) {
-    mappingWarnings.push("no active cost centers are mapped to the selected legal entity");
-  }
+  const branchWarning =
+    formValue.legal_entity_id && filteredBranches.length === 0
+      ? "No active branches are mapped to this legal entity."
+      : null;
+  const branchLocationWarning =
+    selectedBranch && !selectedBranch.location_id
+      ? "This branch has no mapped location. Select the location manually before saving."
+      : null;
+  const costCenterWarning =
+    formValue.legal_entity_id && filteredCostCenters.length === 0
+      ? "No active cost centers are mapped to this legal entity."
+      : null;
+  const departmentWarning =
+    formValue.business_unit_id && filteredDepartments.length === 0
+      ? "No active departments are mapped to this business unit."
+      : null;
+  const gradeWarning =
+    selectedDesignation && !selectedDesignation.grade_id
+      ? "This designation has no mapped grade. Select the grade manually before saving."
+      : null;
 
   function updateField<Key extends keyof HrAdminEmployeeWriteInput>(key: Key, value: HrAdminEmployeeWriteInput[Key]) {
     setFieldErrors((current) => ({ ...current, [key]: undefined }));
@@ -416,10 +431,17 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
               </label>
               <label className="form-field">
                 <span className="muted">Branch</span>
-                <select className="input-control" value={formValue.branch_id ?? ""} onChange={(event) => updateField("branch_id", event.target.value || null)}>
+                <select
+                  className="input-control"
+                  disabled={Boolean(branchWarning)}
+                  value={formValue.branch_id ?? ""}
+                  onChange={(event) => updateField("branch_id", event.target.value || null)}
+                >
                   {selectOptions(filteredBranches)}
                 </select>
-                <FieldHint>Selecting a branch aligns the location automatically when the branch has a mapped location.</FieldHint>
+                <FieldHint tone={branchWarning ? "warning" : "default"}>
+                  {branchWarning ?? "Selecting a branch aligns the location automatically when the branch has a mapped location."}
+                </FieldHint>
                 <FieldError message={fieldErrors.branch_id} />
               </label>
               <label className="form-field">
@@ -427,7 +449,9 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                 <select className="input-control" value={formValue.location_id ?? ""} onChange={(event) => updateField("location_id", event.target.value || null)}>
                   {selectOptions(filteredLocations)}
                 </select>
-                <FieldHint>Location is narrowed by the selected branch when a branch-level location exists.</FieldHint>
+                <FieldHint tone={branchLocationWarning ? "warning" : "default"}>
+                  {branchLocationWarning ?? "Location is narrowed by the selected branch when a branch-level location exists."}
+                </FieldHint>
                 <FieldError message={fieldErrors.location_id} />
               </label>
               <label className="form-field">
@@ -440,18 +464,32 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
               </label>
               <label className="form-field">
                 <span className="muted">Department</span>
-                <select className="input-control" value={formValue.department_id ?? ""} onChange={(event) => updateField("department_id", event.target.value || null)}>
+                <select
+                  className="input-control"
+                  disabled={Boolean(departmentWarning)}
+                  value={formValue.department_id ?? ""}
+                  onChange={(event) => updateField("department_id", event.target.value || null)}
+                >
                   {selectOptions(filteredDepartments)}
                 </select>
-                <FieldHint>Only departments from the selected business unit remain available.</FieldHint>
+                <FieldHint tone={departmentWarning ? "warning" : "default"}>
+                  {departmentWarning ?? "Only departments from the selected business unit remain available."}
+                </FieldHint>
                 <FieldError message={fieldErrors.department_id} />
               </label>
               <label className="form-field">
                 <span className="muted">Cost center</span>
-                <select className="input-control" value={formValue.cost_center_id ?? ""} onChange={(event) => updateField("cost_center_id", event.target.value || null)}>
+                <select
+                  className="input-control"
+                  disabled={Boolean(costCenterWarning)}
+                  value={formValue.cost_center_id ?? ""}
+                  onChange={(event) => updateField("cost_center_id", event.target.value || null)}
+                >
                   {selectOptions(filteredCostCenters)}
                 </select>
-                <FieldHint>Cost centers narrow to the selected legal entity.</FieldHint>
+                <FieldHint tone={costCenterWarning ? "warning" : "default"}>
+                  {costCenterWarning ?? "Cost centers narrow to the selected legal entity."}
+                </FieldHint>
                 <FieldError message={fieldErrors.cost_center_id} />
               </label>
               <label className="form-field">
@@ -467,7 +505,9 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                 <select className="input-control" value={formValue.grade_id ?? ""} onChange={(event) => updateField("grade_id", event.target.value || null)}>
                   {selectOptions(filteredGrades)}
                 </select>
-                <FieldHint>Only grades compatible with the selected designation remain available.</FieldHint>
+                <FieldHint tone={gradeWarning ? "warning" : "default"}>
+                  {gradeWarning ?? "Only grades compatible with the selected designation remain available."}
+                </FieldHint>
                 <FieldError message={fieldErrors.grade_id} />
               </label>
               <label className="form-field">

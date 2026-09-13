@@ -15,6 +15,7 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await expect(catalog.getByRole("columnheader", { name: "Owner" })).toBeVisible();
     await expect(catalog.getByRole("columnheader", { name: "Filters" })).toBeVisible();
     await expect(catalog.getByRole("columnheader", { name: "Exports" })).toBeVisible();
+    await expect(catalog.getByRole("columnheader", { name: "Evidence" })).toBeVisible();
     await expect(catalog.getByRole("columnheader", { name: "Status" })).toBeVisible();
     await expect(catalog.getByRole("columnheader", { name: "Actions" })).toBeVisible();
 
@@ -55,6 +56,20 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await search.fill("daily attendance");
     await expect(catalog.getByText("Daily attendance register")).toBeVisible();
     await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/attendance-register/);
+    await expect(catalog.getByRole("link", { name: "Manifest" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/attendance-register\?format=manifest/);
+    await expect(catalog.getByText("Checksum")).toBeVisible();
+    await expect(catalog.getByText("Manifest").first()).toBeVisible();
+    await expect(catalog.getByText("Audit trail")).toBeVisible();
+    const attendanceManifest = await page.request.get("/api/hr-admin/reports/attendance-register?format=manifest");
+    expect(attendanceManifest.status()).toBe(200);
+    expect(attendanceManifest.headers()["x-hrms-report-key"]).toBe("attendance-register");
+    expect(attendanceManifest.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
+    const attendanceManifestPayload = await attendanceManifest.json();
+    expect(attendanceManifestPayload.export_schema_version).toBe("hrms.report.export.manifest.v1");
+    expect(attendanceManifestPayload.report_key).toBe("attendance-register");
+    expect(attendanceManifestPayload.csv_checksum_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(attendanceManifestPayload.source_endpoints.length).toBeGreaterThan(0);
+    expect(attendanceManifestPayload.evidence_columns.length).toBeGreaterThan(0);
     await search.fill("");
 
     await search.fill("leave balance");
@@ -106,6 +121,9 @@ test.describe("Phase R0 reporting foundation certification", () => {
     const workforceExport = await page.request.get("/api/hr-admin/reports/workforce");
     expect(workforceExport.status()).toBe(200);
     expect(workforceExport.headers()["content-type"]).toContain("text/csv");
+    expect(workforceExport.headers()["x-hrms-report-key"]).toBe("workforce");
+    expect(workforceExport.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(Number(workforceExport.headers()["x-hrms-source-row-count"] ?? "0")).toBeGreaterThanOrEqual(0);
     expect(await workforceExport.text()).toContain("employee_code");
 
     await catalog.getByRole("tab", { name: "Payroll Finance" }).click();

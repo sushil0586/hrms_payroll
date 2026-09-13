@@ -61,6 +61,89 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
 }
 
+function calculationReadiness(run: HrAdminPayrollRun | null) {
+  if (!run) {
+    return {
+      isReady: false,
+      tone: "blocked",
+      title: "Select a payroll run.",
+      detail: "Choose a run from the calculation queue before starting draft calculation.",
+    };
+  }
+  if (run.snapshot_count === 0) {
+    return {
+      isReady: false,
+      tone: "blocked",
+      title: "Calculation blocked.",
+      detail: "Create payroll input snapshots before calculating this run.",
+    };
+  }
+  if (run.blocked_count > 0) {
+    return {
+      isReady: false,
+      tone: "blocked",
+      title: "Calculation blocked.",
+      detail: `${run.blocked_count} snapshot${run.blocked_count === 1 ? "" : "s"} still have blocker validation issues.`,
+    };
+  }
+  if (run.locked_count < run.snapshot_count) {
+    return {
+      isReady: false,
+      tone: "blocked",
+      title: "Calculation blocked.",
+      detail: `${run.snapshot_count - run.locked_count} snapshot${run.snapshot_count - run.locked_count === 1 ? "" : "s"} still need input lock.`,
+    };
+  }
+  if (!["inputs_locked", "calculated"].includes(run.status)) {
+    return {
+      isReady: false,
+      tone: "blocked",
+      title: "Calculation blocked.",
+      detail: `Run status is ${run.status_label}; inputs must be locked before calculation.`,
+    };
+  }
+  if (run.warning_count > 0) {
+    return {
+      isReady: true,
+      tone: "warning",
+      title: "Ready with warnings.",
+      detail: `${run.warning_count} warning snapshot${run.warning_count === 1 ? "" : "s"} will remain traceable in calculation evidence.`,
+    };
+  }
+  return {
+    isReady: true,
+    tone: "ready",
+    title: "Ready to calculate.",
+    detail: "All visible input snapshots are locked and no blocker snapshots are present.",
+  };
+}
+
+function CalculationReadinessPanel({ run, blockerCount }: { run: HrAdminPayrollRun | null; blockerCount: number }) {
+  const readiness = calculationReadiness(run);
+  return (
+    <section className={`payroll-calc-readiness payroll-calc-readiness--${readiness.tone}`} aria-label="Calculation readiness">
+      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+        <div>
+          <span className="workspace-card__eyebrow">Pre-check</span>
+          <h2>Calculation readiness</h2>
+        </div>
+        <span className="payroll-setup-count">{readiness.isReady ? "Ready" : "Blocked"}</span>
+      </div>
+      <div className="payroll-input-lock-summary" aria-label="Selected run calculation counts">
+        <div><span>Snapshots</span><strong>{run?.snapshot_count ?? 0}</strong></div>
+        <div><span>Locked</span><strong>{run?.locked_count ?? 0}</strong></div>
+        <div><span>Warnings</span><strong>{run?.warning_count ?? 0}</strong></div>
+        <div><span>Blocked</span><strong>{run?.blocked_count ?? 0}</strong></div>
+        <div><span>Issues</span><strong>{blockerCount}</strong></div>
+      </div>
+      <div className={`notice notice--compact${readiness.tone === "ready" ? " notice--success" : ""}`} role="note">
+        <strong>{readiness.title}</strong>
+        <span className="muted">{readiness.detail}</span>
+      </div>
+    </section>
+  );
+}
+
 function lineSourceDetail(line: HrAdminPayrollCalculationLine) {
   if (line.line_source === "adjustment") {
     return line.config_snapshot.source_ref ? String(line.config_snapshot.source_ref) : "Applied payroll adjustment";
@@ -313,6 +396,8 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
     }
     return !selectedCalculation || issue.calculation_id === selectedCalculation.id || issue.calculation_id === null;
   });
+  const readiness = calculationReadiness(selectedRun);
+  const openBlockerCount = visibleValidationIssues.filter((issue) => issue.severity === "blocker").length;
 
   return (
     <main className="shell shell--payroll-setup shell--payroll-calculations">
@@ -396,6 +481,8 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
 
             <ValidationIssueRegister issues={visibleValidationIssues} />
 
+            <CalculationReadinessPanel run={selectedRun} blockerCount={openBlockerCount} />
+
             <PayrollCloseActionsPanel
               eyebrow="Payroll operations"
               title="Calculation controls"
@@ -408,8 +495,8 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                   profileField: "calculation_profile_ref",
                   profileLabel: "Calculation profile ref",
                   defaultProfileRef: selectedCalculation?.calculation_profile_ref ?? "",
-                  disabled: !selectedRun,
-                  disabledReason: "Select a payroll run first.",
+                  disabled: !readiness.isReady,
+                  disabledReason: readiness.detail,
                 },
                 {
                   id: "open-review",

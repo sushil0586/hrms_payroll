@@ -43,27 +43,38 @@ function TextField({
   );
 }
 
+function FieldHint({ children, tone = "muted" }: { children: string; tone?: "muted" | "warning" }) {
+  return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
+}
+
 function SelectField({
   label,
   value,
   options,
   onChange,
   required,
+  disabled,
+  hint,
+  tone = "muted",
 }: {
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
   required?: boolean;
+  disabled?: boolean;
+  hint?: string;
+  tone?: "muted" | "warning";
 }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <select className="input-control" required={required} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className="input-control" disabled={disabled} required={required} value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={`${label}-${option.value || "empty"}`} value={option.value}>{option.label}</option>
         ))}
       </select>
+      {hint ? <FieldHint tone={tone}>{hint}</FieldHint> : null}
     </label>
   );
 }
@@ -135,12 +146,58 @@ export function PayrollInputOperationsPanel({
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [submitting, setSubmitting] = useState<string | null>(null);
 
+  const selectedPeriod = useMemo(() => setup.options.periods.find((item) => item.id === runForm.period_id), [runForm.period_id, setup.options.periods]);
+  const compatiblePayGroups = useMemo(
+    () =>
+      selectedPeriod?.calendar_id
+        ? setup.options.pay_groups.filter((item) => item.calendar_id === selectedPeriod.calendar_id)
+        : setup.options.pay_groups,
+    [selectedPeriod?.calendar_id, setup.options.pay_groups],
+  );
+  const selectedPayGroup = useMemo(() => setup.options.pay_groups.find((item) => item.id === runForm.pay_group_id), [runForm.pay_group_id, setup.options.pay_groups]);
   const periodOptions = useMemo(() => setup.options.periods.map((item) => ({ value: item.id, label: item.name })), [setup.options.periods]);
-  const payGroupOptions = useMemo(() => [{ value: "", label: "All pay groups" }, ...setup.options.pay_groups.map((item) => ({ value: item.id, label: item.name }))], [setup.options.pay_groups]);
+  const payGroupOptions = useMemo(
+    () => [{ value: "", label: "All pay groups" }, ...compatiblePayGroups.map((item) => ({ value: item.id, label: item.name }))],
+    [compatiblePayGroups],
+  );
   const runOptions = useMemo(() => setup.runs.map((item) => ({ value: item.id, label: `${item.name} (${item.code})` })), [setup.runs]);
   const employeeOptions = useMemo(() => setup.options.employees.map((item) => ({ value: item.id, label: `${item.name} (${item.employee_code})` })), [setup.options.employees]);
   const runStatusOptions = useMemo(() => setup.options.payroll_run_statuses.map((item) => ({ value: item.value, label: item.label })), [setup.options.payroll_run_statuses]);
   const snapshotStatusOptions = useMemo(() => setup.options.payroll_input_snapshot_statuses.map((item) => ({ value: item.value, label: item.label })), [setup.options.payroll_input_snapshot_statuses]);
+  const lockRunId = runForm.id || snapshotForm.payroll_run_id;
+  const selectedLockRun = useMemo(() => setup.runs.find((item) => item.id === lockRunId), [lockRunId, setup.runs]);
+  const lockRunSnapshots = useMemo(
+    () => setup.snapshots.filter((item) => item.payroll_run_id === lockRunId),
+    [lockRunId, setup.snapshots],
+  );
+  const hasLoadedLockSnapshots = lockRunSnapshots.length > 0;
+  const lockReadyCount = hasLoadedLockSnapshots ? lockRunSnapshots.filter((item) => item.snapshot_status === "ready").length : selectedLockRun?.ready_count ?? 0;
+  const lockWarningCount = hasLoadedLockSnapshots ? lockRunSnapshots.filter((item) => item.snapshot_status === "warning").length : selectedLockRun?.warning_count ?? 0;
+  const lockBlockedCount = hasLoadedLockSnapshots ? lockRunSnapshots.filter((item) => item.snapshot_status === "blocked").length : selectedLockRun?.blocked_count ?? 0;
+  const lockLockedCount = hasLoadedLockSnapshots ? lockRunSnapshots.filter((item) => item.snapshot_status === "locked").length : selectedLockRun?.locked_count ?? 0;
+  const lockSnapshotCount = hasLoadedLockSnapshots ? lockRunSnapshots.length : selectedLockRun?.snapshot_count ?? 0;
+  const firstBlockingSnapshot = lockRunSnapshots.find((item) => item.blockers.length > 0);
+  const firstWarningSnapshot = lockRunSnapshots.find((item) => item.warnings.length > 0);
+  const noPeriodWarning = setup.options.periods.length === 0 ? "No payroll periods are configured. Create a period before creating a payroll run." : "";
+  const noCompatiblePayGroupWarning =
+    runForm.period_id && compatiblePayGroups.length === 0
+      ? "No pay groups use this period's calendar. Leave as all pay groups or create a compatible pay group."
+      : "";
+  const selectedPayGroupWarning =
+    selectedPayGroup && selectedPayGroup.status !== "active" ? "Selected pay group is not active yet." : "";
+
+  function updateRunPeriod(value: string) {
+    setRunForm((current) => {
+      const payGroupStillValid = current.pay_group_id
+        ? setup.options.pay_groups.some((item) => item.id === current.pay_group_id && (!value || item.calendar_id === setup.options.periods.find((period) => period.id === value)?.calendar_id))
+        : true;
+      return {
+        ...current,
+        period_id: value,
+        pay_group_id: payGroupStillValid ? current.pay_group_id : "",
+      };
+    });
+  }
 
   async function saveRun() {
     setSubmitting("run");
@@ -272,8 +329,24 @@ export function PayrollInputOperationsPanel({
             <button className="button button--secondary button--compact" type="button" onClick={() => setRunForm(emptyRunForm(setup))}>New</button>
           </div>
           <div className="form-grid salary-crud-form-grid">
-            <SelectField label="Period" required value={runForm.period_id} options={periodOptions} onChange={(value) => setRunForm((current) => ({ ...current, period_id: value }))} />
-            <SelectField label="Pay group" value={runForm.pay_group_id} options={payGroupOptions} onChange={(value) => setRunForm((current) => ({ ...current, pay_group_id: value }))} />
+            <SelectField
+              label="Period"
+              required
+              value={runForm.period_id}
+              options={periodOptions}
+              disabled={!periodOptions.length}
+              hint={noPeriodWarning}
+              tone={noPeriodWarning ? "warning" : "muted"}
+              onChange={updateRunPeriod}
+            />
+            <SelectField
+              label="Pay group"
+              value={runForm.pay_group_id}
+              options={payGroupOptions}
+              hint={selectedPayGroupWarning || noCompatiblePayGroupWarning}
+              tone={selectedPayGroupWarning || noCompatiblePayGroupWarning ? "warning" : "muted"}
+              onChange={(value) => setRunForm((current) => ({ ...current, pay_group_id: value }))}
+            />
             <TextField label="Code" required value={runForm.code} onChange={(value) => setRunForm((current) => ({ ...current, code: value }))} />
             <TextField label="Name" required value={runForm.name} onChange={(value) => setRunForm((current) => ({ ...current, name: value }))} />
             <SelectField label="Status" required value={runForm.status} options={runStatusOptions} onChange={(value) => setRunForm((current) => ({ ...current, status: value }))} />
@@ -342,6 +415,42 @@ export function PayrollInputOperationsPanel({
             <div><span className="workspace-card__eyebrow">Lock gate</span><h3>Input lock</h3></div>
           </div>
           <p className="section-copy section-copy-soft">Locks all non-blocked snapshots on the selected payroll run and advances the run to calculation-ready state.</p>
+          <div className="payroll-input-lock-summary" aria-label="Selected run lock readiness">
+            <div><span>Snapshots</span><strong>{lockSnapshotCount}</strong></div>
+            <div><span>Ready</span><strong>{lockReadyCount}</strong></div>
+            <div><span>Warnings</span><strong>{lockWarningCount}</strong></div>
+            <div><span>Blocked</span><strong>{lockBlockedCount}</strong></div>
+            <div><span>Locked</span><strong>{lockLockedCount}</strong></div>
+          </div>
+          {lockBlockedCount > 0 ? (
+            <div className="notice notice--compact" role="note">
+              <strong>Lock blocked.</strong>
+              <span className="muted">
+                {firstBlockingSnapshot?.employee_name
+                  ? `${firstBlockingSnapshot.employee_name}: ${firstBlockingSnapshot.blockers[0]}`
+                  : "Resolve blocker snapshots before locking this run."}
+              </span>
+            </div>
+          ) : lockWarningCount > 0 ? (
+            <div className="notice notice--compact notice--success" role="note">
+              <strong>Warnings present.</strong>
+              <span className="muted">
+                {firstWarningSnapshot?.employee_name
+                  ? `${firstWarningSnapshot.employee_name}: ${firstWarningSnapshot.warnings[0]}`
+                  : "Review warnings before locking this run."}
+              </span>
+            </div>
+          ) : lockSnapshotCount > 0 ? (
+            <div className="notice notice--compact notice--success" role="note">
+              <strong>Ready to lock.</strong>
+              <span className="muted">No blocker snapshots are currently visible for this run.</span>
+            </div>
+          ) : (
+            <div className="notice notice--compact" role="note">
+              <strong>No snapshots.</strong>
+              <span className="muted">Create at least one input snapshot before locking this run.</span>
+            </div>
+          )}
           <button className="button button--primary" disabled={submitting === "lock" || !(runForm.id || snapshotForm.payroll_run_id)} type="button" onClick={() => void lockInputs()}>
             {submitting === "lock" ? "Locking..." : "Lock selected run inputs"}
           </button>

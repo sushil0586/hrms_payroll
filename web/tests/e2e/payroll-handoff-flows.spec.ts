@@ -15,6 +15,19 @@ test.describe("HR admin payroll handoff flows", () => {
     await expect(page.getByRole("heading", { name: "Provider jobs" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Provider callbacks" })).toBeVisible();
     await expect(page.getByText("Audit packs").first()).toBeVisible();
+    await expect(page.getByRole("region", { name: "Finance handoff readiness" })).toBeVisible();
+    await expect(page.getByLabel("Selected handoff readiness counts")).toContainText("Artifacts");
+    await expect(page.getByLabel("Selected handoff readiness counts")).toContainText("Deliveries");
+    await expect(
+      page.getByText("Ready to transmit.")
+        .or(page.getByText("Ready for acknowledgement."))
+        .or(page.getByText("Ready for audit pack."))
+        .or(page.getByText("Audit pack locked."))
+        .or(page.getByText("Handoff action blocked."))
+        .or(page.getByText("Handoff blocked."))
+        .or(page.getByText("Select a finance handoff."))
+        .first(),
+    ).toBeVisible();
 
     const artifactLink = page.locator("main a[href*='artifactId=']").first();
     if (await artifactLink.isVisible().catch(() => false)) {

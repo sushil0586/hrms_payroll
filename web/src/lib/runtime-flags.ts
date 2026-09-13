@@ -1,3 +1,4 @@
 export const API_BASE_URL = process.env.HRMS_API_BASE_URL;
 export const BEARER_TOKEN = process.env.HRMS_API_BEARER_TOKEN;
 export const DEMO_DATA_ENABLED = process.env.HRMS_ENABLE_DEMO_DATA === "true";
+export const PAYROLL_LIVE_RAILS_ENABLED = process.env.HRMS_PAYROLL_LIVE_RAILS_ENABLED === "true";

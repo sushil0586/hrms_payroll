@@ -304,18 +304,26 @@ function TextField({
   );
 }
 
+function FieldHint({ children, tone = "muted" }: { children: string; tone?: "muted" | "warning" }) {
+  return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
+}
+
 function SelectField({
   label,
   value,
   onChange,
   options,
   required,
+  hint,
+  tone = "muted",
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   required?: boolean;
+  hint?: string;
+  tone?: "muted" | "warning";
 }) {
   return (
     <label className="form-field">
@@ -327,6 +335,7 @@ function SelectField({
           </option>
         ))}
       </select>
+      {hint ? <FieldHint tone={tone}>{hint}</FieldHint> : null}
     </label>
   );
 }
@@ -387,6 +396,24 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
     () => setup.options.config_statuses.map((item) => ({ value: item.value, label: item.label })),
     [setup.options.config_statuses],
   );
+  const selectedStructurePayGroup = useMemo(
+    () => setup.options.pay_groups.find((item) => item.id === structureForm.pay_group_id),
+    [setup.options.pay_groups, structureForm.pay_group_id],
+  );
+  const selectedVersionStructure = useMemo(
+    () => setup.structures.find((item) => item.id === versionForm.structure_id),
+    [setup.structures, versionForm.structure_id],
+  );
+  const selectedAssignmentVersion = useMemo(
+    () => setup.versions.find((item) => item.id === assignmentForm.structure_version_id),
+    [assignmentForm.structure_version_id, setup.versions],
+  );
+  const structurePayGroupWarning =
+    selectedStructurePayGroup && selectedStructurePayGroup.status !== "active" ? "Selected pay group is not active yet." : "";
+  const versionStructureWarning =
+    selectedVersionStructure && selectedVersionStructure.status !== "active" ? "Selected salary structure is not active yet." : "";
+  const assignmentVersionWarning =
+    selectedAssignmentVersion && selectedAssignmentVersion.status !== "active" ? "Selected structure version is not active yet." : "";
 
   async function save<Item extends ApiItem>(
     family: ConfigFamily,
@@ -579,6 +606,8 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
               label="Pay group"
               value={structureForm.pay_group_id}
               options={[{ value: "", label: "All groups" }, ...setup.options.pay_groups.map((item) => ({ value: item.id, label: item.name }))]}
+              hint={structurePayGroupWarning}
+              tone={structurePayGroupWarning ? "warning" : "muted"}
               onChange={(value) => setStructureForm((current) => ({ ...current, pay_group_id: value }))}
             />
             <TextField label="Currency code" required value={structureForm.currency_code} onChange={(value) => setStructureForm((current) => ({ ...current, currency_code: value.toUpperCase().slice(0, 3) }))} />
@@ -619,7 +648,15 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
         >
           <FormHeader mode={versionForm.id ? "edit" : "create"} title="Version" onReset={() => setVersionForm(emptyVersionForm(setup))} />
           <div className="form-grid salary-crud-form-grid">
-            <SelectField label="Structure" required value={versionForm.structure_id} options={structureOptions} onChange={(value) => setVersionForm((current) => ({ ...current, structure_id: value }))} />
+            <SelectField
+              label="Structure"
+              required
+              value={versionForm.structure_id}
+              options={structureOptions}
+              hint={versionStructureWarning}
+              tone={versionStructureWarning ? "warning" : "muted"}
+              onChange={(value) => setVersionForm((current) => ({ ...current, structure_id: value }))}
+            />
             <TextField label="Version" required type="number" value={versionForm.version} onChange={(value) => setVersionForm((current) => ({ ...current, version: value }))} />
             <TextField label="Effective from" required type="date" value={versionForm.effective_from} onChange={(value) => setVersionForm((current) => ({ ...current, effective_from: value }))} />
             <TextField label="Effective to" type="date" value={versionForm.effective_to} onChange={(value) => setVersionForm((current) => ({ ...current, effective_to: value }))} />
@@ -708,7 +745,15 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           <FormHeader mode={assignmentForm.id ? "edit" : "create"} title="Employee assignment" onReset={() => setAssignmentForm(emptyAssignmentForm(setup))} />
           <div className="form-grid salary-crud-form-grid">
             <SelectField label="Employee" required value={assignmentForm.employee_id} options={employeeOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, employee_id: value }))} />
-            <SelectField label="Structure version" required value={assignmentForm.structure_version_id} options={versionOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, structure_version_id: value }))} />
+            <SelectField
+              label="Structure version"
+              required
+              value={assignmentForm.structure_version_id}
+              options={versionOptions}
+              hint={assignmentVersionWarning}
+              tone={assignmentVersionWarning ? "warning" : "muted"}
+              onChange={(value) => setAssignmentForm((current) => ({ ...current, structure_version_id: value }))}
+            />
             <TextField label="Effective from" required type="date" value={assignmentForm.effective_from} onChange={(value) => setAssignmentForm((current) => ({ ...current, effective_from: value }))} />
             <TextField label="Effective to" type="date" value={assignmentForm.effective_to} onChange={(value) => setAssignmentForm((current) => ({ ...current, effective_to: value }))} />
             <SelectField label="Status" required value={assignmentForm.status} options={statusOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, status: value }))} />

@@ -29,6 +29,25 @@ async function expectOptions(scope: Locator, label: string, minimum = 1) {
   expect(count).toBeGreaterThanOrEqual(minimum);
 }
 
+async function createLegalEntityWithoutBranches(page: Page) {
+  const code = uniqueCode("PG_LE");
+  await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new");
+  await expectPageReady(page, /Create Legal Entity/i);
+
+  await field(page.locator("main"), "Code").fill(code);
+  await field(page.locator("main"), "Name").fill(`Payroll Scope ${code}`);
+  await page.getByLabel("Active").selectOption("true");
+  await field(page.locator("main"), "Registered name").fill(`Payroll Scope ${code} Pvt Ltd`);
+  await field(page.locator("main"), "Country code").fill("IN");
+  await field(page.locator("main"), "Timezone").fill("Asia/Kolkata");
+  await field(page.locator("main"), "Primary email").fill(`${code.toLowerCase()}@example.test`);
+  await field(page.locator("main"), "Primary phone").fill("+91 9876543210");
+  await page.getByRole("button", { name: "Create legal entity" }).click();
+  await expect(page).toHaveURL(/\/hr-admin\/organization\?section=legal_entities/, { timeout: 20_000 });
+
+  return { code, name: `Payroll Scope ${code}` };
+}
+
 async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "PATCH", action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => item.url().includes(`/api/hr-admin/${path}`) && item.request().method() === method),
@@ -164,20 +183,31 @@ test.describe("HR admin payroll setup flows", () => {
     await expectOptions(payGroupForm, "Location");
     await expectOptions(payGroupForm, "Department");
     await expectOptions(payGroupForm, "Employment type");
+
+    const unmappedLegalEntity = await createLegalEntityWithoutBranches(page);
+    await gotoAuthenticated(page, "/hr-admin/payroll-setup");
+    await expectPageReady(page, "Payroll Setup");
+    const refreshedPayGroupForm = page.getByTestId("pay-group-form");
+    await field(refreshedPayGroupForm, "Legal entity").selectOption({ label: unmappedLegalEntity.name });
+    await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
+    await expect(field(refreshedPayGroupForm, "Branch")).toBeDisabled();
+
+    await field(refreshedPayGroupForm, "Legal entity").selectOption("");
+    await expect(field(refreshedPayGroupForm, "Branch")).toBeEnabled();
+
     const payGroupCode = uniqueCode("PAY_GROUP");
     const payGroupResult = await submitAndCapture<{ id: string; code: string; name: string }>(page, "pay-groups", "POST", async () => {
-      await field(payGroupForm, "Calendar").selectOption(calendarResult.payload.id);
-      await field(payGroupForm, "Code").fill(payGroupCode);
-      await field(payGroupForm, "Name").fill(`Browser ${payGroupCode}`);
-      await field(payGroupForm, "Status").selectOption("draft");
-      await field(payGroupForm, "Default currency code").fill("INR");
-      await field(payGroupForm, "Legal entity").selectOption({ index: 1 });
-      await field(payGroupForm, "Branch").selectOption({ index: 1 });
-      await field(payGroupForm, "Location").selectOption({ index: 1 });
-      await field(payGroupForm, "Department").selectOption({ index: 1 });
-      await field(payGroupForm, "Employment type").selectOption({ index: 1 });
-      await field(payGroupForm, "Config profile reference").fill("payroll.paygroup.browser.profile.v1");
-      await payGroupForm.getByRole("button", { name: "Create pay group" }).click();
+      await field(refreshedPayGroupForm, "Calendar").selectOption(calendarResult.payload.id);
+      await field(refreshedPayGroupForm, "Code").fill(payGroupCode);
+      await field(refreshedPayGroupForm, "Name").fill(`Browser ${payGroupCode}`);
+      await field(refreshedPayGroupForm, "Status").selectOption("draft");
+      await field(refreshedPayGroupForm, "Default currency code").fill("INR");
+      await field(refreshedPayGroupForm, "Branch").selectOption({ index: 1 });
+      await field(refreshedPayGroupForm, "Location").selectOption({ index: 1 });
+      await field(refreshedPayGroupForm, "Department").selectOption({ index: 1 });
+      await field(refreshedPayGroupForm, "Employment type").selectOption({ index: 1 });
+      await field(refreshedPayGroupForm, "Config profile reference").fill("payroll.paygroup.browser.profile.v1");
+      await refreshedPayGroupForm.getByRole("button", { name: "Create pay group" }).click();
     });
     expect(payGroupResult.ok).toBeTruthy();
     await expect(page.getByText(payGroupCode).first()).toBeVisible();

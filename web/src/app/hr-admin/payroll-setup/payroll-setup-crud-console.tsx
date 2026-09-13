@@ -111,6 +111,10 @@ function optionItems(items: { id: string; name: string }[], emptyLabel?: string)
   return emptyLabel ? [{ value: "", label: emptyLabel }, ...options] : options;
 }
 
+function FieldHint({ children, tone = "muted" }: { children: string; tone?: "muted" | "warning" }) {
+  return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
+}
+
 function replaceOrAppend<Item extends { id: string }>(items: Item[], next: Item) {
   return items.some((item) => item.id === next.id)
     ? items.map((item) => (item.id === next.id ? next : item))
@@ -254,23 +258,30 @@ function SelectField({
   onChange,
   options,
   required,
+  disabled,
+  hint,
+  tone = "muted",
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   required?: boolean;
+  disabled?: boolean;
+  hint?: string;
+  tone?: "muted" | "warning";
 }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <select className="input-control" required={required} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className="input-control" disabled={disabled} required={required} value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={`${label}-${option.value || "empty"}`} value={option.value}>
             {option.label}
           </option>
         ))}
       </select>
+      {hint ? <FieldHint tone={tone}>{hint}</FieldHint> : null}
     </label>
   );
 }
@@ -334,6 +345,47 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
     () => setup.options.pay_group_statuses.map((item) => ({ value: item.value, label: item.label })),
     [setup.options.pay_group_statuses],
   );
+  const scopedBranches = useMemo(
+    () =>
+      payGroupForm.legal_entity_id
+        ? setup.options.branches.filter((item) => item.legal_entity_id === payGroupForm.legal_entity_id)
+        : setup.options.branches,
+    [payGroupForm.legal_entity_id, setup.options.branches],
+  );
+  const selectedBranch = useMemo(
+    () => setup.options.branches.find((item) => item.id === payGroupForm.branch_id),
+    [payGroupForm.branch_id, setup.options.branches],
+  );
+  const payGroupBranchWarning =
+    payGroupForm.legal_entity_id && scopedBranches.length === 0 ? "No active branches are mapped to this legal entity." : "";
+  const payGroupLocationHint =
+    payGroupForm.branch_id && !selectedBranch?.location_id
+      ? "This branch has no mapped location. Select a location manually when location scope is required."
+      : "";
+
+  function updatePayGroupLegalEntity(value: string) {
+    setPayGroupForm((current) => {
+      const branchStillValid = current.branch_id
+        ? setup.options.branches.some((item) => item.id === current.branch_id && (!value || item.legal_entity_id === value))
+        : true;
+      return {
+        ...current,
+        legal_entity_id: value,
+        branch_id: branchStillValid ? current.branch_id : "",
+        location_id: branchStillValid ? current.location_id : "",
+      };
+    });
+  }
+
+  function updatePayGroupBranch(value: string) {
+    const branch = setup.options.branches.find((item) => item.id === value);
+    setPayGroupForm((current) => ({
+      ...current,
+      branch_id: value,
+      legal_entity_id: branch?.legal_entity_id ?? current.legal_entity_id,
+      location_id: branch?.location_id ?? current.location_id,
+    }));
+  }
 
   async function save<Item extends ApiItem>(
     family: ConfigFamily,
@@ -559,9 +611,24 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
             <TextField label="Name" required value={payGroupForm.name} onChange={(value) => setPayGroupForm((current) => ({ ...current, name: value }))} />
             <SelectField label="Status" required value={payGroupForm.status} options={payGroupStatusOptions} onChange={(value) => setPayGroupForm((current) => ({ ...current, status: value }))} />
             <TextField label="Default currency code" required value={payGroupForm.default_currency_code} onChange={(value) => setPayGroupForm((current) => ({ ...current, default_currency_code: value.toUpperCase().slice(0, 3) }))} />
-            <SelectField label="Legal entity" value={payGroupForm.legal_entity_id} options={optionItems(setup.options.legal_entities, "All legal entities")} onChange={(value) => setPayGroupForm((current) => ({ ...current, legal_entity_id: value }))} />
-            <SelectField label="Branch" value={payGroupForm.branch_id} options={optionItems(setup.options.branches, "All branches")} onChange={(value) => setPayGroupForm((current) => ({ ...current, branch_id: value }))} />
-            <SelectField label="Location" value={payGroupForm.location_id} options={optionItems(setup.options.locations, "All locations")} onChange={(value) => setPayGroupForm((current) => ({ ...current, location_id: value }))} />
+            <SelectField label="Legal entity" value={payGroupForm.legal_entity_id} options={optionItems(setup.options.legal_entities, "All legal entities")} onChange={updatePayGroupLegalEntity} />
+            <SelectField
+              label="Branch"
+              value={payGroupForm.branch_id}
+              options={optionItems(scopedBranches, "All branches")}
+              disabled={Boolean(payGroupForm.legal_entity_id && scopedBranches.length === 0)}
+              hint={payGroupBranchWarning}
+              tone={payGroupBranchWarning ? "warning" : "muted"}
+              onChange={updatePayGroupBranch}
+            />
+            <SelectField
+              label="Location"
+              value={payGroupForm.location_id}
+              options={optionItems(setup.options.locations, "All locations")}
+              hint={payGroupLocationHint}
+              tone={payGroupLocationHint ? "warning" : "muted"}
+              onChange={(value) => setPayGroupForm((current) => ({ ...current, location_id: value }))}
+            />
             <SelectField label="Department" value={payGroupForm.department_id} options={optionItems(setup.options.departments, "All departments")} onChange={(value) => setPayGroupForm((current) => ({ ...current, department_id: value }))} />
             <SelectField label="Employment type" value={payGroupForm.employment_type_id} options={optionItems(setup.options.employment_types, "All employment types")} onChange={(value) => setPayGroupForm((current) => ({ ...current, employment_type_id: value }))} />
             <TextField label="Config profile reference" value={payGroupForm.config_profile_ref} onChange={(value) => setPayGroupForm((current) => ({ ...current, config_profile_ref: value }))} />

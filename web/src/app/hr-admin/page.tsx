@@ -3,6 +3,7 @@ import Link from "next/link";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { WorkspaceCard } from "@/components/patterns/workspace-card";
+import { getLaunchConfigChecks, launchConfigSummary, type LaunchConfigSeverity } from "@/lib/launch-config-checks";
 import { hrAdminModuleMetadata } from "@/lib/ui/module-metadata";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 import { getHrAdminDashboard } from "@/lib/api";
@@ -24,6 +25,16 @@ function launchAuditChipClass(status: HrAdminLaunchAuditModule["status"]) {
   return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--warning";
 }
 
+function launchConfigChipClass(status: LaunchConfigSeverity) {
+  if (status === "ready") {
+    return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--ready";
+  }
+  if (status === "blocked") {
+    return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--blocked";
+  }
+  return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--warning";
+}
+
 export default async function HrAdminLandingPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
@@ -35,6 +46,8 @@ export default async function HrAdminLandingPage() {
   const launchAudit = dashboard.launch_audit;
   const launchAuditModules = launchAudit.modules.slice(0, 8);
   const launchAuditActions = launchAudit.release_actions.slice(0, 4);
+  const launchConfigChecks = getLaunchConfigChecks();
+  const configSummary = launchConfigSummary(launchConfigChecks);
 
   return (
     <main className="shell">
@@ -129,6 +142,32 @@ export default async function HrAdminLandingPage() {
           <div className="hr-admin-launch-audit__evidence">
             {launchAudit.evidence_refs.map((evidenceRef) => (
               <code key={evidenceRef}>{evidenceRef}</code>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="launch-config-guard panel-card-soft">
+          <div className="launch-config-guard__header">
+            <div>
+              <span className="workspace-card__eyebrow">Launch guardrails</span>
+              <h2>Production-safe settings</h2>
+            </div>
+            <div className="hr-admin-launch-audit__summary">
+              <span className={launchConfigChipClass(configSummary.status)}>{launchAuditStatusLabel[configSummary.status]}</span>
+              <span className="queue-summary-chip"><strong>{configSummary.ready}</strong> ready</span>
+              <span className="queue-summary-chip"><strong>{configSummary.warnings}</strong> warnings</span>
+              <span className="queue-summary-chip"><strong>{configSummary.blocked}</strong> blockers</span>
+            </div>
+          </div>
+          <div className="launch-config-guard__grid">
+            {launchConfigChecks.map((check) => (
+              <article className="launch-config-guard__item" key={check.ref}>
+                <span className={launchConfigChipClass(check.severity)}>{launchAuditStatusLabel[check.severity]}</span>
+                <strong>{check.label}</strong>
+                <span>{check.detail}</span>
+              </article>
             ))}
           </div>
         </div>

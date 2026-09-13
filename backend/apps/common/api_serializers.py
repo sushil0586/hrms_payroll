@@ -278,6 +278,8 @@ class HrAdminOptionItemSerializer(serializers.Serializer):
     location_id = serializers.UUIDField(required=False, allow_null=True)
     business_unit_id = serializers.UUIDField(required=False, allow_null=True)
     grade_id = serializers.UUIDField(required=False, allow_null=True)
+    calendar_id = serializers.UUIDField(required=False, allow_null=True)
+    status = serializers.CharField(required=False, allow_blank=True)
 
 
 class HrAdminManagerOptionSerializer(serializers.Serializer):

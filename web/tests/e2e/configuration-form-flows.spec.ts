@@ -20,6 +20,35 @@ async function selectFirstNonEmptyOption(field: Locator) {
 }
 
 test.describe("HR admin configuration form flows", () => {
+  test("employee structural mapping explains empty dependent dropdowns inline", async ({ page }) => {
+    const suffix = Date.now().toString(36);
+    const code = `pw-empty-map-${suffix}`;
+    const name = `PW Empty Mapping ${suffix}`;
+
+    await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new");
+    await expectPageReady(page, /Create Legal Entity/i);
+    await page.getByRole("textbox", { name: "Code", exact: true }).fill(code);
+    await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
+    await page.getByLabel("Active").selectOption("true");
+    await page.getByLabel("Registered name").fill(`${name} Pvt Ltd`);
+    await page.getByLabel("Country code").fill("IN");
+    await page.getByLabel("Timezone").fill("Asia/Kolkata");
+    await page.getByLabel("Primary email").fill(`${code}@example.com`);
+    await page.getByLabel("Primary phone").fill("+91 9876543210");
+    await page.getByRole("button", { name: "Create legal entity" }).click();
+    await expect(page).toHaveURL(/\/hr-admin\/organization\?section=legal_entities/, { timeout: 20_000 });
+
+    await gotoAuthenticated(page, "/hr-admin/employees/new");
+    await expectPageReady(page, "Create employee");
+    await page.getByRole("combobox", { name: /^Legal entity/ }).selectOption({ label: name });
+
+    await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
+    await expect(page.getByText("No active cost centers are mapped to this legal entity.")).toBeVisible();
+    await expect(page.getByRole("combobox", { name: /^Branch/ })).toBeDisabled();
+    await expect(page.getByRole("combobox", { name: /^Cost center/ })).toBeDisabled();
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("employee create form keeps required fields and date warnings visible", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/employees/new");
     await expectPageReady(page, "Create employee");

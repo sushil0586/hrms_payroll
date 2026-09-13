@@ -7899,9 +7899,20 @@ def get_hr_admin_payroll_setup_payload(actor) -> dict:
             "payroll_period_statuses": [{"value": value, "label": label} for value, label in PayrollPeriodStatus.choices],
             "pay_group_statuses": [{"value": value, "label": label} for value, label in PayGroupStatus.choices],
             "legal_entities": [{"id": item.id, "name": item.name} for item in LegalEntity.objects.filter(tenant=tenant, is_active=True).order_by("name")],
-            "branches": [{"id": item.id, "name": item.name} for item in Branch.objects.filter(tenant=tenant, is_active=True).order_by("name")],
+            "branches": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "legal_entity_id": item.legal_entity_id,
+                    "location_id": item.location_id,
+                }
+                for item in Branch.objects.filter(tenant=tenant, is_active=True).select_related("legal_entity", "location").order_by("name")
+            ],
             "locations": [{"id": item.id, "name": item.name} for item in Location.objects.filter(tenant=tenant, is_active=True).order_by("name")],
-            "departments": [{"id": item.id, "name": item.name} for item in Department.objects.filter(tenant=tenant, is_active=True).order_by("name")],
+            "departments": [
+                {"id": item.id, "name": item.name, "business_unit_id": item.business_unit_id}
+                for item in Department.objects.filter(tenant=tenant, is_active=True).select_related("business_unit").order_by("name")
+            ],
             "employment_types": [{"id": item.id, "name": item.name} for item in EmploymentType.objects.filter(tenant=tenant, is_active=True).order_by("name")],
             "employees": [{"id": item.id, "name": _employee_display_name(item), "employee_code": item.employee_code} for item in employees],
         },
@@ -8337,7 +8348,10 @@ def get_hr_admin_salary_setup_payload(actor) -> dict:
             "component_types": [{"value": value, "label": label} for value, label in SalaryComponentType.choices],
             "component_value_types": [{"value": value, "label": label} for value, label in SalaryComponentValueType.choices],
             "config_statuses": [{"value": value, "label": label} for value, label in PayrollConfigStatus.choices],
-            "pay_groups": [{"id": item.id, "name": item.name} for item in PayGroup.objects.filter(tenant=tenant).order_by("name")],
+            "pay_groups": [
+                {"id": item.id, "name": item.name, "calendar_id": item.calendar_id, "status": item.status}
+                for item in PayGroup.objects.filter(tenant=tenant).select_related("calendar").order_by("name")
+            ],
             "employees": [{"id": item.id, "name": _employee_display_name(item), "employee_code": item.employee_code} for item in employees],
         },
     }
@@ -9365,8 +9379,14 @@ def get_hr_admin_payroll_input_snapshot_setup_payload(actor) -> dict:
         "options": {
             "payroll_run_statuses": [{"value": value, "label": label} for value, label in PayrollRunStatus.choices],
             "payroll_input_snapshot_statuses": [{"value": value, "label": label} for value, label in PayrollInputSnapshotStatus.choices],
-            "periods": [{"id": item.id, "name": item.name} for item in PayrollPeriod.objects.filter(tenant=tenant).order_by("-start_date")],
-            "pay_groups": [{"id": item.id, "name": item.name} for item in PayGroup.objects.filter(tenant=tenant).order_by("name")],
+            "periods": [
+                {"id": item.id, "name": item.name, "calendar_id": item.calendar_id, "status": item.status}
+                for item in PayrollPeriod.objects.filter(tenant=tenant).select_related("calendar").order_by("-start_date")
+            ],
+            "pay_groups": [
+                {"id": item.id, "name": item.name, "calendar_id": item.calendar_id, "status": item.status}
+                for item in PayGroup.objects.filter(tenant=tenant).select_related("calendar").order_by("name")
+            ],
             "employees": [{"id": item.id, "name": _employee_display_name(item), "employee_code": item.employee_code} for item in employees],
         },
     }

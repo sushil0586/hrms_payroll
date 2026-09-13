@@ -157,6 +157,7 @@ test.describe("HR admin salary setup flows", () => {
     await expectOptions(versionForm, "Status");
     const version = await submitAndCapture<{ id: string; version: number }>(page, "salary-structure-versions", "POST", async () => {
       await field(versionForm, "Structure").selectOption(structure.id);
+      await expect(page.getByText("Selected salary structure is not active yet.")).toBeVisible();
       await field(versionForm, "Version").fill("1");
       await field(versionForm, "Effective from").fill("2026-04-01");
       await field(versionForm, "Effective to").fill("2027-03-31");
@@ -206,6 +207,7 @@ test.describe("HR admin salary setup flows", () => {
     const assignmentReason = `Browser salary assignment ${Date.now()}`;
     const assignment = await submitAndCapture<{ id: string }>(page, "employee-salary-assignments", "POST", async () => {
       await field(assignmentForm, "Structure version").selectOption(version.id);
+      await expect(page.getByText("Selected structure version is not active yet.")).toBeVisible();
       await field(assignmentForm, "Effective from").fill("2026-04-01");
       await field(assignmentForm, "Effective to").fill("2027-03-31");
       await field(assignmentForm, "Status").selectOption("draft");

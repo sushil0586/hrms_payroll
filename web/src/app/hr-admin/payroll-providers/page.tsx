@@ -3,6 +3,7 @@ import Link from "next/link";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollProviderConnectionSetup } from "@/lib/api";
+import { PAYROLL_LIVE_RAILS_ENABLED } from "@/lib/runtime-flags";
 import type {
   HrAdminPayrollProviderCertificationRun,
   HrAdminPayrollProviderAdapterRegistryEntry,
@@ -53,6 +54,33 @@ function formatDate(value: string | null) {
 
 function StatusBadge({ status, label }: { status: string; label?: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{label || titleCase(status)}</span>;
+}
+
+function LaunchRailGuard({
+  connection,
+  compact = false,
+}: {
+  connection?: HrAdminPayrollProviderConnection | null;
+  compact?: boolean;
+}) {
+  const isProductionLike = Boolean(connection && (
+    connection.environment_ref.toLowerCase().includes("prod") ||
+    connection.adapter_ref.toLowerCase().includes("live_") ||
+    connection.provider_ref.toLowerCase().includes("live")
+  ));
+  const modeLabel = PAYROLL_LIVE_RAILS_ENABLED ? "Live rails enabled" : "Live rails off";
+  const tone = PAYROLL_LIVE_RAILS_ENABLED ? "ready" : isProductionLike ? "blocked" : "sandbox";
+  const detail = PAYROLL_LIVE_RAILS_ENABLED
+    ? "Provider live actions require certification evidence before use."
+    : "Certification and rehearsal are allowed; real payout, filing, and journal submission stay disabled.";
+
+  return (
+    <div className={`launch-rail-guard launch-rail-guard--${tone} ${compact ? "launch-rail-guard--compact" : ""}`}>
+      <span className="launch-rail-guard__dot" aria-hidden="true" />
+      <strong>{modeLabel}</strong>
+      <span>{detail}</span>
+    </div>
+  );
 }
 
 function readinessGates(connection: HrAdminPayrollProviderConnection): ReadinessGate[] {
@@ -223,6 +251,7 @@ function ConnectionDetail({
         <strong>{connection.certification_status_label}</strong>
         <span>{connection.certification_profile_ref}</span>
         <span>{formatDate(connection.last_tested_at)} / {connection.last_tested_by_name ?? "Pending"}</span>
+        <LaunchRailGuard connection={connection} compact />
         <ProviderCertificationActions connectionId={connection.id} disabled={!connection.sandbox_adapter_ref && !connection.adapter_ref} />
       </div>
 
@@ -427,6 +456,10 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
       />
 
       <section className="section section--tight">
+        <LaunchRailGuard connection={selectedConnection} />
+      </section>
+
+      <section className="section section--tight">
         <div className="metric-grid-modern payroll-setup-metrics">
           <MetricTile className="metric-tile-soft" label="Connections" value={setup.summary.connection_count} trend={`${setup.summary.active_connection_count} active`} />
           <MetricTile className="metric-tile-soft" label="Certified" value={setup.summary.certified_connection_count} trend={`${setup.summary.active_allowed_count} launch ready`} />
@@ -501,6 +534,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                   <p className="section-copy section-copy-soft">{String(launchRehearsal.rehearsal_profile_ref ?? "payroll.provider_launch_rehearsal.v1")}</p>
                 </div>
                 <div className="payroll-provider-launch-actions">
+                  <LaunchRailGuard connection={selectedConnection} compact />
                   <StatusBadge status={String(launchRehearsal.status ?? "blocked")} label={titleCase(String(launchRehearsal.status ?? "blocked"))} />
                   <LaunchRehearsalActions />
                 </div>

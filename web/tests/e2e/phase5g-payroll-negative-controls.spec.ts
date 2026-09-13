@@ -24,6 +24,13 @@ async function selectOptionContaining(select: Locator, text: string) {
   await select.selectOption(value);
 }
 
+async function countNonEmptyOptions(select: Locator) {
+  return select.evaluate((element) => {
+    const typedElement = element as HTMLSelectElement;
+    return Array.from(typedElement.options).filter((option) => option.value).length;
+  });
+}
+
 async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: string, action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => routePattern.test(item.url()) && item.request().method() === method, { timeout: 30000 }),
@@ -34,6 +41,63 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
     status: response.status(),
     payload: (await response.json().catch(() => ({}))) as T,
   };
+}
+
+async function ensurePayrollPeriodExists(page: Page) {
+  await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
+  await expectPageReady(page, "Payroll Inputs");
+
+  const runForm = form(page, "payroll-run-form");
+  if ((await countNonEmptyOptions(field(runForm, "Period"))) > 0) {
+    return;
+  }
+
+  await gotoAuthenticated(page, "/hr-admin/payroll-setup", hrAdmin);
+  await expectPageReady(page, "Payroll Setup");
+
+  const calendarForm = form(page, "payroll-calendar-form");
+  const periodForm = form(page, "payroll-period-form");
+  const calendarCode = uniqueCode("NEG_CAL");
+  const periodCode = uniqueCode("NEG_PER");
+
+  const calendar = await submitAndCapture<{ id: string }>(
+    page,
+    /\/api\/hr-admin\/payroll-calendars$/,
+    "POST",
+    async () => {
+      await field(calendarForm, "Code").fill(calendarCode);
+      await field(calendarForm, "Name").fill(`Negative control ${calendarCode}`);
+      await field(calendarForm, "Frequency").selectOption("monthly");
+      await field(calendarForm, "Timezone").fill("Asia/Kolkata");
+      await field(calendarForm, "Currency code").fill("INR");
+      await field(calendarForm, "Period start day").fill("1");
+      await field(calendarForm, "Config profile reference").fill("payroll.calendar.phase5g.negative.v1");
+      await calendarForm.getByRole("checkbox", { name: "Active calendar" }).check();
+      await calendarForm.getByRole("button", { name: "Create calendar" }).click();
+    },
+  );
+  expect(calendar.ok).toBeTruthy();
+
+  const period = await submitAndCapture<{ id: string }>(
+    page,
+    /\/api\/hr-admin\/payroll-periods$/,
+    "POST",
+    async () => {
+      await field(periodForm, "Calendar").selectOption(calendar.payload.id);
+      await field(periodForm, "Code").fill(periodCode);
+      await field(periodForm, "Name").fill(`Negative control ${periodCode}`);
+      await field(periodForm, "Start date").fill("2026-08-01");
+      await field(periodForm, "End date").fill("2026-08-31");
+      await field(periodForm, "Pay date").fill("2026-09-01");
+      await field(periodForm, "Status").selectOption("open");
+      await field(periodForm, "Config profile reference").fill("payroll.period.phase5g.negative.v1");
+      await periodForm.getByRole("button", { name: "Create period" }).click();
+    },
+  );
+  expect(period.ok).toBeTruthy();
+
+  await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
+  await expectPageReady(page, "Payroll Inputs");
 }
 
 async function createRunAndSnapshot(page: Page, snapshotStatus: "ready" | "blocked") {
@@ -84,11 +148,13 @@ async function createRunAndSnapshot(page: Page, snapshotStatus: "ready" | "block
 
 test.describe("Phase 5G payroll negative controls", () => {
   test("blocks close actions when source snapshots are blocked and protects locked snapshots from edits", async ({ page }) => {
-    await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
-    await expectPageReady(page, "Payroll Inputs");
+    await ensurePayrollPeriodExists(page);
 
     const blocked = await createRunAndSnapshot(page, "blocked");
     const lockPanel = form(page, "payroll-input-lock-form");
+    await expect(lockPanel.getByLabel("Selected run lock readiness")).toContainText("Blocked");
+    await expect(lockPanel.getByText("Lock blocked.")).toBeVisible();
+    await expect(lockPanel.getByText("Missing approved attendance")).toBeVisible();
     const blockedLock = await submitAndCapture<{ detail?: string; blocked_count?: number }>(
       page,
       new RegExp(`/api/hr-admin/payroll-runs/${blocked.runId}/lock-inputs$`),
@@ -103,17 +169,11 @@ test.describe("Phase 5G payroll negative controls", () => {
 
     await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${blocked.runId}`, hrAdmin);
     await expectPageReady(page, "Payroll Calculations");
-    const blockedCalc = await submitAndCapture<{ detail?: string }>(
-      page,
-      new RegExp(`/api/hr-admin/payroll-runs/${blocked.runId}/calculate-draft$`),
-      "POST",
-      async () => {
-        await page.getByLabel("Calculation controls").getByLabel("Calculation profile ref").fill("tenant.payroll.calc.phase5g.v1");
-        await page.getByLabel("Calculation controls").getByRole("button", { name: "Calculate draft" }).click();
-      },
-    );
-    expect(blockedCalc.status).toBe(400);
-    await expect(page.getByRole("alert").first()).toContainText(/Payroll inputs must be locked|blocker validation issue|All payroll input snapshots must be locked/);
+    const blockedCalculationReadiness = page.getByRole("region", { name: "Calculation readiness" });
+    await expect(blockedCalculationReadiness).toContainText("Calculation blocked.");
+    await expect(blockedCalculationReadiness).toContainText(/snapshot.*still need input lock|blocker validation/i);
+    await page.getByLabel("Calculation controls").getByLabel("Calculation profile ref").fill("tenant.payroll.calc.phase5g.v1");
+    await expect(page.getByLabel("Calculation controls").getByRole("button", { name: "Calculate draft" })).toBeDisabled();
 
     await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
     await expectPageReady(page, "Payroll Inputs");
@@ -130,6 +190,13 @@ test.describe("Phase 5G payroll negative controls", () => {
     expect(readyLock.payload.locked_count).toBeGreaterThanOrEqual(1);
     await expect(page.getByRole("status").first()).toContainText(/Payroll input snapshots locked for calculation/);
 
+    await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${ready.runId}`, hrAdmin);
+    await expectPageReady(page, "Payroll Calculations");
+    await expect(page.getByRole("region", { name: "Calculation readiness" })).toContainText("Ready to calculate.");
+    await expect(page.getByLabel("Calculation controls").getByRole("button", { name: "Calculate draft" })).toBeEnabled();
+
+    await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${ready.runId}&snapshotId=${ready.snapshotId}`, hrAdmin);
+    await expectPageReady(page, "Payroll Inputs");
     const snapshotForm = form(page, "payroll-input-snapshot-form");
     const immutableEdit = await submitAndCapture<{ detail?: string }>(
       page,

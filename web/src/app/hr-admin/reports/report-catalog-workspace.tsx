@@ -13,6 +13,11 @@ function statusClass(status: ReportCatalogItem["status"]) {
   return "record-chip";
 }
 
+function manifestHref(exportRoute: string) {
+  const separator = exportRoute.includes("?") ? "&" : "?";
+  return `${exportRoute}${separator}format=manifest`;
+}
+
 export function ReportCatalogWorkspace({ reports }: { reports: ReportCatalogItem[] }) {
   const [category, setCategory] = useState<(typeof reportCategories)[number]>("All");
   const [persona, setPersona] = useState("All");
@@ -123,6 +128,7 @@ export function ReportCatalogWorkspace({ reports }: { reports: ReportCatalogItem
                 <th scope="col">Owner</th>
                 <th scope="col">Filters</th>
                 <th scope="col">Exports</th>
+                <th scope="col">Evidence</th>
                 <th scope="col">Status</th>
                 <th scope="col">Actions</th>
               </tr>
@@ -139,6 +145,17 @@ export function ReportCatalogWorkspace({ reports }: { reports: ReportCatalogItem
                   <td>{report.filters.join(", ")}</td>
                   <td>{report.exports.join(", ")}</td>
                   <td>
+                    {report.exportRoute ? (
+                      <div className="report-evidence-cell">
+                        <span>Checksum</span>
+                        <span>Manifest</span>
+                        <span>Audit trail</span>
+                      </div>
+                    ) : (
+                      <span className="muted">Planned</span>
+                    )}
+                  </td>
+                  <td>
                     <span className={statusClass(report.status)}>{report.status}</span>
                   </td>
                   <td>
@@ -153,13 +170,18 @@ export function ReportCatalogWorkspace({ reports }: { reports: ReportCatalogItem
                           Export
                         </Link>
                       ) : null}
+                      {report.exportRoute ? (
+                        <Link className="button button--ghost" href={manifestHref(report.exportRoute)} prefetch={false}>
+                          Manifest
+                        </Link>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
               ))}
               {visibleReports.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <div className="empty-state">No reports match the selected filters.</div>
                   </td>
                 </tr>

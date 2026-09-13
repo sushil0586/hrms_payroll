@@ -4,6 +4,9 @@ Date: 2026-09-13
 Environment: staging, `https://hrms.accerio.in`  
 Certified commit: `d32d876881a2e06a27d47317ae3761898b41cf15`  
 Primary tracker: `docs/qa/pilot-100-execution-tracker-2026-09-12.md`
+Stakeholder acceptance pack: `docs/qa/pilot-100-stakeholder-acceptance-pack-2026-09-13.md`
+Pilot user guide and API plan: `docs/qa/pilot-user-guide-and-api-procurement-plan-2026-09-13.md`
+Role-wise user guide index: `docs/qa/user-guides/README.md`
 
 ## Decision
 
@@ -18,15 +21,20 @@ This is not yet a 100% unattended production-payroll launch sign-off. The remain
 - P100-0 through P100-16 have been executed or accepted with documented limitations.
 - P100-17 provider rehearsal and evidence clarity passed on staging with expected callback/retry seed-data skips.
 - P100-18 monitoring, logs, and disk review passed on staging; old inactive releases were pruned and disk usage improved from `98%` to `73%`.
+- P100-19 release-retention and disk-alert runbook is complete.
 - 1 organization / 100 employee payroll rehearsal data exists under the `PILOT100_20260912` identity.
 - Organization masters, policy setup, payroll setup, 100-employee access matrix, attendance/leave/lifecycle inputs, payroll input snapshot/lock, calculation/review, adjustments, settlements, outputs, payslips, finance handoff, reporting, security/isolation, UX/performance, and release-gate evidence are browser-certified.
 - Final staging release-gate rerun passed: `5/5`.
 - Final P100 UX/performance staging rerun passed: `3/3`.
 - Pilot credential matrix staging rerun passed: `10/10`.
+- Role/menu certification staging rerun passed: `15/15`, covering Platform Admin, HR Admin, Payroll Finance Manager, Tenant Admin, Employee/ESS, Manager/MSS, Support Agent, unsafe cross-role denials, scoped support access, sidebar pages, tabs, long-list pagination, and horizontal overflow checks.
 - Backup/restore drill passed with scratch restore verification.
 - Rollback and roll-forward drill passed with readiness-wait observation.
 - Backend and frontend staging services were active at final verification.
 - Disk pressure was remediated while preserving current and rollback releases.
+- Release retention and disk alert guardrails are documented in `docs/qa/release-retention-disk-alert-runbook-2026-09-13.md`.
+- Role-wise pilot usage and external API procurement guidance are documented in `docs/qa/pilot-user-guide-and-api-procurement-plan-2026-09-13.md`.
+- Separate self-explaining guides exist for Platform Admin, Tenant Admin, HR Admin, Payroll Finance Manager, Manager, Employee, Support Agent, and HR/payroll reports under `docs/qa/user-guides/`.
 
 ## Evidence Commands
 
@@ -60,6 +68,14 @@ Expanded named finance/support result after seeding `payroll.finance` and `suppo
 
 Post-deploy expanded named finance/support result on commit `1efce7e5dbf91867d6abbce2bf5288192608efb9`: `10/10` passed in `2.3m`.
 
+Role and menu certification rerun:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/pilot-credential-matrix-certification.spec.ts tests/e2e/sidebar-tabs-list-certification.spec.ts --project=chromium --workers=1 --reporter=line --timeout=720000
+```
+
+Result: `15/15` passed in `6.8m`.
+
 ## Accepted Limitations
 
 - Mobile is certified for review/smoke usage, but dense payroll administration should be done on desktop.
@@ -86,7 +102,12 @@ Cleanup should run only after stakeholder review confirms the evidence pack is n
 1. Review known limitations with pilot stakeholders.
 2. Confirm retain/cleanup decision for `PILOT100_20260912`.
 3. Validate real provider credentials only when non-production provider credentials are available.
-4. Add a formal release-retention/disk-alert runbook before production.
+
+## Stakeholder Acceptance Pack
+
+- Created business-facing acceptance pack: `docs/qa/pilot-100-stakeholder-acceptance-pack-2026-09-13.md`.
+- Scope: certified pilot scope, accepted limitations, not-approved uses, stakeholder decisions, go/no-go checklist, and sign-off table.
+- Recommendation: proceed with controlled pilot if stakeholders accept the limitations and agree to retain the `PILOT100_20260912` evidence pack until review is complete.
 
 ## Provider Rehearsal Evidence
 
@@ -121,3 +142,4 @@ Cleanup should run only after stakeholder review confirms the evidence pack is n
 - Cleanup action: pruned old inactive release directories and kept current plus rollback releases.
 - Disk after cleanup: root filesystem `73%` used, about `5.1G` free.
 - Final health after cleanup: backend active, web active, `/login` HTTP `200`, `/` HTTP `200`.
+- Release-retention runbook: `docs/qa/release-retention-disk-alert-runbook-2026-09-13.md`.

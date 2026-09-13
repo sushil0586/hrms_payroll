@@ -5,6 +5,7 @@ export default async function MssLayout({ children }: { children: React.ReactNod
   const sessionUser = await requireWorkspaceAccess({ workspace: "mss" });
   const userLabel =
     sessionUser?.display_name || sessionUser?.first_name || sessionUser?.username || null;
+  const canAccessHrAdmin = Boolean(sessionUser?.workspace_access?.hr_admin);
 
   return (
     <WorkspaceChrome
@@ -18,7 +19,7 @@ export default async function MssLayout({ children }: { children: React.ReactNod
       quickLinks={[
         { href: "/ess", label: "ESS" },
         { href: "/ess/notifications", label: "Inbox" },
-        { href: "/hr-admin", label: "HR Admin" },
+        ...(canAccessHrAdmin ? [{ href: "/hr-admin", label: "HR Admin" }] : []),
       ]}
       roleLabel="Manager"
       searchHint="Search approvals, team requests, and exceptions"

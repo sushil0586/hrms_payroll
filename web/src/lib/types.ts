@@ -91,6 +91,8 @@ export type HrAdminOptionItem = {
   location_id?: string | null;
   business_unit_id?: string | null;
   grade_id?: string | null;
+  calendar_id?: string | null;
+  status?: string;
 };
 
 export type HrAdminManagerOption = HrAdminOptionItem & {

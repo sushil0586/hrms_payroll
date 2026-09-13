@@ -23,6 +23,8 @@ test.describe("tier 0 workspace routes", () => {
         await expect(page.getByRole("link", { name: "Review employees" }).first()).toBeVisible();
         await expect(page.getByText("Employee master - hr-admin - 3d").first()).toBeVisible();
         await expect(page.getByText("payroll.provider_launch_readiness.audit_pack.v1")).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Production-safe settings" })).toBeVisible();
+        await expect(page.getByText("Payroll live rails")).toBeVisible();
       }
     });
   }

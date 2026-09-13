@@ -57,6 +57,8 @@ If a phase fails:
 | P100-16 | Rollback and roll-forward drill | Passed on staging with readiness observation | Symlink rollback, service restart, roll-forward, HTTP health | No DB rollback, no destructive release deletion | Add readiness wait/retry to runbook. |
 | P100-17 | Provider rehearsal and evidence clarity | Passed on staging with seed-data skips | Provider lanes, launch rehearsal, callbacks, retry, audit-pack evidence | No real statutory or bank filing, no unsafe live rail execution | Rerun after provider rail, handoff, callback, or audit-pack UI changes. |
 | P100-18 | Monitoring, logs, and disk review | Passed on staging with observations | Service logs, nginx errors, disk, release retention | No secret exposure, no cleanup of current/rollback release | Keep disk below 85%; add release retention runbook. |
+| P100-19 | Release retention and disk alert runbook | Done | Operator runbook, thresholds, dry run, cleanup, verification | No deletion without current/rollback confirmation | Review before production deployment automation. |
+| P100-20 | Stakeholder acceptance pack | Drafted, signatures pending | Business scope, limitations, go/no-go checklist, sign-off table | No live provider/payment/statutory filing approval by implication | Complete signatures before customer-facing pilot start. |
 
 ## Phase P100-0: Safety And Data Strategy
 
@@ -1216,3 +1218,84 @@ Execution result - 2026-09-13:
 - Remaining operational observation:
   - Add a release-retention runbook so future deployments retain only current plus a small rollback window, and alert if disk exceeds `85%`.
 - Confidence after staging certification: 98% overall for controlled pilot operations. Remaining gates: stakeholder acceptance and final retain/cleanup decision. Real live provider credentials remain outside this staging-safe rehearsal unless configured in non-production mode.
+
+## Phase P100-19: Release Retention And Disk Alert Runbook
+
+Real-user intent:
+
+Operations has a repeatable, non-destructive procedure for disk review and release cleanup before a pilot or production deployment fills the host.
+
+Execution result - 2026-09-13:
+
+- Created runbook: `docs/qa/release-retention-disk-alert-runbook-2026-09-13.md`.
+- Runbook covers:
+  - Retention policy: keep current release, latest known-good rollback release, and optionally one extra release when disk allows.
+  - Alert thresholds: warning at `80%`, action required at `85%`, urgent at `90%`, emergency at `95%`.
+  - Pre-cleanup commands to record current symlink, commit, disk usage, release sizes, and journal usage.
+  - Rollback release selection guard.
+  - Dry-run cleanup list.
+  - Cleanup command that skips current and rollback releases.
+  - Post-cleanup service and HTTP health verification.
+  - Staging certification evidence from the `98%` to `73%` disk remediation.
+  - Do-not-do guardrails.
+- Status: done.
+- Confidence after runbook closure: 98% overall for controlled pilot operations. Remaining gates: stakeholder acceptance and final retain/cleanup decision. Real live provider credentials remain outside this staging-safe rehearsal unless configured in non-production mode.
+
+## Phase P100-20: Stakeholder Acceptance Pack
+
+Real-user intent:
+
+Business and operational stakeholders can review the pilot evidence without reading the full technical tracker and can explicitly accept or reject the remaining limitations.
+
+Execution result - 2026-09-13:
+
+- Created stakeholder pack: `docs/qa/pilot-100-stakeholder-acceptance-pack-2026-09-13.md`.
+- The pack includes:
+  - Decision request.
+  - Certified pilot scope.
+  - Accepted limitations and impact table.
+  - Explicit not-approved uses.
+  - Required stakeholder decisions.
+  - Go/no-go checklist.
+  - Sign-off table for business, HR/payroll, finance, product, engineering, QA, and support owners.
+- Recommendation recorded: proceed with a controlled pilot if stakeholders accept the limitations and retain the `PILOT100_20260912` evidence pack until review is complete.
+- Status: drafted, signatures pending.
+- Confidence remains 98% until stakeholder acceptance is complete.
+
+## Phase P100-21: Role And Menu Certification
+
+Real-user intent:
+
+Every pilot user type can log in, reach the intended workspace, use visible sidebar menus/tabs, and is denied unsafe cross-role access.
+
+Execution result - 2026-09-13:
+
+- Environment: staging, `https://hrms.accerio.in`.
+- Test command:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/pilot-credential-matrix-certification.spec.ts tests/e2e/sidebar-tabs-list-certification.spec.ts --project=chromium --workers=1 --reporter=line --timeout=720000
+```
+
+- Result: `15/15` passed in `6.8m`.
+- Covered user types:
+  - Platform Admin.
+  - HR Admin.
+  - Payroll Finance Manager.
+  - Tenant Admin.
+  - Employee / ESS.
+  - Manager / MSS.
+  - Support Agent.
+- Covered behavior:
+  - Intended workspace loads for each user.
+  - Unsafe cross-role pages are denied.
+  - Sensitive low-privilege API calls fail closed.
+  - Payroll finance can read finance evidence but cannot use platform APIs.
+  - Support agent requires approved support scope and can read only granted scope.
+  - Platform Admin, HR Admin, ESS, MSS, and Tenant Admin sidebar menus load.
+  - Visible sidebar links open successfully.
+  - Tabs are clickable and set `aria-selected=true`.
+  - Long-list pagination defects are absent.
+  - Horizontal overflow checks passed.
+- Status: certified.
+- Confidence remains 98% overall for controlled pilot operations; no role/menu blocker found.

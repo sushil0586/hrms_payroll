@@ -29,6 +29,14 @@ function selectOptions(items: HrAdminOptionItem[]) {
   ];
 }
 
+function FieldHint({ children, tone = "default" }: { children: string; tone?: "default" | "warning" }) {
+  return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
+}
+
+function filteredByLegalEntity(items: HrAdminOptionItem[], legalEntityId: string) {
+  return items.filter((item) => !legalEntityId || item.legal_entity_id === legalEntityId);
+}
+
 function formatApiError(payload: unknown) {
   if (!payload || typeof payload !== "object") {
     return "Unable to run roster rollout.";
@@ -62,6 +70,41 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<HrAdminShiftRosterTemplateRolloutResult | null>(null);
   const [error, setError] = useState("");
+  const selectedBranch = options.branches.find((item) => item.id === branchId);
+  const filteredBranches = filteredByLegalEntity(options.branches, legalEntityId);
+  const filteredLocations = options.locations.filter((item) => {
+    if (selectedBranch?.location_id) {
+      return item.id === selectedBranch.location_id;
+    }
+    return true;
+  });
+  const branchWarning =
+    legalEntityId && filteredBranches.length === 0
+      ? "No active branches are mapped to this legal entity."
+      : null;
+  const locationWarning =
+    selectedBranch && !selectedBranch.location_id
+      ? "This branch has no mapped location. Select a location manually when location scope is required."
+      : null;
+
+  function updateLegalEntity(value: string) {
+    setLegalEntityId(value);
+    if (branchId && !filteredByLegalEntity(options.branches, value).some((item) => item.id === branchId)) {
+      setBranchId("");
+      setLocationId("");
+    }
+  }
+
+  function updateBranch(value: string) {
+    setBranchId(value);
+    const nextBranch = options.branches.find((item) => item.id === value);
+    if (nextBranch?.legal_entity_id && !legalEntityId) {
+      setLegalEntityId(nextBranch.legal_entity_id);
+    }
+    if (nextBranch?.location_id) {
+      setLocationId(nextBranch.location_id);
+    }
+  }
 
   async function runRollout(dryRun: boolean) {
     setError("");
@@ -116,9 +159,9 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
         </div>
         <div className="form-grid">
           <label className="form-field"><span className="muted">Roster template</span><select className="input-control" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>{selectOptions(templates.map((item) => ({ id: item.id, name: `${item.name} (${item.status})` })))}</select></label>
-          <label className="form-field"><span className="muted">Legal entity scope</span><select className="input-control" value={legalEntityId} onChange={(e) => setLegalEntityId(e.target.value)}>{selectOptions(options.legal_entities)}</select></label>
-          <label className="form-field"><span className="muted">Branch scope</span><select className="input-control" value={branchId} onChange={(e) => setBranchId(e.target.value)}>{selectOptions(options.branches)}</select></label>
-          <label className="form-field"><span className="muted">Location scope</span><select className="input-control" value={locationId} onChange={(e) => setLocationId(e.target.value)}>{selectOptions(options.locations)}</select></label>
+          <label className="form-field"><span className="muted">Legal entity scope</span><select className="input-control" value={legalEntityId} onChange={(e) => updateLegalEntity(e.target.value)}>{selectOptions(options.legal_entities)}</select><FieldHint>Branch scope narrows to the selected legal entity.</FieldHint></label>
+          <label className="form-field"><span className="muted">Branch scope</span><select className="input-control" disabled={Boolean(branchWarning)} value={branchId} onChange={(e) => updateBranch(e.target.value)}>{selectOptions(filteredBranches)}</select><FieldHint tone={branchWarning ? "warning" : "default"}>{branchWarning ?? "Branch scope is optional when rollout targets employees or departments directly."}</FieldHint></label>
+          <label className="form-field"><span className="muted">Location scope</span><select className="input-control" value={locationId} onChange={(e) => setLocationId(e.target.value)}>{selectOptions(filteredLocations)}</select><FieldHint tone={locationWarning ? "warning" : "default"}>{locationWarning ?? "Location follows the selected branch when a branch location exists."}</FieldHint></label>
           <label className="form-field"><span className="muted">Department scope</span><select className="input-control" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>{selectOptions(options.departments)}</select></label>
           <label className="form-field"><span className="muted">Effective from</span><input className="input-control" type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} /></label>
           <label className="form-field"><span className="muted">Effective to</span><input className="input-control" type="date" value={effectiveTo} onChange={(e) => setEffectiveTo(e.target.value)} /></label>

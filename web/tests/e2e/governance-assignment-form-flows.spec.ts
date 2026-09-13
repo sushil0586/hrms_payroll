@@ -73,6 +73,45 @@ async function createAttendancePolicyThroughBrowser(page: Page) {
   return code;
 }
 
+async function createWorkflowTemplateThroughBrowser(page: Page) {
+  const code = uniqueCode("WORKFLOW_TEMPLATE");
+  await gotoAuthenticated(page, "/hr-admin/workflow-templates/new");
+  await expectPageReady(page, "Create workflow template");
+  const form = page.locator("form").first();
+  await field(form, "Code").fill(code);
+  await field(form, "Name").fill(`Browser ${code}`);
+  await field(form, "Trigger key").fill(`browser_${code.toLowerCase()}`);
+  await field(form, "Condition snapshot JSON").fill("{}");
+  await field(form, "Status").selectOption("active");
+  await field(form, "Version").fill("1");
+  await field(form, "Description").fill("Browser-created workflow template for assignment certification.");
+  await page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Step 1" }) }).getByRole("textbox", { name: "Name" }).fill("Manager approval");
+  await field(form, "Auto approve after hours").fill("24");
+  await field(form, "Escalate after hours").fill("48");
+  await page.getByRole("button", { name: "Create workflow template" }).click();
+  await expect(page).toHaveURL(/\/hr-admin\/workflow-templates$/);
+  await expect(page.getByText(code).first()).toBeVisible();
+  return code;
+}
+
+async function createLegalEntityWithoutBranches(page: Page) {
+  const code = uniqueCode("EMPTY_LE");
+  const name = `Browser ${code}`;
+  await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new");
+  await expectPageReady(page, /Create Legal Entity/i);
+  await page.getByRole("textbox", { name: "Code", exact: true }).fill(code);
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill(name);
+  await page.getByLabel("Active").selectOption("true");
+  await page.getByLabel("Registered name").fill(`${name} Pvt Ltd`);
+  await page.getByLabel("Country code").fill("IN");
+  await page.getByLabel("Timezone").fill("Asia/Kolkata");
+  await page.getByLabel("Primary email").fill(`${code.toLowerCase()}@example.com`);
+  await page.getByLabel("Primary phone").fill("+91 9876543210");
+  await page.getByRole("button", { name: "Create legal entity" }).click();
+  await expect(page).toHaveURL(/\/hr-admin\/organization\?section=legal_entities/, { timeout: 20_000 });
+  return name;
+}
+
 async function createShiftThroughBrowser(page: Page) {
   const code = uniqueCode("SHIFT");
   await gotoAuthenticated(page, "/hr-admin/shifts/new");
@@ -235,6 +274,22 @@ test.describe("HR admin governance and assignment forms", () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test("policy assignment scope fields warn when selected legal entity has no branches", async ({ page }) => {
+    const legalEntityName = await createLegalEntityWithoutBranches(page);
+
+    for (const target of [
+      { path: "/hr-admin/leave-policy-assignments/new", title: /Create leave policy assignment/ },
+      { path: "/hr-admin/attendance-policy-assignments/new", title: /Create attendance policy assignment|Attendance policy assignment/ },
+    ]) {
+      await gotoAuthenticated(page, target.path);
+      await expectPageReady(page, target.title);
+      await page.getByRole("combobox", { name: /^Legal entity/ }).selectOption({ label: legalEntityName });
+      await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
+      await expect(page.getByRole("combobox", { name: /^Branch/ })).toBeDisabled();
+      await expectNoHorizontalOverflow(page);
+    }
+  });
+
   test("workflow assignment form surfaces server validation errors", async ({ page }) => {
     await page.route("**/api/hr-admin/workflow-template-assignments", async (route) => {
       await route.fulfill({
@@ -254,6 +309,8 @@ test.describe("HR admin governance and assignment forms", () => {
   });
 
   test("document requirement form toggles rule state without losing scope inputs", async ({ page }) => {
+    const legalEntityName = await createLegalEntityWithoutBranches(page);
+
     await gotoAuthenticated(page, "/hr-admin/document-requirements/new");
     await expectPageReady(page, "Create document requirement");
 
@@ -264,6 +321,9 @@ test.describe("HR admin governance and assignment forms", () => {
       await expectPageReady(page, "Create document requirement");
     }
     await selectFirstNonEmptyOption(page.getByRole("combobox", { name: /^Category/ }));
+    await page.getByRole("combobox", { name: /^Legal entity/ }).selectOption({ label: legalEntityName });
+    await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
+    await expect(page.getByRole("combobox", { name: /^Branch/ })).toBeDisabled();
     await page.getByLabel("Required within joining days").fill("14");
     await expect(page.getByRole("heading", { name: "Requirement state" })).toBeVisible();
     await expect(page.locator("label").filter({ hasText: "Mandatory" }).getByRole("checkbox")).toBeChecked();
@@ -374,6 +434,8 @@ test.describe("HR admin governance and assignment forms", () => {
   });
 
   test("workflow template assignment creates, reads, updates, and deactivates through browser", async ({ page }) => {
+    const legalEntityName = await createLegalEntityWithoutBranches(page);
+
     await gotoAuthenticated(page, "/hr-admin/workflow-template-assignments/new");
     await expectPageReady(page, /Create workflow assignment/);
 
@@ -381,11 +443,23 @@ test.describe("HR admin governance and assignment forms", () => {
     for (const label of ["Workflow template", "Legal entity", "Branch", "Department", "Business unit", "Grade", "Priority"]) {
       await expect(field(form, label)).toBeVisible();
     }
-    await expect(await hasNonEmptyOption(field(form, "Workflow template"))).toBe(true);
+    if (!(await hasNonEmptyOption(field(form, "Workflow template")))) {
+      await createWorkflowTemplateThroughBrowser(page);
+      await gotoAuthenticated(page, "/hr-admin/workflow-template-assignments/new");
+      await expectPageReady(page, /Create workflow assignment/);
+    }
+
+    const refreshedForm = page.locator("form").first();
+    await expect(await hasNonEmptyOption(field(refreshedForm, "Workflow template"))).toBe(true);
+    await field(refreshedForm, "Legal entity").selectOption({ label: legalEntityName });
+    await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
+    await expect(field(refreshedForm, "Branch")).toBeDisabled();
+    await field(refreshedForm, "Legal entity").selectOption("");
+    await expect(field(refreshedForm, "Branch")).toBeEnabled();
 
     const priority = uniquePriority();
-    await selectFirstNonEmptyOption(field(form, "Workflow template"));
-    await field(form, "Priority").fill(String(priority));
+    await selectFirstNonEmptyOption(field(refreshedForm, "Workflow template"));
+    await field(refreshedForm, "Priority").fill(String(priority));
     await page.locator("label").filter({ hasText: "Assignment active" }).getByRole("checkbox").uncheck();
 
     const created = await submitAndCapture<{ id: string }>(page, "workflow-template-assignments", "POST", async () => {
@@ -457,6 +531,8 @@ test.describe("HR admin governance and assignment forms", () => {
   });
 
   test("shift roster template creates, updates, previews rollout, and applies rollout through browser", async ({ page }) => {
+    const legalEntityName = await createLegalEntityWithoutBranches(page);
+
     await gotoAuthenticated(page, "/hr-admin/shift-roster-templates/new");
     await expectPageReady(page, /Create roster template/);
     await ensureOption(
@@ -499,6 +575,11 @@ test.describe("HR admin governance and assignment forms", () => {
     const rolloutPanel = page.getByRole("heading", { name: "Roster rollout" }).locator("xpath=ancestor::section[1]");
     await expect(field(rolloutPanel, "Roster template")).toBeVisible();
     await field(rolloutPanel, "Roster template").selectOption(created.id);
+    await field(rolloutPanel, "Legal entity scope").selectOption({ label: legalEntityName });
+    await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
+    await expect(field(rolloutPanel, "Branch scope")).toBeDisabled();
+    await field(rolloutPanel, "Legal entity scope").selectOption("");
+    await expect(field(rolloutPanel, "Branch scope")).toBeEnabled();
     await selectFirstNonEmptyOption(field(rolloutPanel, "Target employees"));
     await field(rolloutPanel, "Effective from").fill("2098-02-01");
     await field(rolloutPanel, "Effective to").fill("2098-02-07");

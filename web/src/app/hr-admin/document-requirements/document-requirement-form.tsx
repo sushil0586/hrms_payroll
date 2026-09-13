@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { FormSection } from "@/components/patterns/form-section";
-import type { HrAdminDocumentOptions, HrAdminDocumentRequirementRuleWriteInput } from "@/lib/types";
+import type { HrAdminDocumentOptions, HrAdminDocumentRequirementRuleWriteInput, HrAdminOptionItem } from "@/lib/types";
 
 type Props = {
   initialValue: HrAdminDocumentRequirementRuleWriteInput;
@@ -34,14 +34,43 @@ function selectOptions(items: Array<{ id: string; name: string }>) {
   ];
 }
 
+function FieldHint({ children, tone = "default" }: { children: string; tone?: "default" | "warning" }) {
+  return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
+}
+
+function filteredByLegalEntity(items: HrAdminOptionItem[], legalEntityId: string | null) {
+  return items.filter((item) => !legalEntityId || item.legal_entity_id === legalEntityId);
+}
+
 export function DocumentRequirementForm({ initialValue, mode, options, itemId }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const filteredBranches = filteredByLegalEntity(options.branches, formValue.legal_entity_id);
+  const branchWarning =
+    formValue.legal_entity_id && filteredBranches.length === 0
+      ? "No active branches are mapped to this legal entity."
+      : null;
 
   function update<Key extends keyof HrAdminDocumentRequirementRuleWriteInput>(key: Key, value: HrAdminDocumentRequirementRuleWriteInput[Key]) {
-    setFormValue((current) => ({ ...current, [key]: value }));
+    setFormValue((current) => {
+      const nextValue = { ...current, [key]: value };
+      if (
+        key === "legal_entity_id" &&
+        nextValue.branch_id &&
+        !filteredByLegalEntity(options.branches, nextValue.legal_entity_id).some((item) => item.id === nextValue.branch_id)
+      ) {
+        nextValue.branch_id = null;
+      }
+      if (key === "branch_id") {
+        const nextBranch = options.branches.find((item) => item.id === nextValue.branch_id);
+        if (nextBranch?.legal_entity_id && !nextValue.legal_entity_id) {
+          nextValue.legal_entity_id = nextBranch.legal_entity_id;
+        }
+      }
+      return nextValue;
+    });
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -76,8 +105,8 @@ export function DocumentRequirementForm({ initialValue, mode, options, itemId }:
         <FormSection description="Choose the category and the org filters where the rule should apply." title="Requirement scope">
           <div className="form-grid">
             <label className="form-field"><span className="muted">Category</span><select className="input-control" value={formValue.category_id ?? ""} onChange={(e) => update("category_id", e.target.value || null)}>{selectOptions(options.categories)}</select></label>
-            <label className="form-field"><span className="muted">Legal entity</span><select className="input-control" value={formValue.legal_entity_id ?? ""} onChange={(e) => update("legal_entity_id", e.target.value || null)}>{selectOptions(options.legal_entities)}</select></label>
-            <label className="form-field"><span className="muted">Branch</span><select className="input-control" value={formValue.branch_id ?? ""} onChange={(e) => update("branch_id", e.target.value || null)}>{selectOptions(options.branches)}</select></label>
+            <label className="form-field"><span className="muted">Legal entity</span><select className="input-control" value={formValue.legal_entity_id ?? ""} onChange={(e) => update("legal_entity_id", e.target.value || null)}>{selectOptions(options.legal_entities)}</select><FieldHint>Branch scope narrows to the selected legal entity.</FieldHint></label>
+            <label className="form-field"><span className="muted">Branch</span><select className="input-control" disabled={Boolean(branchWarning)} value={formValue.branch_id ?? ""} onChange={(e) => update("branch_id", e.target.value || null)}>{selectOptions(filteredBranches)}</select><FieldHint tone={branchWarning ? "warning" : "default"}>{branchWarning ?? "Branch scope is optional unless the document rule is branch-specific."}</FieldHint></label>
             <label className="form-field"><span className="muted">Department</span><select className="input-control" value={formValue.department_id ?? ""} onChange={(e) => update("department_id", e.target.value || null)}>{selectOptions(options.departments)}</select></label>
             <label className="form-field"><span className="muted">Grade</span><select className="input-control" value={formValue.grade_id ?? ""} onChange={(e) => update("grade_id", e.target.value || null)}>{selectOptions(options.grades)}</select></label>
             <label className="form-field"><span className="muted">Employment type</span><select className="input-control" value={formValue.employment_type_id ?? ""} onChange={(e) => update("employment_type_id", e.target.value || null)}>{selectOptions(options.employment_types)}</select></label>

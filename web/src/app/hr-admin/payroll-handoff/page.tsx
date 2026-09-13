@@ -162,6 +162,162 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
 }
 
+function handoffReadiness({
+  handoff,
+  artifacts,
+  deliveries,
+  auditPackCount,
+}: {
+  handoff: HrAdminPayrollFinanceHandoff | null;
+  artifacts: HrAdminPayrollOutputArtifact[];
+  deliveries: HrAdminPayrollProviderDelivery[];
+  auditPackCount: number;
+}) {
+  const hasBankAdvice = artifacts.some((artifact) => artifact.kind === "bank_advice");
+  const hasAccountingExport = artifacts.some((artifact) => artifact.kind === "accounting_export");
+  const hasStatutoryReport = artifacts.some((artifact) => artifact.kind === "statutory_report");
+  const openDeliveryCount = deliveries.filter((delivery) => ["queued", "submitted", "acknowledged"].includes(delivery.status)).length;
+  const failedDeliveryCount = deliveries.filter((delivery) => ["failed", "rejected"].includes(delivery.status)).length;
+  const terminalDeliveryCount = deliveries.filter((delivery) => ["reconciled", "failed", "rejected"].includes(delivery.status)).length;
+  const missingArtifacts = [
+    !hasBankAdvice ? "bank advice" : "",
+    !hasAccountingExport ? "accounting export" : "",
+    !hasStatutoryReport ? "statutory report" : "",
+  ].filter(Boolean);
+
+  if (!handoff) {
+    return {
+      tone: "blocked",
+      title: "Select a finance handoff.",
+      detail: "Choose a handoff package before transmitting or acknowledging finance evidence.",
+      transmitReady: false,
+      acknowledgeReady: false,
+      auditPackReady: false,
+      openDeliveryCount,
+      failedDeliveryCount,
+      terminalDeliveryCount,
+      missingArtifactText: "No handoff selected",
+    };
+  }
+
+  if (missingArtifacts.length) {
+    return {
+      tone: "blocked",
+      title: "Handoff blocked.",
+      detail: `Missing ${missingArtifacts.join(", ")} artifact${missingArtifacts.length === 1 ? "" : "s"}. Regenerate the handoff from a published output batch.`,
+      transmitReady: false,
+      acknowledgeReady: false,
+      auditPackReady: false,
+      openDeliveryCount,
+      failedDeliveryCount,
+      terminalDeliveryCount,
+      missingArtifactText: missingArtifacts.join(", "),
+    };
+  }
+
+  const transmitReady = handoff.status === "generated";
+  const acknowledgeReady = handoff.status === "transmitted";
+  const terminalForAudit = handoff.status === "accepted" || handoff.status === "failed";
+  const auditPackReady = terminalForAudit && openDeliveryCount === 0;
+  if (transmitReady) {
+    return {
+      tone: "ready",
+      title: "Ready to transmit.",
+      detail: "Finance artifacts are present and the handoff is generated.",
+      transmitReady,
+      acknowledgeReady,
+      auditPackReady,
+      openDeliveryCount,
+      failedDeliveryCount,
+      terminalDeliveryCount,
+      missingArtifactText: "None",
+    };
+  }
+  if (acknowledgeReady) {
+    return {
+      tone: openDeliveryCount ? "warning" : "ready",
+      title: "Ready for acknowledgement.",
+      detail: openDeliveryCount
+        ? `${openDeliveryCount} provider deliver${openDeliveryCount === 1 ? "y is" : "ies are"} still open; acknowledgement will reconcile provider evidence.`
+        : "Handoff is transmitted and ready for finance acknowledgement.",
+      transmitReady,
+      acknowledgeReady,
+      auditPackReady,
+      openDeliveryCount,
+      failedDeliveryCount,
+      terminalDeliveryCount,
+      missingArtifactText: "None",
+    };
+  }
+  if (auditPackReady) {
+    return {
+      tone: auditPackCount > 0 ? "ready" : "warning",
+      title: auditPackCount > 0 ? "Audit pack locked." : "Ready for audit pack.",
+      detail: auditPackCount > 0
+        ? "Provider audit evidence is generated and locked for retention."
+        : "Finance handoff is terminal and provider deliveries are no longer open.",
+      transmitReady,
+      acknowledgeReady,
+      auditPackReady,
+      openDeliveryCount,
+      failedDeliveryCount,
+      terminalDeliveryCount,
+      missingArtifactText: "None",
+    };
+  }
+
+  return {
+    tone: "blocked",
+    title: "Handoff action blocked.",
+    detail: openDeliveryCount > 0
+      ? `${openDeliveryCount} provider deliver${openDeliveryCount === 1 ? "y is" : "ies are"} still open before audit evidence can be locked.`
+      : `Current handoff status is ${handoff.status_label}; move through transmit and acknowledgement before audit pack generation.`,
+    transmitReady,
+    acknowledgeReady,
+    auditPackReady,
+    openDeliveryCount,
+    failedDeliveryCount,
+    terminalDeliveryCount,
+    missingArtifactText: "None",
+  };
+}
+
+function HandoffReadinessPanel({
+  handoff,
+  artifacts,
+  deliveries,
+  auditPackCount,
+}: {
+  handoff: HrAdminPayrollFinanceHandoff | null;
+  artifacts: HrAdminPayrollOutputArtifact[];
+  deliveries: HrAdminPayrollProviderDelivery[];
+  auditPackCount: number;
+}) {
+  const readiness = handoffReadiness({ handoff, artifacts, deliveries, auditPackCount });
+  return (
+    <section className={`payroll-handoff-readiness payroll-handoff-readiness--${readiness.tone}`} aria-label="Finance handoff readiness">
+      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+        <div>
+          <span className="workspace-card__eyebrow">Pre-check</span>
+          <h2>Finance handoff readiness</h2>
+        </div>
+        <span className="payroll-setup-count">{readiness.transmitReady || readiness.acknowledgeReady || readiness.auditPackReady ? "Ready" : "Blocked"}</span>
+      </div>
+      <div className="payroll-input-lock-summary" aria-label="Selected handoff readiness counts">
+        <div><span>Artifacts</span><strong>{artifacts.length}</strong></div>
+        <div><span>Deliveries</span><strong>{deliveries.length}</strong></div>
+        <div><span>Open</span><strong>{readiness.openDeliveryCount}</strong></div>
+        <div><span>Failed</span><strong>{readiness.failedDeliveryCount}</strong></div>
+        <div><span>Audit packs</span><strong>{auditPackCount}</strong></div>
+      </div>
+      <div className={`notice notice--compact${readiness.tone === "ready" ? " notice--success" : ""}`} role="note">
+        <strong>{readiness.title}</strong>
+        <span className="muted">{readiness.detail}</span>
+      </div>
+    </section>
+  );
+}
+
 function HandoffRail({
   handoffs,
   selectedHandoff,
@@ -1137,6 +1293,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
   const artifactPage = Math.min(numberParam(currentParams.artifactPage, 1), artifactTotalPages);
   const pagedArtifacts = visibleArtifacts.slice((artifactPage - 1) * artifactPageSize, artifactPage * artifactPageSize);
   const selectedArtifact = visibleArtifacts.find((item) => item.id === selectedArtifactId) ?? pagedArtifacts[0] ?? visibleArtifacts[0] ?? null;
+  const selectedHandoffDeliveries = selectedHandoff ? setup.deliveries.filter((item) => item.handoff_id === selectedHandoff.id) : [];
   const selectedDelivery = selectedArtifact ? setup.deliveries.find((item) => item.output_artifact_id === selectedArtifact.id) ?? null : null;
   const totals = selectedHandoff?.totals_snapshot ?? {};
   const summary = selectedHandoff?.handoff_summary_snapshot ?? {};
@@ -1145,6 +1302,12 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
     return artifact.kind === "statutory_report" && (subtype === "statutory_return" || subtype === "statutory_challan");
   });
   const auditPackArtifacts = visibleArtifacts.filter((artifact) => artifact.kind === "provider_audit_pack");
+  const readiness = handoffReadiness({
+    handoff: selectedHandoff,
+    artifacts: visibleArtifacts,
+    deliveries: selectedHandoffDeliveries,
+    auditPackCount: auditPackArtifacts.length,
+  });
 
   return (
     <main className="shell shell--payroll-setup shell--payroll-outputs shell--payroll-handoff">
@@ -1259,6 +1422,13 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
               </div>
             </div>
 
+            <HandoffReadinessPanel
+              auditPackCount={auditPackArtifacts.length}
+              artifacts={visibleArtifacts}
+              deliveries={selectedHandoffDeliveries}
+              handoff={selectedHandoff}
+            />
+
             <PayrollCloseActionsPanel
               eyebrow="Payroll operations"
               title="Handoff controls"
@@ -1268,8 +1438,8 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   id: "transmit-handoff",
                   label: "Transmit handoff",
                   endpoint: selectedHandoff ? `/api/hr-admin/payroll-finance-handoffs/${selectedHandoff.id}/transmit` : "",
-                  disabled: !selectedHandoff,
-                  disabledReason: "Select a finance handoff first.",
+                  disabled: !readiness.transmitReady,
+                  disabledReason: readiness.transmitReady ? "" : readiness.detail,
                 },
                 {
                   id: "acknowledge-handoff",
@@ -1278,8 +1448,8 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   profileField: "acknowledgement_profile_ref",
                   profileLabel: "Acknowledgement profile ref",
                   defaultProfileRef: "tenant.payroll.finance.ack.v1",
-                  disabled: !selectedHandoff,
-                  disabledReason: "Select a finance handoff first.",
+                  disabled: !readiness.acknowledgeReady,
+                  disabledReason: readiness.acknowledgeReady ? "" : readiness.detail,
                 },
                 {
                   id: "generate-audit-pack",
@@ -1288,8 +1458,12 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   profileField: "audit_pack_profile_ref",
                   profileLabel: "Audit pack profile ref",
                   defaultProfileRef: "tenant.payroll.provider.audit.v1",
-                  disabled: !selectedHandoff,
-                  disabledReason: "Select a finance handoff first.",
+                  disabled: !readiness.auditPackReady || auditPackArtifacts.length > 0,
+                  disabledReason: auditPackArtifacts.length > 0
+                    ? "Provider audit evidence is already locked for this handoff."
+                    : readiness.auditPackReady
+                      ? ""
+                      : readiness.detail,
                 },
               ]}
             />
