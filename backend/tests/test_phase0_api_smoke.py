@@ -387,6 +387,13 @@ def bootstrapped_workspace(db):
     }
 
 
+def test_api_v1_healthcheck_is_available_without_authentication(api_client: APIClient):
+    response = api_client.get("/api/v1/health/")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "service": "hrms-backend"}
+
+
 @pytest.mark.django_db
 def test_auth_login_session_logout_round_trip(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "riya.sharma")

@@ -149,7 +149,7 @@ Pilot cleanup performed on 2026-09-13:
 - Older inactive releases pruned.
 - Disk before cleanup: root filesystem `98%` used, about `559M` free.
 - Disk after cleanup: root filesystem `73%` used, about `5.1G` free.
-- Final health: backend active, web active, `/login` HTTP `200`, `/` HTTP `200`.
+- Final health: backend active, web active, `/api/v1/health/` HTTP `200`, `/login` HTTP `200`, `/` HTTP `200`.
 
 ## Cadence
 
