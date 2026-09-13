@@ -2,7 +2,7 @@
 
 Date: 2026-09-13  
 Environment: staging, `https://hrms.accerio.in`  
-Certified commit: `95466df8e6d111772ca9df276ccd1ee527fd3f07`  
+Certified commit: `d32d876881a2e06a27d47317ae3761898b41cf15`  
 Primary tracker: `docs/qa/pilot-100-execution-tracker-2026-09-12.md`
 
 ## Decision
@@ -16,7 +16,8 @@ This is not yet a 100% unattended production-payroll launch sign-off. The remain
 ## What Is Certified
 
 - P100-0 through P100-16 have been executed or accepted with documented limitations.
-- P100-17 provider rehearsal is in progress: provider workspace and launch rehearsal progressed, but provider audit-pack evidence needed a clearer checksum label. The UI fix is locally verified and pending check-in/deployment for final staging rerun.
+- P100-17 provider rehearsal and evidence clarity passed on staging with expected callback/retry seed-data skips.
+- P100-18 monitoring, logs, and disk review passed on staging; old inactive releases were pruned and disk usage improved from `98%` to `73%`.
 - 1 organization / 100 employee payroll rehearsal data exists under the `PILOT100_20260912` identity.
 - Organization masters, policy setup, payroll setup, 100-employee access matrix, attendance/leave/lifecycle inputs, payroll input snapshot/lock, calculation/review, adjustments, settlements, outputs, payslips, finance handoff, reporting, security/isolation, UX/performance, and release-gate evidence are browser-certified.
 - Final staging release-gate rerun passed: `5/5`.
@@ -25,6 +26,7 @@ This is not yet a 100% unattended production-payroll launch sign-off. The remain
 - Backup/restore drill passed with scratch restore verification.
 - Rollback and roll-forward drill passed with readiness-wait observation.
 - Backend and frontend staging services were active at final verification.
+- Disk pressure was remediated while preserving current and rollback releases.
 
 ## Evidence Commands
 
@@ -81,10 +83,10 @@ Cleanup should run only after stakeholder review confirms the evidence pack is n
 
 ## Next Required Gates
 
-1. Validate real provider credentials in a non-production rehearsal mode.
-2. Review monitoring/log routine after the pilot rehearsal.
-3. Review known limitations with pilot stakeholders.
-4. Confirm retain/cleanup decision for `PILOT100_20260912`.
+1. Review known limitations with pilot stakeholders.
+2. Confirm retain/cleanup decision for `PILOT100_20260912`.
+3. Validate real provider credentials only when non-production provider credentials are available.
+4. Add a formal release-retention/disk-alert runbook before production.
 
 ## Provider Rehearsal Evidence
 
@@ -92,7 +94,9 @@ Cleanup should run only after stakeholder review confirms the evidence pack is n
 - Classification: product evidence-clarity issue, not a live provider execution failure.
 - Local fix: selected payroll handoff artifact detail now exposes `Checksum Sha256`, `Evidence Checksum Sha256` for provider audit packs, and `Source hash`.
 - Local verification against staging API passed: `production-provider-callback-flows.spec.ts --grep "delivery drilldown"` returned `1/1` passed.
-- Required next step: check in and deploy the UI evidence-label fix, then rerun the full provider pack on staging.
+- Deployed fix on commit `d32d876881a2e06a27d47317ae3761898b41cf15`.
+- Full provider pack rerun on staging passed for available evidence: `3` passed, `2` skipped in 2.4m.
+- Skips were expected seed-data skips because staging currently has no provider callback seed row and no provider retry/job seed row for those optional drilldowns.
 
 ## Backup / Restore Evidence
 
@@ -109,3 +113,11 @@ Cleanup should run only after stakeholder review confirms the evidence pack is n
 - Rolled forward to commit `1efce7e5dbf91867d6abbce2bf5288192608efb9`.
 - `/login` and `/` returned HTTP `200` after an 8-second readiness wait.
 - Operational note: immediate HTTP checks during restart may return `502`; use a readiness wait/retry loop before declaring rollback unhealthy.
+
+## Monitoring And Disk Evidence
+
+- Post-provider log review on commit `d32d876881a2e06a27d47317ae3761898b41cf15` showed only expected restart, negative-test denial, missing demo endpoint, and external `/.env` probe noise.
+- Disk before cleanup: root filesystem `98%` used, about `559M` free.
+- Cleanup action: pruned old inactive release directories and kept current plus rollback releases.
+- Disk after cleanup: root filesystem `73%` used, about `5.1G` free.
+- Final health after cleanup: backend active, web active, `/login` HTTP `200`, `/` HTTP `200`.

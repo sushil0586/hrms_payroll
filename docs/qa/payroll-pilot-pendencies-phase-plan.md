@@ -4,7 +4,7 @@ Generated: 2026-09-12
 Owner: HRMS Payroll SaaS QA / Delivery  
 Current pilot readiness estimate: 98%  
 Current local build certified through: P100-12 UX/performance  
-Current staging build certified through: P100-16 rollback and roll-forward drill; P100-17 provider rehearsal fix is locally verified and pending deployment  
+Current staging build certified through: P100-18 monitoring, logs, and disk review  
 
 ## Purpose
 
@@ -23,10 +23,11 @@ Detailed 1 organization / 100 employee rehearsal plan:
 Latest P100 pilot rehearsal status:
 
 - Date: 2026-09-13.
-- Deployed app commit: `95466df8e6d111772ca9df276ccd1ee527fd3f07`.
+- Deployed app commit: `d32d876881a2e06a27d47317ae3761898b41cf15`.
 - Decision: `Pilot-ready with accepted limitations`.
 - P100-0 through P100-16 are certified or accepted with documented limitations.
-- P100-17 provider rehearsal is in progress. Provider workspace and launch rehearsal progressed on staging; audit-pack evidence-label clarity was fixed locally and needs deployment/rerun.
+- P100-17 provider rehearsal passed on staging with expected callback/retry seed-data skips.
+- P100-18 monitoring/log review passed on staging; disk pressure was remediated from `98%` used to `73%` used by pruning old inactive releases.
 - Final staging UX/performance result: `3/3` passed.
 - Final staging production launch release-gate result: `5/5` passed.
 - Final staging pilot credential matrix result: `10/10` passed.
@@ -75,7 +76,7 @@ Latest local evidence:
 | Finance handoff exception visibility | 90% | Strong | Finance handoff exception report covers delivery status, retries, callbacks, queue jobs, blocker category, risk, audit-pack readiness, and source evidence locally and on staging. |
 | Full report/export regression | 94% | Strong | P100 full report/export regression and export audit coverage passed on staging. |
 | Staging pilot-data rehearsal | 94% | Strong | P100 realistic 1 organization / 100 employee rehearsal is signed off with accepted limitations. |
-| Operational pilot readiness | 95% | Provider rehearsal in progress | Named users, backup/restore, and rollback passed; provider evidence-label fix is locally green and needs staging rerun; monitoring/log review and stakeholder acceptance remain before customer-facing production payroll. |
+| Operational pilot readiness | 97% | Strong | Named users, backup/restore, rollback, provider rehearsal, and monitoring/log review passed on staging; stakeholder acceptance and release-retention runbook remain before customer-facing production payroll. |
 
 Overall pilot readiness: 98%.
 
@@ -101,8 +102,9 @@ These must be done before any customer-facing pilot payroll run.
 | P1-2 | Pilot known limitations list | Pending | Business-facing document lists accepted gaps and non-pilot features. |
 | P1-3 | Backup and restore drill | Done on staging | Backup was taken, checksum recorded, restored into scratch DB, verified, migration-checked, and scratch DB dropped. |
 | P1-4 | Rollback rehearsal | Done on staging | Previous release was activated, services restarted, then current release restored. Public HTTP health passed after readiness wait. |
-| P1-5 | Provider rehearsal evidence clarity | In progress | Provider launch rehearsal and audit-pack evidence pass on staging with visible checksum/source-hash proof and no real live rail execution. |
-| P1-6 | Monitoring and log review routine | Pending | Basic web/backend service logs and error patterns are reviewed after test payroll run. |
+| P1-5 | Provider rehearsal evidence clarity | Done on staging with seed-data skips | Provider launch rehearsal and audit-pack evidence passed on staging with visible checksum/source-hash proof and no real live rail execution. |
+| P1-6 | Monitoring and log review routine | Done on staging with observations | Basic web/backend/nginx logs were reviewed, expected negative-test/restart noise was classified, and disk pressure was remediated. |
+| P1-7 | Release retention and disk alert runbook | Pending | Define retained release count, cleanup cadence, disk alert threshold, and operator action steps. |
 
 ### P2: Can Follow Pilot Start
 

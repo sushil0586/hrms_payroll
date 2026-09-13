@@ -55,7 +55,8 @@ If a phase fails:
 | P100-14 | Pilot credential matrix | Passed on staging | Named login, workspace access, role denial | Low-privilege API denial, wrong workspace denial | Rerun after any credential, role, or workspace-access change. |
 | P100-15 | Backup and restore drill | Passed on staging | Timestamped backup, checksum, scratch restore, data verification | No live DB restore, scratch cleanup | Rerun before customer-facing production payroll. |
 | P100-16 | Rollback and roll-forward drill | Passed on staging with readiness observation | Symlink rollback, service restart, roll-forward, HTTP health | No DB rollback, no destructive release deletion | Add readiness wait/retry to runbook. |
-| P100-17 | Provider rehearsal and evidence clarity | In progress - local fix verified | Provider lanes, launch rehearsal, callbacks, retry, audit-pack evidence | No real statutory or bank filing, no unsafe live rail execution | Deploy evidence-label fix, then rerun provider pack on staging. |
+| P100-17 | Provider rehearsal and evidence clarity | Passed on staging with seed-data skips | Provider lanes, launch rehearsal, callbacks, retry, audit-pack evidence | No real statutory or bank filing, no unsafe live rail execution | Rerun after provider rail, handoff, callback, or audit-pack UI changes. |
+| P100-18 | Monitoring, logs, and disk review | Passed on staging with observations | Service logs, nginx errors, disk, release retention | No secret exposure, no cleanup of current/rollback release | Keep disk below 85%; add release retention runbook. |
 
 ## Phase P100-0: Safety And Data Strategy
 
@@ -1178,6 +1179,40 @@ Execution result - 2026-09-13:
   - `PLAYWRIGHT_PORT=3100 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/production-provider-callback-flows.spec.ts --grep "delivery drilldown" --project=chromium --workers=1 --reporter=line --timeout=420000`
   - Result: `1/1` passed in 26.4s.
 - Status:
-  - Waiting for check-in and deployment of the UI evidence-label fix.
-  - After deployment, rerun the full provider pack above on staging.
-- Confidence after local fix: 98% overall remains unchanged until the full provider pack is green on staging.
+  - UI evidence-label fix was deployed to staging on commit `d32d876881a2e06a27d47317ae3761898b41cf15`.
+  - Deployment health after the fix: backend active, web active, `/login` HTTP `200`, `/` HTTP `200`.
+  - Full provider pack rerun on staging: `3` passed, `2` skipped in 2.4m.
+  - Skips were expected seed-data skips: staging currently has no provider callback seed row and no provider retry/job seed row for those optional drilldowns.
+  - The previously failing audit-pack evidence chain passed after `Evidence Checksum Sha256` was added to the selected artifact detail.
+- Confidence after staging certification: 98% overall for controlled pilot operations. Remaining gates: monitoring/log review routine, stakeholder acceptance, and final retain/cleanup decision. Real live provider credentials remain outside this staging-safe rehearsal unless configured in non-production mode.
+
+## Phase P100-18: Monitoring, Logs, And Disk Review
+
+Real-user intent:
+
+Operations can look at staging after deployment and provider rehearsal, distinguish expected test noise from real risk, and keep the server healthy enough for pilot activity.
+
+Execution result - 2026-09-13:
+
+- Environment: staging, `https://hrms.accerio.in`.
+- Commit reviewed: `d32d876881a2e06a27d47317ae3761898b41cf15`.
+- Service health after review:
+  - `hrms-payroll-backend.service`: active.
+  - `hrms-payroll-web.service`: active.
+  - `/login`: HTTP `200`.
+  - `/`: HTTP `200`.
+- Log observations:
+  - Backend recent error scan showed only expected restart noise: a Gunicorn worker received `SIGTERM` during service restart.
+  - Web recent error scan showed expected negative-test/API-denial noise: `403` for protected platform/HR endpoints and `404` for `/me/dashboard/`.
+  - Nginx error log showed one external `/.env` probe and temporary upstream connection refused entries during web restart readiness lag.
+- Disk observation:
+  - Before cleanup: root filesystem was `98%` used with about `559M` free.
+  - Cause: old inactive release directories under `/var/www/hrms-payroll-saas` consumed about `8.5G`.
+  - Action: removed older inactive release directories while keeping the current release and latest rollback release.
+  - Kept releases:
+    - `/var/www/hrms-payroll-saas/release-20260913062101` current.
+    - `/var/www/hrms-payroll-saas/release-20260913060836` rollback.
+  - After cleanup: root filesystem is `73%` used with about `5.1G` free.
+- Remaining operational observation:
+  - Add a release-retention runbook so future deployments retain only current plus a small rollback window, and alert if disk exceeds `85%`.
+- Confidence after staging certification: 98% overall for controlled pilot operations. Remaining gates: stakeholder acceptance and final retain/cleanup decision. Real live provider credentials remain outside this staging-safe rehearsal unless configured in non-production mode.
