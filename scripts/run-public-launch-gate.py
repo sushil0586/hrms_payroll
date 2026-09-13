@@ -159,10 +159,17 @@ def main() -> int:
     started_at = now_utc()
     steps.append(run_step("django check", [args.python, "manage.py", "check"], BACKEND, logs_dir, env))
     steps.append(run_step("django migrations dry run", [args.python, "manage.py", "makemigrations", "--check", "--dry-run"], BACKEND, logs_dir, env))
+    health_route_check = (
+        "from django.test import Client; "
+        "response = Client().get('/api/v1/health/', HTTP_HOST='localhost'); "
+        "assert response.status_code == 200, response.status_code; "
+        "assert response.json() == {'status': 'ok', 'service': 'hrms-backend'}, response.content; "
+        "print(response.json())"
+    )
     steps.append(
         run_step(
-            "backend api health test",
-            [args.python, "-m", "pytest", "tests/test_phase0_api_smoke.py::test_api_v1_healthcheck_is_available_without_authentication", "-q"],
+            "backend api health route check",
+            [args.python, "manage.py", "shell", "-c", health_route_check],
             BACKEND,
             logs_dir,
             env,
