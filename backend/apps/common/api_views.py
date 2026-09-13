@@ -10604,7 +10604,7 @@ def get_hr_admin_payroll_calculation_setup_payload(actor, request=None) -> dict:
         },
         "runs": [build_hr_admin_payroll_run_payload(item) for item in runs],
         "calculations": [build_hr_admin_payroll_calculation_payload(item) for item in calculations[:50]],
-        "lines": [build_hr_admin_payroll_calculation_line_payload(item) for item in lines[:200]],
+        "lines": [build_hr_admin_payroll_calculation_line_payload(item) for item in lines[:500]],
         "validation_issues": [build_hr_admin_payroll_validation_issue_payload(item) for item in validation_issues[:200]],
         "options": {
             "payroll_run_statuses": [{"value": value, "label": label} for value, label in PayrollRunStatus.choices],
@@ -10829,9 +10829,9 @@ def get_hr_admin_payroll_review_setup_payload(actor, request=None) -> dict:
         "runs": [build_hr_admin_payroll_run_payload(item) for item in runs],
         "calculations": [build_hr_admin_payroll_calculation_payload(item) for item in calculations[:50]],
         "reviews": [build_hr_admin_payroll_review_payload(item) for item in reviews[:50]],
-        "exceptions": [build_hr_admin_payroll_exception_payload(item) for item in exceptions[:200]],
+        "exceptions": [build_hr_admin_payroll_exception_payload(item) for item in exceptions[:1000]],
         "approvals": [build_hr_admin_payroll_approval_payload(item) for item in approvals[:100]],
-        "lines": [build_hr_admin_payroll_calculation_line_payload(item) for item in lines[:200]],
+        "lines": [build_hr_admin_payroll_calculation_line_payload(item) for item in lines[:500]],
         "options": {
             "payroll_run_statuses": [{"value": value, "label": label} for value, label in PayrollRunStatus.choices],
             "review_statuses": [{"value": value, "label": label} for value, label in PayrollReviewStatus.choices],

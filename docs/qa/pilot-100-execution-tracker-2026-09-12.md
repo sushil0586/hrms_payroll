@@ -44,7 +44,7 @@ If a phase fails:
 | P100-3 | 100 employees and access matrix | Passed | 100 employees, manager hierarchy, pay/bank/salary assignment | Role denial, missing-bank blocker, missing mapping | Rerun directory, ESS/MSS, payroll readiness after seed/config changes. |
 | P100-4 | Attendance/leave/lifecycle inputs | Passed | ESS/MSS/HR inputs for scenario distribution | Unauthorized approvals, invalid dates, rejected requests | Rerun affected input and report checks. |
 | P100-5 | Payroll input snapshot and lock | Passed | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
-| P100-6 | Calculation and review | Not started | Draft calculation, line review, exceptions, decisions | Invalid lock, unauthorized decision, stale calculation | Rerun calculation/review/report pack. |
+| P100-6 | Calculation and review | Passed locally - staging pending | Draft calculation, line review, exceptions, decisions | Invalid lock, employee denial, report export evidence | Rerun calculation/review/report pack after staging deploy. |
 | P100-7 | Adjustments, settlements, readiness | Not started | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
 | P100-8 | Outputs, payslips, ESS proof | Not started | Generate/publish outputs, read/download payslips | Cross-employee payslip denial, revoked/expired grants | Rerun output, ESS, payslip publication, artifact audit tests. |
 | P100-9 | Finance handoff/provider evidence | Not started | Bank advice, delivery, retries, callbacks, audit pack | Failed provider/retry/dead-letter visibility | Rerun handoff, bank advice, finance exception reports. |
@@ -496,6 +496,37 @@ Observations to record:
 Exit gate:
 
 - Payroll review is approved/locked or blockers are documented.
+
+Execution result - 2026-09-13:
+
+- Environment: local dev, `http://127.0.0.1:3000` web against `http://127.0.0.1:8001/api/v1`.
+- Pilot prefix used locally: `P100LOCAL_P5`.
+- Dedicated calculation seed:
+  - Command: `./backend/.venv/bin/python backend/manage.py seed_pilot_100_calculation --prefix P100LOCAL_P5 --output-file web/test-results/p100local-p5-calculation.json`
+  - Counts: `100` locked calculation snapshots, `83` ready snapshots, `17` warning snapshots, `3` scoped payroll rules.
+- Browser certification command:
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 HRMS_API_BASE_URL=http://127.0.0.1:8001/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_PILOT100_PREFIX=P100LOCAL_P5 PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test tests/e2e/pilot-100-calculation-review-certification.spec.ts --workers=1`
+  - Result: `2/2` passed.
+- Positive evidence:
+  - HR admin calculated a 100-employee draft payroll from locked snapshots.
+  - Calculation produced `300` rule-sourced lines and `100` employee totals with positive net pay.
+  - Calculation setup and review setup API payloads returned all `300` lines, proving no 100-employee truncation.
+  - HR admin opened payroll review and saw the auto-created warning exceptions from payroll input snapshots.
+  - HR admin created a manual blocker, verified submission was blocked, accepted the blocker with decision evidence, submitted, approved, and final-locked the review.
+  - Salary variance report CSV/manifest export for the pilot prefix returned `100` source rows and checksum evidence.
+  - Payroll review exceptions report and CSV export returned the pilot warning/manual blocker evidence.
+- Negative evidence:
+  - Review submission with an open blocker returned `400` and an inline blocker alert.
+  - Employee persona could not access payroll calculation setup, review setup, salary variance export, or review exception export APIs.
+- Real-user observations and fixes:
+  - The pilot calculation seed originally copied blank salary values from the local P100 snapshots, correctly triggering 100 salary-payload blockers. Action taken: calculation seed now fills deterministic salary fallback values only when source salary payloads are blank.
+  - Calculation/review setup payloads originally capped line evidence at `200`, which is insufficient for a 100-employee x 3-rule payroll run. Action taken: line cap raised to `500`.
+  - Payroll review exception report evidence could be missed in long-lived tenants because review setup capped exceptions at `200`. Action taken: exception cap raised to `1000`.
+  - Report UI pagination can place accepted low-risk exceptions after warning rows. The certification now proves the visible row by searching the exact blocker title and proves full prefix coverage through export evidence.
+- Staging deployment commands after check-in:
+  - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_calculation --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-calculation-staging-manifest.json`
+  - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-calculation-review-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
+- Confidence after local certification: 92% for P100-6 locally. Staging remains pending until deploy, seed, and browser rerun.
 
 ## Phase P100-7: Adjustments, Settlements, Close Readiness
 
