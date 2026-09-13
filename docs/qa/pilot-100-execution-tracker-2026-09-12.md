@@ -595,7 +595,18 @@ Execution result - 2026-09-13:
   - Settlement line creation originally refreshed the workspace after the first line and could interrupt the second line. Action taken: settlement line creation batches without refresh and refreshes only after both lines are created.
 - Accepted residual:
   - Close readiness for this run is expected to show remaining output/close work because payslip/output generation belongs to P100-8. P100-7 exit is accepted because pending adjustments and settlements are cleared, and the close-readiness report/export evidence is present.
-- Confidence after local certification: 91% for P100-7 locally. Staging deploy, seed, and browser rerun are pending after check-in.
+- Confidence after local certification: 91% for P100-7 locally.
+- Staging deployment and certification:
+  - Deployed commit: `ee835896fbd0a614b05b05794e89b7bca037bf37`.
+  - Services after deploy: `hrms-payroll-backend.service` active, `hrms-payroll-web.service` active.
+  - Staging seed command:
+    - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_calculation --prefix PILOT100_20260912 --run-code-suffix adjust-settle-close --run-name-suffix "Adjustments Settlements Close Gate" --scenario adjustments_settlements_close_gate --input-profile-ref tenant.payroll.input.pilot100.adjustments.v1 --output-file ../web/test-results/pilot-100-adjustments-settlements-staging-manifest.json`
+  - Staging seed counts: `100` locked snapshots, `83` ready snapshots, `17` warning snapshots, `3` scoped payroll rules.
+  - Staging browser command:
+    - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-adjustments-settlements-close-certification.spec.ts --workers=1 --reporter=line --timeout=900000`
+  - Result: `1/1` passed in 2.8m.
+  - Test automation hardening during staging: the settlement certification now waits for both settlement lines through the setup API before navigating, avoiding a staging-latency race where the package existed before both line POSTs completed.
+- Confidence after staging certification: 92% for P100-7. Residual risk: close readiness still expects output generation/payslip proof in P100-8.
 
 ## Phase P100-8: Outputs, Payslips, ESS Proof
 

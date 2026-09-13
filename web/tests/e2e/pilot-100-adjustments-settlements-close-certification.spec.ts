@@ -54,6 +54,20 @@ async function locatePilotRun(page: Page) {
   return run as PayrollRun;
 }
 
+async function waitForSettlementLineCount(page: Page, settlementId: string, expectedCount: number) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const setup = await apiGet<SettlementSetup>(page, "/api/hr-admin/payroll-settlement-setup");
+    const lineCount = setup.lines.filter((item) => item.settlement_id === settlementId).length;
+    if (lineCount >= expectedCount) {
+      return setup;
+    }
+    await page.waitForTimeout(1000);
+  }
+  const setup = await apiGet<SettlementSetup>(page, "/api/hr-admin/payroll-settlement-setup");
+  expect(setup.lines.filter((item) => item.settlement_id === settlementId).length).toBeGreaterThanOrEqual(expectedCount);
+  return setup;
+}
+
 test.describe.serial("P100-7 adjustments, settlements, and close readiness certification", () => {
   test("HR admin creates, rejects invalid states, applies payroll inputs, and proves report visibility", async ({ page }) => {
     test.setTimeout(8 * 60 * 1000);
@@ -152,6 +166,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
     expect(createdSettlement.status).toBe(201);
     expect(createdSettlement.payload.status).toBe("draft");
     expect(createdSettlement.payload.source_hash).toMatch(/^[a-f0-9]{64}$/);
+    await waitForSettlementLineCount(page, createdSettlement.payload.id, 2);
 
     await gotoAuthenticated(page, `/hr-admin/payroll-settlements?runId=${run.id}&settlementId=${createdSettlement.payload.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Settlements");
