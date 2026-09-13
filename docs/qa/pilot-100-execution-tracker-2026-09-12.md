@@ -44,7 +44,7 @@ If a phase fails:
 | P100-3 | 100 employees and access matrix | Passed | 100 employees, manager hierarchy, pay/bank/salary assignment | Role denial, missing-bank blocker, missing mapping | Rerun directory, ESS/MSS, payroll readiness after seed/config changes. |
 | P100-4 | Attendance/leave/lifecycle inputs | Passed | ESS/MSS/HR inputs for scenario distribution | Unauthorized approvals, invalid dates, rejected requests | Rerun affected input and report checks. |
 | P100-5 | Payroll input snapshot and lock | Passed | Snapshot, issue review, lock | Blocker lock denial, locked mutation denial | Rerun input snapshot setup and payroll input exception report. |
-| P100-6 | Calculation and review | Passed locally - staging pending | Draft calculation, line review, exceptions, decisions | Invalid lock, employee denial, report export evidence | Rerun calculation/review/report pack after staging deploy. |
+| P100-6 | Calculation and review | Passed on staging | Draft calculation, line review, exceptions, decisions | Invalid lock, employee denial, report export evidence | Rerun calculation/review/report pack after related payroll engine/report changes. |
 | P100-7 | Adjustments, settlements, readiness | Not started | Adjustments, FNF, close readiness | Duplicate source ref, invalid approval, blocked close | Rerun adjustments/settlements/close readiness reports. |
 | P100-8 | Outputs, payslips, ESS proof | Not started | Generate/publish outputs, read/download payslips | Cross-employee payslip denial, revoked/expired grants | Rerun output, ESS, payslip publication, artifact audit tests. |
 | P100-9 | Finance handoff/provider evidence | Not started | Bank advice, delivery, retries, callbacks, audit pack | Failed provider/retry/dead-letter visibility | Rerun handoff, bank advice, finance exception reports. |
@@ -527,6 +527,18 @@ Execution result - 2026-09-13:
   - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_calculation --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-calculation-staging-manifest.json`
   - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-calculation-review-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
 - Confidence after local certification: 92% for P100-6 locally. Staging remains pending until deploy, seed, and browser rerun.
+- Staging deployment and certification:
+  - Deployed commit: `bf68dc01e8260fbb522529c9f360e3c97d92891b`.
+  - Services after deploy: `hrms-payroll-backend.service` active, `hrms-payroll-web.service` active.
+  - Staging seed command:
+    - `cd /var/www/hrms-payroll-saas/current/backend && set -a && . /var/www/hrms-payroll-saas/shared/backend.env && set +a && ./.venv/bin/python manage.py seed_pilot_100_calculation --prefix PILOT100_20260912 --output-file ../web/test-results/pilot-100-calculation-staging-manifest.json`
+  - Staging seed counts: `100` locked calculation snapshots, `83` ready snapshots, `17` warning snapshots, `3` scoped payroll rules.
+  - Staging seeded run id: `bce9bd43-e7ff-4b9a-9a17-dcdfa5418b84`.
+  - Source lockable input run id: `d4ab54dc-ce2e-40b1-bfc2-ec16a54f0610`.
+  - Staging browser command:
+    - `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 PLAYWRIGHT_PILOT100_PREFIX=PILOT100_20260912 pnpm --dir web exec playwright test tests/e2e/pilot-100-calculation-review-certification.spec.ts --workers=1 --reporter=line --timeout=1200000`
+  - Result: `2/2` passed in 2.1m.
+- Confidence after staging certification: 93% for P100-6. Residual risk: next phases still need adjustments/settlements/close readiness, outputs/payslips, and finance handoff on the same pilot scale.
 
 ## Phase P100-7: Adjustments, Settlements, Close Readiness
 
