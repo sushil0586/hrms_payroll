@@ -117,6 +117,16 @@ done
 
 ## Post-Cleanup Verification
 
+Preferred command from the checked-out release:
+
+```bash
+APP=/var/www/hrms-payroll-saas
+cd "$APP/current"
+pnpm qa:post-deploy-smoke
+```
+
+Manual fallback if the package script is unavailable:
+
 ```bash
 APP=/var/www/hrms-payroll-saas
 
@@ -124,8 +134,27 @@ printf "current=" && readlink -f "$APP/current"
 printf "head=" && cd "$APP/current" && git rev-parse HEAD
 printf "backend=" && sudo systemctl is-active hrms-payroll-backend.service
 printf "web=" && sudo systemctl is-active hrms-payroll-web.service
-printf "login_http=" && curl -k -s -o /tmp/hrms_release_retention_login.html -w "%{http_code}" https://hrms.accerio.in/login && echo
-printf "root_http=" && curl -k -s -o /tmp/hrms_release_retention_root.html -w "%{http_code}" https://hrms.accerio.in/ && echo
+
+for i in $(seq 1 12); do
+  API_HTTP=$(curl -k -s -o /tmp/hrms_release_retention_api_health.json -w "%{http_code}" https://hrms.accerio.in/api/v1/health/)
+  ROOT_HTTP=$(curl -k -s -o /tmp/hrms_release_retention_root.html -w "%{http_code}" https://hrms.accerio.in/)
+  LOGIN_HTTP=$(curl -k -s -o /tmp/hrms_release_retention_login.html -w "%{http_code}" https://hrms.accerio.in/login)
+
+  printf "attempt=%s api_health_http=%s root_http=%s login_http=%s\n" "$i" "$API_HTTP" "$ROOT_HTTP" "$LOGIN_HTTP"
+
+  if [ "$API_HTTP" = "200" ] && [ "$ROOT_HTTP" = "200" ] && [ "$LOGIN_HTTP" = "200" ]; then
+    break
+  fi
+
+  if [ "$i" = "12" ]; then
+    printf "readiness failed after 60 seconds\n" >&2
+    exit 1
+  fi
+
+  sleep 5
+done
+
+cat /tmp/hrms_release_retention_api_health.json && echo
 df -h / "$APP"
 sudo du -h -d 0 "$APP"/release-* 2>/dev/null | sort -h
 ```
@@ -136,9 +165,12 @@ Required result:
 - Current commit is unchanged.
 - Backend service is `active`.
 - Web service is `active`.
+- `/api/v1/health/` returns HTTP `200` and body `{"status":"ok","service":"hrms-backend"}`.
 - `/login` returns HTTP `200`.
 - `/` returns HTTP `200`.
 - Disk usage is below `85%`; below `80%` is preferred.
+
+Use `/api/v1/health/` as the standard backend deployment smoke probe. Root `/health/` can remain available for local development, but API-facing staging and production checks should use `/api/v1/health/` so reverse proxy, backend, and API namespace routing are all covered.
 
 ## Staging Certification Evidence
 

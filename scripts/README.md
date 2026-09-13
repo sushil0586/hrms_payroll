@@ -41,6 +41,14 @@ Run the full staging gate after the preflight is clean:
 pnpm qa:launch-signoff:staging
 ```
 
+Run the standard post-deploy smoke check after flipping a release:
+
+```bash
+pnpm qa:post-deploy-smoke
+```
+
+The smoke script checks `/api/v1/health/`, `/`, `/login`, service status when running on the host, the current release commit, and disk usage below the default `85%` threshold. Override targets with `HRMS_SMOKE_BASE_URL`, `HRMS_SMOKE_APP_DIR`, `HRMS_SMOKE_DISK_WARN_PERCENT`, `HRMS_SMOKE_ATTEMPTS`, and `HRMS_SMOKE_SLEEP_SECONDS`.
+
 The runner writes a timestamped evidence folder under `web/qa-artifacts/production-launch-signoff-*` with:
 
 - command logs

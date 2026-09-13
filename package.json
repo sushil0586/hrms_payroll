@@ -15,6 +15,7 @@
     "qa:launch-signoff": "python3 scripts/run-production-launch-signoff.py",
     "qa:launch-signoff:staging": "python3 scripts/run-production-launch-signoff.py --mode staging",
     "qa:launch-signoff:staging-preflight": "python3 scripts/run-production-launch-signoff.py --mode staging --preflight-only",
+    "qa:post-deploy-smoke": "bash scripts/hrms-post-deploy-smoke.sh",
     "qa:staging-seed": "cd backend && ../.venv/bin/python manage.py seed_staging_launch_data --output-file ../web/qa-artifacts/staging-launch-seed/manifest.json",
     "qa:staging-seed:cleanup": "cd backend && ../.venv/bin/python manage.py seed_staging_launch_data --cleanup --output-file ../web/qa-artifacts/staging-launch-seed/cleanup-manifest.json"
   },
