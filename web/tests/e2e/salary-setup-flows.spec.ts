@@ -39,6 +39,125 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
 }
 
 test.describe("HR admin salary setup flows", () => {
+  test("salary assignment import workbench uploads validates commits and updates coverage", async ({ page }) => {
+    test.setTimeout(5 * 60 * 1000);
+    const suffix = String(Date.now()).slice(-6);
+
+    await gotoAuthenticated(page, "/hr-admin/salary-setup");
+    await expectPageReady(page, "Salary Setup");
+
+    const employeeCode = `SALIMP-${suffix}`;
+    const employeeResponse = await page.request.post("/api/hr-admin/employees", {
+      data: {
+        employee_code: employeeCode,
+        first_name: "Salary",
+        middle_name: "",
+        last_name: "Importer",
+        preferred_name: "Salary Importer",
+        work_email: `salary.import.${suffix}@example.test`,
+        personal_email: "",
+        phone_number: "+91 90000 00200",
+        employment_status: "active",
+        date_of_birth: null,
+        date_of_joining: "2028-04-01",
+        probation_end_date: null,
+        confirmation_date: null,
+        legal_entity_id: null,
+        branch_id: null,
+        location_id: null,
+        department_id: null,
+        business_unit_id: null,
+        cost_center_id: null,
+        designation_id: null,
+        grade_id: null,
+        employment_type_id: null,
+        reporting_manager_id: null,
+      },
+    });
+    expect(employeeResponse.ok()).toBeTruthy();
+    await gotoAuthenticated(page, "/hr-admin/salary-setup");
+    await expectPageReady(page, "Salary Setup");
+
+    const structureForm = page.getByTestId("salary-structure-form");
+    const versionForm = page.getByTestId("salary-version-form");
+    const structureCode = uniqueCode("SAL_IMPORT_STRUCT");
+    const structureNameForImport = `Browser Import ${structureCode}`;
+    const structure = await submitAndCapture<{ id: string; code: string; name: string }>(page, "salary-structures", "POST", async () => {
+      await field(structureForm, "Code").fill(structureCode);
+      await field(structureForm, "Name").fill(structureNameForImport);
+      await field(structureForm, "Pay group").selectOption("");
+      await field(structureForm, "Currency code").fill("INR");
+      await field(structureForm, "Status").selectOption("active");
+      await field(structureForm, "Description").fill("Browser-created structure for bulk assignment import.");
+      await field(structureForm, "Config profile reference").fill(`salary.import.structure.${suffix}`);
+      await structureForm.getByRole("button", { name: "Create structure" }).click();
+    });
+    await expect(page.getByText(structureCode).first()).toBeVisible();
+
+    const version = await submitAndCapture<{ id: string; version: number }>(page, "salary-structure-versions", "POST", async () => {
+      await field(versionForm, "Structure").selectOption(structure.id);
+      await field(versionForm, "Version").fill("1");
+      await field(versionForm, "Effective from").fill("2028-04-01");
+      await field(versionForm, "Effective to").fill("");
+      await field(versionForm, "Annual CTC").fill("1400000");
+      await field(versionForm, "Currency code").fill("INR");
+      await field(versionForm, "Status").selectOption("active");
+      await field(versionForm, "Config profile reference").fill(`salary.import.version.${suffix}`);
+      await versionForm.getByRole("button", { name: "Create version" }).click();
+    });
+    await expect(page.getByText(`Version ${version.version}`).first()).toBeVisible();
+
+    const assignmentForm = page.getByTestId("salary-assignment-form");
+    await expectOptions(assignmentForm, "Employee");
+    await expect(field(assignmentForm, "Employee").locator("option").filter({ hasText: employeeCode })).toHaveCount(1);
+    const structureName = structureNameForImport;
+    const structureVersion = String(version.version);
+
+    const effectiveFrom = `2028-04-${String(Number(suffix.slice(-2)) % 20 + 1).padStart(2, "0")}`;
+    const duplicateReason = `Bulk salary duplicate ${suffix}`;
+    const csv = [
+      "employee_code,structure_name,structure_version,effective_from,effective_to,status,annual_ctc_override,assignment_reason,config_profile_ref",
+      `${employeeCode},"${structureName}",${structureVersion},${effectiveFrom},,active,1450000,Bulk salary import ${suffix},salary.assignment.bulk.${suffix}`,
+      `${employeeCode},"${structureName}",${structureVersion},2028-05-01,2028-04-01,active,1500000,Bad date ${suffix},salary.assignment.bad-date.${suffix}`,
+      `${employeeCode},"${structureName}",${structureVersion},${effectiveFrom},,active,1460000,${duplicateReason},salary.assignment.duplicate.${suffix}`,
+    ].join("\n");
+
+    const workbench = page.getByTestId("salary-assignment-import-workbench");
+    await expect(workbench).toBeVisible();
+    await expect(workbench.getByRole("heading", { name: "Salary assignment import" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Load sample template" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Copy template" })).toBeVisible();
+    await expect(workbench.getByRole("link", { name: "Download template" })).toBeVisible();
+    await expect(workbench.getByText("Upload CSV", { exact: true })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Preview import" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Commit ready rows" })).toBeDisabled();
+
+    await workbench.locator("input[type='file']").setInputFiles({
+      name: "salary-assignment-import.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    });
+    await expect(workbench.getByLabel("CSV data")).toContainText(`Bulk salary import ${suffix}`);
+    await workbench.getByRole("button", { name: "Preview import" }).click();
+    await expect(workbench.getByText("Preview ready. Review blocked rows before committing.")).toBeVisible();
+    await expect(workbench.locator("tbody tr")).toHaveCount(3);
+    await expect(workbench.locator("tbody tr").nth(0).locator(".readiness-badge", { hasText: "ready" })).toBeVisible();
+    await expect(workbench.locator("tbody tr").nth(1).locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+    await expect(workbench.locator("tbody tr").nth(2).locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+    await expect(workbench.getByText("Effective to cannot be earlier than effective from.")).toBeVisible();
+    await expect(workbench.getByText("Duplicate assignment row exists in this import batch.")).toBeVisible();
+    await expect(workbench.getByLabel("CSV data")).toContainText(duplicateReason);
+    await expect(workbench.getByRole("button", { name: "Commit ready rows" })).toBeEnabled();
+
+    await workbench.getByRole("button", { name: "Commit ready rows" }).click();
+    await expect(workbench.getByText("Commit complete. Review employee salary coverage for created assignments.")).toBeVisible({ timeout: 30_000 });
+    await expect(workbench.locator("tbody tr").nth(0).locator(".readiness-badge", { hasText: "created" })).toBeVisible();
+    await expect(workbench.locator("tbody tr").nth(1).locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+    await expect(workbench.locator("tbody tr").nth(2).locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+    await expect(page.getByText(`Bulk salary import ${suffix}`).first()).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("salary setup exposes every current read workspace section and navigation action", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/salary-setup");
     await expectPageReady(page, "Salary Setup");

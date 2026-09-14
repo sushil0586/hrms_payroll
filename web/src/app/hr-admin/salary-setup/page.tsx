@@ -74,7 +74,7 @@ function ComponentRail({ components }: { components: HrAdminSalaryComponent[] })
         <h2>Catalog</h2>
       </div>
       <div className="salary-component-stack">
-        {components.map((component) => (
+        {components.length ? components.map((component) => (
           <article className="salary-component-item" key={component.id}>
             <div>
               <strong>{component.name}</strong>
@@ -90,7 +90,12 @@ function ComponentRail({ components }: { components: HrAdminSalaryComponent[] })
             </div>
             {component.formula_ref ? <code>{component.formula_ref}</code> : null}
           </article>
-        ))}
+        )) : (
+          <div className="notice">
+            <strong>No salary components configured.</strong>
+            <span className="muted">Create components in Salary setup controls before attaching structure lines.</span>
+          </div>
+        )}
       </div>
     </div>
   );

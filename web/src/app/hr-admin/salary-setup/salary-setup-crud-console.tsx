@@ -93,6 +93,28 @@ type Feedback = {
   message: string;
 } | null;
 
+type AssignmentImportStatus = "ready" | "blocked" | "created" | "failed";
+
+type AssignmentImportRow = {
+  index: number;
+  source: Record<string, string>;
+  payload: Record<string, unknown> | null;
+  status: AssignmentImportStatus;
+  message: string;
+};
+
+const assignmentImportHeaders = [
+  "employee_code",
+  "structure_name",
+  "structure_version",
+  "effective_from",
+  "effective_to",
+  "status",
+  "annual_ctc_override",
+  "assignment_reason",
+  "config_profile_ref",
+];
+
 const familyLabels: Record<ConfigFamily, string> = {
   component: "salary component",
   structure: "salary structure",
@@ -128,6 +150,82 @@ function makeSnapshot(profileRef: string) {
 
 function nullable(value: string) {
   return value.trim() ? value.trim() : null;
+}
+
+function assignmentTemplateCsv() {
+  return `${assignmentImportHeaders.join(",")}\n`;
+}
+
+function splitCsvLine(line: string) {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+
+    if (char === "\"" && inQuotes && nextChar === "\"") {
+      current += "\"";
+      index += 1;
+    } else if (char === "\"") {
+      inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseAssignmentCsv(text: string) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) {
+    return { rows: [], error: "CSV must include a header row and at least one salary assignment row." };
+  }
+
+  const parsedHeaders = splitCsvLine(lines[0]);
+  const missingHeaders = assignmentImportHeaders.filter((header) => !parsedHeaders.includes(header));
+  if (missingHeaders.length) {
+    return { rows: [], error: `CSV is missing required columns: ${missingHeaders.join(", ")}.` };
+  }
+
+  return {
+    rows: lines.slice(1).map((line) => {
+      const values = splitCsvLine(line);
+      return Object.fromEntries(parsedHeaders.map((header, index) => [header, values[index] ?? ""]));
+    }),
+    error: "",
+  };
+}
+
+function escapeCsv(value: string) {
+  return value.includes(",") || value.includes("\"") ? `"${value.replaceAll("\"", "\"\"")}"` : value;
+}
+
+function assignmentSampleCsv(setup: HrAdminSalarySetupResponse) {
+  const employee = setup.options.employees[0];
+  const version = setup.versions[0];
+  const row = [
+    employee?.employee_code ?? "",
+    version?.structure_name ?? "",
+    version ? String(version.version) : "",
+    "2026-04-01",
+    "",
+    setup.options.config_statuses.find((item) => item.value === "active")?.value ?? setup.options.config_statuses[0]?.value ?? "active",
+    "1200000",
+    "Bulk salary assignment sample",
+    "salary.assignment.bulk.profile.v1",
+  ];
+  return `${assignmentImportHeaders.join(",")}\n${row.map(escapeCsv).join(",")}`;
 }
 
 function replaceOrAppend<Item extends { id: string }>(items: Item[], next: Item) {
@@ -375,6 +473,10 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
   const [assignmentForm, setAssignmentForm] = useState<AssignmentForm>(() => emptyAssignmentForm(initialSetup));
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [submitting, setSubmitting] = useState<ConfigFamily | null>(null);
+  const [assignmentCsvText, setAssignmentCsvText] = useState(assignmentTemplateCsv());
+  const [assignmentImportRows, setAssignmentImportRows] = useState<AssignmentImportRow[]>([]);
+  const [assignmentImportMessage, setAssignmentImportMessage] = useState("");
+  const [isAssignmentImportCommitting, setIsAssignmentImportCommitting] = useState(false);
 
   const structureOptions = useMemo(
     () => setup.structures.map((item) => ({ value: item.id, label: `${item.name} (${item.code})` })),
@@ -414,6 +516,112 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
     selectedVersionStructure && selectedVersionStructure.status !== "active" ? "Selected salary structure is not active yet." : "";
   const assignmentVersionWarning =
     selectedAssignmentVersion && selectedAssignmentVersion.status !== "active" ? "Selected structure version is not active yet." : "";
+  const assignmentImportReadyCount = assignmentImportRows.filter((row) => row.status === "ready").length;
+
+  function buildAssignmentImportRow(row: Record<string, string>, index: number, batchKeys: Set<string>): AssignmentImportRow {
+    const errors: string[] = [];
+    const employeeCode = row.employee_code.trim();
+    const structureName = row.structure_name.trim();
+    const versionNumber = Number(row.structure_version.trim());
+    const status = row.status.trim() || "active";
+    const employee = setup.options.employees.find((item) => item.employee_code.toLowerCase() === employeeCode.toLowerCase());
+    const version = setup.versions.find(
+      (item) => item.structure_name.toLowerCase() === structureName.toLowerCase() && item.version === versionNumber,
+    );
+    const key = `${employeeCode.toLowerCase()}::${structureName.toLowerCase()}::${row.structure_version.trim()}::${row.effective_from.trim()}`;
+
+    if (!employeeCode) {
+      errors.push("Employee code is required.");
+    }
+    if (!employee) {
+      errors.push("Employee code must match an active employee option.");
+    }
+    if (!structureName) {
+      errors.push("Structure name is required.");
+    }
+    if (!version || !Number.isFinite(versionNumber)) {
+      errors.push("Structure name and version must match an available salary structure version.");
+    }
+    if (!row.effective_from.trim()) {
+      errors.push("Effective from is required.");
+    }
+    if (row.effective_to.trim() && row.effective_to.trim() < row.effective_from.trim()) {
+      errors.push("Effective to cannot be earlier than effective from.");
+    }
+    if (!setup.options.config_statuses.some((item) => item.value === status)) {
+      errors.push("Status must match an available status value.");
+    }
+    if (batchKeys.has(key)) {
+      errors.push("Duplicate assignment row exists in this import batch.");
+    }
+    if (employeeCode && structureName && row.structure_version.trim() && row.effective_from.trim()) {
+      batchKeys.add(key);
+    }
+
+    return {
+      index,
+      source: row,
+      payload: errors.length || !employee || !version
+        ? null
+        : {
+            employee_id: employee.id,
+            structure_version_id: version.id,
+            effective_from: row.effective_from.trim(),
+            effective_to: nullable(row.effective_to),
+            status,
+            annual_ctc_override: nullable(row.annual_ctc_override),
+            assignment_reason: row.assignment_reason.trim(),
+            config_snapshot: makeSnapshot(row.config_profile_ref),
+          },
+      status: errors.length ? "blocked" : "ready",
+      message: errors.join(" "),
+    };
+  }
+
+  function previewAssignmentImport() {
+    const parsed = parseAssignmentCsv(assignmentCsvText);
+    if (parsed.error) {
+      setAssignmentImportRows([]);
+      setAssignmentImportMessage(parsed.error);
+      return;
+    }
+
+    const batchKeys = new Set<string>();
+    setAssignmentImportRows(parsed.rows.map((row, index) => buildAssignmentImportRow(row, index + 1, batchKeys)));
+    setAssignmentImportMessage("Preview ready. Review blocked rows before committing.");
+  }
+
+  async function commitAssignmentImport() {
+    setIsAssignmentImportCommitting(true);
+    const nextRows = [...assignmentImportRows];
+
+    for (let index = 0; index < nextRows.length; index += 1) {
+      const row = nextRows[index];
+      if (row.status !== "ready" || !row.payload) {
+        continue;
+      }
+
+      const response = await fetch("/api/hr-admin/employee-salary-assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(row.payload),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok) {
+        applyAssignment(payload as HrAdminEmployeeSalaryAssignment);
+      }
+      nextRows[index] = {
+        ...row,
+        status: response.ok ? "created" : "failed",
+        message: response.ok ? "Created successfully." : getErrorMessage(payload, "Create failed."),
+      };
+      setAssignmentImportRows([...nextRows]);
+    }
+
+    setIsAssignmentImportCommitting(false);
+    setAssignmentImportMessage("Commit complete. Review employee salary coverage for created assignments.");
+    router.refresh();
+  }
 
   async function save<Item extends ApiItem>(
     family: ConfigFamily,
@@ -523,6 +731,83 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           <span className="muted">{feedback.message}</span>
         </div>
       ) : null}
+
+      <article className="salary-crud-form salary-import-workbench" data-testid="salary-assignment-import-workbench">
+        <div className="salary-crud-form__header">
+          <div>
+            <span className="workspace-card__eyebrow">Bulk onboarding</span>
+            <h3>Salary assignment import</h3>
+          </div>
+          <span className="queue-summary-chip">
+            <strong>{assignmentImportReadyCount}</strong> ready
+          </span>
+        </div>
+        <div className="organization-import-grid">
+          <label className="form-field">
+            <span className="muted">CSV data</span>
+            <textarea className="input-control organization-import-textarea" value={assignmentCsvText} onChange={(event) => setAssignmentCsvText(event.target.value)} />
+          </label>
+          <div className="organization-import-actions">
+            <button className="button button--secondary" type="button" onClick={() => setAssignmentCsvText(assignmentSampleCsv(setup))}>
+              Load sample template
+            </button>
+            <button className="button button--secondary" type="button" onClick={() => navigator.clipboard.writeText(assignmentTemplateCsv())}>
+              Copy template
+            </button>
+            <a className="button button--secondary" download="salary-assignment-import-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(assignmentTemplateCsv())}`}>
+              Download template
+            </a>
+            <label className="button button--secondary">
+              <span>Upload CSV</span>
+              <input
+                className="sr-only"
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) {
+                    return;
+                  }
+                  file.text().then(setAssignmentCsvText);
+                }}
+              />
+            </label>
+            <button className="button button--primary" type="button" onClick={previewAssignmentImport}>
+              Preview import
+            </button>
+            <button className="button button--primary" type="button" disabled={!assignmentImportReadyCount || isAssignmentImportCommitting} onClick={commitAssignmentImport}>
+              {isAssignmentImportCommitting ? "Committing..." : "Commit ready rows"}
+            </button>
+          </div>
+        </div>
+        {assignmentImportMessage ? <div className="notice">{assignmentImportMessage}</div> : null}
+        {assignmentImportRows.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Employee</th>
+                  <th>Structure</th>
+                  <th>Status</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assignmentImportRows.map((row) => (
+                  <tr key={`${row.index}-${row.source.employee_code}`}>
+                    <td>{row.index}</td>
+                    <td>{row.source.employee_code || "Missing employee"}</td>
+                    <td>{row.source.structure_name || "Missing structure"} v{row.source.structure_version || "?"}</td>
+                    <td><span className="readiness-badge">{row.status}</span></td>
+                    <td>{row.message || "Valid for import"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </article>
 
       <div className="salary-crud-grid">
         <form
