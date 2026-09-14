@@ -11,6 +11,7 @@ export default async function TenantAdminLayout({ children }: { children: React.
       footerDescription="Tenant account, seats, configuration posture, and commercial readiness in one focused workspace."
       navItems={[
         { href: "/tenant-admin", label: "Console", shortLabel: "CO", blurb: "Account posture" },
+        { href: "/tenant-admin/setup", label: "Setup Guide", shortLabel: "SG", blurb: "Launch steps" },
         { href: "/tenant-admin/trust-audit", label: "Trust Audit", shortLabel: "TA", blurb: "Evidence review" },
         { href: "/tenant-admin/security-readiness", label: "Security", shortLabel: "SE", blurb: "Enterprise readiness" },
       ]}
@@ -18,6 +19,7 @@ export default async function TenantAdminLayout({ children }: { children: React.
       quickLinks={[
         { href: "/", label: "Home" },
         { href: "/tenant-admin", label: "Tenant" },
+        { href: "/tenant-admin/setup", label: "Setup guide" },
         { href: "/tenant-admin/trust-audit", label: "Trust audit" },
         { href: "/tenant-admin/security-readiness", label: "Security" },
       ]}

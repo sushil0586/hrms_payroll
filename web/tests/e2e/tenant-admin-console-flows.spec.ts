@@ -138,4 +138,36 @@ test.describe("Tenant admin console", () => {
     await expectSetupGuideCertified(page);
     await expectNoHorizontalOverflow(page);
   });
+
+  test("certifies tenant setup workbench navigation and readiness areas", async ({ page }) => {
+    await gotoAuthenticated(page, "/tenant-admin/setup");
+    await expectPageReady(page, "Tenant Setup Guide");
+    await expect(page.getByRole("navigation").getByRole("link", { name: /Setup Guide/ })).toBeVisible();
+    await expect(page.getByTestId("tenant-setup-workbench")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Start master setup" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Back to console" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Setup areas" })).toBeVisible();
+    for (const area of [
+      "Company profile",
+      "Organization masters",
+      "Users and access",
+      "Payroll foundation",
+      "Security and audit",
+    ]) {
+      const row = page.locator(".tenant-setup-area").filter({ hasText: area }).first();
+      await expect(row).toBeVisible();
+      await expect(row.locator(".readiness-badge")).toBeVisible();
+      await expect(row.getByRole("link")).toBeVisible();
+    }
+    for (const guardrail of [
+      "Create legal entities before branches and cost centers.",
+      "Map each branch to a legal entity and location.",
+      "Map departments to business units where reporting depends on BU.",
+      "Map designations to grades before employee onboarding.",
+      "Create pay calendars, pay groups, and salary components before payroll run setup.",
+    ]) {
+      await expect(page.getByText(guardrail, { exact: true })).toBeVisible();
+    }
+    await expectNoHorizontalOverflow(page);
+  });
 });

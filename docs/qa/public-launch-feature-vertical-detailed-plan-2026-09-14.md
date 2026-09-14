@@ -109,7 +109,7 @@ Exit criteria:
 
 Goal: tenant admin/HR admin can complete required setup in a guided, low-confusion flow.
 
-Status: In progress, Tenant Admin launch guide added to the live tenant control center and locally certified on 2026-09-14.
+Status: In progress, Tenant Admin launch guide and dedicated setup workbench added and locally certified on 2026-09-14.
 
 Implementation tasks:
 
@@ -136,8 +136,9 @@ Exit criteria:
 Evidence:
 
 - UI implementation: `/tenant-admin` now shows a guided setup section with five launch steps, progress percentage, per-step readiness badges, and quick links to account, member, security, HR setup, and audit workspaces.
-- Browser local: `tenant-admin-console-flows.spec.ts` -> `2 passed`, covering desktop tenant-admin control center plus narrow viewport guided setup/no-overflow behavior.
-- TypeScript/build: `pnpm --dir web exec tsc --noEmit && pnpm --dir web build` -> passed.
+- UI implementation: `/tenant-admin/setup` now provides a dedicated launch-readiness workbench with company profile, organization masters, users/access, payroll foundation, security/audit areas, and dependency guardrails before employee import.
+- Browser local: `tenant-admin-console-flows.spec.ts` -> `3 passed`, covering desktop tenant-admin control center, narrow viewport guided setup/no-overflow behavior, setup workbench navigation, every readiness area, and dependency guardrail visibility.
+- TypeScript/build: `pnpm --dir web exec tsc --noEmit` and `pnpm --dir web build` -> passed.
 
 ## Phase PLF-4: Bulk Data Onboarding Workbench
 
