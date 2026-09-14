@@ -27,7 +27,7 @@ test.describe("Tenant admin console", () => {
     await expect(page.getByRole("main").getByLabel("Username")).toBeVisible();
     await expect(page.getByRole("main").getByLabel("Employee")).toBeVisible();
     await expect(page.getByRole("main").getByLabel("HR Admin")).toBeVisible();
-    await expect(page.getByRole("main").getByLabel("Manager")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("checkbox", { name: "Manager", exact: true })).toBeVisible();
     await expect(page.getByRole("main").getByRole("button", { name: "Invite member" })).toBeVisible();
     await expect(page.getByRole("main").getByRole("button", { name: "Update roles" }).first()).toBeVisible();
     await expect(page.getByRole("main").getByRole("button", { name: "Suspend" }).first()).toBeVisible();
@@ -86,12 +86,13 @@ test.describe("Tenant admin console", () => {
     await createdRequest.getByRole("button", { name: "Mark applied" }).click();
     await expect((await applyResponse).ok()).toBeTruthy();
     await expect(createdRequest.getByText("Applied")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId("tenant-support-access-form").getByText("Support access", { exact: true })).toBeVisible();
+    const supportAccessForm = page.getByTestId("tenant-support-access-form");
+    await expect(supportAccessForm.getByText("Support access", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Scoped support grants" })).toBeVisible();
-    await expect(page.getByRole("main").getByLabel("Support agent")).toBeVisible();
-    await expect(page.getByRole("main").getByLabel("Duration")).toBeVisible();
-    await expect(page.getByRole("main").getByLabel("Reason")).toBeVisible();
-    await expect(page.getByRole("main").getByLabel("Account posture")).toBeVisible();
+    await expect(supportAccessForm.getByRole("textbox", { name: "Support agent" })).toBeVisible();
+    await expect(supportAccessForm.getByLabel("Duration")).toBeVisible();
+    await expect(supportAccessForm.getByLabel("Reason")).toBeVisible();
+    await expect(supportAccessForm.getByLabel("Account posture")).toBeVisible();
     await expect(page.getByRole("main").getByRole("button", { name: "Request access" })).toBeVisible();
     const supportSessionButton = page.getByRole("main").getByRole("button", { name: "Start session" }).first();
     if (await supportSessionButton.isVisible().catch(() => false)) {

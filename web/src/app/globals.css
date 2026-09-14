@@ -1251,6 +1251,91 @@ select.input-control {
   padding: 16px;
 }
 
+.hr-admin-control-center {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+}
+
+.hr-admin-control-card {
+  display: grid;
+  gap: 14px;
+  min-height: 100%;
+  padding: 16px;
+}
+
+.hr-admin-control-card--primary {
+  border-color: rgba(37, 99, 235, 0.2);
+  background:
+    radial-gradient(circle at 12% 12%, rgba(37, 99, 235, 0.07), transparent 32%),
+    rgba(255, 255, 255, 0.92);
+}
+
+.hr-admin-control-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hr-admin-control-card__header h2 {
+  margin: 4px 0 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.hr-admin-command-list {
+  display: grid;
+  gap: 8px;
+}
+
+.hr-admin-command-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.hr-admin-command-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.hr-admin-command-row strong,
+.hr-admin-command-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hr-admin-command-row strong {
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.hr-admin-command-row span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.hr-admin-shortcut-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.hr-admin-shortcut-grid .button {
+  min-height: 42px;
+}
+
 .hr-admin-launch-audit__header,
 .hr-admin-launch-audit__summary,
 .hr-admin-launch-audit__module,
@@ -7682,6 +7767,7 @@ select.input-control {
   .hr-admin-launch-audit__header,
   .hr-admin-launch-audit__summary,
   .hr-admin-launch-audit__module,
+  .hr-admin-control-card__header,
   .payroll-setup-panel__header--split {
     align-items: flex-start;
     flex-direction: column;
@@ -7700,6 +7786,12 @@ select.input-control {
   }
 
   .hr-admin-launch-audit__action {
+    grid-template-columns: 1fr;
+  }
+
+  .hr-admin-control-center,
+  .hr-admin-command-row,
+  .hr-admin-shortcut-grid {
     grid-template-columns: 1fr;
   }
 

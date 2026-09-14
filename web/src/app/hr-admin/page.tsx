@@ -7,7 +7,7 @@ import { getLaunchConfigChecks, launchConfigSummary, type LaunchConfigSeverity }
 import { hrAdminModuleMetadata } from "@/lib/ui/module-metadata";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 import { getHrAdminDashboard } from "@/lib/api";
-import type { HrAdminLaunchAuditModule } from "@/lib/types";
+import type { HrAdminDashboard, HrAdminLaunchAuditModule } from "@/lib/types";
 
 const launchAuditStatusLabel = {
   ready: "Ready",
@@ -35,6 +35,66 @@ function launchConfigChipClass(status: LaunchConfigSeverity) {
   return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--warning";
 }
 
+function actionStatus(value: number) {
+  if (value > 0) {
+    return "warning" as const;
+  }
+  return "ready" as const;
+}
+
+function buildHrAdminActions(dashboard: HrAdminDashboard) {
+  return [
+    {
+      label: "Payroll readiness",
+      value: dashboard.operations.pending_leave_requests + dashboard.operations.pending_regularizations,
+      detail: "Clear leave and attendance inputs before payroll close.",
+      href: "/hr-admin/payroll-readiness",
+      action: "Open readiness",
+      status: actionStatus(dashboard.operations.pending_leave_requests + dashboard.operations.pending_regularizations),
+    },
+    {
+      label: "Lifecycle queue",
+      value: dashboard.operations.pending_onboardings + dashboard.operations.open_exits + dashboard.operations.pending_probation_reviews,
+      detail: "Joiner, exit, and probation items needing HR action.",
+      href: "/hr-admin/lifecycle",
+      action: "Review lifecycle",
+      status: actionStatus(dashboard.operations.pending_onboardings + dashboard.operations.open_exits + dashboard.operations.pending_probation_reviews),
+    },
+    {
+      label: "Document review",
+      value: dashboard.documents.pending_verification + dashboard.documents.rejected_documents,
+      detail: "Pending and rejected employee documents.",
+      href: "/hr-admin/employee-documents",
+      action: "Review documents",
+      status: actionStatus(dashboard.documents.pending_verification + dashboard.documents.rejected_documents),
+    },
+    {
+      label: "Attendance exceptions",
+      value: dashboard.operations.pending_regularizations,
+      detail: "Regularizations waiting for review.",
+      href: "/hr-admin/attendance-regularizations",
+      action: "Open attendance",
+      status: actionStatus(dashboard.operations.pending_regularizations),
+    },
+    {
+      label: "Notifications",
+      value: dashboard.delivery.failed_notifications + dashboard.delivery.pending_notifications,
+      detail: "Failed and pending delivery events.",
+      href: "/hr-admin/notification-delivery",
+      action: "Open delivery",
+      status: dashboard.delivery.failed_notifications ? "blocked" as const : actionStatus(dashboard.delivery.pending_notifications),
+    },
+    {
+      label: "Launch blockers",
+      value: dashboard.launch_audit.blocker_count + dashboard.launch_audit.remediation_assignment_summary.open_count,
+      detail: "Release blockers and open remediation assignments.",
+      href: "/hr-admin/launch-remediation",
+      action: "Resolve launch",
+      status: dashboard.launch_audit.blocker_count ? "blocked" as const : actionStatus(dashboard.launch_audit.remediation_assignment_summary.open_count),
+    },
+  ];
+}
+
 export default async function HrAdminLandingPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
@@ -48,6 +108,8 @@ export default async function HrAdminLandingPage() {
   const launchAuditActions = launchAudit.release_actions.slice(0, 4);
   const launchConfigChecks = getLaunchConfigChecks();
   const configSummary = launchConfigSummary(launchConfigChecks);
+  const commandActions = buildHrAdminActions(dashboard);
+  const openCommandCount = commandActions.filter((action) => action.status !== "ready").length;
 
   return (
     <main className="shell">
@@ -84,6 +146,67 @@ export default async function HrAdminLandingPage() {
           <MetricTile label="Pending approvals" value={dashboard.overview.pending_approvals} trend="Cross-module action load" />
           <MetricTile label="Launch audit" value={launchAuditStatusLabel[launchAudit.status]} trend={`${launchAudit.passed_gate_count}/${launchAudit.gate_count} gates passed`} />
         </div>
+      </section>
+
+      <section className="section hr-admin-control-center" data-testid="hr-admin-control-center">
+        <article className="panel-card-soft hr-admin-control-card hr-admin-control-card--primary">
+          <div className="hr-admin-control-card__header">
+            <div>
+              <span className="workspace-card__eyebrow">Command queue</span>
+              <h2>Today&apos;s operating priorities</h2>
+            </div>
+            <span className="queue-summary-chip"><strong>{openCommandCount}</strong> active signals</span>
+          </div>
+          <div className="hr-admin-command-list">
+            {commandActions.map((item) => (
+              <div className="hr-admin-command-row" key={item.label}>
+                <span className={launchAuditChipClass(item.status)}>{launchAuditStatusLabel[item.status]}</span>
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.detail}</span>
+                </div>
+                <span className="record-chip">{item.value}</span>
+                <Link className="button button--secondary" href={item.href}>{item.action}</Link>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel-card-soft hr-admin-control-card">
+          <div className="hr-admin-control-card__header">
+            <div>
+              <span className="workspace-card__eyebrow">Fast actions</span>
+              <h2>Operator shortcuts</h2>
+            </div>
+            <span className={launchAuditChipClass(launchAudit.status)}>{launchAuditStatusLabel[launchAudit.status]}</span>
+          </div>
+          <div className="hr-admin-shortcut-grid">
+            <Link className="button button--primary" href="/hr-admin/payroll-inputs">Payroll inputs</Link>
+            <Link className="button button--secondary" href="/hr-admin/payroll-review">Payroll review</Link>
+            <Link className="button button--secondary" href="/hr-admin/employees">Employees</Link>
+            <Link className="button button--secondary" href="/hr-admin/reports">Reports</Link>
+            <Link className="button button--secondary" href="/hr-admin/generated-letters">Letters</Link>
+            <Link className="button button--secondary" href="/hr-admin/saas-operations">Ops health</Link>
+          </div>
+          <div className="detail-grid">
+            <div className="detail-row">
+              <span>Pending approvals</span>
+              <strong>{dashboard.overview.pending_approvals}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Expiring documents</span>
+              <strong>{dashboard.documents.expiring_in_30_days}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Sent today</span>
+              <strong>{dashboard.delivery.sent_today}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Managers mapped</span>
+              <strong>{dashboard.workforce.managers_with_reports}</strong>
+            </div>
+          </div>
+        </article>
       </section>
 
       <section className="section">
