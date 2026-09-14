@@ -9,6 +9,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type {
   PlatformOnboardingAdminContact,
+  PlatformPublicLead,
   PlatformPolicyPackListItem,
   PlatformTenantListItem,
   PlatformTenantOnboarding,
@@ -16,6 +17,7 @@ import type {
 
 type Props = {
   initialPanel: PlatformPanel;
+  leads: PlatformPublicLead[];
   tenants: PlatformTenantListItem[];
   selectedTenant: PlatformTenantListItem | null;
   onboarding: PlatformTenantOnboarding | null;
@@ -23,11 +25,12 @@ type Props = {
 };
 
 type MutationMethod = "POST" | "PATCH";
-type PlatformPanel = "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
+type PlatformPanel = "leads" | "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
 
 const PAGE_SIZE = 8;
 
-const platformTabs: { panel: PlatformPanel; label: string; countKey: "tenants" | "onboarding" | "admins" | "policyPacks" | "events" }[] = [
+const platformTabs: { panel: PlatformPanel; label: string; countKey: "leads" | "tenants" | "onboarding" | "admins" | "policyPacks" | "events" }[] = [
+  { panel: "leads", label: "Leads", countKey: "leads" },
   { panel: "tenants", label: "Tenants", countKey: "tenants" },
   { panel: "onboarding", label: "Onboarding", countKey: "onboarding" },
   { panel: "admins", label: "Admins", countKey: "admins" },
@@ -103,15 +106,17 @@ function buildPanelHref(panel: PlatformPanel, selectedTenantId?: string) {
   return `/platform-admin?${params.toString()}`;
 }
 
-export function PlatformAdminConsole({ initialPanel, tenants, selectedTenant, onboarding, policyPacks }: Props) {
+export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTenant, onboarding, policyPacks }: Props) {
   const router = useRouter();
   const [busyRef, setBusyRef] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState("");
+  const [leadQuery, setLeadQuery] = useState("");
   const [tenantQuery, setTenantQuery] = useState("");
   const [policyPackQuery, setPolicyPackQuery] = useState("");
   const [eventQuery, setEventQuery] = useState("");
+  const [leadPage, setLeadPage] = useState(1);
   const [tenantPage, setTenantPage] = useState(1);
   const [policyPackPage, setPolicyPackPage] = useState(1);
   const [eventPage, setEventPage] = useState(1);
@@ -129,9 +134,13 @@ export function PlatformAdminConsole({ initialPanel, tenants, selectedTenant, on
   const primaryContact = onboarding?.admin_contacts.find((contact) => contact.is_primary) ?? onboarding?.admin_contacts[0] ?? null;
   const publishedPacks = policyPacks.filter((pack) => pack.status === "published");
   const events = onboarding?.recent_events ?? [];
+  const normalizedLeadQuery = leadQuery.trim().toLowerCase();
   const normalizedTenantQuery = tenantQuery.trim().toLowerCase();
   const normalizedPolicyPackQuery = policyPackQuery.trim().toLowerCase();
   const normalizedEventQuery = eventQuery.trim().toLowerCase();
+  const filteredLeads = normalizedLeadQuery
+    ? leads.filter((lead) => [lead.company_name, lead.contact_name, lead.work_email, lead.intent, lead.status, lead.preferred_plan, lead.industry].join(" ").toLowerCase().includes(normalizedLeadQuery))
+    : leads;
   const filteredTenants = normalizedTenantQuery
     ? tenants.filter((tenant) => [tenant.name, tenant.code, tenant.primary_domain, tenant.subscription_plan, tenant.onboarding_status].join(" ").toLowerCase().includes(normalizedTenantQuery))
     : tenants;
@@ -141,10 +150,12 @@ export function PlatformAdminConsole({ initialPanel, tenants, selectedTenant, on
   const filteredEvents = normalizedEventQuery
     ? events.filter((event) => [event.event_type, event.summary, event.actor_identifier, event.created_at].join(" ").toLowerCase().includes(normalizedEventQuery))
     : events;
+  const leadPageData = paginate(filteredLeads, leadPage);
   const tenantPageData = paginate(filteredTenants, tenantPage);
   const policyPackPageData = paginate(filteredPolicyPacks, policyPackPage);
   const eventPageData = paginate(filteredEvents, eventPage);
   const tabCounts = {
+    leads: leads.filter((lead) => ["new", "reviewing", "qualified"].includes(lead.status)).length,
     tenants: tenants.length,
     onboarding: selectedTenant && onboarding ? 2 : 0,
     admins: onboarding?.admin_contacts.length ?? 0,
@@ -197,6 +208,14 @@ export function PlatformAdminConsole({ initialPanel, tenants, selectedTenant, on
       router.push(buildPanelHref("onboarding", payload.id));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Tenant creation failed.");
+    }
+  }
+
+  async function handleLeadStatus(leadId: string, status: string) {
+    try {
+      await mutate(`/api/platform/leads/${leadId}`, "PATCH", { status }, `Lead marked ${titleCase(status)}.`);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Lead update failed.");
     }
   }
 
@@ -433,6 +452,74 @@ export function PlatformAdminConsole({ initialPanel, tenants, selectedTenant, on
           ))}
         </div>
       </section>
+
+      {initialPanel === "leads" ? (
+      <section className="section" data-testid="platform-admin-leads-panel">
+        <article className="record-card">
+          <div className="record-card__title-wrap">
+            <div className="record-card__title">
+              <h2>Public signup and contact leads</h2>
+              <span className="record-chip">{filteredLeads.length} visible</span>
+            </div>
+            <p className="section-copy">Review public requests, qualify them, then create tenants through the protected onboarding workflow.</p>
+          </div>
+          <label className="queue-toolbar__search">
+            <span>Search</span>
+            <input
+              className="input-control"
+              name="lead_search"
+              onChange={(event) => {
+                setLeadQuery(event.target.value);
+                setLeadPage(1);
+              }}
+              placeholder="Company, contact, email, plan, status"
+              value={leadQuery}
+            />
+          </label>
+          <div className="tenant-support-access-list">
+            {leadPageData.items.map((lead) => (
+              <div className="tenant-support-access-row tenant-support-access-row--stacked" key={lead.id}>
+                <div>
+                  <strong>{lead.company_name}</strong>
+                  <span>{lead.contact_name} - {lead.work_email} - {lead.phone_number || "No phone"}</span>
+                  <span>{lead.employee_count ? `${lead.employee_count} employees` : "Employee count not set"} - {lead.preferred_plan || "Plan not set"} - {lead.industry || "Industry not set"}</span>
+                  {lead.message ? <span>{lead.message}</span> : null}
+                </div>
+                <StatusChip value={lead.status} />
+                <span className="record-chip">{titleCase(lead.intent)}</span>
+                <span className="record-chip">{formatDateTime(lead.created_at)}</span>
+                <div className="button-row">
+                  <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleLeadStatus(lead.id, "reviewing")}>Reviewing</button>
+                  <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleLeadStatus(lead.id, "qualified")}>Qualified</button>
+                  <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleLeadStatus(lead.id, "closed")}>Close</button>
+                </div>
+              </div>
+            ))}
+            {!filteredLeads.length ? (
+              <div className="notice">
+                <strong>No public leads match this view.</strong>
+                <span className="muted">Public signup and contact submissions will appear here for platform review.</span>
+              </div>
+            ) : null}
+          </div>
+          <PaginationBar
+            hasNext={leadPageData.hasNext}
+            hasPrevious={leadPageData.hasPrevious}
+            onFirst={() => setLeadPage(1)}
+            onLast={() => setLeadPage(Math.max(1, Math.ceil(filteredLeads.length / PAGE_SIZE)))}
+            onNext={() => setLeadPage((current) => clampPage(current + 1, filteredLeads.length))}
+            onPrevious={() => setLeadPage((current) => clampPage(current - 1, filteredLeads.length))}
+            page={leadPageData.page}
+            pageSize={PAGE_SIZE}
+            totalCount={filteredLeads.length}
+          />
+          <div className="notice notice--compact">
+            <strong>Approval remains controlled.</strong>
+            <span className="muted">Use the Tenants tab to create the tenant only after the lead is qualified and commercials are approved.</span>
+          </div>
+        </article>
+      </section>
+      ) : null}
 
       {initialPanel === "tenants" ? (
       <section className="section employee-master-layout" data-testid="platform-admin-tenants-panel">

@@ -45,6 +45,55 @@ class ChecklistStatus(models.TextChoices):
     SKIPPED = "skipped", "Skipped"
 
 
+class PublicLeadIntent(models.TextChoices):
+    SIGNUP = "signup", "Signup"
+    CONTACT = "contact", "Contact"
+
+
+class PublicLeadStatus(models.TextChoices):
+    NEW = "new", "New"
+    REVIEWING = "reviewing", "Reviewing"
+    QUALIFIED = "qualified", "Qualified"
+    CONVERTED = "converted", "Converted"
+    CLOSED = "closed", "Closed"
+
+
+class PublicTenantLead(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Public signup/contact request that platform admins qualify before tenant creation."""
+
+    intent = models.CharField(max_length=20, choices=PublicLeadIntent.choices, default=PublicLeadIntent.SIGNUP)
+    status = models.CharField(max_length=20, choices=PublicLeadStatus.choices, default=PublicLeadStatus.NEW)
+    company_name = models.CharField(max_length=255)
+    contact_name = models.CharField(max_length=255)
+    work_email = models.EmailField()
+    phone_number = models.CharField(max_length=30, blank=True)
+    employee_count = models.PositiveIntegerField(blank=True, null=True)
+    industry = models.CharField(max_length=80, blank=True)
+    country_code = models.CharField(max_length=2, default="IN")
+    preferred_plan = models.CharField(max_length=40, blank=True)
+    message = models.TextField(blank=True)
+    source_path = models.CharField(max_length=255, blank=True)
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    user_agent = models.TextField(blank=True)
+    reviewed_by_identifier = models.CharField(max_length=120, blank=True)
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+    converted_tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.SET_NULL,
+        related_name="public_leads",
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Public Tenant Lead"
+        verbose_name_plural = "Public Tenant Leads"
+
+    def __str__(self) -> str:
+        return f"{self.company_name} - {self.work_email}"
+
+
 class TenantOnboarding(UUIDPrimaryKeyModel, TimeStampedModel):
     """Tracks the platform-side onboarding state for a tenant."""
 

@@ -86,6 +86,7 @@ import type {
   ManagerAttendanceApprovalListResponse,
   ManagerLeaveApprovalListResponse,
   ManagerTeamSummary,
+  PlatformPublicLead,
   PlatformPolicyPackListItem,
   PlatformTenantListItem,
   PlatformTenantOnboarding,
@@ -318,6 +319,10 @@ export async function getTenantAdminConsole() {
 
 export async function getPlatformTenants() {
   return apiGet<PlatformTenantListItem[]>("/platform/tenants/");
+}
+
+export async function getPlatformPublicLeads() {
+  return apiGet<PlatformPublicLead[]>("/platform/leads/");
 }
 
 export async function getPlatformTenant(tenantId: string) {

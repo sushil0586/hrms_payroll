@@ -5449,6 +5449,27 @@ export type PlatformTenantListItem = {
   updated_at: string;
 };
 
+export type PlatformPublicLead = {
+  id: string;
+  intent: string;
+  status: string;
+  company_name: string;
+  contact_name: string;
+  work_email: string;
+  phone_number: string;
+  employee_count: number | null;
+  industry: string;
+  country_code: string;
+  preferred_plan: string;
+  message: string;
+  source_path: string;
+  reviewed_by_identifier: string;
+  reviewed_at: string | null;
+  converted_tenant_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PlatformOnboardingChecklistItem = {
   id: string;
   code: string;

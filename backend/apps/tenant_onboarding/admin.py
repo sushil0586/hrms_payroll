@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from apps.tenant_onboarding.models import (
+    PublicTenantLead,
     TenantOnboarding,
     TenantOnboardingAdminContact,
     TenantOnboardingChecklistItem,
@@ -38,6 +39,14 @@ class TenantOnboardingAdmin(admin.ModelAdmin):
     list_filter = ("owner_mode", "setup_style", "data_setup_style", "policy_control_style")
     search_fields = ("tenant__name", "tenant__code", "industry_context", "notes")
     inlines = [TenantOnboardingAdminContactInline, TenantOnboardingChecklistItemInline, TenantOnboardingEventInline]
+
+
+@admin.register(PublicTenantLead)
+class PublicTenantLeadAdmin(admin.ModelAdmin):
+    list_display = ("company_name", "contact_name", "work_email", "intent", "status", "employee_count", "preferred_plan", "created_at")
+    list_filter = ("intent", "status", "preferred_plan", "country_code", "created_at")
+    search_fields = ("company_name", "contact_name", "work_email", "phone_number", "message")
+    readonly_fields = ("source_path", "ip_address", "user_agent", "created_at", "updated_at")
 
 
 @admin.register(TenantOnboardingAdminContact)

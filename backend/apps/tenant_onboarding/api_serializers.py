@@ -8,6 +8,8 @@ from apps.tenant_onboarding.models import (
     OnboardingOwnerMode,
     OnboardingSetupStyle,
     PolicyControlStyle,
+    PublicLeadIntent,
+    PublicLeadStatus,
 )
 from apps.tenants.models import SeedPack, SubscriptionPlan, TenantOnboardingStatus, TenantStatus
 
@@ -168,3 +170,52 @@ class PlatformMutationResultSerializer(serializers.Serializer):
     detail = serializers.CharField()
     tenant_status = serializers.CharField(required=False)
     onboarding_status = serializers.CharField(required=False)
+
+
+class PublicTenantLeadCreateSerializer(serializers.Serializer):
+    intent = serializers.ChoiceField(choices=PublicLeadIntent.values, required=False, default=PublicLeadIntent.SIGNUP)
+    company_name = serializers.CharField(max_length=255)
+    contact_name = serializers.CharField(max_length=255)
+    work_email = serializers.EmailField()
+    phone_number = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    employee_count = serializers.IntegerField(min_value=1, max_value=100000, required=False, allow_null=True)
+    industry = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    country_code = serializers.CharField(max_length=2, required=False, default="IN")
+    preferred_plan = serializers.CharField(max_length=40, required=False, allow_blank=True)
+    message = serializers.CharField(required=False, allow_blank=True)
+    source_path = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    website = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_work_email(self, value):
+        return value.strip().lower()
+
+    def validate_website(self, value):
+        if value:
+            raise serializers.ValidationError("Unable to submit this request.")
+        return value
+
+
+class PublicTenantLeadSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    intent = serializers.CharField()
+    status = serializers.CharField()
+    company_name = serializers.CharField()
+    contact_name = serializers.CharField()
+    work_email = serializers.EmailField()
+    phone_number = serializers.CharField(allow_blank=True)
+    employee_count = serializers.IntegerField(allow_null=True)
+    industry = serializers.CharField(allow_blank=True)
+    country_code = serializers.CharField()
+    preferred_plan = serializers.CharField(allow_blank=True)
+    message = serializers.CharField(allow_blank=True)
+    source_path = serializers.CharField(allow_blank=True)
+    reviewed_by_identifier = serializers.CharField(allow_blank=True)
+    reviewed_at = serializers.DateTimeField(allow_null=True)
+    converted_tenant_id = serializers.UUIDField(allow_null=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class PublicTenantLeadUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=PublicLeadStatus.values)
+    reviewed_by_identifier = serializers.CharField(max_length=120, required=False, allow_blank=True)

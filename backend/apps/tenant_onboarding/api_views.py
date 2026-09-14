@@ -17,10 +17,14 @@ from apps.tenant_onboarding.api_serializers import (
     PlatformTenantOnboardingSerializer,
     PlatformTenantOnboardingWriteSerializer,
     PlatformTenantWriteSerializer,
+    PublicTenantLeadCreateSerializer,
+    PublicTenantLeadSerializer,
+    PublicTenantLeadUpdateSerializer,
 )
 from apps.tenant_onboarding.models import (
     AdminProvisioningStatus,
     ChecklistStatus,
+    PublicTenantLead,
     TenantOnboarding,
     TenantOnboardingAdminContact,
 )
@@ -148,6 +152,95 @@ def _get_contact_or_404(contact_id):
         return TenantOnboardingAdminContact.objects.select_related("onboarding__tenant").get(id=contact_id)
     except TenantOnboardingAdminContact.DoesNotExist as exc:
         raise exceptions.NotFound("Admin contact not found.") from exc
+
+
+def _client_ip(request) -> str:
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "")
+
+
+def _serialize_public_lead(item: PublicTenantLead) -> dict:
+    return {
+        "id": item.id,
+        "intent": item.intent,
+        "status": item.status,
+        "company_name": item.company_name,
+        "contact_name": item.contact_name,
+        "work_email": item.work_email,
+        "phone_number": item.phone_number,
+        "employee_count": item.employee_count,
+        "industry": item.industry,
+        "country_code": item.country_code,
+        "preferred_plan": item.preferred_plan,
+        "message": item.message,
+        "source_path": item.source_path,
+        "reviewed_by_identifier": item.reviewed_by_identifier,
+        "reviewed_at": item.reviewed_at,
+        "converted_tenant_id": item.converted_tenant_id,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def _get_public_lead_or_404(item_id):
+    try:
+        return PublicTenantLead.objects.get(id=item_id)
+    except PublicTenantLead.DoesNotExist as exc:
+        raise exceptions.NotFound("Public lead not found.") from exc
+
+
+class PublicTenantLeadCreateView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = PublicTenantLeadCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        data.pop("website", None)
+        lead = PublicTenantLead.objects.create(
+            **data,
+            ip_address=_client_ip(request) or None,
+            user_agent=request.META.get("HTTP_USER_AGENT", "")[:2000],
+        )
+        return response.Response(
+            {
+                "detail": "Request received. Our team will review it and contact you.",
+                "lead_id": str(lead.id),
+                "status": lead.status,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PlatformPublicLeadListView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    def get(self, request):
+        lead_status = request.query_params.get("status", "").strip()
+        queryset = PublicTenantLead.objects.order_by("-created_at")
+        if lead_status:
+            queryset = queryset.filter(status=lead_status)
+        payload = [_serialize_public_lead(item) for item in queryset[:100]]
+        return response.Response(PublicTenantLeadSerializer(payload, many=True).data)
+
+
+class PlatformPublicLeadDetailView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def patch(self, request, item_id):
+        lead = _get_public_lead_or_404(item_id)
+        serializer = PublicTenantLeadUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        lead.status = serializer.validated_data["status"]
+        lead.reviewed_by_identifier = serializer.validated_data.get("reviewed_by_identifier") or _actor_identifier(request)
+        lead.reviewed_at = timezone.now()
+        lead.save(update_fields=["status", "reviewed_by_identifier", "reviewed_at", "updated_at"])
+        return response.Response(PublicTenantLeadSerializer(_serialize_public_lead(lead)).data)
 
 
 class PlatformTenantListCreateView(APIView):

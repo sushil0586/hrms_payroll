@@ -1,4 +1,4 @@
-import { getPlatformPolicyPacks, getPlatformTenant, getPlatformTenantOnboarding, getPlatformTenants } from "@/lib/api";
+import { getPlatformPolicyPacks, getPlatformPublicLeads, getPlatformTenant, getPlatformTenantOnboarding, getPlatformTenants } from "@/lib/api";
 import type { PlatformTenantListItem } from "@/lib/types";
 
 import { PlatformAdminConsole } from "./platform-admin-console";
@@ -22,15 +22,16 @@ function resolveSelectedTenantId(params: Record<string, SearchParamValue>, tenan
 
 function resolvePanel(params: Record<string, SearchParamValue>) {
   const requested = normalizeParam(params.panel);
-  if (["tenants", "onboarding", "admins", "policy-packs", "events"].includes(requested ?? "")) {
-    return requested as "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
+  if (["leads", "tenants", "onboarding", "admins", "policy-packs", "events"].includes(requested ?? "")) {
+    return requested as "leads" | "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
   }
   return "tenants";
 }
 
 export default async function PlatformAdminPage({ searchParams }: PageProps) {
   const currentParams = (await searchParams) ?? {};
-  const [tenantResult, policyPackResult] = await Promise.all([
+  const [leadResult, tenantResult, policyPackResult] = await Promise.all([
+    getPlatformPublicLeads(),
     getPlatformTenants(),
     getPlatformPolicyPacks(),
   ]);
@@ -45,6 +46,7 @@ export default async function PlatformAdminPage({ searchParams }: PageProps) {
   return (
     <PlatformAdminConsole
       initialPanel={resolvePanel(currentParams)}
+      leads={leadResult.data}
       onboarding={onboardingResult?.data ?? null}
       policyPacks={policyPackResult.data}
       selectedTenant={selectedTenantResult?.data ?? null}

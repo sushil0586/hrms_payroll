@@ -1,8 +1,7 @@
 import Link from "next/link";
 
 import { LogoutButton } from "@/app/components/logout-button";
-import { WorkspaceCard } from "@/components/patterns/workspace-card";
-import { PageIntro } from "@/components/patterns/page-intro";
+import { PublicLeadForm } from "@/app/public-lead-form";
 import { getSessionUser } from "@/lib/api";
 import { sessionCanAccessWorkspace, sessionHasAnyRole } from "@/lib/workspace-access";
 
@@ -13,7 +12,6 @@ export default async function HomePage() {
   const canAccessHrAdmin = sessionHasAnyRole(sessionUser, ["hr-admin"]);
   const canAccessMss = sessionCanAccessWorkspace(sessionUser, "mss");
   const canAccessTenantAdmin = sessionCanAccessWorkspace(sessionUser, "tenant_admin");
-  const accessibleWorkspaces = [canAccessPlatformAdmin, canAccessHrAdmin, canAccessEss, canAccessMss, canAccessTenantAdmin].filter(Boolean).length;
   const platformAdminHref = sessionUser ? (canAccessPlatformAdmin ? "/platform-admin" : "/") : "/login";
   const hrAdminHref = sessionUser ? (canAccessHrAdmin ? "/hr-admin" : "/") : "/login";
   const tenantAdminHref = sessionUser ? (canAccessTenantAdmin ? "/tenant-admin" : "/") : "/login";
@@ -21,132 +19,159 @@ export default async function HomePage() {
   const mssHref = sessionUser ? (canAccessMss ? "/mss/approvals" : "/") : "/login";
 
   return (
-    <main className="shell public-shell">
-      <PageIntro
-        eyebrow="PeopleOps control center"
-        title="Choose your workspace"
-        description="Open the right workspace for the task, decision, or employee action."
-        actions={
-          <>
-            <Link className="button button--primary" href={hrAdminHref}>
-              Open HR admin
-            </Link>
-            <Link className="button button--secondary" href={platformAdminHref}>
-              Open Platform
-            </Link>
-            <Link className="button button--secondary" href={essHref}>
-              Open ESS
-            </Link>
-            <Link className="button button--secondary" href={tenantAdminHref}>
-              Open Tenant
-            </Link>
-            <Link className="button button--secondary" href={mssHref}>
-              Open MSS
-            </Link>
-            {sessionUser ? <LogoutButton /> : <Link className="button button--secondary" href="/login">Sign in</Link>}
-          </>
-        }
-        pills={["Shared sign-in", "Role-based access", "Compact workspaces"]}
-        showPills
-      />
+    <main className="shell marketing-shell">
+      <nav className="marketing-nav" aria-label="Public navigation">
+        <Link className="marketing-brand" href="/">
+          <span className="marketing-brand__mark">A</span>
+          <span>Accerio HRMS</span>
+        </Link>
+        <div className="marketing-nav__actions">
+          <a href="#pricing">Pricing</a>
+          <a href="#signup">Public signup</a>
+          <a href="#contact">Contact</a>
+          {sessionUser ? <LogoutButton /> : <Link className="button button--secondary" href="/login">Sign in</Link>}
+        </div>
+      </nav>
 
-      <section className="section public-summary-grid">
-        <div className="queue-summary-chip">
-          <strong>{sessionUser ? accessibleWorkspaces : 3}</strong>
-          {sessionUser ? "workspace routes ready" : "workspace types available"}
+      <section className="marketing-hero">
+        <div className="marketing-hero__content">
+          <span className="hero__eyebrow">Payroll-first HRMS for Indian SMBs</span>
+          <h1>Run payroll, compliance, and employee operations from one audit-ready SaaS workspace.</h1>
+          <p>
+            Accerio HRMS helps growing teams manage employee records, configurable payroll, statutory reporting,
+            payslips, approvals, and finance handoff without hardcoded rules.
+          </p>
+          <div className="marketing-hero__actions">
+            <a className="button button--primary" href="#signup">Request access</a>
+            <a className="button button--secondary" href="#contact">Talk to sales</a>
+            <Link className="button button--secondary" href="/login">Customer login</Link>
+          </div>
+          <div className="marketing-proof-row" aria-label="Product proof points">
+            <span><strong>100 employee</strong> pilot certified</span>
+            <span><strong>22 browser</strong> launch checks passed</span>
+            <span><strong>Role-based</strong> SaaS access</span>
+          </div>
         </div>
-        <div className="queue-summary-chip">
-          <strong>{sessionUser ? "Signed in" : "Single login"}</strong>
-          {sessionUser ? (sessionUser.display_name || sessionUser.username) : "HR admin, ESS, and MSS"}
-        </div>
-        <div className="queue-summary-chip">
-          <strong>{canAccessPlatformAdmin ? "Platform access" : canAccessHrAdmin ? "HR admin access" : "Queue-based routing"}</strong>
-          {canAccessPlatformAdmin ? "tenant onboarding and activation" : canAccessHrAdmin ? "configuration and review" : "enter the workspace that fits the task"}
-        </div>
-      </section>
 
-      <section className="section public-workspace-section">
-        <div className="public-workspace-grid">
-          <WorkspaceCard
-            eyebrow="Platform admin"
-            title="Onboard tenants"
-            description="Create customers, provision first admins, adopt baselines, and activate handoff."
-            href={platformAdminHref}
-            cta={sessionUser ? (canAccessPlatformAdmin ? "Open platform console" : "Platform admin restricted") : "Sign in for platform admin"}
-            className="workspace-card--compact public-workspace-card"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Best for", value: "SaaS operators" },
-              { label: "Focus", value: "Tenant setup and activation" },
-              { label: "Includes", value: "Policy packs, contacts, handoff" },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="HR admin"
-            title="Operate HR"
-            description="Employees, lifecycle, documents, policies, and reports."
-            href={hrAdminHref}
-            cta={sessionUser ? (canAccessHrAdmin ? "Open HR admin" : "HR admin restricted") : "Sign in for HR admin"}
-            className="workspace-card--compact public-workspace-card"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Best for", value: "HR and ops teams" },
-              { label: "Focus", value: "Configuration and review queues" },
-              { label: "Includes", value: "People, policy, lifecycle" },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="ESS"
-            title="Employee self service"
-            description="Attendance, balances, leave requests, and regularizations."
-            href={essHref}
-            cta={sessionUser ? (canAccessEss ? "Open ESS" : "ESS restricted") : "Sign in for ESS"}
-            className="workspace-card--compact public-workspace-card"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Best for", value: "Employees" },
-              { label: "Focus", value: "Self-service and request history" },
-              { label: "Includes", value: "Attendance, leave, balances" },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="MSS"
-            title="Manager approvals"
-            description="Leave and attendance approvals in one queue."
-            href={mssHref}
-            cta={sessionUser ? (canAccessMss ? "Open MSS" : "Manager access required") : "Sign in for MSS"}
-            className="workspace-card--compact public-workspace-card"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Best for", value: "Managers" },
-              { label: "Focus", value: "Approval inbox and team visibility" },
-              { label: "Includes", value: "Leave and attendance decisions" },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Tenant admin"
-            title="Manage account"
-            description="Plan posture, seat usage, configuration health, and commercial audit evidence."
-            href={tenantAdminHref}
-            cta={sessionUser ? (canAccessTenantAdmin ? "Open tenant console" : "Tenant admin restricted") : "Sign in for tenant admin"}
-            className="workspace-card--compact public-workspace-card"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Best for", value: "Tenant owners" },
-              { label: "Focus", value: "Commercial and account posture" },
-              { label: "Includes", value: "Seats, config, evidence" },
-            ]}
-          />
-        </div>
+        <aside className="marketing-product-visual" aria-label="Product preview">
+          <div className="product-window">
+            <div className="product-window__chrome"><span /><span /><span /></div>
+            <div className="product-window__body">
+              <div className="product-window__sidebar">
+                <span className="active" />
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="product-window__main">
+                <div className="product-window__header">
+                  <div>
+                    <span className="mini-label">Payroll cockpit</span>
+                    <strong>September payroll</strong>
+                  </div>
+                  <span className="status-pill">Ready</span>
+                </div>
+                <div className="product-metric-grid">
+                  <div><span>Employees</span><strong>100</strong></div>
+                  <div><span>Net pay</span><strong>₹42.8L</strong></div>
+                  <div><span>Exceptions</span><strong>0</strong></div>
+                </div>
+                <div className="product-chart" aria-hidden="true">
+                  <span style={{ height: "42%" }} />
+                  <span style={{ height: "56%" }} />
+                  <span style={{ height: "48%" }} />
+                  <span style={{ height: "72%" }} />
+                  <span style={{ height: "64%" }} />
+                  <span style={{ height: "86%" }} />
+                </div>
+                <div className="product-steps">
+                  <span>Inputs locked</span>
+                  <span>Review approved</span>
+                  <span>Reports exported</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
       </section>
 
       {sessionUser ? (
-        <section className="section public-session-row">
-          <div className="queue-summary-chip public-session-chip">
-            <strong>Signed in</strong> as {sessionUser.display_name || sessionUser.first_name || sessionUser.username}
+        <section className="marketing-section marketing-workspace-strip" aria-label="Workspace shortcuts">
+          <div>
+            <span className="hero__eyebrow">Signed in</span>
+            <h2>{sessionUser.display_name || sessionUser.first_name || sessionUser.username}</h2>
+          </div>
+          <div className="marketing-workspace-strip__actions">
+            <Link className="button button--primary" href={hrAdminHref}>HR admin</Link>
+            <Link className="button button--secondary" href={platformAdminHref}>Platform</Link>
+            <Link className="button button--secondary" href={tenantAdminHref}>Tenant</Link>
+            <Link className="button button--secondary" href={essHref}>ESS</Link>
+            <Link className="button button--secondary" href={mssHref}>MSS</Link>
           </div>
         </section>
       ) : null}
+
+      <section className="marketing-section">
+        <div className="marketing-section__header">
+          <span className="hero__eyebrow">Why teams buy it</span>
+          <h2>Built for payroll confidence, not just HR record keeping.</h2>
+        </div>
+        <div className="marketing-card-grid">
+          {[
+            ["Configurable payroll", "Salary structures, payroll inputs, calculations, reviews, settlements, and outputs stay tenant configurable."],
+            ["Compliance evidence", "TDS, statutory deductions, filing status, payslip publication, and export audit history are built into the flow."],
+            ["SaaS control", "Platform admin can review public requests, onboard tenants, provision admins, publish baselines, and activate customers."],
+            ["Role-ready workspaces", "Separate experiences for platform admin, tenant admin, HR admin, finance, manager, support, and employee self-service."],
+          ].map(([title, description]) => (
+            <article className="marketing-card" key={title}>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="marketing-section" id="pricing">
+        <div className="marketing-section__header">
+          <span className="hero__eyebrow">Simple launch pricing</span>
+          <h2>Start guided, then scale per employee.</h2>
+        </div>
+        <div className="pricing-grid">
+          <article className="pricing-card">
+            <span>Starter</span>
+            <h3>₹2,999/mo</h3>
+            <p>Up to 50 employees, core HRMS, payroll setup, payslips, and basic reports.</p>
+          </article>
+          <article className="pricing-card pricing-card--featured">
+            <span>Growth</span>
+            <h3>₹75/employee/mo</h3>
+            <p>Payroll runs, statutory setup, TDS reports, manager approvals, ESS, and audit exports.</p>
+          </article>
+          <article className="pricing-card">
+            <span>Business</span>
+            <h3>₹60/employee/mo</h3>
+            <p>Multi-branch operations, finance handoff, advanced reports, provider workflows, and priority support.</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="marketing-section marketing-form-section" id="signup">
+        <div className="marketing-section__header">
+          <span className="hero__eyebrow">Public signup</span>
+          <h2>Request a guided pilot.</h2>
+          <p>Signup requests go to platform admin for review and approval before any tenant is created.</p>
+        </div>
+        <PublicLeadForm intent="signup" submitLabel="Request pilot access" />
+      </section>
+
+      <section className="marketing-section marketing-form-section" id="contact">
+        <div className="marketing-section__header">
+          <span className="hero__eyebrow">Contact us</span>
+          <h2>Need pricing, migration, or payroll compliance help?</h2>
+          <p>Send a message and the platform team can qualify it from the admin console.</p>
+        </div>
+        <PublicLeadForm intent="contact" submitLabel="Send message" compact />
+      </section>
     </main>
   );
 }
