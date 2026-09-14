@@ -98,6 +98,24 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+type EssActionStatus = "ready" | "warning";
+
+const essActionStatusLabel: Record<EssActionStatus, string> = {
+  ready: "Ready",
+  warning: "Review",
+};
+
+function essActionChipClass(status: EssActionStatus) {
+  if (status === "ready") {
+    return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--ready";
+  }
+  return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--warning";
+}
+
+function essActionStatus(value: number): EssActionStatus {
+  return value > 0 ? "warning" : "ready";
+}
+
 function LeaveRequestSection({
   currentParams,
   response,
@@ -341,6 +359,45 @@ export default async function EssPage({ searchParams }: PageProps) {
     }),
     getEssRequestOptions(),
   ]);
+  const pendingLeaveCount = dashboard.leave.pending_requests_count;
+  const pendingRegularizationCount = dashboard.attendance.pending_regularizations_count;
+  const leaveBalanceCount = dashboard.leave.balances.length;
+  const attendanceTodayStatus = dashboard.attendance.today.status.replace("_", " ");
+  const commandActions = [
+    {
+      label: "Leave requests",
+      value: pendingLeaveCount,
+      detail: "Track leave status or create a new leave request.",
+      href: "/ess?leaveStatus=pending",
+      action: "Review leave",
+      status: essActionStatus(pendingLeaveCount),
+    },
+    {
+      label: "Attendance fixes",
+      value: pendingRegularizationCount,
+      detail: "Follow regularizations that can affect payroll inputs.",
+      href: "/ess?regStatus=pending",
+      action: "Review attendance",
+      status: essActionStatus(pendingRegularizationCount),
+    },
+    {
+      label: "Payslips",
+      value: dashboard.profile.employee_code,
+      detail: "Open published payroll documents and read acknowledgements.",
+      href: "/ess/payslips",
+      action: "Open payslips",
+      status: "ready" as const,
+    },
+    {
+      label: "Tax declarations",
+      value: leaveBalanceCount,
+      detail: "Manage declaration proof and year-end tax readiness.",
+      href: "/ess/statutory-declarations",
+      action: "Open tax",
+      status: "ready" as const,
+    },
+  ];
+  const activeSignals = commandActions.filter((item) => item.status !== "ready").length;
 
   return (
     <main className="shell shell--workspace">
@@ -370,6 +427,67 @@ export default async function EssPage({ searchParams }: PageProps) {
           <MetricTile className="metric-tile-soft" label="Hours this month" labelClassName="metric-label-soft" value={dashboard.attendance.month_to_date.work_duration_hours} valueClassName="metric-value-soft" trend="Logged so far" trendClassName="metric-trend-soft" />
           <MetricTile className="metric-tile-soft" label="Today" labelClassName="metric-label-soft" value={dashboard.attendance.today.status.replace("_", " ")} valueClassName="metric-value-soft" trend="Attendance state" trendClassName="metric-trend-soft" />
         </div>
+      </section>
+
+      <section className="section ess-control-center" data-testid="ess-control-center">
+        <article className="panel-card-soft hr-admin-control-card hr-admin-control-card--primary">
+          <div className="hr-admin-control-card__header">
+            <div>
+              <span className="workspace-card__eyebrow">My command queue</span>
+              <h2>Today&apos;s priorities</h2>
+            </div>
+            <span className="queue-summary-chip"><strong>{activeSignals}</strong> active signals</span>
+          </div>
+          <div className="hr-admin-command-list">
+            {commandActions.map((item) => (
+              <div className="hr-admin-command-row" key={item.label}>
+                <span className={essActionChipClass(item.status)}>{essActionStatusLabel[item.status]}</span>
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.detail}</span>
+                </div>
+                <span className="record-chip">{item.value}</span>
+                <Link className="button button--secondary" href={item.href}>{item.action}</Link>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel-card-soft hr-admin-control-card">
+          <div className="hr-admin-control-card__header">
+            <div>
+              <span className="workspace-card__eyebrow">Fast actions</span>
+              <h2>Self-service shortcuts</h2>
+            </div>
+            <span className={essActionChipClass(activeSignals ? "warning" : "ready")}>{activeSignals ? "Review" : "Ready"}</span>
+          </div>
+          <div className="hr-admin-shortcut-grid">
+            <Link className="button button--primary" href="/ess#request-actions">New request</Link>
+            <Link className="button button--secondary" href="/ess/payslips">Payslips</Link>
+            <Link className="button button--secondary" href="/ess/documents">Documents</Link>
+            <Link className="button button--secondary" href="/ess/statutory-declarations">Tax declarations</Link>
+            <Link className="button button--secondary" href="/ess/notifications">Notifications</Link>
+            <Link className="button button--secondary" href="/mss">Manager view</Link>
+          </div>
+          <div className="detail-grid">
+            <div className="detail-row">
+              <span>Today status</span>
+              <strong>{attendanceTodayStatus}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Shift</span>
+              <strong>{dashboard.attendance.today.shift || "Not assigned"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Leave balances</span>
+              <strong>{leaveBalanceCount}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Manager</span>
+              <strong>{dashboard.profile.reporting_manager || "Not mapped"}</strong>
+            </div>
+          </div>
+        </article>
       </section>
 
       <section className="section overview-split">
@@ -429,11 +547,13 @@ export default async function EssPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      <EssRequestSubmissionPanel
-        attendanceRecords={requestOptions.attendanceRecords}
-        isDemo={state === "demo" || requestOptions.state === "demo"}
-        leaveTypes={requestOptions.leaveTypes}
-      />
+      <section id="request-actions">
+        <EssRequestSubmissionPanel
+          attendanceRecords={requestOptions.attendanceRecords}
+          isDemo={state === "demo" || requestOptions.state === "demo"}
+          leaveTypes={requestOptions.leaveTypes}
+        />
+      </section>
 
       <LeaveRequestSection currentParams={currentParams} response={leaveRequests} isDemo={state === "demo"} />
       <RegularizationSection currentParams={currentParams} response={regularizations} />
