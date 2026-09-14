@@ -29,6 +29,16 @@ type ApiItem =
 
 type Feedback = { tone: "success" | "error"; message: string } | null;
 
+type ImportStatus = "ready" | "blocked" | "created" | "failed";
+
+type StatutoryProfileImportRow = {
+  index: number;
+  source: Record<string, string>;
+  payload: Record<string, unknown> | null;
+  status: ImportStatus;
+  message: string;
+};
+
 type PackForm = {
   id?: string;
   code: string;
@@ -244,6 +254,183 @@ function replaceOrAppend<Item extends { id: string }>(items: Item[], next: Item)
 
 function enumOptions(items: { value: string; label: string }[]) {
   return items.map((item) => ({ value: item.value, label: item.label }));
+}
+
+const statutoryProfileImportHeaders = [
+  "employee_code",
+  "statutory_pack_code",
+  "profile_ref",
+  "effective_from",
+  "effective_to",
+  "status",
+  "pan_number",
+  "uan_number",
+  "pf_number",
+  "esi_number",
+  "pf_applicable",
+  "esi_applicable",
+  "professional_tax_state",
+  "lwf_state",
+  "tax_regime",
+  "declaration_status",
+  "previous_employment_income",
+  "previous_employment_tax_deducted",
+  "source_ref",
+  "config_profile_ref",
+];
+
+function statutoryProfileTemplateCsv() {
+  return `${statutoryProfileImportHeaders.join(",")}\n`;
+}
+
+function splitCsvLine(line: string) {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+    if (char === "\"" && inQuotes && nextChar === "\"") {
+      current += "\"";
+      index += 1;
+    } else if (char === "\"") {
+      inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseCsv(text: string, headers: string[]) {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length < 2) {
+    return { rows: [], error: "CSV must include a header row and at least one import row." };
+  }
+  const parsedHeaders = splitCsvLine(lines[0]).map((header) => header.trim());
+  const missingHeaders = headers.filter((header) => !parsedHeaders.includes(header));
+  if (missingHeaders.length) {
+    return { rows: [], error: `CSV is missing required columns: ${missingHeaders.join(", ")}.` };
+  }
+  return {
+    rows: lines.slice(1).map((line) => {
+      const values = splitCsvLine(line);
+      return Object.fromEntries(parsedHeaders.map((header, index) => [header, values[index] ?? ""]));
+    }),
+    error: "",
+  };
+}
+
+function parseBoolean(value: string) {
+  return ["true", "yes", "y", "1", "applicable"].includes(value.trim().toLowerCase());
+}
+
+function normalizeAmount(value: string) {
+  return value.trim() || "0";
+}
+
+function findPackByCode(packs: HrAdminPayrollStatutoryPack[], value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  return packs.find((item) => item.code.toLowerCase() === normalized || item.name.toLowerCase() === normalized) ?? null;
+}
+
+function buildStatutoryProfileImportPayload(row: Record<string, string>, setup: HrAdminPayrollStatutorySetupResponse, batchEmployeeProfiles: Set<string>) {
+  const errors: string[] = [];
+  const employeeCode = row.employee_code.trim();
+  const employee = setup.options.employees.find((item) => item.employee_code.toLowerCase() === employeeCode.toLowerCase()) ?? null;
+  const pack = findPackByCode(setup.packs, row.statutory_pack_code);
+  const status = row.status.trim() || "draft";
+  const taxRegime = row.tax_regime.trim() || "not_declared";
+  const declarationStatus = row.declaration_status.trim() || "not_started";
+  const panNumber = row.pan_number.trim().toUpperCase();
+  const uanNumber = row.uan_number.trim();
+  const pfApplicable = parseBoolean(row.pf_applicable);
+  const esiApplicable = parseBoolean(row.esi_applicable);
+
+  if (!employeeCode) errors.push("Employee code is required.");
+  if (employeeCode && !employee) errors.push("Employee code must match an existing employee.");
+  if (!row.effective_from.trim()) errors.push("Effective from is required.");
+  if (row.effective_to.trim() && row.effective_from.trim() && row.effective_to.trim() < row.effective_from.trim()) errors.push("Effective to cannot be earlier than effective from.");
+  if (row.statutory_pack_code.trim() && !pack) errors.push("Statutory pack code must match an available pack.");
+  if (!setup.options.config_statuses.some((item) => item.value === status)) errors.push("Status must match an available configuration status.");
+  if (!setup.options.tax_regimes.some((item) => item.value === taxRegime)) errors.push("Tax regime must match an available tax regime.");
+  if (!setup.options.declaration_statuses.some((item) => item.value === declarationStatus)) errors.push("Declaration status must match an available declaration status.");
+  if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) errors.push("PAN number must use the 10-character PAN format.");
+  if (uanNumber && !/^[0-9]{12}$/.test(uanNumber)) errors.push("UAN number must be 12 digits.");
+  if (pfApplicable && !uanNumber) errors.push("UAN number is required when PF is applicable.");
+  if (esiApplicable && !row.esi_number.trim()) errors.push("ESI number is required when ESI is applicable.");
+  if (employeeCode && batchEmployeeProfiles.has(employeeCode.toLowerCase())) errors.push("Only one statutory profile per employee can be committed in one import batch.");
+  if (employeeCode) batchEmployeeProfiles.add(employeeCode.toLowerCase());
+
+  if (errors.length || !employee) {
+    return { payload: null, errors };
+  }
+
+  return {
+    payload: {
+      employee_id: employee.id,
+      statutory_pack_id: pack?.id ?? null,
+      profile_ref: row.profile_ref.trim() || `payroll.employee.statutory.${employee.employee_code.toLowerCase()}.v1`,
+      effective_from: row.effective_from.trim(),
+      effective_to: nullable(row.effective_to),
+      status,
+      pan_number: panNumber,
+      uan_number: uanNumber,
+      pf_number: row.pf_number.trim(),
+      esi_number: row.esi_number.trim(),
+      pf_applicable: pfApplicable,
+      esi_applicable: esiApplicable,
+      professional_tax_state: row.professional_tax_state.trim().toUpperCase(),
+      lwf_state: row.lwf_state.trim().toUpperCase(),
+      tax_regime: taxRegime,
+      declaration_status: declarationStatus,
+      previous_employment_income: normalizeAmount(row.previous_employment_income),
+      previous_employment_tax_deducted: normalizeAmount(row.previous_employment_tax_deducted),
+      source_ref: row.source_ref.trim() || "statutory-profile-import",
+      config_snapshot: makeSnapshot(row.config_profile_ref),
+    },
+    errors,
+  };
+}
+
+function statutoryProfileSampleCsv(setup: HrAdminPayrollStatutorySetupResponse, suffix: string) {
+  const employee = setup.options.employees[0];
+  const pack = setup.packs[0];
+  if (!employee) {
+    return statutoryProfileTemplateCsv();
+  }
+  const values = [
+    employee.employee_code,
+    pack?.code ?? "",
+    `payroll.employee.statutory.import.${suffix}.v1`,
+    "2026-04-01",
+    "2027-03-31",
+    "draft",
+    "ABCDE1234F",
+    "123456789012",
+    `PF-${suffix}`,
+    "",
+    "true",
+    "false",
+    "KA",
+    "KA",
+    "new",
+    "not_started",
+    "0",
+    "0",
+    `statutory-profile-import-${suffix}`,
+    "payroll.statutory.profile.import.v1",
+  ];
+  return `${statutoryProfileImportHeaders.join(",")}\n${values.map((value) => (value.includes(",") ? `"${value}"` : value)).join(",")}`;
 }
 
 function emptyPack(setup: HrAdminPayrollStatutorySetupResponse): PackForm {
@@ -621,6 +808,158 @@ function RecordList({ label, children }: { label: string; children: ReactNode })
   return <div className="salary-crud-list" aria-label={label}>{children}</div>;
 }
 
+function StatutoryProfileImportWorkbench({ setup }: { setup: HrAdminPayrollStatutorySetupResponse }) {
+  const [csvText, setCsvText] = useState(statutoryProfileTemplateCsv());
+  const [rows, setRows] = useState<StatutoryProfileImportRow[]>([]);
+  const [message, setMessage] = useState("");
+  const [isCommitting, setIsCommitting] = useState(false);
+  const readyCount = rows.filter((row) => row.status === "ready").length;
+  const createdCount = rows.filter((row) => row.status === "created").length;
+
+  function preview() {
+    const parsed = parseCsv(csvText, statutoryProfileImportHeaders);
+    if (parsed.error) {
+      setRows([]);
+      setMessage(parsed.error);
+      return;
+    }
+
+    const batchEmployeeProfiles = new Set<string>();
+    const nextRows = parsed.rows.map((row, index) => {
+      const result = buildStatutoryProfileImportPayload(row, setup, batchEmployeeProfiles);
+      return {
+        index: index + 1,
+        source: row,
+        payload: result.payload,
+        status: result.errors.length ? "blocked" : "ready",
+        message: result.errors.join(" "),
+      } satisfies StatutoryProfileImportRow;
+    });
+
+    setRows(nextRows);
+    setMessage("Preview ready. Commit ready statutory profiles after checking blocked rows.");
+  }
+
+  async function commitReadyRows() {
+    setIsCommitting(true);
+    const nextRows = [...rows];
+
+    for (let index = 0; index < nextRows.length; index += 1) {
+      const row = nextRows[index];
+      if (row.status !== "ready" || !row.payload) {
+        continue;
+      }
+
+      const response = await fetch("/api/hr-admin/employee-statutory-profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(row.payload),
+      });
+      const payload = await response.json().catch(() => ({}));
+      nextRows[index] = {
+        ...row,
+        status: response.ok ? "created" : "failed",
+        message: response.ok ? "Statutory profile created." : getErrorMessage(payload, "Create failed."),
+      };
+      setRows([...nextRows]);
+    }
+
+    setIsCommitting(false);
+    setMessage("Commit complete. Created rows are saved with source-hash evidence.");
+  }
+
+  return (
+    <section className="section" data-testid="statutory-profile-import-workbench">
+      <article className="panel-card-soft organization-import-workbench">
+        <div className="queue-toolbar__header">
+          <div>
+            <h2 className="section-heading-soft">Employee statutory profile import</h2>
+            <p className="section-copy section-copy-soft">Load PAN, PF, ESI, tax regime, and declaration-readiness profiles by employee code.</p>
+          </div>
+          <div className="queue-toolbar__meta">
+            <span className="queue-summary-chip"><strong>{readyCount}</strong> ready</span>
+            <span className="queue-summary-chip"><strong>{createdCount}</strong> created</span>
+          </div>
+        </div>
+
+        <div className="organization-import-grid">
+          <label className="form-field">
+            <span className="text-label-premium">Statutory profile CSV data</span>
+            <textarea className="input-control organization-import-textarea" value={csvText} onChange={(event) => setCsvText(event.target.value)} />
+          </label>
+          <div className="organization-import-actions">
+            <button className="button button--secondary" type="button" onClick={() => setCsvText(statutoryProfileSampleCsv(setup, String(Date.now()).slice(-5)))}>
+              Load sample template
+            </button>
+            <button className="button button--secondary" type="button" onClick={() => navigator.clipboard.writeText(statutoryProfileTemplateCsv())}>
+              Copy template
+            </button>
+            <a className="button button--secondary" download="employee-statutory-profile-import-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(statutoryProfileTemplateCsv())}`}>
+              Download template
+            </a>
+            <label className="button button--secondary">
+              <span>Upload CSV</span>
+              <input
+                className="sr-only"
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) {
+                    return;
+                  }
+                  file.text().then(setCsvText);
+                }}
+              />
+            </label>
+            <button className="button button--primary" type="button" onClick={preview}>
+              Preview statutory import
+            </button>
+            <button className="button button--primary" type="button" disabled={!readyCount || isCommitting} onClick={commitReadyRows}>
+              {isCommitting ? "Committing..." : "Commit ready statutory rows"}
+            </button>
+          </div>
+        </div>
+
+        {message ? <div className="notice">{message}</div> : null}
+
+        {rows.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Employee</th>
+                  <th>Profile ref</th>
+                  <th>PAN</th>
+                  <th>PF</th>
+                  <th>Tax regime</th>
+                  <th>Status</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={`${row.index}-${row.source.employee_code}-${row.source.profile_ref}`}>
+                    <td>{row.index}</td>
+                    <td>{row.source.employee_code || "Missing code"}</td>
+                    <td><code>{row.source.profile_ref || "Not provided"}</code></td>
+                    <td>{row.source.pan_number || "Not provided"}</td>
+                    <td>{parseBoolean(row.source.pf_applicable) ? "Applicable" : "Not applicable"}</td>
+                    <td>{row.source.tax_regime || "not_declared"}</td>
+                    <td><span className="readiness-badge">{row.status}</span></td>
+                    <td>{row.message || "Valid for import"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </article>
+    </section>
+  );
+}
+
 export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: HrAdminPayrollStatutorySetupResponse }) {
   const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
@@ -758,6 +1097,8 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
           <span className="muted">{feedback.message}</span>
         </div>
       ) : null}
+
+      <StatutoryProfileImportWorkbench setup={setup} />
 
       <div className="salary-crud-grid payroll-statutory-crud-grid">
         <form aria-label="Statutory pack form" className="salary-crud-form" data-testid="statutory-pack-form" onSubmit={(event) => {

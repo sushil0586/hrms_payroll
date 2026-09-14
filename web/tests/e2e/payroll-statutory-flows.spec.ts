@@ -15,6 +15,55 @@ function field(scope: Locator, label: string) {
     .first();
 }
 
+function employeeField(scope: Page | Locator, label: string) {
+  return scope
+    .locator("label.form-field")
+    .filter({ hasText: new RegExp(`^${label}`) })
+    .locator("input, select, textarea")
+    .first();
+}
+
+async function selectFirstNonEmptyOption(locator: Locator) {
+  const value = await locator.evaluate((element) => {
+    const select = element as HTMLSelectElement;
+    return Array.from(select.options).find((option) => option.value)?.value ?? "";
+  });
+  if (value) {
+    await locator.selectOption(value);
+  }
+}
+
+async function createDisposableEmployeeFromBrowser(page: Page, suffix: string) {
+  const employeeCode = `STAT-IMP-${suffix}`;
+  await gotoAuthenticated(page, "/hr-admin/employees/new");
+  await expectPageReady(page, "Create employee");
+
+  await employeeField(page, "Employee code").fill(employeeCode);
+  await employeeField(page, "Employment status").selectOption("active");
+  await employeeField(page, "First name").fill("Statutory");
+  await employeeField(page, "Last name").fill("Import");
+  await employeeField(page, "Preferred name").fill("Statutory Import");
+  await employeeField(page, "Work email").fill(`statutory.import.${suffix}@example.test`);
+  await employeeField(page, "Personal email").fill(`statutory.import.personal.${suffix}@example.test`);
+  await employeeField(page, "Phone number").fill("+91 90000 02001");
+  await employeeField(page, "Date of birth").fill("1993-01-01");
+  await employeeField(page, "Date of joining").fill("2026-04-01");
+  await employeeField(page, "Probation end date").fill("2026-09-30");
+  await selectFirstNonEmptyOption(employeeField(page, "Branch"));
+  await selectFirstNonEmptyOption(employeeField(page, "Cost center"));
+  await selectFirstNonEmptyOption(employeeField(page, "Department"));
+  await selectFirstNonEmptyOption(employeeField(page, "Designation"));
+  await selectFirstNonEmptyOption(employeeField(page, "Employment type"));
+  await selectFirstNonEmptyOption(employeeField(page, "Reporting manager"));
+
+  const [response] = await Promise.all([
+    page.waitForResponse((item) => item.url().includes("/api/hr-admin/employees") && item.request().method() === "POST"),
+    page.getByRole("button", { name: "Create employee" }).click(),
+  ]);
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as { id: string; employee_code: string; full_name: string };
+}
+
 async function expectFields(scope: Locator, labels: string[]) {
   for (const label of labels) {
     await expect(field(scope, label)).toBeVisible();
@@ -42,6 +91,82 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
 }
 
 test.describe("HR admin payroll statutory flows", () => {
+  test("employee statutory profile import validates commits and preserves source hash evidence", async ({ page }) => {
+    test.setTimeout(5 * 60 * 1000);
+    const suffix = String(Date.now()).slice(-6);
+    const employee = await createDisposableEmployeeFromBrowser(page, suffix);
+    const profileRef = `payroll.profile.import.${suffix}.v1`;
+    const duplicateProfileRef = `payroll.profile.import.duplicate.${suffix}.v1`;
+
+    await gotoAuthenticated(page, "/hr-admin/payroll-statutory");
+    await expectPageReady(page, "Payroll Statutory");
+
+    const packOption = await page.getByTestId("statutory-profile-form").locator("select").nth(1).evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      const option = Array.from(select.options).find((item) => item.value);
+      return { value: option?.value ?? "", label: option?.textContent ?? "" };
+    });
+    expect(packOption.value).toBeTruthy();
+    const packCodeMatch = packOption.label.match(/\(([^)]+)\)/);
+    const packCode = packCodeMatch?.[1] ?? "";
+    expect(packCode).toBeTruthy();
+
+    const csv = [
+      "employee_code,statutory_pack_code,profile_ref,effective_from,effective_to,status,pan_number,uan_number,pf_number,esi_number,pf_applicable,esi_applicable,professional_tax_state,lwf_state,tax_regime,declaration_status,previous_employment_income,previous_employment_tax_deducted,source_ref,config_profile_ref",
+      `${employee.employee_code},${packCode},${profileRef},2026-04-01,2027-03-31,draft,ABCDE1234F,123456789012,PF-${suffix},,true,false,KA,KA,new,not_started,1000,100,statutory-profile-import-${suffix},statutory.profile.import.v1`,
+      `${employee.employee_code},${packCode},${duplicateProfileRef},2026-04-01,2027-03-31,draft,ABCDE1234F,123456789012,PF-DUP-${suffix},,true,false,KA,KA,new,not_started,0,0,statutory-profile-import-duplicate-${suffix},statutory.profile.import.v1`,
+      `UNKNOWN-${suffix},${packCode},payroll.profile.import.unknown.${suffix}.v1,2026-04-01,2027-03-31,draft,ABCDE1234F,123456789012,PF-UNK-${suffix},,true,false,KA,KA,new,not_started,0,0,statutory-profile-import-unknown-${suffix},statutory.profile.import.v1`,
+      `${employee.employee_code},${packCode},payroll.profile.import.badpan.${suffix}.v1,2026-04-01,2027-03-31,draft,BADPAN,123456789012,PF-BAD-${suffix},,true,false,KA,KA,new,not_started,0,0,statutory-profile-import-badpan-${suffix},statutory.profile.import.v1`,
+    ].join("\n");
+
+    const workbench = page.getByTestId("statutory-profile-import-workbench");
+    await expect(workbench).toBeVisible();
+    await expect(workbench.getByRole("heading", { name: "Employee statutory profile import" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Load sample template" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Copy template" })).toBeVisible();
+    await expect(workbench.getByRole("link", { name: "Download template" })).toHaveAttribute("download", "employee-statutory-profile-import-template.csv");
+    await expect(workbench.getByText("Upload CSV", { exact: true })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Preview statutory import" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Commit ready statutory rows" })).toBeDisabled();
+
+    await workbench.locator("input[type='file']").setInputFiles({
+      name: "employee-statutory-profile-import.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    });
+    await expect(workbench.getByLabel("Statutory profile CSV data")).toContainText(employee.employee_code);
+    await workbench.getByRole("button", { name: "Preview statutory import" }).click();
+    await expect(workbench.getByText("Preview ready. Commit ready statutory profiles after checking blocked rows.")).toBeVisible();
+    await expect(workbench.locator("tbody tr")).toHaveCount(4);
+    await expect(workbench.locator("tr").filter({ hasText: profileRef }).locator(".readiness-badge", { hasText: "ready" })).toBeVisible();
+    const duplicateRow = workbench.locator("tr").filter({ hasText: duplicateProfileRef });
+    await expect(duplicateRow.locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+    await expect(duplicateRow.getByText("Only one statutory profile per employee can be committed in one import batch.")).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: `UNKNOWN-${suffix}` }).getByText("Employee code must match an existing employee.")).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: `payroll.profile.import.badpan.${suffix}.v1` }).getByText("PAN number must use the 10-character PAN format.")).toBeVisible();
+
+    await workbench.getByRole("button", { name: "Commit ready statutory rows" }).click();
+    await expect(workbench.getByText("Commit complete. Created rows are saved with source-hash evidence.")).toBeVisible({ timeout: 30_000 });
+    await expect(workbench.locator("tr").filter({ hasText: profileRef }).locator(".readiness-badge", { hasText: "created" })).toBeVisible();
+
+    const profiles = await page.evaluate(async () => {
+      const response = await fetch("/api/hr-admin/employee-statutory-profiles");
+      if (!response.ok) {
+        throw new Error(`Statutory profile readback failed with ${response.status}`);
+      }
+      const payload = await response.json();
+      return Array.isArray(payload) ? payload : payload.results ?? [];
+    }) as Array<{ profile_ref: string; employee_id: string; source_hash: string; pan_number: string; pf_applicable: boolean }>;
+    const createdProfile = profiles.find((item) => item.profile_ref === profileRef);
+    expect(createdProfile).toBeTruthy();
+    expect(createdProfile?.employee_id).toBe(employee.id);
+    expect(createdProfile?.source_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(createdProfile?.pan_number).toBe("ABCDE1234F");
+    expect(createdProfile?.pf_applicable).toBe(true);
+    expect(profiles.some((item) => item.profile_ref === duplicateProfileRef)).toBeFalsy();
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("statutory workspace exposes packs, registrations, filings, proof review, and live source trail", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory");
     await expectPageReady(page, "Payroll Statutory");

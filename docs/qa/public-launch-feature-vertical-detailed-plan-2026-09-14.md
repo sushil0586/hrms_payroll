@@ -144,7 +144,7 @@ Evidence:
 
 Goal: real customers can load 100+ employees and related masters without manual one-by-one creation.
 
-Current status: in progress. PLF-4A organization master import, PLF-4B employee bulk import, and PLF-4C salary assignment bulk import are deployed and certified on staging. PLF-4D employee bank import is implemented and certified locally in `/hr-admin/employees`.
+Current status: in progress. PLF-4A organization master import, PLF-4B employee bulk import, PLF-4C salary assignment bulk import, and PLF-4D employee bank import are deployed and certified on staging. PLF-4E employee statutory profile import is locally certified and pending check-in, staging deploy, and live browser rerun.
 
 Implementation tasks:
 
@@ -153,6 +153,7 @@ Implementation tasks:
   - PLF-4B complete locally for employees: template copy/download, CSV upload, row validation, duplicate detection, optional structural name resolution, and commit of ready rows through the same employee create API used by the form.
   - PLF-4C complete for salary assignments: template copy/download, CSV upload, employee-code resolution, salary structure/version resolution, effective-date validation, batch duplicate detection, and commit of ready rows through the salary assignment API.
   - PLF-4D complete locally for employee bank accounts: template copy/download, CSV upload, employee-code resolution, primary-account batch guard, IFSC/account validation, and commit of ready rows through the employee bank account API.
+  - PLF-4E complete locally for employee statutory profiles: template copy/download, CSV upload, employee-code and statutory-pack-code resolution, PAN/UAN/ESI/tax-regime/declaration-status validation, duplicate employee batch guard, commit of ready rows through the statutory profile API, and browser readback of source-hash evidence.
 - Add upload, parse, validation preview, error grouping, row-level correction, import commit, rollback, and audit evidence.
 - Add import history with downloadable error report.
 - Keep all validation rules configurable.
@@ -221,6 +222,22 @@ PLF-4D local certification evidence, 2026-09-14:
 - Browser regression: full `employee-directory-certification.spec.ts` passed, `3 passed`.
 - Build: `pnpm --dir web build` passed after the feature change.
 - Certified paths: employee bank import workbench renders, template actions are visible, CSV upload populates preview, browser-created employee can receive a primary bank account import, unknown employee rows block, invalid IFSC rows block, duplicate primary account rows block within the same import batch, ready rows commit, blocked rows remain uncreated, employee bank account page reflects primary payout coverage, and touched views have no horizontal overflow.
+
+PLF-4D staging certification evidence, 2026-09-14:
+
+- Deployment: staging updated to commit `4cf9396`.
+- Smoke: `pnpm qa:post-deploy-smoke` passed with API/root/login 200, backend/web active, disk 68%.
+- Browser: live `employee-directory-certification.spec.ts` passed, `3 passed`.
+- Certified paths: employee bank import, employee bulk import, directory filters, pagination, detail actions, empty state, and layout checks passed on staging against live APIs.
+
+PLF-4E local certification evidence, 2026-09-14:
+
+- TypeScript: `pnpm --dir web exec tsc --noEmit` passed.
+- Browser: `payroll-statutory-flows.spec.ts -g "employee statutory profile import"` passed.
+- Browser regression: full `payroll-statutory-flows.spec.ts` passed, `4 passed`.
+- Build: `pnpm --dir web build` passed after the feature change.
+- Local data note: Northstar local test tenant was kept on Enterprise for this run because repeated local payroll certification had exceeded the Growth `payroll_runs_per_month` meter. SaaS commercial enforcement remained active.
+- Certified paths: employee statutory profile import workbench renders, template actions are visible, CSV upload populates preview, browser-created employee can receive a statutory profile import, unknown employee rows block, invalid PAN rows block, duplicate employee profile rows block within the same import batch, ready rows commit, created rows remain visible in the preview, profile collection readback confirms source-hash evidence, blocked rows remain uncreated, statutory workspace CRUD/regression remains certified, mobile statutory controls remain usable, and touched views have no horizontal overflow.
 
 Exit criteria:
 
@@ -405,7 +422,7 @@ Execution rule:
 | PLF-1 Public signup and leads | In progress | Backend `2 passed`; browser signup/review/qualify/convert/provision/login and platform-admin tabs regression `2 passed` | Signup/conversion deployed at `39d3880`; expanded provisioning/login pending deploy | 88% |
 | PLF-2 Tenant provisioning | In progress | Converted lead creates tenant plus primary admin contact; first tenant-admin provisioning/login passed locally | Pending staging deploy/certification for expanded path | 84% |
 | PLF-3 Guided setup wizard | Planned | Pending | Pending | TBD |
-| PLF-4 Bulk onboarding | In progress | PLF-4A org import certified; PLF-4B employee import certified; PLF-4C salary assignment import certified locally and on staging; PLF-4D employee bank import locally certified | PLF-4A deployed at `863d7ee`, live org suite `11 passed`; PLF-4B deployed at `9c6a589`, smoke passed, live employee directory suite `2 passed`; PLF-4C deployed at `a0c1aff`, smoke passed, live salary setup suite `4 passed`; PLF-4D pending deploy/live rerun | 96% |
+| PLF-4 Bulk onboarding | In progress | PLF-4A org import certified; PLF-4B employee import certified; PLF-4C salary assignment import certified; PLF-4D employee bank import certified; PLF-4E statutory profile import certified | PLF-4A deployed at `863d7ee`, live org suite `11 passed`; PLF-4B deployed at `9c6a589`, smoke passed, live employee directory suite `2 passed`; PLF-4C deployed at `a0c1aff`, smoke passed, live salary setup suite `4 passed`; PLF-4D deployed at `4cf9396`, smoke passed, live employee directory suite `3 passed`; PLF-4E staging pending check-in/deploy/live rerun | 97% |
 | PLF-5 Compliance/e-filing reports | Planned | Pending | Pending | TBD |
 | PLF-6 Provider certification | Planned | Pending | Pending | TBD |
 | PLF-7 Billing/subscription | Planned | Pending | Pending | TBD |
