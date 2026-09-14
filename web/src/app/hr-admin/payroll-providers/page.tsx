@@ -455,6 +455,12 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
             <Link className="button button--secondary" href="/hr-admin/payroll-statutory">
               Statutory
             </Link>
+            <Link className="button button--secondary" href="/api/hr-admin/payroll-provider-certification-evidence" prefetch={false}>
+              Export evidence
+            </Link>
+            <Link className="button button--ghost" href="/api/hr-admin/payroll-provider-certification-evidence?format=manifest" prefetch={false}>
+              Evidence manifest
+            </Link>
           </>
         }
         pills={["Bank", "Accounting", "Statutory"]}
