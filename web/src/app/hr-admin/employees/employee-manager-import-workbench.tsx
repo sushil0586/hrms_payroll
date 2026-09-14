@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeListItem } from "@/lib/types";
 
 type EmployeeManagerImportWorkbenchProps = {
@@ -176,7 +177,7 @@ export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeM
   const readyCount = rows.filter((row) => row.status === "ready").length;
   const createdCount = rows.filter((row) => row.status === "created").length;
 
-  function preview() {
+  async function preview() {
     const parsed = parseCsv(csvText);
     if (parsed.error) {
       setRows([]);
@@ -185,8 +186,21 @@ export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeM
     }
 
     const batchEmployees = new Set<string>();
-    setRows(parsed.rows.map((row, index) => buildImportRow(row, index + 1, employeesByCode, managersByCode, managersByName, batchEmployees)));
+    const nextRows = parsed.rows.map((row, index) => buildImportRow(row, index + 1, employeesByCode, managersByCode, managersByName, batchEmployees));
+    setRows(nextRows);
     setMessage("Preview ready. Commit ready manager mappings after checking blocked rows.");
+    await recordImportBatchAudit({
+      import_type: "reporting_manager_mappings",
+      status: "previewed",
+      file_name: "employee-manager-import.csv",
+      source_hash: await sha256Hex(csvText),
+      row_count: nextRows.length,
+      ready_count: nextRows.filter((row) => row.status === "ready").length,
+      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
+      rollback_supported: false,
+      evidence_snapshot: { headers, ui: "employee-manager-import-workbench" },
+      row_errors: nextRows.filter((row) => row.status === "blocked").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
+    });
   }
 
   async function commitReadyRows() {
@@ -215,6 +229,20 @@ export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeM
 
     setIsCommitting(false);
     setMessage("Commit complete. Refresh the directory or workforce report to verify manager coverage.");
+    await recordImportBatchAudit({
+      import_type: "reporting_manager_mappings",
+      status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
+      file_name: "employee-manager-import.csv",
+      source_hash: await sha256Hex(csvText),
+      row_count: nextRows.length,
+      ready_count: nextRows.filter((row) => row.status === "ready").length,
+      created_count: nextRows.filter((row) => row.status === "created").length,
+      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
+      failed_count: nextRows.filter((row) => row.status === "failed").length,
+      rollback_supported: false,
+      evidence_snapshot: { headers, ui: "employee-manager-import-workbench" },
+      row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
+    });
   }
 
   return (

@@ -299,6 +299,95 @@ class SaasCommercialAuditEvent(UUIDPrimaryKeyModel, TimeStampedModel):
         return f"{self.tenant.code}:{self.event_type}:{self.occurred_at:%Y-%m-%d %H:%M}"
 
 
+class HrmsImportBatchStatus(models.TextChoices):
+    PREVIEWED = "previewed", "Previewed"
+    COMMITTED = "committed", "Committed"
+    PARTIAL = "partial", "Partial"
+    FAILED = "failed", "Failed"
+    ROLLBACK_REVIEW = "rollback_review", "Rollback Review"
+
+
+class HrmsImportBatchAudit(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Tenant-scoped evidence ledger for browser-driven bulk imports."""
+
+    tenant = models.ForeignKey("tenants.Tenant", on_delete=models.CASCADE, related_name="hrms_import_batch_audits")
+    import_type = models.CharField(max_length=80)
+    status = models.CharField(
+        max_length=30,
+        choices=HrmsImportBatchStatus.choices,
+        default=HrmsImportBatchStatus.PREVIEWED,
+    )
+    actor_user = models.ForeignKey("iam.User", on_delete=models.SET_NULL, blank=True, null=True, related_name="hrms_import_batch_audits")
+    actor_identifier = models.CharField(max_length=160, blank=True)
+    file_name = models.CharField(max_length=180, blank=True)
+    source_hash = models.CharField(max_length=64)
+    row_count = models.PositiveIntegerField(default=0)
+    ready_count = models.PositiveIntegerField(default=0)
+    created_count = models.PositiveIntegerField(default=0)
+    blocked_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    rollback_supported = models.BooleanField(default=False)
+    rollback_status = models.CharField(max_length=40, default="not_requested")
+    source_ref = models.CharField(max_length=160, default="hrms.bulk_import.browser.v1")
+    evidence_snapshot = models.JSONField(default=dict, blank=True)
+    row_errors = models.JSONField(default=list, blank=True)
+    batch_hash = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "import_type", "-created_at"]),
+            models.Index(fields=["tenant", "status", "-created_at"]),
+            models.Index(fields=["tenant", "source_hash"]),
+        ]
+        verbose_name = "HRMS Import Batch Audit"
+        verbose_name_plural = "HRMS Import Batch Audits"
+
+    def _batch_digest(self) -> str:
+        payload = {
+            "tenant_id": str(self.tenant_id or ""),
+            "import_type": self.import_type,
+            "status": self.status,
+            "actor_identifier": self.actor_identifier,
+            "file_name": self.file_name,
+            "source_hash": self.source_hash,
+            "row_count": self.row_count,
+            "ready_count": self.ready_count,
+            "created_count": self.created_count,
+            "blocked_count": self.blocked_count,
+            "failed_count": self.failed_count,
+            "rollback_supported": self.rollback_supported,
+            "rollback_status": self.rollback_status,
+            "source_ref": self.source_ref,
+            "evidence_snapshot": self.evidence_snapshot,
+            "row_errors": self.row_errors,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+    def clean(self):
+        errors = {}
+        if self.status not in HrmsImportBatchStatus.values:
+            errors["status"] = "Status must be a valid import batch status."
+        if not isinstance(self.evidence_snapshot, dict):
+            errors["evidence_snapshot"] = "Evidence snapshot must be an object."
+        if not isinstance(self.row_errors, list):
+            errors["row_errors"] = "Row errors must be a list."
+        if self.source_hash and len(self.source_hash) != 64:
+            errors["source_hash"] = "Source hash must be a SHA-256 hex digest."
+        if self.batch_hash and len(self.batch_hash) != 64:
+            errors["batch_hash"] = "Batch hash must be a SHA-256 hex digest."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.batch_hash = self._batch_digest()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.tenant.code}:{self.import_type}:{self.status}:{self.created_at:%Y-%m-%d %H:%M}"
+
+
 class SaasTenantChangeRequestType(models.TextChoices):
     PLAN_CHANGE = "plan_change", "Plan Change"
     BILLING_CONTACT = "billing_contact", "Billing Contact"

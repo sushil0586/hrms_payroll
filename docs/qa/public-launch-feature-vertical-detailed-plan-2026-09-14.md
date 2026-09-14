@@ -144,7 +144,7 @@ Evidence:
 
 Goal: real customers can load 100+ employees and related masters without manual one-by-one creation.
 
-Current status: in progress. PLF-4A organization master import, PLF-4B employee bulk import, PLF-4C salary assignment bulk import, PLF-4D employee bank import, PLF-4E employee statutory profile import, and PLF-4F leave balance import are deployed and certified on staging. PLF-4G reporting manager import is locally certified and pending check-in, staging deploy, and live browser rerun.
+Current status: in progress. PLF-4A organization master import, PLF-4B employee bulk import, PLF-4C salary assignment bulk import, PLF-4D employee bank import, PLF-4E employee statutory profile import, PLF-4F leave balance import, and PLF-4G reporting manager import are deployed and certified on staging.
 
 Implementation tasks:
 
@@ -270,6 +270,13 @@ PLF-4G local certification evidence, 2026-09-14:
 - Browser regression: full `employee-directory-certification.spec.ts` passed, `4 passed`.
 - Build: `pnpm --dir web build` passed after the feature change.
 - Certified paths: reporting manager import workbench renders, template actions are visible, CSV upload populates preview, valid manager mapping rows become ready, duplicate employee mapping rows block, unknown employees block, self-manager rows block, unknown managers block, ready rows commit through the employee update API, directory/detail views show the updated manager, employee/bank import regressions remain certified, directory controls/pagination/selection/actions/empty state remain certified, and touched views have no horizontal overflow.
+
+PLF-4G staging certification evidence, 2026-09-14:
+
+- Deployment: staging updated to commit `f62b05b`.
+- Smoke: `pnpm qa:post-deploy-smoke` passed with API/root/login 200, backend/web active, disk 68%.
+- Browser: live full `employee-directory-certification.spec.ts` passed, `4 passed`.
+- Certified paths: reporting manager import, employee bank import, employee bulk import, directory controls, pagination, selected detail, action menu links, empty-state reset behavior, and no-overflow checks passed on staging against live APIs.
 
 Exit criteria:
 
@@ -454,7 +461,7 @@ Execution rule:
 | PLF-1 Public signup and leads | In progress | Backend `2 passed`; browser signup/review/qualify/convert/provision/login and platform-admin tabs regression `2 passed` | Signup/conversion deployed at `39d3880`; expanded provisioning/login pending deploy | 88% |
 | PLF-2 Tenant provisioning | In progress | Converted lead creates tenant plus primary admin contact; first tenant-admin provisioning/login passed locally | Pending staging deploy/certification for expanded path | 84% |
 | PLF-3 Guided setup wizard | Planned | Pending | Pending | TBD |
-| PLF-4 Bulk onboarding | In progress | PLF-4A org import certified; PLF-4B employee import certified; PLF-4C salary assignment import certified; PLF-4D employee bank import certified; PLF-4E statutory profile import certified; PLF-4F leave balance import certified; PLF-4G reporting manager import certified | PLF-4A deployed at `863d7ee`, live org suite `11 passed`; PLF-4B deployed at `9c6a589`, smoke passed, live employee directory suite `2 passed`; PLF-4C deployed at `a0c1aff`, smoke passed, live salary setup suite `4 passed`; PLF-4D deployed at `4cf9396`, smoke passed, live employee directory suite `3 passed`; PLF-4E deployed at `3c0561c`, smoke passed, live statutory suite `4 passed`; PLF-4F deployed at `5df5778`, smoke passed, live leave balance suite `3 passed`; PLF-4G staging pending check-in/deploy/live rerun | 98% |
+| PLF-4 Bulk onboarding | In progress | PLF-4A org import certified; PLF-4B employee import certified; PLF-4C salary assignment import certified; PLF-4D employee bank import certified; PLF-4E statutory profile import certified; PLF-4F leave balance import certified; PLF-4G reporting manager import certified; PLF-4H import history/audit evidence locally certified with backend check, migration, typecheck, production build, focused manager-import audit proof `1 passed`, and full employee directory suite `4 passed` | PLF-4A deployed at `863d7ee`, live org suite `11 passed`; PLF-4B deployed at `9c6a589`, smoke passed, live employee directory suite `2 passed`; PLF-4C deployed at `a0c1aff`, smoke passed, live salary setup suite `4 passed`; PLF-4D deployed at `4cf9396`, smoke passed, live employee directory suite `3 passed`; PLF-4E deployed at `3c0561c`, smoke passed, live statutory suite `4 passed`; PLF-4F deployed at `5df5778`, smoke passed, live leave balance suite `3 passed`; PLF-4G deployed at `f62b05b`, smoke passed, live employee directory suite `4 passed`; PLF-4H staging deployment pending check-in | 99% |
 | PLF-5 Compliance/e-filing reports | Planned | Pending | Pending | TBD |
 | PLF-6 Provider certification | Planned | Pending | Pending | TBD |
 | PLF-7 Billing/subscription | Planned | Pending | Pending | TBD |

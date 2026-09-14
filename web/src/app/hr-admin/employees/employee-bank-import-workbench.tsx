@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
 import type { HrAdminEmployeeBankAccountWriteInput, HrAdminEmployeeListItem } from "@/lib/types";
 
 type EmployeeBankImportWorkbenchProps = {
@@ -180,7 +181,7 @@ export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWor
   const readyCount = rows.filter((row) => row.status === "ready").length;
   const createdCount = rows.filter((row) => row.status === "created").length;
 
-  function preview() {
+  async function preview() {
     const parsed = parseCsv(csvText);
     if (parsed.error) {
       setRows([]);
@@ -203,6 +204,18 @@ export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWor
 
     setRows(nextRows);
     setMessage("Preview ready. Commit ready bank accounts after checking blocked rows.");
+    await recordImportBatchAudit({
+      import_type: "employee_bank_accounts",
+      status: "previewed",
+      file_name: "employee-bank-import.csv",
+      source_hash: await sha256Hex(csvText),
+      row_count: nextRows.length,
+      ready_count: nextRows.filter((row) => row.status === "ready").length,
+      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
+      rollback_supported: false,
+      evidence_snapshot: { headers, ui: "employee-bank-import-workbench" },
+      row_errors: nextRows.filter((row) => row.status === "blocked").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
+    });
   }
 
   async function commitReadyRows() {
@@ -231,6 +244,20 @@ export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWor
 
     setIsCommitting(false);
     setMessage("Commit complete. Open the employee bank account page or payroll readiness to verify coverage.");
+    await recordImportBatchAudit({
+      import_type: "employee_bank_accounts",
+      status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
+      file_name: "employee-bank-import.csv",
+      source_hash: await sha256Hex(csvText),
+      row_count: nextRows.length,
+      ready_count: nextRows.filter((row) => row.status === "ready").length,
+      created_count: nextRows.filter((row) => row.status === "created").length,
+      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
+      failed_count: nextRows.filter((row) => row.status === "failed").length,
+      rollback_supported: false,
+      evidence_snapshot: { headers, ui: "employee-bank-import-workbench" },
+      row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
+    });
   }
 
   return (

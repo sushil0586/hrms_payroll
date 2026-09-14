@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { recordImportBatchAudit, sha256Hex } from "@/lib/import-batch-audit";
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeListItem, HrAdminEmployeeWriteInput, HrAdminOptionItem, HrAdminManagerOption } from "@/lib/types";
 
 type EmployeeImportWorkbenchProps = {
@@ -274,7 +275,7 @@ export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWo
   const existingCodes = useMemo(() => new Set(employees.map((employee) => employee.employee_code.toLowerCase())), [employees]);
   const readyCount = rows.filter((row) => row.status === "ready").length;
 
-  function preview() {
+  async function preview() {
     const parsed = parseCsv(csvText);
     if (parsed.error) {
       setRows([]);
@@ -299,6 +300,18 @@ export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWo
 
     setRows(nextRows);
     setMessage("Preview ready. Review blocked rows before committing.");
+    await recordImportBatchAudit({
+      import_type: "employees",
+      status: "previewed",
+      file_name: "employee-import.csv",
+      source_hash: await sha256Hex(csvText),
+      row_count: nextRows.length,
+      ready_count: nextRows.filter((row) => row.status === "ready").length,
+      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
+      rollback_supported: false,
+      evidence_snapshot: { headers, ui: "employee-import-workbench" },
+      row_errors: nextRows.filter((row) => row.status === "blocked").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
+    });
   }
 
   async function commitReadyRows() {
@@ -328,6 +341,20 @@ export function EmployeeImportWorkbench({ employees, options }: EmployeeImportWo
 
     setIsCommitting(false);
     setMessage("Commit complete. Refresh the directory to verify created employees.");
+    await recordImportBatchAudit({
+      import_type: "employees",
+      status: nextRows.some((row) => row.status === "failed") ? "partial" : "committed",
+      file_name: "employee-import.csv",
+      source_hash: await sha256Hex(csvText),
+      row_count: nextRows.length,
+      ready_count: nextRows.filter((row) => row.status === "ready").length,
+      created_count: nextRows.filter((row) => row.status === "created").length,
+      blocked_count: nextRows.filter((row) => row.status === "blocked").length,
+      failed_count: nextRows.filter((row) => row.status === "failed").length,
+      rollback_supported: false,
+      evidence_snapshot: { headers, ui: "employee-import-workbench", created_ids: nextRows.map((row) => row.createdId).filter(Boolean) },
+      row_errors: nextRows.filter((row) => row.status === "blocked" || row.status === "failed").map((row) => ({ row: row.index, employee_code: row.source.employee_code, message: row.message })),
+    });
   }
 
   return (

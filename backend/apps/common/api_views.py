@@ -20,7 +20,7 @@ from rest_framework import exceptions, permissions, response, serializers, statu
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.views import APIView
 
-from apps.common.models import HrmsLaunchRemediationAssignment
+from apps.common.models import HrmsImportBatchAudit, HrmsImportBatchStatus, HrmsLaunchRemediationAssignment
 from apps.common.api_serializers import (
     LIFECYCLE_COMMON_DUE_ANCHORS,
     LIFECYCLE_EXIT_DUE_ANCHORS,
@@ -13617,6 +13617,107 @@ class HrAdminReportExportAuditListCreateView(HrAdminContextMixin, APIView):
             generated_at=serializer.validated_data.get("generated_at") or timezone.now(),
         )
         return response.Response(HrAdminReportExportAuditSerializer(_payroll_report_export_audit_payload(item)).data, status=status.HTTP_201_CREATED)
+
+
+class HrAdminImportBatchAuditSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    import_type = serializers.CharField(max_length=80)
+    status = serializers.ChoiceField(choices=HrmsImportBatchStatus.choices)
+    actor_identifier = serializers.CharField(required=False, allow_blank=True, max_length=160)
+    file_name = serializers.CharField(required=False, allow_blank=True, max_length=180)
+    source_hash = serializers.RegexField(r"^[a-f0-9]{64}$")
+    row_count = serializers.IntegerField(min_value=0)
+    ready_count = serializers.IntegerField(min_value=0, required=False)
+    created_count = serializers.IntegerField(min_value=0, required=False)
+    blocked_count = serializers.IntegerField(min_value=0, required=False)
+    failed_count = serializers.IntegerField(min_value=0, required=False)
+    rollback_supported = serializers.BooleanField(required=False)
+    rollback_status = serializers.CharField(required=False, allow_blank=True, max_length=40)
+    source_ref = serializers.CharField(required=False, allow_blank=True, max_length=160)
+    evidence_snapshot = serializers.DictField(required=False)
+    row_errors = serializers.ListField(child=serializers.DictField(), required=False)
+    batch_hash = serializers.CharField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
+def _hrms_import_batch_audit_payload(item: HrmsImportBatchAudit) -> dict:
+    return {
+        "id": item.id,
+        "import_type": item.import_type,
+        "status": item.status,
+        "actor_identifier": item.actor_identifier,
+        "file_name": item.file_name,
+        "source_hash": item.source_hash,
+        "row_count": item.row_count,
+        "ready_count": item.ready_count,
+        "created_count": item.created_count,
+        "blocked_count": item.blocked_count,
+        "failed_count": item.failed_count,
+        "rollback_supported": item.rollback_supported,
+        "rollback_status": item.rollback_status,
+        "source_ref": item.source_ref,
+        "evidence_snapshot": item.evidence_snapshot,
+        "row_errors": item.row_errors,
+        "batch_hash": item.batch_hash,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+class HrAdminImportBatchAuditListCreateView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        queryset = HrmsImportBatchAudit.objects.filter(tenant=employee.tenant)
+        import_type = request.query_params.get("import_type")
+        status_filter = request.query_params.get("status")
+        query = request.query_params.get("q")
+        if import_type:
+            queryset = queryset.filter(import_type=import_type)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if query:
+            queryset = queryset.filter(
+                Q(actor_identifier__icontains=query)
+                | Q(import_type__icontains=query)
+                | Q(file_name__icontains=query)
+                | Q(source_hash__icontains=query)
+                | Q(batch_hash__icontains=query)
+            )
+        items = [_hrms_import_batch_audit_payload(item) for item in queryset[:200]]
+        return response.Response({
+            "items": HrAdminImportBatchAuditSerializer(items, many=True).data,
+            "count": queryset.count(),
+        })
+
+    def post(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = HrAdminImportBatchAuditSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        item = HrmsImportBatchAudit.objects.create(
+            tenant=employee.tenant,
+            actor_user=request.user,
+            actor_identifier=serializer.validated_data.get("actor_identifier") or getattr(request.user, "username", "") or getattr(request.user, "email", "") or employee.employee_code,
+            import_type=serializer.validated_data["import_type"],
+            status=serializer.validated_data["status"],
+            file_name=serializer.validated_data.get("file_name") or "",
+            source_hash=serializer.validated_data["source_hash"],
+            row_count=serializer.validated_data["row_count"],
+            ready_count=serializer.validated_data.get("ready_count") or 0,
+            created_count=serializer.validated_data.get("created_count") or 0,
+            blocked_count=serializer.validated_data.get("blocked_count") or 0,
+            failed_count=serializer.validated_data.get("failed_count") or 0,
+            rollback_supported=serializer.validated_data.get("rollback_supported", False),
+            rollback_status=serializer.validated_data.get("rollback_status") or "not_requested",
+            source_ref=serializer.validated_data.get("source_ref") or "hrms.bulk_import.browser.v1",
+            evidence_snapshot=serializer.validated_data.get("evidence_snapshot") or {},
+            row_errors=serializer.validated_data.get("row_errors") or [],
+        )
+        return response.Response(HrAdminImportBatchAuditSerializer(_hrms_import_batch_audit_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
 class HrAdminEmployeeListView(HrAdminContextMixin, APIView):

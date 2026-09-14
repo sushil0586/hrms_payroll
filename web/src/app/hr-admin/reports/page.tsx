@@ -96,6 +96,9 @@ export default async function HrAdminReportsPage() {
               <Link className="button button--secondary" href="/hr-admin/reports/export-audits">
                 Export audit history
               </Link>
+              <Link className="button button--secondary" href="/hr-admin/import-history">
+                Import history
+              </Link>
               <Link className="button button--primary" href="/api/hr-admin/reports/workforce" prefetch={false}>
                 Workforce CSV
               </Link>
