@@ -43,7 +43,7 @@ Exit criteria:
 
 Goal: public visitors can submit signup/contact requests and Platform Admin can review, approve, reject, or convert them.
 
-Status: In progress, local backend and browser conversion path passed on 2026-09-14.
+Status: In progress, local backend and browser conversion/provisioning path passed on 2026-09-14.
 
 Implementation tasks:
 
@@ -73,14 +73,14 @@ Exit criteria:
 Evidence:
 
 - Backend API: `cd backend && ../.venv/bin/python -m pytest tests/test_public_lead_intake.py` -> `2 passed`.
-- Browser local focused: `public-signup-to-tenant-provisioning.spec.ts` -> `1 passed`.
+- Browser local focused: `public-signup-to-tenant-provisioning.spec.ts` -> `1 passed`, including first tenant-admin provisioning and login.
 - Browser local touched-page regression: `platform-admin-tabs-pagination-certification.spec.ts` plus `public-signup-to-tenant-provisioning.spec.ts` -> `2 passed`.
 
 ## Phase PLF-2: Tenant Provisioning And First Admin Login
 
 Goal: approved lead becomes a tenant with an admin who can log in and begin setup.
 
-Status: In progress, lead-to-tenant conversion and primary admin contact creation passed locally on 2026-09-14; first admin login/provisioning remains the next depth step.
+Status: In progress, lead-to-tenant conversion, primary admin contact creation, first tenant-admin provisioning, and first tenant-admin login passed locally on 2026-09-14.
 
 Implementation tasks:
 
@@ -334,8 +334,8 @@ Execution rule:
 | Phase | Status | Local Evidence | Staging Evidence | Confidence |
 | --- | --- | --- | --- | ---: |
 | PLF-0 Baseline inventory | Planned | Pending | Pending | TBD |
-| PLF-1 Public signup and leads | In progress | Backend `2 passed`; browser signup/review/qualify/convert and platform-admin tabs regression `2 passed` | Pending deploy | 86% |
-| PLF-2 Tenant provisioning | In progress | Converted lead creates tenant plus primary admin contact | Pending first-admin login/provisioning certification | 78% |
+| PLF-1 Public signup and leads | In progress | Backend `2 passed`; browser signup/review/qualify/convert/provision/login and platform-admin tabs regression `2 passed` | Signup/conversion deployed at `39d3880`; expanded provisioning/login pending deploy | 88% |
+| PLF-2 Tenant provisioning | In progress | Converted lead creates tenant plus primary admin contact; first tenant-admin provisioning/login passed locally | Pending staging deploy/certification for expanded path | 84% |
 | PLF-3 Guided setup wizard | Planned | Pending | Pending | TBD |
 | PLF-4 Bulk onboarding | Planned | Pending | Pending | TBD |
 | PLF-5 Compliance/e-filing reports | Planned | Pending | Pending | TBD |

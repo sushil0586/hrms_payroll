@@ -15,6 +15,8 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     const workEmail = `aditi.${suffix}@plf-launch.test`;
     const tenantCode = `plf-launch-${suffix}`.slice(0, 50);
     const primaryDomain = `plf-${suffix}.test`;
+    const adminUsername = `plf.admin.${suffix}`.slice(0, 150);
+    const adminPassword = process.env.PLAYWRIGHT_PLATFORM_ADMIN_PROVISIONED_PASSWORD ?? "Password@123";
 
     await page.goto("/", { waitUntil: "networkidle" });
     await expectPageReady(page, "Run payroll, compliance, and employee operations");
@@ -76,7 +78,20 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await expect(adminContactRow).toBeVisible();
     await expect(adminContactRow.getByText(contactName)).toBeVisible();
     await expect(adminContactRow.getByText(workEmail)).toBeVisible();
-    await expect(adminsPanel.getByRole("button", { name: "Provision admin" })).toBeVisible();
+    const provisionForm = adminsPanel.locator("article").filter({ hasText: "Provision first admin" }).first();
+    await expect(provisionForm.getByRole("button", { name: "Provision admin" })).toBeVisible();
+    await provisionForm.locator('[name="contact_id"]').selectOption({ label: `${contactName} - ${workEmail}` });
+    await provisionForm.locator('[name="username"]').fill(adminUsername);
+    await provisionForm.locator('[name="role_code"]').selectOption("tenant-admin");
+    await provisionForm.locator('[name="role_name"]').fill("Tenant Admin");
+    await provisionForm.locator('[name="password"]').fill(adminPassword);
+    await provisionForm.locator('[name="membership_status"]').selectOption("active");
+    await provisionForm.locator('[name="must_change_password"]').setChecked(false);
+    await provisionForm.locator('[name="is_user_active"]').setChecked(true);
+    await provisionForm.getByRole("button", { name: "Provision admin" }).click();
+
+    await expect(page.getByText("First admin provisioned.")).toBeVisible();
+    await expect(adminContactRow.getByText("Provisioned")).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await page.goto(`/platform-admin?panel=tenants`, { waitUntil: "networkidle" });
@@ -84,6 +99,17 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await tenantsPanel.getByRole("textbox", { name: "Search" }).fill(companyName);
     await expect(tenantsPanel.locator(".employee-directory-item").filter({ hasText: companyName }).first()).toBeVisible();
     await expect(tenantsPanel.getByText(primaryDomain)).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+
+    await page.request.post("/api/auth/logout").catch(() => null);
+    await page.context().clearCookies();
+    await page.goto("/login", { waitUntil: "networkidle" });
+    await page.getByLabel("Username or email").fill(adminUsername);
+    await page.getByLabel("Password").fill(adminPassword);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL(/\/tenant-admin$/, { timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "Tenant Admin Console" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: companyName })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 });
