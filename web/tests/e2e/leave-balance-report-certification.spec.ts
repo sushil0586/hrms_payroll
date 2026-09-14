@@ -99,8 +99,8 @@ test.describe("Phase R4-S leave balance report certification", () => {
     await page.goto("/hr-admin/reports/leave-balance", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("leave-balance-report")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Run payroll, compliance, and employee operations/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Public signup" })).toBeVisible();
 
     const csvResponse = await page.request.get("/api/hr-admin/reports/leave-balance?sort=risk");
     expect([401, 403]).toContain(csvResponse.status());

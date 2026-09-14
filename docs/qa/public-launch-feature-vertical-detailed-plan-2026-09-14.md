@@ -144,7 +144,7 @@ Evidence:
 
 Goal: real customers can load 100+ employees and related masters without manual one-by-one creation.
 
-Current status: in progress. PLF-4A organization master import, PLF-4B employee bulk import, PLF-4C salary assignment bulk import, and PLF-4D employee bank import are deployed and certified on staging. PLF-4E employee statutory profile import is locally certified and pending check-in, staging deploy, and live browser rerun.
+Current status: in progress. PLF-4A organization master import, PLF-4B employee bulk import, PLF-4C salary assignment bulk import, PLF-4D employee bank import, and PLF-4E employee statutory profile import are deployed and certified on staging. PLF-4F leave balance import is locally certified and pending check-in, staging deploy, and live browser rerun.
 
 Implementation tasks:
 
@@ -154,6 +154,7 @@ Implementation tasks:
   - PLF-4C complete for salary assignments: template copy/download, CSV upload, employee-code resolution, salary structure/version resolution, effective-date validation, batch duplicate detection, and commit of ready rows through the salary assignment API.
   - PLF-4D complete locally for employee bank accounts: template copy/download, CSV upload, employee-code resolution, primary-account batch guard, IFSC/account validation, and commit of ready rows through the employee bank account API.
   - PLF-4E complete locally for employee statutory profiles: template copy/download, CSV upload, employee-code and statutory-pack-code resolution, PAN/UAN/ESI/tax-regime/declaration-status validation, duplicate employee batch guard, commit of ready rows through the statutory profile API, and browser readback of source-hash evidence.
+  - PLF-4F complete locally for leave balance actions: template copy/download, CSV upload, employee-code and leave-policy-name resolution from existing leave balances, action/units/effective-date/reason validation, duplicate action batch guard, and commit of ready rows through the leave balance action API.
 - Add upload, parse, validation preview, error grouping, row-level correction, import commit, rollback, and audit evidence.
 - Add import history with downloadable error report.
 - Keep all validation rules configurable.
@@ -238,6 +239,21 @@ PLF-4E local certification evidence, 2026-09-14:
 - Build: `pnpm --dir web build` passed after the feature change.
 - Local data note: Northstar local test tenant was kept on Enterprise for this run because repeated local payroll certification had exceeded the Growth `payroll_runs_per_month` meter. SaaS commercial enforcement remained active.
 - Certified paths: employee statutory profile import workbench renders, template actions are visible, CSV upload populates preview, browser-created employee can receive a statutory profile import, unknown employee rows block, invalid PAN rows block, duplicate employee profile rows block within the same import batch, ready rows commit, created rows remain visible in the preview, profile collection readback confirms source-hash evidence, blocked rows remain uncreated, statutory workspace CRUD/regression remains certified, mobile statutory controls remain usable, and touched views have no horizontal overflow.
+
+PLF-4E staging certification evidence, 2026-09-14:
+
+- Deployment: staging updated to commit `3c0561c`.
+- Smoke: `pnpm qa:post-deploy-smoke` passed with API/root/login 200, backend/web active, disk 68%.
+- Browser: live `payroll-statutory-flows.spec.ts` passed, `4 passed`.
+- Certified paths: employee statutory profile import, statutory workspace source trail, statutory setup CRUD, declaration proof actions, and mobile statutory controls passed on staging against live APIs.
+
+PLF-4F local certification evidence, 2026-09-14:
+
+- TypeScript: `pnpm --dir web exec tsc --noEmit` passed.
+- Browser: `leave-balance-import-flows.spec.ts` passed, `1 passed`.
+- Browser regression: `leave-balance-import-flows.spec.ts` plus `leave-balance-report-certification.spec.ts` passed, `3 passed`.
+- Build: `pnpm --dir web build` passed after the feature change.
+- Certified paths: leave balance import workbench renders, template actions are visible, CSV upload populates preview, valid adjustment rows become ready, duplicate employee-policy-date-action rows block, unknown employees block, zero-unit rows block, ready rows commit through the audited leave balance action API, created rows remain visible, transaction readback confirms the committed reason/employee, existing leave balance report filters/pagination/export/manifest/audit/drilldown remain certified, employee negative access remains denied, and touched views have no horizontal overflow.
 
 Exit criteria:
 
@@ -422,7 +438,7 @@ Execution rule:
 | PLF-1 Public signup and leads | In progress | Backend `2 passed`; browser signup/review/qualify/convert/provision/login and platform-admin tabs regression `2 passed` | Signup/conversion deployed at `39d3880`; expanded provisioning/login pending deploy | 88% |
 | PLF-2 Tenant provisioning | In progress | Converted lead creates tenant plus primary admin contact; first tenant-admin provisioning/login passed locally | Pending staging deploy/certification for expanded path | 84% |
 | PLF-3 Guided setup wizard | Planned | Pending | Pending | TBD |
-| PLF-4 Bulk onboarding | In progress | PLF-4A org import certified; PLF-4B employee import certified; PLF-4C salary assignment import certified; PLF-4D employee bank import certified; PLF-4E statutory profile import certified | PLF-4A deployed at `863d7ee`, live org suite `11 passed`; PLF-4B deployed at `9c6a589`, smoke passed, live employee directory suite `2 passed`; PLF-4C deployed at `a0c1aff`, smoke passed, live salary setup suite `4 passed`; PLF-4D deployed at `4cf9396`, smoke passed, live employee directory suite `3 passed`; PLF-4E staging pending check-in/deploy/live rerun | 97% |
+| PLF-4 Bulk onboarding | In progress | PLF-4A org import certified; PLF-4B employee import certified; PLF-4C salary assignment import certified; PLF-4D employee bank import certified; PLF-4E statutory profile import certified; PLF-4F leave balance import certified | PLF-4A deployed at `863d7ee`, live org suite `11 passed`; PLF-4B deployed at `9c6a589`, smoke passed, live employee directory suite `2 passed`; PLF-4C deployed at `a0c1aff`, smoke passed, live salary setup suite `4 passed`; PLF-4D deployed at `4cf9396`, smoke passed, live employee directory suite `3 passed`; PLF-4E deployed at `3c0561c`, smoke passed, live statutory suite `4 passed`; PLF-4F staging pending check-in/deploy/live rerun | 98% |
 | PLF-5 Compliance/e-filing reports | Planned | Pending | Pending | TBD |
 | PLF-6 Provider certification | Planned | Pending | Pending | TBD |
 | PLF-7 Billing/subscription | Planned | Pending | Pending | TBD |
