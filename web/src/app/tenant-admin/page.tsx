@@ -49,6 +49,16 @@ function activeSupportGrantCount(data: Awaited<ReturnType<typeof getTenantAdminC
   ).length;
 }
 
+function setupStepBadgeClass(status: "done" | "action" | "watch") {
+  if (status === "done") {
+    return "readiness-badge readiness-badge--ready";
+  }
+  if (status === "watch") {
+    return "readiness-badge readiness-badge--warning";
+  }
+  return "readiness-badge readiness-badge--blocked";
+}
+
 export default async function TenantAdminConsolePage() {
   const result = await getTenantAdminConsole();
   const data = result.data;
@@ -87,6 +97,45 @@ export default async function TenantAdminConsolePage() {
       action: "Audit access",
     },
   ];
+  const setupSteps = [
+    {
+      label: "Confirm company profile",
+      detail: `${data.tenant.legal_name || data.tenant.name} · ${data.tenant.country_code} · ${data.tenant.timezone}`,
+      status: data.tenant.legal_name && data.tenant.country_code && data.tenant.timezone ? "done" : "action",
+      href: "/tenant-admin",
+      action: "Review account",
+    },
+    {
+      label: "Invite workspace owners",
+      detail: `${data.summary.active_membership_count} active members across ${data.summary.role_count} roles`,
+      status: data.summary.active_membership_count > 1 ? "done" : "action",
+      href: "/tenant-admin",
+      action: "Manage members",
+    },
+    {
+      label: "Resolve launch checks",
+      detail: blockers.length ? `${blockers.length} blockers need action` : `${warnings.length} warnings to monitor`,
+      status: blockers.length ? "action" : warnings.length ? "watch" : "done",
+      href: "/tenant-admin/security-readiness",
+      action: "Open security",
+    },
+    {
+      label: "Publish operating configuration",
+      detail: `${data.configuration_health.published_count} published configs, ${data.configuration_health.draft_count} drafts`,
+      status: data.configuration_health.published_count ? "done" : "action",
+      href: "/hr-admin/payroll-setup",
+      action: "Open setup",
+    },
+    {
+      label: "Validate audit evidence",
+      detail: `${data.recent_audit_events.length} recent lifecycle events recorded`,
+      status: data.recent_audit_events.length ? "done" : "watch",
+      href: "/tenant-admin/trust-audit",
+      action: "Open audit",
+    },
+  ] as const;
+  const setupDoneCount = setupSteps.filter((step) => step.status === "done").length;
+  const setupCompletion = Math.round((setupDoneCount / setupSteps.length) * 100);
 
   return (
     <main className="shell shell--workspace">
@@ -122,6 +171,42 @@ export default async function TenantAdminConsolePage() {
           <MetricTile label="Roles" value={data.summary.role_count} trend={`${data.summary.active_membership_count} active members`} />
           <MetricTile label="Configs" value={data.configuration_health.published_count} trend={`${data.configuration_health.draft_count} drafts`} />
         </div>
+      </section>
+
+      <section className="section" data-testid="tenant-setup-guide">
+        <article className="panel-card-soft tenant-console-panel tenant-setup-guide">
+          <div className="tenant-console-panel__header">
+            <div>
+              <span className="workspace-card__eyebrow">Guided setup</span>
+              <h2>Tenant launch guide</h2>
+            </div>
+            <span className={statusBadgeClass(data.summary.commercial_can_launch ? "ready" : data.summary.status)}>
+              {setupCompletion}% complete
+            </span>
+          </div>
+          <div className="tenant-setup-guide__body">
+            <div className="tenant-setup-guide__summary">
+              <strong>{setupDoneCount} of {setupSteps.length} launch steps complete</strong>
+              <span>
+                Start here after tenant creation. Each item links to the workspace where the tenant admin or HR admin
+                can finish the setup evidence.
+              </span>
+            </div>
+            <div className="tenant-setup-step-list">
+              {setupSteps.map((step, index) => (
+                <div className="tenant-setup-step" key={step.label}>
+                  <div className="tenant-setup-step__index">{index + 1}</div>
+                  <div>
+                    <strong>{step.label}</strong>
+                    <span>{step.detail}</span>
+                  </div>
+                  <span className={setupStepBadgeClass(step.status)}>{titleCase(step.status)}</span>
+                  <Link className="button button--secondary" href={step.href}>{step.action}</Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        </article>
       </section>
 
       <section className="section tenant-control-center" data-testid="tenant-admin-control-center">

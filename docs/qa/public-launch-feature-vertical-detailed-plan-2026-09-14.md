@@ -109,6 +109,8 @@ Exit criteria:
 
 Goal: tenant admin/HR admin can complete required setup in a guided, low-confusion flow.
 
+Status: In progress, Tenant Admin launch guide added to the live tenant control center and locally certified on 2026-09-14.
+
 Implementation tasks:
 
 - Add setup checklist: legal entity, branch, location, department, designation, grade, employment type, cost center, pay calendar, pay group, salary components, policies, users.
@@ -130,6 +132,12 @@ Exit criteria:
 
 - A fresh tenant can see exactly what is pending before employee/payroll operations.
 - Confidence uplift target: +3%.
+
+Evidence:
+
+- UI implementation: `/tenant-admin` now shows a guided setup section with five launch steps, progress percentage, per-step readiness badges, and quick links to account, member, security, HR setup, and audit workspaces.
+- Browser local: `tenant-admin-console-flows.spec.ts` -> `2 passed`, covering desktop tenant-admin control center plus narrow viewport guided setup/no-overflow behavior.
+- TypeScript/build: `pnpm --dir web exec tsc --noEmit && pnpm --dir web build` -> passed.
 
 ## Phase PLF-4: Bulk Data Onboarding Workbench
 

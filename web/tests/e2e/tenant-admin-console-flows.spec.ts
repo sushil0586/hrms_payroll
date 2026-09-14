@@ -1,9 +1,33 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("Tenant admin console", () => {
+  async function expectSetupGuideCertified(page: Page) {
+    const setupGuide = page.getByTestId("tenant-setup-guide");
+    await expect(setupGuide).toBeVisible();
+    await expect(setupGuide.getByText("Guided setup", { exact: true })).toBeVisible();
+    await expect(setupGuide.getByRole("heading", { name: "Tenant launch guide" })).toBeVisible();
+    await expect(setupGuide.getByText(/% complete/)).toBeVisible();
+    await expect(setupGuide.getByText(/of 5 launch steps complete/)).toBeVisible();
+    for (const step of [
+      "Confirm company profile",
+      "Invite workspace owners",
+      "Resolve launch checks",
+      "Publish operating configuration",
+      "Validate audit evidence",
+    ]) {
+      const setupStep = setupGuide.locator(".tenant-setup-step").filter({ hasText: step }).first();
+      await expect(setupStep).toBeVisible();
+      await expect(setupStep.locator(".readiness-badge")).toBeVisible();
+      await expect(setupStep.getByRole("link")).toBeVisible();
+    }
+    for (const action of ["Review account", "Manage members", "Open security", "Open setup", "Open audit"]) {
+      await expect(setupGuide.getByRole("link", { name: action })).toBeVisible();
+    }
+  }
+
   test("shows account, seats, configuration, and commercial evidence", async ({ page }) => {
     await gotoAuthenticated(page, "/tenant-admin");
     await expectPageReady(page, "Tenant Admin Console");
@@ -18,6 +42,7 @@ test.describe("Tenant admin console", () => {
     for (const link of ["Review security", "Manage members", "Open queue", "Audit access", "Open trust audit"]) {
       await expect(page.getByTestId("tenant-admin-control-center").getByRole("link", { name: link })).toBeVisible();
     }
+    await expectSetupGuideCertified(page);
     await expect(page.getByRole("heading", { name: "Northstar Foods" })).toBeVisible();
     await expect(page.getByRole("main").getByText("Governance checks", { exact: true })).toBeVisible();
     await expect(page.getByRole("main").getByText("Role coverage", { exact: true })).toBeVisible();
@@ -103,6 +128,14 @@ test.describe("Tenant admin console", () => {
     await expect(page.getByRole("main").getByText("Commercial audit", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Download audit" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Workspaces" })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("keeps guided setup usable on a narrow viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoAuthenticated(page, "/tenant-admin");
+    await expectPageReady(page, "Tenant Admin Console");
+    await expectSetupGuideCertified(page);
     await expectNoHorizontalOverflow(page);
   });
 });

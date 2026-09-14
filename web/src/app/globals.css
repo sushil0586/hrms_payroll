@@ -1271,18 +1271,6 @@ select.input-control {
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
 }
 
-.mss-control-center {
-  display: grid;
-  gap: 18px;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
-}
-
-.ess-control-center {
-  display: grid;
-  gap: 18px;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
-}
-
 .finance-audit-panel {
   display: grid;
   gap: 16px;
@@ -3140,20 +3128,6 @@ select.input-control {
   width: 1px;
   height: 1px;
   opacity: 0;
-}
-
-.platform-lead-convert-form {
-  display: grid;
-  gap: 14px;
-  width: 100%;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(248, 250, 252, 0.72);
-}
-
-.platform-lead-convert-form__notes {
-  grid-column: 1 / -1;
 }
 
 .marketing-workspace-strip {
@@ -7880,8 +7854,6 @@ select.input-control {
 
   .hr-admin-control-center,
   .finance-control-center,
-  .mss-control-center,
-  .ess-control-center,
   .hr-admin-command-row,
   .finance-audit-grid,
   .hr-admin-shortcut-grid {
