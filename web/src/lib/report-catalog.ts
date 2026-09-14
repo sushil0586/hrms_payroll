@@ -229,7 +229,8 @@ export const reportCatalog: ReportCatalogItem[] = [
     filters: ["Quarter", "Legal entity", "Provider profile", "Readiness status"],
     exports: ["CSV", "PDF"],
     status: "Provider gated",
-    route: "/hr-admin/payroll-statutory",
+    route: "/hr-admin/reports/tds-efile-readiness",
+    exportRoute: "/api/hr-admin/reports/tds-efile-package",
   },
   {
     key: "challan-reconciliation",
