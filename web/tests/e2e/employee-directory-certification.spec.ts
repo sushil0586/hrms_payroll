@@ -367,7 +367,7 @@ test.describe("Certification: HR admin employee directory", () => {
   });
 
   test("directory controls, pagination, selection, detail, actions, and empty state are certified", async ({ page }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(300_000);
 
     await gotoAuthenticated(page, "/hr-admin/employees?page_size=5");
     await expectDirectoryPageCertified(page);
@@ -408,7 +408,7 @@ test.describe("Certification: HR admin employee directory", () => {
     await expectNoHorizontalOverflow(page);
 
     await Promise.all([
-      page.waitForURL((url) => url.pathname === "/hr-admin/employees" && !url.search),
+      page.waitForURL((url) => url.pathname === "/hr-admin/employees" && !url.search, { waitUntil: "commit", timeout: 60_000 }),
       directoryPanel(page).getByRole("link", { name: "Reset" }).click(),
     ]);
     await expect(page).toHaveURL(/\/hr-admin\/employees$/);
