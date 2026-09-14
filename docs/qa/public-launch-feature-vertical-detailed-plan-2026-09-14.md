@@ -144,12 +144,13 @@ Evidence:
 
 Goal: real customers can load 100+ employees and related masters without manual one-by-one creation.
 
-Current status: in progress. PLF-4A organization master import is implemented locally as a browser-first workbench on `/hr-admin/organization`.
+Current status: in progress. PLF-4A organization master import is deployed and certified on staging. PLF-4B employee bulk import is implemented locally as a browser-first workbench on `/hr-admin/employees`.
 
 Implementation tasks:
 
 - Add import templates for organization masters, employees, salary assignments, bank details, statutory profiles, leave balances, and manager mappings.
   - PLF-4A complete locally for organization masters: template copy/download, CSV upload, validation preview, same-batch dependency resolution, row status, and commit of ready rows.
+  - PLF-4B complete locally for employees: template copy/download, CSV upload, row validation, duplicate detection, optional structural name resolution, and commit of ready rows through the same employee create API used by the form.
 - Add upload, parse, validation preview, error grouping, row-level correction, import commit, rollback, and audit evidence.
 - Add import history with downloadable error report.
 - Keep all validation rules configurable.
@@ -173,6 +174,21 @@ PLF-4A local certification evidence, 2026-09-14:
 - Browser regression: full `organization-master-crud-flows.spec.ts` passed, `11 passed`.
 - Build: `pnpm --dir web build` completed after the feature change.
 - Certified paths: organization import workbench renders, template actions are visible, CSV upload populates preview, legal entity and branch rows validate as ready, invalid cost center row blocks with dependency guidance, ready rows commit, created rows appear in legal entity and branch catalogs, and touched views have no horizontal overflow.
+
+PLF-4A staging certification evidence, 2026-09-14:
+
+- Deployment: staging updated to commit `863d7ee`.
+- Smoke: `pnpm qa:post-deploy-smoke` passed with API/root/login 200, backend/web active, disk 68%.
+- Browser: live `organization-master-crud-flows.spec.ts` passed, `11 passed`.
+- Runtime observation: the full organization suite took 35.5 minutes on staging; keep the full certificate, but split future live jobs by tag/section when faster release feedback is needed.
+
+PLF-4B local certification evidence, 2026-09-14:
+
+- TypeScript: `pnpm --dir web exec tsc --noEmit` passed.
+- Browser: `employee-directory-certification.spec.ts -g "employee bulk import"` passed.
+- Browser regression: full `employee-directory-certification.spec.ts` passed, `2 passed`.
+- Build: `pnpm --dir web build` passed after the feature change.
+- Certified paths: employee import workbench renders, template actions are visible, CSV upload populates preview, valid employees become ready, duplicate employee code blocks inside the same import batch, missing first name blocks, ready rows commit, created rows are searchable in the employee directory, duplicate blocked rows are not created, directory filters/pagination/detail/actions/empty state still pass, and touched views have no horizontal overflow.
 
 Exit criteria:
 
@@ -357,7 +373,7 @@ Execution rule:
 | PLF-1 Public signup and leads | In progress | Backend `2 passed`; browser signup/review/qualify/convert/provision/login and platform-admin tabs regression `2 passed` | Signup/conversion deployed at `39d3880`; expanded provisioning/login pending deploy | 88% |
 | PLF-2 Tenant provisioning | In progress | Converted lead creates tenant plus primary admin contact; first tenant-admin provisioning/login passed locally | Pending staging deploy/certification for expanded path | 84% |
 | PLF-3 Guided setup wizard | Planned | Pending | Pending | TBD |
-| PLF-4 Bulk onboarding | In progress | PLF-4A organization master import: TypeScript passed; org master browser suite `11 passed`; build passed | Pending check-in, deploy, and staging browser rerun | 86% |
+| PLF-4 Bulk onboarding | In progress | PLF-4A org import certified; PLF-4B employee import: TypeScript passed, employee directory browser suite `2 passed`, build passed | PLF-4A deployed at `863d7ee`; post-deploy smoke passed; live org master browser suite `11 passed`; PLF-4B pending deploy/live rerun | 91% |
 | PLF-5 Compliance/e-filing reports | Planned | Pending | Pending | TBD |
 | PLF-6 Provider certification | Planned | Pending | Pending | TBD |
 | PLF-7 Billing/subscription | Planned | Pending | Pending | TBD |

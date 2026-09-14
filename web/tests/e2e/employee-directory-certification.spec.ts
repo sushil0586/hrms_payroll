@@ -96,6 +96,61 @@ async function expectDirectoryPageCertified(page: Page) {
 }
 
 test.describe("Certification: HR admin employee directory", () => {
+  test("employee bulk import workbench uploads validates commits and verifies directory rows", async ({ page }) => {
+    test.setTimeout(5 * 60 * 1000);
+    const suffix = String(Date.now()).slice(-6);
+    const employeeCode = `BULK-${suffix}`;
+    const duplicateCode = `BULK-DUP-${suffix}`;
+    const csv = [
+      "employee_code,first_name,middle_name,last_name,preferred_name,work_email,personal_email,phone_number,employment_status,date_of_birth,date_of_joining,probation_end_date,confirmation_date,legal_entity,branch,location,business_unit,department,cost_center,designation,grade,employment_type,reporting_manager_code",
+      `${employeeCode},Aditi,,Bulk,Aditi,aditi.bulk.${suffix}@example.test,,+91 90000 00001,active,1995-04-10,2026-04-01,2026-09-30,,,,,,,,,,,`,
+      `${duplicateCode},Duplicate,,One,,duplicate.one.${suffix}@example.test,,+91 90000 00002,active,,2026-04-01,,,,,,,,,,,`,
+      `${duplicateCode},Duplicate,,Two,,duplicate.two.${suffix}@example.test,,+91 90000 00003,active,,2026-04-01,,,,,,,,,,,`,
+      `MISSING-${suffix},,,,missing.${suffix}@example.test,,,+91 90000 00004,active,,2026-04-01,,,,,,,,,,,`,
+    ].join("\n");
+
+    await gotoAuthenticated(page, "/hr-admin/employees?page_size=5");
+    await expectDirectoryPageCertified(page);
+
+    const workbench = page.getByTestId("employee-import-workbench");
+    await expect(workbench).toBeVisible();
+    await expect(workbench.getByRole("heading", { name: "Employee bulk import" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Load sample template" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Copy template" })).toBeVisible();
+    await expect(workbench.getByRole("link", { name: "Download template" })).toBeVisible();
+    await expect(workbench.getByText("Upload CSV", { exact: true })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Preview import" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Commit ready rows" })).toBeDisabled();
+
+    await workbench.locator("input[type='file']").setInputFiles({
+      name: "employee-import.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    });
+    await expect(workbench.getByLabel("CSV data")).toContainText(employeeCode);
+    await workbench.getByRole("button", { name: "Preview import" }).click();
+    await expect(workbench.getByText("Preview ready. Review blocked rows before committing.")).toBeVisible();
+    await expect(workbench.locator("tbody tr")).toHaveCount(4);
+    await expect(workbench.locator("tr").filter({ hasText: employeeCode }).locator(".readiness-badge", { hasText: "ready" })).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: duplicateCode }).last().locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: `MISSING-${suffix}` }).locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+    await expect(workbench.getByText("Employee code already exists in this tenant or import batch.")).toBeVisible();
+    await expect(workbench.getByText("First name is required.")).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Commit ready rows" })).toBeEnabled();
+
+    await workbench.getByRole("button", { name: "Commit ready rows" }).click();
+    await expect(workbench.getByText("Commit complete. Refresh the directory to verify created employees.")).toBeVisible({ timeout: 30_000 });
+    await expect(workbench.locator("tr").filter({ hasText: employeeCode }).locator(".readiness-badge", { hasText: "created" })).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: duplicateCode }).first().locator(".readiness-badge", { hasText: "created" })).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: duplicateCode }).last().locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+
+    await gotoAuthenticated(page, `/hr-admin/employees?q=${employeeCode}&status=all&page_size=5`);
+    await expect(directoryItems(page).filter({ hasText: employeeCode })).toBeVisible();
+    await gotoAuthenticated(page, `/hr-admin/employees?q=${duplicateCode}&status=all&page_size=5`);
+    await expect(directoryItems(page).filter({ hasText: duplicateCode })).toHaveCount(1);
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("directory controls, pagination, selection, detail, actions, and empty state are certified", async ({ page }) => {
     test.setTimeout(180_000);
 

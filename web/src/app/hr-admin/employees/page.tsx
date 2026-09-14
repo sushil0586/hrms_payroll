@@ -4,8 +4,9 @@ import { ActionMenu } from "@/components/patterns/action-menu";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminEmployeeDetail, getHrAdminEmployees } from "@/lib/api";
+import { getHrAdminEmployeeDetail, getHrAdminEmployeeFormOptions, getHrAdminEmployees } from "@/lib/api";
 import type { HrAdminEmployeeDetail, HrAdminEmployeeListItem } from "@/lib/types";
+import { EmployeeImportWorkbench } from "./employee-import-workbench";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -277,7 +278,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const page = Math.max(Number(normalizeParam(currentParams.page) ?? "1") || 1, 1);
   const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) ?? "8") || 8, 1), 50);
 
-  const employeesResult = await getHrAdminEmployees();
+  const [employeesResult, optionsResult] = await Promise.all([getHrAdminEmployees(), getHrAdminEmployeeFormOptions()]);
   const departmentOptions = Array.from(new Set(employeesResult.data.map((employee) => employee.department).filter(Boolean))).sort();
   const filteredEmployees = filterByManagerView(
     filterByDepartment(filterByQuery(filterByStatus(employeesResult.data, status), q), department),
@@ -337,6 +338,8 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
           />
         </div>
       </section>
+
+      <EmployeeImportWorkbench employees={employeesResult.data} options={optionsResult.data} />
 
       <section className="section employee-master-layout">
         <article className="queue-toolbar panel-card-soft">
