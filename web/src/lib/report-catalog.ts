@@ -233,6 +233,18 @@ export const reportCatalog: ReportCatalogItem[] = [
     exportRoute: "/api/hr-admin/reports/tds-efile-package",
   },
   {
+    key: "pf-ecr-readiness",
+    title: "PF ECR readiness report",
+    category: "Compliance",
+    primaryPersona: "Payroll Finance Manager",
+    description: "EPFO registration, PF component setup, UAN/PF member coverage, wage evidence, challan state, and provider ECR route readiness.",
+    filters: ["Period", "Legal entity", "Provider profile", "Readiness status"],
+    exports: ["CSV", "Manifest"],
+    status: "Provider gated",
+    route: "/hr-admin/reports/pf-ecr-readiness",
+    exportRoute: "/api/hr-admin/reports/pf-ecr-package",
+  },
+  {
     key: "challan-reconciliation",
     title: "Challan reconciliation report",
     category: "Compliance",
