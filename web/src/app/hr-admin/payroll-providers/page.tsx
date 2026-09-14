@@ -2,15 +2,20 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminPayrollProviderConnectionSetup } from "@/lib/api";
+import { getHrAdminPayrollFinanceHandoffSetup, getHrAdminPayrollProviderConnectionSetup } from "@/lib/api";
 import { PAYROLL_LIVE_RAILS_ENABLED } from "@/lib/runtime-flags";
 import type {
+  HrAdminPayrollFinanceHandoffSetupResponse,
   HrAdminPayrollProviderCertificationRun,
   HrAdminPayrollProviderAdapterRegistryEntry,
+  HrAdminPayrollProviderCallbackEvent,
   HrAdminPayrollProviderClientRegistryEntry,
   HrAdminPayrollProviderConnection,
+  HrAdminPayrollProviderDelivery,
+  HrAdminPayrollProviderJob,
   HrAdminPayrollProviderLaunchRehearsal,
   HrAdminPayrollProviderPackageRegistryEntry,
+  HrAdminPayrollProviderRetryEvent,
   HrAdminPayrollProviderSchemaMappingPack,
   HrAdminPayrollProviderSchemaMappingSimulation,
   HrAdminPayrollStoragePolicyRegistryEntry,
@@ -31,6 +36,16 @@ type ReadinessGate = {
   label: string;
   passed: boolean;
   value: string;
+};
+
+type ProviderFailureBucket = {
+  ref: string;
+  label: string;
+  severity: "ready" | "warning" | "blocked";
+  count: number;
+  retryable: number;
+  owner: string;
+  action: string;
 };
 
 function normalizeParam(value: SearchParamValue) {
@@ -156,6 +171,93 @@ function storagePolicyRegistryRows(value: unknown): HrAdminPayrollStoragePolicyR
   return Array.isArray(policies)
     ? policies.filter((item): item is HrAdminPayrollStoragePolicyRegistryEntry => Boolean(item && typeof item === "object" && !Array.isArray(item)))
     : [];
+}
+
+function providerFailureBuckets({
+  deliveries,
+  callbackEvents,
+  retryEvents,
+  providerJobs,
+}: {
+  deliveries: HrAdminPayrollProviderDelivery[];
+  callbackEvents: HrAdminPayrollProviderCallbackEvent[];
+  retryEvents: HrAdminPayrollProviderRetryEvent[];
+  providerJobs: HrAdminPayrollProviderJob[];
+}): ProviderFailureBucket[] {
+  const failedDeliveries = deliveries.filter((item) => ["failed", "rejected"].includes(item.status));
+  const rejectedCallbacks = callbackEvents.filter((item) => item.status === "rejected");
+  const pendingCallbacks = callbackEvents.filter((item) => ["received", "pending"].includes(item.status));
+  const scheduledRetries = retryEvents.filter((item) => item.status === "scheduled");
+  const deadLetteredRetries = retryEvents.filter((item) => item.status === "dead_lettered");
+  const queuedJobs = providerJobs.filter((item) => item.status === "queued");
+  const deadLetteredJobs = providerJobs.filter((item) => item.status === "dead_lettered");
+  const staleJobs = providerJobs.filter((item) => ["leased", "running"].includes(item.status) && item.leased_until && new Date(item.leased_until).getTime() <= Date.now());
+
+  return [
+    {
+      ref: "provider.delivery.failure",
+      label: "Delivery failures",
+      severity: failedDeliveries.length ? "blocked" : "ready",
+      count: failedDeliveries.length,
+      retryable: failedDeliveries.filter((item) => item.retry_policy_ref).length,
+      owner: "Payroll operations",
+      action: "Review provider response and schedule retry from finance handoff.",
+    },
+    {
+      ref: "provider.callback.rejected",
+      label: "Callback rejections",
+      severity: rejectedCallbacks.length ? "blocked" : pendingCallbacks.length ? "warning" : "ready",
+      count: rejectedCallbacks.length + pendingCallbacks.length,
+      retryable: pendingCallbacks.length,
+      owner: "Integration owner",
+      action: "Check signature, idempotency, and provider status mapping before accepting callbacks.",
+    },
+    {
+      ref: "provider.retry.queue",
+      label: "Retry queue",
+      severity: deadLetteredRetries.length ? "blocked" : scheduledRetries.length ? "warning" : "ready",
+      count: scheduledRetries.length + deadLetteredRetries.length,
+      retryable: scheduledRetries.length,
+      owner: "Payroll operations",
+      action: "Execute scheduled retries and investigate dead-lettered retry decisions.",
+    },
+    {
+      ref: "provider.job.worker",
+      label: "Worker jobs",
+      severity: deadLetteredJobs.length || staleJobs.length ? "blocked" : queuedJobs.length ? "warning" : "ready",
+      count: queuedJobs.length + deadLetteredJobs.length + staleJobs.length,
+      retryable: queuedJobs.length,
+      owner: "Platform operations",
+      action: "Recover stale jobs, requeue failed work, and confirm worker heartbeat.",
+    },
+  ];
+}
+
+function selectedProviderEvents({
+  providerRef,
+  deliveries,
+  callbackEvents,
+  retryEvents,
+  providerJobs,
+}: {
+  providerRef?: string;
+  deliveries: HrAdminPayrollProviderDelivery[];
+  callbackEvents: HrAdminPayrollProviderCallbackEvent[];
+  retryEvents: HrAdminPayrollProviderRetryEvent[];
+  providerJobs: HrAdminPayrollProviderJob[];
+}) {
+  if (!providerRef) {
+    return { deliveries: [], callbackEvents: [], retryEvents: [], providerJobs: [] };
+  }
+  const selectedDeliveries = deliveries.filter((item) => item.provider_ref === providerRef);
+  const selectedDeliveryIds = new Set(selectedDeliveries.map((item) => item.id));
+
+  return {
+    deliveries: selectedDeliveries,
+    callbackEvents: callbackEvents.filter((item) => item.provider_ref === providerRef || selectedDeliveryIds.has(item.provider_delivery_id)),
+    retryEvents: retryEvents.filter((item) => selectedDeliveryIds.has(item.provider_delivery_id)),
+    providerJobs: providerJobs.filter((item) => item.provider_ref === providerRef || (item.provider_delivery_id ? selectedDeliveryIds.has(item.provider_delivery_id) : false)),
+  };
 }
 
 function ProviderRail({
@@ -409,8 +511,12 @@ function ConnectionDetail({
 export default async function PayrollProvidersPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const selectedConnectionId = normalizeParam(params?.connectionId);
-  const result = await getHrAdminPayrollProviderConnectionSetup();
+  const [result, handoffResult] = await Promise.all([
+    getHrAdminPayrollProviderConnectionSetup(),
+    getHrAdminPayrollFinanceHandoffSetup(),
+  ]);
   const setup = result.data;
+  const handoffSetup: HrAdminPayrollFinanceHandoffSetupResponse = handoffResult.data;
   const selectedConnection = setup.connections.find((item) => item.id === selectedConnectionId) ?? setup.connections[0] ?? null;
   const selectedCertificationRuns = selectedConnection
     ? setup.certification_runs.filter((item) => item.provider_connection_id === selectedConnection.id)
@@ -434,6 +540,21 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
   const latestSelectedRun = selectedCertificationRuns[0] ?? null;
   const selectedGates = selectedConnection ? readinessGates(selectedConnection) : [];
   const selectedReadyCount = selectedGates.filter((gate) => gate.passed).length;
+  const selectedEvents = selectedProviderEvents({
+    providerRef: selectedConnection?.provider_ref,
+    deliveries: handoffSetup.deliveries,
+    callbackEvents: handoffSetup.callback_events,
+    retryEvents: handoffSetup.retry_events,
+    providerJobs: handoffSetup.provider_jobs,
+  });
+  const failureBuckets = providerFailureBuckets({
+    deliveries: handoffSetup.deliveries,
+    callbackEvents: handoffSetup.callback_events,
+    retryEvents: handoffSetup.retry_events,
+    providerJobs: handoffSetup.provider_jobs,
+  });
+  const blockedFailureBucketCount = failureBuckets.filter((bucket) => bucket.severity === "blocked").length;
+  const warningFailureBucketCount = failureBuckets.filter((bucket) => bucket.severity === "warning").length;
 
   return (
     <main className="shell shell--payroll-setup shell--payroll-providers">
@@ -490,6 +611,8 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
           <MetricTile className="metric-tile-soft" label="Credential refs" value={setup.summary.credential_required_count} trend="No raw secrets" />
           <MetricTile className="metric-tile-soft" label="Bank lanes" value={setup.summary.bank_connection_count} trend="Payout providers" />
           <MetricTile className="metric-tile-soft" label="Statutory lanes" value={setup.summary.statutory_connection_count} trend="Return and challan" />
+          <MetricTile className="metric-tile-soft" label="Failure taxonomy" value={blockedFailureBucketCount} trend={`${warningFailureBucketCount} watch`} />
+          <MetricTile className="metric-tile-soft" label="Callback/retry" value={(handoffSetup.summary.provider_callback_event_count ?? 0) + (handoffSetup.summary.provider_retry_event_count ?? 0)} trend={`${handoffSetup.summary.dead_lettered_provider_retry_event_count ?? 0} dead-lettered`} />
         </div>
       </section>
 
@@ -651,6 +774,89 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 {selectedGates.length === 0 ? (
                   <div className="empty-state">No certification gates are available for the selected provider.</div>
                 ) : null}
+              </div>
+            </section>
+
+            <section className="payroll-setup-assignment-panel">
+              <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+                <div>
+                  <span className="workspace-card__eyebrow">Failure taxonomy</span>
+                  <h2>Callback, retry, and revoke certification</h2>
+                  <p className="section-copy section-copy-soft">Classify provider failures before live rails are enabled; destructive recovery actions stay guarded by backend permission and state checks.</p>
+                </div>
+                <span className="payroll-setup-count">{blockedFailureBucketCount} blocked / {warningFailureBucketCount} watch</span>
+              </div>
+              <div className="payroll-provider-gate-grid payroll-provider-failure-grid">
+                {failureBuckets.map((bucket) => (
+                  <article className={`payroll-provider-gate-card is-${bucket.severity}`} key={bucket.ref}>
+                    <div className="payroll-delivery-card-heading">
+                      <strong>{bucket.label}</strong>
+                      <StatusBadge status={bucket.severity} label={bucket.severity === "ready" ? "Clear" : titleCase(bucket.severity)} />
+                    </div>
+                    <span>{bucket.count} open signals / {bucket.retryable} retryable</span>
+                    <span>{bucket.owner}</span>
+                    <code>{bucket.ref}</code>
+                    <p className="section-copy section-copy-soft">{bucket.action}</p>
+                  </article>
+                ))}
+              </div>
+              <div className="payroll-table-scroll">
+                <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
+                  <thead>
+                    <tr>
+                      <th>Evidence type</th>
+                      <th>Selected provider</th>
+                      <th>Status</th>
+                      <th>Failure/ref</th>
+                      <th>Guarded action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedEvents.deliveries.slice(0, 5).map((delivery) => (
+                      <tr key={`delivery-${delivery.id}`}>
+                        <td><strong>Delivery</strong><span>{delivery.output_artifact_title}</span></td>
+                        <td><code>{delivery.provider_ref}</code></td>
+                        <td><StatusBadge status={delivery.status} label={delivery.status_label} /></td>
+                        <td><span>{delivery.failure_code || "failure.none"}</span><span>{delivery.failure_reason || delivery.external_reference || "No provider failure recorded"}</span></td>
+                        <td><span className="record-chip">Retry/requeue API guarded</span></td>
+                      </tr>
+                    ))}
+                    {selectedEvents.callbackEvents.slice(0, 5).map((event) => (
+                      <tr key={`callback-${event.id}`}>
+                        <td><strong>Callback</strong><span>{event.external_event_id || event.idempotency_key}</span></td>
+                        <td><code>{event.provider_ref}</code></td>
+                        <td><StatusBadge status={event.status} label={event.status_label} /></td>
+                        <td><span>{event.failure_code || event.provider_status}</span><span>{event.failure_reason || event.callback_verification_ref}</span></td>
+                        <td><span className="record-chip">Signature/idempotency guarded</span></td>
+                      </tr>
+                    ))}
+                    {selectedEvents.retryEvents.slice(0, 5).map((event) => (
+                      <tr key={`retry-${event.id}`}>
+                        <td><strong>Retry</strong><span>Attempt {event.attempt_number}</span></td>
+                        <td><code>{event.failure_taxonomy_ref}</code></td>
+                        <td><StatusBadge status={event.status} label={event.status_label} /></td>
+                        <td><span>{event.failure_category_ref || event.failure_code || "retry.none"}</span><span>{event.retry_reason || event.failure_reason || "No retry reason recorded"}</span></td>
+                        <td><span className="record-chip">Backoff/dead-letter guarded</span></td>
+                      </tr>
+                    ))}
+                    {selectedEvents.providerJobs.slice(0, 5).map((job) => (
+                      <tr key={`job-${job.id}`}>
+                        <td><strong>Worker job</strong><span>{job.job_kind_label}</span></td>
+                        <td><code>{job.provider_ref}</code></td>
+                        <td><StatusBadge status={job.status} label={job.status_label} /></td>
+                        <td><span>{job.failure_code || job.queue_policy_ref}</span><span>{job.failure_reason || `${job.attempt_count}/${job.max_attempts} attempts`}</span></td>
+                        <td><span className="record-chip">Worker recovery guarded</span></td>
+                      </tr>
+                    ))}
+                    {!selectedEvents.deliveries.length && !selectedEvents.callbackEvents.length && !selectedEvents.retryEvents.length && !selectedEvents.providerJobs.length ? (
+                      <tr>
+                        <td colSpan={5}>
+                          <div className="empty-state">No delivery, callback, retry, or worker-job evidence exists yet for the selected provider. Run a finance handoff or sandbox certification to generate provider event proof.</div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
               </div>
             </section>
 

@@ -15,12 +15,20 @@ test.describe("Phase PLF-6 Provider certification center", () => {
     await expect(page.getByText("Live rails off").first()).toBeVisible();
     await expect(page.getByText(/real payout, filing, and journal submission stay disabled/i).first()).toBeVisible();
 
-    for (const metric of ["Connections", "Certified", "Sandbox ready", "Cert runs", "Mapping packs", "Simulations", "Adapters", "Live packs", "Clients", "Fixtures", "Packages", "Storage policies", "Launch rehearsal", "Launch history", "Credential refs", "Bank lanes", "Statutory lanes"]) {
+    for (const metric of ["Connections", "Certified", "Sandbox ready", "Cert runs", "Mapping packs", "Simulations", "Adapters", "Live packs", "Clients", "Fixtures", "Packages", "Storage policies", "Launch rehearsal", "Launch history", "Credential refs", "Bank lanes", "Statutory lanes", "Failure taxonomy", "Callback/retry"]) {
       await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
     }
 
-    for (const section of ["Connections", "Launch rehearsal", "Certification checklist", "Artifact policy readiness", "Provider package manifests", "Provider client readiness", "Live adapter readiness", "Provider schema coverage", "Active comparison evidence", "Scenario evidence", "Vertical coverage"]) {
+    for (const section of ["Connections", "Launch rehearsal", "Certification checklist", "Callback, retry, and revoke certification", "Artifact policy readiness", "Provider package manifests", "Provider client readiness", "Live adapter readiness", "Provider schema coverage", "Active comparison evidence", "Scenario evidence", "Vertical coverage"]) {
       await expect(page.getByRole("heading", { name: section })).toBeVisible();
+    }
+
+    for (const bucket of ["Delivery failures", "Callback rejections", "Retry queue", "Worker jobs"]) {
+      await expect(page.locator(".payroll-provider-failure-grid").filter({ hasText: bucket })).toBeVisible();
+    }
+
+    for (const taxonomyRef of ["provider.delivery.failure", "provider.callback.rejected", "provider.retry.queue", "provider.job.worker"]) {
+      await expect(page.getByText(taxonomyRef)).toBeVisible();
     }
 
     for (const column of ["Provider", "Kind", "Adapter", "Credential", "Certification", "Latest run", "Status"]) {
@@ -38,6 +46,16 @@ test.describe("Phase PLF-6 Provider certification center", () => {
     await expect(page.getByText("Credential boundary").first()).toBeVisible();
     await expect(page.getByText("Certification evidence").first()).toBeVisible();
     await expect(page.getByText("Gate detail").first()).toBeVisible();
+    await expect(page.getByText(/Retry\/requeue API guarded|No delivery, callback, retry, or worker-job evidence exists yet/i).first()).toBeVisible();
+
+    for (const endpoint of [
+      "/api/hr-admin/payroll-provider-deliveries/00000000-0000-4000-8000-000000000000/schedule-retry",
+      "/api/hr-admin/payroll-provider-deliveries/00000000-0000-4000-8000-000000000000/requeue",
+      "/api/hr-admin/payroll-signed-access-grants/00000000-0000-4000-8000-000000000000/revoke",
+    ]) {
+      const guardedResponse = await page.request.post(endpoint);
+      expect([400, 404]).toContain(guardedResponse.status());
+    }
 
     const evidenceResponse = await page.request.get("/api/hr-admin/payroll-provider-certification-evidence");
     expect(evidenceResponse.status()).toBe(200);
@@ -47,7 +65,11 @@ test.describe("Phase PLF-6 Provider certification center", () => {
     expect(evidence.report_key).toBe("provider-certification-evidence");
     expect(evidence.summary.connection_count).toBeGreaterThan(0);
     expect(Array.isArray(evidence.connections)).toBe(true);
-    expect(JSON.stringify(evidence).toLowerCase()).not.toContain("password");
+    const evidenceText = JSON.stringify(evidence).toLowerCase();
+    expect(evidenceText).not.toContain("password");
+    expect(evidenceText).not.toContain("raw_secret");
+    expect(evidenceText).not.toContain("client_secret");
+    expect(evidenceText).not.toContain("private_key");
 
     const manifestResponse = await page.request.get("/api/hr-admin/payroll-provider-certification-evidence?format=manifest");
     expect(manifestResponse.status()).toBe(200);
@@ -70,5 +92,14 @@ test.describe("Phase PLF-6 Provider certification center", () => {
 
     const evidenceResponse = await page.request.get("/api/hr-admin/payroll-provider-certification-evidence");
     expect([401, 403]).toContain(evidenceResponse.status());
+
+    for (const endpoint of [
+      "/api/hr-admin/payroll-provider-deliveries/00000000-0000-4000-8000-000000000000/schedule-retry",
+      "/api/hr-admin/payroll-provider-deliveries/00000000-0000-4000-8000-000000000000/requeue",
+      "/api/hr-admin/payroll-signed-access-grants/00000000-0000-4000-8000-000000000000/revoke",
+    ]) {
+      const guardedResponse = await page.request.post(endpoint);
+      expect([401, 403]).toContain(guardedResponse.status());
+    }
   });
 });

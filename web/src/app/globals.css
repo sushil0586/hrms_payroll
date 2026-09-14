@@ -6095,6 +6095,25 @@ select.input-control {
   background: #fff7ed;
 }
 
+.payroll-provider-gate-card.is-ready {
+  border-color: rgba(22, 163, 74, 0.22);
+  background: #f0fdf4;
+}
+
+.payroll-provider-gate-card.is-warning {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: #fffbeb;
+}
+
+.payroll-provider-gate-card.is-blocked {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: #fef2f2;
+}
+
+.payroll-provider-failure-grid .section-copy {
+  margin: 0;
+}
+
 .payroll-provider-gate-card span,
 .payroll-provider-gate-card code {
   min-width: 0;
