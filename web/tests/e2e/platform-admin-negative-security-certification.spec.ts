@@ -94,12 +94,25 @@ test.describe("Platform admin negative and security certification", () => {
     await expect(notice(page).getByText(/already exists|unique|tenant creation failed|platform action failed/i)).toBeVisible();
 
     await openPlatformTab(page, "Onboarding");
-    await card(page, "Activation gates").getByRole("button", { name: "Mark baseline" }).click();
-    await expect(notice(page).getByText("At least one adopted policy pack is required before baseline publication can be confirmed.")).toBeVisible();
-    await card(page, "Activation gates").getByRole("button", { name: "Mark handoff" }).click();
-    await expect(notice(page).getByText("Baseline must be published before handoff is marked ready.")).toBeVisible();
-    await card(page, "Activation gates").getByRole("button", { name: "Activate tenant" }).click();
-    await expect(notice(page).getByText("Tenant handoff must be ready before activation.")).toBeVisible();
+    const gates = card(page, "Activation gates");
+    await expect(gates.locator(".platform-gate-checklist")).toBeVisible();
+    await expect(gates.getByText("Baseline published")).toBeVisible();
+    await expect(gates.getByText("Primary admin provisioned")).toBeVisible();
+    await expect(gates.getByText("Handoff ready")).toBeVisible();
+    await expect(gates.getByText("Baseline is required before handoff.")).toBeVisible();
+    await expect(gates.getByRole("link", { name: "Open policy packs" })).toBeVisible();
+    await expect(gates.getByRole("button", { name: "Mark handoff" })).toBeDisabled();
+    await expect(gates.getByRole("button", { name: "Activate tenant" })).toBeDisabled();
+
+    const directBaselineResponse = await page.request.post(`/api/platform/tenants/${tenantId}/onboarding/mark-baseline-published`);
+    expect(directBaselineResponse.status()).toBe(400);
+    expect(JSON.stringify(await directBaselineResponse.json())).toContain("At least one adopted policy pack is required");
+    const directHandoffResponse = await page.request.post(`/api/platform/tenants/${tenantId}/onboarding/mark-handoff-ready`);
+    expect(directHandoffResponse.status()).toBe(400);
+    expect(JSON.stringify(await directHandoffResponse.json())).toContain("Baseline must be published");
+    const directActivationResponse = await page.request.post(`/api/platform/tenants/${tenantId}/onboarding/activate`);
+    expect(directActivationResponse.status()).toBe(400);
+    expect(JSON.stringify(await directActivationResponse.json())).toContain("Tenant handoff must be ready");
 
     await openPlatformTab(page, "Admins");
     await namedControl(card(page, "Admin contacts"), "full_name").fill("Invalid Admin");

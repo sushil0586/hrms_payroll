@@ -71,6 +71,8 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expectSearchNarrowsList(page, "tenant_search", ".employee-directory-item");
 
     const createTenant = card(page, "Create tenant");
+    await expect(createTenant.getByText("Before creating")).toBeVisible();
+    await expect(createTenant.getByText("Code and name are mandatory.")).toBeVisible();
     await expectNamedControls(createTenant, [
       "code",
       "name",
@@ -91,6 +93,10 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await openTab(page, "Onboarding");
     await expect(page).toHaveURL(/\/platform-admin\/onboarding/);
     await expect(page.getByTestId("platform-admin-onboarding-panel")).toBeVisible();
+    await expect(card(page, "Activation gates").locator(".platform-gate-checklist")).toBeVisible();
+    await expect(card(page, "Activation gates").getByText("Baseline published")).toBeVisible();
+    await expect(card(page, "Activation gates").getByText("Primary admin provisioned")).toBeVisible();
+    await expect(card(page, "Activation gates").getByText("Handoff ready")).toBeVisible();
     await expect(card(page, "Activation gates").getByRole("button", { name: "Mark baseline" })).toBeVisible();
     await expect(card(page, "Activation gates").getByRole("button", { name: "Mark handoff" })).toBeVisible();
     await expect(card(page, "Activation gates").getByRole("button", { name: "Activate tenant" })).toBeVisible();
@@ -121,8 +127,10 @@ test.describe("Platform admin tabbed workspace certification", () => {
 
     await openTab(page, "Admins");
     await expect(page.getByTestId("platform-admin-admins-panel")).toBeVisible();
+    await expect(card(page, "Admin contacts").getByText("Contact validation")).toBeVisible();
     await expectNamedControls(card(page, "Admin contacts"), ["full_name", "email", "phone_number", "job_title", "is_primary", "notes"]);
     await expect(card(page, "Admin contacts").getByRole("button", { name: "Add contact" })).toBeVisible();
+    await expect(card(page, "Provision first admin").getByText(/Before provisioning|No contacts are ready for provisioning/)).toBeVisible();
     await expectNamedControls(card(page, "Provision first admin"), [
       "contact_id",
       "username",
@@ -141,6 +149,7 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expectPagination(page.getByTestId("platform-admin-policy-packs-panel"));
     expect(await card(page, "Policy packs").locator(".tenant-support-access-row").count()).toBeLessThanOrEqual(8);
     await expectSearchNarrowsList(page, "policy_pack_search", ".tenant-support-access-row");
+    await expect(card(page, "Policy packs").getByText("Pack validation")).toBeVisible();
     await expectNamedControls(card(page, "Policy packs"), [
       "code",
       "name",
@@ -153,6 +162,7 @@ test.describe("Platform admin tabbed workspace certification", () => {
       "is_active",
     ]);
     await expectNamedControls(card(page, "Adopt baseline"), ["policy_pack_id", "adoption_mode", "notes"]);
+    await expect(card(page, "Adopt baseline").getByText(/Before adoption|Baseline adoption is blocked/)).toBeVisible();
 
     await openTab(page, "Events");
     await expect(page.getByTestId("platform-admin-events-panel")).toBeVisible();
