@@ -11,6 +11,7 @@ export default async function MssLayout({ children }: { children: React.ReactNod
     <WorkspaceChrome
       footerDescription="Pending decisions, exceptions, and queue context for managers."
       navItems={[
+        { href: "/mss", label: "Control Center", shortLabel: "CC", blurb: "Team action snapshot" },
         { href: "/mss/approvals", label: "Approvals", shortLabel: "AP", blurb: "Pending decisions" },
         { href: "/mss/notifications", label: "Notifications", shortLabel: "NT", blurb: "Manager alerts" },
         { href: "/ess", label: "Self service", shortLabel: "SS", blurb: "Personal view" },

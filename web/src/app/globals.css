@@ -1271,6 +1271,12 @@ select.input-control {
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
 }
 
+.mss-control-center {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+}
+
 .finance-audit-panel {
   display: grid;
   gap: 16px;
@@ -7854,6 +7860,7 @@ select.input-control {
 
   .hr-admin-control-center,
   .finance-control-center,
+  .mss-control-center,
   .hr-admin-command-row,
   .finance-audit-grid,
   .hr-admin-shortcut-grid {
