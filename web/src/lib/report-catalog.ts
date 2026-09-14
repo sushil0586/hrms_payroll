@@ -269,6 +269,18 @@ export const reportCatalog: ReportCatalogItem[] = [
     exportRoute: "/api/hr-admin/reports/professional-tax-package",
   },
   {
+    key: "lwf-readiness",
+    title: "LWF readiness report",
+    category: "Compliance",
+    primaryPersona: "Payroll Finance Manager",
+    description: "Labour Welfare Fund setup, employee state coverage, employer registration, return calendar, deduction artifacts, and provider route readiness.",
+    filters: ["Period", "State", "Legal entity", "Readiness status"],
+    exports: ["CSV", "Manifest"],
+    status: "Provider gated",
+    route: "/hr-admin/reports/lwf-readiness",
+    exportRoute: "/api/hr-admin/reports/lwf-package",
+  },
+  {
     key: "challan-reconciliation",
     title: "Challan reconciliation report",
     category: "Compliance",
