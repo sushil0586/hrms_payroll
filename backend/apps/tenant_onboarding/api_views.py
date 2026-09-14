@@ -17,6 +17,7 @@ from apps.tenant_onboarding.api_serializers import (
     PlatformTenantOnboardingSerializer,
     PlatformTenantOnboardingWriteSerializer,
     PlatformTenantWriteSerializer,
+    PublicTenantLeadConvertSerializer,
     PublicTenantLeadCreateSerializer,
     PublicTenantLeadSerializer,
     PublicTenantLeadUpdateSerializer,
@@ -24,6 +25,7 @@ from apps.tenant_onboarding.api_serializers import (
 from apps.tenant_onboarding.models import (
     AdminProvisioningStatus,
     ChecklistStatus,
+    PublicLeadStatus,
     PublicTenantLead,
     TenantOnboarding,
     TenantOnboardingAdminContact,
@@ -241,6 +243,135 @@ class PlatformPublicLeadDetailView(APIView):
         lead.reviewed_at = timezone.now()
         lead.save(update_fields=["status", "reviewed_by_identifier", "reviewed_at", "updated_at"])
         return response.Response(PublicTenantLeadSerializer(_serialize_public_lead(lead)).data)
+
+
+class PlatformPublicLeadConvertView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def post(self, request, item_id):
+        lead = _get_public_lead_or_404(item_id)
+        if lead.converted_tenant_id:
+            raise exceptions.ValidationError("This lead has already been converted to a tenant.")
+
+        serializer = PublicTenantLeadConvertSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        actor_identifier = _actor_identifier(request)
+
+        if Tenant.objects.filter(code__iexact=data["code"]).exists():
+            raise exceptions.ValidationError({"code": "A tenant with this code already exists."})
+        primary_domain = data.get("primary_domain", "")
+        if primary_domain and TenantDomain.objects.filter(domain__iexact=primary_domain).exists():
+            raise exceptions.ValidationError({"primary_domain": "This domain is already mapped to a tenant."})
+
+        tenant = Tenant.objects.create(
+            code=data["code"],
+            name=lead.company_name,
+            legal_name=lead.company_name,
+            status=TenantStatus.DRAFT,
+            subscription_plan=data.get("subscription_plan"),
+            seed_pack=data.get("seed_pack"),
+            primary_email=lead.work_email,
+            primary_phone=lead.phone_number,
+            timezone="Asia/Kolkata",
+            country_code=lead.country_code or "IN",
+            is_sandbox=data.get("is_sandbox", True),
+            onboarding_status=TenantOnboardingStatus.CREATED,
+            onboarding_started_at=timezone.now(),
+            prepared_by_identifier=actor_identifier,
+        )
+        if primary_domain:
+            TenantDomain.objects.create(tenant=tenant, domain=primary_domain, is_primary=True)
+
+        onboarding = tenant.onboarding_record
+        onboarding.country_context = lead.country_code or tenant.country_code
+        onboarding.industry_context = lead.industry
+        onboarding.notes = data.get("notes", "") or lead.message
+        for field in ["owner_mode", "setup_style", "data_setup_style", "policy_control_style"]:
+            if field in data:
+                setattr(onboarding, field, data[field])
+        onboarding.save(
+            update_fields=[
+                "country_context",
+                "industry_context",
+                "notes",
+                "owner_mode",
+                "setup_style",
+                "data_setup_style",
+                "policy_control_style",
+                "updated_at",
+            ]
+        )
+
+        set_checklist_item_status(
+            onboarding,
+            code="tenant_created",
+            status=ChecklistStatus.COMPLETED,
+            actor_identifier=actor_identifier,
+        )
+        if primary_domain:
+            set_checklist_item_status(
+                onboarding,
+                code="domain_mapped",
+                status=ChecklistStatus.COMPLETED,
+                actor_identifier=actor_identifier,
+            )
+
+        contact = TenantOnboardingAdminContact.objects.create(
+            onboarding=onboarding,
+            full_name=lead.contact_name,
+            email=lead.work_email,
+            phone_number=lead.phone_number,
+            job_title=data.get("admin_job_title", ""),
+            is_primary=True,
+            notes="Created from public lead conversion.",
+        )
+        add_onboarding_event(
+            onboarding,
+            event_type="public_lead_converted",
+            summary=f"Converted public lead {lead.work_email} into tenant {tenant.code}.",
+            actor_identifier=actor_identifier,
+            payload={
+                "lead_id": str(lead.id),
+                "contact_id": str(contact.id),
+                "employee_count": lead.employee_count,
+                "preferred_plan": lead.preferred_plan,
+            },
+        )
+
+        lead.status = PublicLeadStatus.CONVERTED
+        lead.reviewed_by_identifier = actor_identifier
+        lead.reviewed_at = timezone.now()
+        lead.converted_tenant = tenant
+        lead.save(update_fields=["status", "reviewed_by_identifier", "reviewed_at", "converted_tenant", "updated_at"])
+
+        return response.Response(
+            {
+                "detail": "Lead converted to tenant.",
+                "lead": PublicTenantLeadSerializer(_serialize_public_lead(lead)).data,
+                "tenant": PlatformTenantListItemSerializer(_serialize_tenant(tenant)).data,
+                "admin_contact": PlatformOnboardingAdminContactSerializer(
+                    {
+                        "id": contact.id,
+                        "full_name": contact.full_name,
+                        "email": contact.email,
+                        "phone_number": contact.phone_number,
+                        "job_title": contact.job_title,
+                        "is_primary": contact.is_primary,
+                        "provisioning_status": contact.provisioning_status,
+                        "user_id": contact.user_id,
+                        "membership_id": contact.membership_id,
+                        "invited_at": contact.invited_at,
+                        "first_login_at": contact.first_login_at,
+                        "notes": contact.notes,
+                        "created_at": contact.created_at,
+                        "updated_at": contact.updated_at,
+                    }
+                ).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class PlatformTenantListCreateView(APIView):

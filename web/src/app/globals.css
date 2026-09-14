@@ -3142,6 +3142,20 @@ select.input-control {
   opacity: 0;
 }
 
+.platform-lead-convert-form {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.platform-lead-convert-form__notes {
+  grid-column: 1 / -1;
+}
+
 .marketing-workspace-strip {
   justify-content: space-between;
   padding: 18px;

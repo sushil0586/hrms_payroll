@@ -219,3 +219,24 @@ class PublicTenantLeadSerializer(serializers.Serializer):
 class PublicTenantLeadUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=PublicLeadStatus.values)
     reviewed_by_identifier = serializers.CharField(max_length=120, required=False, allow_blank=True)
+
+
+class PublicTenantLeadConvertSerializer(serializers.Serializer):
+    code = serializers.SlugField(max_length=50)
+    primary_domain = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    subscription_plan = serializers.ChoiceField(
+        choices=SubscriptionPlan.values,
+        required=False,
+        default=SubscriptionPlan.GROWTH,
+    )
+    seed_pack = serializers.ChoiceField(choices=SeedPack.values, required=False, default=SeedPack.STANDARD_OFFICE)
+    is_sandbox = serializers.BooleanField(required=False, default=True)
+    owner_mode = serializers.ChoiceField(choices=OnboardingOwnerMode.values, required=False)
+    setup_style = serializers.ChoiceField(choices=OnboardingSetupStyle.values, required=False)
+    data_setup_style = serializers.ChoiceField(choices=DataSetupStyle.values, required=False)
+    policy_control_style = serializers.ChoiceField(choices=PolicyControlStyle.values, required=False)
+    admin_job_title = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_primary_domain(self, value):
+        return value.strip().lower()

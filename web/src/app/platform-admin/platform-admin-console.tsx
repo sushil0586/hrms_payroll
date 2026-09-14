@@ -114,6 +114,20 @@ function leadUrgency(lead: PlatformPublicLead) {
   return titleCase(lead.status);
 }
 
+function leadCodeSuggestion(lead: PlatformPublicLead) {
+  return lead.company_name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 42) || "new-tenant";
+}
+
+function leadDomainSuggestion(lead: PlatformPublicLead) {
+  const emailDomain = lead.work_email.split("@")[1]?.toLowerCase() ?? "";
+  if (emailDomain && !emailDomain.endsWith(".example")) return emailDomain;
+  return "";
+}
+
 export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTenant, onboarding, policyPacks }: Props) {
   const router = useRouter();
   const [busyRef, setBusyRef] = useState("");
@@ -252,6 +266,36 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
       await mutate(`/api/platform/leads/${leadId}`, "PATCH", { status }, `Lead marked ${titleCase(status)}.`);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Lead update failed.");
+    }
+  }
+
+  async function handleLeadConvert(event: React.FormEvent<HTMLFormElement>, leadId: string) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    try {
+      const payload = await mutate<{ tenant?: PlatformTenantListItem }>(
+        `/api/platform/leads/${leadId}/convert`,
+        "POST",
+        {
+          code: formValue(formData, "code"),
+          primary_domain: formValue(formData, "primary_domain"),
+          subscription_plan: formValue(formData, "subscription_plan") || "growth",
+          seed_pack: formValue(formData, "seed_pack") || "standard_office",
+          is_sandbox: formData.has("is_sandbox"),
+          owner_mode: formValue(formData, "owner_mode") || "combined_platform_admin",
+          setup_style: formValue(formData, "setup_style") || "platform_assisted",
+          data_setup_style: formValue(formData, "data_setup_style") || "manual",
+          policy_control_style: formValue(formData, "policy_control_style") || "mixed",
+          admin_job_title: formValue(formData, "admin_job_title"),
+          notes: formValue(formData, "notes"),
+        },
+        "Lead converted to tenant.",
+      );
+      if (payload.tenant?.id) {
+        router.push(buildPanelHref("admins", payload.tenant.id));
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Lead conversion failed.");
     }
   }
 
@@ -677,6 +721,40 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                   <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleLeadStatus(lead.id, "qualified")}>Qualified</button>
                   <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleLeadStatus(lead.id, "closed")}>Close</button>
                 </div>
+                {lead.converted_tenant_id ? (
+                  <div className="notice notice--compact notice--success">
+                    <strong>Converted tenant is ready for admin provisioning.</strong>
+                    <Link className="button button--secondary" href={buildPanelHref("admins", lead.converted_tenant_id)}>
+                      Open admin setup
+                    </Link>
+                  </div>
+                ) : (
+                  <form className="platform-lead-convert-form" onSubmit={(event) => handleLeadConvert(event, lead.id)}>
+                    <div className="record-card__title">
+                      <h3>Convert to tenant</h3>
+                      <span className="record-chip">Approval controlled</span>
+                    </div>
+                    <div className="form-grid">
+                      <label className="form-field"><span className="muted">Tenant code</span><input className="input-control" name="code" required defaultValue={leadCodeSuggestion(lead)} /></label>
+                      <label className="form-field"><span className="muted">Primary domain</span><input className="input-control" name="primary_domain" defaultValue={leadDomainSuggestion(lead)} placeholder="customer.example.com" /></label>
+                      <label className="form-field"><span className="muted">Plan</span><select className="input-control" name="subscription_plan" defaultValue={lead.preferred_plan === "business" ? "enterprise" : lead.preferred_plan || "growth"}><option value="starter">Starter</option><option value="growth">Growth</option><option value="enterprise">Enterprise</option></select></label>
+                      <label className="form-field"><span className="muted">Seed pack</span><select className="input-control" name="seed_pack" defaultValue="standard_office"><option value="standard_office">Standard Office</option><option value="shift_based">Shift Based Operations</option><option value="retail_field">Retail or Field Workforce</option><option value="professional_services">Professional Services</option></select></label>
+                      <label className="form-field"><span className="muted">Owner mode</span><select className="input-control" name="owner_mode" defaultValue="combined_platform_admin"><option value="combined_platform_admin">Combined Platform Admin</option><option value="split_platform_roles">Split Platform Roles</option></select></label>
+                      <label className="form-field"><span className="muted">Setup style</span><select className="input-control" name="setup_style" defaultValue="platform_assisted"><option value="platform_assisted">Platform Assisted</option><option value="shared">Shared</option><option value="customer_led">Customer Led</option></select></label>
+                      <label className="form-field"><span className="muted">Data setup</span><select className="input-control" name="data_setup_style" defaultValue="manual"><option value="manual">Manual</option><option value="import_led">Import Led</option><option value="seeded_demo">Seeded Demo</option></select></label>
+                      <label className="form-field"><span className="muted">Policy control</span><select className="input-control" name="policy_control_style" defaultValue="mixed"><option value="mostly_locked">Mostly Locked</option><option value="mostly_delegated">Mostly Delegated</option><option value="mixed">Mixed</option></select></label>
+                      <label className="form-field"><span className="muted">Admin title</span><input className="input-control" name="admin_job_title" placeholder="Head of People" /></label>
+                      <label className="form-field"><span className="muted">Sandbox</span><input name="is_sandbox" type="checkbox" defaultChecked /></label>
+                      <label className="form-field platform-lead-convert-form__notes"><span className="muted">Conversion notes</span><textarea className="input-control" name="notes" placeholder="Commercial approval, pilot scope, or onboarding context." /></label>
+                    </div>
+                    <div className="form-actions-bar">
+                      <span className="muted">Creates tenant, primary admin contact, checklist evidence, and conversion audit.</span>
+                      <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">
+                        {busyRef === `/api/platform/leads/${lead.id}/convert` ? "Converting..." : "Convert lead"}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             ))}
             {!filteredLeads.length ? (

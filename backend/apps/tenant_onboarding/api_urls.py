@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.tenant_onboarding.api_views import (
     PlatformAdminContactProvisionView,
+    PlatformPublicLeadConvertView,
     PlatformPublicLeadDetailView,
     PlatformPublicLeadListView,
     PlatformTenantActivateView,
@@ -19,6 +20,7 @@ urlpatterns = [
     path("public-leads/", PublicTenantLeadCreateView.as_view(), name="public-tenant-lead-create"),
     path("leads/", PlatformPublicLeadListView.as_view(), name="platform-public-lead-list"),
     path("leads/<uuid:item_id>/", PlatformPublicLeadDetailView.as_view(), name="platform-public-lead-detail"),
+    path("leads/<uuid:item_id>/convert/", PlatformPublicLeadConvertView.as_view(), name="platform-public-lead-convert"),
     path("tenants/", PlatformTenantListCreateView.as_view(), name="platform-tenant-list-create"),
     path("tenants/<uuid:item_id>/", PlatformTenantDetailView.as_view(), name="platform-tenant-detail"),
     path("tenants/<uuid:item_id>/onboarding/", PlatformTenantOnboardingDetailView.as_view(), name="platform-tenant-onboarding-detail"),
