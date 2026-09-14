@@ -9,6 +9,15 @@ test.describe("Tenant admin console", () => {
     await expectPageReady(page, "Tenant Admin Console");
     const requestTitle = `PW Test plan change ${Date.now()}`;
     await expect(page.getByRole("main").getByText("Account posture", { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId("tenant-admin-control-center")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Owner command queue" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Readiness snapshot" })).toBeVisible();
+    for (const control of ["Governance blockers", "Seat usage", "Change queue", "Support access"]) {
+      await expect(page.getByTestId("tenant-admin-control-center").getByText(control, { exact: true })).toBeVisible();
+    }
+    for (const link of ["Review security", "Manage members", "Open queue", "Audit access", "Open trust audit"]) {
+      await expect(page.getByTestId("tenant-admin-control-center").getByRole("link", { name: link })).toBeVisible();
+    }
     await expect(page.getByRole("heading", { name: "Northstar Foods" })).toBeVisible();
     await expect(page.getByRole("main").getByText("Governance checks", { exact: true })).toBeVisible();
     await expect(page.getByRole("main").getByText("Role coverage", { exact: true })).toBeVisible();
@@ -77,7 +86,7 @@ test.describe("Tenant admin console", () => {
     await createdRequest.getByRole("button", { name: "Mark applied" }).click();
     await expect((await applyResponse).ok()).toBeTruthy();
     await expect(createdRequest.getByText("Applied")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole("main").getByText("Support access", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("tenant-support-access-form").getByText("Support access", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Scoped support grants" })).toBeVisible();
     await expect(page.getByRole("main").getByLabel("Support agent")).toBeVisible();
     await expect(page.getByRole("main").getByLabel("Duration")).toBeVisible();

@@ -37,10 +37,56 @@ function formatDateTime(value: string | null) {
   }).format(date);
 }
 
+function openChangeRequestCount(data: Awaited<ReturnType<typeof getTenantAdminConsole>>["data"]) {
+  return data.change_request_management.recent_requests.filter((request) =>
+    ["submitted", "approved"].includes(request.status),
+  ).length;
+}
+
+function activeSupportGrantCount(data: Awaited<ReturnType<typeof getTenantAdminConsole>>["data"]) {
+  return data.support_access_management.recent_grants.filter((grant) =>
+    ["requested", "approved", "active"].includes(grant.status),
+  ).length;
+}
+
 export default async function TenantAdminConsolePage() {
   const result = await getTenantAdminConsole();
   const data = result.data;
   const commercial = data.commercial_control;
+  const blockers = data.governance_checks.filter((check) => check.status === "blocked");
+  const warnings = data.governance_checks.filter((check) => check.status === "warning");
+  const openRequests = openChangeRequestCount(data);
+  const activeSupportGrants = activeSupportGrantCount(data);
+  const tenantActions = [
+    {
+      label: "Governance blockers",
+      value: blockers.length,
+      detail: blockers.length ? "Resolve blocked checks before customer launch." : "No blocking tenant checks.",
+      href: "/tenant-admin/security-readiness",
+      action: "Review security",
+    },
+    {
+      label: "Seat usage",
+      value: `${data.seat_usage.current_value}/${data.seat_usage.limit_value || "unlimited"}`,
+      detail: `${titleCase(data.seat_usage.status)} usage posture.`,
+      href: "/tenant-admin",
+      action: "Manage members",
+    },
+    {
+      label: "Change queue",
+      value: openRequests,
+      detail: openRequests ? "Commercial or configuration requests need owner action." : "No open change requests.",
+      href: "/tenant-admin",
+      action: "Open queue",
+    },
+    {
+      label: "Support access",
+      value: activeSupportGrants,
+      detail: activeSupportGrants ? "Review active or approved support access." : "No active support access grants.",
+      href: "/tenant-admin/trust-audit?event_group=support",
+      action: "Audit access",
+    },
+  ];
 
   return (
     <main className="shell shell--workspace">
@@ -76,6 +122,64 @@ export default async function TenantAdminConsolePage() {
           <MetricTile label="Roles" value={data.summary.role_count} trend={`${data.summary.active_membership_count} active members`} />
           <MetricTile label="Configs" value={data.configuration_health.published_count} trend={`${data.configuration_health.draft_count} drafts`} />
         </div>
+      </section>
+
+      <section className="section tenant-control-center" data-testid="tenant-admin-control-center">
+        <article className="panel-card-soft tenant-console-panel tenant-control-card tenant-control-card--primary">
+          <div className="tenant-console-panel__header">
+            <div>
+              <span className="workspace-card__eyebrow">Control center</span>
+              <h2>Owner command queue</h2>
+            </div>
+            <span className={statusBadgeClass(data.summary.status)}>{titleCase(data.summary.status)}</span>
+          </div>
+          <div className="tenant-control-action-list">
+            {tenantActions.map((item) => (
+              <div className="tenant-control-action" key={item.label}>
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.detail}</span>
+                </div>
+                <span className="record-chip">{item.value}</span>
+                <Link className="button button--secondary" href={item.href}>{item.action}</Link>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="panel-card-soft tenant-console-panel tenant-control-card">
+          <div className="tenant-console-panel__header">
+            <div>
+              <span className="workspace-card__eyebrow">Launch posture</span>
+              <h2>Readiness snapshot</h2>
+            </div>
+            <span className={statusBadgeClass(data.summary.commercial_can_launch ? "ready" : data.summary.status)}>
+              {data.summary.commercial_can_launch ? "Can launch" : titleCase(data.summary.status)}
+            </span>
+          </div>
+          <div className="tenant-console-detail-grid">
+            <div className="detail-row">
+              <span>Warnings</span>
+              <strong>{warnings.length}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Published configs</span>
+              <strong>{data.configuration_health.published_count}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Active members</span>
+              <strong>{data.summary.active_membership_count}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Subscription</span>
+              <strong>{titleCase(commercial.subscription.status)}</strong>
+            </div>
+          </div>
+          <div className="form-actions-bar">
+            <span className="muted">Use trust, security, and audit evidence before inviting a pilot customer admin.</span>
+            <Link className="button button--primary" href="/tenant-admin/trust-audit">Open trust audit</Link>
+          </div>
+        </article>
       </section>
 
       <section className="section tenant-console-grid">

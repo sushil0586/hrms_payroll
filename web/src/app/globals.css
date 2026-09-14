@@ -3036,6 +3036,58 @@ select.input-control {
   grid-template-columns: minmax(0, 1fr) auto auto auto;
 }
 
+.tenant-control-center {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
+}
+
+.tenant-control-card {
+  min-height: 100%;
+}
+
+.tenant-control-card--primary {
+  border-color: rgba(37, 99, 235, 0.2);
+  background:
+    radial-gradient(circle at 12% 12%, rgba(37, 99, 235, 0.07), transparent 32%),
+    rgba(255, 255, 255, 0.92);
+}
+
+.tenant-control-action-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tenant-control-action {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.tenant-control-action strong,
+.tenant-control-action span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.tenant-control-action strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.tenant-control-action span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .public-shell--auth {
   width: min(1760px, calc(100% - 56px));
 }
@@ -7547,6 +7599,7 @@ select.input-control {
   .pricing-grid,
   .platform-control-center,
   .platform-control-grid,
+  .tenant-control-center,
   .public-lead-form,
   .public-lead-form--compact {
     grid-template-columns: 1fr;
