@@ -460,6 +460,14 @@ textarea.input-control:disabled {
   border: 1px solid rgba(226, 232, 240, 0.86);
 }
 
+.detail-row span,
+.detail-row strong,
+.detail-row small,
+.detail-row code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .detail-label {
   color: #8b96ab;
   font-size: 11px;
