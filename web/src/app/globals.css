@@ -127,6 +127,18 @@ a {
   text-decoration: none;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .button--compact {
   min-height: 36px;
   padding: 8px 12px;
@@ -3342,6 +3354,42 @@ select.input-control {
   font-size: 12px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.organization-import-workbench {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.organization-import-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.organization-import-textarea {
+  min-height: 180px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.organization-import-actions {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 9px;
+}
+
+.organization-import-actions .button {
+  min-width: 0;
+  width: 100%;
+  justify-content: center;
+  white-space: normal;
 }
 
 .public-shell--auth {
@@ -7817,6 +7865,7 @@ select.input-control {
   .tenant-console-grid,
   .tenant-console-detail-grid,
   .tenant-setup-guide__body,
+  .organization-import-grid,
   .support-session-grid,
   .tenant-membership-form-grid,
   .tenant-membership-row,

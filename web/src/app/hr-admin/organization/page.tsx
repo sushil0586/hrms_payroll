@@ -6,6 +6,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminOrganizationItem, getHrAdminOrganizationSnapshot } from "@/lib/api";
 import type { HrAdminOrganizationItem, HrAdminOrganizationSnapshot } from "@/lib/types";
 import { isOrganizationSectionKey } from "@/app/hr-admin/organization/section-config";
+import { OrganizationImportWorkbench } from "./organization-import-workbench";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -381,6 +382,8 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
           <MetricTile label="Employment types" value={snapshotResult.data.summary.employment_types_count} trend="Workforce rules" />
         </div>
       </section>
+
+      <OrganizationImportWorkbench snapshot={snapshotResult.data} />
 
       <section className="section employee-master-layout">
         <article className="queue-toolbar">

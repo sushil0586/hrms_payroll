@@ -465,4 +465,57 @@ test.describe("HR admin organization master CRUD", () => {
     await expect(field(page, "Employment type")).toHaveValue(created.employment_types!.id);
     await expectNoHorizontalOverflow(page);
   });
+
+  test("organization import workbench previews validates uploads and commits ready rows", async ({ page }) => {
+    test.setTimeout(5 * 60 * 1000);
+    const importSuffix = `pw-import-${runSuffix}`;
+    const legalEntityCode = `${importSuffix}-le`;
+    const branchCode = `${importSuffix}-br`;
+    const invalidCode = `${importSuffix}-bad`;
+    const validCsv = [
+      "section,code,name,registered_name,country_code,timezone,primary_email,primary_phone,address_line_1,address_line_2,city,state,postal_code,legal_entity_code,location_code,branch_type,business_unit_code,parent_code,grade_code,level,description,is_payroll_eligible,is_active",
+      `legal_entities,${legalEntityCode},PW Import Legal Entity ${runSuffix},PW Import Legal Entity Pvt Ltd,IN,Asia/Kolkata,import@example.com,+911234567890,,,,,,,,,,,,,,true`,
+      `branches,${branchCode},PW Import Branch ${runSuffix},,,,,,,,,,,${legalEntityCode},,Head Office,,,,,,,true`,
+      `cost_centers,${invalidCode},PW Import Invalid Cost Center ${runSuffix},,,,,,,,,,,missing-legal-entity,,,,,,,,,true`,
+    ].join("\n");
+
+    await gotoAuthenticated(page, "/hr-admin/organization");
+    await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+    const workbench = page.getByTestId("organization-import-workbench");
+    await expect(workbench).toBeVisible();
+    await expect(workbench.getByRole("heading", { name: "Organization master import" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Load sample template" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Copy template" })).toBeVisible();
+    await expect(workbench.getByRole("link", { name: "Download template" })).toBeVisible();
+    await expect(workbench.getByText("Upload CSV", { exact: true })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Preview import" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Commit ready rows" })).toBeDisabled();
+
+    await workbench.locator("input[type='file']").setInputFiles({
+      name: "organization-master-import.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(validCsv),
+    });
+    await expect(workbench.getByLabel("CSV data")).toContainText(legalEntityCode);
+    await workbench.getByRole("button", { name: "Preview import" }).click();
+    await expect(workbench.getByText("Preview ready. Review blocked rows before committing.")).toBeVisible();
+    await expect(workbench.locator("tbody tr")).toHaveCount(3);
+    await expect(workbench.locator("tr").filter({ hasText: legalEntityCode }).getByText("ready")).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: branchCode }).getByText("ready")).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: invalidCode }).getByText("blocked")).toBeVisible();
+    await expect(workbench.getByText("Cost center requires a valid legal_entity_code")).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Commit ready rows" })).toBeEnabled();
+
+    await workbench.getByRole("button", { name: "Commit ready rows" }).click();
+    await expect(workbench.getByText("Commit complete. Refresh the catalog to verify created masters.")).toBeVisible({ timeout: 30_000 });
+    await expect(workbench.locator("tr").filter({ hasText: legalEntityCode }).locator(".readiness-badge", { hasText: "created" })).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: branchCode }).locator(".readiness-badge", { hasText: "created" })).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: invalidCode }).locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+
+    await gotoAuthenticated(page, `/hr-admin/organization?section=legal_entities&q=${legalEntityCode}&status=all`);
+    await expect(page.locator(".employee-directory-item").filter({ hasText: legalEntityCode })).toBeVisible();
+    await gotoAuthenticated(page, `/hr-admin/organization?section=branches&q=${branchCode}&status=all`);
+    await expect(page.locator(".employee-directory-item").filter({ hasText: branchCode })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
 });
