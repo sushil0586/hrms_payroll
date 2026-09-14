@@ -142,7 +142,8 @@ export default async function TenantAdminConsolePage() {
       <PageIntro
         eyebrow={result.state === "live" ? "Live tenant console" : "Demo tenant console"}
         title="Tenant Admin Console"
-        description="Account posture, seats, configuration health, and commercial readiness."
+        description="Manage your account, users, plan, setup, support access, and audit evidence."
+        className="page-header-surface page-header-surface--compact"
         actions={
           <>
             <a className="button button--primary" href="/api/tenant-admin/commercial-support-audit/download">
@@ -163,7 +164,7 @@ export default async function TenantAdminConsolePage() {
         showPills
       />
 
-      <section className="section">
+      <section className="section" id="dashboard">
         <div className="metric-grid-modern">
           <MetricTile label="Account posture" value={titleCase(data.summary.status)} trend={`${data.summary.blocked_check_count} blockers`} />
           <MetricTile label="Plan" value={titleCase(commercial.plan.plan_ref)} trend={commercial.subscription.billing_provider_ref || "Provider pending"} />
@@ -173,7 +174,7 @@ export default async function TenantAdminConsolePage() {
         </div>
       </section>
 
-      <section className="section" data-testid="tenant-setup-guide">
+      <section className="section" data-testid="tenant-setup-guide" id="setup">
         <article className="panel-card-soft tenant-console-panel tenant-setup-guide">
           <div className="tenant-console-panel__header">
             <div>
@@ -209,7 +210,7 @@ export default async function TenantAdminConsolePage() {
         </article>
       </section>
 
-      <section className="section tenant-control-center" data-testid="tenant-admin-control-center">
+      <section className="section tenant-control-center" data-testid="tenant-admin-control-center" id="plan">
         <article className="panel-card-soft tenant-console-panel tenant-control-card tenant-control-card--primary">
           <div className="tenant-console-panel__header">
             <div>
@@ -267,7 +268,7 @@ export default async function TenantAdminConsolePage() {
         </article>
       </section>
 
-      <section className="section tenant-console-grid">
+      <section className="section tenant-console-grid" id="settings">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>
@@ -318,7 +319,7 @@ export default async function TenantAdminConsolePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section" id="users">
         <div className="panel-card-soft tenant-console-panel">
           <TenantMembershipActions data={data} />
         </div>
@@ -330,7 +331,7 @@ export default async function TenantAdminConsolePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section" id="support">
         <div className="panel-card-soft tenant-console-panel">
           <TenantSupportAccessActions data={data} />
         </div>
@@ -387,7 +388,7 @@ export default async function TenantAdminConsolePage() {
         </div>
       </section>
 
-      <section className="section tenant-console-grid">
+      <section className="section tenant-console-grid" id="audit">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>

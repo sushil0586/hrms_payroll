@@ -156,6 +156,25 @@ def _get_contact_or_404(contact_id):
         raise exceptions.NotFound("Admin contact not found.") from exc
 
 
+def _serialize_admin_contact(contact: TenantOnboardingAdminContact) -> dict:
+    return {
+        "id": contact.id,
+        "full_name": contact.full_name,
+        "email": contact.email,
+        "phone_number": contact.phone_number,
+        "job_title": contact.job_title,
+        "is_primary": contact.is_primary,
+        "provisioning_status": contact.provisioning_status,
+        "user_id": contact.user_id,
+        "membership_id": contact.membership_id,
+        "invited_at": contact.invited_at,
+        "first_login_at": contact.first_login_at,
+        "notes": contact.notes,
+        "created_at": contact.created_at,
+        "updated_at": contact.updated_at,
+    }
+
+
 def _client_ip(request) -> str:
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
     if forwarded_for:
@@ -557,26 +576,35 @@ class PlatformTenantAdminContactCreateView(APIView):
             payload={"contact_id": str(contact.id), "is_primary": contact.is_primary},
         )
         return response.Response(
-            PlatformOnboardingAdminContactSerializer(
-                {
-                    "id": contact.id,
-                    "full_name": contact.full_name,
-                    "email": contact.email,
-                    "phone_number": contact.phone_number,
-                    "job_title": contact.job_title,
-                    "is_primary": contact.is_primary,
-                    "provisioning_status": contact.provisioning_status,
-                    "user_id": contact.user_id,
-                    "membership_id": contact.membership_id,
-                    "invited_at": contact.invited_at,
-                    "first_login_at": contact.first_login_at,
-                    "notes": contact.notes,
-                    "created_at": contact.created_at,
-                    "updated_at": contact.updated_at,
-                }
-            ).data,
+            PlatformOnboardingAdminContactSerializer(_serialize_admin_contact(contact)).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class PlatformAdminContactDetailView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def patch(self, request, contact_id):
+        contact = _get_contact_or_404(contact_id)
+        serializer = PlatformOnboardingAdminContactWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        onboarding = contact.onboarding
+
+        if data.get("is_primary"):
+            onboarding.admin_contacts.exclude(id=contact.id).filter(is_primary=True).update(is_primary=False)
+        for field, value in data.items():
+            setattr(contact, field, value)
+        contact.save(update_fields=list(data.keys()) + ["updated_at"])
+        add_onboarding_event(
+            onboarding,
+            event_type="admin_contact_updated",
+            summary=f"Updated onboarding contact {contact.email}.",
+            actor_identifier=_actor_identifier(request),
+            payload={"contact_id": str(contact.id), "fields": sorted(list(data.keys()))},
+        )
+        return response.Response(PlatformOnboardingAdminContactSerializer(_serialize_admin_contact(contact)).data)
 
 
 class PlatformAdminContactProvisionView(APIView):

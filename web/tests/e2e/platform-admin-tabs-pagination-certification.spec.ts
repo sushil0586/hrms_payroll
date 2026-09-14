@@ -63,7 +63,7 @@ test.describe("Platform admin tabbed workspace certification", () => {
     }
 
     await openTab(page, "Tenants");
-    await expect(page).toHaveURL(/panel=tenants/);
+    await expect(page).toHaveURL(/\/platform-admin\/tenants/);
     await expect(page.getByTestId("platform-admin-tenants-panel")).toBeVisible();
     await expect(page.locator('[name="tenant_search"]')).toBeVisible();
     await expectPagination(page.getByTestId("platform-admin-tenants-panel"));
@@ -89,7 +89,7 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expect(createTenant.locator('[name="code"]')).toBeFocused();
 
     await openTab(page, "Onboarding");
-    await expect(page).toHaveURL(/panel=onboarding/);
+    await expect(page).toHaveURL(/\/platform-admin\/onboarding/);
     await expect(page.getByTestId("platform-admin-onboarding-panel")).toBeVisible();
     await expect(card(page, "Activation gates").getByRole("button", { name: "Mark baseline" })).toBeVisible();
     await expect(card(page, "Activation gates").getByRole("button", { name: "Mark handoff" })).toBeVisible();

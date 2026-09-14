@@ -18,7 +18,7 @@ type OnboardingPayload = {
   tenant_onboarding_status: string;
   baseline_published_at: string | null;
   handoff_completed_at: string | null;
-  admin_contacts: Array<{ email: string; provisioning_status: string; membership_id: string | null; is_primary: boolean }>;
+  admin_contacts: Array<{ id: string; full_name: string; email: string; phone_number: string; job_title: string; notes: string; provisioning_status: string; membership_id: string | null; is_primary: boolean }>;
   checklist_items: Array<{ code: string; status: string; completed_by_identifier: string }>;
   recent_events: OnboardingEvent[];
 };
@@ -126,7 +126,7 @@ test.describe("Platform admin audit evidence certification", () => {
 
     const tenantId = await tenantIdByCode(page, tenantCode);
     expect(tenantId).toBeTruthy();
-    await page.goto(`/platform-admin?panel=onboarding&tenantId=${tenantId}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`/platform-admin/onboarding?tenantId=${tenantId}`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     let evidence = await onboardingPayload(page, tenantId ?? "");
     expect(evidence.tenant_code).toBe(tenantCode);
@@ -158,6 +158,18 @@ test.describe("Platform admin audit evidence certification", () => {
     evidence = await onboardingPayload(page, tenantId ?? "");
     expectEvent(evidence, "admin_contact_added", new RegExp(adminEmail));
     expect(evidence.admin_contacts.some((contact) => contact.email === adminEmail && contact.is_primary)).toBeTruthy();
+
+    await openPlatformTab(page, "Admins");
+    await contactsCard.locator(".tenant-support-access-row").filter({ hasText: adminEmail }).getByRole("button", { name: "Edit" }).click();
+    const editContactForm = contactsCard.locator(".platform-contact-edit-form");
+    await expect(editContactForm.getByText("Edit contact validation")).toBeVisible();
+    await namedControl(editContactForm, "job_title").fill("People Operations Lead");
+    await namedControl(editContactForm, "notes").fill(`Edited contact note for ${tenantCode}.`);
+    await editContactForm.getByRole("button", { name: "Save contact" }).click();
+    await expect(notice(page).getByText("Admin contact updated.", { exact: true })).toBeVisible();
+    evidence = await onboardingPayload(page, tenantId ?? "");
+    expectEvent(evidence, "admin_contact_updated", new RegExp(adminEmail));
+    expect(evidence.admin_contacts.some((contact) => contact.email === adminEmail && contact.job_title === "People Operations Lead" && contact.notes.includes(tenantCode))).toBeTruthy();
 
     await openPlatformTab(page, "Admins");
     const provisionCard = card(page, "Provision first admin");

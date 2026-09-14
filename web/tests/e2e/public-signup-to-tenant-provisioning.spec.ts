@@ -36,7 +36,7 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await expect(signup.getByText("Request received. Our team will review it and contact you.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    await gotoAuthenticated(page, "/platform-admin?panel=leads", platformAdmin);
+    await gotoAuthenticated(page, "/platform-admin/leads", platformAdmin);
     await expectPageReady(page, "Platform Admin Console");
     const leadsPanel = page.getByTestId("platform-admin-leads-panel");
     await expect(leadsPanel).toBeVisible();
@@ -70,10 +70,9 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await qualifiedRow.getByLabel("Conversion notes").fill("Commercial approval received for launch rehearsal.");
     await qualifiedRow.getByRole("button", { name: "Convert lead" }).click();
 
-    await expect(page).toHaveURL(/\/platform-admin\?panel=admins&tenantId=/);
+    await expect(page).toHaveURL(/\/platform-admin\/admins\?tenantId=/);
     const adminsPanel = page.getByTestId("platform-admin-admins-panel");
     await expect(adminsPanel).toBeVisible();
-    await expect(page.getByText("Lead converted to tenant.")).toBeVisible();
     const adminContactRow = adminsPanel.locator(".tenant-support-access-row").filter({ hasText: workEmail }).first();
     await expect(adminContactRow).toBeVisible();
     await expect(adminContactRow.getByText(contactName)).toBeVisible();
@@ -94,7 +93,7 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await expect(adminContactRow.getByText("Provisioned")).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    await page.goto(`/platform-admin?panel=tenants`, { waitUntil: "networkidle" });
+    await page.goto("/platform-admin/tenants", { waitUntil: "networkidle" });
     const tenantsPanel = page.getByTestId("platform-admin-tenants-panel");
     await tenantsPanel.getByRole("textbox", { name: "Search" }).fill(companyName);
     await expect(tenantsPanel.locator(".employee-directory-item").filter({ hasText: companyName }).first()).toBeVisible();

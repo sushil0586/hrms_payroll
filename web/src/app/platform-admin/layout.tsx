@@ -10,20 +10,24 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
     <WorkspaceChrome
       footerDescription="Tenant onboarding, baseline governance, admin provisioning, and activation controls for SaaS operators."
       navItems={[
-        { href: "/platform-admin", label: "Tenants", shortLabel: "TN", blurb: "Onboarding pipeline" },
-        { href: "/platform-admin?panel=policy-packs", label: "Policy Packs", shortLabel: "PP", blurb: "Baseline adoption" },
-        { href: "/platform-admin?panel=events", label: "Events", shortLabel: "EV", blurb: "Handoff evidence" },
+        { href: "/platform-admin", label: "Dashboard", shortLabel: "DB", blurb: "Action queue" },
+        { href: "/platform-admin/leads", label: "Leads", shortLabel: "LD", blurb: "Signup requests" },
+        { href: "/platform-admin/tenants", label: "Tenants", shortLabel: "TN", blurb: "Customer registry" },
+        { href: "/platform-admin/onboarding", label: "Onboarding", shortLabel: "ON", blurb: "Activation gates" },
+        { href: "/platform-admin/admins", label: "First Admins", shortLabel: "FA", blurb: "Login handoff" },
+        { href: "/platform-admin/policy-packs", label: "Policy Packs", shortLabel: "PP", blurb: "Baseline adoption" },
+        { href: "/platform-admin/audit-logs", label: "Audit Logs", shortLabel: "AU", blurb: "Handoff evidence" },
       ]}
-      productLabel="Nexora"
+      productLabel="HRMS"
       quickLinks={[
         { href: "/", label: "Home" },
         { href: "/platform-admin", label: "Tenants" },
-        { href: "/platform-admin?panel=policy-packs", label: "Packs" },
+        { href: "/platform-admin/policy-packs", label: "Packs" },
       ]}
       roleLabel="Platform Admin"
       searchHint="Search tenants, onboarding, baselines, and activation"
       userLabel={userLabel}
-      workspaceLabel="Platform console"
+      workspaceLabel="Platform Control Center"
       workspaceTone="admin"
     >
       {children}

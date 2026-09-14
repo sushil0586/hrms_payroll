@@ -51,7 +51,7 @@ test.describe("Platform admin negative and security certification", () => {
     for (const persona of [employee, manager, hrAdmin]) {
       await loginAs(page, persona, "/platform-admin");
       await expect(page).toHaveURL(/\/$/);
-      await expect(page.getByText("Platform admin restricted")).toBeVisible();
+      await expect(page.getByRole("link", { name: "Platform" })).toHaveAttribute("href", "/");
       await expectDenied(await page.request.get("/api/platform/tenants"));
       await expectDenied(await page.request.post("/api/platform-policy-packs", {
         data: { code: `blocked-${uniqueRunRef()}`, name: "Blocked Pack", domain: "leave" },
@@ -67,6 +67,8 @@ test.describe("Platform admin negative and security certification", () => {
 
     await gotoAuthenticated(page, "/platform-admin", platformAdmin);
     await expectPageReady(page, "Platform Admin Console");
+    await openPlatformTab(page, "Tenants");
+    await expect(page).toHaveURL(/\/platform-admin\/tenants/);
 
     const createTenant = card(page, "Create tenant");
     await createTenant.getByRole("button", { name: "Create tenant" }).click();
@@ -80,7 +82,7 @@ test.describe("Platform admin negative and security certification", () => {
     await namedControl(createTenant, "primary_email").fill(`ops.${tenantCode}@example.test`);
     await createTenant.getByRole("button", { name: "Create tenant" }).click();
     await expect(notice(page).getByText("Tenant created.", { exact: true })).toBeVisible();
-    await expect(page).toHaveURL(/panel=onboarding/);
+    await expect(page).toHaveURL(/\/platform-admin\/onboarding/);
 
     const tenantId = new URL(page.url()).searchParams.get("tenantId");
     expect(tenantId).toBeTruthy();

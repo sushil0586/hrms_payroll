@@ -39,6 +39,44 @@ const platformTabs: { panel: PlatformPanel; label: string; countKey: "control" |
   { panel: "events", label: "Events", countKey: "events" },
 ];
 
+const panelGuides: Record<PlatformPanel, { title: string; description: string; steps: string[] }> = {
+  control: {
+    title: "Dashboard",
+    description: "Start here to see the operator queue across leads, tenant readiness, baselines, and launch blockers.",
+    steps: ["Review urgent signals", "Open the matching panel", "Resolve or record evidence"],
+  },
+  leads: {
+    title: "Leads",
+    description: "Review public signup/contact requests, qualify promising accounts, and convert approved leads into tenants.",
+    steps: ["Review lead details", "Mark reviewing or qualified", "Convert to tenant"],
+  },
+  tenants: {
+    title: "Tenants",
+    description: "Search the customer registry, select a tenant, and create new customer organizations when needed.",
+    steps: ["Find or create tenant", "Select tenant", "Open onboarding"],
+  },
+  onboarding: {
+    title: "Onboarding",
+    description: "Update tenant setup details and move the selected tenant through baseline, handoff, and activation gates.",
+    steps: ["Verify tenant setup", "Publish baseline and handoff", "Activate when ready"],
+  },
+  admins: {
+    title: "First Admins",
+    description: "Create tenant admin contacts and provision the first login user for the customer organization.",
+    steps: ["Add primary contact", "Provision admin", "Share login securely"],
+  },
+  "policy-packs": {
+    title: "Policy Packs",
+    description: "Create, publish, and adopt reusable baseline packs so every tenant starts from controlled configuration.",
+    steps: ["Create baseline pack", "Publish pack", "Adopt for selected tenant"],
+  },
+  events: {
+    title: "Audit Logs",
+    description: "Review tenant onboarding events and evidence for platform actions, handoff, support, and activation.",
+    steps: ["Search evidence", "Check actor and timestamp", "Use for signoff"],
+  },
+};
+
 function titleCase(value: string) {
   return value
     .replace(/[_-]+/g, " ")
@@ -62,6 +100,7 @@ function formValue(formData: FormData, key: string) {
 }
 
 function apiErrorMessage(payload: unknown, fallback: string) {
+  if (Array.isArray(payload) && payload.length) return String(payload[0]);
   if (!payload || typeof payload !== "object") return fallback;
   const record = payload as Record<string, unknown>;
   if (typeof record.detail === "string") return record.detail;
@@ -85,6 +124,30 @@ function StatusChip({ value }: { value: string }) {
   return <span className={`record-chip${isReady ? " record-chip--accent" : ""}`}>{titleCase(value)}</span>;
 }
 
+function GateChecklistItem({
+  complete,
+  label,
+  detail,
+}: {
+  complete: boolean;
+  label: string;
+  detail: string;
+}) {
+  return (
+    <li className={`platform-gate-checklist__item${complete ? " is-complete" : " is-blocked"}`}>
+      <span aria-hidden="true">{complete ? "Done" : "Needed"}</span>
+      <div>
+        <strong>{label}</strong>
+        <small>{detail}</small>
+      </div>
+    </li>
+  );
+}
+
+function ValidationNote({ children }: { children: React.ReactNode }) {
+  return <small className="platform-validation-note">{children}</small>;
+}
+
 function clampPage(page: number, totalCount: number) {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   return Math.min(Math.max(page, 1), totalPages);
@@ -102,9 +165,19 @@ function paginate<T>(items: T[], page: number) {
 }
 
 function buildPanelHref(panel: PlatformPanel, selectedTenantId?: string) {
-  const params = new URLSearchParams({ panel });
+  const panelPaths: Record<PlatformPanel, string> = {
+    control: "/platform-admin",
+    leads: "/platform-admin/leads",
+    tenants: "/platform-admin/tenants",
+    onboarding: "/platform-admin/onboarding",
+    admins: "/platform-admin/admins",
+    "policy-packs": "/platform-admin/policy-packs",
+    events: "/platform-admin/audit-logs",
+  };
+  const params = new URLSearchParams();
   if (selectedTenantId) params.set("tenantId", selectedTenantId);
-  return `/platform-admin?${params.toString()}`;
+  const query = params.toString();
+  return query ? `${panelPaths[panel]}?${query}` : panelPaths[panel];
 }
 
 function leadUrgency(lead: PlatformPublicLead) {
@@ -138,6 +211,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const [tenantQuery, setTenantQuery] = useState("");
   const [policyPackQuery, setPolicyPackQuery] = useState("");
   const [eventQuery, setEventQuery] = useState("");
+  const [editingContactId, setEditingContactId] = useState("");
   const [leadPage, setLeadPage] = useState(1);
   const [tenantPage, setTenantPage] = useState(1);
   const [policyPackPage, setPolicyPackPage] = useState(1);
@@ -156,7 +230,12 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
 
   const provisionableContacts = onboarding?.admin_contacts.filter((contact) => !contact.membership_id) ?? [];
   const primaryContact = onboarding?.admin_contacts.find((contact) => contact.is_primary) ?? onboarding?.admin_contacts[0] ?? null;
+  const hasProvisionedPrimaryAdmin = Boolean(primaryContact?.membership_id);
+  const hasBaseline = Boolean(onboarding?.baseline_published_at);
+  const canMarkHandoff = Boolean(selectedTenant && hasBaseline && hasProvisionedPrimaryAdmin);
+  const canActivateTenant = Boolean(selectedTenant && onboarding?.handoff_completed_at && hasProvisionedPrimaryAdmin);
   const publishedPacks = policyPacks.filter((pack) => pack.status === "published");
+  const canAdoptBaseline = Boolean(selectedTenant && publishedPacks.length);
   const events = onboarding?.recent_events ?? [];
   const normalizedLeadQuery = leadQuery.trim().toLowerCase();
   const normalizedTenantQuery = tenantQuery.trim().toLowerCase();
@@ -212,6 +291,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     policyPacks: policyPacks.length,
     events: events.length,
   };
+  const activeGuide = panelGuides[initialPanel];
 
   async function mutate<T>(path: string, method: MutationMethod, body: Record<string, unknown>, successMessage: string): Promise<T> {
     setBusyRef(path);
@@ -377,6 +457,29 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     }
   }
 
+  async function handleContactPatch(event: React.FormEvent<HTMLFormElement>, contactId: string) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    try {
+      await mutate(
+        `/api/platform/admin-contacts/${contactId}`,
+        "PATCH",
+        {
+          full_name: formValue(formData, "full_name"),
+          email: formValue(formData, "email"),
+          phone_number: formValue(formData, "phone_number"),
+          job_title: formValue(formData, "job_title"),
+          is_primary: formData.has("is_primary"),
+          notes: formValue(formData, "notes"),
+        },
+        "Admin contact updated.",
+      );
+      setEditingContactId("");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Admin contact update failed.");
+    }
+  }
+
   async function handleProvision(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -487,7 +590,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               Home
             </Link>
             {selectedTenant ? (
-              <Link className="button button--primary" href={`/platform-admin?tenantId=${selectedTenant.id}&panel=onboarding`}>
+              <Link className="button button--primary" href={`/platform-admin/onboarding?tenantId=${selectedTenant.id}`}>
                 Open selected tenant
               </Link>
             ) : null}
@@ -532,6 +635,21 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               <span>{tabCounts[item.countKey]}</span>
             </Link>
           ))}
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="platform-panel-guide" data-testid="platform-admin-panel-guide">
+          <div>
+            <span className="eyebrow">Selected workspace</span>
+            <h2>{activeGuide.title}</h2>
+            <p>{activeGuide.description}</p>
+          </div>
+          <ol aria-label={`${activeGuide.title} workflow`}>
+            {activeGuide.steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
         </div>
       </section>
 
@@ -734,9 +852,13 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                       <h3>Convert to tenant</h3>
                       <span className="record-chip">Approval controlled</span>
                     </div>
+                    <div className="notice notice--compact platform-validation-strip">
+                      <strong>Before converting</strong>
+                      <span className="muted">Confirm commercial approval, choose a unique tenant code, and keep sandbox on for trials.</span>
+                    </div>
                     <div className="form-grid">
-                      <label className="form-field"><span className="muted">Tenant code</span><input className="input-control" name="code" required defaultValue={leadCodeSuggestion(lead)} /></label>
-                      <label className="form-field"><span className="muted">Primary domain</span><input className="input-control" name="primary_domain" defaultValue={leadDomainSuggestion(lead)} placeholder="customer.example.com" /></label>
+                      <label className="form-field"><span className="muted">Tenant code</span><input className="input-control" name="code" required defaultValue={leadCodeSuggestion(lead)} /><ValidationNote>Required and must be unique. Use lowercase letters, numbers, or hyphens.</ValidationNote></label>
+                      <label className="form-field"><span className="muted">Primary domain</span><input className="input-control" name="primary_domain" defaultValue={leadDomainSuggestion(lead)} placeholder="customer.example.com" /><ValidationNote>Optional during trial; add the real customer domain before production activation.</ValidationNote></label>
                       <label className="form-field"><span className="muted">Plan</span><select className="input-control" name="subscription_plan" defaultValue={lead.preferred_plan === "business" ? "enterprise" : lead.preferred_plan || "growth"}><option value="starter">Starter</option><option value="growth">Growth</option><option value="enterprise">Enterprise</option></select></label>
                       <label className="form-field"><span className="muted">Seed pack</span><select className="input-control" name="seed_pack" defaultValue="standard_office"><option value="standard_office">Standard Office</option><option value="shift_based">Shift Based Operations</option><option value="retail_field">Retail or Field Workforce</option><option value="professional_services">Professional Services</option></select></label>
                       <label className="form-field"><span className="muted">Owner mode</span><select className="input-control" name="owner_mode" defaultValue="combined_platform_admin"><option value="combined_platform_admin">Combined Platform Admin</option><option value="split_platform_roles">Split Platform Roles</option></select></label>
@@ -854,11 +976,15 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <p className="section-copy">Start a new customer onboarding record and primary domain mapping.</p>
           </div>
           <form className="form-grid" onSubmit={handleTenantCreate}>
-            <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-pa-tenant-01" /></label>
-            <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Platform Tenant 01" /></label>
+            <div className="notice notice--compact platform-validation-strip">
+              <strong>Before creating</strong>
+              <span className="muted">Code and name are mandatory. Email, phone, and domain can be completed later, but activation will still need admin provisioning and handoff.</span>
+            </div>
+            <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-pa-tenant-01" /><ValidationNote>Required and unique. This becomes the tenant identifier in audit evidence.</ValidationNote></label>
+            <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Platform Tenant 01" /><ValidationNote>Required. Use the customer-facing organization name.</ValidationNote></label>
             <label className="form-field"><span className="muted">Legal name</span><input className="input-control" name="legal_name" placeholder="QA Platform Tenant Pvt Ltd" /></label>
-            <label className="form-field"><span className="muted">Primary domain</span><input className="input-control" name="primary_domain" placeholder="qa-pa-tenant-01.example.test" /></label>
-            <label className="form-field"><span className="muted">Primary email</span><input className="input-control" name="primary_email" type="email" placeholder="ops@example.test" /></label>
+            <label className="form-field"><span className="muted">Primary domain</span><input className="input-control" name="primary_domain" placeholder="qa-pa-tenant-01.example.test" /><ValidationNote>Optional for setup; should be final before live customer activation.</ValidationNote></label>
+            <label className="form-field"><span className="muted">Primary email</span><input className="input-control" name="primary_email" type="email" placeholder="ops@example.test" /><ValidationNote>Use a monitored customer or implementation mailbox.</ValidationNote></label>
             <label className="form-field"><span className="muted">Primary phone</span><input className="input-control" name="primary_phone" placeholder="+91 90000 00001" /></label>
             <label className="form-field"><span className="muted">Plan</span><select className="input-control" name="subscription_plan" defaultValue="starter"><option value="starter">Starter</option><option value="growth">Growth</option><option value="enterprise">Enterprise</option></select></label>
             <label className="form-field"><span className="muted">Seed pack</span><select className="input-control" name="seed_pack" defaultValue="standard_office"><option value="standard_office">Standard Office</option><option value="shift_based">Shift Based Operations</option><option value="retail_field">Retail or Field Workforce</option><option value="professional_services">Professional Services</option></select></label>
@@ -906,18 +1032,49 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 </div>
                 <p className="section-copy">Baseline, handoff, and active tenant state transitions.</p>
               </div>
+              <ol className="platform-gate-checklist" aria-label="Activation gate validation checklist">
+                <GateChecklistItem
+                  complete={hasBaseline}
+                  label="Baseline published"
+                  detail={hasBaseline ? `Confirmed ${formatDateTime(onboarding.baseline_published_at)}` : "Adopt a published policy pack, then mark baseline."}
+                />
+                <GateChecklistItem
+                  complete={hasProvisionedPrimaryAdmin}
+                  label="Primary admin provisioned"
+                  detail={hasProvisionedPrimaryAdmin ? `${primaryContact?.email || "Primary admin"} has tenant access.` : `Provision ${primaryContact?.email || "the primary contact"} from First Admins.`}
+                />
+                <GateChecklistItem
+                  complete={Boolean(onboarding.handoff_completed_at)}
+                  label="Handoff ready"
+                  detail={onboarding.handoff_completed_at ? `Marked ${formatDateTime(onboarding.handoff_completed_at)}` : "Available after baseline and primary admin are complete."}
+                />
+              </ol>
               <div className="form-actions-bar">
                 <span className="muted">Baseline timestamp: {formatDateTime(onboarding.baseline_published_at)}</span>
                 <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleTenantAction("mark-baseline-published")}>Mark baseline</button>
               </div>
               <div className="form-actions-bar">
                 <span className="muted">Handoff timestamp: {formatDateTime(onboarding.handoff_completed_at)}</span>
-                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleTenantAction("mark-handoff-ready")}>Mark handoff</button>
+                <button className="button button--secondary" disabled={Boolean(busyRef) || !canMarkHandoff} type="button" onClick={() => handleTenantAction("mark-handoff-ready")}>Mark handoff</button>
               </div>
               <div className="form-actions-bar">
                 <span className="muted">Primary admin: {primaryContact?.email || "Not set"}</span>
-                <button className="button button--primary" disabled={Boolean(busyRef)} type="button" onClick={() => handleTenantAction("activate")}>Activate tenant</button>
+                <button className="button button--primary" disabled={Boolean(busyRef) || !canActivateTenant} type="button" onClick={() => handleTenantAction("activate")}>Activate tenant</button>
               </div>
+              {!hasBaseline ? (
+                <div className="notice notice--compact platform-gate-next-step">
+                  <strong>Baseline is required before handoff.</strong>
+                  <span className="muted">Adopt a published policy pack, then mark baseline.</span>
+                  <Link className="button button--secondary" href={buildPanelHref("policy-packs", selectedTenant.id)}>Open policy packs</Link>
+                </div>
+              ) : null}
+              {hasBaseline && !hasProvisionedPrimaryAdmin ? (
+                <div className="notice notice--compact platform-gate-next-step">
+                  <strong>Primary tenant admin must be provisioned before handoff.</strong>
+                  <span className="muted">Open First Admins, provision {primaryContact?.email || "the primary contact"}, then return here.</span>
+                  <Link className="button button--secondary" href={buildPanelHref("admins", selectedTenant.id)}>Open first admins</Link>
+                </div>
+              ) : null}
             </article>
           </section>
           ) : null}
@@ -932,7 +1089,11 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <p className="section-copy">Update tenant account fields and primary domain.</p>
               </div>
               <form className="form-grid" onSubmit={handleTenantPatch}>
-                <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required defaultValue={selectedTenant.name} /></label>
+                <div className="notice notice--compact platform-validation-strip">
+                  <strong>Tenant setup validation</strong>
+                  <span className="muted">Save setup changes before marking baseline or handoff so the audit trail has the final customer context.</span>
+                </div>
+                <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required defaultValue={selectedTenant.name} /><ValidationNote>Required. This appears in platform lists and customer setup screens.</ValidationNote></label>
                 <label className="form-field"><span className="muted">Legal name</span><input className="input-control" name="legal_name" defaultValue={selectedTenant.legal_name} /></label>
                 <label className="form-field"><span className="muted">Status</span><select className="input-control" name="status" defaultValue={selectedTenant.status}><option value="draft">Draft</option><option value="active">Active</option><option value="suspended">Suspended</option></select></label>
                 <label className="form-field"><span className="muted">Plan</span><select className="input-control" name="subscription_plan" defaultValue={selectedTenant.subscription_plan}><option value="starter">Starter</option><option value="growth">Growth</option><option value="enterprise">Enterprise</option></select></label>
@@ -958,6 +1119,10 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <p className="section-copy">Implementation model, setup style, data approach, and policy control posture.</p>
               </div>
               <form className="form-grid" onSubmit={handleOnboardingPatch}>
+                <div className="notice notice--compact platform-validation-strip">
+                  <strong>Onboarding validation</strong>
+                  <span className="muted">Choose who owns setup, how data enters the tenant, and whether policies are locked or delegated before customer handoff.</span>
+                </div>
                 <label className="form-field"><span className="muted">Owner mode</span><select className="input-control" name="owner_mode" defaultValue={onboarding.owner_mode}><option value="combined_platform_admin">Combined Platform Admin</option><option value="split_platform_roles">Split Platform Roles</option></select></label>
                 <label className="form-field"><span className="muted">Setup style</span><select className="input-control" name="setup_style" defaultValue={onboarding.setup_style}><option value="platform_assisted">Platform Assisted</option><option value="shared">Shared</option><option value="customer_led">Customer Led</option></select></label>
                 <label className="form-field"><span className="muted">Data setup</span><select className="input-control" name="data_setup_style" defaultValue={onboarding.data_setup_style}><option value="manual">Manual</option><option value="import_led">Import Led</option><option value="seeded_demo">Seeded Demo</option></select></label>
@@ -988,19 +1153,49 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               </div>
               <div className="tenant-support-access-list">
                 {onboarding.admin_contacts.map((contact: PlatformOnboardingAdminContact) => (
-                  <div className="tenant-support-access-row" key={contact.id}>
-                    <div>
-                      <strong>{contact.full_name}</strong>
-                      <span>{contact.email}</span>
-                    </div>
-                    <StatusChip value={contact.provisioning_status} />
-                    <span className="record-chip">{contact.is_primary ? "Primary" : "Secondary"}</span>
+                  <div className="tenant-support-access-row tenant-support-access-row--stacked" key={contact.id}>
+                    {editingContactId === contact.id ? (
+                      <form className="form-grid platform-contact-edit-form" onSubmit={(event) => handleContactPatch(event, contact.id)}>
+                        <div className="notice notice--compact platform-validation-strip">
+                          <strong>Edit contact validation</strong>
+                          <span className="muted">This updates onboarding contact details. It does not reset the provisioned user password or role.</span>
+                        </div>
+                        <label className="form-field"><span className="muted">Full name</span><input className="input-control" name="full_name" required defaultValue={contact.full_name} /><ValidationNote>Required. Use the current customer-side admin owner.</ValidationNote></label>
+                        <label className="form-field"><span className="muted">Email</span><input className="input-control" name="email" required type="email" defaultValue={contact.email} /><ValidationNote>Required. For provisioned contacts, coordinate any login identity changes separately.</ValidationNote></label>
+                        <label className="form-field"><span className="muted">Phone</span><input className="input-control" name="phone_number" defaultValue={contact.phone_number} /></label>
+                        <label className="form-field"><span className="muted">Job title</span><input className="input-control" name="job_title" defaultValue={contact.job_title} /></label>
+                        <label className="form-field"><span className="muted">Primary</span><input name="is_primary" type="checkbox" defaultChecked={contact.is_primary} /></label>
+                        <label className="form-field"><span className="muted">Notes</span><textarea className="input-control" name="notes" defaultValue={contact.notes} /></label>
+                        <div className="form-actions-bar">
+                          <span className="muted">Saving writes an admin contact update event.</span>
+                          <div className="button-row">
+                            <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setEditingContactId("")}>Cancel</button>
+                            <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">Save contact</button>
+                          </div>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        <div>
+                          <strong>{contact.full_name}</strong>
+                          <span>{contact.email}</span>
+                          <span>{contact.job_title || "Job title not set"} - {contact.phone_number || "Phone not set"}</span>
+                        </div>
+                        <StatusChip value={contact.provisioning_status} />
+                        <span className="record-chip">{contact.is_primary ? "Primary" : "Secondary"}</span>
+                        <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setEditingContactId(contact.id)}>Edit</button>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
               <form className="form-grid" onSubmit={handleContactCreate}>
-                <label className="form-field"><span className="muted">Full name</span><input className="input-control" name="full_name" required placeholder="Ava Patel" /></label>
-                <label className="form-field"><span className="muted">Email</span><input className="input-control" name="email" required type="email" placeholder="ava.patel@example.test" /></label>
+                <div className="notice notice--compact platform-validation-strip">
+                  <strong>Contact validation</strong>
+                  <span className="muted">A primary contact is required before handoff. Make sure the email belongs to the real tenant admin.</span>
+                </div>
+                <label className="form-field"><span className="muted">Full name</span><input className="input-control" name="full_name" required placeholder="Ava Patel" /><ValidationNote>Required. This person becomes the customer-side owner for onboarding.</ValidationNote></label>
+                <label className="form-field"><span className="muted">Email</span><input className="input-control" name="email" required type="email" placeholder="ava.patel@example.test" /><ValidationNote>Required and used for the provisioned login identity.</ValidationNote></label>
                 <label className="form-field"><span className="muted">Phone</span><input className="input-control" name="phone_number" placeholder="+91 90000 00002" /></label>
                 <label className="form-field"><span className="muted">Job title</span><input className="input-control" name="job_title" placeholder="Head of People" /></label>
                 <label className="form-field"><span className="muted">Primary</span><input name="is_primary" type="checkbox" defaultChecked /></label>
@@ -1021,8 +1216,19 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <p className="section-copy">Create the tenant-scoped login and membership from a contact.</p>
               </div>
               <form className="form-grid" onSubmit={handleProvision}>
+                {!provisionableContacts.length ? (
+                  <div className="notice notice--compact platform-validation-strip">
+                    <strong>No contacts are ready for provisioning.</strong>
+                    <span className="muted">Add a primary contact first, or select a tenant whose primary contact has not already been provisioned.</span>
+                  </div>
+                ) : (
+                  <div className="notice notice--compact platform-validation-strip">
+                    <strong>Before provisioning</strong>
+                    <span className="muted">Select the primary contact, choose the tenant role, and enter a password only if you do not want the system to generate one.</span>
+                  </div>
+                )}
                 <label className="form-field"><span className="muted">Contact</span><select className="input-control" name="contact_id" defaultValue={primaryContact?.membership_id ? provisionableContacts[0]?.id ?? "" : primaryContact?.id ?? ""} required><option value="">Select contact</option>{provisionableContacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.full_name} - {contact.email}</option>)}</select></label>
-                <label className="form-field"><span className="muted">Username</span><input className="input-control" name="username" required placeholder="tenant01.admin" /></label>
+                <label className="form-field"><span className="muted">Username</span><input className="input-control" name="username" required placeholder="tenant01.admin" /><ValidationNote>Required and must be unique across logins.</ValidationNote></label>
                 <label className="form-field"><span className="muted">Role</span><select className="input-control" name="role_code" defaultValue="hr-admin"><option value="hr-admin">HR Admin</option><option value="tenant-admin">Tenant Admin</option></select></label>
                 <label className="form-field"><span className="muted">Role name</span><input className="input-control" name="role_name" placeholder="HR Admin" /></label>
                 <label className="form-field"><span className="muted">Password</span><input className="input-control" name="password" type="password" placeholder="Leave blank to generate" /></label>
@@ -1091,8 +1297,12 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 totalCount={filteredPolicyPacks.length}
               />
               <form className="form-grid" onSubmit={handlePolicyPackCreate}>
-                <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-baseline-pack" /></label>
-                <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Baseline Pack" /></label>
+                <div className="notice notice--compact platform-validation-strip">
+                  <strong>Pack validation</strong>
+                  <span className="muted">Create as draft when the baseline is still changing. Only published packs can be adopted by tenants.</span>
+                </div>
+                <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-baseline-pack" /><ValidationNote>Required and unique. Use a stable code because it appears in baseline evidence.</ValidationNote></label>
+                <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Baseline Pack" /><ValidationNote>Required. Use a name operators can recognize during tenant adoption.</ValidationNote></label>
                 <label className="form-field"><span className="muted">Domain</span><select className="input-control" name="domain" defaultValue="leave"><option value="leave">Leave</option><option value="attendance">Attendance</option><option value="workflow">Workflow</option><option value="document">Document</option></select></label>
                 <label className="form-field"><span className="muted">Status</span><select className="input-control" name="status" defaultValue="draft"><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
                 <label className="form-field"><span className="muted">Version</span><input className="input-control" name="version" defaultValue="1" min={1} type="number" /></label>
@@ -1116,12 +1326,23 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <p className="section-copy">Apply a published platform pack to the selected tenant.</p>
               </div>
               <form className="form-grid" onSubmit={handleAdoptPack}>
+                {!canAdoptBaseline ? (
+                  <div className="notice notice--compact platform-validation-strip">
+                    <strong>Baseline adoption is blocked.</strong>
+                    <span className="muted">{selectedTenant ? "Publish at least one policy pack before adoption." : "Select a tenant before adopting a policy pack."}</span>
+                  </div>
+                ) : (
+                  <div className="notice notice--compact platform-validation-strip">
+                    <strong>Before adoption</strong>
+                    <span className="muted">Select a published pack for the chosen tenant. Adoption creates baseline evidence used by the handoff gate.</span>
+                  </div>
+                )}
                 <label className="form-field"><span className="muted">Published pack</span><select className="input-control" name="policy_pack_id" required><option value="">Select pack</option>{publishedPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} - {pack.code}</option>)}</select></label>
                 <label className="form-field"><span className="muted">Adoption mode</span><select className="input-control" name="adoption_mode" defaultValue="clone_to_tenant_records"><option value="clone_to_tenant_records">Clone To Tenant Records</option><option value="baseline_plus_tenant_overrides">Baseline Plus Tenant Overrides</option><option value="baseline_only">Baseline Only</option></select></label>
                 <label className="form-field"><span className="muted">Notes</span><textarea className="input-control" name="notes" placeholder="Initial platform baseline for onboarding." /></label>
                 <div className="form-actions-bar">
                   <span className="muted">Adoption marks baseline evidence and writes onboarding history.</span>
-                  <button className="button button--primary" disabled={Boolean(busyRef) || !publishedPacks.length} type="submit">Adopt pack</button>
+                  <button className="button button--primary" disabled={Boolean(busyRef) || !canAdoptBaseline} type="submit">Adopt pack</button>
                 </div>
               </form>
 

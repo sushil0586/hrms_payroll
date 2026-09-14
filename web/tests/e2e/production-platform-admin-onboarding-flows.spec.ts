@@ -81,7 +81,7 @@ test.describe("Production platform admin onboarding proof", () => {
       await createTenantCard.getByRole("button", { name: "Create tenant" }).click();
       await expect(notice(page).getByText("Tenant created.", { exact: true })).toBeVisible();
       await expect(page).toHaveURL(/tenantId=/);
-      await expect(page).toHaveURL(/panel=onboarding/);
+      await expect(page).toHaveURL(/\/platform-admin\/onboarding/);
       await expect(page.getByText(tenantName).first()).toBeVisible();
 
       const onboardingCard = card(page, "Onboarding metadata");

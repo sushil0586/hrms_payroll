@@ -37,6 +37,9 @@ type Props = {
 };
 
 function isActivePath(pathname: string, href: string) {
+  if (href === "/platform-admin") {
+    return pathname === href;
+  }
   return href === pathname || pathname.startsWith(`${href}/`);
 }
 
