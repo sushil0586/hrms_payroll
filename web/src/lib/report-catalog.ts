@@ -245,6 +245,18 @@ export const reportCatalog: ReportCatalogItem[] = [
     exportRoute: "/api/hr-admin/reports/pf-ecr-package",
   },
   {
+    key: "esic-contribution-readiness",
+    title: "ESIC contribution readiness report",
+    category: "Compliance",
+    primaryPersona: "Payroll Finance Manager",
+    description: "ESIC component setup, employer registration, insured employee number coverage, wage contribution evidence, filing calendar, and provider route readiness.",
+    filters: ["Period", "Legal entity", "Provider profile", "Readiness status"],
+    exports: ["CSV", "Manifest"],
+    status: "Provider gated",
+    route: "/hr-admin/reports/esic-contribution-readiness",
+    exportRoute: "/api/hr-admin/reports/esic-contribution-package",
+  },
+  {
     key: "challan-reconciliation",
     title: "Challan reconciliation report",
     category: "Compliance",
