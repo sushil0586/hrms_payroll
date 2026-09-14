@@ -1257,6 +1257,61 @@ select.input-control {
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
 }
 
+.finance-control-center {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+}
+
+.finance-audit-panel {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.finance-audit-panel h2 {
+  margin: 4px 0 6px;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.finance-audit-panel p {
+  max-width: 820px;
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.finance-audit-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.finance-audit-grid article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.finance-audit-grid strong {
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.finance-audit-grid span {
+  color: #64748b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .hr-admin-control-card {
   display: grid;
   gap: 14px;
@@ -7790,7 +7845,9 @@ select.input-control {
   }
 
   .hr-admin-control-center,
+  .finance-control-center,
   .hr-admin-command-row,
+  .finance-audit-grid,
   .hr-admin-shortcut-grid {
     grid-template-columns: 1fr;
   }

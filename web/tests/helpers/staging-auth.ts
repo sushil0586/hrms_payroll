@@ -52,6 +52,9 @@ export function personaForRoute(path: string): Persona {
   if (path.startsWith("/mss")) {
     return manager;
   }
+  if (path.startsWith("/finance-manager")) {
+    return payrollFinanceManager;
+  }
   return hrAdmin;
 }
 
