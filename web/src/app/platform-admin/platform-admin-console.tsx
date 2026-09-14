@@ -25,11 +25,12 @@ type Props = {
 };
 
 type MutationMethod = "POST" | "PATCH";
-type PlatformPanel = "leads" | "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
+type PlatformPanel = "control" | "leads" | "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
 
 const PAGE_SIZE = 8;
 
-const platformTabs: { panel: PlatformPanel; label: string; countKey: "leads" | "tenants" | "onboarding" | "admins" | "policyPacks" | "events" }[] = [
+const platformTabs: { panel: PlatformPanel; label: string; countKey: "control" | "leads" | "tenants" | "onboarding" | "admins" | "policyPacks" | "events" }[] = [
+  { panel: "control", label: "Control", countKey: "control" },
   { panel: "leads", label: "Leads", countKey: "leads" },
   { panel: "tenants", label: "Tenants", countKey: "tenants" },
   { panel: "onboarding", label: "Onboarding", countKey: "onboarding" },
@@ -106,6 +107,13 @@ function buildPanelHref(panel: PlatformPanel, selectedTenantId?: string) {
   return `/platform-admin?${params.toString()}`;
 }
 
+function leadUrgency(lead: PlatformPublicLead) {
+  if (lead.status === "new") return "Review now";
+  if (lead.status === "qualified") return "Create tenant";
+  if (lead.status === "reviewing") return "Follow up";
+  return titleCase(lead.status);
+}
+
 export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTenant, onboarding, policyPacks }: Props) {
   const router = useRouter();
   const [busyRef, setBusyRef] = useState("");
@@ -126,6 +134,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
       active: tenants.filter((tenant) => tenant.status === "active").length,
       onboarding: tenants.filter((tenant) => tenant.onboarding_status !== "active").length,
       sandbox: tenants.filter((tenant) => tenant.is_sandbox).length,
+      handoffReady: tenants.filter((tenant) => tenant.onboarding_status === "handoff_ready").length,
+      baselinePending: tenants.filter((tenant) => ["created", "prepared"].includes(tenant.onboarding_status)).length,
       publishedPacks: policyPacks.filter((pack) => pack.status === "published").length,
     };
   }, [policyPacks, tenants]);
@@ -154,7 +164,33 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const tenantPageData = paginate(filteredTenants, tenantPage);
   const policyPackPageData = paginate(filteredPolicyPacks, policyPackPage);
   const eventPageData = paginate(filteredEvents, eventPage);
+  const activeLeads = leads.filter((lead) => ["new", "reviewing", "qualified"].includes(lead.status));
+  const newLeads = leads.filter((lead) => lead.status === "new");
+  const qualifiedLeads = leads.filter((lead) => lead.status === "qualified");
+  const staleOnboardingTenants = tenants.filter((tenant) => !["active", "handoff_ready"].includes(tenant.onboarding_status)).slice(0, 5);
+  const leadQueue = [...newLeads, ...qualifiedLeads, ...activeLeads.filter((lead) => !["new", "qualified"].includes(lead.status))].slice(0, 5);
+  const controlRisks = [
+    {
+      label: "New public leads",
+      value: newLeads.length,
+      action: "Review and qualify inbound requests.",
+      href: buildPanelHref("leads", selectedTenant?.id),
+    },
+    {
+      label: "Tenants not active",
+      value: tenantCounts.onboarding,
+      action: "Move prepared tenants through baseline, admin, handoff, and activation.",
+      href: buildPanelHref("tenants", selectedTenant?.id),
+    },
+    {
+      label: "Published policy packs",
+      value: tenantCounts.publishedPacks,
+      action: tenantCounts.publishedPacks ? "Adopt baseline packs for onboarding tenants." : "Publish at least one baseline pack before handoff.",
+      href: buildPanelHref("policy-packs", selectedTenant?.id),
+    },
+  ];
   const tabCounts = {
+    control: activeLeads.length + tenantCounts.onboarding,
     leads: leads.filter((lead) => ["new", "reviewing", "qualified"].includes(lead.status)).length,
     tenants: tenants.length,
     onboarding: selectedTenant && onboarding ? 2 : 0,
@@ -417,11 +453,13 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         showPills
       />
 
-      <section className="section">
+      <section className="section platform-control-metrics">
         <div className="metric-grid-modern">
+          <MetricTile label="Open control actions" value={tabCounts.control} trend="Leads and tenant gates" />
           <MetricTile label="Tenants" value={tenants.length} trend="Platform catalog" />
           <MetricTile label="Active tenants" value={tenantCounts.active} trend="Activated" />
           <MetricTile label="Onboarding" value={tenantCounts.onboarding} trend="Not yet active" />
+          <MetricTile label="Public leads" value={activeLeads.length} trend={`${newLeads.length} new`} />
           <MetricTile label="Published packs" value={tenantCounts.publishedPacks} trend={`${policyPacks.length} total packs`} />
         </div>
       </section>
@@ -452,6 +490,152 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
           ))}
         </div>
       </section>
+
+      {initialPanel === "control" ? (
+      <>
+        <section className="section platform-control-center" data-testid="platform-admin-control-center">
+          <article className="record-card platform-control-card platform-control-card--primary">
+            <div className="record-card__title-wrap">
+              <div className="record-card__title">
+                <h2>Mission queue</h2>
+                <span className="record-chip">{leadQueue.length} priority leads</span>
+              </div>
+              <p className="section-copy">Inbound signup and contact requests that need platform operator action before tenant creation.</p>
+            </div>
+            <div className="tenant-support-access-list">
+              {leadQueue.map((lead) => (
+                <div className="tenant-support-access-row tenant-support-access-row--stacked" key={lead.id}>
+                  <div>
+                    <strong>{lead.company_name}</strong>
+                    <span>{lead.contact_name} - {lead.work_email}</span>
+                    <span>{lead.employee_count ? `${lead.employee_count} employees` : "Employee count not set"} - {lead.preferred_plan || "Plan not set"}</span>
+                  </div>
+                  <StatusChip value={lead.status} />
+                  <span className="record-chip">{leadUrgency(lead)}</span>
+                  <Link className="button button--secondary" href={buildPanelHref("leads", selectedTenant?.id)}>Open leads</Link>
+                </div>
+              ))}
+              {!leadQueue.length ? (
+                <div className="notice notice--success">
+                  <strong>No active public leads need review.</strong>
+                  <span className="muted">New public signup and contact requests will land here.</span>
+                </div>
+              ) : null}
+            </div>
+          </article>
+
+          <article className="record-card platform-control-card">
+            <div className="record-card__title-wrap">
+              <div className="record-card__title">
+                <h2>Tenant pipeline</h2>
+                <span className="record-chip">{tenantCounts.onboarding} in motion</span>
+              </div>
+              <p className="section-copy">Activation posture across created, prepared, baseline, handoff, sandbox, and active tenants.</p>
+            </div>
+            <div className="detail-grid">
+              <DetailRow label="Active" value={tenantCounts.active} />
+              <DetailRow label="Not active" value={tenantCounts.onboarding} />
+              <DetailRow label="Baseline pending" value={tenantCounts.baselinePending} />
+              <DetailRow label="Handoff ready" value={tenantCounts.handoffReady} />
+              <DetailRow label="Sandbox" value={tenantCounts.sandbox} />
+              <DetailRow label="Published packs" value={tenantCounts.publishedPacks} />
+            </div>
+            <div className="form-actions-bar">
+              <span className="muted">Use tenant details to complete baseline, first admin, handoff, and activation gates.</span>
+              <Link className="button button--primary" href={buildPanelHref("tenants", selectedTenant?.id)}>Open tenants</Link>
+            </div>
+          </article>
+        </section>
+
+        <section className="section platform-control-grid">
+          <article className="record-card">
+            <div className="record-card__title-wrap">
+              <div className="record-card__title">
+                <h2>Risk radar</h2>
+                <span className="record-chip">{controlRisks.filter((item) => Number(item.value) > 0).length} signals</span>
+              </div>
+              <p className="section-copy">Each signal explains the next action instead of just showing a number.</p>
+            </div>
+            <div className="tenant-support-access-list">
+              {controlRisks.map((risk) => (
+                <div className="tenant-support-access-row" key={risk.label}>
+                  <div>
+                    <strong>{risk.label}</strong>
+                    <span>{risk.action}</span>
+                  </div>
+                  <span className="record-chip">{risk.value}</span>
+                  <Link className="button button--secondary" href={risk.href}>Resolve</Link>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="record-card">
+            <div className="record-card__title-wrap">
+              <div className="record-card__title">
+                <h2>Activation blockers</h2>
+                <span className="record-chip">{staleOnboardingTenants.length} shown</span>
+              </div>
+              <p className="section-copy">Tenants that still need platform action before they become customer-ready.</p>
+            </div>
+            <div className="tenant-support-access-list">
+              {staleOnboardingTenants.map((tenant) => (
+                <div className="tenant-support-access-row" key={tenant.id}>
+                  <div>
+                    <strong>{tenant.name}</strong>
+                    <span>{tenant.code} - {tenant.primary_domain || "No domain"}</span>
+                  </div>
+                  <StatusChip value={tenant.onboarding_status} />
+                  <Link className="button button--secondary" href={buildPanelHref("onboarding", tenant.id)}>Review</Link>
+                </div>
+              ))}
+              {!staleOnboardingTenants.length ? (
+                <div className="notice notice--success">
+                  <strong>No tenant activation blockers in this view.</strong>
+                  <span className="muted">Created and prepared tenants will appear here.</span>
+                </div>
+              ) : null}
+            </div>
+          </article>
+
+          <article className="record-card">
+            <div className="record-card__title-wrap">
+              <div className="record-card__title">
+                <h2>Command shortcuts</h2>
+              </div>
+              <p className="section-copy">Fast paths for the platform operator’s common decisions.</p>
+            </div>
+            <div className="platform-command-grid">
+              <Link className="button button--primary" href={buildPanelHref("leads", selectedTenant?.id)}>Review leads</Link>
+              <Link className="button button--secondary" href={buildPanelHref("tenants", selectedTenant?.id)}>Create tenant</Link>
+              <Link className="button button--secondary" href={buildPanelHref("admins", selectedTenant?.id)}>Provision admin</Link>
+              <Link className="button button--secondary" href={buildPanelHref("policy-packs", selectedTenant?.id)}>Policy packs</Link>
+              <Link className="button button--secondary" href="/hr-admin/saas-operations">Ops health</Link>
+              <Link className="button button--secondary" href="/hr-admin/saas-resilience">Resilience</Link>
+            </div>
+          </article>
+
+          <article className="record-card">
+            <div className="record-card__title-wrap">
+              <div className="record-card__title">
+                <h2>Evidence trail</h2>
+              </div>
+              <p className="section-copy">Operator proof for tenant setup, policy baselines, support posture, and launch gates.</p>
+            </div>
+            <div className="detail-grid">
+              <DetailRow label="Tenant events" value={events.length} />
+              <DetailRow label="Policy packs" value={policyPacks.length} />
+              <DetailRow label="Active leads" value={activeLeads.length} />
+              <DetailRow label="Selected tenant" value={selectedTenant?.code || "Not selected"} />
+            </div>
+            <div className="form-actions-bar">
+              <span className="muted">Open events or SaaS operations when evidence is needed for signoff.</span>
+              <Link className="button button--secondary" href={buildPanelHref("events", selectedTenant?.id)}>Open events</Link>
+            </div>
+          </article>
+        </section>
+      </>
+      ) : null}
 
       {initialPanel === "leads" ? (
       <section className="section" data-testid="platform-admin-leads-panel">

@@ -2991,6 +2991,51 @@ select.input-control {
   align-items: flex-start;
 }
 
+.platform-control-center,
+.platform-control-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+}
+
+.platform-control-metrics .metric-grid-modern {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.platform-control-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.platform-control-card {
+  min-height: 100%;
+}
+
+.platform-control-card--primary {
+  border-color: rgba(37, 99, 235, 0.22);
+  background:
+    radial-gradient(circle at 12% 12%, rgba(37, 99, 235, 0.08), transparent 32%),
+    rgba(255, 255, 255, 0.9);
+}
+
+.platform-command-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.platform-command-grid .button {
+  min-height: 42px;
+}
+
+.platform-control-grid .tenant-support-access-row,
+.platform-control-center .tenant-support-access-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.platform-control-center .tenant-support-access-row--stacked {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+}
+
 .public-shell--auth {
   width: min(1760px, calc(100% - 56px));
 }
@@ -7500,6 +7545,8 @@ select.input-control {
   .marketing-hero,
   .marketing-card-grid,
   .pricing-grid,
+  .platform-control-center,
+  .platform-control-grid,
   .public-lead-form,
   .public-lead-form--compact {
     grid-template-columns: 1fr;

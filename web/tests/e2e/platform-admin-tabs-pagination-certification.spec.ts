@@ -3,7 +3,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { gotoAuthenticated, platformAdmin } from "../helpers/staging-auth";
 
-const tabs = ["Tenants", "Onboarding", "Admins", "Policy Packs", "Events"] as const;
+const tabs = ["Control", "Tenants", "Onboarding", "Admins", "Policy Packs", "Events"] as const;
 
 function card(page: Page, heading: string | RegExp): Locator {
   return page.locator("article").filter({ has: page.getByRole("heading", { name: heading }) }).first();
@@ -50,7 +50,20 @@ test.describe("Platform admin tabbed workspace certification", () => {
       await expect(page.getByRole("tab", { name: new RegExp(`^${tab}`) })).toBeVisible();
     }
 
-    await expect(page.getByRole("tab", { name: /^Tenants/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: /^Control/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("platform-admin-control-center")).toBeVisible();
+    await expect(card(page, "Mission queue")).toBeVisible();
+    await expect(card(page, "Tenant pipeline")).toBeVisible();
+    await expect(card(page, "Risk radar")).toBeVisible();
+    await expect(card(page, "Activation blockers")).toBeVisible();
+    await expect(card(page, "Command shortcuts")).toBeVisible();
+    await expect(card(page, "Evidence trail")).toBeVisible();
+    for (const shortcut of ["Review leads", "Create tenant", "Provision admin", "Policy packs", "Ops health", "Resilience"]) {
+      await expect(card(page, "Command shortcuts").getByRole("link", { name: shortcut })).toBeVisible();
+    }
+
+    await openTab(page, "Tenants");
+    await expect(page).toHaveURL(/panel=tenants/);
     await expect(page.getByTestId("platform-admin-tenants-panel")).toBeVisible();
     await expect(page.locator('[name="tenant_search"]')).toBeVisible();
     await expectPagination(page.getByTestId("platform-admin-tenants-panel"));

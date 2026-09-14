@@ -22,10 +22,10 @@ function resolveSelectedTenantId(params: Record<string, SearchParamValue>, tenan
 
 function resolvePanel(params: Record<string, SearchParamValue>) {
   const requested = normalizeParam(params.panel);
-  if (["leads", "tenants", "onboarding", "admins", "policy-packs", "events"].includes(requested ?? "")) {
-    return requested as "leads" | "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
+  if (["control", "leads", "tenants", "onboarding", "admins", "policy-packs", "events"].includes(requested ?? "")) {
+    return requested as "control" | "leads" | "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
   }
-  return "tenants";
+  return "control";
 }
 
 export default async function PlatformAdminPage({ searchParams }: PageProps) {
