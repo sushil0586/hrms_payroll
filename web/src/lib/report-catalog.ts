@@ -257,6 +257,18 @@ export const reportCatalog: ReportCatalogItem[] = [
     exportRoute: "/api/hr-admin/reports/esic-contribution-package",
   },
   {
+    key: "professional-tax-readiness",
+    title: "Professional Tax readiness report",
+    category: "Compliance",
+    primaryPersona: "Payroll Finance Manager",
+    description: "Professional Tax setup, employee state coverage, employer registration, return calendar, deduction artifacts, and provider route readiness.",
+    filters: ["Period", "State", "Legal entity", "Readiness status"],
+    exports: ["CSV", "Manifest"],
+    status: "Provider gated",
+    route: "/hr-admin/reports/professional-tax-readiness",
+    exportRoute: "/api/hr-admin/reports/professional-tax-package",
+  },
+  {
     key: "challan-reconciliation",
     title: "Challan reconciliation report",
     category: "Compliance",
