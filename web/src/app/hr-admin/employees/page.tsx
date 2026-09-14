@@ -6,6 +6,7 @@ import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeDetail, getHrAdminEmployeeFormOptions, getHrAdminEmployees } from "@/lib/api";
 import type { HrAdminEmployeeDetail, HrAdminEmployeeListItem } from "@/lib/types";
+import { EmployeeBankImportWorkbench } from "./employee-bank-import-workbench";
 import { EmployeeImportWorkbench } from "./employee-import-workbench";
 
 type SearchParamValue = string | string[] | undefined;
@@ -340,6 +341,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
       </section>
 
       <EmployeeImportWorkbench employees={employeesResult.data} options={optionsResult.data} />
+      <EmployeeBankImportWorkbench employees={employeesResult.data} />
 
       <section className="section employee-master-layout">
         <article className="queue-toolbar panel-card-soft">
