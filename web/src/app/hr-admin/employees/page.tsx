@@ -8,6 +8,7 @@ import { getHrAdminEmployeeDetail, getHrAdminEmployeeFormOptions, getHrAdminEmpl
 import type { HrAdminEmployeeDetail, HrAdminEmployeeListItem } from "@/lib/types";
 import { EmployeeBankImportWorkbench } from "./employee-bank-import-workbench";
 import { EmployeeImportWorkbench } from "./employee-import-workbench";
+import { EmployeeManagerImportWorkbench } from "./employee-manager-import-workbench";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -342,6 +343,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
 
       <EmployeeImportWorkbench employees={employeesResult.data} options={optionsResult.data} />
       <EmployeeBankImportWorkbench employees={employeesResult.data} />
+      <EmployeeManagerImportWorkbench employees={employeesResult.data} options={optionsResult.data} />
 
       <section className="section employee-master-layout">
         <article className="queue-toolbar panel-card-soft">

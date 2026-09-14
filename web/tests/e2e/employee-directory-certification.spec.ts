@@ -44,6 +44,15 @@ async function selectFirstNonEmptyOption(locator: Locator) {
   }
 }
 
+async function selectOptionContaining(locator: Locator, text: string) {
+  const value = await locator.evaluate((element, expectedText) => {
+    const select = element as HTMLSelectElement;
+    return Array.from(select.options).find((option) => option.textContent?.includes(expectedText))?.value ?? "";
+  }, text);
+  expect(value).toBeTruthy();
+  await locator.selectOption(value);
+}
+
 async function createEmployeeFromBrowser(page: Page, suffix: string) {
   const code = `BANK-IMP-${suffix}`;
   await gotoAuthenticated(page, "/hr-admin/employees/new");
@@ -66,6 +75,42 @@ async function createEmployeeFromBrowser(page: Page, suffix: string) {
   await selectFirstNonEmptyOption(fieldByLabel(page, "Designation"));
   await selectFirstNonEmptyOption(fieldByLabel(page, "Employment type"));
   await selectFirstNonEmptyOption(fieldByLabel(page, "Reporting manager"));
+
+  const [response] = await Promise.all([
+    page.waitForResponse((item) => item.url().includes("/api/hr-admin/employees") && item.request().method() === "POST"),
+    page.getByRole("button", { name: "Create employee" }).click(),
+  ]);
+  expect(response.ok()).toBeTruthy();
+  const created = (await response.json()) as { id: string; employee_code: string; full_name: string };
+  await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${created.id}`));
+  return created;
+}
+
+async function createNamedEmployeeFromBrowser(page: Page, input: { code: string; firstName: string; lastName: string; emailSlug: string; managerCode?: string }) {
+  await gotoAuthenticated(page, "/hr-admin/employees/new");
+  await expectPageReady(page, "Create employee");
+
+  await fieldByLabel(page, "Employee code").fill(input.code);
+  await fieldByLabel(page, "Employment status").selectOption("active");
+  await fieldByLabel(page, "First name").fill(input.firstName);
+  await fieldByLabel(page, "Last name").fill(input.lastName);
+  await fieldByLabel(page, "Preferred name").fill(`${input.firstName} ${input.lastName}`);
+  await fieldByLabel(page, "Work email").fill(`${input.emailSlug}@example.test`);
+  await fieldByLabel(page, "Personal email").fill(`${input.emailSlug}.personal@example.test`);
+  await fieldByLabel(page, "Phone number").fill("+91 90000 01002");
+  await fieldByLabel(page, "Date of birth").fill("1994-01-01");
+  await fieldByLabel(page, "Date of joining").fill("2026-04-01");
+  await fieldByLabel(page, "Probation end date").fill("2026-09-30");
+  await selectFirstNonEmptyOption(fieldByLabel(page, "Branch"));
+  await selectFirstNonEmptyOption(fieldByLabel(page, "Cost center"));
+  await selectFirstNonEmptyOption(fieldByLabel(page, "Department"));
+  await selectFirstNonEmptyOption(fieldByLabel(page, "Designation"));
+  await selectFirstNonEmptyOption(fieldByLabel(page, "Employment type"));
+  if (input.managerCode) {
+    await selectOptionContaining(fieldByLabel(page, "Reporting manager"), input.managerCode);
+  } else {
+    await selectFirstNonEmptyOption(fieldByLabel(page, "Reporting manager"));
+  }
 
   const [response] = await Promise.all([
     page.waitForResponse((item) => item.url().includes("/api/hr-admin/employees") && item.request().method() === "POST"),
@@ -139,6 +184,73 @@ async function expectDirectoryPageCertified(page: Page) {
 }
 
 test.describe("Certification: HR admin employee directory", () => {
+  test("reporting manager import validates commits and updates manager coverage", async ({ page }) => {
+    test.setTimeout(5 * 60 * 1000);
+    const suffix = String(Date.now()).slice(-6);
+    const manager = await createNamedEmployeeFromBrowser(page, {
+      code: `MGR-IMP-${suffix}`,
+      firstName: "Manager",
+      lastName: `Import ${suffix}`,
+      emailSlug: `manager.import.${suffix}`,
+    });
+    const employee = await createNamedEmployeeFromBrowser(page, {
+      code: `REP-IMP-${suffix}`,
+      firstName: "Report",
+      lastName: `Import ${suffix}`,
+      emailSlug: `report.import.${suffix}`,
+    });
+    const duplicateReason = `Duplicate manager row ${suffix}`;
+    const csv = [
+      "employee_code,reporting_manager_code,effective_date,reason",
+      `${employee.employee_code},${manager.employee_code},2026-04-01,Manager mapping import ${suffix}`,
+      `${employee.employee_code},${manager.employee_code},2026-04-02,${duplicateReason}`,
+      `UNKNOWN-${suffix},${manager.employee_code},2026-04-01,Unknown employee`,
+      `${manager.employee_code},${manager.employee_code},2026-04-01,Self manager`,
+      `${employee.employee_code},UNKNOWN-MANAGER-${suffix},2026-04-01,Unknown manager`,
+    ].join("\n");
+
+    await gotoAuthenticated(page, `/hr-admin/employees?q=${employee.employee_code}&status=all&page_size=5`);
+    await expectDirectoryPageCertified(page);
+
+    const workbench = page.getByTestId("employee-manager-import-workbench");
+    await expect(workbench).toBeVisible();
+    await expect(workbench.getByRole("heading", { name: "Reporting manager import" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Load sample template" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Copy template" })).toBeVisible();
+    await expect(workbench.getByRole("link", { name: "Download template" })).toHaveAttribute("download", "employee-manager-import-template.csv");
+    await expect(workbench.getByText("Upload CSV", { exact: true })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Preview manager import" })).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Commit ready manager rows" })).toBeDisabled();
+
+    await workbench.locator("input[type='file']").setInputFiles({
+      name: "employee-manager-import.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    });
+    await expect(workbench.getByLabel("Manager CSV data")).toContainText(employee.employee_code);
+    await workbench.getByRole("button", { name: "Preview manager import" }).click();
+    await expect(workbench.getByText("Preview ready. Commit ready manager mappings after checking blocked rows.")).toBeVisible();
+    await expect(workbench.locator("tbody tr")).toHaveCount(5);
+    await expect(workbench.locator("tr").filter({ hasText: employee.employee_code }).first().locator(".readiness-badge", { hasText: "ready" })).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: duplicateReason }).locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+    await expect(workbench.getByText("Only one manager mapping per employee can be committed in one import batch.").first()).toBeVisible();
+    await expect(workbench.getByText("Employee code must match an existing employee.").first()).toBeVisible();
+    await expect(workbench.getByText("Employee cannot report to self.").first()).toBeVisible();
+    await expect(workbench.getByText("Reporting manager must match an active manager option.").first()).toBeVisible();
+    await expect(workbench.getByRole("button", { name: "Commit ready manager rows" })).toBeEnabled();
+
+    await workbench.getByRole("button", { name: "Commit ready manager rows" }).click();
+    await expect(workbench.getByText("Commit complete. Refresh the directory or workforce report to verify manager coverage.")).toBeVisible({ timeout: 30_000 });
+    await expect(workbench.locator("tr").filter({ hasText: employee.employee_code }).first().locator(".readiness-badge", { hasText: "created" })).toBeVisible();
+    await expect(workbench.locator("tr").filter({ hasText: duplicateReason }).locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();
+
+    await gotoAuthenticated(page, `/hr-admin/employees?q=${employee.employee_code}&status=all&page_size=5`);
+    await expect(directoryItems(page).filter({ hasText: employee.employee_code }).getByText(manager.full_name)).toBeVisible();
+    await expect(detailPanel(page).locator(".detail-row").filter({ hasText: "Reporting Manager" }).getByText(manager.full_name)).toBeVisible();
+
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("employee bank import workbench validates commits and updates payout readiness coverage", async ({ page }) => {
     test.setTimeout(5 * 60 * 1000);
     const suffix = String(Date.now()).slice(-6);
