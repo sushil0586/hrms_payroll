@@ -7,11 +7,16 @@ import { reportCatalog } from "@/lib/report-catalog";
 import { ComplianceReportHubWorkspace } from "./compliance-report-hub-workspace";
 
 const complianceReportKeys = [
+  "compliance-summary",
   "statutory-deductions",
   "challan-reconciliation",
   "statutory-filing-status",
   "provider-filing-receipts",
   "tds-efile-readiness",
+  "pf-ecr-readiness",
+  "esic-contribution-readiness",
+  "professional-tax-readiness",
+  "lwf-readiness",
 ];
 
 export default async function ComplianceReportHubPage() {

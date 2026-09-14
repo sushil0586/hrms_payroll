@@ -233,6 +233,18 @@ export const reportCatalog: ReportCatalogItem[] = [
     exportRoute: "/api/hr-admin/reports/tds-efile-package",
   },
   {
+    key: "compliance-summary",
+    title: "Compliance summary report",
+    category: "Compliance",
+    primaryPersona: "Payroll Finance Manager",
+    description: "Consolidated statutory readiness across TDS, PF, ESIC, Professional Tax, LWF, challans, filing calendars, provider receipts, and blocked launch actions.",
+    filters: ["Readiness status", "Compliance area", "Legal entity", "Period"],
+    exports: ["CSV", "Manifest"],
+    status: "Ready",
+    route: "/hr-admin/reports/compliance-summary",
+    exportRoute: "/api/hr-admin/reports/compliance-summary",
+  },
+  {
     key: "pf-ecr-readiness",
     title: "PF ECR readiness report",
     category: "Compliance",

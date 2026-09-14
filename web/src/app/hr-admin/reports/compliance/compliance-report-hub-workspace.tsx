@@ -6,11 +6,12 @@ import { useMemo, useState } from "react";
 import type { ReportCatalogItem } from "@/lib/report-catalog";
 
 const groups = [
-  { key: "all", label: "All", reports: ["statutory-deductions", "challan-reconciliation", "statutory-filing-status", "provider-filing-receipts", "tds-efile-readiness"] },
+  { key: "all", label: "All", reports: ["compliance-summary", "statutory-deductions", "challan-reconciliation", "statutory-filing-status", "provider-filing-receipts", "tds-efile-readiness", "pf-ecr-readiness", "esic-contribution-readiness", "professional-tax-readiness", "lwf-readiness"] },
+  { key: "summary", label: "Summary", reports: ["compliance-summary"] },
   { key: "deductions", label: "Deductions", reports: ["statutory-deductions"] },
   { key: "filing", label: "Filing & Challans", reports: ["challan-reconciliation", "statutory-filing-status"] },
   { key: "provider", label: "Provider Evidence", reports: ["provider-filing-receipts"] },
-  { key: "tds", label: "TDS Package", reports: ["tds-efile-readiness"] },
+  { key: "returns", label: "Return Packages", reports: ["tds-efile-readiness", "pf-ecr-readiness", "esic-contribution-readiness", "professional-tax-readiness", "lwf-readiness"] },
 ] as const;
 
 type ComplianceReportGroup = (typeof groups)[number]["key"];
@@ -22,6 +23,7 @@ function readyClass(status: string) {
 }
 
 function healthSignal(report: ReportCatalogItem) {
+  if (report.key === "compliance-summary") return "Control report";
   if (report.key === "tds-efile-readiness") return "Provider gated";
   if (report.key === "provider-filing-receipts") return "Receipt tracked";
   if (report.key === "statutory-filing-status") return "Due status";
