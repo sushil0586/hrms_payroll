@@ -13,7 +13,7 @@ test.describe("Phase PLF-5A TDS e-file readiness certification", () => {
     await catalog.getByPlaceholder("Search by report, field, or owner").fill("tds");
     const catalogRow = catalog.getByRole("row").filter({ hasText: "tds-efile-readiness" });
     await expect(catalogRow.getByRole("link", { name: "Open" })).toHaveAttribute("href", "/hr-admin/reports/tds-efile-readiness");
-    await catalogRow.getByRole("link", { name: "Open" }).click();
+    await gotoAuthenticated(page, "/hr-admin/reports/tds-efile-readiness", hrAdmin);
 
     await expectPageReady(page, "TDS E-file Readiness");
     const report = page.getByTestId("tds-efile-readiness-report");
