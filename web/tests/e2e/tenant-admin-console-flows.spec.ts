@@ -1,7 +1,7 @@
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("Tenant admin console", () => {
   async function captureTenantAdminStep(page: Page, testInfo: TestInfo, name: string) {
@@ -208,6 +208,60 @@ test.describe("Tenant admin console", () => {
     await expect((await revokeResponse).ok()).toBeTruthy();
     await expect(createdRow.getByText("Revoked")).toBeVisible({ timeout: 20_000 });
     await captureTenantAdminStep(page, testInfo, "04-revoked-member-row");
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("denies tenant membership mutations without tenant-admin authority", async ({ page }) => {
+    await page.context().clearCookies();
+    const unauthenticatedInvite = await page.request.post("/api/tenant-admin/memberships", {
+      data: {
+        username: `ta.unauth.${Date.now()}`,
+        email: `ta.unauth.${Date.now()}@example.test`,
+        membership_status: "invited",
+        role_ids: ["00000000-0000-4000-8000-000000000000"],
+      },
+    });
+    expect([401, 403]).toContain(unauthenticatedInvite.status());
+
+    await gotoAuthenticated(page, "/ess", employee);
+    const employeeInvite = await page.request.post("/api/tenant-admin/memberships", {
+      data: {
+        username: `ta.employee.${Date.now()}`,
+        email: `ta.employee.${Date.now()}@example.test`,
+        membership_status: "invited",
+        role_ids: ["00000000-0000-4000-8000-000000000000"],
+      },
+    });
+    expect([401, 403, 404]).toContain(employeeInvite.status());
+
+    const employeePatch = await page.request.patch("/api/tenant-admin/memberships/00000000-0000-4000-8000-000000000000", {
+      data: { action: "suspend", note: "Employee role should not mutate tenant memberships." },
+    });
+    expect([401, 403, 404]).toContain(employeePatch.status());
+  });
+
+  test("shows tenant membership audit evidence after lifecycle actions", async ({ page }, testInfo) => {
+    await gotoAuthenticated(page, "/tenant-admin/trust-audit?event_group=tenant_admin&page_size=50");
+    await expectPageReady(page, "Tenant Trust Audit");
+    await expect(page.getByRole("main").getByText("Audit events", { exact: true })).toBeVisible();
+    for (const eventType of [
+      "Tenant Membership Invited",
+      "Tenant Membership Activated",
+      "Tenant Membership Suspended",
+      "Tenant Membership Revoked",
+    ]) {
+      await expect(page.getByRole("main").getByText(eventType).first()).toBeVisible();
+    }
+    await expect(page.getByRole("main").getByText("saas.tenant_admin.membership_mutation.v1").first()).toBeVisible();
+    await captureTenantAdminStep(page, testInfo, "05-tenant-membership-audit-ledger");
+    const auditResponse = await page.request.get("/api/tenant-admin/trust-audit?event_group=tenant_admin&page_size=50");
+    expect(auditResponse.ok()).toBeTruthy();
+    const auditPayload = await auditResponse.json();
+    const eventTypes = auditPayload.events.map((event: { event_type: string }) => event.event_type);
+    expect(eventTypes).toContain("tenant_membership_invited");
+    expect(eventTypes).toContain("tenant_membership_activated");
+    expect(eventTypes).toContain("tenant_membership_suspended");
+    expect(eventTypes).toContain("tenant_membership_revoked");
     await expectNoHorizontalOverflow(page);
   });
 

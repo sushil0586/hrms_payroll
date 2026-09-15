@@ -344,7 +344,7 @@ Testing targets:
 - Unauthorized mutation denial.
 - Pagination for long members.
 
-Status: In progress, modal UX and baseline browser certification complete locally and on staging.
+Status: Complete locally; staging deployment and rerun pending after check-in.
 
 Evidence:
 - User Management now uses an `Invite member` dialog for add flow and an `Update roles` dialog for role updates.
@@ -355,12 +355,14 @@ Evidence:
 - Local lifecycle evidence covers disposable invite, duplicate-user validation, activate, suspend, reactivate, revoke, and screenshot attachments for invited/duplicate/suspended/revoked states.
 - Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts -g "focused user management"` -> `1 passed`; covered row cap, search narrowing, no-match state, and next/previous pagination.
 - Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts` -> `8 passed`.
-- Staging deployment completed on commit `95d13cc`.
+- Staging deployment completed on commit `bc029b8`.
 - Staging post-deploy smoke passed: API health 200, root/login 200, backend/web active, disk 68%.
-- Staging browser command against `https://hrms.accerio.in`: `tenant-admin-console-flows.spec.ts` -> `8 passed`.
+- Staging browser command against `https://hrms.accerio.in`: `tenant-admin-console-flows.spec.ts` -> `8 passed`; covered row cap, search narrowing, no-match state, next/previous pagination, disposable member lifecycle, plan, support, settings, mobile, and setup workbench.
 - Staging lifecycle evidence covers disposable invite, duplicate-user validation, activate, suspend, reactivate, revoke, and screenshot attachments for invited/duplicate/suspended/revoked states.
 - Staging browser command against `https://hrms.accerio.in`: `public-launch-role-menu-certification.spec.ts` -> `7 passed`.
-- Remaining TA-2 work: deploy full-list pagination/search changes, rerun staging Tenant Admin suite, unauthorized mutation denial, and audit evidence verification.
+- Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts -g "denies tenant membership|shows tenant membership audit"` -> `2 passed`; covered unauthenticated and employee-role mutation denial plus trust-audit evidence for invited, activated, suspended, and revoked membership events.
+- Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts` -> `10 passed`; covered dashboard, user management, invite/update/lifecycle, unauthorized mutation denial, trust audit evidence, plan change request, support access, settings, mobile setup, and setup workbench.
+- Remaining TA-2 work: deploy this test hardening and rerun the full Tenant Admin suite on staging.
 
 ### Phase TA-3: Plan And Change Request Certification
 
