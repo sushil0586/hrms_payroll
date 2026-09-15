@@ -3,7 +3,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { gotoAuthenticated, platformAdmin } from "../helpers/staging-auth";
 
-const tabs = ["Control", "Tenants", "Onboarding", "Admins", "Policy Packs", "Events"] as const;
+const tabs = ["Control", "Tenants", "Launch Checklist", "Tenant Admin Users", "Setup Templates", "Events"] as const;
 
 function card(page: Page, heading: string | RegExp): Locator {
   return page.locator("article").filter({ has: page.getByRole("heading", { name: heading }) }).first();
@@ -58,7 +58,7 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expect(card(page, "Activation blockers")).toBeVisible();
     await expect(card(page, "Command shortcuts")).toBeVisible();
     await expect(card(page, "Evidence trail")).toBeVisible();
-    for (const shortcut of ["Review leads", "Create tenant", "Provision admin", "Policy packs", "Ops health", "Resilience"]) {
+    for (const shortcut of ["Review leads", "Create tenant", "Create admin access", "Setup templates", "Ops health", "Resilience"]) {
       await expect(card(page, "Command shortcuts").getByRole("link", { name: shortcut })).toBeVisible();
     }
 
@@ -94,16 +94,16 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expect(createTenantDialog.locator('[name="code"]')).toBeFocused();
     await createTenantDialog.getByRole("button", { name: "Cancel" }).click();
 
-    await openTab(page, "Onboarding");
+    await openTab(page, "Launch Checklist");
     await expect(page).toHaveURL(/\/platform-admin\/onboarding/);
     await expect(page.getByTestId("platform-admin-onboarding-panel")).toBeVisible();
-    await expect(card(page, "Activation gates").locator(".platform-gate-checklist")).toBeVisible();
-    await expect(card(page, "Activation gates").getByText("Baseline published")).toBeVisible();
-    await expect(card(page, "Activation gates").getByText("Primary admin provisioned")).toBeVisible();
-    await expect(card(page, "Activation gates").getByText("Handoff ready")).toBeVisible();
-    await expect(card(page, "Activation gates").getByRole("button", { name: "Mark baseline" })).toBeVisible();
-    await expect(card(page, "Activation gates").getByRole("button", { name: "Mark handoff" })).toBeVisible();
-    await expect(card(page, "Activation gates").getByRole("button", { name: "Activate tenant" })).toBeVisible();
+    await expect(card(page, "Launch checklist").locator(".platform-gate-checklist")).toBeVisible();
+    await expect(card(page, "Launch checklist").getByText("Initial setup confirmed")).toBeVisible();
+    await expect(card(page, "Launch checklist").getByText("Primary tenant admin has login access")).toBeVisible();
+    await expect(card(page, "Launch checklist").getByText("Ready for tenant admin", { exact: true })).toBeVisible();
+    await expect(card(page, "Launch checklist").getByRole("button", { name: "Confirm setup" })).toBeVisible();
+    await expect(card(page, "Launch checklist").getByRole("button", { name: "Mark ready" })).toBeVisible();
+    await expect(card(page, "Launch checklist").getByRole("button", { name: "Activate tenant" })).toBeVisible();
     await expectNamedControls(card(page, "Edit tenant setup"), [
       "name",
       "legal_name",
@@ -129,7 +129,7 @@ test.describe("Platform admin tabbed workspace certification", () => {
       "customer_handoff_notes",
     ]);
 
-    await openTab(page, "Admins");
+    await openTab(page, "Tenant Admin Users");
     await expect(page.getByTestId("platform-admin-admins-panel")).toBeVisible();
     await expect(card(page, "Admin contacts").getByRole("button", { name: "Add contact" })).toBeVisible();
     await card(page, "Admin contacts").getByRole("button", { name: "Add contact" }).click();
@@ -137,8 +137,8 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expect(addContactDialog.getByText("Contact validation")).toBeVisible();
     await expectNamedControls(addContactDialog, ["full_name", "email", "phone_number", "job_title", "is_primary", "notes"]);
     await addContactDialog.getByRole("button", { name: "Cancel" }).click();
-    await expect(card(page, "Provision first admin").getByText(/Before provisioning|No contacts are ready for provisioning/)).toBeVisible();
-    await expectNamedControls(card(page, "Provision first admin"), [
+    await expect(card(page, "Create tenant admin login").getByText(/Before creating login access|No contacts are ready for login access/)).toBeVisible();
+    await expectNamedControls(card(page, "Create tenant admin login"), [
       "contact_id",
       "username",
       "role_code",
@@ -148,16 +148,16 @@ test.describe("Platform admin tabbed workspace certification", () => {
       "must_change_password",
       "is_user_active",
     ]);
-    await expect(card(page, "Provision first admin").getByRole("button", { name: "Provision admin" })).toBeVisible();
+    await expect(card(page, "Create tenant admin login").getByRole("button", { name: "Create login access" })).toBeVisible();
 
-    await openTab(page, "Policy Packs");
+    await openTab(page, "Setup Templates");
     await expect(page.getByTestId("platform-admin-policy-packs-panel")).toBeVisible();
     await expect(page.locator('[name="policy_pack_search"]')).toBeVisible();
     await expectPagination(page.getByTestId("platform-admin-policy-packs-panel"));
-    expect(await card(page, "Policy packs").locator(".tenant-support-access-row").count()).toBeLessThanOrEqual(8);
+    expect(await card(page, "Setup templates").locator(".tenant-support-access-row").count()).toBeLessThanOrEqual(8);
     await expectSearchNarrowsList(page, "policy_pack_search", ".tenant-support-access-row");
-    await expect(card(page, "Policy packs").getByText("Pack validation")).toBeVisible();
-    await expectNamedControls(card(page, "Policy packs"), [
+    await expect(card(page, "Setup templates").getByText("Template validation")).toBeVisible();
+    await expectNamedControls(card(page, "Setup templates"), [
       "code",
       "name",
       "domain",
@@ -168,8 +168,8 @@ test.describe("Platform admin tabbed workspace certification", () => {
       "description",
       "is_active",
     ]);
-    await expectNamedControls(card(page, "Adopt baseline"), ["policy_pack_id", "adoption_mode", "notes"]);
-    await expect(card(page, "Adopt baseline").getByText(/Before adoption|Baseline adoption is blocked/)).toBeVisible();
+    await expectNamedControls(card(page, "Apply setup template"), ["policy_pack_id", "adoption_mode", "notes"]);
+    await expect(card(page, "Apply setup template").getByText(/Before adoption|Setup template cannot be applied yet/)).toBeVisible();
 
     await openTab(page, "Events");
     await expect(page.getByTestId("platform-admin-events-panel")).toBeVisible();

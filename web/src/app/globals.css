@@ -7249,6 +7249,14 @@ select.input-control {
   gap: 16px;
 }
 
+.platform-admin-users-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.platform-admin-users-grid .tenant-support-access-row {
+  grid-template-columns: minmax(260px, 1fr) auto auto auto;
+}
+
 .support-session-scopes {
   display: flex;
   min-width: 0;

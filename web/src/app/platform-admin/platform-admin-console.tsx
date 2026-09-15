@@ -33,16 +33,16 @@ const platformTabs: { panel: PlatformPanel; label: string; countKey: "control" |
   { panel: "control", label: "Control", countKey: "control" },
   { panel: "leads", label: "Leads", countKey: "leads" },
   { panel: "tenants", label: "Tenants", countKey: "tenants" },
-  { panel: "onboarding", label: "Onboarding", countKey: "onboarding" },
-  { panel: "admins", label: "Admins", countKey: "admins" },
-  { panel: "policy-packs", label: "Policy Packs", countKey: "policyPacks" },
+  { panel: "onboarding", label: "Launch Checklist", countKey: "onboarding" },
+  { panel: "admins", label: "Tenant Admin Users", countKey: "admins" },
+  { panel: "policy-packs", label: "Setup Templates", countKey: "policyPacks" },
   { panel: "events", label: "Events", countKey: "events" },
 ];
 
 const panelGuides: Record<PlatformPanel, { title: string; description: string; steps: string[] }> = {
   control: {
     title: "Dashboard",
-    description: "Start here to see the operator queue across leads, tenant readiness, baselines, and launch blockers.",
+    description: "Start here to see signup requests, customer setup readiness, admin access, and launch blockers.",
     steps: ["Review urgent signals", "Open the matching panel", "Resolve or record evidence"],
   },
   leads: {
@@ -56,23 +56,23 @@ const panelGuides: Record<PlatformPanel, { title: string; description: string; s
     steps: ["Find or create tenant", "Select tenant", "Open onboarding"],
   },
   onboarding: {
-    title: "Onboarding",
-    description: "Update tenant setup details and move the selected tenant through baseline, handoff, and activation gates.",
-    steps: ["Verify tenant setup", "Publish baseline and handoff", "Activate when ready"],
+    title: "Launch Checklist",
+    description: "Move the selected customer through setup template adoption, tenant admin access, and launch readiness.",
+    steps: ["Verify tenant setup", "Confirm setup and admin access", "Activate when ready"],
   },
   admins: {
-    title: "First Admins",
-    description: "Create tenant admin contacts and provision the first login user for the customer organization.",
-    steps: ["Add primary contact", "Provision admin", "Share login securely"],
+    title: "Tenant Admin Users",
+    description: "Create customer admin contacts and provision the first login user for the customer organization.",
+    steps: ["Add primary contact", "Create login access", "Share login securely"],
   },
   "policy-packs": {
-    title: "Policy Packs",
-    description: "Create, publish, and adopt reusable baseline packs so every tenant starts from controlled configuration.",
-    steps: ["Create baseline pack", "Publish pack", "Adopt for selected tenant"],
+    title: "Setup Templates",
+    description: "Create, publish, and apply reusable setup templates so every tenant starts from controlled configuration.",
+    steps: ["Create template", "Publish template", "Apply to selected tenant"],
   },
   events: {
     title: "Audit Logs",
-    description: "Review tenant onboarding events and evidence for platform actions, handoff, support, and activation.",
+    description: "Review tenant onboarding events and evidence for platform actions, customer readiness, support, and activation.",
     steps: ["Search evidence", "Check actor and timestamp", "Use for signoff"],
   },
 };
@@ -81,9 +81,9 @@ const panelPills: Record<PlatformPanel, string[]> = {
   control: ["Action queue", "Tenant readiness", "Launch blockers"],
   leads: ["Public signup", "Qualification", "Tenant conversion"],
   tenants: ["Customer registry", "Create tenant", "Select workspace"],
-  onboarding: ["Setup metadata", "Activation gates", "Handoff evidence"],
-  admins: ["Admin contacts", "First login", "Secure handoff"],
-  "policy-packs": ["Baseline packs", "Publish", "Adopt"],
+  onboarding: ["Setup details", "Launch checklist", "Readiness evidence"],
+  admins: ["Admin contacts", "Login access", "Secure sharing"],
+  "policy-packs": ["Setup templates", "Publish", "Apply"],
   events: ["Audit evidence", "Actor trail", "Timeline"],
 };
 
@@ -110,13 +110,21 @@ function formValue(formData: FormData, key: string) {
 }
 
 function apiErrorMessage(payload: unknown, fallback: string) {
-  if (Array.isArray(payload) && payload.length) return String(payload[0]);
+  const friendly = (message: string) => {
+    if (/Primary tenant admin must be provisioned/i.test(message)) return "Create login access for the primary tenant admin before marking this customer ready.";
+    if (/Baseline must be published/i.test(message)) return "Apply and confirm an initial setup template before marking this customer ready.";
+    if (/Tenant handoff must be ready/i.test(message)) return "Mark the customer ready for the tenant admin before activation.";
+    if (/At least one adopted policy pack is required/i.test(message)) return "Apply a published setup template to this tenant before confirming setup.";
+    if (/already exists|duplicate/i.test(message)) return "This record already exists. Search the list or use a different code/email.";
+    return message;
+  };
+  if (Array.isArray(payload) && payload.length) return friendly(String(payload[0]));
   if (!payload || typeof payload !== "object") return fallback;
   const record = payload as Record<string, unknown>;
-  if (typeof record.detail === "string") return record.detail;
+  if (typeof record.detail === "string") return friendly(record.detail);
   const firstEntry = Object.values(record).find((value) => Array.isArray(value) || typeof value === "string");
-  if (Array.isArray(firstEntry) && firstEntry.length) return String(firstEntry[0]);
-  if (typeof firstEntry === "string") return firstEntry;
+  if (Array.isArray(firstEntry) && firstEntry.length) return friendly(String(firstEntry[0]));
+  if (typeof firstEntry === "string") return friendly(firstEntry);
   return fallback;
 }
 
@@ -284,13 +292,13 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     {
       label: "Tenants not active",
       value: tenantCounts.onboarding,
-      action: "Move prepared tenants through baseline, admin, handoff, and activation.",
+      action: "Move prepared tenants through setup confirmation, admin access, readiness, and activation.",
       href: buildPanelHref("tenants", selectedTenant?.id),
     },
     {
-      label: "Published policy packs",
+      label: "Published setup templates",
       value: tenantCounts.publishedPacks,
-      action: tenantCounts.publishedPacks ? "Adopt baseline packs for onboarding tenants." : "Publish at least one baseline pack before handoff.",
+      action: tenantCounts.publishedPacks ? "Apply setup templates for onboarding tenants." : "Publish at least one setup template before marking a customer ready.",
       href: buildPanelHref("policy-packs", selectedTenant?.id),
     },
   ];
@@ -307,7 +315,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const pageTitle = initialPanel === "control" ? "Platform Admin Dashboard" : activeGuide.title;
   const pageDescription =
     initialPanel === "control"
-      ? "A simple control center for public leads, tenant readiness, baselines, handoff, and activation blockers."
+      ? "A simple control center for public leads, tenant readiness, setup templates, admin access, and activation blockers."
       : activeGuide.description;
 
   async function mutate<T>(path: string, method: MutationMethod, body: Record<string, unknown>, successMessage: string): Promise<T> {
@@ -721,18 +729,18 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <h2>Tenant pipeline</h2>
                 <span className="record-chip">{tenantCounts.onboarding} in motion</span>
               </div>
-              <p className="section-copy">Activation posture across created, prepared, baseline, handoff, sandbox, and active tenants.</p>
+              <p className="section-copy">Launch posture across created, prepared, setup-confirmed, ready, sandbox, and active tenants.</p>
             </div>
             <div className="detail-grid">
               <DetailRow label="Active" value={tenantCounts.active} />
               <DetailRow label="Not active" value={tenantCounts.onboarding} />
-              <DetailRow label="Baseline pending" value={tenantCounts.baselinePending} />
-              <DetailRow label="Handoff ready" value={tenantCounts.handoffReady} />
+              <DetailRow label="Setup pending" value={tenantCounts.baselinePending} />
+              <DetailRow label="Ready for tenant admin" value={tenantCounts.handoffReady} />
               <DetailRow label="Sandbox" value={tenantCounts.sandbox} />
               <DetailRow label="Published packs" value={tenantCounts.publishedPacks} />
             </div>
             <div className="form-actions-bar">
-              <span className="muted">Use tenant details to complete baseline, first admin, handoff, and activation gates.</span>
+              <span className="muted">Use tenant details to complete setup confirmation, tenant admin access, readiness, and activation.</span>
               <Link className="button button--primary" href={buildPanelHref("tenants", selectedTenant?.id)}>Open tenants</Link>
             </div>
           </article>
@@ -799,8 +807,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <div className="platform-command-grid">
               <Link className="button button--primary" href={buildPanelHref("leads", selectedTenant?.id)}>Review leads</Link>
               <Link className="button button--secondary" href={buildPanelHref("tenants", selectedTenant?.id)}>Create tenant</Link>
-              <Link className="button button--secondary" href={buildPanelHref("admins", selectedTenant?.id)}>Provision admin</Link>
-              <Link className="button button--secondary" href={buildPanelHref("policy-packs", selectedTenant?.id)}>Policy packs</Link>
+              <Link className="button button--secondary" href={buildPanelHref("admins", selectedTenant?.id)}>Create admin access</Link>
+              <Link className="button button--secondary" href={buildPanelHref("policy-packs", selectedTenant?.id)}>Setup templates</Link>
               <Link className="button button--secondary" href="/hr-admin/saas-operations">Ops health</Link>
               <Link className="button button--secondary" href="/hr-admin/saas-resilience">Resilience</Link>
             </div>
@@ -811,11 +819,11 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               <div className="record-card__title">
                 <h2>Evidence trail</h2>
               </div>
-              <p className="section-copy">Operator proof for tenant setup, policy baselines, support posture, and launch gates.</p>
+              <p className="section-copy">Operator proof for tenant setup, setup templates, support posture, and launch checks.</p>
             </div>
             <div className="detail-grid">
               <DetailRow label="Tenant events" value={events.length} />
-              <DetailRow label="Policy packs" value={policyPacks.length} />
+              <DetailRow label="Setup templates" value={policyPacks.length} />
               <DetailRow label="Active leads" value={activeLeads.length} />
               <DetailRow label="Selected tenant" value={selectedTenant?.code || "Not selected"} />
             </div>
@@ -870,7 +878,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 </div>
                 {lead.converted_tenant_id ? (
                   <div className="notice notice--compact notice--success">
-                    <strong>Converted tenant is ready for admin provisioning.</strong>
+                    <strong>Converted tenant is ready for tenant admin access.</strong>
                     <Link className="button button--secondary" href={buildPanelHref("admins", lead.converted_tenant_id)}>
                       Open admin setup
                     </Link>
@@ -1046,35 +1054,35 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
-                  <h2>Activation gates</h2>
+                  <h2>Launch checklist</h2>
                   <StatusChip value={onboarding.tenant_onboarding_status} />
                 </div>
-                <p className="section-copy">Baseline, handoff, and active tenant state transitions.</p>
+                <p className="section-copy">Complete setup confirmation, tenant admin access, customer readiness, and activation.</p>
               </div>
               <ol className="platform-gate-checklist" aria-label="Activation gate validation checklist">
                 <GateChecklistItem
                   complete={hasBaseline}
-                  label="Baseline published"
-                  detail={hasBaseline ? `Confirmed ${formatDateTime(onboarding.baseline_published_at)}` : "Adopt a published policy pack, then mark baseline."}
+                  label="Initial setup confirmed"
+                  detail={hasBaseline ? `Confirmed ${formatDateTime(onboarding.baseline_published_at)}` : "Apply a published setup template, then confirm setup."}
                 />
                 <GateChecklistItem
                   complete={hasProvisionedPrimaryAdmin}
-                  label="Primary admin provisioned"
-                  detail={hasProvisionedPrimaryAdmin ? `${primaryContact?.email || "Primary admin"} has tenant access.` : `Provision ${primaryContact?.email || "the primary contact"} from First Admins.`}
+                  label="Primary tenant admin has login access"
+                  detail={hasProvisionedPrimaryAdmin ? `${primaryContact?.email || "Primary admin"} has tenant access.` : `Create login access for ${primaryContact?.email || "the primary contact"} from Tenant Admin Users.`}
                 />
                 <GateChecklistItem
                   complete={Boolean(onboarding.handoff_completed_at)}
-                  label="Handoff ready"
-                  detail={onboarding.handoff_completed_at ? `Marked ${formatDateTime(onboarding.handoff_completed_at)}` : "Available after baseline and primary admin are complete."}
+                  label="Ready for tenant admin"
+                  detail={onboarding.handoff_completed_at ? `Marked ${formatDateTime(onboarding.handoff_completed_at)}` : "Available after setup confirmation and primary admin access are complete."}
                 />
               </ol>
               <div className="form-actions-bar">
-                <span className="muted">Baseline timestamp: {formatDateTime(onboarding.baseline_published_at)}</span>
-                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleTenantAction("mark-baseline-published")}>Mark baseline</button>
+                <span className="muted">Setup confirmed at: {formatDateTime(onboarding.baseline_published_at)}</span>
+                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleTenantAction("mark-baseline-published")}>Confirm setup</button>
               </div>
               <div className="form-actions-bar">
-                <span className="muted">Handoff timestamp: {formatDateTime(onboarding.handoff_completed_at)}</span>
-                <button className="button button--secondary" disabled={Boolean(busyRef) || !canMarkHandoff} type="button" onClick={() => handleTenantAction("mark-handoff-ready")}>Mark handoff</button>
+                <span className="muted">Ready for tenant admin at: {formatDateTime(onboarding.handoff_completed_at)}</span>
+                <button className="button button--secondary" disabled={Boolean(busyRef) || !canMarkHandoff} type="button" onClick={() => handleTenantAction("mark-handoff-ready")}>Mark ready</button>
               </div>
               <div className="form-actions-bar">
                 <span className="muted">Primary admin: {primaryContact?.email || "Not set"}</span>
@@ -1082,16 +1090,16 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               </div>
               {!hasBaseline ? (
                 <div className="notice notice--compact platform-gate-next-step">
-                  <strong>Baseline is required before handoff.</strong>
-                  <span className="muted">Adopt a published policy pack, then mark baseline.</span>
-                  <Link className="button button--secondary" href={buildPanelHref("policy-packs", selectedTenant.id)}>Open policy packs</Link>
+                  <strong>Initial setup must be confirmed first.</strong>
+                  <span className="muted">Apply a published setup template, then confirm setup for this tenant.</span>
+                  <Link className="button button--secondary" href={buildPanelHref("policy-packs", selectedTenant.id)}>Open setup templates</Link>
                 </div>
               ) : null}
               {hasBaseline && !hasProvisionedPrimaryAdmin ? (
                 <div className="notice notice--compact platform-gate-next-step">
-                  <strong>Primary tenant admin must be provisioned before handoff.</strong>
-                  <span className="muted">Open First Admins, provision {primaryContact?.email || "the primary contact"}, then return here.</span>
-                  <Link className="button button--secondary" href={buildPanelHref("admins", selectedTenant.id)}>Open first admins</Link>
+                  <strong>Primary tenant admin needs login access before this customer can be marked ready.</strong>
+                  <span className="muted">Open Tenant Admin Users, create login access for {primaryContact?.email || "the primary contact"}, then return here.</span>
+                  <Link className="button button--secondary" href={buildPanelHref("admins", selectedTenant.id)}>Open tenant admin users</Link>
                 </div>
               ) : null}
             </article>
@@ -1110,7 +1118,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               <form className="form-grid" onSubmit={handleTenantPatch}>
                 <div className="notice notice--compact platform-validation-strip">
                   <strong>Tenant setup validation</strong>
-                  <span className="muted">Save setup changes before marking baseline or handoff so the audit trail has the final customer context.</span>
+                  <span className="muted">Save setup changes before confirming setup or marking the customer ready so the audit trail has the final customer context.</span>
                 </div>
                 <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required defaultValue={selectedTenant.name} /><ValidationNote>Required. This appears in platform lists and customer setup screens.</ValidationNote></label>
                 <label className="form-field"><span className="muted">Legal name</span><input className="input-control" name="legal_name" defaultValue={selectedTenant.legal_name} /></label>
@@ -1140,7 +1148,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               <form className="form-grid" onSubmit={handleOnboardingPatch}>
                 <div className="notice notice--compact platform-validation-strip">
                   <strong>Onboarding validation</strong>
-                  <span className="muted">Choose who owns setup, how data enters the tenant, and whether policies are locked or delegated before customer handoff.</span>
+                  <span className="muted">Choose who owns setup, how data enters the tenant, and whether policies are locked or delegated before the customer is marked ready.</span>
                 </div>
                 <label className="form-field"><span className="muted">Owner mode</span><select className="input-control" name="owner_mode" defaultValue={onboarding.owner_mode}><option value="combined_platform_admin">Combined Platform Admin</option><option value="split_platform_roles">Split Platform Roles</option></select></label>
                 <label className="form-field"><span className="muted">Setup style</span><select className="input-control" name="setup_style" defaultValue={onboarding.setup_style}><option value="platform_assisted">Platform Assisted</option><option value="shared">Shared</option><option value="customer_led">Customer Led</option></select></label>
@@ -1149,8 +1157,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <label className="form-field"><span className="muted">Country context</span><input className="input-control" name="country_context" defaultValue={onboarding.country_context} maxLength={2} /></label>
                 <label className="form-field"><span className="muted">Industry</span><input className="input-control" name="industry_context" defaultValue={onboarding.industry_context} /></label>
                 <label className="form-field"><span className="muted">Notes</span><textarea className="input-control" name="notes" defaultValue={onboarding.notes} /></label>
-                <label className="form-field"><span className="muted">Internal handoff</span><textarea className="input-control" name="internal_handoff_notes" defaultValue={onboarding.internal_handoff_notes} /></label>
-                <label className="form-field"><span className="muted">Customer handoff</span><textarea className="input-control" name="customer_handoff_notes" defaultValue={onboarding.customer_handoff_notes} /></label>
+                <label className="form-field"><span className="muted">Internal readiness notes</span><textarea className="input-control" name="internal_handoff_notes" defaultValue={onboarding.internal_handoff_notes} /></label>
+                <label className="form-field"><span className="muted">Customer readiness notes</span><textarea className="input-control" name="customer_handoff_notes" defaultValue={onboarding.customer_handoff_notes} /></label>
                 <div className="form-actions-bar">
                   <span className="muted">Prepared tenants move out of created state.</span>
                   <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">Save onboarding</button>
@@ -1161,14 +1169,14 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
           ) : null}
 
           {initialPanel === "admins" ? (
-          <section className="section support-session-grid" data-testid="platform-admin-admins-panel">
+          <section className="section support-session-grid platform-admin-users-grid" data-testid="platform-admin-admins-panel">
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
                   <h2>Admin contacts</h2>
                   <span className="record-chip">{onboarding.admin_contacts.length} contacts</span>
                 </div>
-                <p className="section-copy">Primary customer admin contact and provisioned login state.</p>
+                <p className="section-copy">Primary customer admin contact and login access state.</p>
               </div>
               <div className="tenant-support-access-list">
                 {onboarding.admin_contacts.map((contact: PlatformOnboardingAdminContact) => (
@@ -1209,7 +1217,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 ))}
               </div>
                 <div className="form-actions-bar">
-                  <span className="muted">Add or edit contacts before provisioning the first tenant admin.</span>
+                  <span className="muted">Add or edit contacts before creating the first tenant admin login.</span>
                   <button className="button button--primary" type="button" onClick={() => setShowAddContactModal(true)}>Add contact</button>
                 </div>
             </article>
@@ -1217,7 +1225,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
-                  <h2>Provision first admin</h2>
+                  <h2>Create tenant admin login</h2>
                   <span className="record-chip">{provisionableContacts.length} ready</span>
                 </div>
                 <p className="section-copy">Create the tenant-scoped login and membership from a contact.</p>
@@ -1225,12 +1233,12 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               <form className="form-grid" onSubmit={handleProvision}>
                 {!provisionableContacts.length ? (
                   <div className="notice notice--compact platform-validation-strip">
-                    <strong>No contacts are ready for provisioning.</strong>
-                    <span className="muted">Add a primary contact first, or select a tenant whose primary contact has not already been provisioned.</span>
+                    <strong>No contacts are ready for login access.</strong>
+                    <span className="muted">Add a primary contact first, or select a tenant whose primary contact does not already have login access.</span>
                   </div>
                 ) : (
                   <div className="notice notice--compact platform-validation-strip">
-                    <strong>Before provisioning</strong>
+                    <strong>Before creating login access</strong>
                     <span className="muted">Select the primary contact, choose the tenant role, and enter a password only if you do not want the system to generate one.</span>
                   </div>
                 )}
@@ -1243,8 +1251,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <label className="form-field"><span className="muted">Must change password</span><input name="must_change_password" type="checkbox" defaultChecked /></label>
                 <label className="form-field"><span className="muted">User active</span><input name="is_user_active" type="checkbox" defaultChecked /></label>
                 <div className="form-actions-bar">
-                  <span className="muted">Provisioning completes the first-admin checklist item.</span>
-                  <button className="button button--primary" disabled={Boolean(busyRef) || !provisionableContacts.length} type="submit">Provision admin</button>
+                  <span className="muted">Creating login access completes the primary tenant-admin checklist item.</span>
+                  <button className="button button--primary" disabled={Boolean(busyRef) || !provisionableContacts.length} type="submit">Create login access</button>
                 </div>
               </form>
             </article>
@@ -1256,10 +1264,10 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
-                  <h2>Policy packs</h2>
+                  <h2>Setup templates</h2>
                   <span className="record-chip">{policyPacks.length} packs</span>
                 </div>
-                <p className="section-copy">Platform-owned baseline packs available for tenant adoption.</p>
+                <p className="section-copy">Platform-owned setup templates available for tenant onboarding.</p>
               </div>
               <label className="queue-toolbar__search">
                 <span>Search</span>
@@ -1287,8 +1295,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 ))}
                 {!filteredPolicyPacks.length ? (
                   <div className="notice">
-                    <strong>No policy packs match this view.</strong>
-                    <span className="muted">Create a pack or clear the search.</span>
+                    <strong>No setup templates match this view.</strong>
+                    <span className="muted">Create a template or clear the search.</span>
                   </div>
                 ) : null}
               </div>
@@ -1305,11 +1313,11 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               />
               <form className="form-grid" onSubmit={handlePolicyPackCreate}>
                 <div className="notice notice--compact platform-validation-strip">
-                  <strong>Pack validation</strong>
-                  <span className="muted">Create as draft when the baseline is still changing. Only published packs can be adopted by tenants.</span>
+                  <strong>Template validation</strong>
+                  <span className="muted">Create as draft while the setup is still changing. Only published templates can be applied to tenants.</span>
                 </div>
-                <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-baseline-pack" /><ValidationNote>Required and unique. Use a stable code because it appears in baseline evidence.</ValidationNote></label>
-                <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Baseline Pack" /><ValidationNote>Required. Use a name operators can recognize during tenant adoption.</ValidationNote></label>
+                <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-setup-template" /><ValidationNote>Required and unique. Use a stable code because it appears in setup evidence.</ValidationNote></label>
+                <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Setup Template" /><ValidationNote>Required. Use a name operators can recognize during tenant onboarding.</ValidationNote></label>
                 <label className="form-field"><span className="muted">Domain</span><select className="input-control" name="domain" defaultValue="leave"><option value="leave">Leave</option><option value="attendance">Attendance</option><option value="workflow">Workflow</option><option value="document">Document</option></select></label>
                 <label className="form-field"><span className="muted">Status</span><select className="input-control" name="status" defaultValue="draft"><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
                 <label className="form-field"><span className="muted">Version</span><input className="input-control" name="version" defaultValue="1" min={1} type="number" /></label>
@@ -1318,8 +1326,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <label className="form-field"><span className="muted">Description</span><textarea className="input-control" name="description" /></label>
                 <label className="form-field"><span className="muted">Active</span><input name="is_active" type="checkbox" defaultChecked /></label>
                 <div className="form-actions-bar">
-                  <span className="muted">Pack items are managed by backend/admin until item-authoring UI is added.</span>
-                  <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">Create pack</button>
+                  <span className="muted">Template items are managed by backend/admin until item-authoring UI is added.</span>
+                  <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">Create template</button>
                 </div>
               </form>
             </article>
@@ -1327,29 +1335,29 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
-                  <h2>Adopt baseline</h2>
+                  <h2>Apply setup template</h2>
                   <span className="record-chip">{publishedPacks.length} published</span>
                 </div>
-                <p className="section-copy">Apply a published platform pack to the selected tenant.</p>
+                <p className="section-copy">Apply a published platform setup template to the selected tenant.</p>
               </div>
               <form className="form-grid" onSubmit={handleAdoptPack}>
                 {!canAdoptBaseline ? (
                   <div className="notice notice--compact platform-validation-strip">
-                    <strong>Baseline adoption is blocked.</strong>
-                    <span className="muted">{selectedTenant ? "Publish at least one policy pack before adoption." : "Select a tenant before adopting a policy pack."}</span>
+                    <strong>Setup template cannot be applied yet.</strong>
+                    <span className="muted">{selectedTenant ? "Publish at least one setup template before applying it." : "Select a tenant before applying a setup template."}</span>
                   </div>
                 ) : (
                   <div className="notice notice--compact platform-validation-strip">
                     <strong>Before adoption</strong>
-                    <span className="muted">Select a published pack for the chosen tenant. Adoption creates baseline evidence used by the handoff gate.</span>
+                    <span className="muted">Select a published template for the chosen tenant. Applying it creates setup evidence used by the readiness check.</span>
                   </div>
                 )}
-                <label className="form-field"><span className="muted">Published pack</span><select className="input-control" name="policy_pack_id" required><option value="">Select pack</option>{publishedPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} - {pack.code}</option>)}</select></label>
-                <label className="form-field"><span className="muted">Adoption mode</span><select className="input-control" name="adoption_mode" defaultValue="clone_to_tenant_records"><option value="clone_to_tenant_records">Clone To Tenant Records</option><option value="baseline_plus_tenant_overrides">Baseline Plus Tenant Overrides</option><option value="baseline_only">Baseline Only</option></select></label>
-                <label className="form-field"><span className="muted">Notes</span><textarea className="input-control" name="notes" placeholder="Initial platform baseline for onboarding." /></label>
+                <label className="form-field"><span className="muted">Published template</span><select className="input-control" name="policy_pack_id" required><option value="">Select template</option>{publishedPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} - {pack.code}</option>)}</select></label>
+                <label className="form-field"><span className="muted">Apply mode</span><select className="input-control" name="adoption_mode" defaultValue="clone_to_tenant_records"><option value="clone_to_tenant_records">Copy To Tenant Records</option><option value="baseline_plus_tenant_overrides">Template Plus Tenant Overrides</option><option value="baseline_only">Template Only</option></select></label>
+                <label className="form-field"><span className="muted">Notes</span><textarea className="input-control" name="notes" placeholder="Initial platform setup for onboarding." /></label>
                 <div className="form-actions-bar">
-                  <span className="muted">Adoption marks baseline evidence and writes onboarding history.</span>
-                  <button className="button button--primary" disabled={Boolean(busyRef) || !canAdoptBaseline} type="submit">Adopt pack</button>
+                  <span className="muted">Applying the template writes setup evidence and onboarding history.</span>
+                  <button className="button button--primary" disabled={Boolean(busyRef) || !canAdoptBaseline} type="submit">Apply template</button>
                 </div>
               </form>
 
@@ -1432,7 +1440,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <form className="form-grid tenant-membership-form-grid--dialog" onSubmit={handleTenantCreate}>
               <div className="notice notice--compact platform-validation-strip form-field--full">
                 <strong>Before creating</strong>
-                <span className="muted">Code and name are mandatory. Email, phone, and domain can be completed later, but activation will still need admin provisioning and handoff.</span>
+                <span className="muted">Code and name are mandatory. Email, phone, and domain can be completed later, but activation still needs tenant admin login access and readiness signoff.</span>
               </div>
               <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-pa-tenant-01" /><ValidationNote>Required and unique. This becomes the tenant identifier in audit evidence.</ValidationNote></label>
               <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Platform Tenant 01" /><ValidationNote>Required. Use the customer-facing organization name.</ValidationNote></label>
@@ -1468,7 +1476,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <form className="form-grid tenant-membership-form-grid--dialog" onSubmit={handleContactCreate}>
               <div className="notice notice--compact platform-validation-strip form-field--full">
                 <strong>Contact validation</strong>
-                <span className="muted">A primary contact is required before handoff. Make sure the email belongs to the real tenant admin.</span>
+                <span className="muted">A primary contact is required before the customer can be marked ready. Make sure the email belongs to the real tenant admin.</span>
               </div>
               <label className="form-field"><span className="muted">Full name</span><input className="input-control" name="full_name" required placeholder="Ava Patel" /><ValidationNote>Required. This person becomes the customer-side owner for onboarding.</ValidationNote></label>
               <label className="form-field"><span className="muted">Email</span><input className="input-control" name="email" required type="email" placeholder="ava.patel@example.test" /><ValidationNote>Required and used for the provisioned login identity.</ValidationNote></label>

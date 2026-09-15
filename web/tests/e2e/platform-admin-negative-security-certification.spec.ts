@@ -48,7 +48,7 @@ async function expectDenied(response: APIResponse) {
   expect(serialized).not.toContain("secret");
 }
 
-async function openPlatformTab(page: Page, name: "Tenants" | "Onboarding" | "Admins" | "Policy Packs" | "Events") {
+async function openPlatformTab(page: Page, name: "Tenants" | "Launch Checklist" | "Tenant Admin Users" | "Setup Templates" | "Events") {
   await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();
   await expect(page.getByRole("tab", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-selected", "true");
 }
@@ -109,15 +109,15 @@ test.describe("Platform admin negative and security certification", () => {
     await expect(notice(page).getByText(/already exists|unique|tenant creation failed|platform action failed/i)).toBeVisible();
     await createTenant.getByRole("button", { name: "Cancel" }).click();
 
-    await openPlatformTab(page, "Onboarding");
-    const gates = card(page, "Activation gates");
+    await openPlatformTab(page, "Launch Checklist");
+    const gates = card(page, "Launch checklist");
     await expect(gates.locator(".platform-gate-checklist")).toBeVisible();
-    await expect(gates.getByText("Baseline published")).toBeVisible();
-    await expect(gates.getByText("Primary admin provisioned")).toBeVisible();
-    await expect(gates.getByText("Handoff ready")).toBeVisible();
-    await expect(gates.getByText("Baseline is required before handoff.")).toBeVisible();
-    await expect(gates.getByRole("link", { name: "Open policy packs" })).toBeVisible();
-    await expect(gates.getByRole("button", { name: "Mark handoff" })).toBeDisabled();
+    await expect(gates.getByText("Initial setup confirmed")).toBeVisible();
+    await expect(gates.getByText("Primary tenant admin has login access")).toBeVisible();
+    await expect(gates.getByText("Ready for tenant admin", { exact: true })).toBeVisible();
+    await expect(gates.getByText("Initial setup must be confirmed first.")).toBeVisible();
+    await expect(gates.getByRole("link", { name: "Open setup templates" })).toBeVisible();
+    await expect(gates.getByRole("button", { name: "Mark ready" })).toBeDisabled();
     await expect(gates.getByRole("button", { name: "Activate tenant" })).toBeDisabled();
 
     const directBaselineResponse = await page.request.post(`/api/platform/tenants/${tenantId}/onboarding/mark-baseline-published`);
@@ -130,7 +130,7 @@ test.describe("Platform admin negative and security certification", () => {
     expect(directActivationResponse.status()).toBe(400);
     expect(JSON.stringify(await directActivationResponse.json())).toContain("Tenant handoff must be ready");
 
-    await openPlatformTab(page, "Admins");
+    await openPlatformTab(page, "Tenant Admin Users");
     const addContact = await openAddContactDialog(page);
     await namedControl(addContact, "full_name").fill("Invalid Admin");
     await namedControl(addContact, "email").fill("not-an-email");
@@ -138,14 +138,14 @@ test.describe("Platform admin negative and security certification", () => {
     await expect(namedControl(addContact, "email")).toBeFocused();
     await addContact.getByRole("button", { name: "Cancel" }).click();
 
-    await openPlatformTab(page, "Policy Packs");
-    const packs = card(page, "Policy packs");
-    await packs.getByRole("button", { name: "Create pack" }).click();
+    await openPlatformTab(page, "Setup Templates");
+    const packs = card(page, "Setup templates");
+    await packs.getByRole("button", { name: "Create template" }).click();
     await expect(namedControl(packs, "code")).toBeFocused();
     await namedControl(packs, "code").fill(packCode);
     await namedControl(packs, "name").fill(`QA Negative Pack ${runRef}`);
     await namedControl(packs, "domain").selectOption("leave");
-    await packs.getByRole("button", { name: "Create pack" }).click();
+    await packs.getByRole("button", { name: "Create template" }).click();
     await expect(notice(page).getByText("Policy pack created.", { exact: true })).toBeVisible();
     await namedControl(packs, "policy_pack_search").fill(packCode);
     await expect(page.getByText(packCode)).toBeVisible();
@@ -153,7 +153,7 @@ test.describe("Platform admin negative and security certification", () => {
     await namedControl(packs, "code").fill(packCode);
     await namedControl(packs, "name").fill(`QA Duplicate Pack ${runRef}`);
     await namedControl(packs, "domain").selectOption("leave");
-    await packs.getByRole("button", { name: "Create pack" }).click();
+    await packs.getByRole("button", { name: "Create template" }).click();
     await expect(notice(page).getByText(/already exists|unique|policy pack creation failed|platform action failed/i)).toBeVisible();
 
     await expectNoHorizontalOverflow(page);

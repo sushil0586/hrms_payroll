@@ -58,7 +58,7 @@ function uniqueRunRef() {
   return new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14).toLowerCase();
 }
 
-async function openPlatformTab(page: Page, name: "Tenants" | "Onboarding" | "Admins" | "Policy Packs" | "Events") {
+async function openPlatformTab(page: Page, name: "Tenants" | "Launch Checklist" | "Tenant Admin Users" | "Setup Templates" | "Events") {
   await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();
   await expect(page.getByRole("tab", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-selected", "true");
 }
@@ -109,8 +109,8 @@ test.describe("Platform admin audit evidence certification", () => {
     await gotoAuthenticated(page, "/platform-admin", platformAdmin);
     await expectPageReady(page, "Platform Admin Dashboard");
 
-    await openPlatformTab(page, "Policy Packs");
-    const policyPackCard = card(page, "Policy packs");
+    await openPlatformTab(page, "Setup Templates");
+    const policyPackCard = card(page, "Setup templates");
     await namedControl(policyPackCard, "code").fill(packCode);
     await namedControl(policyPackCard, "name").fill(packName);
     await namedControl(policyPackCard, "domain").selectOption("leave");
@@ -118,7 +118,7 @@ test.describe("Platform admin audit evidence certification", () => {
     await namedControl(policyPackCard, "country_code").fill("IN");
     await namedControl(policyPackCard, "industry_tag").fill("qa");
     await namedControl(policyPackCard, "description").fill("Audit evidence certification pack.");
-    await policyPackCard.getByRole("button", { name: "Create pack" }).click();
+    await policyPackCard.getByRole("button", { name: "Create template" }).click();
     await expect(notice(page).getByText("Policy pack created.", { exact: true })).toBeVisible();
     await page.reload();
     await namedControl(policyPackCard, "policy_pack_search").fill(packCode);
@@ -159,7 +159,7 @@ test.describe("Platform admin audit evidence certification", () => {
     evidence = await onboardingPayload(page, tenantId ?? "");
     expectEvent(evidence, "tenant_prepared", new RegExp(tenantCode));
 
-    await openPlatformTab(page, "Admins");
+    await openPlatformTab(page, "Tenant Admin Users");
     const contactsCard = await openAddContactDialog(page);
     await namedControl(contactsCard, "full_name").fill(adminName);
     await namedControl(contactsCard, "email").fill(adminEmail);
@@ -173,7 +173,7 @@ test.describe("Platform admin audit evidence certification", () => {
     expectEvent(evidence, "admin_contact_added", new RegExp(adminEmail));
     expect(evidence.admin_contacts.some((contact) => contact.email === adminEmail && contact.is_primary)).toBeTruthy();
 
-    await openPlatformTab(page, "Admins");
+    await openPlatformTab(page, "Tenant Admin Users");
     const adminContactsCard = card(page, "Admin contacts");
     await adminContactsCard.locator(".tenant-support-access-row").filter({ hasText: adminEmail }).getByRole("button", { name: "Edit" }).click();
     const editContactForm = adminContactsCard.locator(".platform-contact-edit-form");
@@ -186,37 +186,37 @@ test.describe("Platform admin audit evidence certification", () => {
     expectEvent(evidence, "admin_contact_updated", new RegExp(adminEmail));
     expect(evidence.admin_contacts.some((contact) => contact.email === adminEmail && contact.job_title === "People Operations Lead" && contact.notes.includes(tenantCode))).toBeTruthy();
 
-    await openPlatformTab(page, "Admins");
-    const provisionCard = card(page, "Provision first admin");
+    await openPlatformTab(page, "Tenant Admin Users");
+    const provisionCard = card(page, "Create tenant admin login");
     await namedControl(provisionCard, "contact_id").selectOption({ label: `${adminName} - ${adminEmail}` });
     await namedControl(provisionCard, "username").fill(`qa.audit.${runRef}`);
     await namedControl(provisionCard, "role_code").selectOption("tenant-admin");
     await namedControl(provisionCard, "role_name").fill("Tenant Admin");
     await namedControl(provisionCard, "password").fill(process.env.PLAYWRIGHT_PLATFORM_ADMIN_PROVISIONED_PASSWORD ?? "Password@123");
     await namedControl(provisionCard, "must_change_password").setChecked(false);
-    await provisionCard.getByRole("button", { name: "Provision admin" }).click();
+    await provisionCard.getByRole("button", { name: "Create login access" }).click();
     await expect(notice(page).getByText("First admin provisioned.", { exact: true })).toBeVisible();
     evidence = await onboardingPayload(page, tenantId ?? "");
     expectEvent(evidence, "first_admin_provisioned", new RegExp(adminEmail));
     expectChecklist(evidence, "first_admin_provisioned");
     expect(evidence.admin_contacts.some((contact) => contact.email === adminEmail && contact.provisioning_status === "provisioned" && contact.membership_id)).toBeTruthy();
 
-    await openPlatformTab(page, "Policy Packs");
-    const adoptCard = card(page, "Adopt baseline");
+    await openPlatformTab(page, "Setup Templates");
+    const adoptCard = card(page, "Apply setup template");
     await namedControl(adoptCard, "policy_pack_id").selectOption({ label: `${packName} - ${packCode}` });
     await namedControl(adoptCard, "adoption_mode").selectOption("clone_to_tenant_records");
     await namedControl(adoptCard, "notes").fill(`Audit adoption for ${tenantCode}.`);
-    await adoptCard.getByRole("button", { name: "Adopt pack" }).click();
+    await adoptCard.getByRole("button", { name: "Apply template" }).click();
     await expect(notice(page).getByText("Policy pack adopted for tenant.", { exact: true })).toBeVisible();
     evidence = await onboardingPayload(page, tenantId ?? "");
     expectEvent(evidence, "baseline_published", new RegExp(packCode));
     expectChecklist(evidence, "baseline_published");
     expect(evidence.baseline_published_at).toBeTruthy();
 
-    await openPlatformTab(page, "Onboarding");
-    await card(page, "Activation gates").getByRole("button", { name: "Mark handoff" }).click();
+    await openPlatformTab(page, "Launch Checklist");
+    await card(page, "Launch checklist").getByRole("button", { name: "Mark ready" }).click();
     await expect(notice(page).getByText("Mark Handoff Ready", { exact: true })).toBeVisible();
-    await card(page, "Activation gates").getByRole("button", { name: "Activate tenant" }).click();
+    await card(page, "Launch checklist").getByRole("button", { name: "Activate tenant" }).click();
     await expect(notice(page).getByText("Activate", { exact: true })).toBeVisible();
     evidence = await onboardingPayload(page, tenantId ?? "");
     expectEvent(evidence, "handoff_marked_ready", new RegExp(tenantCode));
