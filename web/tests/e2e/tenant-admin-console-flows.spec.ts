@@ -86,7 +86,6 @@ test.describe("Tenant admin console", () => {
     await expect(updateDialog.getByRole("button", { name: "Update roles", exact: true })).toBeEnabled();
     await updateDialog.getByRole("button", { name: "Cancel" }).click();
     await expect(updateDialog).toHaveCount(0);
-    await expect(page.getByRole("main").getByRole("button", { name: "Suspend" }).first()).toBeVisible();
     const memberRows = page.locator(".tenant-membership-row");
     const initialRowCount = await memberRows.count();
     expect(initialRowCount).toBeLessThanOrEqual(8);
@@ -281,7 +280,11 @@ test.describe("Tenant admin console", () => {
     const submitRequest = page.getByRole("main").getByRole("button", { name: "Submit request" });
     await expect(submitRequest).toBeVisible();
     await expect(submitRequest).toBeDisabled();
+    await expect(page.getByText("Title is required.")).toBeVisible();
     await page.getByRole("main").getByLabel("Title").fill(requestTitle);
+    await page.getByRole("main").getByLabel("Payload").fill("{");
+    await expect(page.getByText("Payload must be valid JSON.")).toBeVisible();
+    await expect(submitRequest).toBeDisabled();
     await page.getByRole("main").getByLabel("Target ref").fill("subscription.plan.enterprise");
     await page.getByRole("main").getByLabel("Description").fill("Browser-created disposable tenant admin plan change.");
     await page.getByRole("main").getByLabel("Payload").fill("{\n  \"subscription_plan\": \"enterprise\"\n}");
@@ -297,8 +300,9 @@ test.describe("Tenant admin console", () => {
     await expect(createdRequest).toBeVisible({ timeout: 20_000 });
     await expect(createdRequest.getByText("Submitted")).toBeVisible();
     await expect(createdRequest.getByLabel("Decision note")).toBeVisible();
-    await expect(createdRequest.getByRole("button", { name: "Approve" })).toBeEnabled();
-    await expect(createdRequest.getByRole("button", { name: "Reject" })).toBeEnabled();
+    await expect(createdRequest.getByText("Required for approve, reject, or apply.")).toBeVisible();
+    await expect(createdRequest.getByRole("button", { name: "Approve" })).toBeDisabled();
+    await expect(createdRequest.getByRole("button", { name: "Reject" })).toBeDisabled();
     await expect(createdRequest.getByRole("button", { name: "Cancel" })).toBeEnabled();
     await expect(createdRequest.getByRole("button", { name: "Mark applied" })).toBeDisabled();
 
@@ -306,6 +310,8 @@ test.describe("Tenant admin console", () => {
     const approvalNoteInput = createdRequest.getByLabel("Decision note");
     await approvalNoteInput.fill(approvalNote);
     await expect(approvalNoteInput).toHaveValue(approvalNote);
+    await expect(createdRequest.getByRole("button", { name: "Approve" })).toBeEnabled();
+    await expect(createdRequest.getByRole("button", { name: "Reject" })).toBeEnabled();
     const approveResponse = page.waitForResponse(
       (response) => response.url().includes("/api/tenant-admin/change-requests/") && response.request().method() === "PATCH",
       { timeout: 20_000 }

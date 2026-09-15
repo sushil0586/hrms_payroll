@@ -7145,6 +7145,17 @@ select.input-control {
   gap: 8px;
 }
 
+.tenant-field-error {
+  color: #b91c1c;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tenant-field-error--muted {
+  color: #64748b;
+}
+
 .tenant-support-access-actions,
 .tenant-support-access-list {
   display: grid;

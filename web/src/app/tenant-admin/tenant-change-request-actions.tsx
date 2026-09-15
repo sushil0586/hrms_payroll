@@ -40,6 +40,7 @@ export function TenantChangeRequestActions({ data }: Props) {
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
   const [busyRef, setBusyRef] = useState("");
   const [notice, setNotice] = useState("");
+  const [payloadError, setPayloadError] = useState("");
 
   const selectedType = requestTypes.find((item) => item.value === requestType) ?? requestTypes[0];
   const actionLabels = useMemo(
@@ -49,6 +50,7 @@ export function TenantChangeRequestActions({ data }: Props) {
 
   function updateType(nextType: string) {
     setRequestType(nextType);
+    setPayloadError("");
     const nextConfig = requestTypes.find((item) => item.value === nextType);
     if (nextConfig?.allowed_payload_fields.includes("primary_email")) {
       setPayloadText("{\n  \"primary_email\": \"billing@example.com\"\n}");
@@ -60,21 +62,39 @@ export function TenantChangeRequestActions({ data }: Props) {
     }
   }
 
-  async function submitChangeRequest() {
-    setBusyRef("create");
-    setNotice("");
-    let requestedPayload: Record<string, unknown>;
+  function validatePayloadText() {
     try {
       const parsed = JSON.parse(payloadText) as unknown;
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        throw new Error("Payload must be a JSON object.");
+        return { error: "Payload must be a JSON object.", payload: null };
       }
-      requestedPayload = parsed as Record<string, unknown>;
-    } catch (error) {
+      return { error: "", payload: parsed as Record<string, unknown> };
+    } catch {
+      return { error: "Payload must be valid JSON.", payload: null };
+    }
+  }
+
+  const titleError = title.trim() ? "" : "Title is required.";
+  const targetError = selectedType?.target_ref_required && !targetRef.trim() ? "Target reference is required for this request type." : "";
+  const currentPayloadValidation = validatePayloadText();
+  const canSubmit =
+    !busyRef &&
+    data.change_request_management.enabled &&
+    !titleError &&
+    !targetError &&
+    !currentPayloadValidation.error;
+
+  async function submitChangeRequest() {
+    setBusyRef("create");
+    setNotice("");
+    const validation = validatePayloadText();
+    if (titleError || targetError || validation.error || !validation.payload) {
       setBusyRef("");
-      setNotice(error instanceof Error ? error.message : "Payload must be valid JSON.");
+      setPayloadError(validation.error);
+      setNotice(titleError || targetError || validation.error || "Complete the required request fields.");
       return;
     }
+    setPayloadError("");
     const response = await fetch("/api/tenant-admin/change-requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -83,7 +103,7 @@ export function TenantChangeRequestActions({ data }: Props) {
         title: title.trim(),
         target_ref: targetRef.trim(),
         description: description.trim(),
-        requested_payload: requestedPayload,
+        requested_payload: validation.payload,
       }),
     });
     const result = await response.json().catch(() => ({}));
@@ -143,10 +163,12 @@ export function TenantChangeRequestActions({ data }: Props) {
         <label>
           <span>Title</span>
           <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={selectedType?.label ?? "Change request"} />
+          {titleError ? <small className="tenant-field-error">{titleError}</small> : null}
         </label>
         <label>
           <span>Target ref</span>
           <input value={targetRef} onChange={(event) => setTargetRef(event.target.value)} placeholder={selectedType?.target_ref_required ? "Required" : "Optional"} />
+          {targetError ? <small className="tenant-field-error">{targetError}</small> : null}
         </label>
         <label>
           <span>Description</span>
@@ -154,7 +176,17 @@ export function TenantChangeRequestActions({ data }: Props) {
         </label>
         <label className="tenant-change-request-form__payload">
           <span>Payload</span>
-          <textarea value={payloadText} onChange={(event) => setPayloadText(event.target.value)} rows={5} />
+          <textarea
+            aria-invalid={Boolean(payloadError || currentPayloadValidation.error)}
+            value={payloadText}
+            onChange={(event) => {
+              setPayloadText(event.target.value);
+              setPayloadError("");
+            }}
+            onBlur={() => setPayloadError(currentPayloadValidation.error)}
+            rows={5}
+          />
+          {payloadError || currentPayloadValidation.error ? <small className="tenant-field-error">{payloadError || currentPayloadValidation.error}</small> : null}
         </label>
       </div>
       <div className="tenant-change-request-hint">
@@ -162,7 +194,7 @@ export function TenantChangeRequestActions({ data }: Props) {
         <strong>{selectedType?.allowed_payload_fields.join(", ")}</strong>
       </div>
       <div className="tenant-membership-actions__footer">
-        <button className="button button--primary" disabled={busyRef === "create" || !title.trim() || !data.change_request_management.enabled} onClick={submitChangeRequest} type="button">
+        <button className="button button--primary" disabled={!canSubmit} onClick={submitChangeRequest} type="button">
           {busyRef === "create" ? "Submitting" : "Submit request"}
         </button>
         {notice ? <span role="status">{notice}</span> : null}
@@ -174,6 +206,7 @@ export function TenantChangeRequestActions({ data }: Props) {
           const canApprove = request.status === "submitted";
           const canCancel = request.status === "submitted";
           const canApply = request.status === "approved";
+          const decisionNote = (decisionNotes[request.id] ?? "").trim();
           return (
             <div className="tenant-change-request-row" key={request.id}>
               <div>
@@ -185,15 +218,16 @@ export function TenantChangeRequestActions({ data }: Props) {
               <label>
                 <span>Decision note</span>
                 <input value={decisionNotes[request.id] ?? ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [request.id]: event.target.value }))} />
+                {canApprove || canApply ? <small className="tenant-field-error tenant-field-error--muted">Required for approve, reject, or apply.</small> : null}
               </label>
               <div className="tenant-change-request-row__actions">
-                <button className="button button--secondary" disabled={rowBusy || !canApprove} onClick={() => runRequestAction(request.id, "approve")} type="button">
+                <button className="button button--secondary" disabled={rowBusy || !canApprove || !decisionNote} onClick={() => runRequestAction(request.id, "approve")} type="button">
                   {actionLabels.approve ?? "Approve"}
                 </button>
-                <button className="button button--secondary" disabled={rowBusy || !canApply} onClick={() => runRequestAction(request.id, "apply")} type="button">
+                <button className="button button--secondary" disabled={rowBusy || !canApply || !decisionNote} onClick={() => runRequestAction(request.id, "apply")} type="button">
                   {actionLabels.apply ?? "Mark applied"}
                 </button>
-                <button className="button button--ghost" disabled={rowBusy || !canApprove} onClick={() => runRequestAction(request.id, "reject")} type="button">
+                <button className="button button--ghost" disabled={rowBusy || !canApprove || !decisionNote} onClick={() => runRequestAction(request.id, "reject")} type="button">
                   {actionLabels.reject ?? "Reject"}
                 </button>
                 <button className="button button--ghost" disabled={rowBusy || !canCancel} onClick={() => runRequestAction(request.id, "cancel")} type="button">
