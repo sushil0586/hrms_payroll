@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
@@ -263,6 +263,8 @@ function leadDomainSuggestion(lead: PlatformPublicLead) {
 
 export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTenant, onboarding, policyPacks }: Props) {
   const router = useRouter();
+  const createTenantFirstFieldRef = useRef<HTMLInputElement>(null);
+  const addContactFirstFieldRef = useRef<HTMLInputElement>(null);
   const [busyRef, setBusyRef] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -435,6 +437,27 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     initialPanel === "control"
       ? "A simple control center for public leads, tenant readiness, setup templates, admin access, and activation blockers."
       : activeGuide.description;
+
+  useEffect(() => {
+    if (showCreateTenantModal) {
+      createTenantFirstFieldRef.current?.focus();
+    }
+    if (showAddContactModal) {
+      addContactFirstFieldRef.current?.focus();
+    }
+  }, [showAddContactModal, showCreateTenantModal]);
+
+  useEffect(() => {
+    if (!showCreateTenantModal && !showAddContactModal) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busyRef) {
+        setShowCreateTenantModal(false);
+        setShowAddContactModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [busyRef, showAddContactModal, showCreateTenantModal]);
 
   async function mutate<T>(path: string, method: MutationMethod, body: Record<string, unknown>, successMessage: string): Promise<T> {
     setBusyRef(path);
@@ -768,7 +791,11 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
 
       {(message || error || generatedPassword) ? (
         <section className="section">
-          <div className="notice">
+          <div
+            aria-live={error ? "assertive" : "polite"}
+            className={`notice platform-feedback${error ? " platform-feedback--error" : " platform-feedback--success"}`}
+            role={error ? "alert" : "status"}
+          >
             {message ? <strong>{message}</strong> : null}
             {error ? <strong>{error}</strong> : null}
             {generatedPassword ? <span className="muted">Generated password: {generatedPassword}</span> : null}
@@ -1657,21 +1684,35 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         </>
       ) : null}
       {showCreateTenantModal ? (
-        <div className="tenant-modal-shell" role="presentation">
-          <div aria-label="Create platform tenant" aria-modal="true" className="tenant-modal" role="dialog">
+        <div
+          className="tenant-modal-shell"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !busyRef) {
+              setShowCreateTenantModal(false);
+            }
+          }}
+        >
+          <div
+            aria-describedby="create-platform-tenant-description"
+            aria-labelledby="create-platform-tenant-title"
+            aria-modal="true"
+            className="tenant-modal"
+            role="dialog"
+          >
             <div className="tenant-modal__header">
               <div>
                 <span className="eyebrow">Tenant onboarding</span>
-                <h3>Create tenant</h3>
+                <h3 id="create-platform-tenant-title">Create platform tenant</h3>
               </div>
               <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowCreateTenantModal(false)}>Close</button>
             </div>
             <form className="form-grid tenant-membership-form-grid--dialog" onSubmit={handleTenantCreate}>
-              <div className="notice notice--compact platform-validation-strip form-field--full">
+              <div className="notice notice--compact platform-validation-strip form-field--full" id="create-platform-tenant-description">
                 <strong>Before creating</strong>
                 <span className="muted">Code and name are mandatory. Email, phone, and domain can be completed later, but activation still needs tenant admin login access and readiness signoff.</span>
               </div>
-              <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-pa-tenant-01" /><ValidationNote>Required and unique. This becomes the tenant identifier in audit evidence.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" ref={createTenantFirstFieldRef} required placeholder="qa-pa-tenant-01" /><ValidationNote>Required and unique. This becomes the tenant identifier in audit evidence.</ValidationNote></label>
               <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Platform Tenant 01" /><ValidationNote>Required. Use the customer-facing organization name.</ValidationNote></label>
               <label className="form-field"><span className="muted">Legal name</span><input className="input-control" name="legal_name" placeholder="QA Platform Tenant Pvt Ltd" /></label>
               <label className="form-field"><span className="muted">Primary domain</span><input className="input-control" name="primary_domain" placeholder="qa-pa-tenant-01.example.test" /><ValidationNote>Optional for setup; should be final before live customer activation.</ValidationNote></label>
@@ -1693,21 +1734,35 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         </div>
       ) : null}
       {showAddContactModal && selectedTenant ? (
-        <div className="tenant-modal-shell" role="presentation">
-          <div aria-label="Add platform admin contact" aria-modal="true" className="tenant-modal" role="dialog">
+        <div
+          className="tenant-modal-shell"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !busyRef) {
+              setShowAddContactModal(false);
+            }
+          }}
+        >
+          <div
+            aria-describedby="add-platform-admin-contact-description"
+            aria-labelledby="add-platform-admin-contact-title"
+            aria-modal="true"
+            className="tenant-modal"
+            role="dialog"
+          >
             <div className="tenant-modal__header">
               <div>
                 <span className="eyebrow">First admin</span>
-                <h3>Add admin contact</h3>
+                <h3 id="add-platform-admin-contact-title">Add platform admin contact</h3>
               </div>
               <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowAddContactModal(false)}>Close</button>
             </div>
             <form className="form-grid tenant-membership-form-grid--dialog" onSubmit={handleContactCreate}>
-              <div className="notice notice--compact platform-validation-strip form-field--full">
+              <div className="notice notice--compact platform-validation-strip form-field--full" id="add-platform-admin-contact-description">
                 <strong>Contact validation</strong>
                 <span className="muted">A primary contact is required before the customer can be marked ready. Make sure the email belongs to the real tenant admin.</span>
               </div>
-              <label className="form-field"><span className="muted">Full name</span><input className="input-control" name="full_name" required placeholder="Ava Patel" /><ValidationNote>Required. This person becomes the customer-side owner for onboarding.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Full name</span><input className="input-control" name="full_name" ref={addContactFirstFieldRef} required placeholder="Ava Patel" /><ValidationNote>Required. This person becomes the customer-side owner for onboarding.</ValidationNote></label>
               <label className="form-field"><span className="muted">Email</span><input className="input-control" name="email" required type="email" placeholder="ava.patel@example.test" /><ValidationNote>Required and used for the provisioned login identity.</ValidationNote></label>
               <label className="form-field"><span className="muted">Phone</span><input className="input-control" name="phone_number" placeholder="+91 90000 00002" /></label>
               <label className="form-field"><span className="muted">Job title</span><input className="input-control" name="job_title" placeholder="Head of People" /></label>

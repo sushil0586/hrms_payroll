@@ -84,6 +84,8 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expect(createTenant.getByRole("button", { name: "Create tenant" })).toBeVisible();
     await createTenant.getByRole("button", { name: "Create tenant" }).click();
     const createTenantDialog = page.getByRole("dialog", { name: "Create platform tenant" });
+    await expect(createTenantDialog).toHaveAttribute("aria-describedby", "create-platform-tenant-description");
+    await expect(createTenantDialog.locator('[name="code"]')).toBeFocused();
     await expect(createTenantDialog.getByText("Before creating")).toBeVisible();
     await expect(createTenantDialog.getByText("Code and name are mandatory.")).toBeVisible();
     await expectNamedControls(createTenantDialog, [
@@ -99,6 +101,9 @@ test.describe("Platform admin tabbed workspace certification", () => {
       "country_code",
       "is_sandbox",
     ]);
+    await page.keyboard.press("Escape");
+    await expect(createTenantDialog).toBeHidden();
+    await createTenant.getByRole("button", { name: "Create tenant" }).click();
     await createTenantDialog.getByRole("button", { name: "Create tenant" }).click();
     await expect(createTenantDialog.locator('[name="code"]')).toBeFocused();
     await createTenantDialog.getByRole("button", { name: "Cancel" }).click();
@@ -155,8 +160,13 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expect(card(page, "Admin contacts").getByRole("button", { name: "Add contact" })).toBeVisible();
     await card(page, "Admin contacts").getByRole("button", { name: "Add contact" }).click();
     const addContactDialog = page.getByRole("dialog", { name: "Add platform admin contact" });
+    await expect(addContactDialog).toHaveAttribute("aria-describedby", "add-platform-admin-contact-description");
+    await expect(addContactDialog.locator('[name="full_name"]')).toBeFocused();
     await expect(addContactDialog.getByText("Contact validation")).toBeVisible();
     await expectNamedControls(addContactDialog, ["full_name", "email", "phone_number", "job_title", "is_primary", "notes"]);
+    await page.keyboard.press("Escape");
+    await expect(addContactDialog).toBeHidden();
+    await card(page, "Admin contacts").getByRole("button", { name: "Add contact" }).click();
     await addContactDialog.getByRole("button", { name: "Cancel" }).click();
     await expect(card(page, "Create tenant admin login").getByText(/Before creating login access|No contacts are ready for login access/)).toBeVisible();
     await expectNamedControls(card(page, "Create tenant admin login"), [
@@ -216,5 +226,11 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await page.locator('[name="event_search"]').fill("__no_matching_platform_admin_event__");
     expect(await card(page, "Onboarding events").locator(".tenant-support-access-row").count()).toBe(0);
     await expectNoHorizontalOverflow(page);
+    const desktopScreenshot = await page.screenshot({ fullPage: true });
+    expect(desktopScreenshot.length).toBeGreaterThan(1000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoHorizontalOverflow(page);
+    const mobileScreenshot = await page.screenshot({ fullPage: true });
+    expect(mobileScreenshot.length).toBeGreaterThan(1000);
   });
 });

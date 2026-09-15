@@ -3413,6 +3413,25 @@ select.input-control {
   grid-column: 1 / -1;
 }
 
+.platform-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  border-radius: 8px;
+}
+
+.platform-feedback--success {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(236, 253, 245, 0.82);
+}
+
+.platform-feedback--error {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(254, 242, 242, 0.88);
+  color: #991b1b;
+}
+
 .platform-validation-note {
   display: block;
   margin-top: 6px;

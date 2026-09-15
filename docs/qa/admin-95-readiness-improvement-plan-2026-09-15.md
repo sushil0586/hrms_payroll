@@ -191,7 +191,7 @@ Exit criteria:
 
 ## Phase PA-95-5: Visual Polish And Accessibility Pass
 
-Status: Pending  
+Status: In progress; feedback and dialog accessibility complete locally on 2026-09-15  
 Goal: make the Platform Admin experience visually consistent with the improved Tenant Admin direction.
 
 Implementation tasks:
@@ -265,13 +265,15 @@ After Platform Admin reaches 95%, repeat the same model for Tenant Admin:
 | 2026-09-15 | PA-95-4 event search usability | Staging | Deployed commit `d8eece1`; post-deploy smoke passed; full Platform Admin browser pack `6 passed`. | Functionality 94%, QA 95%, UX 90% | Human-readable event search is live and certified inside the CRUD/state-transition proof. |
 | 2026-09-15 | PA-95-2 | Local UI against staging API | Passed: `pnpm --dir web lint`, `pnpm --dir web typecheck`, Platform Admin browser pack `4 passed`, `pnpm --dir web build`. | Functionality 90%, QA 92%, UX 87% | Added selected-tenant guided launch checklist with numbered steps, Done/Needed/Blocked status, direct action links, and clear dependency messaging for tenant record, setup template, tenant admin login, readiness, and activation. |
 | 2026-09-15 | PA-95-4 filters and pagination usability | Local UI against staging API | Passed: `pnpm --dir web lint`, `pnpm --dir web typecheck`, focused Platform Admin tabs/pagination/filter proof `1 passed`, `pnpm --dir web build`. Full local Platform Admin pack had `5 passed`, `1 failed` due local Next.js dev chunk reload error for `/tenant-admin/layout.js`; staging had previously passed the same tenant-admin landing path. | Functionality 94%, QA 95%, UX 92% | Added compact filters for tenant status/plan, setup template status/domain, and audit event type. Browser proof verifies filters narrow/reset without breaking pagination layout. Rerun full pack after local dev-server restart or after staging deploy. |
+| 2026-09-15 | PA-95-4 filters and pagination usability | Staging | Deployed commit `78c6404`; post-deploy smoke passed; full Platform Admin browser pack `6 passed` in 7.3m. | Functionality 94%, QA 95%, UX 92% | Tenant, setup template, and audit event filters are live. Staging browser proof covers tab routing, filters, pagination, CRUD/state transitions, audit evidence, negative validation, security denial, and five-tenant onboarding. |
+| 2026-09-15 | PA-95-5 feedback and dialog accessibility | Local UI against staging API | Passed: `pnpm --dir web lint`, `pnpm --dir web typecheck`, focused Platform Admin tabs/pagination/accessibility proof `1 passed`, `pnpm --dir web build`. | Functionality 94%, QA 95%, UX 93% | Feedback banners now use `status`/`alert` semantics with success/error styling. Create Tenant and Add Admin Contact dialogs now have labelled descriptions, focus the first required field on open, support Escape/backdrop close, and are covered by desktop/mobile screenshot-buffer proof with no horizontal overflow. |
 
 ## Current Next Recommended Phase
 
-After this filter work is checked in, deploy and run **PA-95-6 staging certification** for Platform Admin, then start **PA-95-5 Visual Polish And Accessibility Pass** only if the staging screenshots still show usability gaps.
+Start **PA-95-5 Visual Polish And Accessibility Pass** for Platform Admin, then close with **PA-95-6 staging launch certification**.
 
 Reason:
 
 - Core Platform Admin workflows are already staging-certified.
-- PA-95-4 now adds the missing list filters that make high-volume operations manageable.
-- The remaining launch gap is mostly visual/accessibility polish plus one clean full-pack rerun on staging.
+- PA-95-4 is now live and staging-certified.
+- The remaining launch gap is mostly visual/accessibility polish, screenshot review, keyboard behavior, and final signoff rerun.
