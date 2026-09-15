@@ -433,7 +433,7 @@ Testing targets:
 - Audit download integrity.
 - Pagination for long audit lists.
 
-Status: Complete locally; staging deployment and rerun pending after check-in.
+Status: Complete locally and on staging.
 
 Evidence:
 - Added Trust Audit pagination controls with filter-preserving First, Previous, Next, and Last actions.
@@ -443,6 +443,9 @@ Evidence:
 - Local production web build passed: `pnpm --dir web build`.
 - Local focused TA-5 Playwright against staging API passed: `tenant-security-readiness-flows.spec.ts tenant-trust-audit-flows.spec.ts` = 6/6.
 - Local full Tenant Admin Playwright against staging API passed: `tenant-admin-console-flows.spec.ts tenant-security-readiness-flows.spec.ts tenant-trust-audit-flows.spec.ts` = 16/16.
+- Staging deployment completed on commit `0c3de1d`.
+- Staging post-deploy smoke passed: API health 200, root/login 200, backend/web active, disk 68%.
+- Staging full Tenant Admin Playwright against `https://hrms.accerio.in` passed: `tenant-admin-console-flows.spec.ts tenant-security-readiness-flows.spec.ts tenant-trust-audit-flows.spec.ts` = 16/16.
 
 Observed product posture:
 - Security Readiness is intentionally read-only and clear enough for tenant owners to understand readiness domains and blockers.
@@ -458,7 +461,23 @@ Testing targets:
 - Direct API mutations fail closed.
 - Browser routes redirect or show access denial clearly.
 
-Status: Not started.
+Status: Complete locally; staging deployment and rerun pending after check-in.
+
+Evidence:
+- Added dedicated browser boundary suite: `tenant-admin-boundary-certification.spec.ts`.
+- Verified every tenant-admin page redirects unauthenticated sessions to login without workspace failure noise.
+- Verified employee, manager, platform admin, and support-agent sessions cannot open Tenant Admin as a privileged workspace unless the session explicitly has `tenant_admin` access.
+- Verified blocked roles cannot use Tenant Admin API proxies for Security Readiness, Trust Audit, audit download, membership create/update, change-request create/update, or support-access create/update.
+- Verified denied API responses fail closed and do not leak passwords, secrets, salary snapshots, bank debit account refs, or live provider refs.
+- Verified a real Tenant Admin session can access all focused Tenant Admin pages and that security, trust-audit, and audit-download payloads are scoped to the active tenant code.
+- Local backend check passed: `./.venv/bin/python manage.py check`.
+- Local production web build passed: `pnpm --dir web build`.
+- Local focused TA-6 Playwright against staging API passed: `tenant-admin-boundary-certification.spec.ts` = 3/3.
+- Local full Tenant Admin Playwright against staging API passed with TA-6 included: `tenant-admin-boundary-certification.spec.ts tenant-admin-console-flows.spec.ts tenant-security-readiness-flows.spec.ts tenant-trust-audit-flows.spec.ts` = 19/19.
+
+Observed product posture:
+- Blocked signed-in users currently land on the public home page with workspace shortcuts, not a separate workspace chooser. The important security behavior is correct: the Tenant shortcut remains non-navigable and the Tenant Admin heading/data is not exposed.
+- Cross-tenant proof is tenant-code based in this phase because we do not yet have a second independent tenant-admin credential in the automated matrix.
 
 ### Phase TA-7: Launch Certification Run
 
@@ -487,7 +506,6 @@ Status: Not started.
 | User Management is embedded in dashboard | Hard to certify and operate | TA-1, TA-2 |
 | Change requests are embedded in dashboard | Plan/commercial flow is not obvious | TA-1, TA-3 |
 | Support access is embedded in dashboard | Critical support approval flow needs its own focused page | TA-1, TA-4 |
-| Trust audit staging rerun pending after latest pagination change | Need production-deployed evidence before launch signoff | TA-5, TA-7 |
 | Settings is an anchor, not a focused page | Tenant-owned vs platform-owned fields are unclear | TA-1 |
 | Existing tests cover useful basics but not full page-by-page CRUD after split | Certification confidence is limited | TA-2 through TA-7 |
 
