@@ -93,6 +93,12 @@ function titleCase(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function normalizedSearchText(value: string | null | undefined) {
+  return String(value ?? "")
+    .replace(/[_-]+/g, " ")
+    .toLowerCase();
+}
+
 function formatDateTime(value: string | null) {
   if (!value) return "Not set";
   return new Intl.DateTimeFormat("en-IN", {
@@ -349,7 +355,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const normalizedLeadQuery = leadQuery.trim().toLowerCase();
   const normalizedTenantQuery = tenantQuery.trim().toLowerCase();
   const normalizedPolicyPackQuery = policyPackQuery.trim().toLowerCase();
-  const normalizedEventQuery = eventQuery.trim().toLowerCase();
+  const normalizedEventQuery = normalizedSearchText(eventQuery.trim());
   const filteredLeads = normalizedLeadQuery
     ? leads.filter((lead) => [lead.company_name, lead.contact_name, lead.work_email, lead.intent, lead.status, lead.preferred_plan, lead.industry].join(" ").toLowerCase().includes(normalizedLeadQuery))
     : leads;
@@ -360,7 +366,12 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     ? policyPacks.filter((pack) => [pack.name, pack.code, pack.domain, pack.status, pack.country_code, pack.industry_tag].join(" ").toLowerCase().includes(normalizedPolicyPackQuery))
     : policyPacks;
   const filteredEvents = normalizedEventQuery
-    ? events.filter((event) => [event.event_type, event.summary, event.actor_identifier, event.created_at].join(" ").toLowerCase().includes(normalizedEventQuery))
+    ? events.filter((event) =>
+        [event.event_type, event.summary, event.actor_identifier, event.created_at]
+          .map(normalizedSearchText)
+          .join(" ")
+          .includes(normalizedEventQuery),
+      )
     : events;
   const leadPageData = paginate(filteredLeads, leadPage);
   const tenantPageData = paginate(filteredTenants, tenantPage);

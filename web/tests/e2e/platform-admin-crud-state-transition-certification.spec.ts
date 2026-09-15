@@ -177,7 +177,7 @@ test.describe("Platform admin CRUD and state transition certification", () => {
 
     await openPlatformTab(page, "Events");
     const eventsCard = card(page, "Onboarding events");
-    await namedControl(eventsCard, "event_search").fill("tenant_updated");
+    await namedControl(eventsCard, "event_search").fill("tenant updated");
     await expect(eventsCard.locator(".tenant-support-access-row").filter({ hasText: "Tenant Updated" }).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

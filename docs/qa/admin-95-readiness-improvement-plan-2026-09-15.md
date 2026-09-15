@@ -122,7 +122,7 @@ Exit criteria:
 
 ## Phase PA-95-3: Full CRUD And State Transition Certification
 
-Status: In progress; focused CRUD/state transition proof complete locally on 2026-09-15  
+Status: Complete on staging on 2026-09-15  
 Goal: prove every Platform Admin mutation works from browser with positive and negative coverage.
 
 Implementation tasks:
@@ -158,7 +158,7 @@ Exit criteria:
 
 ## Phase PA-95-4: List Usability, Search, Filters, And Pagination
 
-Status: Pending  
+Status: In progress; human-readable event search complete locally on 2026-09-15  
 Goal: make long operational pages manageable at realistic data volume.
 
 Implementation tasks:
@@ -260,6 +260,8 @@ After Platform Admin reaches 95%, repeat the same model for Tenant Admin:
 | 2026-09-15 | PA-95-0 and PA-95-1 | Local UI against staging API | Passed: `pnpm --dir web lint`, `pnpm --dir web typecheck`, Platform Admin browser pack `4 passed`, `pnpm --dir web build`. | Functionality 87%, QA 90%, UX 80% | Renamed operator-facing concepts: Policy Packs -> Setup Templates, Activation Gates -> Launch Checklist, Baseline -> Initial Setup, Handoff -> Ready for Tenant Admin, Provision Admin -> Create Login Access. Found and fixed a real UX/layout defect where the login-access form could intercept Admin Contact edit clicks. |
 | 2026-09-15 | PA-95-2 | Staging | Deployed commit `a55342f`; post-deploy smoke passed; Platform Admin browser pack `5 passed`. | Functionality 90%, QA 92%, UX 87% | Guided tenant launch checklist is live. Five-tenant browser onboarding proof now passes, including tenant admin login landing with clear selected-tenant context. |
 | 2026-09-15 | PA-95-3 focused CRUD/state transitions | Local UI against staging API | Passed: `platform-admin-crud-state-transition-certification.spec.ts` `1 passed`. | Functionality 92%, QA 93%, UX 88% | New proof creates tenant, edits setup fields, suspends, reactivates, updates onboarding metadata, verifies tenant list persistence, verifies API payload state, and verifies audit event visibility. Observation: Events search currently matches event keys like `tenant_updated`; human phrase search such as `tenant updated` should be added in PA-95-4. |
+| 2026-09-15 | PA-95-3 full certification | Staging | Deployed commit `b1519f0`; post-deploy smoke passed; Platform Admin browser pack with CRUD/state-transition proof `6 passed`. | Functionality 94%, QA 95%, UX 89% | Staging now proves create tenant, edit tenant profile/status, suspend/reactivate, onboarding metadata update, admin contact add/edit, first admin provisioning, setup template create/publish/apply, handoff/activation gates, security denial, pagination, and audit evidence after refresh. |
+| 2026-09-15 | PA-95-4 event search usability | Local UI against staging API | Passed: `platform-admin-crud-state-transition-certification.spec.ts` `1 passed`; `pnpm --dir web lint`; `pnpm --dir web typecheck`. | Functionality 94%, QA 95%, UX 90% | Events search now normalizes internal keys so human phrases such as `tenant updated` match `tenant_updated` audit events. |
 | 2026-09-15 | PA-95-2 | Local UI against staging API | Passed: `pnpm --dir web lint`, `pnpm --dir web typecheck`, Platform Admin browser pack `4 passed`, `pnpm --dir web build`. | Functionality 90%, QA 92%, UX 87% | Added selected-tenant guided launch checklist with numbered steps, Done/Needed/Blocked status, direct action links, and clear dependency messaging for tenant record, setup template, tenant admin login, readiness, and activation. |
 
 ## Current Next Recommended Phase
