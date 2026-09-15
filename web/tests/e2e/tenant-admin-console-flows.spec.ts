@@ -102,12 +102,14 @@ test.describe("Tenant admin console", () => {
     await expect(memberRows.first()).toBeVisible();
     const nextPage = page.getByLabel("Member pagination").getByRole("button", { name: "Next" });
     if (await nextPage.isEnabled().catch(() => false)) {
-      const firstPageText = await memberRows.first().innerText();
+      const firstPageText = (await memberRows.first().innerText()).replace(/\s+/g, "");
       await nextPage.click();
-      await expect(memberRows.first()).not.toHaveText(firstPageText);
+      await expect
+        .poll(async () => (await memberRows.first().innerText()).replace(/\s+/g, ""))
+        .not.toBe(firstPageText);
       await expect(page.getByLabel("Member pagination").getByRole("button", { name: "Previous" })).toBeEnabled();
       await page.getByLabel("Member pagination").getByRole("button", { name: "Previous" }).click();
-      await expect(memberRows.first()).toHaveText(firstPageText);
+      await expect.poll(async () => (await memberRows.first().innerText()).replace(/\s+/g, "")).toBe(firstPageText);
     }
     await expect(page.getByRole("main").getByText("Role coverage", { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
