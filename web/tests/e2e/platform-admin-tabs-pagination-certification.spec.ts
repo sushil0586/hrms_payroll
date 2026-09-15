@@ -66,9 +66,18 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expect(page).toHaveURL(/\/platform-admin\/tenants/);
     await expect(page.getByTestId("platform-admin-tenants-panel")).toBeVisible();
     await expect(page.locator('[name="tenant_search"]')).toBeVisible();
+    await expect(page.locator('[name="tenant_status_filter"]')).toBeVisible();
+    await expect(page.locator('[name="tenant_plan_filter"]')).toBeVisible();
     await expectPagination(page.getByTestId("platform-admin-tenants-panel"));
     expect(await page.locator(".employee-directory-item").count()).toBeLessThanOrEqual(8);
     await expectSearchNarrowsList(page, "tenant_search", ".employee-directory-item");
+    const tenantListCount = await page.locator(".employee-directory-item").count();
+    await page.locator('[name="tenant_status_filter"]').selectOption("active");
+    expect(await page.locator(".employee-directory-item").count()).toBeLessThanOrEqual(tenantListCount);
+    await page.locator('[name="tenant_status_filter"]').selectOption("all");
+    await page.locator('[name="tenant_plan_filter"]').selectOption("growth");
+    expect(await page.locator(".employee-directory-item").count()).toBeLessThanOrEqual(tenantListCount);
+    await page.locator('[name="tenant_plan_filter"]').selectOption("all");
 
     const createTenant = card(page, "Create tenant");
     await expect(createTenant.getByText("After create")).toBeVisible();
@@ -165,9 +174,18 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await openTab(page, "Setup Templates");
     await expect(page.getByTestId("platform-admin-policy-packs-panel")).toBeVisible();
     await expect(page.locator('[name="policy_pack_search"]')).toBeVisible();
+    await expect(page.locator('[name="policy_pack_status_filter"]')).toBeVisible();
+    await expect(page.locator('[name="policy_pack_domain_filter"]')).toBeVisible();
     await expectPagination(page.getByTestId("platform-admin-policy-packs-panel"));
     expect(await card(page, "Setup templates").locator(".tenant-support-access-row").count()).toBeLessThanOrEqual(8);
     await expectSearchNarrowsList(page, "policy_pack_search", ".tenant-support-access-row");
+    const setupTemplateCount = await card(page, "Setup templates").locator(".tenant-support-access-row").count();
+    await page.locator('[name="policy_pack_status_filter"]').selectOption("published");
+    expect(await card(page, "Setup templates").locator(".tenant-support-access-row").count()).toBeLessThanOrEqual(setupTemplateCount);
+    await page.locator('[name="policy_pack_status_filter"]').selectOption("all");
+    await page.locator('[name="policy_pack_domain_filter"]').selectOption("leave");
+    expect(await card(page, "Setup templates").locator(".tenant-support-access-row").count()).toBeLessThanOrEqual(setupTemplateCount);
+    await page.locator('[name="policy_pack_domain_filter"]').selectOption("all");
     await expect(card(page, "Setup templates").getByText("Template validation")).toBeVisible();
     await expectNamedControls(card(page, "Setup templates"), [
       "code",
@@ -186,8 +204,15 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await openTab(page, "Events");
     await expect(page.getByTestId("platform-admin-events-panel")).toBeVisible();
     await expect(page.locator('[name="event_search"]')).toBeVisible();
+    await expect(page.locator('[name="event_type_filter"]')).toBeVisible();
     await expectPagination(page.getByTestId("platform-admin-events-panel"));
     expect(await card(page, "Onboarding events").locator(".tenant-support-access-row").count()).toBeLessThanOrEqual(8);
+    const firstEventType = await page.locator('[name="event_type_filter"] option').nth(1).getAttribute("value");
+    expect(firstEventType).toBeTruthy();
+    const eventCount = await card(page, "Onboarding events").locator(".tenant-support-access-row").count();
+    await page.locator('[name="event_type_filter"]').selectOption(firstEventType ?? "");
+    expect(await card(page, "Onboarding events").locator(".tenant-support-access-row").count()).toBeLessThanOrEqual(eventCount);
+    await page.locator('[name="event_type_filter"]').selectOption("all");
     await page.locator('[name="event_search"]').fill("__no_matching_platform_admin_event__");
     expect(await card(page, "Onboarding events").locator(".tenant-support-access-row").count()).toBe(0);
     await expectNoHorizontalOverflow(page);

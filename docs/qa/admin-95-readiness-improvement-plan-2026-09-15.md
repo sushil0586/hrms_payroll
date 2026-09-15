@@ -158,7 +158,7 @@ Exit criteria:
 
 ## Phase PA-95-4: List Usability, Search, Filters, And Pagination
 
-Status: In progress; human-readable event search complete locally on 2026-09-15  
+Status: In progress; tenant, setup template, and event filters complete locally on 2026-09-15  
 Goal: make long operational pages manageable at realistic data volume.
 
 Implementation tasks:
@@ -262,13 +262,16 @@ After Platform Admin reaches 95%, repeat the same model for Tenant Admin:
 | 2026-09-15 | PA-95-3 focused CRUD/state transitions | Local UI against staging API | Passed: `platform-admin-crud-state-transition-certification.spec.ts` `1 passed`. | Functionality 92%, QA 93%, UX 88% | New proof creates tenant, edits setup fields, suspends, reactivates, updates onboarding metadata, verifies tenant list persistence, verifies API payload state, and verifies audit event visibility. Observation: Events search currently matches event keys like `tenant_updated`; human phrase search such as `tenant updated` should be added in PA-95-4. |
 | 2026-09-15 | PA-95-3 full certification | Staging | Deployed commit `b1519f0`; post-deploy smoke passed; Platform Admin browser pack with CRUD/state-transition proof `6 passed`. | Functionality 94%, QA 95%, UX 89% | Staging now proves create tenant, edit tenant profile/status, suspend/reactivate, onboarding metadata update, admin contact add/edit, first admin provisioning, setup template create/publish/apply, handoff/activation gates, security denial, pagination, and audit evidence after refresh. |
 | 2026-09-15 | PA-95-4 event search usability | Local UI against staging API | Passed: `platform-admin-crud-state-transition-certification.spec.ts` `1 passed`; `pnpm --dir web lint`; `pnpm --dir web typecheck`. | Functionality 94%, QA 95%, UX 90% | Events search now normalizes internal keys so human phrases such as `tenant updated` match `tenant_updated` audit events. |
+| 2026-09-15 | PA-95-4 event search usability | Staging | Deployed commit `d8eece1`; post-deploy smoke passed; full Platform Admin browser pack `6 passed`. | Functionality 94%, QA 95%, UX 90% | Human-readable event search is live and certified inside the CRUD/state-transition proof. |
 | 2026-09-15 | PA-95-2 | Local UI against staging API | Passed: `pnpm --dir web lint`, `pnpm --dir web typecheck`, Platform Admin browser pack `4 passed`, `pnpm --dir web build`. | Functionality 90%, QA 92%, UX 87% | Added selected-tenant guided launch checklist with numbered steps, Done/Needed/Blocked status, direct action links, and clear dependency messaging for tenant record, setup template, tenant admin login, readiness, and activation. |
+| 2026-09-15 | PA-95-4 filters and pagination usability | Local UI against staging API | Passed: `pnpm --dir web lint`, `pnpm --dir web typecheck`, focused Platform Admin tabs/pagination/filter proof `1 passed`, `pnpm --dir web build`. Full local Platform Admin pack had `5 passed`, `1 failed` due local Next.js dev chunk reload error for `/tenant-admin/layout.js`; staging had previously passed the same tenant-admin landing path. | Functionality 94%, QA 95%, UX 92% | Added compact filters for tenant status/plan, setup template status/domain, and audit event type. Browser proof verifies filters narrow/reset without breaking pagination layout. Rerun full pack after local dev-server restart or after staging deploy. |
 
 ## Current Next Recommended Phase
 
-Start with **PA-95-3 Full CRUD And State Transition Certification** after PA-95-2 is checked in, deployed, and certified on staging.
+After this filter work is checked in, deploy and run **PA-95-6 staging certification** for Platform Admin, then start **PA-95-5 Visual Polish And Accessibility Pass** only if the staging screenshots still show usability gaps.
 
 Reason:
 
-- PA-95-2 now gives the operator a clear tenant launch sequence.
-- PA-95-3 should prove every Platform Admin mutation end to end and close the remaining functionality/QA gap toward 95%.
+- Core Platform Admin workflows are already staging-certified.
+- PA-95-4 now adds the missing list filters that make high-volume operations manageable.
+- The remaining launch gap is mostly visual/accessibility polish plus one clean full-pack rerun on staging.

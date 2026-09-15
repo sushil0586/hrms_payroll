@@ -3421,6 +3421,21 @@ select.input-control {
   line-height: 1.35;
 }
 
+.platform-list-filters {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  margin-top: 10px;
+}
+
+.platform-list-filters .form-field {
+  margin: 0;
+}
+
+.platform-list-filters .input-control {
+  min-height: 42px;
+}
+
 .platform-contact-edit-form {
   width: 100%;
 }
@@ -8609,6 +8624,7 @@ select.input-control {
   .tenant-change-request-row,
   .tenant-support-access-form,
   .tenant-support-access-row,
+  .platform-list-filters,
   .saas-usage-grid {
     grid-template-columns: minmax(0, 1fr);
   }

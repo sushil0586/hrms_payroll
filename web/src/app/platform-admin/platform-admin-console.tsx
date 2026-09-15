@@ -271,6 +271,11 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const [tenantQuery, setTenantQuery] = useState("");
   const [policyPackQuery, setPolicyPackQuery] = useState("");
   const [eventQuery, setEventQuery] = useState("");
+  const [tenantStatusFilter, setTenantStatusFilter] = useState("all");
+  const [tenantPlanFilter, setTenantPlanFilter] = useState("all");
+  const [policyPackStatusFilter, setPolicyPackStatusFilter] = useState("all");
+  const [policyPackDomainFilter, setPolicyPackDomainFilter] = useState("all");
+  const [eventTypeFilter, setEventTypeFilter] = useState("all");
   const [editingContactId, setEditingContactId] = useState("");
   const [showCreateTenantModal, setShowCreateTenantModal] = useState(false);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
@@ -359,20 +364,32 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const filteredLeads = normalizedLeadQuery
     ? leads.filter((lead) => [lead.company_name, lead.contact_name, lead.work_email, lead.intent, lead.status, lead.preferred_plan, lead.industry].join(" ").toLowerCase().includes(normalizedLeadQuery))
     : leads;
-  const filteredTenants = normalizedTenantQuery
-    ? tenants.filter((tenant) => [tenant.name, tenant.code, tenant.primary_domain, tenant.subscription_plan, tenant.onboarding_status].join(" ").toLowerCase().includes(normalizedTenantQuery))
-    : tenants;
-  const filteredPolicyPacks = normalizedPolicyPackQuery
-    ? policyPacks.filter((pack) => [pack.name, pack.code, pack.domain, pack.status, pack.country_code, pack.industry_tag].join(" ").toLowerCase().includes(normalizedPolicyPackQuery))
-    : policyPacks;
-  const filteredEvents = normalizedEventQuery
-    ? events.filter((event) =>
-        [event.event_type, event.summary, event.actor_identifier, event.created_at]
+  const filteredTenants = tenants.filter((tenant) => {
+    const matchesSearch = normalizedTenantQuery
+      ? [tenant.name, tenant.code, tenant.primary_domain, tenant.subscription_plan, tenant.status, tenant.onboarding_status].join(" ").toLowerCase().includes(normalizedTenantQuery)
+      : true;
+    const matchesStatus = tenantStatusFilter === "all" || tenant.status === tenantStatusFilter || tenant.onboarding_status === tenantStatusFilter;
+    const matchesPlan = tenantPlanFilter === "all" || tenant.subscription_plan === tenantPlanFilter;
+    return matchesSearch && matchesStatus && matchesPlan;
+  });
+  const filteredPolicyPacks = policyPacks.filter((pack) => {
+    const matchesSearch = normalizedPolicyPackQuery
+      ? [pack.name, pack.code, pack.domain, pack.status, pack.country_code, pack.industry_tag].join(" ").toLowerCase().includes(normalizedPolicyPackQuery)
+      : true;
+    const matchesStatus = policyPackStatusFilter === "all" || pack.status === policyPackStatusFilter;
+    const matchesDomain = policyPackDomainFilter === "all" || pack.domain === policyPackDomainFilter;
+    return matchesSearch && matchesStatus && matchesDomain;
+  });
+  const filteredEvents = events.filter((event) => {
+    const matchesSearch = normalizedEventQuery
+      ? [event.event_type, event.summary, event.actor_identifier, event.created_at]
           .map(normalizedSearchText)
           .join(" ")
-          .includes(normalizedEventQuery),
-      )
-    : events;
+          .includes(normalizedEventQuery)
+      : true;
+    const matchesType = eventTypeFilter === "all" || event.event_type === eventTypeFilter;
+    return matchesSearch && matchesType;
+  });
   const leadPageData = paginate(filteredLeads, leadPage);
   const tenantPageData = paginate(filteredTenants, tenantPage);
   const policyPackPageData = paginate(filteredPolicyPacks, policyPackPage);
@@ -380,6 +397,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const activeLeads = leads.filter((lead) => ["new", "reviewing", "qualified"].includes(lead.status));
   const newLeads = leads.filter((lead) => lead.status === "new");
   const qualifiedLeads = leads.filter((lead) => lead.status === "qualified");
+  const eventTypes = Array.from(new Set(events.map((event) => event.event_type))).sort();
   const staleOnboardingTenants = tenants.filter((tenant) => !["active", "handoff_ready"].includes(tenant.onboarding_status)).slice(0, 5);
   const leadQueue = [...newLeads, ...qualifiedLeads, ...activeLeads.filter((lead) => !["new", "qualified"].includes(lead.status))].slice(0, 5);
   const controlRisks = [
@@ -1065,6 +1083,46 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               value={tenantQuery}
             />
           </label>
+          <div className="platform-list-filters" aria-label="Tenant filters">
+            <label className="form-field">
+              <span className="muted">Status</span>
+              <select
+                className="input-control"
+                name="tenant_status_filter"
+                onChange={(event) => {
+                  setTenantStatusFilter(event.target.value);
+                  setTenantPage(1);
+                }}
+                value={tenantStatusFilter}
+              >
+                <option value="all">All statuses</option>
+                <option value="draft">Draft</option>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+                <option value="created">Created</option>
+                <option value="prepared">Prepared</option>
+                <option value="baseline_published">Initial setup confirmed</option>
+                <option value="handoff_ready">Ready for tenant admin</option>
+              </select>
+            </label>
+            <label className="form-field">
+              <span className="muted">Plan</span>
+              <select
+                className="input-control"
+                name="tenant_plan_filter"
+                onChange={(event) => {
+                  setTenantPlanFilter(event.target.value);
+                  setTenantPage(1);
+                }}
+                value={tenantPlanFilter}
+              >
+                <option value="all">All plans</option>
+                <option value="starter">Starter</option>
+                <option value="growth">Growth</option>
+                <option value="enterprise">Enterprise</option>
+              </select>
+            </label>
+          </div>
 
           <div className="employee-directory-list">
             {tenantPageData.items.map((tenant) => (
@@ -1397,6 +1455,43 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                   value={policyPackQuery}
                 />
               </label>
+              <div className="platform-list-filters" aria-label="Setup template filters">
+                <label className="form-field">
+                  <span className="muted">Status</span>
+                  <select
+                    className="input-control"
+                    name="policy_pack_status_filter"
+                    onChange={(event) => {
+                      setPolicyPackStatusFilter(event.target.value);
+                      setPolicyPackPage(1);
+                    }}
+                    value={policyPackStatusFilter}
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </label>
+                <label className="form-field">
+                  <span className="muted">Domain</span>
+                  <select
+                    className="input-control"
+                    name="policy_pack_domain_filter"
+                    onChange={(event) => {
+                      setPolicyPackDomainFilter(event.target.value);
+                      setPolicyPackPage(1);
+                    }}
+                    value={policyPackDomainFilter}
+                  >
+                    <option value="all">All domains</option>
+                    <option value="leave">Leave</option>
+                    <option value="attendance">Attendance</option>
+                    <option value="workflow">Workflow</option>
+                    <option value="document">Document</option>
+                  </select>
+                </label>
+              </div>
               <div className="tenant-support-access-list">
                 {policyPackPageData.items.map((pack) => (
                   <div className="tenant-support-access-row" key={pack.id}>
@@ -1508,6 +1603,25 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                   value={eventQuery}
                 />
               </label>
+              <div className="platform-list-filters" aria-label="Event filters">
+                <label className="form-field">
+                  <span className="muted">Event type</span>
+                  <select
+                    className="input-control"
+                    name="event_type_filter"
+                    onChange={(event) => {
+                      setEventTypeFilter(event.target.value);
+                      setEventPage(1);
+                    }}
+                    value={eventTypeFilter}
+                  >
+                    <option value="all">All event types</option>
+                    {eventTypes.map((eventType) => (
+                      <option key={eventType} value={eventType}>{titleCase(eventType)}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <div className="tenant-support-access-list">
                 {eventPageData.items.map((event) => (
                   <div className="tenant-support-access-row" key={event.id}>
