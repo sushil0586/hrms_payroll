@@ -222,6 +222,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const [policyPackQuery, setPolicyPackQuery] = useState("");
   const [eventQuery, setEventQuery] = useState("");
   const [editingContactId, setEditingContactId] = useState("");
+  const [showCreateTenantModal, setShowCreateTenantModal] = useState(false);
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [leadPage, setLeadPage] = useState(1);
   const [tenantPage, setTenantPage] = useState(1);
   const [policyPackPage, setPolicyPackPage] = useState(1);
@@ -350,6 +352,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         },
         "Tenant created.",
       );
+      setShowCreateTenantModal(false);
       router.push(buildPanelHref("onboarding", payload.id));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Tenant creation failed.");
@@ -466,6 +469,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         },
         "Admin contact added.",
       );
+      setShowAddContactModal(false);
       event.currentTarget.reset();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Admin contact creation failed.");
@@ -997,32 +1001,22 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
           <div className="record-card__title-wrap">
             <div className="record-card__title">
               <h2>Create tenant</h2>
+              <span className="record-chip">Modal flow</span>
             </div>
-            <p className="section-copy">Start a new customer onboarding record and primary domain mapping.</p>
+            <p className="section-copy">Start a new customer onboarding record only when the commercial and implementation context is ready.</p>
           </div>
-          <form className="form-grid" onSubmit={handleTenantCreate}>
-            <div className="notice notice--compact platform-validation-strip">
-              <strong>Before creating</strong>
-              <span className="muted">Code and name are mandatory. Email, phone, and domain can be completed later, but activation will still need admin provisioning and handoff.</span>
-            </div>
-            <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-pa-tenant-01" /><ValidationNote>Required and unique. This becomes the tenant identifier in audit evidence.</ValidationNote></label>
-            <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Platform Tenant 01" /><ValidationNote>Required. Use the customer-facing organization name.</ValidationNote></label>
-            <label className="form-field"><span className="muted">Legal name</span><input className="input-control" name="legal_name" placeholder="QA Platform Tenant Pvt Ltd" /></label>
-            <label className="form-field"><span className="muted">Primary domain</span><input className="input-control" name="primary_domain" placeholder="qa-pa-tenant-01.example.test" /><ValidationNote>Optional for setup; should be final before live customer activation.</ValidationNote></label>
-            <label className="form-field"><span className="muted">Primary email</span><input className="input-control" name="primary_email" type="email" placeholder="ops@example.test" /><ValidationNote>Use a monitored customer or implementation mailbox.</ValidationNote></label>
-            <label className="form-field"><span className="muted">Primary phone</span><input className="input-control" name="primary_phone" placeholder="+91 90000 00001" /></label>
-            <label className="form-field"><span className="muted">Plan</span><select className="input-control" name="subscription_plan" defaultValue="starter"><option value="starter">Starter</option><option value="growth">Growth</option><option value="enterprise">Enterprise</option></select></label>
-            <label className="form-field"><span className="muted">Seed pack</span><select className="input-control" name="seed_pack" defaultValue="standard_office"><option value="standard_office">Standard Office</option><option value="shift_based">Shift Based Operations</option><option value="retail_field">Retail or Field Workforce</option><option value="professional_services">Professional Services</option></select></label>
-            <label className="form-field"><span className="muted">Timezone</span><input className="input-control" name="timezone" defaultValue="Asia/Kolkata" /></label>
-            <label className="form-field"><span className="muted">Country</span><input className="input-control" name="country_code" defaultValue="IN" maxLength={2} /></label>
-            <label className="form-field"><span className="muted">Sandbox</span><input name="is_sandbox" type="checkbox" defaultChecked /></label>
-            <div className="form-actions-bar">
-              <span className="muted">Creates tenant, onboarding record, checklist evidence, and domain mapping.</span>
-              <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">
-                {busyRef === "/api/platform/tenants" ? "Creating..." : "Create tenant"}
-              </button>
-            </div>
-          </form>
+          <div className="detail-grid">
+            <DetailRow label="Required" value="Code and name" />
+            <DetailRow label="Recommended" value="Domain, email, phone" />
+            <DetailRow label="Default mode" value="Sandbox" />
+            <DetailRow label="After create" value="Onboarding gates" />
+          </div>
+          <div className="form-actions-bar">
+            <span className="muted">The tenant form opens in a focused dialog with validation notes.</span>
+            <button className="button button--primary" type="button" onClick={() => setShowCreateTenantModal(true)}>
+              Create tenant
+            </button>
+          </div>
         </article>
       </section>
       ) : null}
@@ -1214,22 +1208,10 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                   </div>
                 ))}
               </div>
-              <form className="form-grid" onSubmit={handleContactCreate}>
-                <div className="notice notice--compact platform-validation-strip">
-                  <strong>Contact validation</strong>
-                  <span className="muted">A primary contact is required before handoff. Make sure the email belongs to the real tenant admin.</span>
-                </div>
-                <label className="form-field"><span className="muted">Full name</span><input className="input-control" name="full_name" required placeholder="Ava Patel" /><ValidationNote>Required. This person becomes the customer-side owner for onboarding.</ValidationNote></label>
-                <label className="form-field"><span className="muted">Email</span><input className="input-control" name="email" required type="email" placeholder="ava.patel@example.test" /><ValidationNote>Required and used for the provisioned login identity.</ValidationNote></label>
-                <label className="form-field"><span className="muted">Phone</span><input className="input-control" name="phone_number" placeholder="+91 90000 00002" /></label>
-                <label className="form-field"><span className="muted">Job title</span><input className="input-control" name="job_title" placeholder="Head of People" /></label>
-                <label className="form-field"><span className="muted">Primary</span><input name="is_primary" type="checkbox" defaultChecked /></label>
-                <label className="form-field"><span className="muted">Notes</span><textarea className="input-control" name="notes" /></label>
                 <div className="form-actions-bar">
-                  <span className="muted">A new primary contact supersedes the previous primary marker.</span>
-                  <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">Add contact</button>
+                  <span className="muted">Add or edit contacts before provisioning the first tenant admin.</span>
+                  <button className="button button--primary" type="button" onClick={() => setShowAddContactModal(true)}>Add contact</button>
                 </div>
-              </form>
             </article>
 
             <article className="record-card">
@@ -1436,6 +1418,71 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
           </section>
           ) : null}
         </>
+      ) : null}
+      {showCreateTenantModal ? (
+        <div className="tenant-modal-shell" role="presentation">
+          <div aria-label="Create platform tenant" aria-modal="true" className="tenant-modal" role="dialog">
+            <div className="tenant-modal__header">
+              <div>
+                <span className="eyebrow">Tenant onboarding</span>
+                <h3>Create tenant</h3>
+              </div>
+              <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowCreateTenantModal(false)}>Close</button>
+            </div>
+            <form className="form-grid tenant-membership-form-grid--dialog" onSubmit={handleTenantCreate}>
+              <div className="notice notice--compact platform-validation-strip form-field--full">
+                <strong>Before creating</strong>
+                <span className="muted">Code and name are mandatory. Email, phone, and domain can be completed later, but activation will still need admin provisioning and handoff.</span>
+              </div>
+              <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-pa-tenant-01" /><ValidationNote>Required and unique. This becomes the tenant identifier in audit evidence.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Platform Tenant 01" /><ValidationNote>Required. Use the customer-facing organization name.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Legal name</span><input className="input-control" name="legal_name" placeholder="QA Platform Tenant Pvt Ltd" /></label>
+              <label className="form-field"><span className="muted">Primary domain</span><input className="input-control" name="primary_domain" placeholder="qa-pa-tenant-01.example.test" /><ValidationNote>Optional for setup; should be final before live customer activation.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Primary email</span><input className="input-control" name="primary_email" type="email" placeholder="ops@example.test" /><ValidationNote>Use a monitored customer or implementation mailbox.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Primary phone</span><input className="input-control" name="primary_phone" placeholder="+91 90000 00001" /></label>
+              <label className="form-field"><span className="muted">Plan</span><select className="input-control" name="subscription_plan" defaultValue="starter"><option value="starter">Starter</option><option value="growth">Growth</option><option value="enterprise">Enterprise</option></select></label>
+              <label className="form-field"><span className="muted">Seed pack</span><select className="input-control" name="seed_pack" defaultValue="standard_office"><option value="standard_office">Standard Office</option><option value="shift_based">Shift Based Operations</option><option value="retail_field">Retail or Field Workforce</option><option value="professional_services">Professional Services</option></select></label>
+              <label className="form-field"><span className="muted">Timezone</span><input className="input-control" name="timezone" defaultValue="Asia/Kolkata" /></label>
+              <label className="form-field"><span className="muted">Country</span><input className="input-control" name="country_code" defaultValue="IN" maxLength={2} /></label>
+              <label className="form-field"><span className="muted">Sandbox</span><input name="is_sandbox" type="checkbox" defaultChecked /></label>
+              <div className="tenant-modal__actions form-field--full">
+                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowCreateTenantModal(false)}>Cancel</button>
+                <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">
+                  {busyRef === "/api/platform/tenants" ? "Creating..." : "Create tenant"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+      {showAddContactModal && selectedTenant ? (
+        <div className="tenant-modal-shell" role="presentation">
+          <div aria-label="Add platform admin contact" aria-modal="true" className="tenant-modal" role="dialog">
+            <div className="tenant-modal__header">
+              <div>
+                <span className="eyebrow">First admin</span>
+                <h3>Add admin contact</h3>
+              </div>
+              <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowAddContactModal(false)}>Close</button>
+            </div>
+            <form className="form-grid tenant-membership-form-grid--dialog" onSubmit={handleContactCreate}>
+              <div className="notice notice--compact platform-validation-strip form-field--full">
+                <strong>Contact validation</strong>
+                <span className="muted">A primary contact is required before handoff. Make sure the email belongs to the real tenant admin.</span>
+              </div>
+              <label className="form-field"><span className="muted">Full name</span><input className="input-control" name="full_name" required placeholder="Ava Patel" /><ValidationNote>Required. This person becomes the customer-side owner for onboarding.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Email</span><input className="input-control" name="email" required type="email" placeholder="ava.patel@example.test" /><ValidationNote>Required and used for the provisioned login identity.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Phone</span><input className="input-control" name="phone_number" placeholder="+91 90000 00002" /></label>
+              <label className="form-field"><span className="muted">Job title</span><input className="input-control" name="job_title" placeholder="Head of People" /></label>
+              <label className="form-field"><span className="muted">Primary</span><input name="is_primary" type="checkbox" defaultChecked /></label>
+              <label className="form-field"><span className="muted">Notes</span><textarea className="input-control" name="notes" /></label>
+              <div className="tenant-modal__actions form-field--full">
+                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowAddContactModal(false)}>Cancel</button>
+                <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">Add contact</button>
+              </div>
+            </form>
+          </div>
+        </div>
       ) : null}
     </main>
   );

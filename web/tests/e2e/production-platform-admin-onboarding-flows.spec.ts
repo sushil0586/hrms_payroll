@@ -11,6 +11,20 @@ function namedControl(root: Locator, name: string): Locator {
   return root.locator(`[name="${name}"]`);
 }
 
+async function openCreateTenantDialog(page: Page): Promise<Locator> {
+  await card(page, "Create tenant").getByRole("button", { name: "Create tenant" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create platform tenant" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+async function openAddContactDialog(page: Page): Promise<Locator> {
+  await card(page, "Admin contacts").getByRole("button", { name: "Add contact" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add platform admin contact" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 function notice(page: Page): Locator {
   return page.locator(".notice").first();
 }
@@ -66,7 +80,7 @@ test.describe("Production platform admin onboarding proof", () => {
       const adminUsername = `qa.pa.${runRef}.${padded}`;
 
       await openPlatformTab(page, "Tenants");
-      const createTenantCard = card(page, "Create tenant");
+      const createTenantCard = await openCreateTenantDialog(page);
       await namedControl(createTenantCard, "code").fill(tenantCode);
       await namedControl(createTenantCard, "name").fill(tenantName);
       await namedControl(createTenantCard, "legal_name").fill(`${tenantName} Pvt Ltd`);
@@ -99,7 +113,7 @@ test.describe("Production platform admin onboarding proof", () => {
       await page.reload();
 
       await openPlatformTab(page, "Admins");
-      const contactsCard = card(page, "Admin contacts");
+      const contactsCard = await openAddContactDialog(page);
       await namedControl(contactsCard, "full_name").fill(adminName);
       await namedControl(contactsCard, "email").fill(adminEmail);
       await namedControl(contactsCard, "phone_number").fill(`+91 91111 11${padded}`);

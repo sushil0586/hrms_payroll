@@ -71,9 +71,13 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expectSearchNarrowsList(page, "tenant_search", ".employee-directory-item");
 
     const createTenant = card(page, "Create tenant");
-    await expect(createTenant.getByText("Before creating")).toBeVisible();
-    await expect(createTenant.getByText("Code and name are mandatory.")).toBeVisible();
-    await expectNamedControls(createTenant, [
+    await expect(createTenant.getByText("After create")).toBeVisible();
+    await expect(createTenant.getByRole("button", { name: "Create tenant" })).toBeVisible();
+    await createTenant.getByRole("button", { name: "Create tenant" }).click();
+    const createTenantDialog = page.getByRole("dialog", { name: "Create platform tenant" });
+    await expect(createTenantDialog.getByText("Before creating")).toBeVisible();
+    await expect(createTenantDialog.getByText("Code and name are mandatory.")).toBeVisible();
+    await expectNamedControls(createTenantDialog, [
       "code",
       "name",
       "legal_name",
@@ -86,9 +90,9 @@ test.describe("Platform admin tabbed workspace certification", () => {
       "country_code",
       "is_sandbox",
     ]);
-    await expect(createTenant.getByRole("button", { name: "Create tenant" })).toBeVisible();
-    await createTenant.getByRole("button", { name: "Create tenant" }).click();
-    await expect(createTenant.locator('[name="code"]')).toBeFocused();
+    await createTenantDialog.getByRole("button", { name: "Create tenant" }).click();
+    await expect(createTenantDialog.locator('[name="code"]')).toBeFocused();
+    await createTenantDialog.getByRole("button", { name: "Cancel" }).click();
 
     await openTab(page, "Onboarding");
     await expect(page).toHaveURL(/\/platform-admin\/onboarding/);
@@ -127,9 +131,12 @@ test.describe("Platform admin tabbed workspace certification", () => {
 
     await openTab(page, "Admins");
     await expect(page.getByTestId("platform-admin-admins-panel")).toBeVisible();
-    await expect(card(page, "Admin contacts").getByText("Contact validation")).toBeVisible();
-    await expectNamedControls(card(page, "Admin contacts"), ["full_name", "email", "phone_number", "job_title", "is_primary", "notes"]);
     await expect(card(page, "Admin contacts").getByRole("button", { name: "Add contact" })).toBeVisible();
+    await card(page, "Admin contacts").getByRole("button", { name: "Add contact" }).click();
+    const addContactDialog = page.getByRole("dialog", { name: "Add platform admin contact" });
+    await expect(addContactDialog.getByText("Contact validation")).toBeVisible();
+    await expectNamedControls(addContactDialog, ["full_name", "email", "phone_number", "job_title", "is_primary", "notes"]);
+    await addContactDialog.getByRole("button", { name: "Cancel" }).click();
     await expect(card(page, "Provision first admin").getByText(/Before provisioning|No contacts are ready for provisioning/)).toBeVisible();
     await expectNamedControls(card(page, "Provision first admin"), [
       "contact_id",

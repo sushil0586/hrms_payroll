@@ -36,6 +36,20 @@ function namedControl(root: Locator, name: string): Locator {
   return root.locator(`[name="${name}"]`);
 }
 
+async function openCreateTenantDialog(page: Page): Promise<Locator> {
+  await card(page, "Create tenant").getByRole("button", { name: "Create tenant" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create platform tenant" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+async function openAddContactDialog(page: Page): Promise<Locator> {
+  await card(page, "Admin contacts").getByRole("button", { name: "Add contact" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add platform admin contact" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 function notice(page: Page): Locator {
   return page.locator(".notice").first();
 }
@@ -112,7 +126,7 @@ test.describe("Platform admin audit evidence certification", () => {
     await expect(notice(page).getByText("Policy pack published.", { exact: true })).toBeVisible();
 
     await openPlatformTab(page, "Tenants");
-    const createTenantCard = card(page, "Create tenant");
+    const createTenantCard = await openCreateTenantDialog(page);
     await namedControl(createTenantCard, "code").fill(tenantCode);
     await namedControl(createTenantCard, "name").fill(tenantName);
     await namedControl(createTenantCard, "legal_name").fill(`${tenantName} Pvt Ltd`);
@@ -146,7 +160,7 @@ test.describe("Platform admin audit evidence certification", () => {
     expectEvent(evidence, "tenant_prepared", new RegExp(tenantCode));
 
     await openPlatformTab(page, "Admins");
-    const contactsCard = card(page, "Admin contacts");
+    const contactsCard = await openAddContactDialog(page);
     await namedControl(contactsCard, "full_name").fill(adminName);
     await namedControl(contactsCard, "email").fill(adminEmail);
     await namedControl(contactsCard, "phone_number").fill("+91 92222 22001");
@@ -160,8 +174,9 @@ test.describe("Platform admin audit evidence certification", () => {
     expect(evidence.admin_contacts.some((contact) => contact.email === adminEmail && contact.is_primary)).toBeTruthy();
 
     await openPlatformTab(page, "Admins");
-    await contactsCard.locator(".tenant-support-access-row").filter({ hasText: adminEmail }).getByRole("button", { name: "Edit" }).click();
-    const editContactForm = contactsCard.locator(".platform-contact-edit-form");
+    const adminContactsCard = card(page, "Admin contacts");
+    await adminContactsCard.locator(".tenant-support-access-row").filter({ hasText: adminEmail }).getByRole("button", { name: "Edit" }).click();
+    const editContactForm = adminContactsCard.locator(".platform-contact-edit-form");
     await expect(editContactForm.getByText("Edit contact validation")).toBeVisible();
     await namedControl(editContactForm, "job_title").fill("People Operations Lead");
     await namedControl(editContactForm, "notes").fill(`Edited contact note for ${tenantCode}.`);

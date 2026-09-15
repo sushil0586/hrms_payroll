@@ -11,6 +11,20 @@ function namedControl(root: Locator, name: string): Locator {
   return root.locator(`[name="${name}"]`);
 }
 
+async function openCreateTenantDialog(page: Page): Promise<Locator> {
+  await card(page, "Create tenant").getByRole("button", { name: "Create tenant" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create platform tenant" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+async function openAddContactDialog(page: Page): Promise<Locator> {
+  await card(page, "Admin contacts").getByRole("button", { name: "Add contact" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add platform admin contact" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 function notice(page: Page): Locator {
   return page.locator(".notice").first();
 }
@@ -70,7 +84,7 @@ test.describe("Platform admin negative and security certification", () => {
     await openPlatformTab(page, "Tenants");
     await expect(page).toHaveURL(/\/platform-admin\/tenants/);
 
-    const createTenant = card(page, "Create tenant");
+    let createTenant = await openCreateTenantDialog(page);
     await createTenant.getByRole("button", { name: "Create tenant" }).click();
     await expect(namedControl(createTenant, "code")).toBeFocused();
 
@@ -88,10 +102,12 @@ test.describe("Platform admin negative and security certification", () => {
     expect(tenantId).toBeTruthy();
 
     await openPlatformTab(page, "Tenants");
-    await namedControl(card(page, "Create tenant"), "code").fill(tenantCode);
-    await namedControl(card(page, "Create tenant"), "name").fill(`QA Duplicate Tenant ${runRef}`);
-    await card(page, "Create tenant").getByRole("button", { name: "Create tenant" }).click();
+    createTenant = await openCreateTenantDialog(page);
+    await namedControl(createTenant, "code").fill(tenantCode);
+    await namedControl(createTenant, "name").fill(`QA Duplicate Tenant ${runRef}`);
+    await createTenant.getByRole("button", { name: "Create tenant" }).click();
     await expect(notice(page).getByText(/already exists|unique|tenant creation failed|platform action failed/i)).toBeVisible();
+    await createTenant.getByRole("button", { name: "Cancel" }).click();
 
     await openPlatformTab(page, "Onboarding");
     const gates = card(page, "Activation gates");
@@ -115,10 +131,12 @@ test.describe("Platform admin negative and security certification", () => {
     expect(JSON.stringify(await directActivationResponse.json())).toContain("Tenant handoff must be ready");
 
     await openPlatformTab(page, "Admins");
-    await namedControl(card(page, "Admin contacts"), "full_name").fill("Invalid Admin");
-    await namedControl(card(page, "Admin contacts"), "email").fill("not-an-email");
-    await card(page, "Admin contacts").getByRole("button", { name: "Add contact" }).click();
-    await expect(namedControl(card(page, "Admin contacts"), "email")).toBeFocused();
+    const addContact = await openAddContactDialog(page);
+    await namedControl(addContact, "full_name").fill("Invalid Admin");
+    await namedControl(addContact, "email").fill("not-an-email");
+    await addContact.getByRole("button", { name: "Add contact" }).click();
+    await expect(namedControl(addContact, "email")).toBeFocused();
+    await addContact.getByRole("button", { name: "Cancel" }).click();
 
     await openPlatformTab(page, "Policy Packs");
     const packs = card(page, "Policy packs");
