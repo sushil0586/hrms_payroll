@@ -321,13 +321,17 @@ Testing targets:
 - No long mixed CRUD page remains.
 - Desktop and mobile no-overflow certification.
 
-Status: Complete locally, pending staging deployment/rerun.
+Status: Complete on local and staging.
 
 Evidence:
 - `pnpm --dir web build` passed on 2026-09-15 and generated routes for `/tenant-admin/users`, `/tenant-admin/plan`, `/tenant-admin/support-access`, and `/tenant-admin/settings`.
 - Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts` -> `7 passed`.
 - Local browser command against `http://localhost:3211` with staging API: `public-launch-role-menu-certification.spec.ts` -> `7 passed`.
-- Interpretation: Tenant Admin is now split into focused pages and the sidebar route model works locally. Staging proof is required after check-in and deployment.
+- Staging deployment completed on commit `8978107`.
+- Staging post-deploy smoke passed: API health 200, root/login 200, backend/web active, disk 68%.
+- Staging browser command against `https://hrms.accerio.in`: `tenant-admin-console-flows.spec.ts` -> `7 passed`.
+- Staging browser command against `https://hrms.accerio.in`: `public-launch-role-menu-certification.spec.ts` -> `7 passed`.
+- Interpretation: Tenant Admin is now split into focused pages and the sidebar route model works on staging. Next confidence gain must come from deeper CRUD, validation, pagination, and negative testing per focused page.
 
 ### Phase TA-2: User Management CRUD Certification
 
@@ -340,7 +344,14 @@ Testing targets:
 - Unauthorized mutation denial.
 - Pagination for long members.
 
-Status: Not started.
+Status: In progress, modal UX and baseline browser certification complete locally.
+
+Evidence:
+- User Management now uses an `Invite member` dialog for add flow and an `Update roles` dialog for role updates.
+- Dialog validation covers required email, valid email format, username, and at least one selected role before submit.
+- Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts -g "focused user management"` -> `1 passed`.
+- Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts` -> `7 passed`.
+- Remaining TA-2 work: live positive invite mutation with disposable user, suspend/reactivate/revoke lifecycle proof, unauthorized mutation denial, audit evidence verification, and pagination/search for long member lists.
 
 ### Phase TA-3: Plan And Change Request Certification
 

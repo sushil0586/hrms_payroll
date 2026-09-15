@@ -6789,10 +6789,32 @@ select.input-control {
   line-height: 1.4;
 }
 
+.tenant-membership-actions__header-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tenant-inline-notice {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  border-radius: 8px;
+  background: rgba(238, 242, 255, 0.78);
+  color: #3730a3;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 8px 10px;
+}
+
 .tenant-membership-row {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(220px, 1fr) auto minmax(160px, 220px) auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   padding: 12px;
@@ -6825,6 +6847,92 @@ select.input-control {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.tenant-modal-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(8px);
+}
+
+.tenant-modal {
+  display: grid;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  gap: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.24);
+  padding: 18px;
+}
+
+.tenant-modal--small {
+  width: min(560px, 100%);
+}
+
+.tenant-modal__header,
+.tenant-modal__actions {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tenant-modal__header h3 {
+  margin: 3px 0 0;
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.tenant-modal__actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.tenant-modal__validation {
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.92);
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
+.tenant-modal__member-summary {
+  display: grid;
+  gap: 3px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.85);
+  padding: 12px;
+}
+
+.tenant-modal__member-summary strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.tenant-modal__member-summary span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tenant-membership-form-grid--dialog {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .tenant-change-request-actions,
@@ -8136,6 +8244,41 @@ select.input-control {
 
   .platform-panel-guide {
     grid-template-columns: 1fr;
+  }
+
+  .tenant-modal-shell {
+    align-items: start;
+    padding: 12px;
+  }
+
+  .tenant-modal {
+    max-height: calc(100vh - 24px);
+    padding: 14px;
+  }
+
+  .tenant-modal__header,
+  .tenant-modal__actions,
+  .tenant-membership-actions__header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tenant-modal__actions .button,
+  .tenant-membership-actions__header-actions .button {
+    width: 100%;
+  }
+
+  .tenant-membership-form-grid--dialog,
+  .tenant-membership-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tenant-membership-row__actions {
+    justify-content: stretch;
+  }
+
+  .tenant-membership-row__actions .button {
+    flex: 1 1 140px;
   }
 
   .product-window__body {
