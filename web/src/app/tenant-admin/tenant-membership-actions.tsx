@@ -28,19 +28,25 @@ type Props = {
   data: TenantAdminConsole;
 };
 
-type EditingMember = TenantAdminConsole["membership_management"]["recent_memberships"][number] | null;
+type TenantMembership = TenantAdminConsole["membership_management"]["recent_memberships"][number];
+type EditingMember = TenantMembership | null;
 type Confirmation = {
   member: NonNullable<EditingMember>;
   action: "activate" | "suspend" | "revoke";
 } | null;
+
+const PAGE_SIZE = 8;
 
 export function TenantMembershipActions({ data }: Props) {
   const router = useRouter();
   const roleOptions = data.membership_management.role_options;
   const activeStatusOptions = data.membership_management.status_options.filter((item) => item.value === "invited" || item.value === "active");
   const defaultRoleId = roleOptions[0]?.id ?? "";
+  const memberships = data.membership_management.memberships?.length ? data.membership_management.memberships : data.membership_management.recent_memberships;
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<EditingMember>(null);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -58,6 +64,29 @@ export function TenantMembershipActions({ data }: Props) {
     () => Object.fromEntries(data.membership_management.available_actions.map((action) => [action.value, action.label])),
     [data.membership_management.available_actions]
   );
+
+  const filteredMemberships = useMemo(() => {
+    const query = memberSearch.trim().toLowerCase();
+    if (!query) return memberships;
+    return memberships.filter((membership) => {
+      const haystack = [
+        membership.display_name,
+        membership.email,
+        membership.username,
+        membership.membership_status,
+        membership.roles.map((role) => role.name).join(" "),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [memberSearch, memberships]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredMemberships.length / PAGE_SIZE));
+  const boundedPageIndex = Math.min(pageIndex, pageCount - 1);
+  const pagedMemberships = filteredMemberships.slice(boundedPageIndex * PAGE_SIZE, boundedPageIndex * PAGE_SIZE + PAGE_SIZE);
+  const firstVisibleRow = filteredMemberships.length ? boundedPageIndex * PAGE_SIZE + 1 : 0;
+  const lastVisibleRow = Math.min(filteredMemberships.length, (boundedPageIndex + 1) * PAGE_SIZE);
 
   const inviteValidation = useMemo(() => {
     if (!email.trim()) return "Email is required.";
@@ -110,6 +139,11 @@ export function TenantMembershipActions({ data }: Props) {
 
   function toggleEditRole(roleId: string) {
     setEditRoleIds((current) => (current.includes(roleId) ? current.filter((item) => item !== roleId) : [...current, roleId]));
+  }
+
+  function updateMemberSearch(value: string) {
+    setMemberSearch(value);
+    setPageIndex(0);
   }
 
   async function inviteMember() {
@@ -193,8 +227,26 @@ export function TenantMembershipActions({ data }: Props) {
       <p className="tenant-console-empty">Invite users and update roles from focused dialogs. Suspended or revoked users lose tenant workspace access.</p>
       {notice ? <span className="tenant-inline-notice" role="status">{notice}</span> : null}
 
+      <div className="tenant-membership-toolbar">
+        <label>
+          <span>Search members</span>
+          <input aria-label="Search members" onChange={(event) => updateMemberSearch(event.target.value)} placeholder="Name, email, username, status, or role" value={memberSearch} />
+        </label>
+        <div aria-label="Member pagination" className="tenant-membership-pager">
+          <span>
+            {firstVisibleRow}-{lastVisibleRow} of {filteredMemberships.length}
+          </span>
+          <button className="button button--secondary button--compact" disabled={boundedPageIndex === 0} onClick={() => setPageIndex((current) => Math.max(0, current - 1))} type="button">
+            Previous
+          </button>
+          <button className="button button--secondary button--compact" disabled={boundedPageIndex >= pageCount - 1} onClick={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))} type="button">
+            Next
+          </button>
+        </div>
+      </div>
+
       <div className="tenant-membership-actions__members">
-        {data.membership_management.recent_memberships.map((membership) => (
+        {pagedMemberships.map((membership) => (
           <div className="tenant-membership-row" key={membership.id}>
             <div>
               <strong>{membership.display_name}</strong>
@@ -221,6 +273,11 @@ export function TenantMembershipActions({ data }: Props) {
             </div>
           </div>
         ))}
+        {!pagedMemberships.length ? (
+          <div className="tenant-console-empty" role="status">
+            No members match the current search.
+          </div>
+        ) : null}
       </div>
 
       {inviteOpen ? (

@@ -1333,16 +1333,19 @@ def _tenant_admin_membership_payload(membership: TenantMembership) -> dict:
 
 def _tenant_admin_membership_management_payload(tenant) -> dict:
     roles = list(Role.objects.filter(tenant=tenant, is_active=True).order_by("name"))
-    memberships = (
+    memberships_queryset = (
         TenantMembership.objects.filter(tenant=tenant)
         .select_related("user")
         .prefetch_related("membership_roles__role")
-        .order_by("-updated_at", "user__username")[:8]
+        .order_by("-updated_at", "user__username")
     )
+    memberships = list(memberships_queryset)
     return {
         "status_options": [{"value": value, "label": label} for value, label in MembershipStatus.choices],
         "role_options": [_tenant_admin_role_payload(role) for role in roles],
-        "recent_memberships": [_tenant_admin_membership_payload(membership) for membership in memberships],
+        "memberships": [_tenant_admin_membership_payload(membership) for membership in memberships],
+        "recent_memberships": [_tenant_admin_membership_payload(membership) for membership in memberships[:8]],
+        "total_membership_count": len(memberships),
         "available_actions": [
             {"value": "invite", "label": "Invite member"},
             {"value": "activate", "label": "Activate"},

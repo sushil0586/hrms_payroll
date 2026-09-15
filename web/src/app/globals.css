@@ -6858,6 +6858,56 @@ select.input-control {
   gap: 8px;
 }
 
+.tenant-membership-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.tenant-membership-toolbar label {
+  display: grid;
+  gap: 7px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tenant-membership-toolbar input {
+  min-height: 44px;
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111827;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
+.tenant-membership-toolbar input:focus {
+  border-color: rgb(var(--workspace-accent-rgb, 99 102 241) / 0.54);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--workspace-accent-rgb, 99 102 241) / 0.12);
+}
+
+.tenant-membership-pager {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tenant-membership-pager span {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
 .tenant-modal-shell {
   position: fixed;
   inset: 0;
@@ -8309,6 +8359,18 @@ select.input-control {
   .tenant-membership-form-grid--dialog,
   .tenant-membership-row {
     grid-template-columns: 1fr;
+  }
+
+  .tenant-membership-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .tenant-membership-pager {
+    justify-content: stretch;
+  }
+
+  .tenant-membership-pager .button {
+    flex: 1;
   }
 
   .tenant-membership-row__actions {

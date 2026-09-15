@@ -87,6 +87,28 @@ test.describe("Tenant admin console", () => {
     await updateDialog.getByRole("button", { name: "Cancel" }).click();
     await expect(updateDialog).toHaveCount(0);
     await expect(page.getByRole("main").getByRole("button", { name: "Suspend" }).first()).toBeVisible();
+    const memberRows = page.locator(".tenant-membership-row");
+    const initialRowCount = await memberRows.count();
+    expect(initialRowCount).toBeLessThanOrEqual(8);
+    await expect(page.getByRole("main").getByLabel("Search members")).toBeVisible();
+    await expect(page.getByLabel("Member pagination")).toBeVisible();
+    const firstMemberEmail = (await memberRows.first().locator("span").first().innerText()).trim();
+    await page.getByRole("main").getByLabel("Search members").fill(firstMemberEmail);
+    await expect(memberRows).toHaveCount(1);
+    await expect(memberRows.first()).toContainText(firstMemberEmail);
+    await page.getByRole("main").getByLabel("Search members").fill("no-member-matches-this-query");
+    await expect(page.getByText("No members match the current search.")).toBeVisible();
+    await page.getByRole("main").getByLabel("Search members").clear();
+    await expect(memberRows.first()).toBeVisible();
+    const nextPage = page.getByLabel("Member pagination").getByRole("button", { name: "Next" });
+    if (await nextPage.isEnabled().catch(() => false)) {
+      const firstPageText = await memberRows.first().innerText();
+      await nextPage.click();
+      await expect(memberRows.first()).not.toHaveText(firstPageText);
+      await expect(page.getByLabel("Member pagination").getByRole("button", { name: "Previous" })).toBeEnabled();
+      await page.getByLabel("Member pagination").getByRole("button", { name: "Previous" }).click();
+      await expect(memberRows.first()).toHaveText(firstPageText);
+    }
     await expect(page.getByRole("main").getByText("Role coverage", { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

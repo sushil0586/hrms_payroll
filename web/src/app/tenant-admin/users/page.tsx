@@ -37,7 +37,7 @@ export default async function TenantAdminUsersPage() {
         <div className="metric-grid-modern">
           <MetricTile label="Active members" value={data.summary.active_membership_count} trend={`${data.summary.role_count} roles`} />
           <MetricTile label="Seat usage" value={`${data.seat_usage.current_value}/${data.seat_usage.limit_value || "unlimited"}`} trend={titleCase(data.seat_usage.status)} />
-          <MetricTile label="Recent rows" value={data.membership_management.recent_memberships.length} trend="Visible memberships" />
+          <MetricTile label="Members" value={data.membership_management.total_membership_count ?? data.membership_management.recent_memberships.length} trend="Searchable directory" />
           <MetricTile label="Available roles" value={data.membership_management.role_options.length} trend="Assignable roles" />
         </div>
       </section>

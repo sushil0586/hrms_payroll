@@ -2506,6 +2506,30 @@ export type TenantAdminConsole = {
       name: string;
       is_system_role: boolean;
     }>;
+    memberships?: Array<{
+      id: string;
+      user_id: string;
+      username: string;
+      email: string;
+      display_name: string;
+      first_name: string;
+      last_name: string;
+      phone_number: string;
+      is_user_active: boolean;
+      membership_status: string;
+      is_default_membership: boolean;
+      employee_code: string;
+      role_ids: string[];
+      roles: Array<{
+        id: string;
+        code: string;
+        name: string;
+        is_primary: boolean;
+        is_system_role: boolean;
+      }>;
+      created_at: string;
+      updated_at: string;
+    }>;
     recent_memberships: Array<{
       id: string;
       user_id: string;
@@ -2530,6 +2554,7 @@ export type TenantAdminConsole = {
       created_at: string;
       updated_at: string;
     }>;
+    total_membership_count?: number;
     available_actions: Array<{
       value: string;
       label: string;

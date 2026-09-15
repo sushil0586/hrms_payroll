@@ -350,15 +350,17 @@ Evidence:
 - User Management now uses an `Invite member` dialog for add flow and an `Update roles` dialog for role updates.
 - Dialog validation covers required email, valid email format, username, and at least one selected role before submit.
 - Risky access actions now use confirmation dialogs for activate, suspend, and revoke with a change-note field and action-specific warning copy.
+- User Management now receives the full tenant membership list, caps visible rows to 8 per page, and supports search by name, email, username, status, or role.
 - Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts -g "invite and access lifecycle"` -> `1 passed`.
 - Local lifecycle evidence covers disposable invite, duplicate-user validation, activate, suspend, reactivate, revoke, and screenshot attachments for invited/duplicate/suspended/revoked states.
-- Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts -g "focused user management"` -> `1 passed`.
+- Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts -g "focused user management"` -> `1 passed`; covered row cap, search narrowing, no-match state, and next/previous pagination.
 - Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts` -> `8 passed`.
-- Staging deployment completed on commit `efbc9c1`.
+- Staging deployment completed on commit `95d13cc`.
 - Staging post-deploy smoke passed: API health 200, root/login 200, backend/web active, disk 68%.
-- Staging browser command against `https://hrms.accerio.in`: `tenant-admin-console-flows.spec.ts` -> `7 passed`.
+- Staging browser command against `https://hrms.accerio.in`: `tenant-admin-console-flows.spec.ts` -> `8 passed`.
+- Staging lifecycle evidence covers disposable invite, duplicate-user validation, activate, suspend, reactivate, revoke, and screenshot attachments for invited/duplicate/suspended/revoked states.
 - Staging browser command against `https://hrms.accerio.in`: `public-launch-role-menu-certification.spec.ts` -> `7 passed`.
-- Remaining TA-2 work: deploy confirmation-dialog lifecycle changes, rerun staging Tenant Admin suite, unauthorized mutation denial, audit evidence verification, and pagination/search for long member lists.
+- Remaining TA-2 work: deploy full-list pagination/search changes, rerun staging Tenant Admin suite, unauthorized mutation denial, and audit evidence verification.
 
 ### Phase TA-3: Plan And Change Request Certification
 
