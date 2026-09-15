@@ -29,6 +29,10 @@ type Props = {
 };
 
 type EditingMember = TenantAdminConsole["membership_management"]["recent_memberships"][number] | null;
+type Confirmation = {
+  member: NonNullable<EditingMember>;
+  action: "activate" | "suspend" | "revoke";
+} | null;
 
 export function TenantMembershipActions({ data }: Props) {
   const router = useRouter();
@@ -44,6 +48,8 @@ export function TenantMembershipActions({ data }: Props) {
   const [membershipStatus, setMembershipStatus] = useState(activeStatusOptions[0]?.value ?? "invited");
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>(defaultRoleId ? [defaultRoleId] : []);
   const [editRoleIds, setEditRoleIds] = useState<string[]>([]);
+  const [confirmation, setConfirmation] = useState<Confirmation>(null);
+  const [actionNote, setActionNote] = useState("");
   const [busyRef, setBusyRef] = useState("");
   const [notice, setNotice] = useState("");
   const [formError, setFormError] = useState("");
@@ -85,6 +91,19 @@ export function TenantMembershipActions({ data }: Props) {
     setNotice("");
   }
 
+  function openConfirmation(member: NonNullable<EditingMember>, action: NonNullable<Confirmation>["action"]) {
+    setConfirmation({ member, action });
+    setActionNote("");
+    setFormError("");
+    setNotice("");
+  }
+
+  function closeConfirmation() {
+    setConfirmation(null);
+    setActionNote("");
+    setFormError("");
+  }
+
   function toggleInviteRole(roleId: string) {
     setSelectedRoleIds((current) => (current.includes(roleId) ? current.filter((item) => item !== roleId) : [...current, roleId]));
   }
@@ -124,7 +143,7 @@ export function TenantMembershipActions({ data }: Props) {
     router.refresh();
   }
 
-  async function runMembershipAction(membershipId: string, action: "activate" | "suspend" | "revoke" | "update_roles") {
+  async function runMembershipAction(membershipId: string, action: "activate" | "suspend" | "revoke" | "update_roles", note = "") {
     if (action === "update_roles" && editValidation) {
       setFormError(editValidation);
       return;
@@ -137,8 +156,9 @@ export function TenantMembershipActions({ data }: Props) {
         ? {
             action,
             role_ids: editRoleIds,
+            note,
           }
-        : { action };
+        : { action, note };
     const response = await fetch(`/api/tenant-admin/memberships/${membershipId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -152,6 +172,7 @@ export function TenantMembershipActions({ data }: Props) {
     }
     setNotice(`${actionLabels[action] ?? titleCase(action)} saved.`);
     setEditingMember(null);
+    closeConfirmation();
     router.refresh();
   }
 
@@ -186,15 +207,15 @@ export function TenantMembershipActions({ data }: Props) {
                 {actionLabels.update_roles ?? "Update roles"}
               </button>
               {membership.membership_status === "active" ? (
-                <button className="button button--secondary" disabled={busyRef.startsWith(`${membership.id}:`)} onClick={() => runMembershipAction(membership.id, "suspend")} type="button">
+                <button className="button button--secondary" disabled={busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "suspend")} type="button">
                   {actionLabels.suspend ?? "Suspend"}
                 </button>
               ) : (
-                <button className="button button--secondary" disabled={busyRef.startsWith(`${membership.id}:`)} onClick={() => runMembershipAction(membership.id, "activate")} type="button">
+                <button className="button button--secondary" disabled={busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "activate")} type="button">
                   {actionLabels.activate ?? "Activate"}
                 </button>
               )}
-              <button className="button button--ghost" disabled={busyRef.startsWith(`${membership.id}:`)} onClick={() => runMembershipAction(membership.id, "revoke")} type="button">
+              <button className="button button--ghost" disabled={busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "revoke")} type="button">
                 {actionLabels.revoke ?? "Revoke"}
               </button>
             </div>
@@ -298,6 +319,58 @@ export function TenantMembershipActions({ data }: Props) {
               </button>
               <button className="button button--primary" disabled={busyRef.startsWith(`${editingMember.id}:`) || Boolean(editValidation)} onClick={() => runMembershipAction(editingMember.id, "update_roles")} type="button">
                 {busyRef === `${editingMember.id}:update_roles` ? "Saving" : actionLabels.update_roles ?? "Update roles"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {confirmation ? (
+        <div className="tenant-modal-shell" role="presentation">
+          <div aria-label={`${titleCase(confirmation.action)} tenant member`} aria-modal="true" className="tenant-modal tenant-modal--small" role="dialog">
+            <div className="tenant-modal__header">
+              <div>
+                <span className="workspace-card__eyebrow">Access change</span>
+                <h3>{titleCase(confirmation.action)} member</h3>
+              </div>
+              <button aria-label={`Close ${confirmation.action} member`} className="button button--ghost" onClick={closeConfirmation} type="button">
+                Close
+              </button>
+            </div>
+            <div className="tenant-modal__member-summary">
+              <strong>{confirmation.member.display_name}</strong>
+              <span>{confirmation.member.email}</span>
+              <span>Current status: {titleCase(confirmation.member.membership_status)}</span>
+            </div>
+            <label className="tenant-modal__note">
+              <span>Change note</span>
+              <textarea
+                aria-label="Change note"
+                onChange={(event) => setActionNote(event.target.value)}
+                placeholder="Reason or approval reference"
+                value={actionNote}
+              />
+            </label>
+            <div className="tenant-modal__validation">
+              <span>
+                {confirmation.action === "revoke"
+                  ? "Revoked members lose access and remain visible in audit history."
+                  : confirmation.action === "suspend"
+                    ? "Suspended members lose access until reactivated."
+                    : "Activated members can access the tenant workspace when role and seat rules allow it."}
+              </span>
+            </div>
+            <div className="tenant-modal__actions">
+              <button className="button button--secondary" onClick={closeConfirmation} type="button">
+                Cancel
+              </button>
+              <button
+                className={confirmation.action === "revoke" ? "button button--danger" : "button button--primary"}
+                disabled={busyRef.startsWith(`${confirmation.member.id}:`)}
+                onClick={() => runMembershipAction(confirmation.member.id, confirmation.action, actionNote.trim())}
+                type="button"
+              >
+                {busyRef === `${confirmation.member.id}:${confirmation.action}` ? "Saving" : actionLabels[confirmation.action] ?? titleCase(confirmation.action)}
               </button>
             </div>
           </div>

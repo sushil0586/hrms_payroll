@@ -1,9 +1,16 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, type TestInfo, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("Tenant admin console", () => {
+  async function captureTenantAdminStep(page: Page, testInfo: TestInfo, name: string) {
+    await testInfo.attach(name, {
+      body: await page.screenshot({ fullPage: true }),
+      contentType: "image/png",
+    });
+  }
+
   async function expectSetupGuideCertified(page: Page) {
     const setupGuide = page.getByTestId("tenant-setup-guide");
     await expect(setupGuide).toBeVisible();
@@ -81,6 +88,102 @@ test.describe("Tenant admin console", () => {
     await expect(updateDialog).toHaveCount(0);
     await expect(page.getByRole("main").getByRole("button", { name: "Suspend" }).first()).toBeVisible();
     await expect(page.getByRole("main").getByText("Role coverage", { exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("certifies user management invite and access lifecycle", async ({ page }, testInfo) => {
+    await gotoAuthenticated(page, "/tenant-admin/users");
+    await expectPageReady(page, "Tenant User Management");
+    const stamp = Date.now();
+    const email = `ta.lifecycle.${stamp}@example.test`;
+    const username = `ta.lifecycle.${stamp}`;
+
+    await page.getByRole("main").getByRole("button", { name: "Invite member" }).click();
+    const inviteDialog = page.getByRole("dialog", { name: "Invite tenant member" });
+    await expect(inviteDialog).toBeVisible();
+    await inviteDialog.getByLabel("Email").fill(email);
+    await inviteDialog.getByLabel("Username").fill(username);
+    await inviteDialog.getByLabel("First name").fill("TA");
+    await inviteDialog.getByLabel("Last name").fill("Lifecycle");
+    await inviteDialog.getByLabel("Status").selectOption("invited");
+    await expect(inviteDialog.getByRole("button", { name: "Invite member", exact: true })).toBeEnabled();
+    const inviteResponse = page.waitForResponse(
+      (response) => response.url().includes("/api/tenant-admin/memberships") && response.request().method() === "POST",
+      { timeout: 20_000 }
+    );
+    await inviteDialog.getByRole("button", { name: "Invite member", exact: true }).click();
+    await expect((await inviteResponse).ok()).toBeTruthy();
+
+    const createdRow = page.locator(".tenant-membership-row").filter({ hasText: email }).first();
+    await expect(createdRow).toBeVisible({ timeout: 20_000 });
+    await expect(createdRow.getByText("Invited")).toBeVisible();
+    await captureTenantAdminStep(page, testInfo, "01-invited-member-row");
+
+    await page.getByRole("main").getByRole("button", { name: "Invite member" }).click();
+    const duplicateDialog = page.getByRole("dialog", { name: "Invite tenant member" });
+    await duplicateDialog.getByLabel("Email").fill(email);
+    await duplicateDialog.getByLabel("Username").fill(username);
+    await expect(duplicateDialog.getByRole("button", { name: "Invite member", exact: true })).toBeEnabled();
+    const duplicateResponse = page.waitForResponse(
+      (response) => response.url().includes("/api/tenant-admin/memberships") && response.request().method() === "POST",
+      { timeout: 20_000 }
+    );
+    await duplicateDialog.getByRole("button", { name: "Invite member", exact: true }).click();
+    expect((await duplicateResponse).status()).toBe(400);
+    await expect(duplicateDialog.getByText(/already belongs|already in use/i)).toBeVisible({ timeout: 20_000 });
+    await duplicateDialog.getByRole("button", { name: "Cancel" }).click();
+    await captureTenantAdminStep(page, testInfo, "02-duplicate-member-validation");
+
+    await createdRow.getByRole("button", { name: "Activate" }).click();
+    const activateDialog = page.getByRole("dialog", { name: "Activate tenant member" });
+    await expect(activateDialog).toBeVisible();
+    await activateDialog.getByLabel("Change note").fill("Activate disposable lifecycle member.");
+    const activateResponse = page.waitForResponse(
+      (response) => response.url().includes("/api/tenant-admin/memberships/") && response.request().method() === "PATCH",
+      { timeout: 20_000 }
+    );
+    await activateDialog.getByRole("button", { name: "Activate", exact: true }).click();
+    await expect((await activateResponse).ok()).toBeTruthy();
+    await expect(createdRow.getByText("Active")).toBeVisible({ timeout: 20_000 });
+
+    await createdRow.getByRole("button", { name: "Suspend" }).click();
+    const suspendDialog = page.getByRole("dialog", { name: "Suspend tenant member" });
+    await expect(suspendDialog).toBeVisible();
+    await expect(suspendDialog.getByText("Suspended members lose access until reactivated.")).toBeVisible();
+    await suspendDialog.getByLabel("Change note").fill("Suspend disposable lifecycle member.");
+    const suspendResponse = page.waitForResponse(
+      (response) => response.url().includes("/api/tenant-admin/memberships/") && response.request().method() === "PATCH",
+      { timeout: 20_000 }
+    );
+    await suspendDialog.getByRole("button", { name: "Suspend", exact: true }).click();
+    await expect((await suspendResponse).ok()).toBeTruthy();
+    await expect(createdRow.getByText("Suspended")).toBeVisible({ timeout: 20_000 });
+    await captureTenantAdminStep(page, testInfo, "03-suspended-member-row");
+
+    await createdRow.getByRole("button", { name: "Activate" }).click();
+    const reactivateDialog = page.getByRole("dialog", { name: "Activate tenant member" });
+    await reactivateDialog.getByLabel("Change note").fill("Reactivate disposable lifecycle member.");
+    const reactivateResponse = page.waitForResponse(
+      (response) => response.url().includes("/api/tenant-admin/memberships/") && response.request().method() === "PATCH",
+      { timeout: 20_000 }
+    );
+    await reactivateDialog.getByRole("button", { name: "Activate", exact: true }).click();
+    await expect((await reactivateResponse).ok()).toBeTruthy();
+    await expect(createdRow.getByText("Active")).toBeVisible({ timeout: 20_000 });
+
+    await createdRow.getByRole("button", { name: "Revoke" }).click();
+    const revokeDialog = page.getByRole("dialog", { name: "Revoke tenant member" });
+    await expect(revokeDialog).toBeVisible();
+    await expect(revokeDialog.getByText("Revoked members lose access and remain visible in audit history.")).toBeVisible();
+    await revokeDialog.getByLabel("Change note").fill("Revoke disposable lifecycle member after test.");
+    const revokeResponse = page.waitForResponse(
+      (response) => response.url().includes("/api/tenant-admin/memberships/") && response.request().method() === "PATCH",
+      { timeout: 20_000 }
+    );
+    await revokeDialog.getByRole("button", { name: "Revoke", exact: true }).click();
+    await expect((await revokeResponse).ok()).toBeTruthy();
+    await expect(createdRow.getByText("Revoked")).toBeVisible({ timeout: 20_000 });
+    await captureTenantAdminStep(page, testInfo, "04-revoked-member-row");
     await expectNoHorizontalOverflow(page);
   });
 
