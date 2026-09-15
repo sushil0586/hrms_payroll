@@ -93,7 +93,7 @@ test.describe("Platform admin audit evidence certification", () => {
     const adminEmail = `qa.audit.${runRef}@example.test`;
 
     await gotoAuthenticated(page, "/platform-admin", platformAdmin);
-    await expectPageReady(page, "Platform Admin Console");
+    await expectPageReady(page, "Platform Admin Dashboard");
 
     await openPlatformTab(page, "Policy Packs");
     const policyPackCard = card(page, "Policy packs");

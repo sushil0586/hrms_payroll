@@ -37,7 +37,7 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await expectNoHorizontalOverflow(page);
 
     await gotoAuthenticated(page, "/platform-admin/leads", platformAdmin);
-    await expectPageReady(page, "Platform Admin Console");
+    await expectPageReady(page, "Platform Admin Dashboard");
     const leadsPanel = page.getByTestId("platform-admin-leads-panel");
     await expect(leadsPanel).toBeVisible();
     await leadsPanel.getByRole("textbox", { name: "Search" }).fill(companyName);

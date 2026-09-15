@@ -461,7 +461,7 @@ Testing targets:
 - Direct API mutations fail closed.
 - Browser routes redirect or show access denial clearly.
 
-Status: Complete locally; staging deployment and rerun pending after check-in.
+Status: Complete locally and on staging.
 
 Evidence:
 - Added dedicated browser boundary suite: `tenant-admin-boundary-certification.spec.ts`.
@@ -474,6 +474,10 @@ Evidence:
 - Local production web build passed: `pnpm --dir web build`.
 - Local focused TA-6 Playwright against staging API passed: `tenant-admin-boundary-certification.spec.ts` = 3/3.
 - Local full Tenant Admin Playwright against staging API passed with TA-6 included: `tenant-admin-boundary-certification.spec.ts tenant-admin-console-flows.spec.ts tenant-security-readiness-flows.spec.ts tenant-trust-audit-flows.spec.ts` = 19/19.
+- Staging deployment completed on commit `8a4dd9e`.
+- Staging post-deploy smoke passed: API health 200, root/login 200, backend/web active, disk 68%.
+- Staging focused TA-6 Playwright passed: `tenant-admin-boundary-certification.spec.ts` = 3/3.
+- Staging full Tenant Admin Playwright passed with TA-6 included: `tenant-admin-boundary-certification.spec.ts tenant-admin-console-flows.spec.ts tenant-security-readiness-flows.spec.ts tenant-trust-audit-flows.spec.ts` = 19/19.
 
 Observed product posture:
 - Blocked signed-in users currently land on the public home page with workspace shortcuts, not a separate workspace chooser. The important security behavior is correct: the Tenant shortcut remains non-navigable and the Tenant Admin heading/data is not exposed.
@@ -496,18 +500,27 @@ Exit criteria:
 - All pages have single responsibility.
 - Confidence at least 90% for Tenant Admin pilot launch.
 
-Status: Not started.
+Status: Complete locally and on staging.
+
+Evidence:
+- Final staging certification run completed against `https://hrms.accerio.in` on deployed commit `8a4dd9e`.
+- Command: `tenant-admin-boundary-certification.spec.ts tenant-admin-console-flows.spec.ts tenant-security-readiness-flows.spec.ts tenant-trust-audit-flows.spec.ts --project=chromium --workers=1 --trace on`.
+- Result: 19/19 passed in 5.0 minutes.
+- Trace evidence generated for all 19 tests under `web/test-results/**/trace.zip`.
+- Critical-flow screenshots remain attached by the Tenant Admin console spec for membership lifecycle, duplicate validation, and membership audit evidence.
+- Covered pages: Dashboard, User Management, Plans And Subscription, Setup Guide, Support Access, Audit Logs, Settings, Security.
+- Covered operations: user invite, duplicate-user validation, activate, suspend, reactivate, revoke, audit evidence lookup, plan change submit/approve/apply, support access request/approve/start/end/revoke, trust-audit filter/pagination/download, empty state, unauthenticated redirects, wrong-role API denial, and tenant-code scoped read surfaces.
+
+Final launch confidence:
+- Tenant Admin pilot launch confidence: 92%.
+- Confidence basis: page split is complete, major flows are browser-certified locally and on staging, role/API boundaries are verified, and no critical/high defects remain in the certified Tenant Admin scope.
+- Residual risk: cross-tenant automation currently proves active tenant-code scoping with one tenant-admin persona; a second independent tenant-admin credential would raise confidence further for multi-tenant isolation.
 
 ## Current Known Gaps
 
 | Gap | Impact | Target Phase |
 | --- | --- | --- |
-| Dashboard contains account, users, changes, support, roles, configs, usage, and audit together | Tenant Admin feels complex and weak | TA-1 |
-| User Management is embedded in dashboard | Hard to certify and operate | TA-1, TA-2 |
-| Change requests are embedded in dashboard | Plan/commercial flow is not obvious | TA-1, TA-3 |
-| Support access is embedded in dashboard | Critical support approval flow needs its own focused page | TA-1, TA-4 |
-| Settings is an anchor, not a focused page | Tenant-owned vs platform-owned fields are unclear | TA-1 |
-| Existing tests cover useful basics but not full page-by-page CRUD after split | Certification confidence is limited | TA-2 through TA-7 |
+| Cross-tenant proof uses one active tenant-admin persona | True two-tenant tenant-admin isolation needs a second independent tenant-admin credential in the automation matrix | Future multi-tenant hardening |
 
 ## Working Definition Of Done
 

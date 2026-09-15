@@ -66,7 +66,7 @@ test.describe("Platform admin negative and security certification", () => {
     const packCode = `qa-neg-pack-${runRef}`;
 
     await gotoAuthenticated(page, "/platform-admin", platformAdmin);
-    await expectPageReady(page, "Platform Admin Console");
+    await expectPageReady(page, "Platform Admin Dashboard");
     await openPlatformTab(page, "Tenants");
     await expect(page).toHaveURL(/\/platform-admin\/tenants/);
 

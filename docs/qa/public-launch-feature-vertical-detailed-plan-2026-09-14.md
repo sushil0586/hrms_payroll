@@ -462,6 +462,28 @@ Execution rule:
 
 ## Phase Completion Tracker
 
+## Platform Admin UX Review Update: 15 Sep 2026
+
+Current review outcome:
+
+- Platform Admin had separate sidebar routes, but each route still opened with the same generic console identity and repeated dashboard metrics.
+- First cleanup completed locally: route-aware page titles, focused descriptions, panel-specific pills, compact header styling, and dashboard metrics limited to the dashboard route.
+- This brings Platform Admin closer to the Tenant Admin pattern: each page now reads as one responsibility instead of one large multipurpose console.
+
+Local certification evidence:
+
+- `pnpm --dir web lint` passed.
+- `platform-admin-tabs-pagination-certification.spec.ts` passed locally against staging API via `http://localhost:3211`.
+- Covered tab routing, pagination controls, visible control groups, required-field focus, no-horizontal-overflow, and route-specific Platform Admin page headings.
+
+Remaining Platform Admin UX hardening before final launch signoff:
+
+- Convert long inline create/update forms into lightweight modals or drawers where the page responsibility is list-first.
+- Add explicit empty-state guidance when no tenant is selected on Onboarding, First Admins, Policy Packs adoption, or Audit Logs.
+- Strengthen negative validation messages near the failed form/action, not only in the top notice.
+- Add browser screenshots/videos for each Platform Admin route at desktop and mobile widths.
+- Rerun full positive and negative Platform Admin CRUD certification on staging after check-in and deployment.
+
 | Phase | Status | Local Evidence | Staging Evidence | Confidence |
 | --- | --- | --- | --- | ---: |
 | PLF-0 Baseline inventory | Planned | Pending | Pending | TBD |

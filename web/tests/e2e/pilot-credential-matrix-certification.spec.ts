@@ -46,7 +46,7 @@ const matrix: MatrixPersona[] = [
     label: "Platform admin",
     persona: platformAdmin,
     landingPath: "/platform-admin",
-    heading: "Platform Admin Console",
+    heading: "Platform Admin Dashboard",
     expectedAccess: { platform_admin: true },
     deniedPaths: [
       { path: "/ess", deniedText: /Choose your workspace|Self Service/i },

@@ -42,7 +42,7 @@ async function expectSearchNarrowsList(page: Page, searchName: string, listSelec
 test.describe("Platform admin tabbed workspace certification", () => {
   test("certifies tab routing, pagination, and every visible control group", async ({ page }) => {
     await gotoAuthenticated(page, "/platform-admin", platformAdmin);
-    await expectPageReady(page, "Platform Admin Console");
+    await expectPageReady(page, "Platform Admin Dashboard");
     await expectNoHorizontalOverflow(page);
 
     await expect(page.getByRole("tablist", { name: "Platform admin sections" })).toBeVisible();

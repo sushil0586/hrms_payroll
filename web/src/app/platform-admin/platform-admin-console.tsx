@@ -77,6 +77,16 @@ const panelGuides: Record<PlatformPanel, { title: string; description: string; s
   },
 };
 
+const panelPills: Record<PlatformPanel, string[]> = {
+  control: ["Action queue", "Tenant readiness", "Launch blockers"],
+  leads: ["Public signup", "Qualification", "Tenant conversion"],
+  tenants: ["Customer registry", "Create tenant", "Select workspace"],
+  onboarding: ["Setup metadata", "Activation gates", "Handoff evidence"],
+  admins: ["Admin contacts", "First login", "Secure handoff"],
+  "policy-packs": ["Baseline packs", "Publish", "Adopt"],
+  events: ["Audit evidence", "Actor trail", "Timeline"],
+};
+
 function titleCase(value: string) {
   return value
     .replace(/[_-]+/g, " ")
@@ -292,6 +302,11 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     events: events.length,
   };
   const activeGuide = panelGuides[initialPanel];
+  const pageTitle = initialPanel === "control" ? "Platform Admin Dashboard" : activeGuide.title;
+  const pageDescription =
+    initialPanel === "control"
+      ? "A simple control center for public leads, tenant readiness, baselines, handoff, and activation blockers."
+      : activeGuide.description;
 
   async function mutate<T>(path: string, method: MutationMethod, body: Record<string, unknown>, successMessage: string): Promise<T> {
     setBusyRef(path);
@@ -582,34 +597,44 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     <main className="shell">
       <PageIntro
         eyebrow="Live platform operations"
-        title="Platform Admin Console"
-        description="Create tenants, prepare onboarding, provision first admins, publish baselines, and activate customer handoff."
+        title={pageTitle}
+        description={pageDescription}
+        className="page-header-surface page-header-surface--compact"
         actions={
           <>
-            <Link className="button button--secondary" href="/">
-              Home
-            </Link>
-            {selectedTenant ? (
+            {initialPanel !== "control" ? (
+              <Link className="button button--secondary" href="/platform-admin">
+                Dashboard
+              </Link>
+            ) : null}
+            {initialPanel !== "tenants" ? (
+              <Link className="button button--secondary" href={buildPanelHref("tenants", selectedTenant?.id)}>
+                Tenants
+              </Link>
+            ) : null}
+            {selectedTenant && initialPanel !== "onboarding" ? (
               <Link className="button button--primary" href={`/platform-admin/onboarding?tenantId=${selectedTenant.id}`}>
                 Open selected tenant
               </Link>
             ) : null}
           </>
         }
-        pills={["Tenant onboarding", "Policy baselines", "First admin provisioning", "Activation gates"]}
+        pills={panelPills[initialPanel]}
         showPills
       />
 
-      <section className="section platform-control-metrics">
-        <div className="metric-grid-modern">
-          <MetricTile label="Open control actions" value={tabCounts.control} trend="Leads and tenant gates" />
-          <MetricTile label="Tenants" value={tenants.length} trend="Platform catalog" />
-          <MetricTile label="Active tenants" value={tenantCounts.active} trend="Activated" />
-          <MetricTile label="Onboarding" value={tenantCounts.onboarding} trend="Not yet active" />
-          <MetricTile label="Public leads" value={activeLeads.length} trend={`${newLeads.length} new`} />
-          <MetricTile label="Published packs" value={tenantCounts.publishedPacks} trend={`${policyPacks.length} total packs`} />
-        </div>
-      </section>
+      {initialPanel === "control" ? (
+        <section className="section platform-control-metrics">
+          <div className="metric-grid-modern">
+            <MetricTile label="Open control actions" value={tabCounts.control} trend="Leads and tenant gates" />
+            <MetricTile label="Tenants" value={tenants.length} trend="Platform catalog" />
+            <MetricTile label="Active tenants" value={tenantCounts.active} trend="Activated" />
+            <MetricTile label="Onboarding" value={tenantCounts.onboarding} trend="Not yet active" />
+            <MetricTile label="Public leads" value={activeLeads.length} trend={`${newLeads.length} new`} />
+            <MetricTile label="Published packs" value={tenantCounts.publishedPacks} trend={`${policyPacks.length} total packs`} />
+          </div>
+        </section>
+      ) : null}
 
       {(message || error || generatedPassword) ? (
         <section className="section">

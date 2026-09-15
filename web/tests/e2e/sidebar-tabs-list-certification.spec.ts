@@ -11,7 +11,7 @@ type WorkspaceCase = {
 };
 
 const workspaces: WorkspaceCase[] = [
-  { name: "Platform admin", entryPath: "/platform-admin", heading: "Platform Admin Console", persona: platformAdmin },
+  { name: "Platform admin", entryPath: "/platform-admin", heading: "Platform Admin Dashboard", persona: platformAdmin },
   { name: "HR admin", entryPath: "/hr-admin", heading: "Control center", persona: hrAdmin },
   { name: "Employee self service", entryPath: "/ess", heading: "Self Service", persona: employee },
   { name: "Manager self service", entryPath: "/mss/approvals", heading: /Approvals|Manager/i, persona: manager },

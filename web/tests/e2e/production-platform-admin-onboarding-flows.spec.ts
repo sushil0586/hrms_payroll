@@ -31,7 +31,7 @@ test.describe("Production platform admin onboarding proof", () => {
     const adminPassword = process.env.PLAYWRIGHT_PLATFORM_ADMIN_PROVISIONED_PASSWORD ?? "Password@123";
 
     await gotoAuthenticated(page, "/platform-admin", platformAdmin);
-    await expectPageReady(page, "Platform Admin Console");
+    await expectPageReady(page, "Platform Admin Dashboard");
     await expectNoHorizontalOverflow(page);
 
     await openPlatformTab(page, "Policy Packs");
@@ -163,7 +163,7 @@ test.describe("Production platform admin onboarding proof", () => {
       await page.request.post("/api/auth/logout").catch(() => null);
       await page.context().clearCookies();
       await gotoAuthenticated(page, "/platform-admin", platformAdmin);
-      await expectPageReady(page, "Platform Admin Console");
+      await expectPageReady(page, "Platform Admin Dashboard");
       await openPlatformTab(page, "Policy Packs");
     }
 
