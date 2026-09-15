@@ -381,7 +381,7 @@ Testing targets:
 - Audit evidence.
 - Pagination for long request list.
 
-Status: Complete locally; staging deployment and rerun pending after check-in.
+Status: Complete locally and on staging.
 
 Evidence:
 - Plan page keeps one clear responsibility: commercial profile, usage evidence, and tenant-owned change requests.
@@ -390,7 +390,11 @@ Evidence:
 - Approve, reject, and apply actions require a decision note before the action button is enabled, matching backend governance rules.
 - Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts -g "focused plan page"` -> `1 passed`; covered commercial profile, usage evidence, required title, invalid JSON blocking, request creation, submitted state, note-required action buttons, approve, and mark applied.
 - Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts` -> `10 passed`; verified dashboard, users, membership lifecycle, unauthorized boundaries, trust audit, plan, support, settings, mobile setup, and setup workbench after the Plan UX change.
-- Remaining TA-3 work: deploy after check-in, rerun post-deploy smoke, rerun focused Plan flow and full Tenant Admin suite on staging.
+- Staging deployment completed on commit `914fb38`.
+- Staging post-deploy smoke passed: API health 200, root/login 200, backend/web active, disk 68%.
+- Staging browser command against `https://hrms.accerio.in`: `tenant-admin-console-flows.spec.ts -g "focused plan page"` -> `1 passed`; covered deployed inline validation, valid request creation, note-required action buttons, approve, and mark applied.
+- Staging browser command against `https://hrms.accerio.in`: `tenant-admin-console-flows.spec.ts` -> `10 passed`.
+- Remaining TA-3 work: none for current scope.
 
 ### Phase TA-4: Support Access Certification
 
@@ -404,7 +408,15 @@ Testing targets:
 - Trust audit evidence.
 - Pagination for long grants.
 
-Status: Not started.
+Status: Complete locally; staging deployment and rerun pending after check-in.
+
+Evidence:
+- Support Access request form shows inline browser validation for required support agent, required reason, valid duration, and at least one selected scope.
+- Request access remains disabled until the form is valid.
+- Grant action rows show that a decision note is required for approve, reject, or revoke.
+- Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts -g "support access page"` -> `1 passed`; covered required-field validation, duration validation, request creation, requested state, note-required approve, approve, start session, end session, second request creation, note-required revoke, and revoke.
+- Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts` -> `10 passed`; verified dashboard, users, membership lifecycle, unauthorized boundaries, trust audit, plan, support lifecycle, settings, mobile setup, and setup workbench after Support Access UX hardening.
+- Remaining TA-4 work: deploy after check-in, rerun post-deploy smoke, rerun focused Support Access flow and full Tenant Admin suite on staging.
 
 ### Phase TA-5: Security And Trust Audit Certification
 

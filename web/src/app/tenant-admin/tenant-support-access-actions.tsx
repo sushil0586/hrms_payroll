@@ -62,9 +62,29 @@ export function TenantSupportAccessActions({ data }: Props) {
     setSelectedScopes((current) => (current.includes(scopeRef) ? current.filter((item) => item !== scopeRef) : [...current, scopeRef]));
   }
 
+  const supportAgentError = supportAgentIdentifier.trim() ? "" : "Support agent is required.";
+  const reasonError = reason.trim() ? "" : "Reason is required.";
+  const scopeError = selectedScopes.length ? "" : "Select at least one support scope.";
+  const durationError =
+    Number.isFinite(duration) && duration >= 1 && duration <= data.support_access_management.max_duration_minutes
+      ? ""
+      : `Duration must be between 1 and ${data.support_access_management.max_duration_minutes} minutes.`;
+  const canRequestSupportAccess =
+    !busyRef &&
+    data.support_access_management.enabled &&
+    !supportAgentError &&
+    !reasonError &&
+    !scopeError &&
+    !durationError;
+
   async function requestSupportAccess() {
     setBusyRef("request");
     setNotice("");
+    if (!canRequestSupportAccess) {
+      setBusyRef("");
+      setNotice(supportAgentError || reasonError || scopeError || durationError || "Complete the required support access fields.");
+      return;
+    }
     const response = await fetch("/api/tenant-admin/support-access-grants", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -123,14 +143,17 @@ export function TenantSupportAccessActions({ data }: Props) {
         <label>
           <span>Support agent</span>
           <input value={supportAgentIdentifier} onChange={(event) => setSupportAgentIdentifier(event.target.value)} placeholder="support.agent@example.com" />
+          {supportAgentError ? <small className="tenant-field-error">{supportAgentError}</small> : null}
         </label>
         <label>
           <span>Duration</span>
           <input min={1} max={data.support_access_management.max_duration_minutes} type="number" value={duration} onChange={(event) => setDuration(Number(event.target.value))} />
+          {durationError ? <small className="tenant-field-error">{durationError}</small> : null}
         </label>
         <label className="tenant-support-access-form__reason">
           <span>Reason</span>
           <input value={reason} onChange={(event) => setReason(event.target.value)} />
+          {reasonError ? <small className="tenant-field-error">{reasonError}</small> : null}
         </label>
       </div>
 
@@ -142,11 +165,12 @@ export function TenantSupportAccessActions({ data }: Props) {
           </label>
         ))}
       </div>
+      {scopeError ? <small className="tenant-field-error">{scopeError}</small> : null}
 
       <div className="tenant-membership-actions__footer">
         <button
           className="button button--primary"
-          disabled={busyRef === "request" || !supportAgentIdentifier.trim() || !reason.trim() || selectedScopes.length === 0 || !data.support_access_management.enabled}
+          disabled={!canRequestSupportAccess}
           onClick={requestSupportAccess}
           type="button"
         >
@@ -177,6 +201,9 @@ export function TenantSupportAccessActions({ data }: Props) {
                 <label>
                   <span>Decision note</span>
                   <input value={decisionNotes[grant.id] ?? ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [grant.id]: event.target.value }))} />
+                  {grant.status === "requested" || grant.status === "approved" || grant.status === "active" ? (
+                    <small className="tenant-field-error tenant-field-error--muted">Required for approve, reject, or revoke.</small>
+                  ) : null}
                 </label>
                 <label>
                   <span>Session ref</span>
