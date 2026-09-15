@@ -134,13 +134,14 @@ export default async function TenantAdminConsolePage() {
       action: "Review audit",
     },
   ];
+  const nextStep = setupSteps.find((step) => step.status === "action") ?? setupSteps.find((step) => step.status === "watch") ?? setupSteps[0];
 
   return (
     <main className="shell shell--workspace">
       <PageIntro
         eyebrow={result.state === "live" ? "Live tenant console" : "Demo tenant console"}
         title="Tenant Admin Console"
-        description="A simple control center for account posture, launch readiness, users, plan, support, and audit evidence."
+        description="Start here to see the account state, the next launch action, and the focused pages that need attention."
         className="page-header-surface page-header-surface--compact"
         actions={
           <>
@@ -182,11 +183,19 @@ export default async function TenantAdminConsolePage() {
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Control center</span>
-              <h2>Next best actions</h2>
+              <h2>Start here</h2>
             </div>
             <span className={statusBadgeClass(data.summary.commercial_can_launch ? "ready" : data.summary.status)}>
               {data.summary.commercial_can_launch ? "Can launch" : titleCase(data.summary.status)}
             </span>
+          </div>
+          <div className="tenant-next-action" data-testid="tenant-next-action">
+            <div>
+              <span>Next action</span>
+              <strong>{nextStep.label}</strong>
+              <p>{nextStep.detail}</p>
+            </div>
+            <Link className="button button--primary" href={nextStep.href}>{nextStep.action}</Link>
           </div>
           <div className="tenant-control-action-list">
             {controlCards.map((item) => (
@@ -205,7 +214,7 @@ export default async function TenantAdminConsolePage() {
         <article className="panel-card-soft tenant-console-panel tenant-control-card">
           <div className="tenant-console-panel__header">
             <div>
-              <span className="workspace-card__eyebrow">Launch posture</span>
+              <span className="workspace-card__eyebrow">Account state</span>
               <h2>Readiness snapshot</h2>
             </div>
             <span className={statusBadgeClass(data.summary.status)}>{titleCase(data.summary.status)}</span>
@@ -239,8 +248,8 @@ export default async function TenantAdminConsolePage() {
         <article className="panel-card-soft tenant-console-panel tenant-setup-guide">
           <div className="tenant-console-panel__header">
             <div>
-              <span className="workspace-card__eyebrow">Guided setup</span>
-              <h2>Tenant launch guide</h2>
+              <span className="workspace-card__eyebrow">Launch progress</span>
+              <h2>Setup guide</h2>
             </div>
             <span className={statusBadgeClass(data.summary.commercial_can_launch ? "ready" : data.summary.status)}>
               {setupCompletion}% complete

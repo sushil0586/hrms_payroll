@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { TenantAdminConsole } from "@/lib/types";
@@ -40,7 +40,10 @@ const PAGE_SIZE = 8;
 export function TenantMembershipActions({ data }: Props) {
   const router = useRouter();
   const roleOptions = data.membership_management.role_options;
-  const activeStatusOptions = data.membership_management.status_options.filter((item) => item.value === "invited" || item.value === "active");
+  const activeStatusOptions = useMemo(
+    () => data.membership_management.status_options.filter((item) => item.value === "invited" || item.value === "active"),
+    [data.membership_management.status_options]
+  );
   const defaultRoleId = roleOptions[0]?.id ?? "";
   const memberships = data.membership_management.memberships?.length ? data.membership_management.memberships : data.membership_management.recent_memberships;
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -59,6 +62,9 @@ export function TenantMembershipActions({ data }: Props) {
   const [busyRef, setBusyRef] = useState("");
   const [notice, setNotice] = useState("");
   const [formError, setFormError] = useState("");
+  const inviteEmailRef = useRef<HTMLInputElement>(null);
+  const editDialogRef = useRef<HTMLDivElement>(null);
+  const confirmationNoteRef = useRef<HTMLTextAreaElement>(null);
 
   const actionLabels = useMemo(
     () => Object.fromEntries(data.membership_management.available_actions.map((action) => [action.value, action.label])),
@@ -97,8 +103,11 @@ export function TenantMembershipActions({ data }: Props) {
   }, [email, selectedRoleIds.length, username]);
 
   const editValidation = editRoleIds.length ? "" : "Select at least one role before saving.";
+  const normalizedInviteValidation = inviteValidation.toLowerCase();
+  const inviteEmailInvalid = normalizedInviteValidation.includes("email") || (email.trim() ? !emailLooksValid(email.trim()) : false);
+  const inviteUsernameInvalid = normalizedInviteValidation.includes("username");
 
-  function resetInviteForm() {
+  const resetInviteForm = useCallback(() => {
     setEmail("");
     setUsername("");
     setFirstName("");
@@ -106,12 +115,12 @@ export function TenantMembershipActions({ data }: Props) {
     setMembershipStatus(activeStatusOptions[0]?.value ?? "invited");
     setSelectedRoleIds(defaultRoleId ? [defaultRoleId] : []);
     setFormError("");
-  }
+  }, [activeStatusOptions, defaultRoleId]);
 
-  function closeInviteDialog() {
+  const closeInviteDialog = useCallback(() => {
     setInviteOpen(false);
     resetInviteForm();
-  }
+  }, [resetInviteForm]);
 
   function openEditDialog(member: NonNullable<EditingMember>) {
     setEditingMember(member);
@@ -127,11 +136,41 @@ export function TenantMembershipActions({ data }: Props) {
     setNotice("");
   }
 
-  function closeConfirmation() {
+  const closeConfirmation = useCallback(() => {
     setConfirmation(null);
     setActionNote("");
     setFormError("");
-  }
+  }, []);
+
+  useEffect(() => {
+    if (inviteOpen) {
+      inviteEmailRef.current?.focus();
+    }
+  }, [inviteOpen]);
+
+  useEffect(() => {
+    if (editingMember) {
+      editDialogRef.current?.querySelector<HTMLInputElement>("input[type='checkbox']")?.focus();
+    }
+  }, [editingMember]);
+
+  useEffect(() => {
+    if (confirmation) {
+      confirmationNoteRef.current?.focus();
+    }
+  }, [confirmation]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (inviteOpen) closeInviteDialog();
+      if (editingMember) setEditingMember(null);
+      if (confirmation) closeConfirmation();
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [closeConfirmation, closeInviteDialog, confirmation, editingMember, inviteOpen]);
 
   function toggleInviteRole(roleId: string) {
     setSelectedRoleIds((current) => (current.includes(roleId) ? current.filter((item) => item !== roleId) : [...current, roleId]));
@@ -282,7 +321,7 @@ export function TenantMembershipActions({ data }: Props) {
 
       {inviteOpen ? (
         <div className="tenant-modal-shell" role="presentation">
-          <div aria-label="Invite tenant member" aria-modal="true" className="tenant-modal" role="dialog">
+          <div aria-describedby="invite-member-validation" aria-label="Invite tenant member" aria-modal="true" className="tenant-modal" role="dialog">
             <div className="tenant-modal__header">
               <div>
                 <span className="workspace-card__eyebrow">User Management</span>
@@ -295,11 +334,11 @@ export function TenantMembershipActions({ data }: Props) {
             <div className="tenant-membership-form-grid tenant-membership-form-grid--dialog">
               <label>
                 <span>Email</span>
-                <input aria-invalid={Boolean(formError && formError.toLowerCase().includes("email"))} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="person@company.com" />
+                <input aria-describedby="invite-member-validation" aria-invalid={inviteEmailInvalid || Boolean(formError && formError.toLowerCase().includes("email"))} ref={inviteEmailRef} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="person@company.com" />
               </label>
               <label>
                 <span>Username</span>
-                <input aria-invalid={Boolean(formError && formError.toLowerCase().includes("username"))} value={username} onChange={(event) => setUsername(event.target.value)} placeholder="person.name" />
+                <input aria-describedby="invite-member-validation" aria-invalid={inviteUsernameInvalid || Boolean(formError && formError.toLowerCase().includes("username"))} value={username} onChange={(event) => setUsername(event.target.value)} placeholder="person.name" />
               </label>
               <label>
                 <span>First name</span>
@@ -320,7 +359,7 @@ export function TenantMembershipActions({ data }: Props) {
                 </select>
               </label>
             </div>
-            <div className="tenant-role-picker" aria-label="Invite roles">
+            <div className="tenant-role-picker" aria-describedby="invite-member-validation" aria-label="Invite roles">
               {roleOptions.map((role) => (
                 <label key={role.id}>
                   <input checked={selectedRoleIds.includes(role.id)} onChange={() => toggleInviteRole(role.id)} type="checkbox" />
@@ -328,7 +367,7 @@ export function TenantMembershipActions({ data }: Props) {
                 </label>
               ))}
             </div>
-            <div className="tenant-modal__validation">
+            <div className="tenant-modal__validation" id="invite-member-validation" role={formError || inviteValidation ? "alert" : "status"}>
               <span>{formError || inviteValidation || "Ready to invite after review."}</span>
             </div>
             <div className="tenant-modal__actions">
@@ -345,7 +384,7 @@ export function TenantMembershipActions({ data }: Props) {
 
       {editingMember ? (
         <div className="tenant-modal-shell" role="presentation">
-          <div aria-label="Update tenant member roles" aria-modal="true" className="tenant-modal tenant-modal--small" role="dialog">
+          <div aria-describedby="update-member-validation" aria-label="Update tenant member roles" aria-modal="true" className="tenant-modal tenant-modal--small" ref={editDialogRef} role="dialog">
             <div className="tenant-modal__header">
               <div>
                 <span className="workspace-card__eyebrow">Role assignment</span>
@@ -359,7 +398,7 @@ export function TenantMembershipActions({ data }: Props) {
               <strong>{editingMember.display_name}</strong>
               <span>{editingMember.email}</span>
             </div>
-            <div className="tenant-role-picker" aria-label="Update roles">
+            <div className="tenant-role-picker" aria-describedby="update-member-validation" aria-label="Update roles">
               {roleOptions.map((role) => (
                 <label key={role.id}>
                   <input checked={editRoleIds.includes(role.id)} onChange={() => toggleEditRole(role.id)} type="checkbox" />
@@ -367,7 +406,7 @@ export function TenantMembershipActions({ data }: Props) {
                 </label>
               ))}
             </div>
-            <div className="tenant-modal__validation">
+            <div className="tenant-modal__validation" id="update-member-validation" role={formError || editValidation ? "alert" : "status"}>
               <span>{formError || editValidation || "Role selection is ready to save."}</span>
             </div>
             <div className="tenant-modal__actions">
@@ -384,7 +423,7 @@ export function TenantMembershipActions({ data }: Props) {
 
       {confirmation ? (
         <div className="tenant-modal-shell" role="presentation">
-          <div aria-label={`${titleCase(confirmation.action)} tenant member`} aria-modal="true" className="tenant-modal tenant-modal--small" role="dialog">
+          <div aria-describedby="membership-action-validation" aria-label={`${titleCase(confirmation.action)} tenant member`} aria-modal="true" className="tenant-modal tenant-modal--small" role="dialog">
             <div className="tenant-modal__header">
               <div>
                 <span className="workspace-card__eyebrow">Access change</span>
@@ -403,12 +442,14 @@ export function TenantMembershipActions({ data }: Props) {
               <span>Change note</span>
               <textarea
                 aria-label="Change note"
+                aria-describedby="membership-action-validation"
                 onChange={(event) => setActionNote(event.target.value)}
                 placeholder="Reason or approval reference"
+                ref={confirmationNoteRef}
                 value={actionNote}
               />
             </label>
-            <div className="tenant-modal__validation">
+            <div className="tenant-modal__validation" id="membership-action-validation" role="status">
               <span>
                 {confirmation.action === "revoke"
                   ? "Revoked members lose access and remain visible in audit history."

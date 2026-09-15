@@ -40,6 +40,8 @@ type Props = {
   data: TenantAdminConsole;
 };
 
+const SUPPORT_GRANT_PAGE_SIZE = 5;
+
 export function TenantSupportAccessActions({ data }: Props) {
   const router = useRouter();
   const scopes = data.support_access_management.scope_options;
@@ -50,6 +52,8 @@ export function TenantSupportAccessActions({ data }: Props) {
   const [selectedScopes, setSelectedScopes] = useState<string[]>(defaultScope ? [defaultScope] : []);
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
   const [sessionRefs, setSessionRefs] = useState<Record<string, string>>({});
+  const [grantSearch, setGrantSearch] = useState("");
+  const [grantPageIndex, setGrantPageIndex] = useState(0);
   const [busyRef, setBusyRef] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -76,6 +80,30 @@ export function TenantSupportAccessActions({ data }: Props) {
     !reasonError &&
     !scopeError &&
     !durationError;
+  const normalizedGrantSearch = grantSearch.trim().toLowerCase();
+  const grants = data.support_access_management.recent_grants.filter((grant) => {
+    if (!normalizedGrantSearch) {
+      return true;
+    }
+    return [
+      grant.support_agent_identifier,
+      grant.reason,
+      grant.status,
+      grant.scope_refs.join(" "),
+      grant.session_ref,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedGrantSearch);
+  });
+  const grantPageCount = Math.max(1, Math.ceil(grants.length / SUPPORT_GRANT_PAGE_SIZE));
+  const boundedGrantPageIndex = Math.min(grantPageIndex, grantPageCount - 1);
+  const pagedGrants = grants.slice(
+    boundedGrantPageIndex * SUPPORT_GRANT_PAGE_SIZE,
+    boundedGrantPageIndex * SUPPORT_GRANT_PAGE_SIZE + SUPPORT_GRANT_PAGE_SIZE
+  );
+  const firstVisibleGrant = grants.length ? boundedGrantPageIndex * SUPPORT_GRANT_PAGE_SIZE + 1 : 0;
+  const lastVisibleGrant = Math.min(grants.length, (boundedGrantPageIndex + 1) * SUPPORT_GRANT_PAGE_SIZE);
 
   async function requestSupportAccess() {
     setBusyRef("request");
@@ -102,6 +130,8 @@ export function TenantSupportAccessActions({ data }: Props) {
       return;
     }
     setNotice("Support access requested.");
+    setGrantSearch(reason.trim());
+    setGrantPageIndex(0);
     setSupportAgentIdentifier("");
     setReason("");
     router.refresh();
@@ -126,6 +156,11 @@ export function TenantSupportAccessActions({ data }: Props) {
       return;
     }
     setNotice(`${actionLabels[action] ?? titleCase(action)} saved.`);
+    const refreshedGrant = (result as { support_access_grant?: { reason?: unknown } }).support_access_grant;
+    if (typeof refreshedGrant?.reason === "string" && refreshedGrant.reason) {
+      setGrantSearch(refreshedGrant.reason);
+      setGrantPageIndex(0);
+    }
     router.refresh();
   }
 
@@ -142,22 +177,53 @@ export function TenantSupportAccessActions({ data }: Props) {
       <div className="tenant-support-access-form">
         <label>
           <span>Support agent</span>
-          <input value={supportAgentIdentifier} onChange={(event) => setSupportAgentIdentifier(event.target.value)} placeholder="support.agent@example.com" />
-          {supportAgentError ? <small className="tenant-field-error">{supportAgentError}</small> : null}
+          <input
+            aria-describedby="support-agent-error"
+            aria-invalid={Boolean(supportAgentError)}
+            value={supportAgentIdentifier}
+            onChange={(event) => setSupportAgentIdentifier(event.target.value)}
+            placeholder="support.agent@example.com"
+          />
+          {supportAgentError ? (
+            <small className="tenant-field-error" id="support-agent-error" role="alert">
+              {supportAgentError}
+            </small>
+          ) : null}
         </label>
         <label>
           <span>Duration</span>
-          <input min={1} max={data.support_access_management.max_duration_minutes} type="number" value={duration} onChange={(event) => setDuration(Number(event.target.value))} />
-          {durationError ? <small className="tenant-field-error">{durationError}</small> : null}
+          <input
+            aria-describedby="support-duration-error"
+            aria-invalid={Boolean(durationError)}
+            min={1}
+            max={data.support_access_management.max_duration_minutes}
+            type="number"
+            value={duration}
+            onChange={(event) => setDuration(Number(event.target.value))}
+          />
+          {durationError ? (
+            <small className="tenant-field-error" id="support-duration-error" role="alert">
+              {durationError}
+            </small>
+          ) : null}
         </label>
         <label className="tenant-support-access-form__reason">
           <span>Reason</span>
-          <input value={reason} onChange={(event) => setReason(event.target.value)} />
-          {reasonError ? <small className="tenant-field-error">{reasonError}</small> : null}
+          <input
+            aria-describedby="support-reason-error"
+            aria-invalid={Boolean(reasonError)}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+          {reasonError ? (
+            <small className="tenant-field-error" id="support-reason-error" role="alert">
+              {reasonError}
+            </small>
+          ) : null}
         </label>
       </div>
 
-      <div className="tenant-role-picker">
+      <div aria-describedby="support-scope-error" aria-label="Support scopes" className="tenant-role-picker">
         {scopes.map((scope) => (
           <label key={scope.value}>
             <input checked={selectedScopes.includes(scope.value)} onChange={() => toggleScope(scope.value)} type="checkbox" />
@@ -165,7 +231,11 @@ export function TenantSupportAccessActions({ data }: Props) {
           </label>
         ))}
       </div>
-      {scopeError ? <small className="tenant-field-error">{scopeError}</small> : null}
+      {scopeError ? (
+        <small className="tenant-field-error" id="support-scope-error" role="alert">
+          {scopeError}
+        </small>
+      ) : null}
 
       <div className="tenant-membership-actions__footer">
         <button
@@ -179,8 +249,35 @@ export function TenantSupportAccessActions({ data }: Props) {
         {notice ? <span role="status">{notice}</span> : null}
       </div>
 
+      <div className="tenant-membership-toolbar tenant-membership-toolbar--compact">
+        <label>
+          <span>Search grants</span>
+          <input
+            aria-label="Search support grants"
+            placeholder="Agent, reason, status, scope"
+            value={grantSearch}
+            onChange={(event) => {
+              setGrantSearch(event.target.value);
+              setGrantPageIndex(0);
+            }}
+          />
+        </label>
+        <div aria-label="Support grant pagination" className="tenant-membership-pager">
+          <span>
+            {firstVisibleGrant}-{lastVisibleGrant} of {grants.length}
+          </span>
+          <button className="button button--secondary button--compact" disabled={boundedGrantPageIndex === 0} onClick={() => setGrantPageIndex((current) => Math.max(0, current - 1))} type="button">
+            Previous
+          </button>
+          <button className="button button--secondary button--compact" disabled={boundedGrantPageIndex >= grantPageCount - 1} onClick={() => setGrantPageIndex((current) => Math.min(grantPageCount - 1, current + 1))} type="button">
+            Next
+          </button>
+        </div>
+      </div>
+
       <div className="tenant-support-access-list">
-        {data.support_access_management.recent_grants.map((grant) => {
+        {!pagedGrants.length ? <p className="tenant-console-empty">No support grants match the current search.</p> : null}
+        {pagedGrants.map((grant) => {
           const rowBusy = busyRef.startsWith(`${grant.id}:`);
           const hasDecisionNote = Boolean((decisionNotes[grant.id] ?? "").trim());
           const canApprove = grant.status === "requested" && hasDecisionNote;

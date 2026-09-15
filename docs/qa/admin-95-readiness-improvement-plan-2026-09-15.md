@@ -191,7 +191,7 @@ Exit criteria:
 
 ## Phase PA-95-5: Visual Polish And Accessibility Pass
 
-Status: In progress; route-by-route visual/mobile certification complete locally on 2026-09-15  
+Status: Complete on staging on 2026-09-15  
 Goal: make the Platform Admin experience visually consistent with the improved Tenant Admin direction.
 
 Implementation tasks:
@@ -218,7 +218,7 @@ Exit criteria:
 
 ## Phase PA-95-6: Staging Launch Certification
 
-Status: Pending  
+Status: Complete on staging on 2026-09-15  
 Goal: certify Platform Admin at 95% on staging after deployment.
 
 Required staging pack:
@@ -269,13 +269,14 @@ After Platform Admin reaches 95%, repeat the same model for Tenant Admin:
 | 2026-09-15 | PA-95-5 feedback and dialog accessibility | Local UI against staging API | Passed: `pnpm --dir web lint`, `pnpm --dir web typecheck`, focused Platform Admin tabs/pagination/accessibility proof `1 passed`, `pnpm --dir web build`. | Functionality 94%, QA 95%, UX 93% | Feedback banners now use `status`/`alert` semantics with success/error styling. Create Tenant and Add Admin Contact dialogs now have labelled descriptions, focus the first required field on open, support Escape/backdrop close, and are covered by desktop/mobile screenshot-buffer proof with no horizontal overflow. |
 | 2026-09-15 | PA-95-5 feedback and dialog accessibility | Staging | Deployed commit `7eb8f8d`; post-deploy smoke passed; full Platform Admin browser pack `6 passed` in 7.1m. | Functionality 94%, QA 95%, UX 93% | Staging certification confirms the accessibility/dialog changes did not regress Platform Admin onboarding, CRUD/state transitions, filters, pagination, validation, security denial, or audit evidence. |
 | 2026-09-15 | PA-95-5 route visual/mobile certification | Local UI against staging API | Initial run found mobile horizontal overflow on `/platform-admin/admins`; fixed `.platform-admin-users-grid .tenant-support-access-row` mobile stacking. Passed after fix: new visual/accessibility pack `2 passed`, existing tabs/pagination pack `1 passed`, `pnpm --dir web lint`, `pnpm --dir web typecheck`, `pnpm --dir web build`. | Functionality 94%, QA 95%, UX 94% | New proof visits every Platform Admin route on desktop and mobile, captures Playwright report screenshots, checks active tab state, checks no app error/no horizontal overflow, and certifies dialog keyboard focus plus Escape close. |
+| 2026-09-15 | PA-95-5 route visual/mobile certification | Staging | Deployed commit `0f45e0e`; post-deploy smoke passed; expanded full Platform Admin browser pack `8 passed` in 8.3m. | Functionality 95%, QA 95%, UX 95% | Staging now includes route-by-route desktop/mobile screenshot proof, no horizontal overflow, active-tab verification, dialog focus/required validation/Escape close, CRUD/state transitions, audit evidence, security denial, and five-tenant onboarding. |
+| 2026-09-15 | PA-95-6 final Platform Admin launch certification | Staging | Final freeze run on commit `0f45e0e`: post-deploy smoke passed; expanded full Platform Admin browser pack `8 passed` in 8.4m. | Functionality 95%, QA 95%, UX 95% | Platform Admin is certified launch-ready for the current scope. No critical/high defects remain in the certified pack. Evidence includes health check, route-by-route desktop/mobile rendering, keyboard dialog behavior, validation, security denial, CRUD/state transitions, audit evidence, and five-tenant onboarding. |
 
 ## Current Next Recommended Phase
 
-Start **PA-95-5 Visual Polish And Accessibility Pass** for Platform Admin, then close with **PA-95-6 staging launch certification**.
+Move to **Tenant Admin 95% readiness execution** using the same phase model.
 
 Reason:
 
-- Core Platform Admin workflows are already staging-certified.
-- PA-95-4 is now live and staging-certified.
-- The remaining launch gap is mostly visual/accessibility polish, screenshot review, keyboard behavior, and final signoff rerun.
+- Platform Admin is now frozen at 95% for the certified launch scope.
+- Tenant Admin was previously identified as the weakest area and should receive the same route, CRUD, visual, validation, and staging certification treatment.

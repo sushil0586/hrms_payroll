@@ -5,6 +5,314 @@ Environment target: local first, then staging at `https://hrms.accerio.in`
 Primary role: Tenant Admin  
 Purpose: make Tenant Admin simple, single-responsibility, browser-certified, and launch ready.
 
+## TA-95 Restart Baseline
+
+Date: 2026-09-15  
+Reason: Platform Admin has now reached 95% staging certification, so Tenant Admin is being re-baselined against the same stricter launch bar: simple operator experience, route-level responsibility, clear validation, full CRUD/list/browser evidence, mobile proof, accessibility proof, and final staging freeze.
+
+Current confidence:
+
+| Area | Current Rating | Target | Reason |
+| --- | ---: | ---: | --- |
+| Tenant Admin functionality readiness | 82-85% | 95% | Core dashboard, users, plan, setup, support access, security, settings, and trust audit exist and have prior browser coverage. Remaining confidence gap is around launch-grade consistency, field/control inventory, visual proof across every route, and stricter per-page certification. |
+| Tenant Admin QA/browser coverage | 85-88% | 95% | Existing suites cover many positive/negative flows, but the Platform Admin standard now requires every visible control group, filter, pagination path, dialog behavior, mobile route screenshot, and role boundary to be explicitly certified. |
+| Tenant Admin user-friendliness | 72-78% | 95% | Pages are split, but some labels and workflows still feel admin-heavy. The experience needs a simpler customer-owner control-center feel with fewer mixed responsibilities per page. |
+| Tenant Admin public launch readiness | 78-82% | 95% | Usable for controlled pilot; needs 95% pass on route UX, validation clarity, list operations, mobile/accessibility, and final staging certification before broad public launch. |
+
+### TA-95-0 Fresh Inventory
+
+Status: Complete locally on 2026-09-15  
+Goal: identify every Tenant Admin route, API, visible responsibility, and certification gap before changing UI.
+
+Current routes:
+
+| Route | Current role | Visible controls/actions | TA-95 obligation |
+| --- | --- | --- | --- |
+| `/tenant-admin` | Account control center | Continue setup, Manage users, Download audit, quick links for Users/Plan/Support/Audit/Blockers, setup-guide links | Keep as dashboard-only; certify every quick link, tenant identity, metrics, setup states, desktop/mobile rendering, and empty/warning/blocked/ready copy. |
+| `/tenant-admin/users` | User management | Invite member, search members, member pagination, update roles, activate, suspend, reactivate, revoke | Certify full CRUD, required/invalid/duplicate/no-role/seat-limit validation, dialogs, focus/Escape behavior, audit evidence, mobile no-overflow. |
+| `/tenant-admin/plan` | Plan and subscription | Back to console, Download audit, change request form, payload JSON field, approve/reject/cancel/apply buttons where allowed | Certify tenant-owned request lifecycle, invalid JSON, missing required fields, note-required transitions, pagination/list growth, audit evidence. |
+| `/tenant-admin/setup` | Setup guide | Start master setup, Back to console, setup-area action links | Keep mostly read-only; certify each area has owner/status/evidence/action link and that dependency guardrails are clear. |
+| `/tenant-admin/support-access` | Support access | Back to console, Trust audit, request form, support agent, duration, reason, scope checkboxes, approve/reject/start/end/revoke actions | Certify support lifecycle, no-scope validation, missing reason/agent validation, revoke/reject note, scope enforcement, trust-audit evidence, pagination. |
+| `/tenant-admin/security-readiness` | Security posture | Trust audit, Back to console, readiness domains and evidence rows | Certify every domain, blocked/missing values, owner labels, trust-audit navigation, non-tenant denial. |
+| `/tenant-admin/trust-audit` | Customer audit evidence | Download audit, Back to console, group/type/session filters, clear filter, pagination | Certify filter combinations, empty state, pagination, download contract, source hashes, unauthorized denial. |
+| `/tenant-admin/settings` | Account settings | Back to console, Setup guide, read-only platform-owned identifiers/governance/config health | Decide whether this remains read-only or gains tenant-owned edit requests. Certify read-only explanation and no misleading editable controls. |
+
+Current APIs:
+
+| API | Purpose | TA-95 obligation |
+| --- | --- | --- |
+| `/api/tenant-admin/memberships` | Create/list tenant memberships | Positive invite, validation failures, duplicate handling, seat-limit behavior, role denial. |
+| `/api/tenant-admin/memberships/[membershipId]` | Update membership roles/status | Role update, activate/suspend/revoke, note requirements, audit proof, unauthorized denial. |
+| `/api/tenant-admin/change-requests` | Create/list tenant-owned change requests | Plan/settings request creation, invalid payload, missing fields, list/pagination. |
+| `/api/tenant-admin/change-requests/[requestId]` | Transition change requests | Approve/reject/cancel/apply with note rules and repeat-action denial. |
+| `/api/tenant-admin/support-access-grants` | Create/list support grants | Request, validation, scope selection, role denial. |
+| `/api/tenant-admin/support-access-grants/[grantId]` | Support grant transitions | Approve/reject/start/end/revoke, expiry/revoked denial, audit proof. |
+| `/api/tenant-admin/security-readiness` | Security posture | Scoped read only; wrong-role denial; missing values clear. |
+| `/api/tenant-admin/trust-audit` | Evidence list | Filters, pagination, tenant scoping, wrong-role denial. |
+| `/api/tenant-admin/commercial-support-audit/download` | Evidence download | JSON contract, tenant code, hashes, wrong-role denial. |
+
+Current test assets:
+
+| Test file | Current coverage |
+| --- | --- |
+| `tenant-admin-console-flows.spec.ts` | Dashboard, users, member lifecycle, duplicate validation, plan change request lifecycle, support access lifecycle, settings, setup guide, mobile setup, and some audit evidence. |
+| `tenant-admin-visual-accessibility-certification.spec.ts` | Added in TA-95-1. Certifies every Tenant Admin route, sidebar/top navigation shell, desktop screenshots, mobile dashboard wrapping, and no horizontal overflow. |
+| `tenant-security-readiness-flows.spec.ts` | Security readiness domains, evidence, API payload, wrong-role denial. |
+| `tenant-trust-audit-flows.spec.ts` | Trust audit filters, pagination, empty state, download contract, wrong-role denial. |
+| `tenant-admin-boundary-certification.spec.ts` | Unauthenticated redirects, wrong-role route/API denial, tenant-code scoped read surfaces. |
+| `public-launch-role-menu-certification.spec.ts` | Menu visibility and role landing coverage across personas. |
+
+TA-95-0 findings:
+
+- Tenant Admin is functionally broad and mostly covered, but the evidence is spread across older phase language and needs a clean 95% tracker.
+- Dashboard is already closer to a control center, but must be visually certified route-by-route like Platform Admin.
+- Users, Plan, and Support Access have mutation coverage, but need stricter visible-control inventory and dialog accessibility checks.
+- Settings is the biggest product decision point: it is read-only today. For launch, either keep it intentionally read-only with clear change-request path, or implement editable tenant-owned preferences.
+- True cross-tenant automation still needs a second independent tenant-admin credential; current proof is tenant-code scoped with one tenant-admin persona.
+
+Next recommended phase:
+
+Start **TA-95-1 Dashboard And Navigation Simplification**.
+
+Target for TA-95-1:
+
+- Make Tenant Admin dashboard feel as simple and polished as Platform Admin.
+- Verify all sidebar menu items and top quick links map cleanly to focused pages.
+- Add or harden a route-by-route Tenant Admin visual/accessibility certification spec.
+- Raise UX confidence from 72-78% to about 84-86% before deeper per-page CRUD passes.
+
+### TA-95-1 Dashboard And Navigation Simplification
+
+Status: Complete locally on 2026-09-15  
+Goal: make Tenant Admin feel like a clear customer-owner control center, then prove every Tenant Admin menu route renders cleanly with browser evidence.
+
+Implemented:
+
+- Simplified Tenant Admin sidebar labels from heavier admin wording to customer-owner wording:
+  - `User Management` -> `Users`
+  - `Plans & Subscription` -> `Plan`
+  - `Audit Logs` -> `Trust Audit`
+- Kept the `Tenant Admin Console` page heading stable so existing role-routing and launch tests remain compatible.
+- Added a clear `Start here` control-center panel with a computed `Next action` based on the first blocked/watch setup step.
+- Kept setup progress on the dashboard, but changed its visible language from a large guided setup feel to a lighter `Launch progress` / `Setup guide` section.
+- Added `tenant-admin-visual-accessibility-certification.spec.ts` to certify all Tenant Admin routes and screenshot evidence.
+
+Browser evidence:
+
+| Run | Environment | Result |
+| --- | --- | --- |
+| `tenant-admin-visual-accessibility-certification.spec.ts` | Local Next UI + staging API, Chromium | 9 passed in 52.6s |
+| `tenant-admin-console-flows.spec.ts` | Local Next UI + staging API, Chromium | 10 passed in 2.4m |
+
+Command used:
+
+```bash
+HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_COOKIE_SECURE=false HRMS_ENABLE_DEMO_DATA=false PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test web/tests/e2e/tenant-admin-visual-accessibility-certification.spec.ts web/tests/e2e/tenant-admin-console-flows.spec.ts --project=chromium --workers=1 --reporter=line --timeout=720000
+```
+
+Confidence after TA-95-1:
+
+| Area | Previous | Current | Notes |
+| --- | ---: | ---: | --- |
+| Tenant Admin functionality readiness | 82-85% | 86-88% | Core route and mutation workflows remain green after dashboard/navigation simplification. |
+| Tenant Admin QA/browser coverage | 85-88% | 89-91% | Every Tenant Admin route now has explicit visual/accessibility/no-overflow proof, plus existing CRUD/lifecycle tests. |
+| Tenant Admin user-friendliness | 72-78% | 84-86% | Dashboard now gives a single next action and simpler menu language. |
+| Tenant Admin public launch readiness | 78-82% | 84-87% | Still needs field-by-field per-page UX/validation hardening before 95%. |
+
+Next recommended phase:
+
+Start **TA-95-2 Users Page Certification And Dialog UX**.
+
+Target for TA-95-2:
+
+- Certify every user-management field, checkbox, row action, validation, pagination, keyboard path, and mobile layout.
+- Improve dialog focus/close behavior if gaps are found.
+- Add clearer validation for no roles, duplicate identity, seat limit, and status transitions where current copy is weak.
+- Raise Tenant Admin functionality and UX confidence to about 88-90%.
+
+### TA-95-2 Users Page Certification And Dialog UX
+
+Status: Complete locally on 2026-09-15  
+Goal: harden Tenant Admin user-management dialogs and certify the page like a real tenant owner would use it.
+
+Implemented:
+
+- Added focus management for Tenant Admin user dialogs:
+  - Invite member opens with focus on Email.
+  - Update roles opens with focus on the first role checkbox.
+  - Activate/Suspend/Revoke opens with focus on Change note.
+- Added Escape-key close behavior for invite, update roles, and access-change dialogs.
+- Connected validation messaging to form controls with `aria-describedby`.
+- Exposed validation/status copy with `role="alert"` or `role="status"` as appropriate.
+- Fixed invite Email and Username `aria-invalid` state so it matches visible validation before submit.
+- Added `tenant-admin-users-dialog-certification.spec.ts` for granular dialog certification.
+
+Browser evidence:
+
+| Run | Environment | Result |
+| --- | --- | --- |
+| `tenant-admin-users-dialog-certification.spec.ts` | Local Next UI + staging API, Chromium | 4 passed in 31.6s |
+| `tenant-admin-console-flows.spec.ts` | Local Next UI + staging API, Chromium | 10 passed in 2.7m |
+
+Certified behavior:
+
+- Invite dialog required email, invalid email, required username, no-role selection, disabled submit, focus, Escape close, and no overflow.
+- Update roles dialog focus, no-role validation, disabled save, Escape close, and no overflow.
+- Activate/Suspend/Revoke dialogs focus on note, show status-specific consequence copy, support cancel/Escape close, and keep layout stable.
+- Member search empty state and pagination boundary controls remain clear.
+- Existing invite/create, duplicate validation, activate, suspend, reactivate, revoke, audit evidence, wrong-role denial, plan, support, settings, setup, and mobile paths remain green.
+
+Confidence after TA-95-2:
+
+| Area | Previous | Current | Notes |
+| --- | ---: | ---: | --- |
+| Tenant Admin functionality readiness | 86-88% | 88-90% | User access CRUD/lifecycle remains green and dialog behavior is stronger. |
+| Tenant Admin QA/browser coverage | 89-91% | 91-92% | Users page now has dedicated field/control/dialog certification in addition to broad flow coverage. |
+| Tenant Admin user-friendliness | 84-86% | 87-89% | Dialog entry, close, validation, and consequences are clearer for real users. |
+| Tenant Admin public launch readiness | 84-87% | 87-89% | Still needs plan/support/settings/security/trust audit page-by-page deep certification before 95%. |
+
+### TA-95-3 Plan And Settings Decision Flow
+
+Status: Complete locally on 2026-09-15  
+Goal: make tenant-owned account/profile changes understandable by routing them through the existing governed change-request queue.
+
+Implemented:
+
+- Added a `Request account change` path from Tenant Settings into Plan and Subscription.
+- Prefilled the correct production request type, `configuration_change`, with target ref and explanatory description.
+- Added clearer inline field validation for title, required target ref, and JSON payload.
+- Added request-list pagination so the Plan page does not grow into a long uncontrolled queue.
+- Added an empty state for the change-request queue.
+
+Browser evidence:
+
+| Run | Environment | Result |
+| --- | --- | --- |
+| `tenant-admin-plan-settings-certification.spec.ts` | Local Next UI + staging API, Chromium | 4 passed in 43.8s |
+| `tenant-admin-console-flows.spec.ts` | Local Next UI + staging API, Chromium | 10 passed in 2.2m |
+
+Certified behavior:
+
+- Settings explains platform-governed fields and routes users to the correct request flow.
+- Configuration-change requests show helpful defaults, then clear validation if required data is removed.
+- Invalid JSON blocks submission with an inline message.
+- Disposable request create/cancel lifecycle works from the browser.
+- Queue pagination caps visible rows and preserves previous/next behavior.
+- Unauthorized and employee-role API submissions are denied.
+
+Confidence after TA-95-3:
+
+| Area | Previous | Current | Notes |
+| --- | ---: | ---: | --- |
+| Tenant Admin functionality readiness | 88-90% | 90-91% | Settings now has a governed change path instead of only read-only text. |
+| Tenant Admin QA/browser coverage | 91-92% | 92-93% | Plan/settings now have dedicated validation, pagination, lifecycle, and role-denial tests. |
+| Tenant Admin user-friendliness | 87-89% | 89-91% | The account-change path is clearer and avoids a dead-end settings page. |
+| Tenant Admin public launch readiness | 87-89% | 89-91% | Needs Support Access deep UX and final staging rerun to continue toward 95%. |
+
+### TA-95-4 Support Access Deep UX
+
+Status: Complete locally on 2026-09-15  
+Goal: make support-access requests, decisions, and history safe and easy for a tenant owner to operate.
+
+Implemented:
+
+- Added searchable Support Access grant history.
+- Added pagination for Support Access grant rows so long histories remain manageable.
+- Added clear empty-state copy when no grants match the current search.
+- Connected Support agent, Duration, Reason, and scope validation to accessible inline messages.
+- Kept the currently created or acted-on grant visible after create/approve/start/end/reject/revoke by focusing the grant history on that grant reason.
+
+Browser evidence:
+
+| Run | Environment | Result |
+| --- | --- | --- |
+| `tenant-admin-support-access-certification.spec.ts` | Local Next UI + staging API, Chromium | 4 passed in 38.6s |
+| `tenant-admin-console-flows.spec.ts` | Local Next UI + staging API, Chromium | 10 passed in 2.1m |
+
+Certified behavior:
+
+- Required support agent, missing reason, invalid duration, and no-scope validation are visible and block submit.
+- Valid support-access request creation works from the browser.
+- Rejected grants become closed: approve, start session, and revoke remain disabled after rejection.
+- Existing approve, start session, end session, second request, and revoke lifecycle still works.
+- Search narrows the support grant list without breaking pagination.
+- Pagination caps visible support grant rows to 5 and supports previous/next navigation.
+- Unauthenticated and employee-role API submissions are denied.
+
+Regression found and fixed:
+
+- After ending a support session, the acted-on row could move off the visible first page before the user/test saw the final state. The list now focuses on the acted grant after create or mutation, keeping the current work visible.
+
+Confidence after TA-95-4:
+
+| Area | Previous | Current | Notes |
+| --- | ---: | ---: | --- |
+| Tenant Admin functionality readiness | 90-91% | 91-92% | Support lifecycle, reject path, validation, search, and pagination are covered. |
+| Tenant Admin QA/browser coverage | 92-93% | 93-94% | Support Access now has a dedicated negative/list/lifecycle certification spec plus full-suite regression. |
+| Tenant Admin user-friendliness | 89-91% | 91-92% | Long support history and row-loss after actions are addressed. |
+| Tenant Admin public launch readiness | 89-91% | 91-92% | Needs security/trust refresh and staging deployment rerun to move toward 95%. |
+
+Next recommended phase:
+
+Start **TA-95-5 Security, Trust Audit, And Final Tenant Admin Staging Rerun**.
+
+Target for TA-95-5:
+
+- Re-run Security Readiness and Trust Audit against the updated Tenant Admin shell.
+- Certify filters, pagination, audit download, source hashes, role denial, desktop, and mobile proof.
+- Run the combined Tenant Admin certification suite locally, then deploy and repeat on staging.
+
+### TA-95-5 Security, Trust Audit, And Combined Local Certification
+
+Status: Complete locally on 2026-09-15  
+Goal: prove Tenant Admin security evidence, trust evidence, and the combined Tenant Admin control-center flow before staging deployment.
+
+Implemented:
+
+- Added `tenant-admin-security-trust-final-certification.spec.ts`.
+- Certified Enterprise Security Readiness across desktop and mobile.
+- Certified Trust Audit review scope, active filters, taxonomy, session evidence, evidence ledger, pagination, clear filters, and audit download integrity.
+- Verified audit download includes tenant code, commercial events, support-access evidence, and a 64-character SHA-256 checksum.
+- Re-ran the full Tenant Admin browser certification set after TA-95-1 through TA-95-5 changes.
+
+Browser evidence:
+
+| Run | Environment | Result |
+| --- | --- | --- |
+| `tenant-admin-security-trust-final-certification.spec.ts tenant-security-readiness-flows.spec.ts tenant-trust-audit-flows.spec.ts` | Local Next UI + staging API, Chromium | 9 passed in 1.0m |
+| Combined Tenant Admin certification set | Local Next UI + staging API, Chromium | 34 passed in 5.9m |
+
+Combined Tenant Admin certification set:
+
+```bash
+tenant-admin-console-flows.spec.ts
+tenant-admin-users-dialog-certification.spec.ts
+tenant-admin-plan-settings-certification.spec.ts
+tenant-admin-support-access-certification.spec.ts
+tenant-admin-security-trust-final-certification.spec.ts
+tenant-security-readiness-flows.spec.ts
+tenant-trust-audit-flows.spec.ts
+tenant-admin-boundary-certification.spec.ts
+```
+
+Build evidence:
+
+- Production build passed.
+- Touched routes included `/tenant-admin/security-readiness`, `/tenant-admin/trust-audit`, and Tenant Admin API routes.
+
+Confidence after TA-95-5 local:
+
+| Area | Previous | Current | Notes |
+| --- | ---: | ---: | --- |
+| Tenant Admin functionality readiness | 91-92% | 93-94% | All Tenant Admin focus areas now have local browser proof across positive, negative, list, and boundary behavior. |
+| Tenant Admin QA/browser coverage | 93-94% | 94-95% | Combined 34-test Tenant Admin certification passed locally against staging API shape. |
+| Tenant Admin user-friendliness | 91-92% | 92-93% | Security/Trust are understandable as evidence pages; no new UX defect found in final local run. |
+| Tenant Admin public launch readiness | 91-92% | 93-94% | Needs staging deployment and full staging rerun for 95% launch confidence. |
+
+Next recommended phase:
+
+Deploy the current check-in to staging, then run the same combined Tenant Admin certification set against `https://hrms.accerio.in`.
+
 ## Product Direction
 
 Tenant Admin is the customer account owner workspace. It should not feel like HR operations or payroll processing. It should behave like a simple account control center where the customer owner can answer:

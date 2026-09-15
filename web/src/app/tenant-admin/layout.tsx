@@ -8,14 +8,14 @@ export default async function TenantAdminLayout({ children }: { children: React.
 
   return (
     <WorkspaceChrome
-      footerDescription="Tenant account, seats, configuration posture, and commercial readiness in one focused workspace."
+      footerDescription="Account setup, users, plan, support, security, and audit evidence in one focused workspace."
       navItems={[
         { href: "/tenant-admin", label: "Dashboard", shortLabel: "DB", blurb: "Account posture" },
-        { href: "/tenant-admin/users", label: "User Management", shortLabel: "UM", blurb: "Invites and roles" },
-        { href: "/tenant-admin/plan", label: "Plans & Subscription", shortLabel: "PL", blurb: "Billing posture" },
+        { href: "/tenant-admin/users", label: "Users", shortLabel: "US", blurb: "Invites and roles" },
+        { href: "/tenant-admin/plan", label: "Plan", shortLabel: "PL", blurb: "Subscription" },
         { href: "/tenant-admin/setup", label: "Setup Guide", shortLabel: "SG", blurb: "Launch steps" },
         { href: "/tenant-admin/support-access", label: "Support Access", shortLabel: "SA", blurb: "Assisted operations" },
-        { href: "/tenant-admin/trust-audit", label: "Audit Logs", shortLabel: "AU", blurb: "Evidence review" },
+        { href: "/tenant-admin/trust-audit", label: "Trust Audit", shortLabel: "TA", blurb: "Evidence review" },
         { href: "/tenant-admin/settings", label: "Settings", shortLabel: "ST", blurb: "Account controls" },
         { href: "/tenant-admin/security-readiness", label: "Security", shortLabel: "SE", blurb: "Enterprise readiness" },
       ]}
@@ -28,7 +28,7 @@ export default async function TenantAdminLayout({ children }: { children: React.
         { href: "/tenant-admin/security-readiness", label: "Security" },
       ]}
       roleLabel="Tenant Admin"
-      searchHint="Search users, plan, settings..."
+      searchHint="Search users, setup, audit..."
       userLabel={userLabel}
       workspaceLabel="Account Control Center"
       workspaceTone="admin"

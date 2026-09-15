@@ -37,6 +37,12 @@ export default async function TenantAdminSettingsPage() {
             <Link className="button button--secondary" href="/tenant-admin/setup">
               Setup guide
             </Link>
+            <Link
+              className="button button--secondary"
+              href="/tenant-admin/plan?request_type=configuration_change&target_ref=tenant.account.profile&title=Update%20tenant%20account%20profile&description=Request%20a%20platform-reviewed%20tenant%20profile%20change."
+            >
+              Request account change
+            </Link>
           </>
         }
         pills={[data.tenant.code, data.tenant.country_code, data.tenant.timezone]}
@@ -79,7 +85,7 @@ export default async function TenantAdminSettingsPage() {
               <strong>{data.tenant.timezone}</strong>
             </div>
           </div>
-          <p className="tenant-console-empty">Tenant identifiers are platform-governed. Ask Platform Admin for legal-name, code, or activation changes.</p>
+          <p className="tenant-console-empty">Tenant identifiers are platform-governed. Use Request account change for legal-name, code, timezone, or activation updates.</p>
         </div>
 
         <div className="panel-card-soft tenant-console-panel">

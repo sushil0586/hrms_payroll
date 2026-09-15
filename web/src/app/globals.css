@@ -3541,6 +3541,44 @@ select.input-control {
   gap: 10px;
 }
 
+.tenant-next-action {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.tenant-next-action span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.tenant-next-action strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.tenant-next-action p {
+  margin: 5px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .tenant-control-action {
   display: grid;
   min-width: 0;
@@ -8455,6 +8493,7 @@ select.input-control {
   .platform-control-center,
   .platform-control-grid,
   .tenant-control-center,
+  .tenant-next-action,
   .tenant-setup-workbench,
   .tenant-setup-step,
   .tenant-setup-area,

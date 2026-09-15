@@ -14,8 +14,8 @@ test.describe("Tenant admin console", () => {
   async function expectSetupGuideCertified(page: Page) {
     const setupGuide = page.getByTestId("tenant-setup-guide");
     await expect(setupGuide).toBeVisible();
-    await expect(setupGuide.getByText("Guided setup", { exact: true })).toBeVisible();
-    await expect(setupGuide.getByRole("heading", { name: "Tenant launch guide" })).toBeVisible();
+    await expect(setupGuide.getByText("Launch progress", { exact: true })).toBeVisible();
+    await expect(setupGuide.getByRole("heading", { name: "Setup guide" })).toBeVisible();
     await expect(setupGuide.getByText(/% complete/)).toBeVisible();
     await expect(setupGuide.getByText(/of 5 launch steps complete/)).toBeVisible();
     for (const step of [
@@ -40,7 +40,9 @@ test.describe("Tenant admin console", () => {
     await expectPageReady(page, "Tenant Admin Console");
     await expect(page.getByRole("main").getByText("Account posture", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("tenant-admin-control-center")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Next best actions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Start here" })).toBeVisible();
+    await expect(page.getByTestId("tenant-next-action")).toBeVisible();
+    await expect(page.getByTestId("tenant-next-action").getByText("Next action", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Readiness snapshot" })).toBeVisible();
     for (const control of ["Users", "Plan", "Support", "Audit"]) {
       await expect(page.getByTestId("tenant-admin-control-center").getByText(control, { exact: true })).toBeVisible();

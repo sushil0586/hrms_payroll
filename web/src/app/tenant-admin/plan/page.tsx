@@ -25,10 +25,19 @@ function formatDateTime(value: string | null) {
   }).format(date);
 }
 
-export default async function TenantAdminPlanPage() {
+type Props = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function TenantAdminPlanPage({ searchParams }: Props) {
   const result = await getTenantAdminConsole();
   const data = result.data;
   const commercial = data.commercial_control;
+  const params = (await searchParams) ?? {};
 
   return (
     <main className="shell shell--workspace">
@@ -116,7 +125,13 @@ export default async function TenantAdminPlanPage() {
 
       <section className="section">
         <div className="panel-card-soft tenant-console-panel">
-          <TenantChangeRequestActions data={data} />
+          <TenantChangeRequestActions
+            data={data}
+            initialDescription={firstParam(params.description)}
+            initialRequestType={firstParam(params.request_type)}
+            initialTargetRef={firstParam(params.target_ref)}
+            initialTitle={firstParam(params.title)}
+          />
         </div>
       </section>
     </main>

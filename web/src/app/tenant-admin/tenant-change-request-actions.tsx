@@ -24,25 +24,59 @@ function formatJson(value: Record<string, unknown>) {
   return JSON.stringify(value, null, 2);
 }
 
+function initialPayloadForType(requestTypes: TenantAdminConsole["change_request_management"]["request_type_options"], requestType: string) {
+  const config = requestTypes.find((item) => item.value === requestType);
+  if (config?.allowed_payload_fields.includes("primary_email")) {
+    return "{\n  \"primary_email\": \"billing@example.com\"\n}";
+  }
+  if (config?.allowed_payload_fields.includes("configuration_key")) {
+    return "{\n  \"configuration_key\": \"tenant.account.profile\",\n  \"change_summary\": \"Review tenant account profile settings\"\n}";
+  }
+  return "{\n  \"subscription_plan\": \"enterprise\"\n}";
+}
+
 type Props = {
   data: TenantAdminConsole;
+  initialDescription?: string;
+  initialRequestType?: string;
+  initialTargetRef?: string;
+  initialTitle?: string;
 };
 
-export function TenantChangeRequestActions({ data }: Props) {
+const REQUEST_PAGE_SIZE = 5;
+
+export function TenantChangeRequestActions({
+  data,
+  initialDescription = "",
+  initialRequestType,
+  initialTargetRef = "",
+  initialTitle = "",
+}: Props) {
   const router = useRouter();
   const requestTypes = data.change_request_management.request_type_options;
-  const defaultType = requestTypes[0]?.value ?? "plan_change";
+  const defaultType =
+    requestTypes.find((item) => item.value === initialRequestType)?.value ?? requestTypes[0]?.value ?? "plan_change";
   const [requestType, setRequestType] = useState(defaultType);
-  const [title, setTitle] = useState("");
-  const [targetRef, setTargetRef] = useState("");
-  const [description, setDescription] = useState("");
-  const [payloadText, setPayloadText] = useState("{\n  \"subscription_plan\": \"enterprise\"\n}");
+  const [title, setTitle] = useState(initialTitle);
+  const [targetRef, setTargetRef] = useState(initialTargetRef);
+  const [description, setDescription] = useState(initialDescription);
+  const [payloadText, setPayloadText] = useState(initialPayloadForType(requestTypes, defaultType));
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
+  const [requestPageIndex, setRequestPageIndex] = useState(0);
   const [busyRef, setBusyRef] = useState("");
   const [notice, setNotice] = useState("");
   const [payloadError, setPayloadError] = useState("");
 
   const selectedType = requestTypes.find((item) => item.value === requestType) ?? requestTypes[0];
+  const requests = data.change_request_management.recent_requests;
+  const requestPageCount = Math.max(1, Math.ceil(requests.length / REQUEST_PAGE_SIZE));
+  const boundedRequestPageIndex = Math.min(requestPageIndex, requestPageCount - 1);
+  const pagedRequests = requests.slice(
+    boundedRequestPageIndex * REQUEST_PAGE_SIZE,
+    boundedRequestPageIndex * REQUEST_PAGE_SIZE + REQUEST_PAGE_SIZE
+  );
+  const firstVisibleRequest = requests.length ? boundedRequestPageIndex * REQUEST_PAGE_SIZE + 1 : 0;
+  const lastVisibleRequest = Math.min(requests.length, (boundedRequestPageIndex + 1) * REQUEST_PAGE_SIZE);
   const actionLabels = useMemo(
     () => Object.fromEntries(data.change_request_management.action_options.map((action) => [action.value, action.label])),
     [data.change_request_management.action_options]
@@ -162,13 +196,21 @@ export function TenantChangeRequestActions({ data }: Props) {
         </label>
         <label>
           <span>Title</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={selectedType?.label ?? "Change request"} />
-          {titleError ? <small className="tenant-field-error">{titleError}</small> : null}
+          <input aria-describedby="change-request-title-error" aria-invalid={Boolean(titleError)} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={selectedType?.label ?? "Change request"} />
+          {titleError ? (
+            <small className="tenant-field-error" id="change-request-title-error" role="alert">
+              {titleError}
+            </small>
+          ) : null}
         </label>
         <label>
           <span>Target ref</span>
-          <input value={targetRef} onChange={(event) => setTargetRef(event.target.value)} placeholder={selectedType?.target_ref_required ? "Required" : "Optional"} />
-          {targetError ? <small className="tenant-field-error">{targetError}</small> : null}
+          <input aria-describedby="change-request-target-error" aria-invalid={Boolean(targetError)} value={targetRef} onChange={(event) => setTargetRef(event.target.value)} placeholder={selectedType?.target_ref_required ? "Required" : "Optional"} />
+          {targetError ? (
+            <small className="tenant-field-error" id="change-request-target-error" role="alert">
+              {targetError}
+            </small>
+          ) : null}
         </label>
         <label>
           <span>Description</span>
@@ -178,6 +220,7 @@ export function TenantChangeRequestActions({ data }: Props) {
           <span>Payload</span>
           <textarea
             aria-invalid={Boolean(payloadError || currentPayloadValidation.error)}
+            aria-describedby="change-request-payload-error"
             value={payloadText}
             onChange={(event) => {
               setPayloadText(event.target.value);
@@ -186,7 +229,11 @@ export function TenantChangeRequestActions({ data }: Props) {
             onBlur={() => setPayloadError(currentPayloadValidation.error)}
             rows={5}
           />
-          {payloadError || currentPayloadValidation.error ? <small className="tenant-field-error">{payloadError || currentPayloadValidation.error}</small> : null}
+          {payloadError || currentPayloadValidation.error ? (
+            <small className="tenant-field-error" id="change-request-payload-error" role="alert">
+              {payloadError || currentPayloadValidation.error}
+            </small>
+          ) : null}
         </label>
       </div>
       <div className="tenant-change-request-hint">
@@ -200,8 +247,23 @@ export function TenantChangeRequestActions({ data }: Props) {
         {notice ? <span role="status">{notice}</span> : null}
       </div>
 
+      <div className="tenant-membership-toolbar tenant-membership-toolbar--compact">
+        <div aria-label="Change request pagination" className="tenant-membership-pager">
+          <span>
+            {firstVisibleRequest}-{lastVisibleRequest} of {requests.length}
+          </span>
+          <button className="button button--secondary button--compact" disabled={boundedRequestPageIndex === 0} onClick={() => setRequestPageIndex((current) => Math.max(0, current - 1))} type="button">
+            Previous
+          </button>
+          <button className="button button--secondary button--compact" disabled={boundedRequestPageIndex >= requestPageCount - 1} onClick={() => setRequestPageIndex((current) => Math.min(requestPageCount - 1, current + 1))} type="button">
+            Next
+          </button>
+        </div>
+      </div>
+
       <div className="tenant-change-request-list">
-        {data.change_request_management.recent_requests.map((request) => {
+        {!pagedRequests.length ? <p className="tenant-console-empty">No change requests recorded yet.</p> : null}
+        {pagedRequests.map((request) => {
           const rowBusy = busyRef.startsWith(`${request.id}:`);
           const canApprove = request.status === "submitted";
           const canCancel = request.status === "submitted";
