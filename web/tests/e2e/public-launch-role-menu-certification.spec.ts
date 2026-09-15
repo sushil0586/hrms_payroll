@@ -28,7 +28,7 @@ const workspacePersonas: WorkspacePersona[] = [
     persona: platformAdmin,
     landingPath: "/platform-admin",
     navLabel: /Platform Admin navigation/i,
-    expectedChrome: "Platform console",
+    expectedChrome: "Platform Control Center",
     minimumMenuLinks: 3,
   },
   {
@@ -36,7 +36,7 @@ const workspacePersonas: WorkspacePersona[] = [
     persona: tenantAdmin,
     landingPath: "/tenant-admin",
     navLabel: /Tenant Admin navigation/i,
-    expectedChrome: "Tenant console",
+    expectedChrome: "Account Control Center",
     minimumMenuLinks: 3,
   },
   {

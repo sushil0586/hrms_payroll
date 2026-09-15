@@ -23,7 +23,7 @@ test.describe("Tenant admin console", () => {
       await expect(setupStep.locator(".readiness-badge")).toBeVisible();
       await expect(setupStep.getByRole("link")).toBeVisible();
     }
-    for (const action of ["Review account", "Manage members", "Open security", "Open setup", "Open audit"]) {
+    for (const action of ["Review account", "Manage users", "Open security", "Open setup", "Open audit"]) {
       await expect(setupGuide.getByRole("link", { name: action })).toBeVisible();
     }
   }
@@ -31,22 +31,23 @@ test.describe("Tenant admin console", () => {
   test("shows account, seats, configuration, and commercial evidence", async ({ page }) => {
     await gotoAuthenticated(page, "/tenant-admin");
     await expectPageReady(page, "Tenant Admin Console");
-    const requestTitle = `PW Test plan change ${Date.now()}`;
     await expect(page.getByRole("main").getByText("Account posture", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("tenant-admin-control-center")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Owner command queue" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Next best actions" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Readiness snapshot" })).toBeVisible();
-    for (const control of ["Governance blockers", "Seat usage", "Change queue", "Support access"]) {
+    for (const control of ["Users", "Plan", "Support", "Audit"]) {
       await expect(page.getByTestId("tenant-admin-control-center").getByText(control, { exact: true })).toBeVisible();
     }
-    for (const link of ["Review security", "Manage members", "Open queue", "Audit access", "Open trust audit"]) {
+    for (const link of ["Manage users", "Review plan", "Open support", "Review audit", "Review blockers"]) {
       await expect(page.getByTestId("tenant-admin-control-center").getByRole("link", { name: link })).toBeVisible();
     }
     await expectSetupGuideCertified(page);
-    await expect(page.getByRole("heading", { name: "Northstar Foods" })).toBeVisible();
-    await expect(page.getByRole("main").getByText("Governance checks", { exact: true })).toBeVisible();
-    await expect(page.getByRole("main").getByText("Role coverage", { exact: true })).toBeVisible();
-    await expect(page.getByRole("main").getByText("Configuration health", { exact: true }).first()).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("certifies focused user management page and member controls", async ({ page }) => {
+    await gotoAuthenticated(page, "/tenant-admin/users");
+    await expectPageReady(page, "Tenant User Management");
     await expect(page.getByRole("main").getByText("Member mutations", { exact: true })).toBeVisible();
     await expect(page.getByRole("main").getByLabel("Email")).toBeVisible();
     await expect(page.getByRole("main").getByLabel("Username")).toBeVisible();
@@ -56,6 +57,16 @@ test.describe("Tenant admin console", () => {
     await expect(page.getByRole("main").getByRole("button", { name: "Invite member" })).toBeVisible();
     await expect(page.getByRole("main").getByRole("button", { name: "Update roles" }).first()).toBeVisible();
     await expect(page.getByRole("main").getByRole("button", { name: "Suspend" }).first()).toBeVisible();
+    await expect(page.getByRole("main").getByText("Role coverage", { exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("certifies focused plan page and change request lifecycle", async ({ page }) => {
+    await gotoAuthenticated(page, "/tenant-admin/plan");
+    await expectPageReady(page, "Plans And Subscription");
+    const requestTitle = `PW Test plan change ${Date.now()}`;
+    await expect(page.getByRole("main").getByText("Commercial profile", { exact: true })).toBeVisible();
+    await expect(page.getByRole("main").getByText("Usage evidence", { exact: true })).toBeVisible();
     await expect(page.getByRole("main").getByText("Change requests", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Billing and configuration queue" })).toBeVisible();
     await expect(page.getByRole("main").getByLabel("Type")).toBeVisible();
@@ -111,6 +122,12 @@ test.describe("Tenant admin console", () => {
     await createdRequest.getByRole("button", { name: "Mark applied" }).click();
     await expect((await applyResponse).ok()).toBeTruthy();
     await expect(createdRequest.getByText("Applied")).toBeVisible({ timeout: 20_000 });
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("certifies focused support access page and support controls", async ({ page }) => {
+    await gotoAuthenticated(page, "/tenant-admin/support-access");
+    await expectPageReady(page, "Support Access");
     const supportAccessForm = page.getByTestId("tenant-support-access-form");
     await expect(supportAccessForm.getByText("Support access", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Scoped support grants" })).toBeVisible();
@@ -124,10 +141,17 @@ test.describe("Tenant admin console", () => {
       await expect(supportSessionButton).toBeVisible();
       await expect(page.getByRole("main").getByRole("button", { name: "Revoke" }).first()).toBeVisible();
     }
-    await expect(page.getByRole("main").getByText("Usage evidence", { exact: true })).toBeVisible();
-    await expect(page.getByRole("main").getByText("Commercial audit", { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Download audit" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Workspaces" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What support can access" })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("certifies focused tenant settings page", async ({ page }) => {
+    await gotoAuthenticated(page, "/tenant-admin/settings");
+    await expectPageReady(page, "Tenant Settings");
+    await expect(page.getByRole("main").getByText("Tenant account", { exact: true })).toBeVisible();
+    await expect(page.getByRole("main").getByText("Governance checks", { exact: true })).toBeVisible();
+    await expect(page.getByRole("main").getByText("Configuration health", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Tenant identifiers are platform-governed.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 
