@@ -13,6 +13,14 @@ function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function normalizePositiveNumber(value: SearchParamValue, fallback: number, max: number) {
+  const parsed = Number(normalizeParam(value) || String(fallback));
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(Math.max(Math.floor(parsed), 1), max);
+}
+
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
@@ -33,11 +41,11 @@ function formatDateTime(value: string | null) {
   }).format(date);
 }
 
-function queryFor(params: Record<string, string>) {
+function queryFor(params: Record<string, string | number>) {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value) {
-      query.set(key, value);
+      query.set(key, String(value));
     }
   });
   return query.toString();
@@ -54,14 +62,27 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
   const actor = normalizeParam(currentParams.actor) || "";
   const sourceRef = normalizeParam(currentParams.source_ref) || "";
   const supportSessionRef = normalizeParam(currentParams.support_session_ref) || "";
+  const page = normalizePositiveNumber(currentParams.page, 1, 10_000);
+  const pageSize = normalizePositiveNumber(currentParams.page_size, 12, 50);
   const result = await getTenantAdminTrustAuditReview({
     event_group: eventGroup,
     event_type: eventType,
     actor,
     source_ref: sourceRef,
     support_session_ref: supportSessionRef,
+    page,
+    page_size: pageSize,
   });
   const data = result.data;
+  const basePageQuery = {
+    event_group: data.filters.event_group,
+    event_type: data.filters.event_type,
+    actor: data.filters.actor,
+    source_ref: data.filters.source_ref,
+    support_session_ref: data.filters.support_session_ref,
+    page_size: data.page_size,
+  };
+  const totalPages = Math.max(1, Math.ceil(data.total_count / Math.max(data.page_size, 1)));
   const activeFilters = [
     data.filters.event_group !== "all" ? `Group: ${titleCase(data.filters.event_group)}` : "",
     data.filters.event_type ? `Event: ${titleCase(data.filters.event_type)}` : "",
@@ -220,6 +241,50 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
             {!data.events.length ? (
               <p className="tenant-console-empty">No audit events match the selected trust filters.</p>
             ) : null}
+          </div>
+          <div aria-label="Trust audit pagination" className="pagination-bar">
+            <div className="pagination-bar__summary">
+              <span className="queue-summary-chip">
+                <strong>
+                  {data.total_count === 0 ? 0 : (data.page - 1) * data.page_size + 1}-{data.total_count === 0 ? 0 : Math.min(data.page * data.page_size, data.total_count)}
+                </strong>
+                of {data.total_count}
+              </span>
+              <span className="queue-summary-chip">
+                <strong>Page {data.page}</strong>
+                of {totalPages}
+              </span>
+            </div>
+            <div className="pagination-bar__actions">
+              <Link
+                aria-disabled={!data.has_previous}
+                className="button button--secondary"
+                href={data.has_previous ? `/tenant-admin/trust-audit?${queryFor({ ...basePageQuery, page: 1 })}` : `/tenant-admin/trust-audit?${queryFor({ ...basePageQuery, page: data.page })}`}
+              >
+                First
+              </Link>
+              <Link
+                aria-disabled={!data.has_previous}
+                className="button button--secondary"
+                href={data.has_previous ? `/tenant-admin/trust-audit?${queryFor({ ...basePageQuery, page: data.page - 1 })}` : `/tenant-admin/trust-audit?${queryFor({ ...basePageQuery, page: data.page })}`}
+              >
+                Previous
+              </Link>
+              <Link
+                aria-disabled={!data.has_next}
+                className="button button--secondary"
+                href={data.has_next ? `/tenant-admin/trust-audit?${queryFor({ ...basePageQuery, page: data.page + 1 })}` : `/tenant-admin/trust-audit?${queryFor({ ...basePageQuery, page: data.page })}`}
+              >
+                Next
+              </Link>
+              <Link
+                aria-disabled={!data.has_next}
+                className="button button--secondary"
+                href={data.has_next ? `/tenant-admin/trust-audit?${queryFor({ ...basePageQuery, page: totalPages })}` : `/tenant-admin/trust-audit?${queryFor({ ...basePageQuery, page: data.page })}`}
+              >
+                Last
+              </Link>
+            </div>
           </div>
         </div>
       </section>

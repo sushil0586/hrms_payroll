@@ -408,7 +408,7 @@ Testing targets:
 - Trust audit evidence.
 - Pagination for long grants.
 
-Status: Complete locally; staging deployment and rerun pending after check-in.
+Status: Complete locally and on staging.
 
 Evidence:
 - Support Access request form shows inline browser validation for required support agent, required reason, valid duration, and at least one selected scope.
@@ -416,7 +416,11 @@ Evidence:
 - Grant action rows show that a decision note is required for approve, reject, or revoke.
 - Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts -g "support access page"` -> `1 passed`; covered required-field validation, duration validation, request creation, requested state, note-required approve, approve, start session, end session, second request creation, note-required revoke, and revoke.
 - Local browser command against `http://localhost:3211` with staging API: `tenant-admin-console-flows.spec.ts` -> `10 passed`; verified dashboard, users, membership lifecycle, unauthorized boundaries, trust audit, plan, support lifecycle, settings, mobile setup, and setup workbench after Support Access UX hardening.
-- Remaining TA-4 work: deploy after check-in, rerun post-deploy smoke, rerun focused Support Access flow and full Tenant Admin suite on staging.
+- Staging deployment completed on commit `8b5ba58`.
+- Staging post-deploy smoke passed: API health 200, root/login 200, backend/web active, disk 68%.
+- Staging browser command against `https://hrms.accerio.in`: `tenant-admin-console-flows.spec.ts -g "support access page"` -> `1 passed`; covered deployed required-field validation, duration validation, request creation, approve, start session, end session, second request creation, and revoke.
+- Staging browser command against `https://hrms.accerio.in`: `tenant-admin-console-flows.spec.ts` -> `10 passed`.
+- Remaining TA-4 work: none for current scope.
 
 ### Phase TA-5: Security And Trust Audit Certification
 
@@ -429,7 +433,20 @@ Testing targets:
 - Audit download integrity.
 - Pagination for long audit lists.
 
-Status: Not started.
+Status: Complete locally; staging deployment and rerun pending after check-in.
+
+Evidence:
+- Added Trust Audit pagination controls with filter-preserving First, Previous, Next, and Last actions.
+- Expanded browser certification for Security Readiness across MFA, SSO, SCIM, session, audit, data-protection posture, evidence labels, owner/status text, navigation to Trust Audit, and employee-role API denial.
+- Expanded browser certification for Trust Audit across event-group filters, event-type filters, clear filters, empty unknown-filter state, pagination controls, audit pack download contract, evidence checksum, and employee-role API denial.
+- Local backend check passed: `./.venv/bin/python manage.py check`.
+- Local production web build passed: `pnpm --dir web build`.
+- Local focused TA-5 Playwright against staging API passed: `tenant-security-readiness-flows.spec.ts tenant-trust-audit-flows.spec.ts` = 6/6.
+- Local full Tenant Admin Playwright against staging API passed: `tenant-admin-console-flows.spec.ts tenant-security-readiness-flows.spec.ts tenant-trust-audit-flows.spec.ts` = 16/16.
+
+Observed product posture:
+- Security Readiness is intentionally read-only and clear enough for tenant owners to understand readiness domains and blockers.
+- Trust Audit is now usable for long histories because filters and pagination are visible in the page, not only supported by the backend.
 
 ### Phase TA-6: Cross-Role And Cross-Tenant Boundaries
 
@@ -470,7 +487,7 @@ Status: Not started.
 | User Management is embedded in dashboard | Hard to certify and operate | TA-1, TA-2 |
 | Change requests are embedded in dashboard | Plan/commercial flow is not obvious | TA-1, TA-3 |
 | Support access is embedded in dashboard | Critical support approval flow needs its own focused page | TA-1, TA-4 |
-| Trust audit has filters but no strong pagination UX certification yet | Long audit history may become hard to use | TA-5 |
+| Trust audit staging rerun pending after latest pagination change | Need production-deployed evidence before launch signoff | TA-5, TA-7 |
 | Settings is an anchor, not a focused page | Tenant-owned vs platform-owned fields are unclear | TA-1 |
 | Existing tests cover useful basics but not full page-by-page CRUD after split | Certification confidence is limited | TA-2 through TA-7 |
 
