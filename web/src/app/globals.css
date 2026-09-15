@@ -3472,6 +3472,36 @@ select.input-control {
     rgba(255, 255, 255, 0.92);
 }
 
+.tenant-identity-strip {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.tenant-identity-strip span:first-child {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.tenant-identity-strip h2 {
+  margin: 2px 0 0;
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .tenant-control-action-list {
   display: grid;
   gap: 10px;
@@ -8528,7 +8558,8 @@ select.input-control {
   .hr-admin-launch-audit__summary,
   .hr-admin-launch-audit__module,
   .hr-admin-control-card__header,
-  .payroll-setup-panel__header--split {
+  .payroll-setup-panel__header--split,
+  .tenant-identity-strip {
     align-items: flex-start;
     flex-direction: column;
   }

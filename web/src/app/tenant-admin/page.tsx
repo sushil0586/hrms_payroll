@@ -159,6 +159,14 @@ export default async function TenantAdminConsolePage() {
         showPills
       />
 
+      <section className="tenant-identity-strip" aria-label="Selected tenant">
+        <div>
+          <span>Selected tenant</span>
+          <h2>{data.tenant.name}</h2>
+        </div>
+        <span className={statusBadgeClass(data.tenant.status)}>{titleCase(data.tenant.status)}</span>
+      </section>
+
       <section className="section" id="dashboard">
         <div className="metric-grid-modern">
           <MetricTile label="Account posture" value={titleCase(data.summary.status)} trend={`${data.summary.blocked_check_count} blockers`} />
