@@ -87,7 +87,7 @@ Exit criteria:
 
 ## Phase PA-95-2: Guided Tenant Onboarding Checklist
 
-Status: Pending  
+Status: Complete locally on 2026-09-15; staging deploy pending check-in  
 Goal: make the tenant onboarding sequence obvious from one screen.
 
 Implementation tasks:
@@ -258,13 +258,13 @@ After Platform Admin reaches 95%, repeat the same model for Tenant Admin:
 | --- | --- | --- | --- | --- | --- |
 | 2026-09-15 | Baseline before PA-95 | Staging | Platform Admin modal-flow deploy and certification passed: post-deploy smoke passed, Platform Admin browser pack `4 passed`. | Functionality 85%, QA 88%, UX 70-75% | Create Tenant and Add Admin Contact are modal-based; validation is clearer, but onboarding language and guided sequence still need simplification. |
 | 2026-09-15 | PA-95-0 and PA-95-1 | Local UI against staging API | Passed: `pnpm --dir web lint`, `pnpm --dir web typecheck`, Platform Admin browser pack `4 passed`, `pnpm --dir web build`. | Functionality 87%, QA 90%, UX 80% | Renamed operator-facing concepts: Policy Packs -> Setup Templates, Activation Gates -> Launch Checklist, Baseline -> Initial Setup, Handoff -> Ready for Tenant Admin, Provision Admin -> Create Login Access. Found and fixed a real UX/layout defect where the login-access form could intercept Admin Contact edit clicks. |
+| 2026-09-15 | PA-95-2 | Local UI against staging API | Passed: `pnpm --dir web lint`, `pnpm --dir web typecheck`, Platform Admin browser pack `4 passed`, `pnpm --dir web build`. | Functionality 90%, QA 92%, UX 87% | Added selected-tenant guided launch checklist with numbered steps, Done/Needed/Blocked status, direct action links, and clear dependency messaging for tenant record, setup template, tenant admin login, readiness, and activation. |
 
 ## Current Next Recommended Phase
 
-Start with **PA-95-2 Guided Tenant Onboarding Checklist** after PA-95-1 is checked in, deployed, and certified on staging.
+Start with **PA-95-3 Full CRUD And State Transition Certification** after PA-95-2 is checked in, deployed, and certified on staging.
 
 Reason:
 
-- PA-95-0 and PA-95-1 improved the visible language and fixed a real clickability issue.
-- PA-95-2 turns the selected tenant flow into a true guided sequence instead of several independent operation cards.
-- This should be the biggest next jump toward 95% user-friendliness and functionality.
+- PA-95-2 now gives the operator a clear tenant launch sequence.
+- PA-95-3 should prove every Platform Admin mutation end to end and close the remaining functionality/QA gap toward 95%.

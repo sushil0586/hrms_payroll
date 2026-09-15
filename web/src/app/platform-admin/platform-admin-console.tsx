@@ -162,6 +162,42 @@ function GateChecklistItem({
   );
 }
 
+function GuidedChecklistItem({
+  index,
+  status,
+  title,
+  detail,
+  actionHref,
+  actionLabel,
+}: {
+  index: number;
+  status: "done" | "needed" | "blocked";
+  title: string;
+  detail: string;
+  actionHref?: string;
+  actionLabel?: string;
+}) {
+  const statusLabel = status === "done" ? "Done" : status === "blocked" ? "Blocked" : "Needed";
+
+  return (
+    <li className={`platform-guided-checklist__item platform-guided-checklist__item--${status}`}>
+      <span className="platform-guided-checklist__index">{index}</span>
+      <div className="platform-guided-checklist__content">
+        <div className="platform-guided-checklist__title-row">
+          <strong>{title}</strong>
+          <span>{statusLabel}</span>
+        </div>
+        <small>{detail}</small>
+        {actionHref && actionLabel ? (
+          <Link className="button button--secondary" href={actionHref}>
+            {actionLabel}
+          </Link>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
 function ValidationNote({ children }: { children: React.ReactNode }) {
   return <small className="platform-validation-note">{children}</small>;
 }
@@ -256,6 +292,59 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const canActivateTenant = Boolean(selectedTenant && onboarding?.handoff_completed_at && hasProvisionedPrimaryAdmin);
   const publishedPacks = policyPacks.filter((pack) => pack.status === "published");
   const canAdoptBaseline = Boolean(selectedTenant && publishedPacks.length);
+  const guidedChecklist = selectedTenant && onboarding ? [
+    {
+      status: "done" as const,
+      title: "Customer record created",
+      detail: `${selectedTenant.name} exists in the tenant registry.`,
+      actionHref: buildPanelHref("tenants", selectedTenant.id),
+      actionLabel: "Review tenant",
+    },
+    {
+      status: hasBaseline ? "done" as const : publishedPacks.length ? "needed" as const : "blocked" as const,
+      title: "Apply setup template",
+      detail: hasBaseline
+        ? `Initial setup was confirmed ${formatDateTime(onboarding.baseline_published_at)}.`
+        : publishedPacks.length
+          ? "Choose a published setup template and apply it to this tenant."
+          : "Publish at least one setup template before this tenant can receive initial setup.",
+      actionHref: buildPanelHref("policy-packs", selectedTenant.id),
+      actionLabel: hasBaseline ? "View templates" : "Apply template",
+    },
+    {
+      status: hasProvisionedPrimaryAdmin ? "done" as const : primaryContact ? "needed" as const : "blocked" as const,
+      title: "Create tenant admin login",
+      detail: hasProvisionedPrimaryAdmin
+        ? `${primaryContact?.email || "Primary tenant admin"} has tenant admin access.`
+        : primaryContact
+          ? `Create login access for ${primaryContact.email}.`
+          : "Add a primary tenant admin contact before creating login access.",
+      actionHref: buildPanelHref("admins", selectedTenant.id),
+      actionLabel: hasProvisionedPrimaryAdmin ? "View admin users" : primaryContact ? "Create login access" : "Add admin contact",
+    },
+    {
+      status: onboarding.handoff_completed_at ? "done" as const : canMarkHandoff ? "needed" as const : "blocked" as const,
+      title: "Mark ready for tenant admin",
+      detail: onboarding.handoff_completed_at
+        ? `Customer readiness was marked ${formatDateTime(onboarding.handoff_completed_at)}.`
+        : canMarkHandoff
+          ? "Setup and primary admin access are complete. Mark this customer ready."
+          : "Complete setup template and tenant admin login before marking ready.",
+      actionHref: buildPanelHref("onboarding", selectedTenant.id),
+      actionLabel: onboarding.handoff_completed_at ? "View readiness" : "Open launch checklist",
+    },
+    {
+      status: selectedTenant.status === "active" ? "done" as const : canActivateTenant ? "needed" as const : "blocked" as const,
+      title: "Activate tenant",
+      detail: selectedTenant.status === "active"
+        ? "Tenant is active and available for customer use."
+        : canActivateTenant
+          ? "Readiness is complete. Activate the tenant when the customer is ready to begin."
+          : "Mark the customer ready for tenant admin before activation.",
+      actionHref: buildPanelHref("onboarding", selectedTenant.id),
+      actionLabel: selectedTenant.status === "active" ? "View active tenant" : "Open launch checklist",
+    },
+  ] : [];
   const events = onboarding?.recent_events ?? [];
   const normalizedLeadQuery = leadQuery.trim().toLowerCase();
   const normalizedTenantQuery = tenantQuery.trim().toLowerCase();
@@ -1057,8 +1146,23 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                   <h2>Launch checklist</h2>
                   <StatusChip value={onboarding.tenant_onboarding_status} />
                 </div>
-                <p className="section-copy">Complete setup confirmation, tenant admin access, customer readiness, and activation.</p>
+                <p className="section-copy">Follow these steps in order to make the customer ready for launch.</p>
               </div>
+              <ol className="platform-guided-checklist" aria-label="Guided tenant launch checklist">
+                {guidedChecklist.map((step, index) => (
+                  <GuidedChecklistItem
+                    actionHref={step.actionHref}
+                    actionLabel={step.actionLabel}
+                    detail={step.detail}
+                    index={index + 1}
+                    key={step.title}
+                    status={step.status}
+                    title={step.title}
+                  />
+                ))}
+              </ol>
+              <div className="platform-gate-divider" />
+              <p className="section-copy">Readiness gates and timestamps</p>
               <ol className="platform-gate-checklist" aria-label="Activation gate validation checklist">
                 <GateChecklistItem
                   complete={hasBaseline}

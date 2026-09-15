@@ -3242,6 +3242,106 @@ select.input-control {
   list-style: none;
 }
 
+.platform-guided-checklist {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.platform-guided-checklist__item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.platform-guided-checklist__index {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.platform-guided-checklist__content {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.platform-guided-checklist__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.platform-guided-checklist__title-row strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.platform-guided-checklist__title-row span {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.platform-guided-checklist__content small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.platform-guided-checklist__content .button {
+  justify-self: start;
+}
+
+.platform-guided-checklist__item--done {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(236, 253, 245, 0.72);
+}
+
+.platform-guided-checklist__item--done .platform-guided-checklist__index,
+.platform-guided-checklist__item--done .platform-guided-checklist__title-row span {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.platform-guided-checklist__item--blocked {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(255, 251, 235, 0.72);
+}
+
+.platform-guided-checklist__item--blocked .platform-guided-checklist__index,
+.platform-guided-checklist__item--blocked .platform-guided-checklist__title-row span {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.platform-gate-divider {
+  height: 1px;
+  margin: 10px 0 12px;
+  background: rgba(226, 232, 240, 0.86);
+}
+
 .platform-gate-checklist__item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

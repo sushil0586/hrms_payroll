@@ -97,6 +97,18 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await openTab(page, "Launch Checklist");
     await expect(page).toHaveURL(/\/platform-admin\/onboarding/);
     await expect(page.getByTestId("platform-admin-onboarding-panel")).toBeVisible();
+    await expect(card(page, "Launch checklist").locator(".platform-guided-checklist")).toBeVisible();
+    const guidedChecklist = card(page, "Launch checklist").locator(".platform-guided-checklist");
+    await expect(guidedChecklist).toBeVisible();
+    for (const step of [
+      "Customer record created",
+      "Apply setup template",
+      "Create tenant admin login",
+      "Mark ready for tenant admin",
+      "Activate tenant",
+    ]) {
+      await expect(guidedChecklist.locator(".platform-guided-checklist__item").filter({ hasText: step })).toBeVisible();
+    }
     await expect(card(page, "Launch checklist").locator(".platform-gate-checklist")).toBeVisible();
     await expect(card(page, "Launch checklist").getByText("Initial setup confirmed")).toBeVisible();
     await expect(card(page, "Launch checklist").getByText("Primary tenant admin has login access")).toBeVisible();
