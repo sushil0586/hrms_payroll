@@ -16537,7 +16537,16 @@ class HrAdminNotificationOptionsView(HrAdminContextMixin, APIView):
                         "description": "Optional reply-to address used by SMTP-style providers for recipient responses.",
                         "input_type": "text",
                         "default_value": "",
-                        "placeholder": "support@example.local",
+                        "placeholder": "support@verified-domain.example",
+                    },
+                    {
+                        "backend_key": NotificationDeliveryBackend.EMAIL_SMTP,
+                        "key": "ses_region",
+                        "label": "SES region",
+                        "description": "Operational note for Amazon SES SMTP routing. SMTP credentials still stay in deployment secrets.",
+                        "input_type": "text",
+                        "default_value": "",
+                        "placeholder": "ap-south-1",
                     },
                     {
                         "backend_key": NotificationDeliveryBackend.CONSOLE,
@@ -16590,8 +16599,8 @@ class HrAdminNotificationOptionsView(HrAdminContextMixin, APIView):
                         "sender_identifier_label": "From name or sender key",
                         "sender_identifier_placeholder": "nexora-hrms",
                         "sender_address_label": "From email",
-                        "sender_address_placeholder": "notifications@example.local",
-                        "provider_config_example": {"reply_to": "support@example.local"},
+                        "sender_address_placeholder": "notifications@verified-domain.example",
+                        "provider_config_example": {"reply_to": "support@verified-domain.example", "ses_region": "ap-south-1"},
                     },
                     {
                         "channel": NotificationChannel.SMS,

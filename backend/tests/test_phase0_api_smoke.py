@@ -15327,6 +15327,10 @@ def test_bootstrap_demo_workspace_seeds_document_notification_catalog(api_client
     assert any(item["value"] == NotificationDeliveryBackend.EMAIL_SMTP for item in options_payload["notification_delivery_backends"])
     assert any(item["key"] == "max_attempts" for item in options_payload["notification_delivery_authoring"]["policy_fields"])
     assert any(item["backend_key"] == NotificationDeliveryBackend.EMAIL_SMTP for item in options_payload["notification_delivery_authoring"]["provider_fields"])
+    assert any(
+        item["backend_key"] == NotificationDeliveryBackend.EMAIL_SMTP and item["key"] == "ses_region"
+        for item in options_payload["notification_delivery_authoring"]["provider_fields"]
+    )
     assert any(item["channel"] == "email" for item in options_payload["notification_delivery_authoring"]["channel_hints"])
     assert any(item["module"] == "documents" for item in options_payload["notification_catalog_authoring"]["event_module_hints"])
     assert any(item["audience_type"] == "custom" for item in options_payload["notification_catalog_authoring"]["audience_hints"])
@@ -15665,6 +15669,61 @@ def test_process_notifications_command_delivers_email_and_console_channels(api_c
     review_payload = review_response.json()
     assert len(review_payload["delivery_logs"]) == 1
     assert review_payload["delivery_logs"][0]["provider_name"] == NotificationDeliveryBackend.EMAIL_SMTP
+
+
+@pytest.mark.django_db
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    DEFAULT_FROM_EMAIL="Nexora HRMS <notifications@verified-domain.example>",
+)
+def test_email_smtp_backend_is_ses_sandbox_ready_without_secret_leak(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    membership = employee.membership
+    config = NotificationChannelConfiguration.objects.get(tenant=tenant, channel="email")
+    config.backend_key = NotificationDeliveryBackend.EMAIL_SMTP
+    config.sender_address = "Nexora HRMS <notifications@verified-domain.example>"
+    config.provider_config = {"reply_to": "support@verified-domain.example", "ses_region": "ap-south-1"}
+    config.save(update_fields=["backend_key", "sender_address", "provider_config", "updated_at"])
+
+    Notification.objects.create(
+        tenant=tenant,
+        channel="email",
+        audience_type="membership",
+        recipient_membership=membership,
+        recipient_identifier=membership.user.username,
+        subject_type="employee_invite",
+        subject_identifier="ses-sandbox-proof-1",
+        title="SES sandbox proof",
+        subject="SES sandbox proof subject",
+        body="This email proves the SES SMTP path can deliver through the HRMS notification queue.",
+        status="pending",
+        priority="high",
+        scheduled_for=timezone.now(),
+        payload={"sandbox_recipient_verified": True},
+    )
+
+    mail.outbox = []
+    call_command("process_notifications", tenant_code=tenant.code, channels=["email"])
+
+    notification = Notification.objects.get(tenant=tenant, subject_identifier="ses-sandbox-proof-1")
+    assert notification.status == NotificationStatus.DELIVERED
+    assert notification.recipient_address == employee.work_email
+    assert len(mail.outbox) == 1
+    message = mail.outbox[0]
+    assert message.subject == "SES sandbox proof subject"
+    assert message.from_email == "Nexora HRMS <notifications@verified-domain.example>"
+    assert message.to == [employee.work_email]
+    assert message.reply_to == ["support@verified-domain.example"]
+
+    log = NotificationDeliveryLog.objects.get(notification=notification)
+    assert log.provider_name == NotificationDeliveryBackend.EMAIL_SMTP
+    assert log.response_payload == {
+        "recipient": employee.work_email,
+        "from_email": "Nexora HRMS <notifications@verified-domain.example>",
+    }
+    assert "DJANGO_EMAIL_HOST_PASSWORD" not in json.dumps(log.response_payload)
+    assert "ses-smtp" not in json.dumps(log.response_payload).lower()
 
 
 @pytest.mark.django_db

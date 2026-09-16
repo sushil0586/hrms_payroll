@@ -8,7 +8,7 @@ import logging
 from typing import Any
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -192,13 +192,16 @@ class EmailSmtpBackend(BaseNotificationDeliveryBackend):
 
         from_email = configuration.sender_address or getattr(settings, "DEFAULT_FROM_EMAIL", "hrms@example.local")
         subject = notification.subject or notification.title or "Notification"
-        send_mail(
+        provider_config = configuration.provider_config if isinstance(configuration.provider_config, dict) else {}
+        reply_to = provider_config.get("reply_to")
+        message = EmailMessage(
             subject=subject,
-            message=notification.body or notification.title,
+            body=notification.body or notification.title,
             from_email=from_email,
-            recipient_list=[recipient_address],
-            fail_silently=False,
+            to=[recipient_address],
+            reply_to=[reply_to] if reply_to else None,
         )
+        message.send(fail_silently=False)
         return DeliveryResult(
             status=NotificationStatus.DELIVERED,
             provider_name=self.key,
