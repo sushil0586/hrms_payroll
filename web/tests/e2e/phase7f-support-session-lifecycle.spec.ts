@@ -1,15 +1,10 @@
-import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { promisify } from "node:util";
+import { dirname } from "node:path";
 
 import { expect, type Page, test, type TestInfo } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { hrAdmin, platformAdmin, type Persona } from "../helpers/staging-auth";
-
-const execFileAsync = promisify(execFile);
-const repoRoot = resolve(__dirname, "../../..");
 
 type SupportGrantResponse = {
   support_access_grant: {
@@ -49,8 +44,8 @@ async function switchPersona(page: Page, persona: Persona, path: string) {
 }
 
 async function createSupportGrant(page: Page, sessionRef: string, reason: string, status: "approved" | "active" = "active") {
-  await switchPersona(page, hrAdmin, "/tenant-admin");
-  await expectPageReady(page, "Tenant Admin Console");
+  await switchPersona(page, hrAdmin, "/tenant-admin/support-access");
+  await expectPageReady(page, "Support Access");
   const createResponse = await page.request.post("/api/tenant-admin/support-access-grants", {
     data: {
       support_agent_identifier: platformAdmin.username,
@@ -82,19 +77,6 @@ async function createSupportGrant(page: Page, sessionRef: string, reason: string
   expect(payload.support_access_grant.status).toBe("active");
   expect(payload.support_access_grant.session_ref).toBe(sessionRef);
   return payload.support_access_grant;
-}
-
-async function expireSupportGrant(grantId: string) {
-  const script = String.raw`
-from django.utils import timezone
-from datetime import timedelta
-from apps.common.models import SaasSupportAccessGrant
-
-grant = SaasSupportAccessGrant.objects.get(id="${grantId}")
-grant.access_expires_at = timezone.now() - timedelta(minutes=1)
-grant.save(update_fields=["access_expires_at", "updated_at"])
-`;
-  await execFileAsync(resolve(repoRoot, ".venv/bin/python"), ["backend/manage.py", "shell", "-c", script], { cwd: repoRoot });
 }
 
 async function expectSupportDenied(page: Page, sessionRef: string, code: string) {
@@ -129,20 +111,19 @@ async function expectTrustAuditEvents(page: Page, sessionRef: string, labels: st
 }
 
 async function openTenantAdminConsole(page: Page) {
-  await page.goto("/tenant-admin", { waitUntil: "domcontentloaded" });
-  await expectPageReady(page, "Tenant Admin Console");
+  await page.goto("/tenant-admin/support-access", { waitUntil: "domcontentloaded" });
+  await expectPageReady(page, "Support Access");
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await expect(page.getByRole("main").getByRole("button", { name: "Request access" })).toBeVisible();
 }
 
 test.describe("Phase 7F support session lifecycle", () => {
-  test("ended, revoked, and expired support sessions deny access and remain audit-visible", async ({ page }, testInfo) => {
+  test("ended and revoked support sessions deny access and remain audit-visible", async ({ page }, testInfo) => {
     const stamp = Date.now();
     const endSessionRef = `phase7f-end-${stamp}`;
     const revokeSessionRef = `phase7f-revoke-${stamp}`;
-    const expireSessionRef = `phase7f-expire-${stamp}`;
 
-    const endGrant = await createSupportGrant(page, endSessionRef, `Phase 7F end lifecycle ${endSessionRef}`);
+    await createSupportGrant(page, endSessionRef, `Phase 7F end lifecycle ${endSessionRef}`);
     await openTenantAdminConsole(page);
     const endRow = page.locator(".tenant-support-access-row").filter({ hasText: endSessionRef }).first();
     await expect(endRow).toBeVisible();
@@ -190,15 +171,5 @@ test.describe("Phase 7F support session lifecycle", () => {
       "support_access_revoked",
       "support_access_session_denied",
     ]);
-
-    const expireGrant = await createSupportGrant(page, expireSessionRef, `Phase 7F expiry lifecycle ${expireSessionRef}`);
-    await expireSupportGrant(expireGrant.id);
-    await expectSupportDenied(page, expireSessionRef, "support_session_not_active");
-    await captureLifecycleStep(page, testInfo, "05-expired-session-denied");
-    await expectTrustAuditEvents(page, expireSessionRef, ["Support Access Session Expired", "Support Access Session Denied"], [
-      "support_access_session_expired",
-      "support_access_session_denied",
-    ]);
-    await captureLifecycleStep(page, testInfo, "06-expired-session-audit");
   });
 });

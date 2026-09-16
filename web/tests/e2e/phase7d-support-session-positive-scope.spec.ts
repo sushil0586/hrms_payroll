@@ -27,8 +27,8 @@ async function switchPersona(page: Page, persona: Persona, path: string) {
 }
 
 async function requestSupportGrantThroughTenantAdmin(page: Page, sessionRef: string) {
-  await switchPersona(page, hrAdmin, "/tenant-admin");
-  await expectPageReady(page, "Tenant Admin Console");
+  await switchPersona(page, hrAdmin, "/tenant-admin/support-access");
+  await expectPageReady(page, "Support Access");
   await expect(page.getByRole("heading", { name: "Scoped support grants" })).toBeVisible();
   await expect(page.getByRole("main").getByLabel("Support agent")).toBeVisible();
   await expect(page.getByRole("main").getByLabel("Duration")).toBeVisible();
