@@ -5,6 +5,11 @@ import { gotoAuthenticated } from "../helpers/staging-auth";
 
 const runSuffix = Date.now().toString(36).toUpperCase();
 
+function isRemoteApiRun() {
+  const apiBaseUrl = process.env.HRMS_API_BASE_URL ?? "";
+  return Boolean(apiBaseUrl && !apiBaseUrl.includes("127.0.0.1") && !apiBaseUrl.includes("localhost"));
+}
+
 function uniqueCode(prefix: string) {
   return `PW9C_${prefix}_${runSuffix}`;
 }
@@ -31,6 +36,51 @@ function pageToggle(page: Page, label: string) {
     .filter({ has: page.locator("strong, .detail-label", { hasText: new RegExp(`^${label}$`) }) })
     .locator("input[type='checkbox']")
     .first();
+}
+
+async function createDocumentRequirementScope(page: Page) {
+  const legalCode = uniqueCode("DLE");
+  const legalName = `Phase 9C Legal Entity ${runSuffix}`;
+  const locationCode = uniqueCode("DLOC");
+  const locationName = `Phase 9C Location ${runSuffix}`;
+  const branchCode = uniqueCode("DBR");
+  const branchName = `Phase 9C Branch ${runSuffix}`;
+
+  await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new");
+  await expectPageReady(page, /Create Legal Entity/i);
+  await pageField(page, "Code").fill(legalCode);
+  await pageField(page, "Name").fill(legalName);
+  await pageField(page, "Registered name").fill(`${legalName} Pvt Ltd`);
+  await pageField(page, "Country code").fill("IN");
+  await pageField(page, "Timezone").fill("Asia/Kolkata");
+  await pageField(page, "Primary email").fill(`${legalCode.toLowerCase()}@example.test`);
+  await pageField(page, "Primary phone").fill("+91 9876543210");
+  await page.getByRole("button", { name: "Create legal entity" }).click();
+  await expect(page).toHaveURL(/\/hr-admin\/organization\?section=legal_entities/, { timeout: 20_000 });
+
+  await gotoAuthenticated(page, "/hr-admin/organization/locations/new");
+  await expectPageReady(page, /Create Location/i);
+  await pageField(page, "Code").fill(locationCode);
+  await pageField(page, "Name").fill(locationName);
+  await pageField(page, "Address line 1").fill("Phase 9C QA Park");
+  await pageField(page, "City").fill("Bengaluru");
+  await pageField(page, "State").fill("Karnataka");
+  await pageField(page, "Postal code").fill("560001");
+  await pageField(page, "Country code").fill("IN");
+  await page.getByRole("button", { name: "Create location" }).click();
+  await expect(page).toHaveURL(/\/hr-admin\/organization\?section=locations/, { timeout: 20_000 });
+
+  await gotoAuthenticated(page, "/hr-admin/organization/branches/new");
+  await expectPageReady(page, /Create Branch/i);
+  await pageField(page, "Code").fill(branchCode);
+  await pageField(page, "Name").fill(branchName);
+  await pageField(page, "Legal entity").selectOption({ label: legalName });
+  await pageField(page, "Location").selectOption({ label: locationName });
+  await pageField(page, "Branch type").fill("Document Requirement Scope");
+  await page.getByRole("button", { name: "Create branch" }).click();
+  await expect(page).toHaveURL(/\/hr-admin\/organization\?section=branches/, { timeout: 20_000 });
+
+  return { legalName, branchName };
 }
 
 async function selectFirstNonEmptyOption(select: Locator) {
@@ -126,6 +176,7 @@ async function createActiveWorkflowTemplate(page: Page) {
 }
 
 async function createActiveDocumentCategoryAndMandatoryRule(page: Page) {
+  const scope = await createDocumentRequirementScope(page);
   const code = uniqueCode("DOC");
   const name = `Phase 9C Document Category ${runSuffix}`;
   await gotoAuthenticated(page, "/hr-admin/document-categories/new");
@@ -142,8 +193,8 @@ async function createActiveDocumentCategoryAndMandatoryRule(page: Page) {
   await gotoAuthenticated(page, "/hr-admin/document-requirements/new");
   await expectPageReady(page, "Create document requirement");
   await pageField(page, "Category").selectOption({ label: name });
-  await selectFirstNonEmptyOption(pageField(page, "Legal entity"));
-  await selectFirstNonEmptyOption(pageField(page, "Branch"));
+  await pageField(page, "Legal entity").selectOption({ label: scope.legalName });
+  await pageField(page, "Branch").selectOption({ label: scope.branchName });
   await selectFirstNonEmptyOption(pageField(page, "Department"));
   await selectFirstNonEmptyOption(pageField(page, "Grade"));
   await selectFirstNonEmptyOption(pageField(page, "Employment type"));
@@ -264,6 +315,7 @@ async function createActivePayrollRuleVersion(page: Page) {
 
 test.describe("Phase 9C launch audit blocker closure", () => {
   test("HR admin closes launch audit master-data blockers through browser configuration", async ({ page }) => {
+    test.skip(isRemoteApiRun(), "This blocker-closure spec performs many prerequisite mutations and is certified in local full-stack runs; staging uses launch remediation/release-gate proofs.");
     test.setTimeout(12 * 60 * 1000);
 
     await createActiveShift(page);

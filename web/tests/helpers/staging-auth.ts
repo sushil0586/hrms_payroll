@@ -62,11 +62,18 @@ async function gotoWithRetry(page: Page, targetPath: string) {
   const attempts = 2;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      await page.goto(targetPath, { waitUntil: "domcontentloaded", timeout: 45_000 });
+      await page.goto(targetPath, { waitUntil: "domcontentloaded", timeout: 90_000 });
       await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
       return;
     } catch (error) {
-      if (attempt === attempts || !String(error).includes("ERR_NETWORK_IO_SUSPENDED")) {
+      const message = String(error);
+      const retryable =
+        message.includes("ERR_NETWORK_IO_SUSPENDED") ||
+        message.includes("ERR_ABORTED") ||
+        message.includes("Timeout") ||
+        message.includes("ECONNRESET") ||
+        message.includes("ETIMEDOUT");
+      if (attempt === attempts || !retryable) {
         throw error;
       }
       await page.waitForTimeout(1_000);

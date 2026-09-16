@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLifecycleQueue } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { LifecycleAgingReportWorkspace } from "./lifecycle-aging-report-workspace";
 
 export default async function LifecycleAgingReportPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const result = await getHrAdminLifecycleQueue({ page: 1, page_size: 500 });
 
   return (

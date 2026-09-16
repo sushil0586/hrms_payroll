@@ -8,10 +8,13 @@ import {
   getHrAdminPayrollReviewSetup,
   getHrAdminPayrollSettlementSetup,
 } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { PayrollCloseReadinessReportWorkspace } from "./payroll-close-readiness-report-workspace";
 
 export default async function PayrollCloseReadinessReportPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const [inputSetup, reviewSetup, adjustmentSetup, settlementSetup, outputSetup] = await Promise.all([
     getHrAdminPayrollInputSnapshotSetup(),
     getHrAdminPayrollReviewSetup(),

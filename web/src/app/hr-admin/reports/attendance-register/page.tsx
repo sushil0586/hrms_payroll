@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendanceRecords } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { AttendanceRegisterReportWorkspace } from "./attendance-register-report-workspace";
 
 export default async function AttendanceRegisterReportPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const result = await getHrAdminAttendanceRecords({ page: 1, page_size: 500 });
 
   return (

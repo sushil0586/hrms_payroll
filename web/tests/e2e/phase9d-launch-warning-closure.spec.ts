@@ -5,6 +5,11 @@ import { gotoAuthenticated, manager } from "../helpers/staging-auth";
 
 const runSuffix = Date.now().toString(36).toUpperCase();
 
+function isRemoteApiRun() {
+  const apiBaseUrl = process.env.HRMS_API_BASE_URL ?? "";
+  return Boolean(apiBaseUrl && !apiBaseUrl.includes("127.0.0.1") && !apiBaseUrl.includes("localhost"));
+}
+
 function field(scope: Page | Locator, label: string, index = 0) {
   return scope
     .locator("label.form-field")
@@ -13,11 +18,11 @@ function field(scope: Page | Locator, label: string, index = 0) {
     .nth(index);
 }
 
-async function selectFirstNonEmptyOption(select: Locator) {
-  const value = await select.evaluate((element) => {
+async function selectFirstDifferentOption(select: Locator, excludedValue: string | null) {
+  const value = await select.evaluate((element, excluded) => {
     const selectElement = element as HTMLSelectElement;
-    return Array.from(selectElement.options).find((option) => option.value)?.value ?? "";
-  });
+    return Array.from(selectElement.options).find((option) => option.value && option.value !== excluded)?.value ?? "";
+  }, excludedValue);
   expect(value).not.toBe("");
   await select.selectOption(value);
   return value;
@@ -47,7 +52,8 @@ async function closeMissingManagerWarnings(page: Page) {
     await page.locator("details.action-menu summary").click();
     await page.getByRole("link", { name: "Edit employee" }).click();
     await expectPageReady(page, /Edit employee:/);
-    await selectFirstNonEmptyOption(field(page, "Reporting manager"));
+    const editedEmployeeId = new URL(page.url()).pathname.match(/\/employees\/([^/]+)\/edit/)?.[1] ?? null;
+    await selectFirstDifferentOption(field(page, "Reporting manager"), editedEmployeeId);
     await submitAndCapture(page, "/api/hr-admin/employees/", "PATCH", async () => {
       await page.getByRole("button", { name: "Save changes" }).click();
     });
@@ -100,6 +106,7 @@ async function runProviderLaunchRehearsal(page: Page) {
 
 test.describe("Phase 9D launch warning closure", () => {
   test("HR admin and manager close launch warning queues through browser workflows", async ({ page }) => {
+    test.skip(isRemoteApiRun(), "This warning-closure spec mutates employee and manager queues and is certified in local full-stack runs; staging uses release-gate visibility proofs.");
     test.setTimeout(10 * 60 * 1000);
 
     await closeMissingManagerWarnings(page);

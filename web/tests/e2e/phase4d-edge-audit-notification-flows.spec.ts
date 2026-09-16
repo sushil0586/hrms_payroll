@@ -13,7 +13,11 @@ function uniqueRef(prefix: string) {
 }
 
 function field(scope: Page | Locator, label: string, index = 0) {
-  return scope.locator("label.form-field, label.queue-toolbar__search").filter({ hasText: label }).locator("input, select, textarea").nth(index);
+  return scope
+    .locator("label.form-field, label.queue-toolbar__search")
+    .filter({ has: scope.getByText(label, { exact: true }) })
+    .locator("input, select, textarea")
+    .nth(index);
 }
 
 function card(page: Page, text: string | RegExp) {

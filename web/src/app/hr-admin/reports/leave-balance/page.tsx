@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLeaveBalances } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { LeaveBalanceReportWorkspace } from "./leave-balance-report-workspace";
 
 export default async function LeaveBalanceReportPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const result = await getHrAdminLeaveBalances();
 
   return (

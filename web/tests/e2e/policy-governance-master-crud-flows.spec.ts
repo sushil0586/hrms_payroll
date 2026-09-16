@@ -92,6 +92,52 @@ async function expectDuplicateSaveFails(page: Page) {
   await expectNoHorizontalOverflow(page);
 }
 
+async function createDocumentRequirementScope(page: Page) {
+  const legalCode = codeFor("DREQ_LE");
+  const legalName = `PW Document Requirement Legal Entity ${runSuffix}`;
+  const locationCode = codeFor("DREQ_LOC");
+  const locationName = `PW Document Requirement Location ${runSuffix}`;
+  const branchCode = codeFor("DREQ_BR");
+  const branchName = `PW Document Requirement Branch ${runSuffix}`;
+
+  await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new");
+  await expectPageReady(page, /Create Legal Entity/i);
+  await field(page, "Code").fill(legalCode);
+  await field(page, "Name").fill(legalName);
+  await field(page, "Registered name").fill(`${legalName} Pvt Ltd`);
+  await field(page, "Country code").fill("IN");
+  await field(page, "Timezone").fill("Asia/Kolkata");
+  await field(page, "Primary email").fill(`${legalCode.toLowerCase()}@example.test`);
+  await field(page, "Primary phone").fill("+91 9876543210");
+  await page.getByRole("button", { name: "Create legal entity" }).click();
+  await expect(page).toHaveURL(/\/hr-admin\/organization\?section=legal_entities/, { timeout: 20_000 });
+
+  await gotoAuthenticated(page, "/hr-admin/organization/locations/new");
+  await expectPageReady(page, /Create Location/i);
+  await field(page, "Code").fill(locationCode);
+  await field(page, "Name").fill(locationName);
+  await field(page, "Address line 1").fill("Phase 95 QA Park");
+  await field(page, "Address line 2").fill("Document Tower");
+  await field(page, "City").fill("Bengaluru");
+  await field(page, "State").fill("Karnataka");
+  await field(page, "Postal code").fill("560001");
+  await field(page, "Country code").fill("IN");
+  await page.getByRole("button", { name: "Create location" }).click();
+  await expect(page).toHaveURL(/\/hr-admin\/organization\?section=locations/, { timeout: 20_000 });
+
+  await gotoAuthenticated(page, "/hr-admin/organization/branches/new");
+  await expectPageReady(page, /Create Branch/i);
+  await field(page, "Code").fill(branchCode);
+  await field(page, "Name").fill(branchName);
+  await field(page, "Legal entity").selectOption({ label: legalName });
+  await field(page, "Location").selectOption({ label: locationName });
+  await field(page, "Branch type").fill("Document Requirement Scope");
+  await page.getByRole("button", { name: "Create branch" }).click();
+  await expect(page).toHaveURL(/\/hr-admin\/organization\?section=branches/, { timeout: 20_000 });
+
+  return { legalName, branchName };
+}
+
 async function createLeaveType(page: Page, prefix = "LT"): Promise<CreatedRecord> {
   const code = codeFor(prefix);
   const name = `PW Test Leave Type ${runSuffix}`;
@@ -553,6 +599,7 @@ test.describe("HR admin policy and governance master CRUD", () => {
   test("document requirement page supports granular browser CRUD and scoped requirement controls", async ({ page }) => {
     test.setTimeout(4 * 60 * 1000);
     const category = await createDocumentCategory(page, "DREQCAT");
+    const requirementScope = await createDocumentRequirementScope(page);
 
     await gotoAuthenticated(page, "/hr-admin/document-requirements/new");
     await expectPageReady(page, "Create document requirement");
@@ -565,8 +612,14 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await expect(page.getByText("Save failed.")).toBeVisible();
 
     await selectRecordOption(page, "Category", category);
-    await selectFirstNonEmptyOption(field(page, "Legal entity"));
-    await selectFirstNonEmptyOption(field(page, "Branch"));
+    await field(page, "Legal entity").selectOption({ label: requirementScope.legalName });
+    const branchField = field(page, "Branch");
+    if (await branchField.isDisabled()) {
+      await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
+    } else {
+      await branchField.selectOption({ label: requirementScope.branchName });
+      await expect(branchField).not.toHaveValue("");
+    }
     await selectFirstNonEmptyOption(field(page, "Department"));
     await selectFirstNonEmptyOption(field(page, "Grade"));
     await selectFirstNonEmptyOption(field(page, "Employment type"));

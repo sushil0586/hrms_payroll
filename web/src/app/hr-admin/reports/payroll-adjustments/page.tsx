@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollAdjustmentSetup } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { PayrollAdjustmentsReportWorkspace } from "./payroll-adjustments-report-workspace";
 
 export default async function PayrollAdjustmentsReportPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const result = await getHrAdminPayrollAdjustmentSetup();
 
   return (

@@ -233,11 +233,13 @@ test.describe("HR admin notification setup CRUD", () => {
     await submitAndCapture(page, `notification-events/${created.id}`, "PATCH", async () => {
       await page.getByRole("button", { name: "Save changes" }).click();
     });
-    await expect(page).toHaveURL(/\/hr-admin\/notification-events$/);
-    await expect(page.getByText(`Updated ${code}`).first()).toBeVisible();
-    const updatedEventCard = page.locator("article").filter({ hasText: `Updated ${code}` }).first();
-    await expect(updatedEventCard.getByText("critical").first()).toBeVisible();
-    await expect(updatedEventCard.getByText("7 min").first()).toBeVisible();
+    await gotoAuthenticated(page, `/hr-admin/notification-events/${created.id}/edit`);
+    await expectPageReady(page, "Edit notification event");
+    const persistedForm = page.locator("form").first();
+    await expect(field(persistedForm, "Name")).toHaveValue(`Updated ${code}`);
+    await expect(field(persistedForm, "Priority")).toHaveValue("critical");
+    await expect(field(persistedForm, "Delay minutes")).toHaveValue("7");
+    await expect(page.locator("label").filter({ hasText: "Active" }).getByRole("checkbox")).toBeChecked();
 
     await gotoAuthenticated(page, "/hr-admin/notification-events/new");
     await expectPageReady(page, "Create notification event");

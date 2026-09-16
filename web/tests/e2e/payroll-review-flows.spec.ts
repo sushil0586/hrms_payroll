@@ -13,9 +13,15 @@ test.describe("HR admin payroll review flows", () => {
     await expect(page.getByText("Approval trail").first()).toBeVisible();
     await expect(page.getByText("Final lock").first()).toBeVisible();
 
-    const exceptionLink = page.locator("main a[href*='exceptionId=']").first();
+    const exceptionLink = page.locator("main table a[href*='exceptionId=']").first();
     if (await exceptionLink.isVisible().catch(() => false)) {
-      await exceptionLink.click();
+      const href = await exceptionLink.getAttribute("href");
+      expect(href).toContain("exceptionId=");
+      await exceptionLink.scrollIntoViewIfNeeded();
+      await Promise.all([
+        page.waitForURL(/exceptionId=/),
+        exceptionLink.click(),
+      ]);
       await expect(page).toHaveURL(/exceptionId=/);
       await expect(page.getByText("Approval").or(page.getByText("Source")).or(page.getByText("Exception")).first()).toBeVisible();
     }

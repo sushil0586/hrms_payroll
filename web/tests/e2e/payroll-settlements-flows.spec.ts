@@ -12,9 +12,15 @@ test.describe("HR admin payroll settlement flows", () => {
     await expect(page.getByText("Full-and-final packages").first()).toBeVisible();
     await expect(page.getByText("Source").or(page.getByText("Totals")).or(page.getByText("No settlements")).first()).toBeVisible();
 
-    const settlementLink = page.locator("main a[href*='settlementId=']").first();
+    const settlementLink = page.locator("main table a[href*='settlementId=']").first();
     if (await settlementLink.isVisible().catch(() => false)) {
-      await settlementLink.click();
+      const href = await settlementLink.getAttribute("href");
+      expect(href).toContain("settlementId=");
+      await settlementLink.scrollIntoViewIfNeeded();
+      await Promise.all([
+        page.waitForURL(/settlementId=/),
+        settlementLink.click(),
+      ]);
       await expect(page).toHaveURL(/settlementId=/);
       await expect(page.getByText("Source hash").or(page.getByText("Trace")).or(page.getByText("Line")).first()).toBeVisible();
     }

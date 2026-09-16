@@ -73,6 +73,22 @@ async function getHandoffSetup(page: Page): Promise<HandoffSetup> {
   return (await response.json()) as HandoffSetup;
 }
 
+async function waitForRetryExecution(page: Page, retryEventId: string) {
+  let latest: HandoffSetup | null = null;
+  await expect
+    .poll(async () => {
+      latest = await getHandoffSetup(page);
+      const retry = latest.retry_events.find((item) => item.id === retryEventId);
+      const job = latest.provider_jobs.find((item) => item.retry_event_id === retryEventId);
+      return `${retry?.status ?? "missing"}:${job?.status ?? "missing"}`;
+    }, {
+      intervals: [500, 1000, 2000, 3000, 5000],
+      timeout: 20_000,
+    })
+    .toBe("executed:completed");
+  return latest!;
+}
+
 async function getJson<T>(page: Page, path: string) {
   const response = await page.request.get(`${apiBaseUrl()}${path}`, {
     headers: { Authorization: `Token ${await authToken(page)}` },
@@ -250,6 +266,8 @@ async function runProviderJobWorker() {
 
 test.describe("Phase 6D provider retry worker certification", () => {
   test("schedules a failed provider delivery retry, runs the worker, and exposes queue evidence", async ({ page }, testInfo) => {
+    test.skip(!apiBaseUrl().includes("127.0.0.1") && !apiBaseUrl().includes("localhost"), "Provider job worker execution is local-only; remote API runs use production provider retry evidence specs.");
+
     await gotoAuthenticated(page, "/hr-admin/payroll-handoff", hrAdmin);
     await expectPageReady(page, "Payroll Handoff");
 
@@ -284,7 +302,7 @@ test.describe("Phase 6D provider retry worker certification", () => {
     const { stdout } = await runProviderJobWorker();
     expect(stdout).toContain("Processed");
 
-    const refreshed = await getHandoffSetup(page);
+    const refreshed = await waitForRetryExecution(page, schedulePayload.retry_event.id);
     const executedRetry = refreshed.retry_events.find((item) => item.id === schedulePayload.retry_event.id);
     expect(executedRetry?.status).toBe("executed");
     const job = refreshed.provider_jobs.find((item) => item.retry_event_id === schedulePayload.retry_event.id);

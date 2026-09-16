@@ -309,9 +309,70 @@ Confidence after TA-95-5 local:
 | Tenant Admin user-friendliness | 91-92% | 92-93% | Security/Trust are understandable as evidence pages; no new UX defect found in final local run. |
 | Tenant Admin public launch readiness | 91-92% | 93-94% | Needs staging deployment and full staging rerun for 95% launch confidence. |
 
-Next recommended phase:
+### TA-95-5 Staging Certification
 
-Deploy the current check-in to staging, then run the same combined Tenant Admin certification set against `https://hrms.accerio.in`.
+Status: Complete on staging on 2026-09-15  
+Environment: `https://hrms.accerio.in`  
+Deployed commit: `f6f6ccc`
+
+Deployment evidence:
+
+- Staging deploy completed from `origin/main`.
+- Web production build passed on EC2.
+- Django system check passed.
+- Migrations checked: no pending migrations.
+- Backend service active.
+- Web service active.
+- Post-deploy smoke passed: API health 200, root 200, login 200, disk 68%.
+
+Staging browser evidence:
+
+| Run | Environment | Result |
+| --- | --- | --- |
+| Combined Tenant Admin certification set | Staging `https://hrms.accerio.in`, Chromium | 34 passed in 7.8m |
+
+Final Tenant Admin confidence after staging:
+
+| Area | Final Rating | Notes |
+| --- | ---: | --- |
+| Tenant Admin functionality readiness | 95% | Dashboard, users, plan/settings, support access, security, trust audit, setup, and boundaries passed staging browser certification. |
+| Tenant Admin QA/browser coverage | 95% | 34-test combined staging suite passed, including positive, negative, lifecycle, list, pagination, mobile, API denial, and audit evidence paths. |
+| Tenant Admin user-friendliness | 93-94% | Pages are now simpler and single-purpose; remaining improvement would be richer in-product explanations/tooltips, not launch blocking. |
+| Tenant Admin public launch readiness | 95% | Tenant Admin is ready for pilot/public-launch candidate use from the certified app-code perspective. |
+
+Remaining non-blocking improvement:
+
+- Add a second independent tenant-admin credential to automate true two-tenant isolation beyond active tenant-code scoped proof.
+
+## Tenant Admin Final Launch Summary
+
+Status: launch-ready for pilot/public-launch candidate from the app-code and browser-certification perspective.  
+Final confidence: 95%.  
+Certification date: 2026-09-15.  
+Certified environment: staging at `https://hrms.accerio.in`.  
+Certified commit: `f6f6ccc`.
+
+What is certified:
+
+- Tenant Admin dashboard behaves as a customer-owner control center.
+- Users page supports invite, duplicate validation, role updates, activate, suspend, reactivate, revoke, search, pagination, dialogs, focus behavior, and audit evidence.
+- Plan and Settings support governed account/configuration change requests with validation, create/cancel, approve/apply regression coverage, pagination, and role denial.
+- Support Access supports request, validation, scope selection, approve, reject, start session, end session, revoke, search, pagination, closed-state behavior, and role denial.
+- Security Readiness clearly shows MFA, SSO, SCIM, session, audit, data-protection posture, evidence, owner, status, desktop rendering, and mobile rendering.
+- Trust Audit supports event-group filters, event-type filters, active filter display, clear filters, empty states, pagination, audit download, checksum verification, and role denial.
+- Tenant Admin boundary checks verify unauthenticated redirects, wrong-role denial, tenant-code scoped read surfaces, and API fail-closed behavior.
+
+Launch decision:
+
+- No critical or high Tenant Admin defects remain in the certified scope.
+- No UI alignment or horizontal-overflow issue was found in the certified desktop/mobile routes.
+- The only remaining non-blocking confidence gap is true two-tenant automation with a second independent tenant-admin credential.
+
+Next action for product readiness:
+
+- Keep Tenant Admin code frozen except for critical fixes.
+- Add one more tenant-admin persona for a second tenant when available, then run a dedicated cross-tenant isolation suite.
+- Continue with the next role workspace after Tenant Admin, most likely HR Admin or Finance Manager, using the same 95% certification standard.
 
 ## Product Direction
 

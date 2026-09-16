@@ -37,7 +37,7 @@ test.describe("Phase R4-H compliance report hub certification", () => {
       { tab: "Deductions", visible: "Statutory deduction summary", hidden: "Provider filing receipts report" },
       { tab: "Filing & Challans", visible: "Challan reconciliation report", hidden: "TDS e-file readiness report" },
       { tab: "Provider Evidence", visible: "Provider filing receipts report", hidden: "Statutory filing status report" },
-      { tab: "TDS Package", visible: "TDS e-file readiness report", hidden: "Challan reconciliation report" },
+      { tab: "Return Packages", visible: "TDS e-file readiness report", hidden: "Challan reconciliation report" },
       { tab: "All", visible: "Provider filing receipts report", hidden: "" },
     ];
     for (const item of tabCases) {

@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollFinanceHandoffSetup, getHrAdminPayrollProviderConnectionSetup } from "@/lib/api";
 import { PAYROLL_LIVE_RAILS_ENABLED } from "@/lib/runtime-flags";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 import type {
   HrAdminPayrollFinanceHandoffSetupResponse,
   HrAdminPayrollProviderCertificationRun,
@@ -509,6 +510,7 @@ function ConnectionDetail({
 }
 
 export default async function PayrollProvidersPage({ searchParams }: PageProps) {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
   const params = await searchParams;
   const selectedConnectionId = normalizeParam(params?.connectionId);
   const [result, handoffResult] = await Promise.all([

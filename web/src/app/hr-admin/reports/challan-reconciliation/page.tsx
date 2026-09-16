@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollFinanceHandoffSetup, getHrAdminPayrollStatutorySetup } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { ChallanReconciliationReportWorkspace } from "./challan-reconciliation-report-workspace";
 
 export default async function ChallanReconciliationReportPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const [statutoryResult, handoffResult] = await Promise.all([
     getHrAdminPayrollStatutorySetup(),
     getHrAdminPayrollFinanceHandoffSetup(),

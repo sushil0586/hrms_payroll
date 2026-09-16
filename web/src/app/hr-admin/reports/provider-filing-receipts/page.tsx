@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollFinanceHandoffSetup } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { ProviderFilingReceiptsReportWorkspace } from "./provider-filing-receipts-report-workspace";
 
 export default async function ProviderFilingReceiptsReportPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const handoffResult = await getHrAdminPayrollFinanceHandoffSetup();
 
   return (

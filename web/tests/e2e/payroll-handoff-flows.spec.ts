@@ -29,9 +29,15 @@ test.describe("HR admin payroll handoff flows", () => {
         .first(),
     ).toBeVisible();
 
-    const artifactLink = page.locator("main a[href*='artifactId=']").first();
+    const artifactLink = page.locator("main table a[href*='artifactId=']").first();
     if (await artifactLink.isVisible().catch(() => false)) {
-      await artifactLink.click();
+      const href = await artifactLink.getAttribute("href");
+      expect(href).toContain("artifactId=");
+      await artifactLink.scrollIntoViewIfNeeded();
+      await Promise.all([
+        page.waitForURL(/artifactId=/),
+        artifactLink.click(),
+      ]);
       await expect(page).toHaveURL(/artifactId=/);
       await expect(page.getByText("Locked evidence").or(page.getByText("Storage")).or(page.getByText("Provider")).first()).toBeVisible();
     }

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollFinanceHandoffSetup, getHrAdminPayrollStatutorySetup } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 import { reportCatalog } from "@/lib/report-catalog";
 
 import { ComplianceReportHubWorkspace } from "./compliance-report-hub-workspace";
@@ -20,6 +21,8 @@ const complianceReportKeys = [
 ];
 
 export default async function ComplianceReportHubPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const [statutoryResult, handoffResult] = await Promise.all([
     getHrAdminPayrollStatutorySetup(),
     getHrAdminPayrollFinanceHandoffSetup(),

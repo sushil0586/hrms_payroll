@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeDocuments } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { DocumentComplianceReportWorkspace } from "./document-compliance-report-workspace";
 
 export default async function DocumentComplianceReportPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const result = await getHrAdminEmployeeDocuments({ page: 1, page_size: 500 });
 
   return (

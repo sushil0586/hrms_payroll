@@ -99,14 +99,15 @@ export default async function HomePage() {
         <section className="marketing-section marketing-workspace-strip" aria-label="Workspace shortcuts">
           <div>
             <span className="hero__eyebrow">Signed in</span>
-            <h2>{sessionUser.display_name || sessionUser.first_name || sessionUser.username}</h2>
+            <h2>Choose your workspace</h2>
+            <p>{sessionUser.display_name || sessionUser.first_name || sessionUser.username}</p>
           </div>
           <div className="marketing-workspace-strip__actions">
-            <Link className="button button--primary" href={hrAdminHref}>HR admin</Link>
-            <Link className="button button--secondary" href={platformAdminHref}>Platform</Link>
-            <Link className="button button--secondary" href={tenantAdminHref}>Tenant</Link>
+            <Link className="button button--primary" href={hrAdminHref}>{canAccessHrAdmin ? "HR admin" : "HR admin restricted"}</Link>
+            <Link className="button button--secondary" href={platformAdminHref}>{canAccessPlatformAdmin ? "Platform" : "Platform restricted"}</Link>
+            <Link className="button button--secondary" href={tenantAdminHref}>{canAccessTenantAdmin ? "Tenant" : "Tenant restricted"}</Link>
             <Link className="button button--secondary" href={essHref}>ESS</Link>
-            <Link className="button button--secondary" href={mssHref}>MSS</Link>
+            <Link className="button button--secondary" href={mssHref}>{canAccessMss ? "MSS" : "MSS restricted"}</Link>
           </div>
         </section>
       ) : null}

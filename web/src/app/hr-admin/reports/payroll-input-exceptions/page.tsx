@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { PayrollInputExceptionsReportWorkspace } from "./payroll-input-exceptions-report-workspace";
 
 export default async function PayrollInputExceptionsReportPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const result = await getHrAdminPayrollInputSnapshotSetup();
 
   return (

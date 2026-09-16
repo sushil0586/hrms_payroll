@@ -5,6 +5,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDashboard } from "@/lib/api";
 import { reportCatalog } from "@/lib/report-catalog";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { ReportCatalogWorkspace } from "./report-catalog-workspace";
 
@@ -38,6 +39,8 @@ function InsightRow({ label, value }: { label: string; value: string | number })
 }
 
 export default async function HrAdminReportsPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const dashboardResult = await getHrAdminDashboard();
   const { overview, workforce, operations, documents, governance, delivery } = dashboardResult.data;
   const state = dashboardResult.state;

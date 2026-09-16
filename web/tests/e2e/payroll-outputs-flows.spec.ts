@@ -13,9 +13,15 @@ test.describe("HR admin payroll output flows", () => {
     await expect(page.getByText("Finance handoff readiness").first()).toBeVisible();
     await expect(page.getByText("Storage").or(page.getByText("Source hash")).or(page.getByText("No output artifacts")).first()).toBeVisible();
 
-    const artifactLink = page.locator("main a[href*='artifactId=']").first();
+    const artifactLink = page.locator("main table a[href*='artifactId=']").first();
     if (await artifactLink.isVisible().catch(() => false)) {
-      await artifactLink.click();
+      const href = await artifactLink.getAttribute("href");
+      expect(href).toContain("artifactId=");
+      await artifactLink.scrollIntoViewIfNeeded();
+      await Promise.all([
+        page.waitForURL(/artifactId=/),
+        artifactLink.click(),
+      ]);
       await expect(page).toHaveURL(/artifactId=/);
       await expect(page.getByText("Access governance").or(page.getByText("Download file")).or(page.getByText("Storage")).first()).toBeVisible();
     }

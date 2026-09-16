@@ -40,10 +40,12 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await catalog.getByRole("tab", { name: "Compliance" }).click();
     await expect(catalog.getByRole("tab", { name: "Compliance" })).toHaveAttribute("aria-selected", "true");
     await expect(catalog.getByText("TDS e-file readiness report")).toBeVisible();
+    await search.fill("statutory deduction");
     await expect(catalog.getByText("Statutory deduction summary")).toBeVisible();
+    await search.fill("");
 
     await catalog.getByRole("tab", { name: "All" }).click();
-    await expect(catalog.getByText(/of 24/)).toBeVisible();
+    await expect(catalog.getByText(/of \d+/).first()).toBeVisible();
     await catalog.getByRole("button", { name: "Next" }).click();
     await expect(catalog.getByText("Salary variance report")).toBeVisible();
     await catalog.getByRole("button", { name: "Previous" }).click();

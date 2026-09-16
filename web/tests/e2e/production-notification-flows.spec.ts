@@ -23,7 +23,6 @@ test.describe("Production notification reliability proof", () => {
       "Retry capped",
       "Document notifications",
       "Channels with failures",
-      "Notifications",
       "Retry ready",
       "Select notifications",
       "Select page",
@@ -32,6 +31,7 @@ test.describe("Production notification reliability proof", () => {
       "Quick review",
       "Full review",
     ]);
+    await expect(page.getByRole("heading", { name: "Notification queue", exact: true })).toBeVisible();
     await expect(page.locator(".queue-toolbar").getByRole("combobox", { name: /^Retry state/ })).toHaveValue("retry_ready");
     await expect(page.getByRole("button", { name: /Retry selected/ })).toBeVisible();
     const selectPage = page.getByLabel("Select page");

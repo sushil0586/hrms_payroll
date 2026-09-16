@@ -106,11 +106,14 @@ test.describe("Production launch release gate proof", () => {
     await gotoAuthenticated(page, "/tenant-admin");
     await expectPageReady(page, "Tenant Admin Console");
     await expectVisibleText(page, [
-      "Commercial audit",
-      "Support access",
-      "Members",
-      "Roles",
-      "Change requests",
+      "Control center",
+      "Start here",
+      "Users",
+      "Plan",
+      "Support",
+      "Audit",
+      "Setup guide",
+      "Open requests",
       "Download audit",
     ]);
     await captureLaunchGateStep(page, testInfo, "07-tenant-admin-release-review");

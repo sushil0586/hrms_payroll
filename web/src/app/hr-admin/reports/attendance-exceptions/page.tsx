@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendanceRegularizations } from "@/lib/api";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { AttendanceExceptionsReportWorkspace } from "./attendance-exceptions-report-workspace";
 
 export default async function AttendanceExceptionsReportPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   const result = await getHrAdminAttendanceRegularizations({ page: 1, page_size: 500 });
 
   return (

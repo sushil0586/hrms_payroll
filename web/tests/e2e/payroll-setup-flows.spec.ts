@@ -4,7 +4,7 @@ import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertio
 import { gotoAuthenticated } from "../helpers/staging-auth";
 
 function uniqueCode(prefix: string) {
-  return `PW_${prefix}_${Date.now()}`;
+  return `PW_${prefix}_${Date.now().toString(36)}`.toUpperCase();
 }
 
 function field(scope: Locator, label: string) {
