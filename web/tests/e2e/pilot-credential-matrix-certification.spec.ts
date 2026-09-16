@@ -102,8 +102,8 @@ const matrix: MatrixPersona[] = [
   {
     label: "Payroll finance manager",
     persona: payrollFinanceManager,
-    landingPath: "/hr-admin/payroll-handoff",
-    heading: "Payroll Handoff",
+    landingPath: "/finance-manager",
+    heading: "Finance control center",
     expectedAccess: { hr_admin: true, tenant_admin: true },
     expectedRoles: ["hr-admin", "payroll-finance-manager"],
     deniedPaths: [
@@ -177,8 +177,8 @@ async function expectDeniedPayload(response: APIResponse, label: string) {
 }
 
 async function requestSupportGrantForSupportAgent(page: Page, sessionRef: string) {
-  await loginAs(page, hrAdmin, "/tenant-admin");
-  await expectPageReady(page, "Tenant Admin Console");
+  await loginAs(page, hrAdmin, "/tenant-admin/support-access");
+  await expectPageReady(page, "Support Access");
 
   const main = page.getByRole("main");
   await expect(main.getByRole("heading", { name: "Scoped support grants" })).toBeVisible();

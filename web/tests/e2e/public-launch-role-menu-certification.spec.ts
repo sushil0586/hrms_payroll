@@ -50,10 +50,10 @@ const workspacePersonas: WorkspacePersona[] = [
   {
     label: "Payroll finance manager",
     persona: payrollFinanceManager,
-    landingPath: "/hr-admin/payroll-handoff",
-    navLabel: /HR Admin navigation|People operations navigation/i,
-    expectedChrome: "People operations",
-    minimumMenuLinks: 12,
+    landingPath: "/finance-manager",
+    navLabel: /Payroll Finance navigation|Finance operations navigation/i,
+    expectedChrome: "Finance operations",
+    minimumMenuLinks: 4,
   },
   {
     label: "Manager",

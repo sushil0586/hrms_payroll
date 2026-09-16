@@ -374,6 +374,13 @@ Next action for product readiness:
 - Add one more tenant-admin persona for a second tenant when available, then run a dedicated cross-tenant isolation suite.
 - Continue with the next role workspace after Tenant Admin, most likely HR Admin or Finance Manager, using the same 95% certification standard.
 
+## Tenant Admin Revalidation Log
+
+| Date | Environment | Evidence | Result | Confidence |
+| --- | --- | --- | --- | --- |
+| 2026-09-16 | Local web against live staging API | Re-ran combined Tenant Admin certification set: console, users dialogs, plan/settings, support access, security/trust final, security readiness, trust audit, and boundary certification. | 34/34 passed in 5.6m | Tenant Admin remains 95% for app-code functionality, browser QA, and public-launch readiness. |
+| 2026-09-16 | Local web against live staging API | Re-ran Tenant Admin visual/accessibility route certification across dashboard, users, plan, setup, support access, trust audit, settings, security readiness, and mobile dashboard/navigation wrapping. | 9/9 passed in 55.5s | UX confidence remains 95% for certified route shell, no-overflow, and menu/navigation behavior. |
+
 ## Product Direction
 
 Tenant Admin is the customer account owner workspace. It should not feel like HR operations or payroll processing. It should behave like a simple account control center where the customer owner can answer:

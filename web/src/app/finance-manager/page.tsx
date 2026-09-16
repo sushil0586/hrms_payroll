@@ -91,7 +91,7 @@ function buildFinanceActions(data: HrAdminPayrollFinanceHandoffSetupResponse) {
       status: financeStatus(failedProviderEvents, failedProviderEvents > 0),
     },
     {
-      label: "Export audit",
+      label: "Audit history",
       value: data.summary.provider_audit_pack_count ?? 0,
       detail: "Audit packs and export manifests available for finance signoff.",
       href: "/api/hr-admin/reports/export-audits?format=manifest",
@@ -122,8 +122,8 @@ export default async function FinanceManagerLandingPage() {
             <Link className="button button--secondary" href="/api/hr-admin/reports/statutory-filing-status?format=csv">
               Export filings
             </Link>
-            <Link className="button button--secondary" href="/api/hr-admin/reports/export-audits?format=csv">
-              Export audit
+            <Link className="button button--secondary" href="/hr-admin/reports/export-audits">
+              Open audit history
             </Link>
           </>
         }
