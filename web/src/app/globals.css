@@ -1893,6 +1893,12 @@ select.input-control {
   border-color: rgba(255, 112, 67, 0.2);
 }
 
+.record-chip--warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #9a5b00;
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
 .record-card__actions {
   display: flex;
   flex-wrap: wrap;
@@ -3232,6 +3238,106 @@ select.input-control {
   counter-increment: platform-guide;
   font-size: 12px;
   font-weight: 800;
+}
+
+.platform-permission-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(180px, 220px) minmax(150px, 190px) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 16px;
+  border: 1px solid rgba(203, 213, 225, 0.72);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.platform-permission-filters__actions,
+.platform-permission-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.platform-permission-modules {
+  display: grid;
+  gap: 14px;
+}
+
+.platform-permission-module {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.platform-permission-module__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.platform-permission-module__header h3 {
+  margin: 4px 0 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.platform-permission-list {
+  display: grid;
+  gap: 10px;
+}
+
+.platform-permission-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.2fr) minmax(220px, 0.8fr) minmax(160px, 0.5fr);
+  gap: 14px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.platform-permission-row strong,
+.platform-permission-row small,
+.platform-permission-row code {
+  display: block;
+}
+
+.platform-permission-row strong {
+  color: #111827;
+  line-height: 1.3;
+}
+
+.platform-permission-row small,
+.platform-permission-row__roles .muted {
+  margin-top: 6px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.platform-permission-row code {
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 4px 7px;
+  overflow-wrap: anywhere;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.05);
+  color: #334155;
+  font-size: 12px;
+}
+
+.platform-permission-row__roles strong {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
 }
 
 .platform-gate-checklist {
@@ -8962,6 +9068,8 @@ select.input-control {
   .tenant-support-access-form,
   .tenant-support-access-row,
   .platform-admin-users-grid .tenant-support-access-row,
+  .platform-permission-filters,
+  .platform-permission-row,
   .platform-list-filters,
   .saas-usage-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -8970,14 +9078,16 @@ select.input-control {
   .tenant-membership-row__actions,
   .tenant-role-row__actions,
   .tenant-change-request-row__actions,
-  .tenant-support-access-row__actions {
+  .tenant-support-access-row__actions,
+  .platform-permission-filters__actions {
     justify-content: stretch;
   }
 
   .tenant-membership-row__actions .button,
   .tenant-role-row__actions .button,
   .tenant-change-request-row__actions .button,
-  .tenant-support-access-row__actions .button {
+  .tenant-support-access-row__actions .button,
+  .platform-permission-filters__actions .button {
     width: 100%;
   }
 

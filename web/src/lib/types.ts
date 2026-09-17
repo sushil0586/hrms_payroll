@@ -5607,3 +5607,15 @@ export type PlatformPolicyPackListItem = {
   item_count: number;
   adoption_count: number;
 };
+
+export type PlatformPermissionCatalogItem = {
+  key: string;
+  label: string;
+  module: string;
+  description: string;
+  risk_level: "low" | "medium" | "high" | "critical" | string;
+  tenant_assignable: boolean;
+  required_module: string;
+  required_plan: string;
+  default_role_codes: string[];
+};

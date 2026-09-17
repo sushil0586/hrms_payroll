@@ -86,6 +86,7 @@ import type {
   ManagerAttendanceApprovalListResponse,
   ManagerLeaveApprovalListResponse,
   ManagerTeamSummary,
+  PlatformPermissionCatalogItem,
   PlatformPublicLead,
   PlatformPolicyPackListItem,
   PlatformTenantListItem,
@@ -360,6 +361,10 @@ export async function getPlatformTenantOnboarding(tenantId: string) {
 
 export async function getPlatformPolicyPacks() {
   return apiGet<PlatformPolicyPackListItem[]>("/platform-policy-packs/");
+}
+
+export async function getPlatformPermissionCatalog() {
+  return apiGet<PlatformPermissionCatalogItem[]>("/platform/permission-catalog/");
 }
 
 export async function getTenantAdminTrustAuditReview(params?: {
@@ -13226,6 +13231,18 @@ function getDemoData<T>(path: string): T {
       return buildDemoSupportSessionDomainSnapshot() as T;
     case "/tenant-admin/console/":
       return buildDemoTenantAdminConsole() as T;
+    case "/platform/permission-catalog/":
+      return buildDemoTenantAdminConsole().role_management.permission_catalog.map((item) => ({
+        key: item.key,
+        label: item.label,
+        module: item.module,
+        description: item.description,
+        risk_level: item.risk_level,
+        tenant_assignable: item.tenant_assignable,
+        required_module: item.required_module,
+        required_plan: item.required_plan,
+        default_role_codes: item.default_role_codes,
+      })) as T;
     case "/tenant-admin/trust-audit/":
       return buildDemoTenantAdminTrustAuditReview() as T;
     case "/tenant-admin/security-readiness/":

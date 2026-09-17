@@ -75,6 +75,24 @@ def create_tenant_hr_admin_user(*, tenant: Tenant, username: str, email: str) ->
 
 
 @pytest.mark.django_db
+def test_platform_permission_catalog_requires_platform_staff_and_returns_catalog(api_client: APIClient, platform_staff_user: User):
+    anonymous_response = api_client.get("/api/v1/platform/permission-catalog/")
+    assert anonymous_response.status_code in {401, 403}
+
+    api_client.force_authenticate(user=platform_staff_user)
+    response = api_client.get("/api/v1/platform/permission-catalog/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    keys = {item["key"] for item in payload}
+    assert "tenant.roles.manage" in keys
+    assert "platform.permission_catalog.manage" in keys
+    platform_permission = next(item for item in payload if item["key"] == "platform.permission_catalog.manage")
+    assert platform_permission["tenant_assignable"] is False
+    assert platform_permission["risk_level"] == "critical"
+
+
+@pytest.mark.django_db
 def test_platform_staff_can_create_tenant_and_seed_onboarding(api_client: APIClient, platform_staff_user: User):
     api_client.force_authenticate(user=platform_staff_user)
 

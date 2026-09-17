@@ -16,6 +16,7 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
         { href: "/platform-admin/onboarding", label: "Launch Checklist", shortLabel: "LC", blurb: "Readiness gates" },
         { href: "/platform-admin/admins", label: "Tenant Admin Users", shortLabel: "TA", blurb: "Login access" },
         { href: "/platform-admin/policy-packs", label: "Setup Templates", shortLabel: "ST", blurb: "Default setup" },
+        { href: "/platform-admin/permissions", label: "Permissions", shortLabel: "PM", blurb: "RBAC catalog" },
         { href: "/platform-admin/audit-logs", label: "Audit Logs", shortLabel: "AU", blurb: "Action evidence" },
       ]}
       productLabel="HRMS"

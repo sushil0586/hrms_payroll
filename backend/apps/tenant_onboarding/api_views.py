@@ -7,10 +7,12 @@ from django.utils import timezone
 from rest_framework import exceptions, permissions, response, status
 from rest_framework.views import APIView
 
+from apps.iam.permission_catalog import get_permission_catalog
 from apps.tenant_onboarding.api_serializers import (
     PlatformMutationResultSerializer,
     PlatformOnboardingAdminContactSerializer,
     PlatformOnboardingAdminContactWriteSerializer,
+    PlatformPermissionCatalogItemSerializer,
     PlatformProvisionAdminResultSerializer,
     PlatformProvisionAdminSerializer,
     PlatformTenantListItemSerializer,
@@ -203,6 +205,14 @@ def _serialize_public_lead(item: PublicTenantLead) -> dict:
         "created_at": item.created_at,
         "updated_at": item.updated_at,
     }
+
+
+class PlatformPermissionCatalogListView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    def get(self, request):
+        payload = sorted(get_permission_catalog(), key=lambda item: (item["module"], item["key"]))
+        return response.Response(PlatformPermissionCatalogItemSerializer(payload, many=True).data)
 
 
 def _get_public_lead_or_404(item_id):

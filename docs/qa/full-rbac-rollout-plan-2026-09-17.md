@@ -836,6 +836,7 @@ Exit criteria:
 | 2026-09-17 | Baseline | Complete | TA-8 implemented custom role CRUD locally; permission storage exists but enforcement/catalog/matrix are still pending. |
 | 2026-09-17 | RBAC-0 Catalog Freeze And Mapping | Complete | First production permission catalog, route mapping, API mapping, and default system role grants are documented in this plan. No enforcement code changed in this phase. |
 | 2026-09-17 | RBAC-1A Code-Backed Permission Catalog | Complete locally | Added `apps.iam.permission_catalog`, exposed catalog in Tenant Admin payload, switched role dialog to catalog selections, and blocked unknown permission keys in backend role mutations. |
+| 2026-09-17 | RBAC-1B Platform Admin Permission Catalog Visibility | Complete locally | Added superuser-only `/api/v1/platform/permission-catalog/`, typed web fetcher, and `/platform-admin/permissions` page with search, risk, assignability, module grouping, and Platform Admin navigation. Django check and web typecheck are green. |
 | 2026-09-17 | RBAC-2A Tenant Role Permission Matrix UX | Complete locally | Role dialog now groups permissions by module, shows selected counts, risk labels, and descriptions while keeping backend catalog validation active. |
 | 2026-09-17 | RBAC-2B Plan-Aware Permission Availability | Complete locally | Catalog payload marks unavailable permissions by tenant entitlement; backend rejects unavailable-plan permission assignment; starter-plan payroll denial is covered by tests. |
 | 2026-09-17 | RBAC-2C Browser Matrix Certification | Complete locally | Tenant Admin role spec now covers module switching, selected summary, and disabled unavailable-plan payroll permission with restore-safe plan switching. |
@@ -874,7 +875,7 @@ Exit criteria:
 
 | Gap | Risk | Target Phase |
 | --- | --- | --- |
-| Platform Admin permission catalog UI is not yet available | Platform team cannot browse/manage catalog from the console yet | RBAC-1B/RBAC-2 |
+| Platform Admin permission catalog is read-only and code-backed | Platform team can browse the catalog now, but cannot add/remove permission definitions from UI until catalog rows move to a governed DB model | RBAC-10 |
 | Backend permission helper now covers Tenant Admin, core HR employee/org/document/leave/attendance APIs, report export evidence, payroll lifecycle, payroll output artifact downloads, finance handoff/provider actions, and statutory setup/declaration APIs | Remaining risk is certification breadth, not a known launch-critical backend gap in these slices | RBAC-9 |
 | Frontend permission context is implemented for Tenant Admin, MSS approvals/control center, core HR employee/org/document/leave/attendance pages, payroll/statutory output/handoff/statutory setup action slices, and payroll lifecycle workspaces | Remaining risk is broader regression breadth and Platform Admin catalog ergonomics; payroll/statutory and payroll lifecycle viewer proofs are green on staging | RBAC-8/RBAC-9 |
 | Last-admin guard and audit-diff evidence exist for Tenant Admin role/member mutations; destructive browser proof should run on a disposable tenant | Tenant lockout is blocked locally and audit evidence is readable on staging; shared staging is not ideal for the destructive last-admin mutation proof | RBAC-8/RBAC-9 |

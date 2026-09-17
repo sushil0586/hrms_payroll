@@ -172,6 +172,18 @@ class PlatformMutationResultSerializer(serializers.Serializer):
     onboarding_status = serializers.CharField(required=False)
 
 
+class PlatformPermissionCatalogItemSerializer(serializers.Serializer):
+    key = serializers.CharField()
+    label = serializers.CharField()
+    module = serializers.CharField()
+    description = serializers.CharField()
+    risk_level = serializers.CharField()
+    tenant_assignable = serializers.BooleanField()
+    required_module = serializers.CharField(allow_blank=True)
+    required_plan = serializers.CharField(allow_blank=True)
+    default_role_codes = serializers.ListField(child=serializers.CharField())
+
+
 class PublicTenantLeadCreateSerializer(serializers.Serializer):
     intent = serializers.ChoiceField(choices=PublicLeadIntent.values, required=False, default=PublicLeadIntent.SIGNUP)
     company_name = serializers.CharField(max_length=255)
