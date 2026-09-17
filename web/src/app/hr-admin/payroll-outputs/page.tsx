@@ -251,8 +251,8 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
 }
 
 export default async function HrAdminPayrollOutputsPage({ searchParams }: PageProps) {
-  const sessionUser = await requireSessionPermission({ permissionKeys: ["payroll.outputs.view", "payroll.outputs.publish"], fallbackPath: "/hr-admin" });
-  const canPublishOutputs = sessionHasPermission(sessionUser, "payroll.outputs.publish");
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["payroll.outputs.view", "payroll.publish"], fallbackPath: "/hr-admin" });
+  const canPublishOutputs = sessionHasPermission(sessionUser, "payroll.publish");
   const canGenerateHandoff = sessionHasPermission(sessionUser, "finance.handoff.create");
   const currentParams = (await searchParams) ?? {};
   const selectedBatchId = normalizeParam(currentParams.batchId);
@@ -384,7 +384,7 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   label: "Publish outputs",
                   endpoint: selectedBatch ? `/api/hr-admin/payroll-output-batches/${selectedBatch.id}/publish` : "",
                   disabled: !canPublishOutputs || !selectedBatch,
-                  disabledReason: !canPublishOutputs ? "Requires payroll.outputs.publish." : "Select an output batch first.",
+                  disabledReason: !canPublishOutputs ? "Requires payroll.publish." : "Select an output batch first.",
                 },
                 {
                   id: "generate-finance-handoff",

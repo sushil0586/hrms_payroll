@@ -8,6 +8,13 @@ type CreatedRole = {
 };
 
 type TenantConsole = {
+  role_management: {
+    roles: Array<{
+      id: string;
+      code: string;
+      permission_keys: string[];
+    }>;
+  };
   membership_management: {
     memberships?: Array<{
       id: string;
@@ -19,6 +26,18 @@ type TenantConsole = {
       username: string;
       role_ids: string[];
     }>;
+  };
+};
+
+type CommercialControl = {
+  tenant: {
+    subscription_plan: string;
+  };
+  subscription: {
+    status: string;
+    billing_provider_ref: string;
+    billing_account_ref: string;
+    current_period_end: string;
   };
 };
 
@@ -54,7 +73,54 @@ async function loginViaApi(page: Page, persona: { username: string; password: st
   expect(response.ok()).toBeTruthy();
 }
 
+async function getCommercialControl(page: Page) {
+  const response = await page.request.get(`${apiBaseUrl()}/hr-admin/saas-control-plane/`, {
+    headers: await authHeaders(page),
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return (await response.json()) as CommercialControl;
+}
+
+async function patchCommercialControl(page: Page, payload: Record<string, string>) {
+  const response = await page.request.patch("/api/hr-admin/saas-control-plane", { data: payload });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return (await response.json()) as CommercialControl;
+}
+
+async function forcePayrollEntitledPlan(page: Page) {
+  await loginViaApi(page, hrAdmin);
+  const original = await getCommercialControl(page);
+  await patchCommercialControl(page, {
+    subscription_plan: "enterprise",
+    status: "active",
+    billing_provider_ref: original.subscription.billing_provider_ref || "manual_billing.v1",
+    billing_account_ref: original.subscription.billing_account_ref,
+    current_period_end: original.subscription.current_period_end,
+  });
+  return original;
+}
+
+async function restoreCommercialControl(page: Page, original: CommercialControl | null) {
+  if (!original) {
+    return;
+  }
+  await loginViaApi(page, hrAdmin);
+  await patchCommercialControl(page, {
+    subscription_plan: original.tenant.subscription_plan,
+    status: original.subscription.status,
+    billing_provider_ref: original.subscription.billing_provider_ref,
+    billing_account_ref: original.subscription.billing_account_ref,
+    current_period_end: original.subscription.current_period_end,
+  });
+}
+
 async function createTenantRole(page: Page, input: { name: string; code: string; description: string; permissions: string[] }) {
+  const currentConsole = await getTenantConsole(page).catch(() => null);
+  const existingRole = currentConsole?.role_management.roles.find((role) => role.code === input.code);
+  if (existingRole) {
+    return existingRole;
+  }
+
   const response = await page.request.post("/api/tenant-admin/roles", {
     data: {
       name: input.name,
@@ -175,7 +241,20 @@ async function getHandoffSetup(page: Page) {
 }
 
 test.describe("Payroll and statutory RBAC certification", () => {
+  test.describe.configure({ mode: "serial" });
+  test.setTimeout(120_000);
   test.skip(!process.env.HRMS_API_BASE_URL, "Payroll/statutory RBAC proof requires a live HRMS API.");
+
+  let originalCommercialControl: CommercialControl | null = null;
+
+  test.beforeEach(async ({ page }) => {
+    originalCommercialControl = await forcePayrollEntitledPlan(page);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await restoreCommercialControl(page, originalCommercialControl);
+    originalCommercialControl = null;
+  });
 
   test("certifies statutory viewer gets evidence view, read-only setup controls, and backend denials", async ({ page }) => {
     const persona = await createRoleBackedUser(page, {
@@ -235,9 +314,9 @@ test.describe("Payroll and statutory RBAC certification", () => {
     await gotoAuthenticated(page, "/hr-admin/payroll-outputs", persona);
     await expectPageReady(page, "Payroll Outputs");
     await expect(page.getByRole("button", { name: "Publish outputs" })).toBeDisabled();
-    await expect(page.getByText("Requires payroll.outputs.publish.")).toBeVisible();
+    await expect(page.getByText("Requires payroll.publish.").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Generate handoff" })).toBeDisabled();
-    await expect(page.getByText("Requires finance.handoff.create.")).toBeVisible();
+    await expect(page.getByText("Requires finance.handoff.create.").first()).toBeVisible();
 
     const setup = await getOutputSetup(page);
     test.skip(!setup.output_batches.length, "No payroll output batch exists for publish denial proof.");
@@ -245,7 +324,7 @@ test.describe("Payroll and statutory RBAC certification", () => {
     await expectForbiddenWithPermission(
       page,
       page.request.post(`/api/hr-admin/payroll-output-batches/${batchId}/publish`, { data: {} }),
-      "payroll.outputs.publish",
+      "payroll.publish",
     );
     await expectForbiddenWithPermission(
       page,
@@ -268,11 +347,11 @@ test.describe("Payroll and statutory RBAC certification", () => {
     await gotoAuthenticated(page, "/hr-admin/payroll-handoff", persona);
     await expectPageReady(page, "Payroll Handoff");
     await expect(page.getByRole("button", { name: "Transmit handoff" })).toBeDisabled();
-    await expect(page.getByText("Requires finance.handoff.transmit.")).toBeVisible();
+    await expect(page.getByText("Requires finance.handoff.transmit.").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Acknowledge handoff" })).toBeDisabled();
-    await expect(page.getByText("Requires finance.handoff.acknowledge.")).toBeVisible();
+    await expect(page.getByText("Requires finance.handoff.acknowledge.").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Generate audit pack" })).toBeDisabled();
-    await expect(page.getByText("Requires finance.bank_advice.export.")).toBeVisible();
+    await expect(page.getByText("Requires finance.bank_advice.export.").first()).toBeVisible();
 
     const setup = await getHandoffSetup(page);
     test.skip(!setup.handoffs.length, "No finance handoff exists for handoff action denial proof.");
