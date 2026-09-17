@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollCalculationSetup } from "@/lib/api";
 import type { HrAdminPayrollCalculationLine, HrAdminPayrollRun, HrAdminPayrollRunCalculation, HrAdminPayrollValidationIssue } from "@/lib/types";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 
 type SearchParamValue = string | string[] | undefined;
@@ -365,6 +366,9 @@ function ValidationIssueRegister({ issues }: { issues: HrAdminPayrollValidationI
 }
 
 export default async function HrAdminPayrollCalculationsPage({ searchParams }: PageProps) {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["payroll.review", "payroll.calculate"], fallbackPath: "/hr-admin" });
+  const canCalculate = sessionHasPermission(sessionUser, "payroll.calculate");
+  const canOpenReview = sessionHasPermission(sessionUser, "payroll.review");
   const currentParams = (await searchParams) ?? {};
   const selectedRunId = normalizeParam(currentParams.runId);
   const selectedCalculationId = normalizeParam(currentParams.calculationId);
@@ -495,8 +499,8 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                   profileField: "calculation_profile_ref",
                   profileLabel: "Calculation profile ref",
                   defaultProfileRef: selectedCalculation?.calculation_profile_ref ?? "",
-                  disabled: !readiness.isReady,
-                  disabledReason: readiness.detail,
+                  disabled: !canCalculate || !readiness.isReady,
+                  disabledReason: !canCalculate ? "Requires payroll.calculate." : readiness.detail,
                 },
                 {
                   id: "open-review",
@@ -505,8 +509,8 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                   profileField: "review_profile_ref",
                   profileLabel: "Review profile ref",
                   defaultProfileRef: "tenant.payroll.review.v1",
-                  disabled: !selectedRun,
-                  disabledReason: "Select a payroll run first.",
+                  disabled: !canOpenReview || !selectedRun,
+                  disabledReason: !canOpenReview ? "Requires payroll.review." : "Select a payroll run first.",
                 },
               ]}
             />

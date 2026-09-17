@@ -29,16 +29,18 @@ function TextField({
   value,
   onChange,
   required,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <input className="input-control" required={required} type="text" value={value} onChange={(event) => onChange(event.target.value)} />
+      <input className="input-control" disabled={disabled} required={required} type="text" value={value} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -79,11 +81,11 @@ function SelectField({
   );
 }
 
-function JsonField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function JsonField({ label, value, onChange, disabled }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <textarea className="input-control" rows={3} value={value} onChange={(event) => onChange(event.target.value)} />
+      <textarea className="input-control" disabled={disabled} rows={3} value={value} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -134,10 +136,14 @@ export function PayrollInputOperationsPanel({
   initialSetup,
   selectedRun,
   selectedSnapshot,
+  canManageInputs,
+  canLockInputs,
 }: {
   initialSetup: HrAdminPayrollInputSnapshotSetupResponse;
   selectedRun: HrAdminPayrollRun | null;
   selectedSnapshot: HrAdminPayrollInputSnapshot | null;
+  canManageInputs: boolean;
+  canLockInputs: boolean;
 }) {
   const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
@@ -185,6 +191,8 @@ export function PayrollInputOperationsPanel({
       : "";
   const selectedPayGroupWarning =
     selectedPayGroup && selectedPayGroup.status !== "active" ? "Selected pay group is not active yet." : "";
+  const manageDisabledReason = "Requires payroll.inputs.manage.";
+  const lockDisabledReason = "Requires payroll.lock.";
 
   function updateRunPeriod(value: string) {
     setRunForm((current) => {
@@ -326,7 +334,7 @@ export function PayrollInputOperationsPanel({
         >
           <div className="salary-crud-form__header">
             <div><span className="workspace-card__eyebrow">{runForm.id ? "Edit mode" : "Create mode"}</span><h3>Payroll run</h3></div>
-            <button className="button button--secondary button--compact" type="button" onClick={() => setRunForm(emptyRunForm(setup))}>New</button>
+            <button className="button button--secondary button--compact" disabled={!canManageInputs} type="button" onClick={() => setRunForm(emptyRunForm(setup))}>New</button>
           </div>
           <div className="form-grid salary-crud-form-grid">
             <SelectField
@@ -334,25 +342,26 @@ export function PayrollInputOperationsPanel({
               required
               value={runForm.period_id}
               options={periodOptions}
-              disabled={!periodOptions.length}
-              hint={noPeriodWarning}
-              tone={noPeriodWarning ? "warning" : "muted"}
+              disabled={!periodOptions.length || !canManageInputs}
+              hint={!canManageInputs ? manageDisabledReason : noPeriodWarning}
+              tone={!canManageInputs || noPeriodWarning ? "warning" : "muted"}
               onChange={updateRunPeriod}
             />
             <SelectField
               label="Pay group"
               value={runForm.pay_group_id}
               options={payGroupOptions}
-              hint={selectedPayGroupWarning || noCompatiblePayGroupWarning}
-              tone={selectedPayGroupWarning || noCompatiblePayGroupWarning ? "warning" : "muted"}
+              disabled={!canManageInputs}
+              hint={!canManageInputs ? manageDisabledReason : selectedPayGroupWarning || noCompatiblePayGroupWarning}
+              tone={!canManageInputs || selectedPayGroupWarning || noCompatiblePayGroupWarning ? "warning" : "muted"}
               onChange={(value) => setRunForm((current) => ({ ...current, pay_group_id: value }))}
             />
-            <TextField label="Code" required value={runForm.code} onChange={(value) => setRunForm((current) => ({ ...current, code: value }))} />
-            <TextField label="Name" required value={runForm.name} onChange={(value) => setRunForm((current) => ({ ...current, name: value }))} />
-            <SelectField label="Status" required value={runForm.status} options={runStatusOptions} onChange={(value) => setRunForm((current) => ({ ...current, status: value }))} />
-            <TextField label="Input profile ref" required value={runForm.input_profile_ref} onChange={(value) => setRunForm((current) => ({ ...current, input_profile_ref: value }))} />
-            <TextField label="Snapshot schema ref" required value={runForm.snapshot_schema_ref} onChange={(value) => setRunForm((current) => ({ ...current, snapshot_schema_ref: value }))} />
-            <TextField label="Config profile reference" value={runForm.config_profile_ref} onChange={(value) => setRunForm((current) => ({ ...current, config_profile_ref: value }))} />
+            <TextField disabled={!canManageInputs} label="Code" required value={runForm.code} onChange={(value) => setRunForm((current) => ({ ...current, code: value }))} />
+            <TextField disabled={!canManageInputs} label="Name" required value={runForm.name} onChange={(value) => setRunForm((current) => ({ ...current, name: value }))} />
+            <SelectField disabled={!canManageInputs} hint={!canManageInputs ? manageDisabledReason : ""} tone="warning" label="Status" required value={runForm.status} options={runStatusOptions} onChange={(value) => setRunForm((current) => ({ ...current, status: value }))} />
+            <TextField disabled={!canManageInputs} label="Input profile ref" required value={runForm.input_profile_ref} onChange={(value) => setRunForm((current) => ({ ...current, input_profile_ref: value }))} />
+            <TextField disabled={!canManageInputs} label="Snapshot schema ref" required value={runForm.snapshot_schema_ref} onChange={(value) => setRunForm((current) => ({ ...current, snapshot_schema_ref: value }))} />
+            <TextField disabled={!canManageInputs} label="Config profile reference" value={runForm.config_profile_ref} onChange={(value) => setRunForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
           <div className="salary-crud-list" aria-label="Payroll run records">
             {setup.runs.slice(0, 6).map((item) => (
@@ -365,9 +374,10 @@ export function PayrollInputOperationsPanel({
               </button>
             ))}
           </div>
-          <button className="button button--primary" disabled={submitting === "run" || !periodOptions.length} type="submit">
+          <button className="button button--primary" disabled={!canManageInputs || submitting === "run" || !periodOptions.length} type="submit">
             {submitting === "run" ? "Saving..." : runForm.id ? "Save run" : "Create run"}
           </button>
+          {!canManageInputs ? <span className="muted">{manageDisabledReason}</span> : null}
         </form>
 
         <form
@@ -381,21 +391,21 @@ export function PayrollInputOperationsPanel({
         >
           <div className="salary-crud-form__header">
             <div><span className="workspace-card__eyebrow">{snapshotForm.id ? "Edit mode" : "Create mode"}</span><h3>Input snapshot</h3></div>
-            <button className="button button--secondary button--compact" type="button" onClick={() => setSnapshotForm(snapshotToForm(null, runForm.id ?? firstValue(setup.runs), firstValue(setup.options.employees)))}>New</button>
+            <button className="button button--secondary button--compact" disabled={!canManageInputs} type="button" onClick={() => setSnapshotForm(snapshotToForm(null, runForm.id ?? firstValue(setup.runs), firstValue(setup.options.employees)))}>New</button>
           </div>
           <div className="form-grid salary-crud-form-grid">
-            <SelectField label="Payroll run" required value={snapshotForm.payroll_run_id} options={runOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, payroll_run_id: value }))} />
-            <SelectField label="Employee" required value={snapshotForm.employee_id} options={employeeOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, employee_id: value }))} />
-            <SelectField label="Snapshot status" required value={snapshotForm.snapshot_status} options={snapshotStatusOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, snapshot_status: value }))} />
-            <TextField label="Input profile ref" required value={snapshotForm.input_profile_ref} onChange={(value) => setSnapshotForm((current) => ({ ...current, input_profile_ref: value }))} />
-            <TextField label="Config profile reference" value={snapshotForm.config_profile_ref} onChange={(value) => setSnapshotForm((current) => ({ ...current, config_profile_ref: value }))} />
+            <SelectField disabled={!canManageInputs} hint={!canManageInputs ? manageDisabledReason : ""} tone="warning" label="Payroll run" required value={snapshotForm.payroll_run_id} options={runOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, payroll_run_id: value }))} />
+            <SelectField disabled={!canManageInputs} label="Employee" required value={snapshotForm.employee_id} options={employeeOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, employee_id: value }))} />
+            <SelectField disabled={!canManageInputs} label="Snapshot status" required value={snapshotForm.snapshot_status} options={snapshotStatusOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, snapshot_status: value }))} />
+            <TextField disabled={!canManageInputs} label="Input profile ref" required value={snapshotForm.input_profile_ref} onChange={(value) => setSnapshotForm((current) => ({ ...current, input_profile_ref: value }))} />
+            <TextField disabled={!canManageInputs} label="Config profile reference" value={snapshotForm.config_profile_ref} onChange={(value) => setSnapshotForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
           <div className="form-grid salary-crud-form-grid">
-            <JsonField label="Employee snapshot JSON" value={snapshotForm.employee_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, employee_snapshot: value }))} />
-            <JsonField label="Organization snapshot JSON" value={snapshotForm.organization_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, organization_snapshot: value }))} />
-            <JsonField label="Salary snapshot JSON" value={snapshotForm.salary_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, salary_snapshot: value }))} />
-            <JsonField label="Attendance snapshot JSON" value={snapshotForm.attendance_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, attendance_snapshot: value }))} />
-            <JsonField label="Validation snapshot JSON" value={snapshotForm.validation_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, validation_snapshot: value }))} />
+            <JsonField disabled={!canManageInputs} label="Employee snapshot JSON" value={snapshotForm.employee_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, employee_snapshot: value }))} />
+            <JsonField disabled={!canManageInputs} label="Organization snapshot JSON" value={snapshotForm.organization_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, organization_snapshot: value }))} />
+            <JsonField disabled={!canManageInputs} label="Salary snapshot JSON" value={snapshotForm.salary_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, salary_snapshot: value }))} />
+            <JsonField disabled={!canManageInputs} label="Attendance snapshot JSON" value={snapshotForm.attendance_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, attendance_snapshot: value }))} />
+            <JsonField disabled={!canManageInputs} label="Validation snapshot JSON" value={snapshotForm.validation_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, validation_snapshot: value }))} />
           </div>
           <div className="salary-crud-list" aria-label="Payroll input snapshot records">
             {setup.snapshots.slice(0, 6).map((item) => (
@@ -405,9 +415,10 @@ export function PayrollInputOperationsPanel({
               </button>
             ))}
           </div>
-          <button className="button button--primary" disabled={submitting === "snapshot" || !runOptions.length || !employeeOptions.length} type="submit">
+          <button className="button button--primary" disabled={!canManageInputs || submitting === "snapshot" || !runOptions.length || !employeeOptions.length} type="submit">
             {submitting === "snapshot" ? "Saving..." : snapshotForm.id ? "Save snapshot" : "Create snapshot"}
           </button>
+          {!canManageInputs ? <span className="muted">{manageDisabledReason}</span> : null}
         </form>
 
         <div className="salary-crud-form" aria-label="Payroll input lock panel" data-testid="payroll-input-lock-form">
@@ -451,9 +462,10 @@ export function PayrollInputOperationsPanel({
               <span className="muted">Create at least one input snapshot before locking this run.</span>
             </div>
           )}
-          <button className="button button--primary" disabled={submitting === "lock" || !(runForm.id || snapshotForm.payroll_run_id)} type="button" onClick={() => void lockInputs()}>
+          <button className="button button--primary" disabled={!canLockInputs || submitting === "lock" || !(runForm.id || snapshotForm.payroll_run_id)} type="button" onClick={() => void lockInputs()}>
             {submitting === "lock" ? "Locking..." : "Lock selected run inputs"}
           </button>
+          {!canLockInputs ? <span className="muted">{lockDisabledReason}</span> : null}
         </div>
       </div>
     </section>

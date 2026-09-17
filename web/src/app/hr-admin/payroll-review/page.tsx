@@ -5,6 +5,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReviewSetup } from "@/lib/api";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 import { PayrollReviewExceptionActions } from "./payroll-review-exception-actions";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import type {
   HrAdminPayrollCalculationLine,
   HrAdminPayrollRun,
@@ -180,6 +181,11 @@ function ApprovalTimeline({ approvals }: { approvals: HrAdminPayrollRunApproval[
 }
 
 export default async function HrAdminPayrollReviewPage({ searchParams }: PageProps) {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["payroll.review"], fallbackPath: "/hr-admin" });
+  const canReviewPayroll = sessionHasPermission(sessionUser, "payroll.review");
+  const canApprovePayroll = sessionHasPermission(sessionUser, "payroll.approve");
+  const canLockPayroll = sessionHasPermission(sessionUser, "payroll.lock");
+  const canGenerateOutputs = sessionHasPermission(sessionUser, "payroll.publish");
   const currentParams = (await searchParams) ?? {};
   const selectedReviewId = normalizeParam(currentParams.reviewId);
   const selectedExceptionId = normalizeParam(currentParams.exceptionId);
@@ -302,8 +308,8 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   id: "submit-review",
                   label: "Submit review",
                   endpoint: selectedReview ? `/api/hr-admin/payroll-reviews/${selectedReview.id}/submit` : "",
-                  disabled: !selectedReview,
-                  disabledReason: "Select a payroll review first.",
+                  disabled: !canReviewPayroll || !selectedReview,
+                  disabledReason: !canReviewPayroll ? "Requires payroll.review." : "Select a payroll review first.",
                 },
                 {
                   id: "approve-review",
@@ -314,15 +320,15 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   defaultProfileRef: selectedReview?.review_profile_ref ?? "",
                   commentField: "comment",
                   commentLabel: "Approval comment",
-                  disabled: !selectedReview,
-                  disabledReason: "Select a payroll review first.",
+                  disabled: !canApprovePayroll || !selectedReview,
+                  disabledReason: !canApprovePayroll ? "Requires payroll.approve." : "Select a payroll review first.",
                 },
                 {
                   id: "lock-review",
                   label: "Final lock",
                   endpoint: selectedReview ? `/api/hr-admin/payroll-reviews/${selectedReview.id}/lock` : "",
-                  disabled: !selectedReview,
-                  disabledReason: "Select a payroll review first.",
+                  disabled: !canLockPayroll || !selectedReview,
+                  disabledReason: !canLockPayroll ? "Requires payroll.lock." : "Select a payroll review first.",
                 },
                 {
                   id: "generate-outputs",
@@ -331,8 +337,8 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   profileField: "output_profile_ref",
                   profileLabel: "Output profile ref",
                   defaultProfileRef: "tenant.payroll.outputs.v1",
-                  disabled: !selectedReview,
-                  disabledReason: "Select a payroll review first.",
+                  disabled: !canGenerateOutputs || !selectedReview,
+                  disabledReason: !canGenerateOutputs ? "Requires payroll.publish." : "Select a payroll review first.",
                 },
               ]}
             />
@@ -384,6 +390,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
               selectedException={selectedException}
               lines={visibleLines}
               severityOptions={setup.options.exception_severities}
+              canManageExceptions={canReviewPayroll}
             />
 
             <ApprovalTimeline approvals={visibleApprovals} />

@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
 import type { HrAdminPayrollInputSnapshot, HrAdminPayrollRun } from "@/lib/types";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollInputOperationsPanel } from "./payroll-input-operations-panel";
 
 type SearchParamValue = string | string[] | undefined;
@@ -160,6 +161,9 @@ function SnapshotDetail({ snapshot }: { snapshot: HrAdminPayrollInputSnapshot | 
 }
 
 export default async function HrAdminPayrollInputsPage({ searchParams }: PageProps) {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["payroll.inputs.view", "payroll.inputs.manage"], fallbackPath: "/hr-admin" });
+  const canManageInputs = sessionHasPermission(sessionUser, "payroll.inputs.manage");
+  const canLockInputs = sessionHasPermission(sessionUser, "payroll.lock");
   const currentParams = (await searchParams) ?? {};
   const selectedRunId = normalizeParam(currentParams.runId);
   const selectedSnapshotId = normalizeParam(currentParams.snapshotId);
@@ -285,7 +289,13 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
         </div>
       </section>
 
-      <PayrollInputOperationsPanel initialSetup={setup} selectedRun={selectedRun} selectedSnapshot={selectedSnapshot} />
+      <PayrollInputOperationsPanel
+        initialSetup={setup}
+        selectedRun={selectedRun}
+        selectedSnapshot={selectedSnapshot}
+        canManageInputs={canManageInputs}
+        canLockInputs={canLockInputs}
+      />
     </main>
   );
 }

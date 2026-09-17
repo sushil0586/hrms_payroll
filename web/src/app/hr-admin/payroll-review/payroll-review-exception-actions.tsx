@@ -15,6 +15,7 @@ type Props = {
   selectedException: HrAdminPayrollRunException | null;
   lines: HrAdminPayrollCalculationLine[];
   severityOptions: Option[];
+  canManageExceptions: boolean;
 };
 
 function apiErrorMessage(payload: unknown, fallback: string) {
@@ -28,7 +29,7 @@ function apiErrorMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
-export function PayrollReviewExceptionActions({ reviewId, selectedException, lines, severityOptions }: Props) {
+export function PayrollReviewExceptionActions({ reviewId, selectedException, lines, severityOptions, canManageExceptions }: Props) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
@@ -112,19 +113,19 @@ export function PayrollReviewExceptionActions({ reviewId, selectedException, lin
         <article className="payroll-close-action-card">
           <label className="form-field" htmlFor="payroll-review-exception-title">
             <span className="muted">Title</span>
-            <input id="payroll-review-exception-title" className="input-control" value={title} onChange={(event) => setTitle(event.target.value)} />
+            <input id="payroll-review-exception-title" className="input-control" disabled={!canManageExceptions} value={title} onChange={(event) => setTitle(event.target.value)} />
           </label>
           <label className="form-field" htmlFor="payroll-review-exception-detail">
             <span className="muted">Detail</span>
-            <textarea id="payroll-review-exception-detail" className="input-control" rows={3} value={detail} onChange={(event) => setDetail(event.target.value)} />
+            <textarea id="payroll-review-exception-detail" className="input-control" disabled={!canManageExceptions} rows={3} value={detail} onChange={(event) => setDetail(event.target.value)} />
           </label>
           <label className="form-field" htmlFor="payroll-review-exception-category">
             <span className="muted">Category</span>
-            <input id="payroll-review-exception-category" className="input-control" value={category} onChange={(event) => setCategory(event.target.value)} />
+            <input id="payroll-review-exception-category" className="input-control" disabled={!canManageExceptions} value={category} onChange={(event) => setCategory(event.target.value)} />
           </label>
           <label className="form-field" htmlFor="payroll-review-exception-severity">
             <span className="muted">Severity</span>
-            <select id="payroll-review-exception-severity" className="input-control" value={severity} onChange={(event) => setSeverity(event.target.value)}>
+            <select id="payroll-review-exception-severity" className="input-control" disabled={!canManageExceptions} value={severity} onChange={(event) => setSeverity(event.target.value)}>
               {severityOptions.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
@@ -132,22 +133,23 @@ export function PayrollReviewExceptionActions({ reviewId, selectedException, lin
           </label>
           <label className="form-field" htmlFor="payroll-review-exception-line">
             <span className="muted">Calculation line</span>
-            <select id="payroll-review-exception-line" className="input-control" value={lineId} onChange={(event) => setLineId(event.target.value)}>
+            <select id="payroll-review-exception-line" className="input-control" disabled={!canManageExceptions} value={lineId} onChange={(event) => setLineId(event.target.value)}>
               <option value="">Run level</option>
               {lines.slice(0, 25).map((line) => (
                 <option key={line.id} value={line.id}>{line.employee_code} / {line.component_code}</option>
               ))}
             </select>
           </label>
-          <button className="button button--primary" type="button" disabled={!reviewId || !title || Boolean(busyAction)} onClick={createException}>
+          <button className="button button--primary" type="button" disabled={!canManageExceptions || !reviewId || !title || Boolean(busyAction)} onClick={createException}>
             {busyAction === "create" ? "Working..." : "Create exception"}
           </button>
+          {!canManageExceptions ? <span className="muted">Requires payroll.review.</span> : null}
         </article>
 
         <article className="payroll-close-action-card">
           <label className="form-field" htmlFor="payroll-review-exception-decision">
             <span className="muted">Decision</span>
-            <select id="payroll-review-exception-decision" className="input-control" value={decision} onChange={(event) => setDecision(event.target.value)}>
+            <select id="payroll-review-exception-decision" className="input-control" disabled={!canManageExceptions} value={decision} onChange={(event) => setDecision(event.target.value)}>
               <option value="resolved">Resolved</option>
               <option value="accepted">Accepted</option>
               <option value="rejected">Rejected</option>
@@ -155,11 +157,12 @@ export function PayrollReviewExceptionActions({ reviewId, selectedException, lin
           </label>
           <label className="form-field" htmlFor="payroll-review-exception-reason">
             <span className="muted">Decision reason</span>
-            <textarea id="payroll-review-exception-reason" className="input-control" rows={4} value={reason} onChange={(event) => setReason(event.target.value)} />
+            <textarea id="payroll-review-exception-reason" className="input-control" disabled={!canManageExceptions} rows={4} value={reason} onChange={(event) => setReason(event.target.value)} />
           </label>
-          <button className="button button--primary" type="button" disabled={!selectedException || Boolean(busyAction)} onClick={decideException}>
+          <button className="button button--primary" type="button" disabled={!canManageExceptions || !selectedException || Boolean(busyAction)} onClick={decideException}>
             {busyAction === "decision" ? "Working..." : "Save decision"}
           </button>
+          {!canManageExceptions ? <span className="muted">Requires payroll.review.</span> : null}
         </article>
       </div>
 
