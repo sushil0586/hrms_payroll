@@ -7,6 +7,21 @@ type CreatedRole = {
   id: string;
 };
 
+type TenantConsole = {
+  membership_management: {
+    memberships?: Array<{
+      id: string;
+      username: string;
+      role_ids: string[];
+    }>;
+    recent_memberships: Array<{
+      id: string;
+      username: string;
+      role_ids: string[];
+    }>;
+  };
+};
+
 type OutputSetup = {
   output_batches: Array<{ id: string }>;
 };
@@ -39,21 +54,62 @@ async function loginViaApi(page: Page, persona: { username: string; password: st
   expect(response.ok()).toBeTruthy();
 }
 
-async function createRoleBackedUser(page: Page, input: { suffix: number; roleName: string; roleCode: string; permissions: string[] }) {
-  await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);
-  await expectPageReady(page, "Roles & Permissions");
-
-  const roleResponse = await page.request.post("/api/tenant-admin/roles", {
+async function createTenantRole(page: Page, input: { name: string; code: string; description: string; permissions: string[] }) {
+  const response = await page.request.post("/api/tenant-admin/roles", {
     data: {
-      name: `${input.roleName} ${input.suffix}`,
-      code: `${input.roleCode}-${input.suffix}`,
-      description: "Browser certification role for payroll/statutory RBAC.",
+      name: input.name,
+      code: input.code,
+      description: input.description,
       is_active: true,
       permission_keys: input.permissions,
     },
   });
-  expect(roleResponse.ok()).toBeTruthy();
-  const rolePayload = (await roleResponse.json()) as { role: CreatedRole };
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const payload = (await response.json()) as { role: CreatedRole };
+  return payload.role;
+}
+
+async function getTenantConsole(page: Page) {
+  const response = await page.request.get(`${apiBaseUrl()}/tenant-admin/console/`, {
+    headers: await authHeaders(page),
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return (await response.json()) as TenantConsole;
+}
+
+async function ensureSetupRoleOnSeedAdmin(page: Page, suffix: number) {
+  const setupRole = await createTenantRole(page, {
+    name: `QA RBAC Setup ${suffix}`,
+    code: `qa-rbac-setup-${suffix}`,
+    description: "Temporary setup role for payroll/statutory RBAC browser certification.",
+    permissions: ["employees.create", "employees.access.manage"],
+  });
+  const consolePayload = await getTenantConsole(page);
+  const memberships = consolePayload.membership_management.memberships ?? consolePayload.membership_management.recent_memberships;
+  const seedAdminMembership = memberships.find((membership) => membership.username === tenantAdmin.username || membership.username === hrAdmin.username);
+  expect(seedAdminMembership, `Expected seed admin membership for ${tenantAdmin.username} or ${hrAdmin.username}`).toBeTruthy();
+  const nextRoleIds = Array.from(new Set([...seedAdminMembership!.role_ids, setupRole.id]));
+  const response = await page.request.patch(`/api/tenant-admin/memberships/${seedAdminMembership!.id}`, {
+    data: {
+      action: "update_roles",
+      role_ids: nextRoleIds,
+      note: "Temporary payroll/statutory RBAC setup permissions for browser certification.",
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+
+async function createRoleBackedUser(page: Page, input: { suffix: number; roleName: string; roleCode: string; permissions: string[] }) {
+  await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);
+  await expectPageReady(page, "Roles & Permissions");
+
+  const rolePayload = await createTenantRole(page, {
+    name: `${input.roleName} ${input.suffix}`,
+    code: `${input.roleCode}-${input.suffix}`,
+    description: "Browser certification role for payroll/statutory RBAC.",
+    permissions: input.permissions,
+  });
+  await ensureSetupRoleOnSeedAdmin(page, input.suffix);
 
   const username = `${input.roleCode}.${input.suffix}`;
   const email = `${username}@example.com`;
@@ -85,7 +141,7 @@ async function createRoleBackedUser(page: Page, input: { suffix: number; roleNam
       must_change_password: false,
       membership_status: "active",
       is_default_membership: true,
-      role_ids: [rolePayload.role.id],
+      role_ids: [rolePayload.id],
       password: rbacPassword,
     },
   });
