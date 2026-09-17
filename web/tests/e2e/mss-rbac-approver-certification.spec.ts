@@ -19,7 +19,29 @@ type EmployeePayload = EmployeeListItem & {
   reporting_manager_id?: string | null;
 };
 
+type AttendanceRecordOption = {
+  id: string;
+  is_locked: boolean;
+};
+
+type AttendanceRegularizationList = {
+  items: Array<{
+    attendance_record_id: string;
+    status: string;
+  }>;
+};
+
 const customPassword = "Password@123";
+
+function apiBaseUrl() {
+  return process.env.HRMS_API_BASE_URL ?? "http://127.0.0.1:8012/api/v1";
+}
+
+async function authHeaders(page: Page) {
+  const token = (await page.context().cookies()).find((cookie) => cookie.name === "hrms_access_token")?.value;
+  expect(token).toBeTruthy();
+  return { Authorization: `Token ${token}` };
+}
 
 function uniqueRef(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
@@ -86,8 +108,10 @@ async function createCustomAttendanceReviewerRole(page: Page, suffix: string) {
 
 async function getEmployeeByCode(page: Page, employeeCode: string) {
   await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);
-  const response = await page.request.get("/api/hr-admin/employees");
-  expect(response.ok()).toBeTruthy();
+  const response = await page.request.get(`${apiBaseUrl()}/hr-admin/employees/`, {
+    headers: await authHeaders(page),
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
   const employees = (await response.json()) as EmployeeListItem[];
   const matched = employees.find((item) => item.employee_code === employeeCode);
   expect(matched, `Expected employee ${employeeCode} to exist`).toBeTruthy();
@@ -128,6 +152,27 @@ async function createApproverEmployeeWithAccess(page: Page, suffix: string, role
   });
   expect(accessResponse.ok()).toBeTruthy();
   return { ...created, username, password: customPassword };
+}
+
+async function selectRegularizableAttendanceRecord(page: Page) {
+  const [recordsResponse, regularizationsResponse] = await Promise.all([
+    page.request.get("/api/me/attendance-records"),
+    page.request.get(`${apiBaseUrl()}/me/attendance-regularizations/?status=pending&page_size=100`, {
+      headers: await authHeaders(page),
+    }),
+  ]);
+  expect(recordsResponse.ok(), await recordsResponse.text()).toBeTruthy();
+  expect(regularizationsResponse.ok(), await regularizationsResponse.text()).toBeTruthy();
+  const records = (await recordsResponse.json()) as AttendanceRecordOption[];
+  const regularizations = (await regularizationsResponse.json()) as AttendanceRegularizationList;
+  const pendingRecordIds = new Set(
+    regularizations.items
+      .filter((item) => item.status === "pending")
+      .map((item) => item.attendance_record_id),
+  );
+  const record = records.find((item) => !item.is_locked && !pendingRecordIds.has(item.id));
+  expect(record, "Expected at least one unlocked attendance record without pending regularization.").toBeTruthy();
+  await field(page, "Attendance record").selectOption(record!.id);
 }
 
 test.describe("MSS RBAC approver certification", () => {
@@ -173,7 +218,9 @@ test.describe("MSS RBAC approver certification", () => {
       await expect(card(page, reason)).toBeVisible();
       await expect(card(page, reason)).toContainText("pending");
 
-      const hrDenied = await page.request.get("/api/hr-admin/employees");
+      const hrDenied = await page.request.get(`${apiBaseUrl()}/hr-admin/employees/`, {
+        headers: await authHeaders(page),
+      });
       expect(hrDenied.status()).toBe(403);
       expect(JSON.stringify(await hrDenied.json())).toContain("employees.view");
 
@@ -218,6 +265,7 @@ test.describe("MSS RBAC approver certification", () => {
 
       await gotoAuthenticated(page, "/ess", employee);
       await expectPageReady(page, "Self service");
+      await selectRegularizableAttendanceRecord(page);
       await field(page, "Requested status").selectOption("remote");
       await field(page, "Reason", 1).fill(reason);
       const regularizationResult = await submitAndCapture<{ id: string; status: string }>(
@@ -228,7 +276,7 @@ test.describe("MSS RBAC approver certification", () => {
           await page.getByRole("button", { name: "Submit regularization" }).click();
         },
       );
-      expect(regularizationResult.ok).toBeTruthy();
+      expect(regularizationResult.ok, JSON.stringify(regularizationResult.payload)).toBeTruthy();
       expect(regularizationResult.payload.status).toBe("pending");
 
       await gotoAuthenticated(page, "/mss", reviewer);
@@ -242,7 +290,9 @@ test.describe("MSS RBAC approver certification", () => {
       await expect(card(page, reason)).toBeVisible();
       await expect(card(page, reason)).toContainText("pending");
 
-      const leaveDenied = await page.request.get("/api/manager/leave-requests/pending");
+      const leaveDenied = await page.request.get(`${apiBaseUrl()}/manager/leave-requests/pending/`, {
+        headers: await authHeaders(page),
+      });
       expect(leaveDenied.status()).toBe(403);
       expect(JSON.stringify(await leaveDenied.json())).toContain("leave.view");
 

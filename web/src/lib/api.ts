@@ -246,17 +246,42 @@ export async function getMssApprovalInbox(params?: {
   leave_page_size?: number;
   regularization_page?: number;
   regularization_page_size?: number;
+  include_leave?: boolean;
+  include_regularizations?: boolean;
 }) {
+  const includeLeave = params?.include_leave ?? true;
+  const includeRegularizations = params?.include_regularizations ?? true;
+  const emptyLeave: ManagerLeaveApprovalListResponse = {
+    items: [],
+    total_count: 0,
+    page: params?.leave_page ?? 1,
+    page_size: params?.leave_page_size ?? 10,
+    has_next: false,
+    has_previous: false,
+  };
+  const emptyRegularizations: ManagerAttendanceApprovalListResponse = {
+    items: [],
+    total_count: 0,
+    page: params?.regularization_page ?? 1,
+    page_size: params?.regularization_page_size ?? 10,
+    has_next: false,
+    has_previous: false,
+  };
+
   const [summary, pendingLeave, pendingRegularizations] = await Promise.all([
     apiGet<ManagerTeamSummary>("/manager/team-summary/"),
-    apiGet<ManagerLeaveApprovalListResponse>(`/manager/leave-requests/pending/${buildQueryString({
-      page: params?.leave_page ?? 1,
-      page_size: params?.leave_page_size ?? 10,
-    })}`),
-    apiGet<ManagerAttendanceApprovalListResponse>(`/manager/attendance-regularizations/pending/${buildQueryString({
-      page: params?.regularization_page ?? 1,
-      page_size: params?.regularization_page_size ?? 10,
-    })}`),
+    includeLeave
+      ? apiGet<ManagerLeaveApprovalListResponse>(`/manager/leave-requests/pending/${buildQueryString({
+          page: params?.leave_page ?? 1,
+          page_size: params?.leave_page_size ?? 10,
+        })}`)
+      : Promise.resolve({ data: emptyLeave, state: "live" as const }),
+    includeRegularizations
+      ? apiGet<ManagerAttendanceApprovalListResponse>(`/manager/attendance-regularizations/pending/${buildQueryString({
+          page: params?.regularization_page ?? 1,
+          page_size: params?.regularization_page_size ?? 10,
+        })}`)
+      : Promise.resolve({ data: emptyRegularizations, state: "live" as const }),
   ]);
 
   return {

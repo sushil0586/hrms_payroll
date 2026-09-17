@@ -84,7 +84,12 @@ export default async function MssControlCenterPage() {
   const sessionUser = await requireWorkspaceAccess({ workspace: "mss" });
   const canApproveLeave = sessionHasPermission(sessionUser, "leave.requests.approve");
   const canReviewAttendance = sessionHasPermission(sessionUser, "attendance.regularization.review");
-  const result = await getMssApprovalInbox({ leave_page_size: 5, regularization_page_size: 5 });
+  const result = await getMssApprovalInbox({
+    leave_page_size: 5,
+    regularization_page_size: 5,
+    include_leave: canApproveLeave,
+    include_regularizations: canReviewAttendance,
+  });
   const summary = result.summary;
   const actions = buildManagerActions(summary, { canApproveLeave, canReviewAttendance });
   const activeSignals = actions.filter((item) => item.status !== "ready").length;

@@ -359,6 +359,8 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
     leave_page_size: 5,
     regularization_page: regPage,
     regularization_page_size: 5,
+    include_leave: canApproveLeave,
+    include_regularizations: canReviewAttendance,
   });
   const inboxState = state === "live" ? "live" : "demo";
 
