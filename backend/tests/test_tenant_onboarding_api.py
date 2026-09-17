@@ -4,7 +4,7 @@ from rest_framework.test import APIClient
 
 from apps.attendance.models import AttendancePolicy, Holiday, HolidayCalendar, Shift
 from apps.employees.models import Employee, EmploymentStatus
-from apps.iam.models import MembershipRole, PermissionCatalogEntry, Role, TenantMembership, User
+from apps.iam.models import MenuCatalogEntry, MembershipRole, PermissionCatalogEntry, Role, TenantMembership, User
 from apps.leave_management.models import LeavePolicy, LeaveType
 from apps.platform_policies.models import (
     PlatformPolicyPack,
@@ -156,6 +156,31 @@ def test_platform_permission_catalog_update_rejects_invalid_or_unknown_keys(api_
         format="json",
     )
     assert missing_response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_authenticated_menu_catalog_prefers_synced_db_rows(api_client: APIClient, platform_staff_user: User):
+    anonymous_response = api_client.get("/api/v1/auth/menu-catalog/?workspace=tenant-admin")
+    assert anonymous_response.status_code in {401, 403}
+
+    call_command("sync_menu_catalog")
+    entry = MenuCatalogEntry.objects.get(workspace="tenant-admin", kind="sidebar", href="/tenant-admin/roles")
+    entry.label = "Role designer"
+    entry.permission_keys = ["tenant.roles.view", "tenant.roles.manage"]
+    entry.save(update_fields=["label", "permission_keys", "updated_at"])
+
+    api_client.force_authenticate(user=platform_staff_user)
+    response = api_client.get("/api/v1/auth/menu-catalog/?workspace=tenant-admin")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    role_item = next(item for item in payload if item["href"] == "/tenant-admin/roles")
+    assert role_item["label"] == "Role designer"
+    assert role_item["catalog_source"] == "database"
+    assert role_item["permission_keys"] == ["tenant.roles.view", "tenant.roles.manage"]
+    assert all(item["workspace"] == "tenant-admin" for item in payload)
+    synced_workspaces = set(MenuCatalogEntry.objects.values_list("workspace", flat=True))
+    assert {"platform-admin", "tenant-admin", "hr-admin", "ess", "mss", "finance-manager"}.issubset(synced_workspaces)
 
 
 @pytest.mark.django_db

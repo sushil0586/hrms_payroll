@@ -1,4 +1,5 @@
 import { WorkspaceChrome, type WorkspaceNavGroup } from "@/components/shell/workspace-chrome";
+import { getWorkspaceMenuSource } from "@/lib/ui/menu-catalog";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 const financeNavigation: WorkspaceNavGroup[] = [
@@ -17,17 +18,23 @@ export default async function FinanceManagerLayout({ children }: { children: Rea
   const sessionUser = await requireWorkspaceAccess({ roleCodes: ["payroll-finance-manager"] });
   const userLabel =
     sessionUser?.display_name || sessionUser?.first_name || sessionUser?.username || null;
+  const menuSource = await getWorkspaceMenuSource({
+    workspace: "finance-manager",
+    sessionUser,
+    fallbackGroups: financeNavigation,
+    fallbackQuickLinks: [
+      { href: "/finance-manager", label: "Finance" },
+      { href: "/login", label: "Switch user" },
+    ],
+  });
 
   return (
     <WorkspaceChrome
       footerDescription="Payroll payout, statutory liabilities, provider evidence, and finance-close control in one workspace."
-      navGroups={financeNavigation}
-      navItems={financeNavigation.flatMap((group) => group.items)}
+      navGroups={menuSource.navGroups}
+      navItems={menuSource.navItems}
       productLabel="Nexora"
-      quickLinks={[
-        { href: "/finance-manager", label: "Finance" },
-        { href: "/login", label: "Switch user" },
-      ]}
+      quickLinks={menuSource.quickLinks}
       roleLabel="Payroll Finance"
       searchHint="Search handoffs, bank advice, statutory filings, and audit evidence"
       userLabel={userLabel}

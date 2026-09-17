@@ -6,6 +6,7 @@ from rest_framework import serializers
 
 from apps.workflows.models import WorkflowAssignment, WorkflowInstanceStatus
 from apps.iam.models import MembershipStatus, TenantMembership, User
+from apps.iam.permission_catalog import get_permission_catalog
 from apps.iam.permission_checks import get_user_tenant_permission_keys
 
 
@@ -65,6 +66,21 @@ class SessionUserSerializer(serializers.Serializer):
     memberships = MembershipSummarySerializer(many=True)
     workspace_access = WorkspaceAccessSerializer()
     effective_permissions = serializers.ListField(child=serializers.CharField())
+
+
+class MenuCatalogEntrySerializer(serializers.Serializer):
+    id = serializers.CharField(required=False)
+    workspace = serializers.CharField()
+    group = serializers.CharField(allow_blank=True)
+    kind = serializers.CharField()
+    href = serializers.CharField()
+    label = serializers.CharField()
+    short_label = serializers.CharField(allow_blank=True)
+    blurb = serializers.CharField(allow_blank=True)
+    permission_keys = serializers.ListField(child=serializers.CharField())
+    sort_order = serializers.IntegerField()
+    is_active = serializers.BooleanField()
+    catalog_source = serializers.CharField(required=False, default="code")
 
 
 def _membership_role_codes(membership: TenantMembership | None) -> list[str]:
@@ -169,6 +185,13 @@ def build_session_user_payload(user: User) -> dict:
         if default_membership
         else []
     )
+    if user.is_superuser:
+        platform_permissions = [
+            item["key"]
+            for item in get_permission_catalog()
+            if "platform-admin" in item.get("default_role_codes", [])
+        ]
+        effective_permissions = sorted(set(effective_permissions) | set(platform_permissions))
 
     return {
         "id": user.id,

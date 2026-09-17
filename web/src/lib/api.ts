@@ -86,6 +86,7 @@ import type {
   ManagerAttendanceApprovalListResponse,
   ManagerLeaveApprovalListResponse,
   ManagerTeamSummary,
+  MenuCatalogItem,
   PlatformPermissionCatalogItem,
   PlatformPublicLead,
   PlatformPolicyPackListItem,
@@ -365,6 +366,10 @@ export async function getPlatformPolicyPacks() {
 
 export async function getPlatformPermissionCatalog() {
   return apiGet<PlatformPermissionCatalogItem[]>("/platform/permission-catalog/");
+}
+
+export async function getMenuCatalog(workspace: string) {
+  return apiGet<MenuCatalogItem[]>(`/auth/menu-catalog/${buildQueryString({ workspace })}`);
 }
 
 export async function getTenantAdminTrustAuditReview(params?: {

@@ -90,6 +90,51 @@ class PermissionCatalogEntry(UUIDPrimaryKeyModel, TimeStampedModel):
         }
 
 
+class MenuCatalogEntry(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Database-managed workspace navigation entry with permission metadata."""
+
+    class MenuKind(models.TextChoices):
+        SIDEBAR = "sidebar", "Sidebar"
+        QUICK_LINK = "quick_link", "Quick Link"
+
+    workspace = models.CharField(max_length=80)
+    group = models.CharField(max_length=120, blank=True)
+    kind = models.CharField(max_length=20, choices=MenuKind.choices, default=MenuKind.SIDEBAR)
+    href = models.CharField(max_length=255)
+    label = models.CharField(max_length=120)
+    short_label = models.CharField(max_length=12, blank=True)
+    blurb = models.CharField(max_length=255, blank=True)
+    permission_keys = models.JSONField(default=list, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    source_ref = models.CharField(max_length=120, blank=True, default="code_catalog")
+
+    class Meta:
+        ordering = ["workspace", "kind", "group", "sort_order", "label"]
+        unique_together = [("workspace", "kind", "href")]
+        verbose_name = "Menu Catalog Entry"
+        verbose_name_plural = "Menu Catalog Entries"
+
+    def __str__(self) -> str:
+        return f"{self.workspace}:{self.label}"
+
+    def as_catalog_dict(self) -> dict:
+        return {
+            "id": str(self.id),
+            "workspace": self.workspace,
+            "group": self.group,
+            "kind": self.kind,
+            "href": self.href,
+            "label": self.label,
+            "short_label": self.short_label,
+            "blurb": self.blurb,
+            "permission_keys": list(self.permission_keys or []),
+            "sort_order": self.sort_order,
+            "is_active": self.is_active,
+            "catalog_source": "database",
+        }
+
+
 class Role(UUIDPrimaryKeyModel, TimeStampedModel):
     """Tenant-scoped business role used for HRMS access control."""
 

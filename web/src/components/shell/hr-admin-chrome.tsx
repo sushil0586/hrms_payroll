@@ -8,17 +8,18 @@ type Props = {
   children: React.ReactNode;
   navGroups?: WorkspaceNavGroup[];
   navItems?: WorkspaceNavItem[];
+  quickLinks?: Array<{ href: string; label: string }>;
   userLabel?: string | null;
 };
 
-export function HrAdminChrome({ children, navGroups, navItems, userLabel }: Props) {
+export function HrAdminChrome({ children, navGroups, navItems, quickLinks, userLabel }: Props) {
   return (
     <WorkspaceChrome
       footerDescription="Governance, policy execution, and lifecycle control in one sober workspace."
       navItems={navItems ?? hrAdminNavigation.flatMap((group) => group.items)}
       navGroups={navGroups}
       productLabel="Nexora"
-      quickLinks={[
+      quickLinks={quickLinks ?? [
         { href: "/ess", label: "ESS" },
         { href: "/mss/approvals", label: "MSS" },
       ]}

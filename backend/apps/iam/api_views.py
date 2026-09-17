@@ -7,9 +7,12 @@ from rest_framework.views import APIView
 
 from apps.iam.api_serializers import (
     LoginSerializer,
+    MenuCatalogEntrySerializer,
     SessionUserSerializer,
     build_session_user_payload,
 )
+from apps.iam.menu_catalog import get_menu_catalog
+from apps.iam.models import MenuCatalogEntry
 
 
 class LoginView(APIView):
@@ -36,6 +39,23 @@ class SessionView(APIView):
     def get(self, request):
         payload = build_session_user_payload(request.user)
         return response.Response(SessionUserSerializer(payload).data)
+
+
+class MenuCatalogView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        workspace = request.query_params.get("workspace") or ""
+        entries = list(MenuCatalogEntry.objects.filter(is_active=True).order_by("workspace", "kind", "group", "sort_order", "label"))
+        payload = [entry.as_catalog_dict() for entry in entries]
+        if not payload:
+            payload = [
+                {**item, "is_active": True, "catalog_source": "code"}
+                for item in get_menu_catalog()
+            ]
+        if workspace:
+            payload = [item for item in payload if item["workspace"] == workspace]
+        return response.Response(MenuCatalogEntrySerializer(payload, many=True).data)
 
 
 class LogoutView(APIView):

@@ -5621,3 +5621,18 @@ export type PlatformPermissionCatalogItem = {
   catalog_source?: "database" | "code" | string;
   is_active?: boolean;
 };
+
+export type MenuCatalogItem = {
+  id?: string;
+  workspace: string;
+  group: string;
+  kind: "sidebar" | "quick_link" | string;
+  href: string;
+  label: string;
+  short_label: string;
+  blurb: string;
+  permission_keys: string[];
+  sort_order: number;
+  is_active: boolean;
+  catalog_source?: "database" | "code" | string;
+};

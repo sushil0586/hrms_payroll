@@ -13,6 +13,7 @@ export type WorkspaceNavItem = {
   blurb?: string;
   disabled?: boolean;
   disabledReason?: string;
+  permissions?: string[];
 };
 
 export type WorkspaceNavGroup = {

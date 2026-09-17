@@ -1,5 +1,6 @@
 import { WorkspaceChrome } from "@/components/shell/workspace-chrome";
-import { requireWorkspaceAccess, sessionHasAnyPermission } from "@/lib/workspace-access";
+import { getWorkspaceMenuSource } from "@/lib/ui/menu-catalog";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 const TENANT_ADMIN_NAV_ITEMS = [
   { href: "/tenant-admin", label: "Dashboard", shortLabel: "DB", blurb: "Account posture", permissions: ["tenant.dashboard.view"] },
@@ -25,15 +26,20 @@ export default async function TenantAdminLayout({ children }: { children: React.
   const sessionUser = await requireWorkspaceAccess({ workspace: "tenant_admin" });
   const userLabel =
     sessionUser?.display_name || sessionUser?.first_name || sessionUser?.username || null;
-  const navItems = TENANT_ADMIN_NAV_ITEMS.filter((item) => sessionHasAnyPermission(sessionUser, item.permissions)).map(({ permissions, ...item }) => item);
-  const quickLinks = TENANT_ADMIN_QUICK_LINKS.filter((item) => sessionHasAnyPermission(sessionUser, item.permissions)).map(({ permissions, ...item }) => item);
+  const menuSource = await getWorkspaceMenuSource({
+    workspace: "tenant-admin",
+    sessionUser,
+    fallbackGroups: [{ title: "Workspace", items: TENANT_ADMIN_NAV_ITEMS }],
+    fallbackQuickLinks: TENANT_ADMIN_QUICK_LINKS,
+  });
 
   return (
     <WorkspaceChrome
       footerDescription="Account setup, users, plan, support, security, and audit evidence in one focused workspace."
-      navItems={navItems}
+      navGroups={menuSource.navGroups}
+      navItems={menuSource.navItems}
       productLabel="HRMS"
-      quickLinks={quickLinks}
+      quickLinks={menuSource.quickLinks}
       roleLabel="Tenant Admin"
       searchHint="Search users, setup, audit..."
       userLabel={userLabel}

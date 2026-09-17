@@ -1,8 +1,9 @@
 import { HrAdminChrome } from "@/components/shell/hr-admin-chrome";
 import type { WorkspaceNavGroup } from "@/components/shell/workspace-chrome";
 import { getHrAdminSaasCommercialControl } from "@/lib/api";
+import { getWorkspaceMenuSource } from "@/lib/ui/menu-catalog";
 import { hrAdminNavigation } from "@/lib/ui/navigation";
-import { requireSessionPermission, sessionHasAnyPermission } from "@/lib/workspace-access";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 const PAYROLL_CORE_NAV_PATHS = new Set([
   "/hr-admin/payroll-readiness",
@@ -34,7 +35,10 @@ function disabledReasonForScope(scope: {
   return "Unavailable on current plan";
 }
 
-async function getCommercialAwareHrAdminNavigation(sessionUser: Awaited<ReturnType<typeof requireSessionPermission>>): Promise<WorkspaceNavGroup[]> {
+async function getCommercialAwareHrAdminNavigation(
+  sessionUser: Awaited<ReturnType<typeof requireSessionPermission>>,
+  baseGroups: WorkspaceNavGroup[],
+): Promise<WorkspaceNavGroup[]> {
   try {
     const result = await getHrAdminSaasCommercialControl();
     const scopes = new Map(result.data.enforcement.scopes.map((scope) => [scope.scope_ref, scope]));
@@ -51,30 +55,22 @@ async function getCommercialAwareHrAdminNavigation(sessionUser: Awaited<ReturnTy
       missing_entitlements: [],
     });
 
-    return hrAdminNavigation
+    return baseGroups
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => sessionHasAnyPermission(sessionUser, item.permissions ?? [])).map((item) => {
+        items: group.items.map((item) => {
         const disabledReason =
           PAYROLL_PROVIDER_NAV_PATHS.has(item.href)
             ? payrollProviderReason
             : PAYROLL_CORE_NAV_PATHS.has(item.href)
               ? payrollCoreReason
               : null;
-        const { permissions, ...navItem } = item;
-        return disabledReason ? { ...navItem, disabled: true, disabledReason } : navItem;
+        return disabledReason ? { ...item, disabled: true, disabledReason } : item;
       }),
     }))
       .filter((group) => group.items.length > 0);
   } catch {
-    return hrAdminNavigation
-      .map((group) => ({
-        ...group,
-        items: group.items
-          .filter((item) => sessionHasAnyPermission(sessionUser, item.permissions ?? []))
-          .map(({ permissions, ...item }) => item),
-      }))
-      .filter((group) => group.items.length > 0);
+    return baseGroups;
   }
 }
 
@@ -105,7 +101,16 @@ export default async function HrAdminLayout({ children }: { children: React.Reac
   });
   const userLabel =
     sessionUser?.display_name || sessionUser?.first_name || sessionUser?.username || null;
-  const navGroups = await getCommercialAwareHrAdminNavigation(sessionUser);
+  const menuSource = await getWorkspaceMenuSource({
+    workspace: "hr-admin",
+    sessionUser,
+    fallbackGroups: hrAdminNavigation,
+    fallbackQuickLinks: [
+      { href: "/ess", label: "ESS" },
+      { href: "/mss/approvals", label: "MSS" },
+    ],
+  });
+  const navGroups = await getCommercialAwareHrAdminNavigation(sessionUser, menuSource.navGroups);
 
-  return <HrAdminChrome navGroups={navGroups} userLabel={userLabel}>{children}</HrAdminChrome>;
+  return <HrAdminChrome navGroups={navGroups} quickLinks={menuSource.quickLinks} userLabel={userLabel}>{children}</HrAdminChrome>;
 }
