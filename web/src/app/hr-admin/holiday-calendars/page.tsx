@@ -4,8 +4,11 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { getHrAdminHolidayCalendars } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminHolidayCalendarsPage() {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-operations" });
+  const canManagePolicies = sessionHasPermission(sessionUser, "attendance.policies.manage");
   const result = await getHrAdminHolidayCalendars();
 
   return (
@@ -16,7 +19,7 @@ export default async function HrAdminHolidayCalendarsPage() {
         description="Set scope-aware holiday schedules that policies and daily attendance records can reference."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/holiday-calendars/new">Create holiday calendar</Link>
+            {canManagePolicies ? <Link className="button button--primary" href="/hr-admin/holiday-calendars/new">Create holiday calendar</Link> : null}
             <Link className="button button--secondary" href="/hr-admin/attendance-operations">Back to attendance operations</Link>
           </>
         }
@@ -48,7 +51,7 @@ export default async function HrAdminHolidayCalendarsPage() {
                   <p className="section-copy">{item.code}</p>
                 </div>
                 <div className="record-card__actions">
-                  <Link className="button button--secondary" href={`/hr-admin/holiday-calendars/${item.id}/edit`}>Edit</Link>
+                  {canManagePolicies ? <Link className="button button--secondary" href={`/hr-admin/holiday-calendars/${item.id}/edit`}>Edit</Link> : null}
                 </div>
               </div>
               <div className="detail-grid">

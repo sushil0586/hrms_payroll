@@ -488,6 +488,11 @@ def test_hr_admin_dashboard_returns_saas_launch_audit(api_client: APIClient, boo
 
 @pytest.mark.django_db
 def test_hr_admin_can_persist_and_filter_report_export_audits(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    hr_admin_role = Role.objects.get(tenant=tenant, code="hr-admin")
+    for permission_key in ["reports.compliance.view", "reports.compliance.export"]:
+        if not hr_admin_role.permissions.filter(permission_key=permission_key).exists():
+            hr_admin_role.permissions.create(permission_key=permission_key)
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
@@ -525,6 +530,117 @@ def test_hr_admin_can_persist_and_filter_report_export_audits(api_client: APICli
     list_payload = list_response.json()
     assert list_payload["count"] == 1
     assert list_payload["items"][0]["checksum_sha256"] == "a" * 64
+
+
+@pytest.mark.django_db
+def test_report_exports_require_category_export_permissions(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    role = Role.objects.create(
+        tenant=tenant,
+        code="custom-hr-report-viewer",
+        name="Custom HR Report Viewer",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="reports.hr.view")
+    user = User.objects.create_user(
+        username="custom.hr.report.viewer",
+        email="custom.hr.report.viewer@example.com",
+        password=PASSWORD,
+        first_name="Report",
+        last_name="Viewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="CUSTOM-HR-REPORT-VIEWER-001",
+        first_name="Report",
+        last_name="Viewer",
+        work_email="custom.hr.report.viewer@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.localdate(),
+        membership=membership,
+    )
+    token = login(api_client, "custom.hr.report.viewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    blocked_response = api_client.get("/api/v1/hr-admin/reports/exports/workforce/")
+    assert blocked_response.status_code == 403
+    assert "reports.hr.export" in str(blocked_response.json())
+
+    role.permissions.create(permission_key="reports.hr.export")
+    allowed_response = api_client.get("/api/v1/hr-admin/reports/exports/workforce/")
+    assert allowed_response.status_code == 200
+    assert allowed_response["Content-Type"].startswith("text/csv")
+    assert "workforce-report.csv" in allowed_response["Content-Disposition"]
+
+
+@pytest.mark.django_db
+def test_report_export_audit_writes_require_report_category_export_permission(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    role = Role.objects.create(
+        tenant=tenant,
+        code="custom-payroll-report-auditor",
+        name="Custom Payroll Report Auditor",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="reports.compliance.view")
+    user = User.objects.create_user(
+        username="custom.payroll.report.auditor",
+        email="custom.payroll.report.auditor@example.com",
+        password=PASSWORD,
+        first_name="Payroll",
+        last_name="Auditor",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="CUSTOM-PAYROLL-REPORT-AUDITOR-001",
+        first_name="Payroll",
+        last_name="Auditor",
+        work_email="custom.payroll.report.auditor@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.localdate(),
+        membership=membership,
+    )
+    token = login(api_client, "custom.payroll.report.auditor")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    payload = {
+        "actor_display": "Payroll Auditor",
+        "report_key": "payroll-register",
+        "export_type": "csv",
+        "filters": {"sort": "net_pay_desc"},
+        "row_count": 1,
+        "checksum_sha256": "b" * 64,
+        "content_type": "text/csv",
+        "source_endpoints": ["/hr-admin/payroll-output-setup/"],
+        "evidence_columns": ["employee_code", "net_pay", "source_hash"],
+        "request_identifier": "req-payroll-report-audit-rbac",
+        "user_agent": "pytest",
+    }
+
+    blocked_response = api_client.post("/api/v1/hr-admin/reports/export-audits/", payload, format="json")
+    assert blocked_response.status_code == 403
+    assert "reports.payroll.export" in str(blocked_response.json())
+
+    role.permissions.create(permission_key="reports.payroll.export")
+    allowed_response = api_client.post("/api/v1/hr-admin/reports/export-audits/", payload, format="json")
+    assert allowed_response.status_code == 201, allowed_response.json()
+    assert allowed_response.json()["report_key"] == "payroll-register"
 
 
 @pytest.mark.django_db
@@ -1056,6 +1172,775 @@ def test_custom_tenant_role_with_view_permissions_can_open_tenant_admin_console(
 
     assert response.status_code == 200, response.json()
     assert response.json()["tenant"]["code"] == tenant.code
+
+
+@pytest.mark.django_db
+def test_custom_hr_employee_viewer_role_gates_employee_mutations(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    sample_employee = Employee.objects.filter(tenant=tenant).exclude(employee_code="HR-001").first()
+    assert sample_employee is not None
+    role = Role.objects.create(
+        tenant=tenant,
+        code="hr-employee-viewer",
+        name="HR Employee Viewer",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="employees.view")
+    user = User.objects.create_user(
+        username="hr.employee.viewer",
+        email="hr.employee.viewer@example.com",
+        password=PASSWORD,
+        first_name="HR",
+        last_name="Viewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="HR-VIEWER-001",
+        first_name="HR",
+        last_name="Viewer",
+        work_email="hr.employee.viewer@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.now().date(),
+        membership=membership,
+    )
+    token = login(api_client, "hr.employee.viewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    session_response = api_client.get("/api/v1/auth/session/")
+    assert session_response.status_code == 200
+    assert session_response.json()["default_membership"]["role_codes"] == ["hr-employee-viewer"]
+    assert session_response.json()["workspace_access"]["hr_admin"] is True
+    assert session_response.json()["workspace_access"]["tenant_admin"] is False
+    assert session_response.json()["workspace_access"]["mss"] is False
+    assert session_response.json()["effective_permissions"] == ["employees.view"]
+
+    list_response = api_client.get("/api/v1/hr-admin/employees/")
+    assert list_response.status_code == 200, list_response.json()
+
+    create_response = api_client.post(
+        "/api/v1/hr-admin/employees/",
+        {
+            "employee_code": "BLOCKED-HR-EMP-001",
+            "first_name": "Blocked",
+            "last_name": "Create",
+            "work_email": "blocked.hr.emp@example.com",
+            "employment_status": EmploymentStatus.ACTIVE,
+        },
+        format="json",
+    )
+    assert create_response.status_code == 403
+    assert "employees.create" in str(create_response.json())
+
+    edit_response = api_client.patch(
+        f"/api/v1/hr-admin/employees/{sample_employee.id}/",
+        {"preferred_name": "Blocked"},
+        format="json",
+    )
+    assert edit_response.status_code == 403
+    assert "employees.edit" in str(edit_response.json())
+
+    access_response = api_client.get(f"/api/v1/hr-admin/employees/{sample_employee.id}/access/")
+    assert access_response.status_code == 403
+    assert "employees.access.manage" in str(access_response.json())
+
+
+@pytest.mark.django_db
+def test_custom_hr_organization_viewer_role_gates_master_mutations(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    sample_department = Department.objects.filter(tenant=tenant).first()
+    assert sample_department is not None
+    role = Role.objects.create(
+        tenant=tenant,
+        code="hr-organization-viewer",
+        name="HR Organization Viewer",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="organization.view")
+    user = User.objects.create_user(
+        username="hr.organization.viewer",
+        email="hr.organization.viewer@example.com",
+        password=PASSWORD,
+        first_name="Org",
+        last_name="Viewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="HR-ORG-VIEWER-001",
+        first_name="Org",
+        last_name="Viewer",
+        work_email="hr.organization.viewer@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.now().date(),
+        membership=membership,
+    )
+    token = login(api_client, "hr.organization.viewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    session_response = api_client.get("/api/v1/auth/session/")
+    assert session_response.status_code == 200
+    assert session_response.json()["default_membership"]["role_codes"] == ["hr-organization-viewer"]
+    assert session_response.json()["workspace_access"]["hr_admin"] is True
+    assert session_response.json()["workspace_access"]["tenant_admin"] is False
+    assert session_response.json()["effective_permissions"] == ["organization.view"]
+
+    snapshot_response = api_client.get("/api/v1/hr-admin/organization/")
+    assert snapshot_response.status_code == 200, snapshot_response.json()
+    assert "departments" in snapshot_response.json()
+
+    detail_response = api_client.get(f"/api/v1/hr-admin/organization/departments/{sample_department.id}/")
+    assert detail_response.status_code == 200, detail_response.json()
+    assert detail_response.json()["id"] == str(sample_department.id)
+
+    create_response = api_client.post(
+        "/api/v1/hr-admin/organization/departments/",
+        {"code": "BLOCKED-ORG-001", "name": "Blocked Department", "is_active": True},
+        format="json",
+    )
+    assert create_response.status_code == 403
+    assert "organization.manage" in str(create_response.json())
+
+    edit_response = api_client.patch(
+        f"/api/v1/hr-admin/organization/departments/{sample_department.id}/",
+        {"name": "Blocked Department Edit"},
+        format="json",
+    )
+    assert edit_response.status_code == 403
+    assert "organization.manage" in str(edit_response.json())
+
+
+@pytest.mark.django_db
+def test_custom_hr_document_viewer_role_gates_document_mutations(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.filter(tenant=tenant).first()
+    assert employee is not None
+    category = DocumentCategory.objects.create(
+        tenant=tenant,
+        code="rbac-viewer-proof",
+        name="RBAC Viewer Proof",
+        category_type=DocumentCategoryType.IDENTITY,
+        requires_verification=True,
+        is_active=True,
+    )
+    document = EmployeeDocument.objects.create(
+        tenant=tenant,
+        employee=employee,
+        category=category,
+        status=EmployeeDocumentStatus.ACTIVE,
+        verification_status=VerificationStatus.PENDING,
+        title="RBAC Viewer Proof",
+        file_name="rbac-viewer-proof.pdf",
+        uploaded_by_identifier="seed",
+    )
+    role = Role.objects.create(
+        tenant=tenant,
+        code="hr-document-viewer",
+        name="HR Document Viewer",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="documents.view")
+    user = User.objects.create_user(
+        username="hr.document.viewer",
+        email="hr.document.viewer@example.com",
+        password=PASSWORD,
+        first_name="Document",
+        last_name="Viewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="HR-DOC-VIEWER-001",
+        first_name="Document",
+        last_name="Viewer",
+        work_email="hr.document.viewer@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.now().date(),
+        membership=membership,
+    )
+    token = login(api_client, "hr.document.viewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    session_response = api_client.get("/api/v1/auth/session/")
+    assert session_response.status_code == 200
+    assert session_response.json()["workspace_access"]["hr_admin"] is True
+    assert session_response.json()["effective_permissions"] == ["documents.view"]
+
+    category_response = api_client.get("/api/v1/hr-admin/document-categories/")
+    assert category_response.status_code == 200, category_response.json()
+    documents_response = api_client.get("/api/v1/hr-admin/employee-documents/")
+    assert documents_response.status_code == 200, documents_response.json()
+    detail_response = api_client.get(f"/api/v1/hr-admin/employee-documents/{document.id}/")
+    assert detail_response.status_code == 200, detail_response.json()
+
+    create_category_response = api_client.post(
+        "/api/v1/hr-admin/document-categories/",
+        {"code": "blocked-doc-cat", "name": "Blocked Category", "category_type": DocumentCategoryType.OTHER},
+        format="json",
+    )
+    assert create_category_response.status_code == 403
+    assert "documents.manage" in str(create_category_response.json())
+
+    verify_response = api_client.patch(
+        f"/api/v1/hr-admin/employee-documents/{document.id}/",
+        {"verification_status": VerificationStatus.VERIFIED, "rejection_reason": "Blocked verify"},
+        format="json",
+    )
+    assert verify_response.status_code == 403
+    assert "documents.verify" in str(verify_response.json())
+
+    reminder_response = api_client.post(
+        "/api/v1/hr-admin/employee-documents/reminders/",
+        {"document_ids": [str(document.id)]},
+        format="json",
+    )
+    assert reminder_response.status_code == 403
+    assert "documents.manage" in str(reminder_response.json())
+
+
+@pytest.mark.django_db
+def test_custom_hr_leave_viewer_role_gates_leave_mutations(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    role = Role.objects.create(
+        tenant=tenant,
+        code="hr-leave-viewer",
+        name="HR Leave Viewer",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="leave.view")
+    user = User.objects.create_user(
+        username="hr.leave.viewer",
+        email="hr.leave.viewer@example.com",
+        password=PASSWORD,
+        first_name="Leave",
+        last_name="Viewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="HR-LEAVE-VIEWER-001",
+        first_name="Leave",
+        last_name="Viewer",
+        work_email="hr.leave.viewer@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.now().date(),
+        membership=membership,
+    )
+    token = login(api_client, "hr.leave.viewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    session_response = api_client.get("/api/v1/auth/session/")
+    assert session_response.status_code == 200
+    assert session_response.json()["workspace_access"]["hr_admin"] is True
+    assert session_response.json()["effective_permissions"] == ["leave.view"]
+
+    leave_types_response = api_client.get("/api/v1/hr-admin/leave-types/")
+    assert leave_types_response.status_code == 200, leave_types_response.json()
+    leave_policies_response = api_client.get("/api/v1/hr-admin/leave-policies/")
+    assert leave_policies_response.status_code == 200, leave_policies_response.json()
+    balances_response = api_client.get("/api/v1/hr-admin/leave-balances/")
+    assert balances_response.status_code == 200, balances_response.json()
+
+    create_leave_type_response = api_client.post(
+        "/api/v1/hr-admin/leave-types/",
+        {"code": "blocked-leave-type", "name": "Blocked Leave Type", "is_paid": True, "is_active": True},
+        format="json",
+    )
+    assert create_leave_type_response.status_code == 403
+    assert "leave.policies.manage" in str(create_leave_type_response.json())
+
+    balance_action_response = api_client.post(
+        "/api/v1/hr-admin/leave-balances/actions/",
+        {
+            "employee_id": str(Employee.objects.filter(tenant=tenant).first().id),
+            "leave_policy_id": str(LeavePolicy.objects.filter(tenant=tenant).first().id),
+            "action": "adjust",
+            "units": "1.00",
+            "reason": "Blocked balance mutation",
+        },
+        format="json",
+    )
+    assert balance_action_response.status_code == 403
+    assert "leave.balances.manage" in str(balance_action_response.json())
+
+
+@pytest.mark.django_db
+def test_custom_leave_approver_role_gates_manager_leave_decisions(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    leave_type = bootstrapped_workspace["earned_leave_type"]
+    leave_policy = LeavePolicy.objects.filter(tenant=tenant, leave_type=leave_type).first()
+    role = Role.objects.create(
+        tenant=tenant,
+        code="custom-leave-queue-viewer",
+        name="Custom Leave Queue Viewer",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="leave.view")
+    user = User.objects.create_user(
+        username="custom.leave.approver",
+        email="custom.leave.approver@example.com",
+        password=PASSWORD,
+        first_name="Leave",
+        last_name="Approver",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    manager_employee = Employee.objects.create(
+        tenant=tenant,
+        employee_code="CUSTOM-LEAVE-APPROVER-001",
+        first_name="Leave",
+        last_name="Approver",
+        work_email="custom.leave.approver@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.now().date(),
+        membership=membership,
+    )
+    leave_employee = Employee.objects.filter(tenant=tenant, employee_code="EMP-0042").first()
+    leave_employee.reporting_manager = manager_employee
+    leave_employee.save(update_fields=["reporting_manager"])
+    pending_leave = LeaveRequest.objects.create(
+        tenant=tenant,
+        employee=leave_employee,
+        leave_type=leave_type,
+        leave_policy=leave_policy,
+        status=LeaveRequestStatus.PENDING,
+        start_date=timezone.now().date() + timedelta(days=30),
+        end_date=timezone.now().date() + timedelta(days=30),
+        start_day_portion="full_day",
+        end_day_portion="full_day",
+        requested_units=Decimal("1.00"),
+        reason="Custom RBAC leave approval proof.",
+        applied_at=timezone.now(),
+    )
+
+    token = login(api_client, "custom.leave.approver")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    session_response = api_client.get("/api/v1/auth/session/")
+    assert session_response.status_code == 200
+    assert session_response.json()["workspace_access"]["mss"] is False
+    assert session_response.json()["effective_permissions"] == ["leave.view"]
+
+    queue_response = api_client.get("/api/v1/manager/leave-requests/pending/?page=1&page_size=5")
+    assert queue_response.status_code == 200, queue_response.json()
+    assert any(item["id"] == str(pending_leave.id) for item in queue_response.json()["items"])
+
+    blocked_approve_response = api_client.post(
+        f"/api/v1/manager/leave-requests/{pending_leave.id}/approve/",
+        {"comment": "Blocked without approval permission."},
+        format="json",
+    )
+    assert blocked_approve_response.status_code == 403
+    assert "leave.requests.approve" in str(blocked_approve_response.json())
+
+    role.permissions.create(permission_key="leave.requests.approve")
+    session_response = api_client.get("/api/v1/auth/session/")
+    assert session_response.status_code == 200
+    assert session_response.json()["workspace_access"]["mss"] is True
+    assert session_response.json()["effective_permissions"] == ["leave.requests.approve", "leave.view"]
+
+    approved_response = api_client.post(
+        f"/api/v1/manager/leave-requests/{pending_leave.id}/approve/",
+        {"comment": "Approved with custom RBAC role."},
+        format="json",
+    )
+    assert approved_response.status_code == 200, approved_response.json()
+    pending_leave.refresh_from_db()
+    assert approved_response.json()["status"] == LeaveRequestStatus.APPROVED
+    assert pending_leave.status == LeaveRequestStatus.APPROVED
+    audit_event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="leave_request_approved",
+        actor_identifier="custom.leave.approver",
+        event_snapshot__leave_request_id=str(pending_leave.id),
+    ).first()
+    assert audit_event is not None
+    assert audit_event.source_ref == "hrms.rbac.leave_approval.audit.v1"
+    assert audit_event.event_snapshot["previous_status"] == LeaveRequestStatus.PENDING
+    assert audit_event.event_snapshot["new_status"] == LeaveRequestStatus.APPROVED
+    assert audit_event.event_snapshot["decision"] == "approved"
+    assert audit_event.source_hash
+
+
+@pytest.mark.django_db
+def test_custom_attendance_reviewer_role_gates_manager_regularization_decisions(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    role = Role.objects.create(
+        tenant=tenant,
+        code="custom-attendance-queue-viewer",
+        name="Custom Attendance Queue Viewer",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="attendance.view")
+    user = User.objects.create_user(
+        username="custom.attendance.reviewer",
+        email="custom.attendance.reviewer@example.com",
+        password=PASSWORD,
+        first_name="Attendance",
+        last_name="Reviewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    manager_employee = Employee.objects.create(
+        tenant=tenant,
+        employee_code="CUSTOM-ATTENDANCE-REVIEWER-001",
+        first_name="Attendance",
+        last_name="Reviewer",
+        work_email="custom.attendance.reviewer@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.now().date(),
+        membership=membership,
+    )
+    regularization_employee = Employee.objects.filter(tenant=tenant, employee_code="EMP-0042").first()
+    regularization_employee.reporting_manager = manager_employee
+    regularization_employee.save(update_fields=["reporting_manager"])
+    attendance_record = AttendanceRecord.objects.create(
+        tenant=tenant,
+        employee=regularization_employee,
+        attendance_date=timezone.localdate() + timedelta(days=45),
+        status=AttendanceStatus.ABSENT,
+    )
+    regularization = AttendanceRegularization.objects.create(
+        tenant=tenant,
+        employee=regularization_employee,
+        attendance_record=attendance_record,
+        status=RegularizationStatus.PENDING,
+        requested_status=AttendanceStatus.PRESENT,
+        requested_check_in_at=timezone.now().replace(hour=9, minute=5, second=0, microsecond=0),
+        requested_check_out_at=timezone.now().replace(hour=18, minute=10, second=0, microsecond=0),
+        reason="Custom RBAC attendance review proof.",
+        applied_at=timezone.now(),
+    )
+
+    token = login(api_client, "custom.attendance.reviewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    session_response = api_client.get("/api/v1/auth/session/")
+    assert session_response.status_code == 200
+    assert session_response.json()["workspace_access"]["mss"] is False
+    assert session_response.json()["effective_permissions"] == ["attendance.view"]
+
+    queue_response = api_client.get("/api/v1/manager/attendance-regularizations/pending/?page=1&page_size=5")
+    assert queue_response.status_code == 200, queue_response.json()
+    assert any(item["id"] == str(regularization.id) for item in queue_response.json()["items"])
+
+    blocked_approve_response = api_client.post(
+        f"/api/v1/manager/attendance-regularizations/{regularization.id}/approve/",
+        {"comment": "Blocked without review permission."},
+        format="json",
+    )
+    assert blocked_approve_response.status_code == 403
+    assert "attendance.regularization.review" in str(blocked_approve_response.json())
+
+    role.permissions.create(permission_key="attendance.regularization.review")
+    session_response = api_client.get("/api/v1/auth/session/")
+    assert session_response.status_code == 200
+    assert session_response.json()["workspace_access"]["mss"] is True
+    assert session_response.json()["effective_permissions"] == ["attendance.regularization.review", "attendance.view"]
+
+    approved_response = api_client.post(
+        f"/api/v1/manager/attendance-regularizations/{regularization.id}/approve/",
+        {"comment": "Approved with custom RBAC role."},
+        format="json",
+    )
+    assert approved_response.status_code == 200, approved_response.json()
+    regularization.refresh_from_db()
+    attendance_record.refresh_from_db()
+    assert approved_response.json()["status"] == RegularizationStatus.APPROVED
+    assert regularization.status == RegularizationStatus.APPROVED
+    assert attendance_record.is_regularized is True
+    audit_event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="attendance_regularization_approved",
+        actor_identifier="custom.attendance.reviewer",
+        event_snapshot__attendance_regularization_id=str(regularization.id),
+    ).first()
+    assert audit_event is not None
+    assert audit_event.source_ref == "hrms.rbac.attendance_regularization.audit.v1"
+    assert audit_event.event_snapshot["previous_status"] == RegularizationStatus.PENDING
+    assert audit_event.event_snapshot["new_status"] == RegularizationStatus.APPROVED
+    assert audit_event.event_snapshot["decision"] == "approved"
+    assert audit_event.source_hash
+
+
+@pytest.mark.django_db
+def test_custom_hr_attendance_viewer_role_gates_attendance_mutations(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    record = bootstrapped_workspace["riya_today_record"]
+    regularization = bootstrapped_workspace["pending_regularization"]
+    role = Role.objects.create(
+        tenant=tenant,
+        code="hr-attendance-viewer",
+        name="HR Attendance Viewer",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="attendance.view")
+    user = User.objects.create_user(
+        username="hr.attendance.viewer",
+        email="hr.attendance.viewer@example.com",
+        password=PASSWORD,
+        first_name="Attendance",
+        last_name="Viewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="HR-ATT-VIEWER-001",
+        first_name="Attendance",
+        last_name="Viewer",
+        work_email="hr.attendance.viewer@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.now().date(),
+        membership=membership,
+    )
+    token = login(api_client, "hr.attendance.viewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    session_response = api_client.get("/api/v1/auth/session/")
+    assert session_response.status_code == 200
+    assert session_response.json()["workspace_access"]["hr_admin"] is True
+    assert session_response.json()["effective_permissions"] == ["attendance.view"]
+
+    options_response = api_client.get("/api/v1/hr-admin/attendance-operations/options/")
+    assert options_response.status_code == 200, options_response.json()
+    records_response = api_client.get("/api/v1/hr-admin/attendance-records/")
+    assert records_response.status_code == 200, records_response.json()
+    regularizations_response = api_client.get("/api/v1/hr-admin/attendance-regularizations/")
+    assert regularizations_response.status_code == 200, regularizations_response.json()
+
+    create_shift_response = api_client.post(
+        "/api/v1/hr-admin/shifts/",
+        {
+            "code": "blocked-shift",
+            "name": "Blocked Shift",
+            "start_time": "09:00",
+            "end_time": "18:00",
+            "is_active": True,
+        },
+        format="json",
+    )
+    assert create_shift_response.status_code == 403
+    assert "attendance.policies.manage" in str(create_shift_response.json())
+
+    edit_record_response = api_client.patch(
+        f"/api/v1/hr-admin/attendance-records/{record.id}/",
+        {"status": AttendanceStatus.PRESENT},
+        format="json",
+    )
+    assert edit_record_response.status_code == 403
+    assert "attendance.records.manage" in str(edit_record_response.json())
+
+    approve_response = api_client.post(
+        f"/api/v1/hr-admin/attendance-regularizations/{regularization.id}/approve/",
+        {"comment": "Blocked review"},
+        format="json",
+    )
+    assert approve_response.status_code == 403
+    assert "attendance.regularization.review" in str(approve_response.json())
+
+
+@pytest.mark.django_db
+def test_hr_admin_leave_setup_mutations_write_audit_evidence(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    leave_type = bootstrapped_workspace["earned_leave_type"]
+    target_employee = Employee.objects.filter(tenant=tenant, employee_code="EMP-0042").first()
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    suffix = uuid4().hex[:8]
+
+    create_response = api_client.post(
+        "/api/v1/hr-admin/leave-policies/",
+        {
+            "leave_type_id": str(leave_type.id),
+            "code": f"rbac-audit-leave-{suffix}",
+            "name": f"RBAC Audit Leave {suffix}",
+            "status": LeavePolicyStatus.ACTIVE,
+            "annual_entitlement": "12.00",
+            "min_days_per_request": "0.50",
+            "allow_half_day": True,
+        },
+        format="json",
+    )
+    assert create_response.status_code == 201, create_response.json()
+    leave_policy_id = create_response.json()["id"]
+    create_event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="leave_policy_created",
+        actor_identifier="nisha.rao",
+        event_snapshot__leave_policy_id=leave_policy_id,
+    ).first()
+    assert create_event is not None
+    assert create_event.source_ref == "hrms.rbac.leave_setup.audit.v1"
+    assert create_event.event_snapshot["permission"] == "leave.policies.manage"
+    assert create_event.source_hash
+
+    update_response = api_client.patch(
+        f"/api/v1/hr-admin/leave-policies/{leave_policy_id}/",
+        {"name": f"RBAC Audit Leave Updated {suffix}", "notice_days_required": 2},
+        format="json",
+    )
+    assert update_response.status_code == 200, update_response.json()
+    update_event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="leave_policy_updated",
+        actor_identifier="nisha.rao",
+        event_snapshot__leave_policy_id=leave_policy_id,
+    ).first()
+    assert update_event is not None
+    assert update_event.event_snapshot["changed_fields"] == ["name", "notice_days_required"]
+    assert update_event.source_hash
+
+    balance_response = api_client.post(
+        "/api/v1/hr-admin/leave-balances/actions/",
+        {
+            "employee_id": str(target_employee.id),
+            "leave_policy_id": leave_policy_id,
+            "action": "credit_adjustment",
+            "units": "1.00",
+            "reason": "RBAC audit evidence proof.",
+        },
+        format="json",
+    )
+    assert balance_response.status_code == 200, balance_response.json()
+    transaction_id = balance_response.json()["transaction"]["id"]
+    balance_event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="leave_balance_action_recorded",
+        actor_identifier="nisha.rao",
+        event_snapshot__leave_balance_transaction_id=transaction_id,
+    ).first()
+    assert balance_event is not None
+    assert balance_event.source_ref == "hrms.rbac.leave_balance.audit.v1"
+    assert balance_event.event_snapshot["action"] == "credit_adjustment"
+    assert balance_event.event_snapshot["permission"] == "leave.balances.manage"
+    assert balance_event.source_hash
+
+
+@pytest.mark.django_db
+def test_hr_admin_attendance_setup_mutations_write_audit_evidence(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    record = bootstrapped_workspace["riya_today_record"]
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    suffix = uuid4().hex[:8]
+
+    shift_response = api_client.post(
+        "/api/v1/hr-admin/shifts/",
+        {
+            "code": f"rbac-audit-shift-{suffix}",
+            "name": f"RBAC Audit Shift {suffix}",
+            "start_time": "09:00",
+            "end_time": "18:00",
+            "is_active": True,
+        },
+        format="json",
+    )
+    assert shift_response.status_code == 201, shift_response.json()
+    shift_id = shift_response.json()["id"]
+    shift_event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="attendance_shift_created",
+        actor_identifier="nisha.rao",
+        event_snapshot__shift_id=shift_id,
+    ).first()
+    assert shift_event is not None
+    assert shift_event.source_ref == "hrms.rbac.attendance_setup.audit.v1"
+    assert shift_event.event_snapshot["permission"] == "attendance.policies.manage"
+    assert shift_event.source_hash
+
+    policy_response = api_client.post(
+        "/api/v1/hr-admin/attendance-policies/",
+        {
+            "code": f"rbac-audit-attendance-{suffix}",
+            "name": f"RBAC Audit Attendance {suffix}",
+            "status": AttendancePolicyStatus.ACTIVE,
+            "default_shift_id": shift_id,
+            "full_day_min_hours": "8.00",
+            "half_day_min_hours": "4.00",
+            "allow_regularization": True,
+        },
+        format="json",
+    )
+    assert policy_response.status_code == 201, policy_response.json()
+    policy_id = policy_response.json()["id"]
+    policy_event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="attendance_policy_created",
+        actor_identifier="nisha.rao",
+        event_snapshot__attendance_policy_id=policy_id,
+    ).first()
+    assert policy_event is not None
+    assert policy_event.event_snapshot["permission"] == "attendance.policies.manage"
+    assert policy_event.source_hash
+
+    record_response = api_client.patch(
+        f"/api/v1/hr-admin/attendance-records/{record.id}/",
+        {
+            "status": AttendanceStatus.PRESENT,
+            "shift_id": shift_id,
+            "check_in_at": timezone.now().replace(hour=9, minute=0, second=0, microsecond=0).isoformat(),
+            "check_out_at": timezone.now().replace(hour=18, minute=0, second=0, microsecond=0).isoformat(),
+        },
+        format="json",
+    )
+    assert record_response.status_code == 200, record_response.json()
+    record_event = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="attendance_record_updated",
+        actor_identifier="nisha.rao",
+        event_snapshot__attendance_record_id=str(record.id),
+    ).first()
+    assert record_event is not None
+    assert record_event.event_snapshot["permission"] == "attendance.records.manage"
+    assert record_event.event_snapshot["new_status"] == AttendanceStatus.PRESENT
+    assert record_event.source_hash
 
 
 @pytest.mark.django_db
@@ -3185,6 +4070,80 @@ def test_employee_cannot_access_hr_admin_payroll_statutory_setup(api_client: API
     assert response.json()["detail"] == "You do not have access to this workspace."
 
 
+def test_custom_statutory_viewer_role_gates_statutory_mutations(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    role = Role.objects.create(
+        tenant=tenant,
+        code="statutory-view-only",
+        name="Statutory View Only",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="statutory.setup.view")
+    role.permissions.create(permission_key="statutory.declarations.view")
+    user = User.objects.create_user(
+        username="statutory.viewer",
+        email="statutory.viewer@example.com",
+        password=PASSWORD,
+        first_name="Statutory",
+        last_name="Viewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="STATUTORY-VIEWER-001",
+        first_name="Statutory",
+        last_name="Viewer",
+        work_email="statutory.viewer@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.localdate(),
+        membership=membership,
+    )
+
+    token = login(api_client, "statutory.viewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-statutory-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    pack_list_response = api_client.get("/api/v1/hr-admin/payroll-statutory-packs/")
+    assert pack_list_response.status_code == 200, pack_list_response.json()
+    declaration_list_response = api_client.get("/api/v1/hr-admin/employee-statutory-declarations/")
+    assert declaration_list_response.status_code == 200, declaration_list_response.json()
+
+    blocked_pack_create = api_client.post(
+        "/api/v1/hr-admin/payroll-statutory-packs/",
+        {
+            "code": "viewer-denied-pack",
+            "name": "Viewer Denied Pack",
+            "country_code": "in",
+            "status": PayrollConfigStatus.ACTIVE,
+            "effective_from": "2026-04-01",
+        },
+        format="json",
+    )
+    assert blocked_pack_create.status_code == 403
+    assert "statutory.setup.manage" in str(blocked_pack_create.json())
+    blocked_profile_create = api_client.post(
+        "/api/v1/hr-admin/employee-statutory-profiles/",
+        {
+            "employee_id": str(employee.id),
+            "effective_from": "2026-09-01",
+            "pan_number": "ABCDE1234F",
+            "tax_regime": PayrollTaxRegime.NEW,
+        },
+        format="json",
+    )
+    assert blocked_profile_create.status_code == 403
+    assert "statutory.declarations.manage" in str(blocked_profile_create.json())
+
+
 def test_hr_admin_employee_statutory_declaration_proof_workflow(api_client: APIClient, bootstrapped_workspace):
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
@@ -5059,7 +6018,87 @@ def test_hr_admin_payroll_review_approves_and_final_locks_run(api_client: APICli
         format="json",
     )
     assert edit_response.status_code == 400
-    assert "immutable" in str(edit_response.json()).lower()
+    assert "final locked" in str(edit_response.json()).lower()
+
+
+def test_payroll_reviewer_role_cannot_perform_high_risk_lifecycle_actions(api_client: APIClient, bootstrapped_workspace):
+    admin_token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {admin_token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    payroll_run, _snapshot = create_calculable_payroll_run(tenant=tenant, employee=employee)
+
+    calculate_response = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", {}, format="json")
+    assert calculate_response.status_code == 200, calculate_response.json()
+    open_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/open-review/",
+        {"calculation_id": calculate_response.json()["calculation"]["id"]},
+        format="json",
+    )
+    assert open_response.status_code == 200, open_response.json()
+    review_id = open_response.json()["review"]["id"]
+
+    role = Role.objects.create(
+        tenant=tenant,
+        code="payroll-review-only",
+        name="Payroll Review Only",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="payroll.review")
+    user = User.objects.create_user(
+        username="payroll.review.only",
+        email="payroll.review.only@example.com",
+        password=PASSWORD,
+        first_name="Payroll",
+        last_name="Reviewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="PAYROLL-REVIEW-ONLY-001",
+        first_name="Payroll",
+        last_name="Reviewer",
+        work_email="payroll.review.only@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.localdate(),
+        membership=membership,
+    )
+
+    reviewer_token = login(api_client, "payroll.review.only")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {reviewer_token}")
+
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-review-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    submit_response = api_client.post(f"/api/v1/hr-admin/payroll-reviews/{review_id}/submit/", {}, format="json")
+    assert submit_response.status_code == 200, submit_response.json()
+    assert submit_response.json()["review"]["status"] == PayrollReviewStatus.READY_FOR_APPROVAL
+
+    blocked_calculate = api_client.post(f"/api/v1/hr-admin/payroll-runs/{payroll_run.id}/calculate-draft/", {}, format="json")
+    assert blocked_calculate.status_code == 403
+    assert "payroll.calculate" in str(blocked_calculate.json())
+    blocked_approve = api_client.post(f"/api/v1/hr-admin/payroll-reviews/{review_id}/approve/", {}, format="json")
+    assert blocked_approve.status_code == 403
+    assert "payroll.approve" in str(blocked_approve.json())
+    blocked_lock = api_client.post(f"/api/v1/hr-admin/payroll-reviews/{review_id}/lock/", {}, format="json")
+    assert blocked_lock.status_code == 403
+    assert "payroll.lock" in str(blocked_lock.json())
+    blocked_generate = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review_id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert blocked_generate.status_code == 403
+    assert "payroll.publish" in str(blocked_generate.json())
+    blocked_output_setup = api_client.get("/api/v1/hr-admin/payroll-output-setup/")
+    assert blocked_output_setup.status_code == 403
+    assert "payroll.outputs.view" in str(blocked_output_setup.json())
 
 
 def test_hr_admin_payroll_review_blocks_submit_until_blocker_exception_decided(api_client: APIClient, bootstrapped_workspace):
@@ -5232,6 +6271,82 @@ def test_hr_admin_payroll_outputs_generate_and_publish_locked_review(api_client:
     assert setup_payload["summary"]["latest_net_pay"] == "28200.00"
     assert PayrollOutputBatch.objects.filter(id=batch_id, status=PayrollOutputBatchStatus.PUBLISHED).exists()
     assert PayrollOutputArtifact.objects.filter(output_batch_id=batch_id, status=PayrollOutputArtifactStatus.PUBLISHED).count() == 2
+
+
+def test_payroll_output_artifact_downloads_require_download_permission(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(api_client, tenant=tenant, employee=employee)
+
+    generate_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_response.status_code == 200, generate_response.json()
+    publish_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{generate_response.json()['output_batch']['id']}/publish/",
+        {},
+        format="json",
+    )
+    assert publish_response.status_code == 200, publish_response.json()
+    published_payslip = next(item for item in publish_response.json()["artifacts"] if item["kind"] == PayrollOutputArtifactKind.PAYSLIP)
+
+    role = Role.objects.create(
+        tenant=tenant,
+        code="payroll-output-viewer-no-download",
+        name="Payroll Output Viewer No Download",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="payroll.outputs.view")
+    user = User.objects.create_user(
+        username="payroll.output.viewer",
+        email="payroll.output.viewer@example.com",
+        password=PASSWORD,
+        first_name="Payroll",
+        last_name="Viewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="PAYROLL-OUTPUT-VIEWER-001",
+        first_name="Payroll",
+        last_name="Viewer",
+        work_email="payroll.output.viewer@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.localdate(),
+        membership=membership,
+    )
+
+    viewer_token = login(api_client, "payroll.output.viewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {viewer_token}")
+    download_response = api_client.get(published_payslip["download_url"])
+    assert download_response.status_code == 403
+    assert "payroll.outputs.download" in str(download_response.json())
+    signed_access_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-artifacts/{published_payslip['id']}/signed-access/",
+        {"expires_in_seconds": 120},
+        format="json",
+    )
+    assert signed_access_response.status_code == 403
+    assert "payroll.outputs.download" in str(signed_access_response.json())
+    audit_export_response = api_client.get(f"/api/v1/hr-admin/payroll-output-artifacts/{published_payslip['id']}/access-audit-export/")
+    assert audit_export_response.status_code == 403
+    assert "payroll.outputs.download" in str(audit_export_response.json())
+
+    role.permissions.create(permission_key="payroll.outputs.download")
+    allowed_download_response = api_client.get(published_payslip["download_url"])
+    assert allowed_download_response.status_code == 200
+    assert allowed_download_response["X-Payroll-Artifact-Checksum"] == published_payslip["checksum_sha256"]
 
 
 def test_hr_admin_payroll_outputs_support_configured_signed_url_storage_strategy(api_client: APIClient, bootstrapped_workspace):
@@ -6041,6 +7156,108 @@ def test_hr_admin_payroll_finance_handoff_generate_and_transmit(api_client: APIC
     assert any(item["kind"] == PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK for item in setup_payload["artifacts"])
     assert PayrollFinanceHandoff.objects.filter(id=handoff_id, status=PayrollFinanceHandoffStatus.ACCEPTED).exists()
     assert PayrollProviderDelivery.objects.filter(handoff_id=handoff_id, status=PayrollProviderDeliveryStatus.RECONCILED).count() == 3
+
+
+def test_finance_handoff_viewer_role_cannot_perform_provider_actions(api_client: APIClient, bootstrapped_workspace):
+    admin_token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {admin_token}")
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    review = create_locked_payroll_review(api_client, tenant=tenant, employee=employee)
+
+    generate_outputs_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-reviews/{review.id}/generate-outputs/",
+        {"output_profile_ref": "india.monthly.output.profile.v1"},
+        format="json",
+    )
+    assert generate_outputs_response.status_code == 200, generate_outputs_response.json()
+    batch_id = generate_outputs_response.json()["output_batch"]["id"]
+    publish_response = api_client.post(f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/publish/", {}, format="json")
+    assert publish_response.status_code == 200, publish_response.json()
+    handoff_response = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/",
+        {"handoff_profile_ref": "india.monthly.finance.handoff.v1"},
+        format="json",
+    )
+    assert handoff_response.status_code == 200, handoff_response.json()
+    handoff_id = handoff_response.json()["handoff"]["id"]
+    transmit_response = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert transmit_response.status_code == 200, transmit_response.json()
+    delivery_id = transmit_response.json()["deliveries"][0]["id"]
+
+    role = Role.objects.create(
+        tenant=tenant,
+        code="finance-handoff-view-only",
+        name="Finance Handoff View Only",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="finance.handoff.view")
+    user = User.objects.create_user(
+        username="finance.handoff.viewer",
+        email="finance.handoff.viewer@example.com",
+        password=PASSWORD,
+        first_name="Finance",
+        last_name="Viewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    Employee.objects.create(
+        tenant=tenant,
+        employee_code="FINANCE-HANDOFF-VIEWER-001",
+        first_name="Finance",
+        last_name="Viewer",
+        work_email="finance.handoff.viewer@example.com",
+        employment_status=EmploymentStatus.ACTIVE,
+        date_of_joining=timezone.localdate(),
+        membership=membership,
+    )
+
+    viewer_token = login(api_client, "finance.handoff.viewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {viewer_token}")
+    setup_response = api_client.get("/api/v1/hr-admin/payroll-finance-handoff-setup/")
+    assert setup_response.status_code == 200, setup_response.json()
+    assert setup_response.json()["summary"]["handoff_count"] == 1
+
+    blocked_generate = api_client.post(
+        f"/api/v1/hr-admin/payroll-output-batches/{batch_id}/generate-finance-handoff/",
+        {"handoff_profile_ref": "india.monthly.finance.handoff.v1"},
+        format="json",
+    )
+    assert blocked_generate.status_code == 403
+    assert "finance.handoff.create" in str(blocked_generate.json())
+    blocked_transmit = api_client.post(f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/transmit/", {}, format="json")
+    assert blocked_transmit.status_code == 403
+    assert "finance.handoff.transmit" in str(blocked_transmit.json())
+    blocked_retry = api_client.post(
+        f"/api/v1/hr-admin/payroll-provider-deliveries/{delivery_id}/schedule-retry/",
+        {"retry_reason": "viewer cannot schedule provider retries"},
+        format="json",
+    )
+    assert blocked_retry.status_code == 403
+    assert "finance.handoff.transmit" in str(blocked_retry.json())
+    blocked_audit_pack = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/generate-audit-pack/",
+        {"audit_pack_profile_ref": "payroll.provider_audit_pack.standard.v1"},
+        format="json",
+    )
+    assert blocked_audit_pack.status_code == 403
+    assert "finance.bank_advice.export" in str(blocked_audit_pack.json())
+    blocked_acknowledge = api_client.post(
+        f"/api/v1/hr-admin/payroll-finance-handoffs/{handoff_id}/acknowledge/",
+        {
+            "acknowledgement_profile_ref": "india.monthly.provider.ack.v1",
+            "provider_status": PayrollProviderDeliveryStatus.RECONCILED,
+        },
+        format="json",
+    )
+    assert blocked_acknowledge.status_code == 403
+    assert "finance.handoff.acknowledge" in str(blocked_acknowledge.json())
 
 
 def test_payroll_provider_callback_endpoint_verifies_idempotent_delivery_updates(api_client: APIClient, bootstrapped_workspace):

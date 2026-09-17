@@ -4,8 +4,11 @@ import { AttendancePolicyAssignmentGovernancePanel } from "@/app/hr-admin/attend
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendancePolicyAssignments, getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminAttendancePolicyAssignmentsPage() {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/policy-assignments" });
+  const canManagePolicies = sessionHasPermission(sessionUser, "attendance.policies.manage");
   const [result, optionsResult] = await Promise.all([
     getHrAdminAttendancePolicyAssignments(),
     getHrAdminPolicyOptions(),
@@ -20,9 +23,11 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
         description="Map attendance behavior to the branches, locations, departments, employment types, or employees that should inherit it."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/attendance-policy-assignments/new">
-              Create attendance assignment
-            </Link>
+            {canManagePolicies ? (
+              <Link className="button button--primary" href="/hr-admin/attendance-policy-assignments/new">
+                Create attendance assignment
+              </Link>
+            ) : null}
             <Link className="button button--secondary" href="/hr-admin/policy-assignments">
               Back to policy assignments
             </Link>
@@ -56,9 +61,11 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
                   </div>
                 </div>
                 <div className="record-card__actions">
-                  <Link className="button button--secondary" href={`/hr-admin/attendance-policy-assignments/${item.id}/edit`}>
-                    Edit
-                  </Link>
+                  {canManagePolicies ? (
+                    <Link className="button button--secondary" href={`/hr-admin/attendance-policy-assignments/${item.id}/edit`}>
+                      Edit
+                    </Link>
+                  ) : null}
                 </div>
               </div>
               <div className="detail-grid">
@@ -94,7 +101,11 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
         </div>
       </section>
 
-      <AttendancePolicyAssignmentGovernancePanel employees={optionsResult.data.employees} />
+      {canManagePolicies ? (
+        <AttendancePolicyAssignmentGovernancePanel employees={optionsResult.data.employees} />
+      ) : (
+        <section className="section"><div className="notice"><strong>Read-only attendance assignment view.</strong><span className="muted">Resolution previews and assignment edits require attendance policy management permission.</span></div></section>
+      )}
     </main>
   );
 }

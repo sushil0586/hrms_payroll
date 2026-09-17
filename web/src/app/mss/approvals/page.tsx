@@ -6,6 +6,7 @@ import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { ManagerDecisionPanel } from "@/app/mss/approvals/manager-decision-panel";
 import { getMssApprovalInbox } from "@/lib/api";
+import { requireWorkspaceAccess, sessionHasPermission } from "@/lib/workspace-access";
 import type {
   AttendanceRegularizationItem,
   LeaveRequestItem,
@@ -105,10 +106,12 @@ function LeaveApprovalSection({
   currentParams,
   response,
   state,
+  canApproveLeave,
 }: {
   currentParams: Record<string, SearchParamValue>;
   response: ManagerLeaveApprovalListResponse;
   state: "live" | "demo";
+  canApproveLeave: boolean;
 }) {
   const items = response.items;
   const page = Math.max(Number(normalizeParam(currentParams.leavePage) || String(response.page)) || response.page, 1);
@@ -196,6 +199,7 @@ function LeaveApprovalSection({
             </div>
             <ManagerDecisionPanel
               description="Capture the manager decision without leaving the selected request."
+              canDecide={canApproveLeave}
               employeeReason={selected.reason}
               itemId={selected.id}
               kind="leave"
@@ -232,10 +236,12 @@ function RegularizationApprovalSection({
   currentParams,
   response,
   state,
+  canReviewAttendance,
 }: {
   currentParams: Record<string, SearchParamValue>;
   response: ManagerAttendanceApprovalListResponse;
   state: "live" | "demo";
+  canReviewAttendance: boolean;
 }) {
   const items = response.items;
   const page = Math.max(Number(normalizeParam(currentParams.regPage) || String(response.page)) || response.page, 1);
@@ -308,6 +314,7 @@ function RegularizationApprovalSection({
             </div>
             <ManagerDecisionPanel
               description="Approve or reject the selected attendance exception with a manager note."
+              canDecide={canReviewAttendance}
               employeeReason={selected.reason}
               itemId={selected.id}
               kind="attendance"
@@ -340,6 +347,9 @@ function RegularizationApprovalSection({
 }
 
 export default async function MssApprovalsPage({ searchParams }: PageProps) {
+  const sessionUser = await requireWorkspaceAccess({ workspace: "mss" });
+  const canApproveLeave = sessionHasPermission(sessionUser, "leave.requests.approve");
+  const canReviewAttendance = sessionHasPermission(sessionUser, "attendance.regularization.review");
   const currentParams = (await searchParams) ?? {};
   const queue = normalizeParam(currentParams.queue) ?? "leave";
   const leavePage = Math.max(Number(normalizeParam(currentParams.leavePage) || "1") || 1, 1);
@@ -418,9 +428,9 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
       </section>
 
       {queue === "attendance" ? (
-        <RegularizationApprovalSection currentParams={currentParams} response={pendingRegularizations} state={inboxState} />
+        <RegularizationApprovalSection currentParams={currentParams} response={pendingRegularizations} state={inboxState} canReviewAttendance={canReviewAttendance} />
       ) : (
-        <LeaveApprovalSection currentParams={currentParams} response={pendingLeave} state={inboxState} />
+        <LeaveApprovalSection currentParams={currentParams} response={pendingLeave} state={inboxState} canApproveLeave={canApproveLeave} />
       )}
 
       {inboxState === "demo" ? (

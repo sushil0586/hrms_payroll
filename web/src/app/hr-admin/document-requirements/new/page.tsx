@@ -4,8 +4,13 @@ import { createEmptyDocumentRequirementValue } from "@/app/hr-admin/document-req
 import { DocumentRequirementForm } from "@/app/hr-admin/document-requirements/document-requirement-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewDocumentRequirementPage() {
+  await requireSessionPermission({
+    permissionKeys: ["documents.manage"],
+    fallbackPath: "/hr-admin/document-requirements",
+  });
   const optionsResult = await getHrAdminDocumentOptions();
 
   return (

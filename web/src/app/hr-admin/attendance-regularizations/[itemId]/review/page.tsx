@@ -3,10 +3,12 @@ import Link from "next/link";
 import { AttendanceRegularizationReviewForm } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-review-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendanceRegularization } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminAttendanceRegularizationReviewPage({ params }: PageProps) {
+  await requireSessionPermission({ permissionKeys: ["attendance.regularization.review"], fallbackPath: "/hr-admin/attendance-regularizations" });
   const { itemId } = await params;
   const result = await getHrAdminAttendanceRegularization(itemId);
   const item = result.data;

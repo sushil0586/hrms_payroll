@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated } from "../helpers/staging-auth";
+import { gotoAuthenticated, tenantAdmin } from "../helpers/staging-auth";
 
 function uniqueRef(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
@@ -148,6 +148,97 @@ async function expectOnboardingQueueCertified(page: Page, workflowRef?: string) 
 }
 
 test.describe("Phase 3B employee documents and onboarding certification", () => {
+  test("limited document viewer role sees read-only document workspace and receives backend denials", async ({ page }) => {
+    test.skip(!process.env.HRMS_API_BASE_URL, "Limited document role proof requires a live HRMS API.");
+
+    await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);
+    await expectPageReady(page, "Roles & Permissions");
+
+    const suffix = Date.now();
+    const roleResponse = await page.request.post("/api/tenant-admin/roles", {
+      data: {
+        name: `QA Document Viewer ${suffix}`,
+        code: `qa-document-viewer-${suffix}`,
+        description: "Browser certification role with read-only document access.",
+        is_active: true,
+        permission_keys: ["documents.view"],
+      },
+    });
+    expect(roleResponse.ok()).toBeTruthy();
+    const rolePayload = await roleResponse.json();
+    const roleId = rolePayload.role.id as string;
+
+    const username = `qa.doc.viewer.${suffix}`;
+    const inviteResponse = await page.request.post("/api/tenant-admin/memberships", {
+      data: {
+        username,
+        email: `${username}@example.com`,
+        first_name: "QA",
+        last_name: "Doc Viewer",
+        membership_status: "active",
+        role_ids: [roleId],
+      },
+    });
+    expect(inviteResponse.ok()).toBeTruthy();
+    const invitePayload = await inviteResponse.json();
+    const generatedPassword = invitePayload.generated_password as string;
+    expect(generatedPassword).toBeTruthy();
+
+    await page.request.post("/api/auth/logout").catch(() => null);
+    await page.context().clearCookies();
+    await gotoAuthenticated(page, "/hr-admin/employee-documents", { username, password: generatedPassword });
+    await expectPageReady(page, /Employee document review/);
+
+    const navigation = page.getByRole("navigation");
+    await expect(navigation.getByRole("link", { name: /Documents/ })).toBeVisible();
+    await expect(navigation.getByRole("link", { name: /People/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Upload document" })).toHaveCount(0);
+    await expect(page.getByText("Read-only document queue.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Select page" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Send reminder/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Review", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Download", exact: true })).toHaveCount(0);
+
+    const categoriesResponse = await page.request.get("/api/hr-admin/document-categories");
+    expect(categoriesResponse.ok()).toBeTruthy();
+    const documentsResponse = await page.request.get("/api/hr-admin/employee-documents");
+    expect(documentsResponse.ok()).toBeTruthy();
+    const documentsPayload = (await documentsResponse.json()) as { items: Array<{ id: string }> };
+
+    await page.goto("/hr-admin/employee-documents/new", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/hr-admin\/employee-documents$/);
+    await expectPageReady(page, /Employee document review/);
+
+    const blockedCategoryResponse = await page.request.post("/api/hr-admin/document-categories", {
+      data: {
+        code: `blocked-doc-${suffix}`,
+        name: `Blocked Document ${suffix}`,
+        category_type: "other",
+      },
+    });
+    expect(blockedCategoryResponse.status()).toBe(403);
+    expect(JSON.stringify(await blockedCategoryResponse.json())).toContain("documents.manage");
+
+    const firstDocumentId = documentsPayload.items[0]?.id;
+    if (firstDocumentId) {
+      const blockedVerifyResponse = await page.request.patch(`/api/hr-admin/employee-documents/${firstDocumentId}`, {
+        data: {
+          verification_status: "verified",
+          rejection_reason: "Blocked verify",
+        },
+      });
+      expect(blockedVerifyResponse.status()).toBe(403);
+      expect(JSON.stringify(await blockedVerifyResponse.json())).toContain("documents.verify");
+
+      const blockedReminderResponse = await page.request.post("/api/hr-admin/employee-documents/reminders", {
+        data: { document_ids: [firstDocumentId] },
+      });
+      expect(blockedReminderResponse.status()).toBe(403);
+      expect(JSON.stringify(await blockedReminderResponse.json())).toContain("documents.manage");
+    }
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("employee document upload and queue controls are certified", async ({ page }) => {
     test.setTimeout(3 * 60 * 1000);
     const title = uniqueRef("DOC");

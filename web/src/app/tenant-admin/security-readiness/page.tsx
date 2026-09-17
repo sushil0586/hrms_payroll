@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminEnterpriseSecurityReadiness } from "@/lib/api";
 import type { TenantAdminEnterpriseSecurityReadiness } from "@/lib/types";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type ReadinessCheck = TenantAdminEnterpriseSecurityReadiness["checks"][number];
 
@@ -105,6 +106,11 @@ function GroupPanel({
 }
 
 export default async function TenantAdminSecurityReadinessPage() {
+  await requireSessionPermission({
+    permissionKeys: ["tenant.security.view"],
+    workspace: "tenant_admin",
+    fallbackPath: "/tenant-admin",
+  });
   const result = await getTenantAdminEnterpriseSecurityReadiness();
   const data = result.data;
   const checksByPrefix = (prefix: string) => data.checks.filter((check) => check.ref.startsWith(prefix));

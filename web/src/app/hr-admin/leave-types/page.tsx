@@ -4,8 +4,11 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { getHrAdminLeaveTypes } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminLeaveTypesPage() {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view", "leave.policies.manage"], fallbackPath: "/hr-admin" });
+  const canManagePolicies = sessionHasPermission(sessionUser, "leave.policies.manage");
   const result = await getHrAdminLeaveTypes();
   const activeCount = result.data.filter((item) => item.is_active).length;
 
@@ -17,9 +20,11 @@ export default async function HrAdminLeaveTypesPage() {
         description="Manage the leave categories employees and managers work with before layering policy assignments, accrual rules, and approval logic on top."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/leave-types/new">
-              Create leave type
-            </Link>
+            {canManagePolicies ? (
+              <Link className="button button--primary" href="/hr-admin/leave-types/new">
+                Create leave type
+              </Link>
+            ) : null}
             <Link className="button button--secondary" href="/hr-admin/policies">
               Back to policies
             </Link>
@@ -56,9 +61,11 @@ export default async function HrAdminLeaveTypesPage() {
                   <p className="section-copy">{item.code}</p>
                 </div>
                 <div className="record-card__actions">
-                  <Link className="button button--secondary" href={`/hr-admin/leave-types/${item.id}/edit`}>
-                    Edit
-                  </Link>
+                  {canManagePolicies ? (
+                    <Link className="button button--secondary" href={`/hr-admin/leave-types/${item.id}/edit`}>
+                      Edit
+                    </Link>
+                  ) : null}
                 </div>
               </div>
               <PlatformGovernanceNotice item={item} />

@@ -29,6 +29,7 @@ type Props = {
     has_next: boolean;
     has_previous: boolean;
   };
+  canManageRecords?: boolean;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -67,6 +68,7 @@ export function AttendanceRecordBulkManager({
   sourceOptions,
   currentFilters,
   pagination,
+  canManageRecords = true,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -112,6 +114,10 @@ export function AttendanceRecordBulkManager({
   async function handleBulkAction(action: "lock" | "unlock" | "set_status" | "mark_regularized" | "clear_regularized") {
     if (state !== "live") {
       setError("Bulk actions are disabled in demo mode.");
+      return;
+    }
+    if (!canManageRecords) {
+      setError("You need attendance record management permission to run bulk actions.");
       return;
     }
     setError("");
@@ -218,38 +224,46 @@ export function AttendanceRecordBulkManager({
           }} type="button">
             Clear filters
           </button>
-          <button className="button button--secondary" disabled={items.length === 0} onClick={toggleAll} type="button">
-            {allSelected ? "Clear selection" : "Select page"}
-          </button>
-          <button className="button button--primary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("lock")} type="button">
-            {isSubmitting ? "Saving..." : `Lock (${selectedIds.length || 0})`}
-          </button>
-          <button className="button button--secondary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("unlock")} type="button">
-            Unlock ({selectedIds.length || 0})
-          </button>
+          {canManageRecords ? (
+            <>
+              <button className="button button--secondary" disabled={items.length === 0} onClick={toggleAll} type="button">
+                {allSelected ? "Clear selection" : "Select page"}
+              </button>
+              <button className="button button--primary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("lock")} type="button">
+                {isSubmitting ? "Saving..." : `Lock (${selectedIds.length || 0})`}
+              </button>
+              <button className="button button--secondary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("unlock")} type="button">
+                Unlock ({selectedIds.length || 0})
+              </button>
+            </>
+          ) : null}
         </div>
-        <div className="queue-toolbar__grid">
-          <label className="form-field">
-            <span className="muted">Bulk attendance status</span>
-            <select className="input-control" onChange={(event) => setBulkStatus(event.target.value)} value={bulkStatus}>
-              {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <div className="form-field">
-            <span className="muted">Bulk actions</span>
-            <div className="queue-toolbar__actions">
-              <button className="button button--secondary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("set_status")} type="button">
-                Set status ({selectedIds.length || 0})
-              </button>
-              <button className="button button--secondary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("mark_regularized")} type="button">
-                Mark regularized
-              </button>
-              <button className="button button--ghost" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("clear_regularized")} type="button">
-                Clear regularized
-              </button>
+        {canManageRecords ? (
+          <div className="queue-toolbar__grid">
+            <label className="form-field">
+              <span className="muted">Bulk attendance status</span>
+              <select className="input-control" onChange={(event) => setBulkStatus(event.target.value)} value={bulkStatus}>
+                {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <div className="form-field">
+              <span className="muted">Bulk actions</span>
+              <div className="queue-toolbar__actions">
+                <button className="button button--secondary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("set_status")} type="button">
+                  Set status ({selectedIds.length || 0})
+                </button>
+                <button className="button button--secondary" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("mark_regularized")} type="button">
+                  Mark regularized
+                </button>
+                <button className="button button--ghost" disabled={isSubmitting || selectedIds.length === 0} onClick={() => handleBulkAction("clear_regularized")} type="button">
+                  Clear regularized
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="notice"><strong>Read-only attendance view.</strong><span className="muted">Record edits and bulk actions require attendance record management permission.</span></div>
+        )}
         <div className="queue-toolbar__summary">
           <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> shared state</span>
           <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
@@ -266,7 +280,7 @@ export function AttendanceRecordBulkManager({
                 <div className="record-card__title-wrap">
                   <div className="record-card__title">
                     <label className="toggle-inline">
-                      <input checked={isSelected} onChange={() => toggleOne(item.id)} type="checkbox" />
+                      {canManageRecords ? <input checked={isSelected} onChange={() => toggleOne(item.id)} type="checkbox" /> : null}
                       <h2>{item.employee_name}</h2>
                     </label>
                   </div>
@@ -279,10 +293,14 @@ export function AttendanceRecordBulkManager({
                   <p className="section-copy section-copy-soft">{item.employee_code} • {item.attendance_date} • {item.shift || "No shift"}</p>
                 </div>
                 <div className="record-card__actions">
-                  <button className="button button--secondary" disabled={items.length === 0} onClick={toggleAll} type="button">
-                    {allSelected ? "Clear page selection" : "Select page"}
-                  </button>
-                  <Link className="button button--secondary" href={`/hr-admin/attendance-records/${item.id}/edit`}>Edit record</Link>
+                  {canManageRecords ? (
+                    <>
+                      <button className="button button--secondary" disabled={items.length === 0} onClick={toggleAll} type="button">
+                        {allSelected ? "Clear page selection" : "Select page"}
+                      </button>
+                      <Link className="button button--secondary" href={`/hr-admin/attendance-records/${item.id}/edit`}>Edit record</Link>
+                    </>
+                  ) : null}
                 </div>
               </div>
               <div className="detail-grid">

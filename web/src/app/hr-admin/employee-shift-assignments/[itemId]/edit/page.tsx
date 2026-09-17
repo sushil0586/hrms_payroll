@@ -4,12 +4,14 @@ import { EmployeeShiftAssignmentForm } from "@/app/hr-admin/employee-shift-assig
 import { employeeShiftAssignmentToFormValue } from "@/app/hr-admin/employee-shift-assignments/form-values";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeShiftAssignment, getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = {
   params: Promise<{ itemId: string }>;
 };
 
 export default async function HrAdminEditEmployeeShiftAssignmentPage({ params }: PageProps) {
+  await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/employee-shift-assignments" });
   const { itemId } = await params;
   const [itemResult, optionsResult] = await Promise.all([
     getHrAdminEmployeeShiftAssignment(itemId),

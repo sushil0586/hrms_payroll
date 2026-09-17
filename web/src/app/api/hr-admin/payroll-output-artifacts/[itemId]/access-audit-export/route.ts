@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { requireApiRoutePermission } from "@/lib/api-route-permissions";
+
 const API_BASE_URL = process.env.HRMS_API_BASE_URL;
 
 type RouteContext = {
@@ -10,10 +12,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (!API_BASE_URL) {
     return NextResponse.json({ detail: "HRMS_API_BASE_URL is not configured." }, { status: 500 });
   }
-  const token = request.cookies.get("hrms_access_token")?.value;
-  if (!token) {
-    return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
-  }
+  const permission = await requireApiRoutePermission(request, "payroll.outputs.download");
+  if (!permission.ok) return permission.response;
+  const token = permission.token;
 
   const { itemId } = await context.params;
   const upstreamResponse = await fetch(`${API_BASE_URL}/hr-admin/payroll-output-artifacts/${itemId}/access-audit-export/`, {

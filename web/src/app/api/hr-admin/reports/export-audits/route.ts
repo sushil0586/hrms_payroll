@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { requireApiRoutePermission } from "@/lib/api-route-permissions";
 import { API_BASE_URL } from "@/lib/runtime-flags";
 import { actorTokenHash, listBackendReportExportAudits, listReportExportAudits } from "@/lib/report-export-audit-store";
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get("hrms_access_token")?.value;
-  if (!token) {
-    return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
-  }
+  const permission = await requireApiRoutePermission(request, "reports.compliance.view");
+  if (!permission.ok) return permission.response;
+  const token = permission.token;
 
   if (API_BASE_URL) {
     const upstream = await fetch(`${API_BASE_URL}/hr-admin/dashboard/`, {

@@ -5,6 +5,7 @@ import { EmployeeForm } from "@/app/hr-admin/employees/employee-form";
 import { employeeDetailToFormValue } from "@/app/hr-admin/employees/form-values";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeDetail, getHrAdminEmployeeFormOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = {
   params: Promise<{
@@ -14,6 +15,10 @@ type PageProps = {
 
 export default async function HrAdminEditEmployeePage({ params }: PageProps) {
   const { employeeId } = await params;
+  await requireSessionPermission({
+    permissionKeys: ["employees.edit"],
+    fallbackPath: `/hr-admin/employees?employeeId=${employeeId}`,
+  });
   const [detailResult, optionsResult] = await Promise.all([
     getHrAdminEmployeeDetail(employeeId),
     getHrAdminEmployeeFormOptions(),

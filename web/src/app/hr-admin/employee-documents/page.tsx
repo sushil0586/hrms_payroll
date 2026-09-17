@@ -4,6 +4,7 @@ import { EmployeeDocumentQueue } from "@/app/hr-admin/employee-documents/employe
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentOptions, getHrAdminEmployeeDocuments } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -15,6 +16,13 @@ function normalizeParam(value: SearchParamValue) {
 }
 
 export default async function HrAdminEmployeeDocumentsPage({ searchParams }: PageProps) {
+  const sessionUser = await requireSessionPermission({
+    permissionKeys: ["documents.view", "documents.manage", "documents.verify", "documents.export"],
+    fallbackPath: "/hr-admin",
+  });
+  const canManageDocuments = sessionHasPermission(sessionUser, "documents.manage");
+  const canVerifyDocuments = sessionHasPermission(sessionUser, "documents.verify");
+  const canExportDocuments = sessionHasPermission(sessionUser, "documents.export");
   const currentParams = (await searchParams) ?? {};
   const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
   const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "25") || 25, 1), 100);
@@ -47,7 +55,7 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
         description="Review uploads, verification status, expiry coverage, and reviewer context from a queue that is built for operational throughput."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/employee-documents/new">Upload document</Link>
+            {canManageDocuments ? <Link className="button button--primary" href="/hr-admin/employee-documents/new">Upload document</Link> : null}
             <Link className="button button--secondary" href="/hr-admin/documents">Open document control center</Link>
             <Link className="button button--ghost" href="/hr-admin/reports">Open reports</Link>
           </>
@@ -87,6 +95,9 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
           has_next: result.data.has_next,
           has_previous: result.data.has_previous,
         }}
+        canExportDocuments={canExportDocuments}
+        canManageDocuments={canManageDocuments}
+        canVerifyDocuments={canVerifyDocuments}
       />
     </main>
   );

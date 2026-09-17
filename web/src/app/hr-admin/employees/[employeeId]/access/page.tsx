@@ -6,6 +6,7 @@ import { employeeAccessDetailToFormValue } from "@/app/hr-admin/employees/[emplo
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeAccessDetail, getHrAdminEmployeeAccessOptions, getHrAdminEmployeeDetail } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = {
   params: Promise<{
@@ -15,6 +16,10 @@ type PageProps = {
 
 export default async function HrAdminEmployeeAccessPage({ params }: PageProps) {
   const { employeeId } = await params;
+  await requireSessionPermission({
+    permissionKeys: ["employees.access.manage"],
+    fallbackPath: `/hr-admin/employees?employeeId=${employeeId}`,
+  });
   const [employeeResult, accessResult, optionsResult] = await Promise.all([
     getHrAdminEmployeeDetail(employeeId),
     getHrAdminEmployeeAccessDetail(employeeId),

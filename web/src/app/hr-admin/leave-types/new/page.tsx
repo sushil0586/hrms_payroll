@@ -4,8 +4,10 @@ import { createEmptyLeaveTypeValue } from "@/app/hr-admin/leave-types/form-value
 import { LeaveTypeForm } from "@/app/hr-admin/leave-types/leave-type-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewLeaveTypePage() {
+  await requireSessionPermission({ permissionKeys: ["leave.policies.manage"], fallbackPath: "/hr-admin/leave-types" });
   const optionsResult = await getHrAdminPolicyOptions();
   const defaultCategory = optionsResult.data.leave_categories[0]?.value || "paid";
   const defaultUnit = optionsResult.data.leave_units[0]?.value || "day";

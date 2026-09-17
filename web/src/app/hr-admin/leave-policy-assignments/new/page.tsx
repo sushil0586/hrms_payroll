@@ -4,8 +4,10 @@ import { createEmptyLeavePolicyAssignmentValue } from "@/app/hr-admin/leave-poli
 import { LeavePolicyAssignmentForm } from "@/app/hr-admin/leave-policy-assignments/leave-policy-assignment-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewLeavePolicyAssignmentPage() {
+  await requireSessionPermission({ permissionKeys: ["leave.policies.manage"], fallbackPath: "/hr-admin/leave-policy-assignments" });
   const optionsResult = await getHrAdminPolicyOptions();
 
   return (

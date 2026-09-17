@@ -12,6 +12,7 @@ type Props = {
   description: string;
   employeeReason?: string | null;
   requestAction?: string;
+  canDecide?: boolean;
 };
 
 function getErrorMessage(payload: unknown, fallback: string) {
@@ -42,6 +43,7 @@ export function ManagerDecisionPanel({
   description,
   employeeReason,
   requestAction,
+  canDecide = true,
 }: Props) {
   const router = useRouter();
   const [comment, setComment] = useState("");
@@ -55,6 +57,11 @@ export function ManagerDecisionPanel({
   async function handleDecision(action: "approve" | "reject") {
     setError("");
     setSuccessMessage("");
+
+    if (!canDecide) {
+      setError(kind === "leave" ? "Leave approval permission is required." : "Attendance review permission is required.");
+      return;
+    }
 
     if (state === "demo") {
       setSuccessMessage(
@@ -117,7 +124,7 @@ export function ManagerDecisionPanel({
         <span className="muted">Decision note</span>
         <textarea
           className="input-control"
-          disabled={isSubmitting || !isPending}
+          disabled={isSubmitting || !isPending || !canDecide}
           onChange={(event) => setComment(event.target.value)}
           rows={4}
           value={comment}
@@ -141,6 +148,16 @@ export function ManagerDecisionPanel({
           <span className="muted">Only pending items can be actioned from the MSS inbox.</span>
         </div>
       ) : null}
+      {!canDecide ? (
+        <div className="notice">
+          <strong>Read-only approval view.</strong>
+          <span className="muted">
+            {kind === "leave"
+              ? "Approve or reject requires leave approval permission."
+              : "Approve or reject requires attendance review permission."}
+          </span>
+        </div>
+      ) : null}
       <div className="form-actions-bar">
         <span className="muted">
           {state === "demo"
@@ -150,7 +167,7 @@ export function ManagerDecisionPanel({
         <div className="form-actions-bar__buttons">
           <button
             className="button button--primary"
-            disabled={isSubmitting || !isPending}
+            disabled={isSubmitting || !isPending || !canDecide}
             onClick={() => handleDecision("approve")}
             type="button"
           >
@@ -158,7 +175,7 @@ export function ManagerDecisionPanel({
           </button>
           <button
             className="button button--secondary"
-            disabled={isSubmitting || !isPending}
+            disabled={isSubmitting || !isPending || !canDecide}
             onClick={() => handleDecision("reject")}
             type="button"
           >

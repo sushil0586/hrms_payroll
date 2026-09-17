@@ -464,6 +464,7 @@ from apps.common.selectors import (
     get_manager_leave_request_detail,
     get_manager_pending_leave_requests,
     get_manager_team_summary,
+    record_saas_commercial_audit_event,
     recompute_hrms_saas_launch_audit_pack_checksum,
     sync_hrms_saas_launch_remediation_assignments,
     create_tenant_admin_change_request,
@@ -1204,6 +1205,21 @@ def save_hr_admin_organization_item(actor, section: str, validated_data, *, item
 
     item.save()
     return item
+
+def _hr_admin_actor_identifier(actor) -> str:
+    membership = getattr(actor, "membership", None)
+    user = getattr(membership, "user", None)
+    return getattr(user, "username", "") or getattr(actor, "employee_code", "") or ""
+
+
+def _record_hr_admin_setup_audit_event(actor, *, event_type: str, source_ref: str, event_snapshot: dict):
+    return record_saas_commercial_audit_event(
+        actor.tenant,
+        event_type=event_type,
+        actor_identifier=_hr_admin_actor_identifier(actor),
+        source_ref=source_ref,
+        event_snapshot=event_snapshot,
+    )
 
 
 def build_hr_admin_leave_type_payload(item: LeaveType) -> dict:
@@ -6215,6 +6231,15 @@ class EmployeeContextMixin:
             return None
         return employee
 
+    def require_tenant_permission(self, tenant, permission_key: str):
+        if not user_has_tenant_permission(self.request.user, tenant, permission_key):
+            raise exceptions.PermissionDenied(f"Missing tenant permission: {permission_key}.")
+
+    def require_any_tenant_permission(self, tenant, primary_permission_key: str, *fallback_permission_keys: str):
+        permission_keys = (primary_permission_key, *fallback_permission_keys)
+        if not any(user_has_tenant_permission(self.request.user, tenant, permission_key) for permission_key in permission_keys):
+            raise exceptions.PermissionDenied(f"Missing tenant permission: {primary_permission_key}.")
+
     def build_profile_payload(self, employee):
         manager_name = None
         if employee.reporting_manager:
@@ -6250,13 +6275,45 @@ class MeProfileView(EmployeeContextMixin, APIView):
 
 
 class HrAdminContextMixin(EmployeeContextMixin):
-    workspace_role_codes = ("hr-admin",)
+    workspace_role_codes = ()
+    legacy_workspace_role_codes = ("hr-admin",)
+    workspace_permission_prefixes = (
+        "employees.",
+        "organization.",
+        "documents.",
+        "leave.",
+        "attendance.",
+        "lifecycle.",
+        "letters.",
+        "notifications.",
+        "payroll.",
+        "finance.",
+        "statutory.",
+        "reports.",
+        "audit.hr.",
+    )
 
     def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
+        APIView.initial(self, request, *args, **kwargs)
         membership = get_default_membership_for_user(request.user)
         if not membership:
-            return
+            raise exceptions.PermissionDenied("No active tenant membership found.")
+        has_workspace_role = membership.membership_roles.filter(
+            role__code__in=self.legacy_workspace_role_codes,
+            role__is_active=True,
+        ).exists()
+        active_role_codes = set(
+            membership.membership_roles.filter(role__is_active=True).values_list("role__code", flat=True)
+        )
+        permission_keys = get_user_tenant_permission_keys(request.user, membership.tenant)
+        has_hr_permission = any(
+            any(permission_key.startswith(prefix) for prefix in self.workspace_permission_prefixes)
+            for permission_key in permission_keys
+        )
+        if not has_workspace_role and active_role_codes and active_role_codes.issubset({"employee"}):
+            has_hr_permission = False
+        if not has_workspace_role and not has_hr_permission:
+            raise exceptions.PermissionDenied("You do not have access to this workspace.")
         commercial_access = evaluate_saas_commercial_access(
             membership.tenant,
             request_path=request.path,
@@ -6297,10 +6354,6 @@ class TenantAdminContextMixin(EmployeeContextMixin):
     def get_tenant(self):
         membership = get_default_membership_for_user(self.request.user)
         return membership.tenant if membership else None
-
-    def require_tenant_permission(self, tenant, permission_key: str):
-        if not user_has_tenant_permission(self.request.user, tenant, permission_key):
-            raise exceptions.PermissionDenied(f"Missing tenant permission: {permission_key}.")
 
 
 class MeLeaveSummaryView(EmployeeContextMixin, APIView):
@@ -10072,6 +10125,7 @@ class HrAdminPayrollInputSnapshotSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.inputs.view")
         return response.Response(HrAdminPayrollInputSnapshotSetupSerializer(get_hr_admin_payroll_input_snapshot_setup_payload(employee)).data)
 
 
@@ -10080,6 +10134,7 @@ class HrAdminPayrollRunListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.inputs.view")
         items = PayrollRun.objects.filter(tenant=employee.tenant).select_related("period", "pay_group", "locked_by").order_by("-period__start_date", "name")
         return response.Response(HrAdminPayrollRunSerializer([build_hr_admin_payroll_run_payload(item) for item in items], many=True).data)
 
@@ -10087,6 +10142,7 @@ class HrAdminPayrollRunListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.inputs.manage")
         serializer = HrAdminPayrollRunWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -10104,6 +10160,7 @@ class HrAdminPayrollRunDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.inputs.view")
         item = PayrollRun.objects.filter(tenant=employee.tenant, id=item_id).select_related("period", "pay_group", "locked_by").first()
         if not item:
             return response.Response({"detail": "Payroll run not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -10113,6 +10170,7 @@ class HrAdminPayrollRunDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.inputs.manage")
         item = PayrollRun.objects.filter(tenant=employee.tenant, id=item_id).select_related("period", "pay_group").first()
         if not item:
             return response.Response({"detail": "Payroll run not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -10133,6 +10191,7 @@ class HrAdminPayrollRunLockInputsView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.lock")
         payroll_run = PayrollRun.objects.filter(tenant=employee.tenant, id=item_id).select_related("period", "pay_group", "locked_by").first()
         if not payroll_run:
             return response.Response({"detail": "Payroll run not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -10178,6 +10237,7 @@ class HrAdminPayrollInputSnapshotListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.inputs.view")
         items = PayrollInputSnapshot.objects.filter(tenant=employee.tenant).select_related(
             "payroll_run",
             "employee",
@@ -10193,6 +10253,7 @@ class HrAdminPayrollInputSnapshotListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.inputs.manage")
         serializer = HrAdminPayrollInputSnapshotWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -10215,6 +10276,7 @@ class HrAdminPayrollInputSnapshotDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.inputs.view")
         item = PayrollInputSnapshot.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "payroll_run",
             "employee",
@@ -10229,6 +10291,7 @@ class HrAdminPayrollInputSnapshotDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.inputs.manage")
         item = PayrollInputSnapshot.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run__period").first()
         if not item:
             return response.Response({"detail": "Payroll input snapshot not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -10745,6 +10808,7 @@ class HrAdminPayrollCalculationSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         return response.Response(HrAdminPayrollCalculationSetupSerializer(get_hr_admin_payroll_calculation_setup_payload(employee, request)).data)
 
 
@@ -10753,6 +10817,7 @@ class HrAdminPayrollRunDraftCalculateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.calculate")
         payroll_run = PayrollRun.objects.filter(tenant=employee.tenant, id=item_id).select_related("period__calendar", "pay_group").first()
         if not payroll_run:
             return response.Response({"detail": "Payroll run not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -10956,6 +11021,7 @@ class HrAdminPayrollReviewSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         return response.Response(HrAdminPayrollReviewSetupSerializer(get_hr_admin_payroll_review_setup_payload(employee, request)).data)
 
 
@@ -10964,6 +11030,7 @@ class HrAdminPayrollRunOpenReviewView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         payroll_run = PayrollRun.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not payroll_run:
             return response.Response({"detail": "Payroll run not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -10997,6 +11064,7 @@ class HrAdminPayrollReviewSubmitView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         review = PayrollRunReview.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "calculation").first()
         if not review:
             return response.Response({"detail": "Payroll review not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -11012,6 +11080,7 @@ class HrAdminPayrollReviewApproveView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.approve")
         review = PayrollRunReview.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "calculation").first()
         if not review:
             return response.Response({"detail": "Payroll review not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -11035,6 +11104,7 @@ class HrAdminPayrollReviewRejectView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.approve")
         review = PayrollRunReview.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "calculation").first()
         if not review:
             return response.Response({"detail": "Payroll review not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -11058,6 +11128,7 @@ class HrAdminPayrollReviewLockView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.lock")
         review = PayrollRunReview.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "calculation").first()
         if not review:
             return response.Response({"detail": "Payroll review not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -11073,6 +11144,7 @@ class HrAdminPayrollReviewExceptionListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         review = PayrollRunReview.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "calculation").first()
         if not review:
             return response.Response({"detail": "Payroll review not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -11105,6 +11177,7 @@ class HrAdminPayrollReviewExceptionDecisionView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.review")
         exception = PayrollRunException.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "review",
             "payroll_run",
@@ -11276,6 +11349,7 @@ class HrAdminPayrollOutputSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.outputs.view")
         return response.Response(HrAdminPayrollOutputSetupSerializer(get_hr_admin_payroll_output_setup_payload(employee, request)).data)
 
 
@@ -11284,6 +11358,7 @@ class HrAdminPayrollReviewGenerateOutputsView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.publish")
         review = PayrollRunReview.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "calculation").first()
         if not review:
             return response.Response({"detail": "Payroll review not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -11306,6 +11381,7 @@ class HrAdminPayrollOutputBatchPublishView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.publish")
         batch = PayrollOutputBatch.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "review").first()
         if not batch:
             return response.Response({"detail": "Payroll output batch not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -11322,6 +11398,7 @@ class HrAdminPayrollOutputArtifactSignedAccessIssueView(HrAdminContextMixin, API
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.outputs.download")
         artifact = PayrollOutputArtifact.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "output_batch",
             "payroll_run",
@@ -11368,6 +11445,7 @@ class HrAdminPayrollArtifactSignedAccessGrantRevokeView(HrAdminContextMixin, API
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.outputs.download")
         grant = PayrollArtifactSignedAccessGrant.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "output_artifact",
             "output_batch",
@@ -11403,6 +11481,7 @@ class HrAdminPayrollOutputArtifactAccessAuditExportView(HrAdminContextMixin, API
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.outputs.download")
         artifact = PayrollOutputArtifact.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "output_batch",
             "payroll_run",
@@ -11452,6 +11531,7 @@ class HrAdminPayrollOutputArtifactDownloadView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "payroll.outputs.download")
         artifact = PayrollOutputArtifact.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "output_batch",
             "payroll_run",
@@ -12200,6 +12280,7 @@ class HrAdminPayrollFinanceHandoffSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "finance.handoff.view", "finance.handoff.create")
         return response.Response(HrAdminPayrollFinanceHandoffSetupSerializer(get_hr_admin_payroll_finance_handoff_setup_payload(employee)).data)
 
 
@@ -12548,6 +12629,7 @@ class HrAdminPayrollOutputBatchGenerateFinanceHandoffView(HrAdminContextMixin, A
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "finance.handoff.create")
         batch = PayrollOutputBatch.objects.filter(tenant=employee.tenant, id=item_id).select_related("payroll_run", "review").first()
         if not batch:
             return response.Response({"detail": "Payroll output batch not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12577,6 +12659,7 @@ class HrAdminPayrollFinanceHandoffTransmitView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "finance.handoff.transmit", "finance.handoff.create")
         handoff = PayrollFinanceHandoff.objects.filter(tenant=employee.tenant, id=item_id).select_related("output_batch", "payroll_run", "review").first()
         if not handoff:
             return response.Response({"detail": "Payroll finance handoff not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12600,6 +12683,7 @@ class HrAdminPayrollFinanceHandoffGenerateAuditPackView(HrAdminContextMixin, API
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "finance.bank_advice.export", "finance.handoff.create")
         handoff = PayrollFinanceHandoff.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "output_batch",
             "payroll_run",
@@ -12636,6 +12720,7 @@ class HrAdminPayrollFinanceHandoffAcknowledgeView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "finance.handoff.acknowledge", "finance.handoff.create")
         handoff = PayrollFinanceHandoff.objects.filter(tenant=employee.tenant, id=item_id).select_related("output_batch", "payroll_run", "review", "transmitted_by").first()
         if not handoff:
             return response.Response({"detail": "Payroll finance handoff not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12706,6 +12791,7 @@ class HrAdminPayrollProviderDeliveryScheduleRetryView(HrAdminContextMixin, APIVi
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "finance.handoff.transmit", "finance.handoff.create")
         delivery = PayrollProviderDelivery.objects.filter(tenant=employee.tenant, id=item_id).select_related("handoff", "output_artifact").first()
         if not delivery:
             return response.Response({"detail": "Payroll provider delivery not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12734,6 +12820,7 @@ class HrAdminPayrollProviderDeliveryRequeueView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "finance.handoff.transmit", "finance.handoff.create")
         delivery = PayrollProviderDelivery.objects.filter(tenant=employee.tenant, id=item_id).select_related("handoff", "output_artifact").first()
         if not delivery:
             return response.Response({"detail": "Payroll provider delivery not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12766,6 +12853,7 @@ class HrAdminPayrollStatutorySetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage", "statutory.declarations.view", "statutory.declarations.manage")
         return response.Response(HrAdminPayrollStatutorySetupSerializer(get_hr_admin_payroll_statutory_setup_payload(employee)).data)
 
 
@@ -12774,6 +12862,7 @@ class HrAdminPayrollStatutoryPackListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage")
         items = PayrollStatutoryPack.objects.filter(tenant=employee.tenant).order_by("country_code", "name", "-effective_from")
         return response.Response(HrAdminPayrollStatutoryPackSerializer([build_hr_admin_payroll_statutory_pack_payload(item) for item in items], many=True).data)
 
@@ -12781,6 +12870,7 @@ class HrAdminPayrollStatutoryPackListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
         serializer = HrAdminPayrollStatutoryPackWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -12795,6 +12885,7 @@ class HrAdminPayrollStatutoryPackDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage")
         item = PayrollStatutoryPack.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Payroll statutory pack not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12804,6 +12895,7 @@ class HrAdminPayrollStatutoryPackDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
         item = PayrollStatutoryPack.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Payroll statutory pack not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12821,6 +12913,7 @@ class HrAdminPayrollStatutoryComponentListCreateView(HrAdminContextMixin, APIVie
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage")
         items = PayrollStatutoryComponent.objects.filter(tenant=employee.tenant).select_related(
             "statutory_pack", "salary_component"
         ).order_by("statutory_pack__name", "statutory_type", "name")
@@ -12830,6 +12923,7 @@ class HrAdminPayrollStatutoryComponentListCreateView(HrAdminContextMixin, APIVie
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
         serializer = HrAdminPayrollStatutoryComponentWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -12846,6 +12940,7 @@ class HrAdminPayrollStatutoryComponentDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage")
         item = PayrollStatutoryComponent.objects.filter(tenant=employee.tenant, id=item_id).select_related("statutory_pack", "salary_component").first()
         if not item:
             return response.Response({"detail": "Payroll statutory component not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12855,6 +12950,7 @@ class HrAdminPayrollStatutoryComponentDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
         item = PayrollStatutoryComponent.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Payroll statutory component not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12874,6 +12970,7 @@ class HrAdminPayrollStatutorySlabListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage")
         items = PayrollStatutorySlab.objects.filter(tenant=employee.tenant).select_related(
             "statutory_component"
         ).order_by("statutory_component__code", "slab_order", "min_amount")
@@ -12883,6 +12980,7 @@ class HrAdminPayrollStatutorySlabListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
         serializer = HrAdminPayrollStatutorySlabWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -12899,6 +12997,7 @@ class HrAdminPayrollStatutorySlabDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage")
         item = PayrollStatutorySlab.objects.filter(tenant=employee.tenant, id=item_id).select_related("statutory_component").first()
         if not item:
             return response.Response({"detail": "Payroll statutory slab not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12908,6 +13007,7 @@ class HrAdminPayrollStatutorySlabDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
         item = PayrollStatutorySlab.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Payroll statutory slab not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12927,6 +13027,7 @@ class HrAdminPayrollStatutoryEmployerRegistrationListCreateView(HrAdminContextMi
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage")
         items = PayrollStatutoryEmployerRegistration.objects.filter(tenant=employee.tenant).select_related(
             "statutory_pack", "statutory_component", "legal_entity", "branch", "location"
         ).order_by("statutory_pack__name", "registration_type_ref", "name")
@@ -12941,6 +13042,7 @@ class HrAdminPayrollStatutoryEmployerRegistrationListCreateView(HrAdminContextMi
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
         serializer = HrAdminPayrollStatutoryEmployerRegistrationWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -12962,6 +13064,7 @@ class HrAdminPayrollStatutoryEmployerRegistrationDetailView(HrAdminContextMixin,
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage")
         item = PayrollStatutoryEmployerRegistration.objects.filter(
             tenant=employee.tenant,
             id=item_id,
@@ -12974,6 +13077,7 @@ class HrAdminPayrollStatutoryEmployerRegistrationDetailView(HrAdminContextMixin,
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
         item = PayrollStatutoryEmployerRegistration.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Payroll statutory employer registration not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -12993,6 +13097,7 @@ class HrAdminPayrollStatutoryFilingCalendarListCreateView(HrAdminContextMixin, A
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage")
         items = PayrollStatutoryFilingCalendar.objects.filter(tenant=employee.tenant).select_related(
             "statutory_pack", "statutory_component", "employer_registration"
         ).order_by("due_date", "statutory_pack__name", "filing_type_ref")
@@ -13007,6 +13112,7 @@ class HrAdminPayrollStatutoryFilingCalendarListCreateView(HrAdminContextMixin, A
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
         serializer = HrAdminPayrollStatutoryFilingCalendarWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -13028,6 +13134,7 @@ class HrAdminPayrollStatutoryFilingCalendarDetailView(HrAdminContextMixin, APIVi
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.setup.view", "statutory.setup.manage")
         item = PayrollStatutoryFilingCalendar.objects.filter(
             tenant=employee.tenant,
             id=item_id,
@@ -13040,6 +13147,7 @@ class HrAdminPayrollStatutoryFilingCalendarDetailView(HrAdminContextMixin, APIVi
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.setup.manage")
         item = PayrollStatutoryFilingCalendar.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Payroll statutory filing calendar not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13059,6 +13167,7 @@ class HrAdminEmployeeStatutoryProfileListCreateView(HrAdminContextMixin, APIView
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.declarations.view", "statutory.declarations.manage")
         items = EmployeeStatutoryProfile.objects.filter(tenant=employee.tenant).select_related(
             "employee", "statutory_pack"
         ).order_by("employee__employee_code", "-effective_from")
@@ -13068,6 +13177,7 @@ class HrAdminEmployeeStatutoryProfileListCreateView(HrAdminContextMixin, APIView
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         serializer = HrAdminEmployeeStatutoryProfileWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -13084,6 +13194,7 @@ class HrAdminEmployeeStatutoryProfileDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.declarations.view", "statutory.declarations.manage")
         item = EmployeeStatutoryProfile.objects.filter(tenant=employee.tenant, id=item_id).select_related("employee", "statutory_pack").first()
         if not item:
             return response.Response({"detail": "Employee statutory profile not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13093,6 +13204,7 @@ class HrAdminEmployeeStatutoryProfileDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         item = EmployeeStatutoryProfile.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Employee statutory profile not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13112,6 +13224,7 @@ class HrAdminEmployeeStatutoryDeclarationListCreateView(HrAdminContextMixin, API
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.declarations.view", "statutory.declarations.manage")
         items = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant).select_related(
             "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
         ).prefetch_related("items").order_by("employee__employee_code", "-financial_year_code")
@@ -13121,6 +13234,7 @@ class HrAdminEmployeeStatutoryDeclarationListCreateView(HrAdminContextMixin, API
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         serializer = HrAdminEmployeeStatutoryDeclarationWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -13137,6 +13251,7 @@ class HrAdminEmployeeStatutoryDeclarationDetailView(HrAdminContextMixin, APIView
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.declarations.view", "statutory.declarations.manage")
         item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
         ).prefetch_related("items").first()
@@ -13148,6 +13263,7 @@ class HrAdminEmployeeStatutoryDeclarationDetailView(HrAdminContextMixin, APIView
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13167,6 +13283,7 @@ class HrAdminEmployeeStatutoryDeclarationSubmitView(HrAdminContextMixin, APIView
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
         ).prefetch_related("items").first()
@@ -13184,6 +13301,7 @@ class HrAdminEmployeeStatutoryDeclarationVerifyView(HrAdminContextMixin, APIView
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
         ).prefetch_related("items").first()
@@ -13201,6 +13319,7 @@ class HrAdminEmployeeStatutoryDeclarationRejectView(HrAdminContextMixin, APIView
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
         ).prefetch_related("items").first()
@@ -13220,6 +13339,7 @@ class HrAdminEmployeeStatutoryDeclarationLockView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         item = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "employee", "employee_statutory_profile", "statutory_pack", "submitted_by", "verified_by", "rejected_by", "locked_by"
         ).prefetch_related("items").first()
@@ -13237,6 +13357,7 @@ class HrAdminEmployeeStatutoryDeclarationItemListCreateView(HrAdminContextMixin,
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.declarations.view", "statutory.declarations.manage")
         declaration = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not declaration:
             return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13249,6 +13370,7 @@ class HrAdminEmployeeStatutoryDeclarationItemListCreateView(HrAdminContextMixin,
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         declaration = EmployeeStatutoryDeclaration.objects.filter(tenant=employee.tenant, id=item_id).select_related("employee").first()
         if not declaration:
             return response.Response({"detail": "Employee statutory declaration not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13268,6 +13390,7 @@ class HrAdminEmployeeStatutoryDeclarationItemDetailView(HrAdminContextMixin, API
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_any_tenant_permission(employee.tenant, "statutory.declarations.view", "statutory.declarations.manage")
         item = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "declaration", "employee", "verified_by", "rejected_by"
         ).first()
@@ -13279,6 +13402,7 @@ class HrAdminEmployeeStatutoryDeclarationItemDetailView(HrAdminContextMixin, API
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         item = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, id=item_id).select_related("declaration", "employee").first()
         if not item:
             return response.Response({"detail": "Employee statutory declaration item not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13298,6 +13422,7 @@ class HrAdminEmployeeStatutoryDeclarationItemVerifyView(HrAdminContextMixin, API
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "statutory.declarations.manage")
         item = EmployeeStatutoryDeclarationItem.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "declaration", "employee", "verified_by", "rejected_by"
         ).first()
@@ -13597,6 +13722,7 @@ class HrAdminReportExportView(HrAdminContextMixin, APIView):
         config = self.REPORT_EXPORTS.get(report_key)
         if not config:
             return response.Response({"detail": "Unknown report export."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, _report_export_permission_for_key(report_key))
 
         rows = config["builder"](employee)
         output = StringIO()
@@ -13611,6 +13737,45 @@ class HrAdminReportExportView(HrAdminContextMixin, APIView):
         csv_response = HttpResponse(output.getvalue(), content_type="text/csv")
         csv_response["Content-Disposition"] = f'attachment; filename="{config["filename"]}"'
         return csv_response
+
+
+PAYROLL_REPORT_KEYS = {
+    "payroll-register",
+    "payroll-input-exceptions",
+    "salary-variance",
+    "payroll-review-exceptions",
+    "payroll-adjustments",
+    "payroll-settlements",
+    "payroll-close-readiness",
+    "payslip-publication",
+    "bank-advice",
+    "finance-handoff-exceptions",
+}
+COMPLIANCE_REPORT_KEYS = {
+    "tds-efile-readiness",
+    "tds-efile-package",
+    "compliance-summary",
+    "pf-ecr-readiness",
+    "pf-ecr-package",
+    "esic-contribution-readiness",
+    "esic-contribution-package",
+    "professional-tax-readiness",
+    "professional-tax-package",
+    "lwf-readiness",
+    "lwf-package",
+    "challan-reconciliation",
+    "statutory-filing-status",
+    "provider-filing-receipts",
+    "statutory-deductions",
+}
+
+
+def _report_export_permission_for_key(report_key: str) -> str:
+    if report_key in PAYROLL_REPORT_KEYS:
+        return "reports.payroll.export"
+    if report_key in COMPLIANCE_REPORT_KEYS:
+        return "reports.compliance.export"
+    return "reports.hr.export"
 
 
 class HrAdminReportExportAuditSerializer(serializers.Serializer):
@@ -13654,6 +13819,7 @@ class HrAdminReportExportAuditListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "reports.compliance.view")
         queryset = PayrollReportExportAudit.objects.filter(tenant=employee.tenant)
         report_key = request.query_params.get("report_key")
         export_type = request.query_params.get("export_type")
@@ -13681,6 +13847,7 @@ class HrAdminReportExportAuditListCreateView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminReportExportAuditSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        self.require_tenant_permission(employee.tenant, _report_export_permission_for_key(serializer.validated_data["report_key"]))
         membership = getattr(employee, "membership", None)
         item = PayrollReportExportAudit.objects.create(
             tenant=employee.tenant,
@@ -13808,6 +13975,7 @@ class HrAdminEmployeeListView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.view")
         payload = get_hr_admin_employee_list(employee)
         return response.Response(HrAdminEmployeeListItemSerializer(payload, many=True).data)
 
@@ -13815,6 +13983,7 @@ class HrAdminEmployeeListView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.create")
         serializer = HrAdminEmployeeWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_employee(employee, serializer.validated_data)
@@ -13827,6 +13996,7 @@ class HrAdminEmployeeDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.view")
         payload = get_hr_admin_employee_detail(employee, employee_id)
         if not payload:
             return response.Response({"detail": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13836,6 +14006,7 @@ class HrAdminEmployeeDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.edit")
         item = Employee.objects.filter(tenant=employee.tenant, id=employee_id).first()
         if not item:
             return response.Response({"detail": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13868,6 +14039,7 @@ class HrAdminEmployeeBankAccountListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.view")
         employee_record = Employee.objects.filter(tenant=employee.tenant, id=employee_id).first()
         if not employee_record:
             return response.Response({"detail": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13879,6 +14051,7 @@ class HrAdminEmployeeBankAccountListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.edit")
         employee_record = Employee.objects.filter(tenant=employee.tenant, id=employee_id).first()
         if not employee_record:
             return response.Response({"detail": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13912,6 +14085,7 @@ class HrAdminEmployeeBankAccountDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.edit")
         item = self._get_item(employee, employee_id, item_id)
         if not item:
             return response.Response({"detail": "Bank account not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13932,6 +14106,7 @@ class HrAdminEmployeeFormOptionsView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.view")
         payload = get_hr_admin_employee_form_options(employee)
         return response.Response(HrAdminEmployeeFormOptionsSerializer(payload).data)
 
@@ -13941,6 +14116,7 @@ class HrAdminEmployeeAccessOptionsView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.access.manage")
         payload = get_hr_admin_employee_access_options(employee)
         return response.Response(HrAdminEmployeeAccessOptionsSerializer(payload).data)
 
@@ -13950,6 +14126,7 @@ class HrAdminEmployeeAccessDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.access.manage")
         payload = get_hr_admin_employee_access_detail(employee, employee_id)
         if not payload:
             return response.Response({"detail": "Employee access not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -13959,6 +14136,7 @@ class HrAdminEmployeeAccessDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.access.manage")
         serializer = HrAdminEmployeeAccessWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = save_hr_admin_employee_access(employee, employee_id, serializer.validated_data)
@@ -13968,6 +14146,7 @@ class HrAdminEmployeeAccessDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "employees.access.manage")
         serializer = HrAdminEmployeeAccessWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         detail = get_hr_admin_employee_access_detail(employee, employee_id)
@@ -13996,6 +14175,7 @@ class HrAdminOrganizationSnapshotView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "organization.view")
         payload = get_hr_admin_organization_snapshot(employee)
         return response.Response(HrAdminOrganizationSnapshotSerializer(payload).data)
 
@@ -14005,6 +14185,7 @@ class HrAdminOrganizationFormOptionsView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "organization.view")
         payload = get_hr_admin_organization_form_options(employee)
         return response.Response(HrAdminOrganizationFormOptionsSerializer(payload).data)
 
@@ -14014,6 +14195,7 @@ class HrAdminOrganizationSectionListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "organization.manage")
         serializer = HrAdminOrganizationWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_organization_item(employee, section, serializer.validated_data)
@@ -14026,6 +14208,7 @@ class HrAdminOrganizationSectionDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "organization.view")
         payload = get_hr_admin_organization_item_detail(employee, section, item_id)
         if not payload:
             return response.Response({"detail": "Organization item not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14035,6 +14218,7 @@ class HrAdminOrganizationSectionDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "organization.manage")
         model_class = ORGANIZATION_MODEL_MAP.get(section)
         if model_class is None:
             return response.Response({"detail": "Unsupported organization section."}, status=status.HTTP_400_BAD_REQUEST)
@@ -14082,6 +14266,7 @@ class HrAdminAttendanceOperationOptionsView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         payload = {
             "attendance_statuses": [{"value": value, "label": label} for value, label in AttendanceStatus.choices],
             "attendance_sources": [{"value": value, "label": label} for value, label in AttendanceSource.choices],
@@ -14101,6 +14286,7 @@ class HrAdminShiftListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         payload = [build_hr_admin_shift_payload(item) for item in Shift.objects.filter(tenant=employee.tenant).order_by("name")]
         return response.Response(HrAdminShiftSerializer(payload, many=True).data)
 
@@ -14108,9 +14294,22 @@ class HrAdminShiftListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminShiftWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_shift(employee, serializer.validated_data)
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="attendance_shift_created",
+            source_ref="hrms.rbac.attendance_setup.audit.v1",
+            event_snapshot={
+                "shift_id": str(item.id),
+                "shift_code": item.code,
+                "shift_name": item.name,
+                "action": "created",
+                "permission": "attendance.policies.manage",
+            },
+        )
         return response.Response(HrAdminShiftSerializer(build_hr_admin_shift_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
@@ -14119,6 +14318,7 @@ class HrAdminShiftDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         item = Shift.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Shift not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14128,12 +14328,29 @@ class HrAdminShiftDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         item = Shift.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Shift not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminShiftWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        previous_snapshot = build_hr_admin_shift_payload(item)
         item = save_hr_admin_shift(employee, serializer.validated_data, item=item)
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="attendance_shift_updated",
+            source_ref="hrms.rbac.attendance_setup.audit.v1",
+            event_snapshot={
+                "shift_id": str(item.id),
+                "shift_code": item.code,
+                "shift_name": item.name,
+                "action": "updated",
+                "permission": "attendance.policies.manage",
+                "changed_fields": sorted(serializer.validated_data.keys()),
+                "previous_status": previous_snapshot["is_active"],
+                "new_status": item.is_active,
+            },
+        )
         return response.Response(HrAdminShiftSerializer(build_hr_admin_shift_payload(item)).data)
 
 
@@ -14142,6 +14359,7 @@ class HrAdminShiftDetachView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         item = Shift.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Shift not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14157,6 +14375,7 @@ class HrAdminHolidayCalendarListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         items = HolidayCalendar.objects.filter(tenant=employee.tenant).select_related("legal_entity", "branch", "location").prefetch_related("holidays").order_by("year", "name")
         payload = [build_hr_admin_holiday_calendar_payload(item) for item in items]
         return response.Response(HrAdminHolidayCalendarSerializer(payload, many=True).data)
@@ -14165,6 +14384,7 @@ class HrAdminHolidayCalendarListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminHolidayCalendarWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_holiday_calendar(employee, serializer.validated_data)
@@ -14177,6 +14397,7 @@ class HrAdminHolidayCalendarDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         item = HolidayCalendar.objects.filter(tenant=employee.tenant, id=item_id).select_related("legal_entity", "branch", "location").prefetch_related("holidays").first()
         if not item:
             return response.Response({"detail": "Holiday calendar not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14186,6 +14407,7 @@ class HrAdminHolidayCalendarDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         item = HolidayCalendar.objects.filter(tenant=employee.tenant, id=item_id).select_related("legal_entity", "branch", "location").prefetch_related("holidays").first()
         if not item:
             return response.Response({"detail": "Holiday calendar not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14201,6 +14423,7 @@ class HrAdminHolidayCalendarDetachView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         item = HolidayCalendar.objects.filter(tenant=employee.tenant, id=item_id).select_related("legal_entity", "branch", "location").prefetch_related("holidays").first()
         if not item:
             return response.Response({"detail": "Holiday calendar not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14217,6 +14440,7 @@ class HrAdminAttendanceRecordListView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         try:
             page = max(int(request.query_params.get("page", 1) or 1), 1)
         except (TypeError, ValueError):
@@ -14287,6 +14511,7 @@ class HrAdminAttendanceRecordBulkActionView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.records.manage")
         serializer = HrAdminAttendanceRecordBulkActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         action = serializer.validated_data["action"]
@@ -14382,6 +14607,7 @@ class HrAdminAttendanceRecordDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         item = (
             AttendanceRecord.objects.filter(tenant=employee.tenant, id=item_id)
             .select_related("employee__department", "employee__designation", "shift", "holiday")
@@ -14395,6 +14621,7 @@ class HrAdminAttendanceRecordDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.records.manage")
         item = (
             AttendanceRecord.objects.filter(tenant=employee.tenant, id=item_id)
             .select_related("employee__department", "employee__designation", "shift", "holiday")
@@ -14404,7 +14631,23 @@ class HrAdminAttendanceRecordDetailView(HrAdminContextMixin, APIView):
             return response.Response({"detail": "Attendance record not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminAttendanceRecordWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        previous_snapshot = build_hr_admin_attendance_record_payload(item)
         item = save_hr_admin_attendance_record(employee, serializer.validated_data, item=item)
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="attendance_record_updated",
+            source_ref="hrms.rbac.attendance_setup.audit.v1",
+            event_snapshot={
+                "attendance_record_id": str(item.id),
+                "employee_id": str(item.employee_id),
+                "attendance_date": item.attendance_date,
+                "action": "updated",
+                "permission": "attendance.records.manage",
+                "changed_fields": sorted(serializer.validated_data.keys()),
+                "previous_status": previous_snapshot["status"],
+                "new_status": item.status,
+            },
+        )
         return response.Response(HrAdminAttendanceRecordSerializer(build_hr_admin_attendance_record_payload(item)).data)
 
 
@@ -14413,6 +14656,7 @@ class HrAdminAttendanceRegularizationListView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         try:
             page = max(int(request.query_params.get("page", 1) or 1), 1)
         except (TypeError, ValueError):
@@ -14475,6 +14719,7 @@ class HrAdminAttendanceRegularizationDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         item = (
             AttendanceRegularization.objects.filter(tenant=employee.tenant, id=item_id)
             .select_related("employee__department", "employee__designation", "attendance_record", "attendance_record__shift")
@@ -14490,6 +14735,7 @@ class HrAdminAttendanceRegularizationApproveView(HrAdminContextMixin, APIView):
         actor = self.get_employee()
         if not actor:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(actor.tenant, "attendance.regularization.review")
         regularization = AttendanceRegularization.objects.select_related(
             "employee__reporting_manager",
             "employee__membership",
@@ -14514,6 +14760,7 @@ class HrAdminAttendanceRegularizationRejectView(HrAdminContextMixin, APIView):
         actor = self.get_employee()
         if not actor:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(actor.tenant, "attendance.regularization.review")
         regularization = AttendanceRegularization.objects.select_related(
             "employee__reporting_manager",
             "employee__membership",
@@ -14538,6 +14785,7 @@ class HrAdminLeaveTypeListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         payload = [
             build_hr_admin_leave_type_payload(item)
             for item in LeaveType.objects.filter(tenant=employee.tenant).order_by("name")
@@ -14548,6 +14796,7 @@ class HrAdminLeaveTypeListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         serializer = HrAdminLeaveTypeWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_leave_type(employee, serializer.validated_data)
@@ -14559,6 +14808,7 @@ class HrAdminLeaveTypeDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         item = LeaveType.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14568,6 +14818,7 @@ class HrAdminLeaveTypeDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         item = LeaveType.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14582,6 +14833,7 @@ class HrAdminLeaveTypeDetachView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         item = LeaveType.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14597,6 +14849,7 @@ class HrAdminAttendancePolicyListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         payload = [
             build_hr_admin_attendance_policy_payload(item)
             for item in AttendancePolicy.objects.filter(tenant=employee.tenant).select_related("default_shift", "holiday_calendar").order_by("name")
@@ -14607,9 +14860,22 @@ class HrAdminAttendancePolicyListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminAttendancePolicyWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_attendance_policy(employee, serializer.validated_data)
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="attendance_policy_created",
+            source_ref="hrms.rbac.attendance_setup.audit.v1",
+            event_snapshot={
+                "attendance_policy_id": str(item.id),
+                "attendance_policy_code": item.code,
+                "attendance_policy_name": item.name,
+                "action": "created",
+                "permission": "attendance.policies.manage",
+            },
+        )
         return response.Response(HrAdminAttendancePolicySerializer(build_hr_admin_attendance_policy_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
@@ -14618,6 +14884,7 @@ class HrAdminAttendancePolicyDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         item = AttendancePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("default_shift", "holiday_calendar").first()
         if not item:
             return response.Response({"detail": "Attendance policy not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14627,12 +14894,29 @@ class HrAdminAttendancePolicyDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         item = AttendancePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("default_shift", "holiday_calendar").first()
         if not item:
             return response.Response({"detail": "Attendance policy not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminAttendancePolicyWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        previous_snapshot = build_hr_admin_attendance_policy_payload(item)
         item = save_hr_admin_attendance_policy(employee, serializer.validated_data, item=item)
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="attendance_policy_updated",
+            source_ref="hrms.rbac.attendance_setup.audit.v1",
+            event_snapshot={
+                "attendance_policy_id": str(item.id),
+                "attendance_policy_code": item.code,
+                "attendance_policy_name": item.name,
+                "action": "updated",
+                "permission": "attendance.policies.manage",
+                "changed_fields": sorted(serializer.validated_data.keys()),
+                "previous_status": previous_snapshot["status"],
+                "new_status": item.status,
+            },
+        )
         return response.Response(HrAdminAttendancePolicySerializer(build_hr_admin_attendance_policy_payload(item)).data)
 
 
@@ -14641,6 +14925,7 @@ class HrAdminAttendancePolicyDetachView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         item = AttendancePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("default_shift", "holiday_calendar").first()
         if not item:
             return response.Response({"detail": "Attendance policy not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14656,6 +14941,7 @@ class HrAdminAttendancePolicyPreviewView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminAttendancePolicyPreviewRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         target_employee = Employee.objects.filter(tenant=employee.tenant, id=serializer.validated_data["employee_id"]).first()
@@ -14700,6 +14986,7 @@ class HrAdminLeavePolicyListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         payload = [
             build_hr_admin_leave_policy_payload(item)
             for item in LeavePolicy.objects.filter(tenant=employee.tenant).select_related("leave_type").order_by("name")
@@ -14710,9 +14997,23 @@ class HrAdminLeavePolicyListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         serializer = HrAdminLeavePolicyWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_leave_policy(employee, serializer.validated_data)
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="leave_policy_created",
+            source_ref="hrms.rbac.leave_setup.audit.v1",
+            event_snapshot={
+                "leave_policy_id": str(item.id),
+                "leave_policy_code": item.code,
+                "leave_policy_name": item.name,
+                "leave_type_id": str(item.leave_type_id),
+                "action": "created",
+                "permission": "leave.policies.manage",
+            },
+        )
         return response.Response(HrAdminLeavePolicySerializer(build_hr_admin_leave_policy_payload(item)).data, status=status.HTTP_201_CREATED)
 
 
@@ -14721,6 +15022,7 @@ class HrAdminLeavePolicyDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         item = LeavePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
         if not item:
             return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14730,12 +15032,30 @@ class HrAdminLeavePolicyDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         item = LeavePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
         if not item:
             return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HrAdminLeavePolicyWriteSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        previous_snapshot = build_hr_admin_leave_policy_payload(item)
         item = save_hr_admin_leave_policy(employee, serializer.validated_data, item=item)
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="leave_policy_updated",
+            source_ref="hrms.rbac.leave_setup.audit.v1",
+            event_snapshot={
+                "leave_policy_id": str(item.id),
+                "leave_policy_code": item.code,
+                "leave_policy_name": item.name,
+                "leave_type_id": str(item.leave_type_id),
+                "action": "updated",
+                "permission": "leave.policies.manage",
+                "changed_fields": sorted(serializer.validated_data.keys()),
+                "previous_status": previous_snapshot["status"],
+                "new_status": item.status,
+            },
+        )
         return response.Response(HrAdminLeavePolicySerializer(build_hr_admin_leave_policy_payload(item)).data)
 
 
@@ -14744,6 +15064,7 @@ class HrAdminLeavePolicyDetachView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         item = LeavePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
         if not item:
             return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14759,6 +15080,7 @@ class HrAdminLeavePolicyPreviewView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         serializer = HrAdminLeavePolicyPreviewRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         target_employee = Employee.objects.filter(tenant=employee.tenant, id=serializer.validated_data["employee_id"]).first()
@@ -14782,6 +15104,7 @@ class HrAdminLeavePolicyAssignmentConflictView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         serializer = HrAdminLeavePolicyAssignmentConflictRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         leave_policy = LeavePolicy.objects.filter(
@@ -14813,6 +15136,7 @@ class HrAdminLeavePolicyAssignmentResolutionView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         serializer = HrAdminLeavePolicyAssignmentResolutionRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         target_employee = Employee.objects.filter(
@@ -14839,6 +15163,7 @@ class HrAdminLeavePolicyAssignmentListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         items = LeavePolicyAssignment.objects.filter(tenant=employee.tenant).select_related(
             "leave_policy", "leave_policy__leave_type", "legal_entity", "branch", "department", "grade", "employment_type", "employee"
         ).order_by("priority", "created_at")
@@ -14854,6 +15179,7 @@ class HrAdminLeavePolicyAssignmentListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         serializer = HrAdminLeavePolicyAssignmentWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_leave_policy_assignment(employee, serializer.validated_data)
@@ -14882,6 +15208,7 @@ class HrAdminLeavePolicyAssignmentDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         item = LeavePolicyAssignment.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "leave_policy",
             "leave_policy__leave_type",
@@ -14903,6 +15230,7 @@ class HrAdminLeavePolicyAssignmentDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
         item = LeavePolicyAssignment.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Leave policy assignment not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -14930,6 +15258,7 @@ class HrAdminLeaveBalanceListView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         items = LeaveBalance.objects.filter(tenant=employee.tenant).select_related(
             "employee",
             "leave_policy",
@@ -14961,6 +15290,7 @@ class HrAdminLeaveBalanceTransactionListView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         items = LeaveBalanceTransaction.objects.filter(tenant=employee.tenant).select_related(
             "employee",
             "leave_policy",
@@ -14997,6 +15327,7 @@ class HrAdminLeaveBalanceActionView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.balances.manage")
         serializer = HrAdminLeaveBalanceActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -15025,6 +15356,22 @@ class HrAdminLeaveBalanceActionView(HrAdminContextMixin, APIView):
             .select_related("employee", "leave_policy", "performed_by", "reviewed_by", "leave_balance")
             .first()
         )
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="leave_balance_action_recorded",
+            source_ref="hrms.rbac.leave_balance.audit.v1",
+            event_snapshot={
+                "leave_balance_id": str(balance.id),
+                "leave_balance_transaction_id": str(transaction_item.id),
+                "target_employee_id": str(target_employee.id),
+                "leave_policy_id": str(leave_policy.id),
+                "action": transaction_item.action,
+                "units": transaction_item.units,
+                "applied": mutation_result["applied"],
+                "requires_review": mutation_result["requires_review"],
+                "permission": "leave.balances.manage",
+            },
+        )
         return response.Response(
             HrAdminLeaveBalanceActionResultSerializer(
                 {
@@ -15044,6 +15391,7 @@ class HrAdminLeaveBalanceTransactionReviewView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.balances.manage")
         serializer = HrAdminLeaveBalanceTransactionReviewSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         transaction_item = LeaveBalanceTransaction.objects.filter(tenant=employee.tenant, id=item_id).first()
@@ -15065,6 +15413,22 @@ class HrAdminLeaveBalanceTransactionReviewView(HrAdminContextMixin, APIView):
             .select_related("employee", "leave_policy", "performed_by", "reviewed_by", "leave_balance")
             .first()
         )
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="leave_balance_transaction_reviewed",
+            source_ref="hrms.rbac.leave_balance.audit.v1",
+            event_snapshot={
+                "leave_balance_id": str(balance.id),
+                "leave_balance_transaction_id": str(updated_transaction.id),
+                "target_employee_id": str(updated_transaction.employee_id),
+                "leave_policy_id": str(updated_transaction.leave_policy_id),
+                "action": updated_transaction.action,
+                "decision": serializer.validated_data["decision"],
+                "applied": mutation_result["applied"],
+                "requires_review": mutation_result["requires_review"],
+                "permission": "leave.balances.manage",
+            },
+        )
         return response.Response(
             HrAdminLeaveBalanceActionResultSerializer(
                 {
@@ -15084,6 +15448,7 @@ class HrAdminAttendancePolicyAssignmentListCreateView(HrAdminContextMixin, APIVi
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         items = AttendancePolicyAssignment.objects.filter(tenant=employee.tenant).select_related(
             "attendance_policy", "legal_entity", "branch", "location", "department", "grade", "employment_type", "employee"
         ).order_by("priority", "created_at")
@@ -15099,6 +15464,7 @@ class HrAdminAttendancePolicyAssignmentListCreateView(HrAdminContextMixin, APIVi
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminAttendancePolicyAssignmentWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_attendance_policy_assignment(employee, serializer.validated_data)
@@ -15116,6 +15482,7 @@ class HrAdminAttendancePolicyAssignmentDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         item = AttendancePolicyAssignment.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "attendance_policy", "legal_entity", "branch", "location", "department", "grade", "employment_type", "employee"
         ).first()
@@ -15130,6 +15497,7 @@ class HrAdminAttendancePolicyAssignmentDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         item = AttendancePolicyAssignment.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Attendance policy assignment not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15150,6 +15518,7 @@ class HrAdminAttendancePolicyAssignmentConflictView(HrAdminContextMixin, APIView
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminAttendancePolicyAssignmentConflictRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         attendance_policy = AttendancePolicy.objects.filter(
@@ -15182,6 +15551,7 @@ class HrAdminAttendancePolicyAssignmentResolutionView(HrAdminContextMixin, APIVi
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         serializer = HrAdminAttendancePolicyAssignmentResolutionRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         target_employee = Employee.objects.filter(tenant=employee.tenant, id=serializer.validated_data["employee_id"]).first()
@@ -15196,6 +15566,7 @@ class HrAdminEmployeeShiftAssignmentListCreateView(HrAdminContextMixin, APIView)
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         items = EmployeeShiftAssignment.objects.filter(tenant=employee.tenant).select_related("employee", "shift").order_by("employee__employee_code", "-effective_from", "created_at")
         payload = [
             build_hr_admin_employee_shift_assignment_payload(tenant=employee.tenant, item=item)
@@ -15207,6 +15578,7 @@ class HrAdminEmployeeShiftAssignmentListCreateView(HrAdminContextMixin, APIView)
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminEmployeeShiftAssignmentWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_employee_shift_assignment(employee, serializer.validated_data)
@@ -15220,6 +15592,7 @@ class HrAdminEmployeeShiftAssignmentDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         item = EmployeeShiftAssignment.objects.filter(tenant=employee.tenant, id=item_id).select_related("employee", "shift").first()
         if not item:
             return response.Response({"detail": "Employee shift assignment not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15230,6 +15603,7 @@ class HrAdminEmployeeShiftAssignmentDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         item = EmployeeShiftAssignment.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Employee shift assignment not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15246,6 +15620,7 @@ class HrAdminEmployeeShiftAssignmentConflictView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminEmployeeShiftAssignmentConflictRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         target_employee = Employee.objects.filter(tenant=employee.tenant, id=serializer.validated_data["employee_id"]).first()
@@ -15272,6 +15647,7 @@ class HrAdminEmployeeShiftAssignmentResolutionView(HrAdminContextMixin, APIView)
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         serializer = HrAdminEmployeeShiftAssignmentResolutionRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         target_employee = Employee.objects.filter(tenant=employee.tenant, id=serializer.validated_data["employee_id"]).first()
@@ -15290,6 +15666,7 @@ class HrAdminShiftRosterTemplateListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         payload = [
             build_hr_admin_shift_roster_template_payload(item)
             for item in ShiftRosterTemplate.objects.filter(tenant=employee.tenant).select_related("shift").order_by("name")
@@ -15300,6 +15677,7 @@ class HrAdminShiftRosterTemplateListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminShiftRosterTemplateWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_shift_roster_template(employee, serializer.validated_data)
@@ -15312,6 +15690,7 @@ class HrAdminShiftRosterTemplateDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         item = ShiftRosterTemplate.objects.filter(tenant=employee.tenant, id=item_id).select_related("shift").first()
         if not item:
             return response.Response({"detail": "Shift roster template not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15321,6 +15700,7 @@ class HrAdminShiftRosterTemplateDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         item = ShiftRosterTemplate.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Shift roster template not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15336,6 +15716,7 @@ class HrAdminShiftRosterTemplateRolloutView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.policies.manage")
         serializer = HrAdminShiftRosterTemplateRolloutRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         template = ShiftRosterTemplate.objects.filter(tenant=employee.tenant, id=serializer.validated_data["template_id"]).select_related("shift").first()
@@ -15384,6 +15765,7 @@ class HrAdminShiftRosterRolloutListView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         payload = [
             build_hr_admin_shift_roster_rollout_payload(item)
             for item in ShiftRosterRollout.objects.filter(tenant=employee.tenant).select_related("template").order_by("-created_at")[:25]
@@ -15590,6 +15972,7 @@ class HrAdminDocumentOptionsView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.view")
         tenant = employee.tenant
         payload = {
             "document_category_types": [{"value": value, "label": label} for value, label in DocumentCategoryType.choices],
@@ -15612,6 +15995,7 @@ class HrAdminDocumentCategoryListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.view")
         items = DocumentCategory.objects.filter(tenant=employee.tenant).order_by("name")
         payload = [build_hr_admin_document_category_payload(item) for item in items]
         return response.Response(HrAdminDocumentCategorySerializer(payload, many=True).data)
@@ -15620,6 +16004,7 @@ class HrAdminDocumentCategoryListCreateView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.manage")
         serializer = HrAdminDocumentCategoryWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_document_category(employee, serializer.validated_data)
@@ -15631,6 +16016,7 @@ class HrAdminDocumentCategoryDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.view")
         item = DocumentCategory.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Document category not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15640,6 +16026,7 @@ class HrAdminDocumentCategoryDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.manage")
         item = DocumentCategory.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Document category not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15654,6 +16041,7 @@ class HrAdminDocumentRequirementRuleListCreateView(HrAdminContextMixin, APIView)
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.view")
         items = DocumentRequirementRule.objects.filter(tenant=employee.tenant).select_related(
             "category", "legal_entity", "branch", "department", "grade", "employment_type"
         ).order_by("priority", "created_at")
@@ -15664,6 +16052,7 @@ class HrAdminDocumentRequirementRuleListCreateView(HrAdminContextMixin, APIView)
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.manage")
         serializer = HrAdminDocumentRequirementRuleWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = save_hr_admin_document_requirement(employee, serializer.validated_data)
@@ -15676,6 +16065,7 @@ class HrAdminDocumentRequirementRuleDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.view")
         item = DocumentRequirementRule.objects.filter(tenant=employee.tenant, id=item_id).select_related(
             "category", "legal_entity", "branch", "department", "grade", "employment_type"
         ).first()
@@ -15687,6 +16077,7 @@ class HrAdminDocumentRequirementRuleDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.manage")
         item = DocumentRequirementRule.objects.filter(tenant=employee.tenant, id=item_id).first()
         if not item:
             return response.Response({"detail": "Document requirement rule not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15704,6 +16095,7 @@ class HrAdminEmployeeDocumentListView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.view")
         try:
             page = max(int(request.query_params.get("page", 1) or 1), 1)
         except (TypeError, ValueError):
@@ -15771,6 +16163,7 @@ class HrAdminEmployeeDocumentListView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.manage")
         serializer = HrAdminEmployeeDocumentCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = create_hr_admin_employee_document(employee, serializer.validated_data)
@@ -15786,6 +16179,7 @@ class HrAdminEmployeeDocumentDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.view")
         item = EmployeeDocument.objects.filter(tenant=employee.tenant, id=item_id).select_related("employee", "category", "artifact").first()
         if not item:
             return response.Response({"detail": "Employee document not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15795,6 +16189,7 @@ class HrAdminEmployeeDocumentDetailView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.verify")
         item = EmployeeDocument.objects.filter(tenant=employee.tenant, id=item_id).select_related("employee", "category", "artifact").first()
         if not item:
             return response.Response({"detail": "Employee document not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15810,6 +16205,7 @@ class HrAdminEmployeeDocumentDownloadView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.export")
         item = EmployeeDocument.objects.filter(tenant=employee.tenant, id=item_id).select_related("artifact").first()
         if not item or not item.artifact_id or not item.artifact or not item.artifact.stored_file:
             return response.Response({"detail": "Document file not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -15830,6 +16226,7 @@ class HrAdminEmployeeDocumentReminderActionView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "documents.manage")
         serializer = HrAdminEmployeeDocumentReminderActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -17880,6 +18277,7 @@ class ManagerPendingLeaveRequestListView(EmployeeContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         page, page_size = _get_page_params(request)
         items = get_manager_pending_leave_requests(employee)
         payload = _build_paginated_payload(items, page=page, page_size=page_size)
@@ -17891,6 +18289,7 @@ class ManagerLeaveRequestDetailView(EmployeeContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
         payload = get_manager_leave_request_detail(employee, request_id)
         if not payload:
             return response.Response({"detail": "Leave request not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
@@ -17902,6 +18301,7 @@ class ManagerLeaveRequestApproveView(ManagerDecisionMixin, APIView):
         actor = self.get_employee()
         if not actor:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(actor.tenant, "leave.requests.approve")
         leave_request = LeaveRequest.objects.select_related("employee__reporting_manager", "employee__membership").filter(id=request_id).first()
         if not leave_request or not self.ensure_leave_request_scope(leave_request):
             return response.Response({"detail": "Leave request not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
@@ -17917,6 +18317,7 @@ class ManagerLeaveRequestRejectView(ManagerDecisionMixin, APIView):
         actor = self.get_employee()
         if not actor:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(actor.tenant, "leave.requests.approve")
         leave_request = LeaveRequest.objects.select_related("employee__reporting_manager", "employee__membership").filter(id=request_id).first()
         if not leave_request or not self.ensure_leave_request_scope(leave_request):
             return response.Response({"detail": "Leave request not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
@@ -17932,6 +18333,7 @@ class ManagerAttendanceRegularizationApproveView(ManagerDecisionMixin, APIView):
         actor = self.get_employee()
         if not actor:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(actor.tenant, "attendance.regularization.review")
         regularization = AttendanceRegularization.objects.select_related("employee__reporting_manager", "employee__membership", "attendance_record").filter(id=regularization_id).first()
         if not regularization or not self.ensure_manager_scope(regularization.employee):
             return response.Response({"detail": "Attendance regularization not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
@@ -17947,6 +18349,7 @@ class ManagerPendingAttendanceRegularizationListView(EmployeeContextMixin, APIVi
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         page, page_size = _get_page_params(request)
         items = get_manager_pending_attendance_regularizations(employee)
         payload = _build_paginated_payload(items, page=page, page_size=page_size)
@@ -17958,6 +18361,7 @@ class ManagerAttendanceRegularizationDetailView(EmployeeContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
         payload = get_manager_attendance_regularization_detail(employee, regularization_id)
         if not payload:
             return response.Response({"detail": "Attendance regularization not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
@@ -17969,6 +18373,7 @@ class ManagerAttendanceRegularizationRejectView(ManagerDecisionMixin, APIView):
         actor = self.get_employee()
         if not actor:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(actor.tenant, "attendance.regularization.review")
         regularization = AttendanceRegularization.objects.select_related("employee__reporting_manager", "employee__membership", "attendance_record").filter(id=regularization_id).first()
         if not regularization or not self.ensure_manager_scope(regularization.employee):
             return response.Response({"detail": "Attendance regularization not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)

@@ -6,6 +6,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminOrganizationItem, getHrAdminOrganizationSnapshot } from "@/lib/api";
 import type { HrAdminOrganizationItem, HrAdminOrganizationSnapshot } from "@/lib/types";
 import { isOrganizationSectionKey } from "@/app/hr-admin/organization/section-config";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { OrganizationImportWorkbench } from "./organization-import-workbench";
 
 type SearchParamValue = string | string[] | undefined;
@@ -320,6 +321,11 @@ function itemMeta(item: HrAdminOrganizationItem, section: string) {
 }
 
 export default async function HrAdminOrganizationPage({ searchParams }: PageProps) {
+  const sessionUser = await requireSessionPermission({
+    permissionKeys: ["organization.view", "organization.manage"],
+    fallbackPath: "/hr-admin",
+  });
+  const canManageOrganization = sessionHasPermission(sessionUser, "organization.manage");
   const currentParams = (await searchParams) ?? {};
   const snapshotResult = await getHrAdminOrganizationSnapshot();
   const sections = getSections(snapshotResult.data);
@@ -357,7 +363,7 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
             <Link className="button button--secondary" href="/hr-admin">
               Back to admin workspace
             </Link>
-            {isOrganizationSectionKey(sectionKey) ? (
+            {canManageOrganization && isOrganizationSectionKey(sectionKey) ? (
               <Link className="button button--primary" href={`/hr-admin/organization/${sectionKey}/new`}>
                 Create {activeSection.label.slice(0, -1).toLowerCase()}
               </Link>
@@ -383,7 +389,7 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
         </div>
       </section>
 
-      <OrganizationImportWorkbench snapshot={snapshotResult.data} />
+      {canManageOrganization ? <OrganizationImportWorkbench snapshot={snapshotResult.data} /> : null}
 
       <section className="section employee-master-layout">
         <article className="queue-toolbar">
@@ -493,7 +499,7 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
                         </div>
                       )}
                     </Link>
-                    {isOrganizationSectionKey(sectionKey) ? (
+                    {canManageOrganization && isOrganizationSectionKey(sectionKey) ? (
                       <div className="record-card__actions">
                         <Link className="button button--secondary" href={`/hr-admin/organization/${sectionKey}/${item.id}/edit`}>
                           Edit

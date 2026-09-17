@@ -4,8 +4,11 @@ import { ShiftRosterRolloutPanel } from "@/app/hr-admin/shift-roster-templates/s
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPolicyOptions, getHrAdminShiftRosterRollouts, getHrAdminShiftRosterTemplates } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminShiftRosterTemplatesPage() {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-operations" });
+  const canManagePolicies = sessionHasPermission(sessionUser, "attendance.policies.manage");
   const [result, optionsResult, rolloutsResult] = await Promise.all([
     getHrAdminShiftRosterTemplates(),
     getHrAdminPolicyOptions(),
@@ -21,7 +24,7 @@ export default async function HrAdminShiftRosterTemplatesPage() {
         description="Define reusable shift patterns once, then publish and roll them out across teams with less manual scheduling work."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/shift-roster-templates/new">Create roster template</Link>
+            {canManagePolicies ? <Link className="button button--primary" href="/hr-admin/shift-roster-templates/new">Create roster template</Link> : null}
             <Link className="button button--secondary" href="/hr-admin/attendance-operations">Back to attendance operations</Link>
           </>
         }
@@ -49,7 +52,7 @@ export default async function HrAdminShiftRosterTemplatesPage() {
                   </div>
                 </div>
                 <div className="record-card__actions">
-                  <Link className="button button--secondary" href={`/hr-admin/shift-roster-templates/${item.id}/edit`}>Edit</Link>
+                  {canManagePolicies ? <Link className="button button--secondary" href={`/hr-admin/shift-roster-templates/${item.id}/edit`}>Edit</Link> : null}
                 </div>
               </div>
               <div className="detail-grid">
@@ -73,7 +76,11 @@ export default async function HrAdminShiftRosterTemplatesPage() {
         </div>
       </section>
 
-      <ShiftRosterRolloutPanel options={optionsResult.data} templates={result.data} rollouts={rolloutsResult.data} />
+      {canManagePolicies ? (
+        <ShiftRosterRolloutPanel options={optionsResult.data} templates={result.data} rollouts={rolloutsResult.data} />
+      ) : (
+        <section className="section"><div className="notice"><strong>Read-only roster template view.</strong><span className="muted">Template rollout requires attendance policy management permission.</span></div></section>
+      )}
     </main>
   );
 }

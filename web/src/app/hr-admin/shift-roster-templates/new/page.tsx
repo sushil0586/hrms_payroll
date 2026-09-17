@@ -4,8 +4,10 @@ import { createEmptyShiftRosterTemplateValue } from "@/app/hr-admin/shift-roster
 import { ShiftRosterTemplateForm } from "@/app/hr-admin/shift-roster-templates/shift-roster-template-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewShiftRosterTemplatePage() {
+  await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/shift-roster-templates" });
   const optionsResult = await getHrAdminPolicyOptions();
 
   return (

@@ -1,5 +1,7 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { requireApiRoutePermission } from "@/lib/api-route-permissions";
+
 
 const API_BASE_URL = process.env.HRMS_API_BASE_URL;
 
@@ -96,8 +98,9 @@ function amountFor(line: Record<string, unknown>, keys: string[]) {
 }
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get("hrms_access_token")?.value;
-  if (!token) return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
+  const permission = await requireApiRoutePermission(request, "reports.compliance.export");
+  if (!permission.ok) return permission.response;
+  const token = permission.token;
 
   const [statutoryResult, handoffResult] = await Promise.all([
     upstreamJson<StatutorySetup>("/hr-admin/payroll-statutory-setup/", token),

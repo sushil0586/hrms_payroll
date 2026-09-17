@@ -4,8 +4,11 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { getHrAdminShifts } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminShiftsPage() {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-operations" });
+  const canManagePolicies = sessionHasPermission(sessionUser, "attendance.policies.manage");
   const result = await getHrAdminShifts();
 
   return (
@@ -16,7 +19,7 @@ export default async function HrAdminShiftsPage() {
         description="Configure the attendance windows, grace rules, and weekly-off patterns that operational attendance depends on."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/shifts/new">Create shift</Link>
+            {canManagePolicies ? <Link className="button button--primary" href="/hr-admin/shifts/new">Create shift</Link> : null}
             <Link className="button button--secondary" href="/hr-admin/attendance-operations">Back to attendance operations</Link>
           </>
         }
@@ -49,7 +52,7 @@ export default async function HrAdminShiftsPage() {
                   <p className="section-copy">{item.code}</p>
                 </div>
                 <div className="record-card__actions">
-                  <Link className="button button--secondary" href={`/hr-admin/shifts/${item.id}/edit`}>Edit</Link>
+                  {canManagePolicies ? <Link className="button button--secondary" href={`/hr-admin/shifts/${item.id}/edit`}>Edit</Link> : null}
                 </div>
               </div>
               <div className="detail-grid">

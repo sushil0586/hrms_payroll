@@ -15,6 +15,7 @@ type Props = {
   initialBalances: HrAdminLeaveBalance[];
   initialTransactions: HrAdminLeaveBalanceTransaction[];
   options: HrAdminPolicyOptions;
+  canManageBalances?: boolean;
 };
 
 type ImportStatus = "ready" | "blocked" | "created" | "failed";
@@ -149,9 +150,11 @@ const defaultActionValue: HrAdminLeaveBalanceActionInput = {
 function LeaveBalanceImportWorkbench({
   balances,
   onResult,
+  canManageBalances,
 }: {
   balances: HrAdminLeaveBalance[];
   onResult: (result: HrAdminLeaveBalanceActionResult) => void;
+  canManageBalances: boolean;
 }) {
   const [csvText, setCsvText] = useState(leaveBalanceTemplateCsv());
   const [rows, setRows] = useState<LeaveBalanceImportRow[]>([]);
@@ -219,6 +222,10 @@ function LeaveBalanceImportWorkbench({
   }
 
   async function commitReadyRows() {
+    if (!canManageBalances) {
+      setMessage("You need leave balance management permission to commit imports.");
+      return;
+    }
     setIsCommitting(true);
     const nextRows = [...rows];
 
@@ -290,11 +297,14 @@ function LeaveBalanceImportWorkbench({
             <button className="button button--primary" type="button" onClick={preview}>
               Preview leave import
             </button>
-            <button className="button button--primary" type="button" disabled={!readyCount || isCommitting} onClick={commitReadyRows}>
+            <button className="button button--primary" type="button" disabled={!readyCount || isCommitting || !canManageBalances} onClick={commitReadyRows}>
               {isCommitting ? "Committing..." : "Commit ready leave rows"}
             </button>
           </div>
         </div>
+        {!canManageBalances ? (
+          <div className="notice"><strong>Read-only leave balance view.</strong><span className="muted">Imports can be previewed, but committing changes requires leave balance management permission.</span></div>
+        ) : null}
         {message ? <div className="notice">{message}</div> : null}
         {rows.length ? (
           <div className="table-scroll">
@@ -335,7 +345,7 @@ function LeaveBalanceImportWorkbench({
   );
 }
 
-export function LeaveBalanceOperations({ initialBalances, initialTransactions, options }: Props) {
+export function LeaveBalanceOperations({ initialBalances, initialTransactions, options, canManageBalances = true }: Props) {
   const router = useRouter();
   const [balances, setBalances] = useState(initialBalances);
   const [transactions, setTransactions] = useState(initialTransactions);
@@ -390,6 +400,10 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
     event.preventDefault();
     setError("");
     setSuccessMessage("");
+    if (!canManageBalances) {
+      setError("You need leave balance management permission to apply balance actions.");
+      return;
+    }
     setIsSubmitting(true);
     const response = await fetch("/api/hr-admin/leave-balances/actions", {
       method: "POST",
@@ -433,6 +447,10 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
   async function handleReview(transactionId: string, decision: "approve" | "reject") {
     setError("");
     setSuccessMessage("");
+    if (!canManageBalances) {
+      setError("You need leave balance management permission to review balance transactions.");
+      return;
+    }
     setReviewingTransactionId(transactionId);
     const response = await fetch(`/api/hr-admin/leave-balances/transactions/${transactionId}/review`, {
       method: "POST",
@@ -459,7 +477,7 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
 
   return (
     <>
-      <LeaveBalanceImportWorkbench balances={balances} onResult={applyActionResult} />
+      <LeaveBalanceImportWorkbench balances={balances} canManageBalances={canManageBalances} onResult={applyActionResult} />
 
       <section className="section">
         <div className="workspace-card workspace-card--compact">
@@ -517,10 +535,13 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
               </div>
             ) : null}
             <div className="queue-toolbar__actions">
-              <button className="button button--primary" disabled={isSubmitting} type="submit">
+              <button className="button button--primary" disabled={isSubmitting || !canManageBalances} type="submit">
                 {isSubmitting ? "Applying..." : "Apply balance action"}
               </button>
             </div>
+            {!canManageBalances ? (
+              <div className="notice"><strong>Read-only leave balance view.</strong><span className="muted">Balance actions and reviews require leave balance management permission.</span></div>
+            ) : null}
           </form>
         </div>
       </section>
@@ -675,7 +696,7 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
               </div>
               {item.status === "pending" ? (
                 <div className="queue-toolbar__actions">
-                  {item.can_current_actor_review ? (
+                  {canManageBalances && item.can_current_actor_review ? (
                     <>
                       <input
                         className="input-control"

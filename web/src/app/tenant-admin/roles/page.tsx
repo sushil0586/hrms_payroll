@@ -2,12 +2,17 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getSessionUser, getTenantAdminConsole } from "@/lib/api";
-import { sessionHasPermission } from "@/lib/workspace-access";
+import { getTenantAdminConsole } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TenantRoleActions } from "../tenant-role-actions";
 
 export default async function TenantAdminRolesPage() {
-  const [result, sessionUser] = await Promise.all([getTenantAdminConsole(), getSessionUser()]);
+  const sessionUser = await requireSessionPermission({
+    permissionKeys: ["tenant.roles.view", "tenant.roles.manage"],
+    workspace: "tenant_admin",
+    fallbackPath: "/tenant-admin",
+  });
+  const result = await getTenantAdminConsole();
   const data = result.data;
   const canManageRoles = sessionHasPermission(sessionUser, "tenant.roles.manage");
   const customRoleCount = data.role_management.roles.filter((role) => !role.is_system_role).length;

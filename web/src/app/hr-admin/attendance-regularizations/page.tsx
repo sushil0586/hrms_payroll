@@ -4,6 +4,7 @@ import { AttendanceRegularizationQueue } from "@/app/hr-admin/attendance-regular
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendanceOperationOptions, getHrAdminAttendanceRegularizations } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -15,6 +16,8 @@ function normalizeParam(value: SearchParamValue) {
 }
 
 export default async function HrAdminAttendanceRegularizationsPage({ searchParams }: PageProps) {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view"], fallbackPath: "/hr-admin" });
+  const canReviewRegularizations = sessionHasPermission(sessionUser, "attendance.regularization.review");
   const currentParams = (await searchParams) ?? {};
   const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
   const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "25") || 25, 1), 100);
@@ -71,6 +74,7 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
           has_next: result.data.has_next,
           has_previous: result.data.has_previous,
         }}
+        canReviewRegularizations={canReviewRegularizations}
       />
     </main>
   );

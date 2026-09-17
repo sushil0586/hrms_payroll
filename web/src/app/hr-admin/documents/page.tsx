@@ -9,8 +9,16 @@ import {
   getHrAdminEmployeeDocuments,
   getHrAdminGeneratedLetters,
 } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminDocumentsPage() {
+  const sessionUser = await requireSessionPermission({
+    permissionKeys: ["documents.view", "documents.manage", "documents.verify", "documents.export"],
+    fallbackPath: "/hr-admin",
+  });
+  const canManageDocuments = sessionHasPermission(sessionUser, "documents.manage");
+  const canVerifyDocuments = sessionHasPermission(sessionUser, "documents.verify");
+  const canViewDocuments = sessionHasPermission(sessionUser, "documents.view");
   const [categoriesResult, requirementsResult, employeeDocumentsResult, generatedLettersResult] = await Promise.all([
     getHrAdminDocumentCategories(),
     getHrAdminDocumentRequirements(),
@@ -34,9 +42,9 @@ export default async function HrAdminDocumentsPage() {
         description="Control categories, requirement rules, and employee review queues from one document workspace."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/document-categories">Open categories</Link>
-            <Link className="button button--secondary" href="/hr-admin/document-requirements">Open requirements</Link>
-            <Link className="button button--secondary" href="/hr-admin/employee-documents">Open employee documents</Link>
+            {canViewDocuments ? <Link className="button button--primary" href="/hr-admin/document-categories">Open categories</Link> : null}
+            {canViewDocuments ? <Link className="button button--secondary" href="/hr-admin/document-requirements">Open requirements</Link> : null}
+            {canViewDocuments || canVerifyDocuments ? <Link className="button button--secondary" href="/hr-admin/employee-documents">Open employee documents</Link> : null}
             <Link className="button button--secondary" href="/hr-admin/generated-letters">Open generated letters</Link>
             <Link className="button button--secondary" href="/hr-admin">Back to admin workspace</Link>
           </>
@@ -54,28 +62,32 @@ export default async function HrAdminDocumentsPage() {
 
       <section className="section">
         <div className="workspace-grid">
-          <WorkspaceCard
-            eyebrow="Taxonomy"
-            title="Document categories"
-            description="Control reusable document types, upload rules, and verification behavior."
-            href="/hr-admin/document-categories"
-            cta="Manage categories"
-            details={[
-              { label: "Configured", value: categoriesResult.data.length },
-              { label: "Verification required", value: categoriesResult.data.filter((item) => item.requires_verification).length },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Compliance"
-            title="Document requirements"
-            description="Define where documents are mandatory by legal entity, branch, department, grade, and employment context."
-            href="/hr-admin/document-requirements"
-            cta="Manage requirements"
-            details={[
-              { label: "Rules", value: requirementsResult.data.length },
-              { label: "Mandatory", value: requirementsResult.data.filter((item) => item.is_mandatory).length },
-            ]}
-          />
+          {canViewDocuments ? (
+            <WorkspaceCard
+              eyebrow="Taxonomy"
+              title="Document categories"
+              description="Control reusable document types, upload rules, and verification behavior."
+              href="/hr-admin/document-categories"
+              cta={canManageDocuments ? "Manage categories" : "View categories"}
+              details={[
+                { label: "Configured", value: categoriesResult.data.length },
+                { label: "Verification required", value: categoriesResult.data.filter((item) => item.requires_verification).length },
+              ]}
+            />
+          ) : null}
+          {canViewDocuments ? (
+            <WorkspaceCard
+              eyebrow="Compliance"
+              title="Document requirements"
+              description="Define where documents are mandatory by legal entity, branch, department, grade, and employment context."
+              href="/hr-admin/document-requirements"
+              cta={canManageDocuments ? "Manage requirements" : "View requirements"}
+              details={[
+                { label: "Rules", value: requirementsResult.data.length },
+                { label: "Mandatory", value: requirementsResult.data.filter((item) => item.is_mandatory).length },
+              ]}
+            />
+          ) : null}
           <WorkspaceCard
             eyebrow="Letters"
             title="Generated HR letters"

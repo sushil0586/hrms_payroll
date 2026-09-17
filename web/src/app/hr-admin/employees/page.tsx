@@ -6,6 +6,7 @@ import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeDetail, getHrAdminEmployeeFormOptions, getHrAdminEmployees } from "@/lib/api";
 import type { HrAdminEmployeeDetail, HrAdminEmployeeListItem } from "@/lib/types";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { EmployeeBankImportWorkbench } from "./employee-bank-import-workbench";
 import { EmployeeImportWorkbench } from "./employee-import-workbench";
 import { EmployeeManagerImportWorkbench } from "./employee-manager-import-workbench";
@@ -272,6 +273,10 @@ function EmployeeDetailPanel({ detail }: { detail: HrAdminEmployeeDetail | null 
 }
 
 export default async function HrAdminEmployeesPage({ searchParams }: PageProps) {
+  const sessionUser = await requireSessionPermission({
+    permissionKeys: ["employees.view", "employees.create", "employees.edit", "employees.import", "employees.access.manage"],
+    fallbackPath: "/hr-admin",
+  });
   const currentParams = (await searchParams) ?? {};
   const status = normalizeParam(currentParams.status) ?? "all";
   const q = normalizeParam(currentParams.q) ?? "";
@@ -297,6 +302,10 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const detail = detailResult?.data ?? null;
   const state =
     employeesResult.state === "live" && (!detailResult || detailResult.state === "live") ? "live" : "demo";
+  const canCreateEmployees = sessionHasPermission(sessionUser, "employees.create");
+  const canEditEmployees = sessionHasPermission(sessionUser, "employees.edit");
+  const canImportEmployees = sessionHasPermission(sessionUser, "employees.import");
+  const canManageEmployeeAccess = sessionHasPermission(sessionUser, "employees.access.manage");
 
   const tabs = ["all", "active", "on_notice", "inactive", "exited"];
 
@@ -314,9 +323,11 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
             <Link className="button button--secondary" href="/hr-admin">
               Admin
             </Link>
-            <Link className="button button--primary" href="/hr-admin/employees/new">
-              New employee
-            </Link>
+            {canCreateEmployees ? (
+              <Link className="button button--primary" href="/hr-admin/employees/new">
+                New employee
+              </Link>
+            ) : null}
           </>
         }
         pills={["Directory", "Access", "Structure"]}
@@ -341,9 +352,9 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
         </div>
       </section>
 
-      <EmployeeImportWorkbench employees={employeesResult.data} options={optionsResult.data} />
-      <EmployeeBankImportWorkbench employees={employeesResult.data} />
-      <EmployeeManagerImportWorkbench employees={employeesResult.data} options={optionsResult.data} />
+      {canImportEmployees && canCreateEmployees ? <EmployeeImportWorkbench employees={employeesResult.data} options={optionsResult.data} /> : null}
+      {canImportEmployees && canEditEmployees ? <EmployeeBankImportWorkbench employees={employeesResult.data} /> : null}
+      {canImportEmployees && canEditEmployees ? <EmployeeManagerImportWorkbench employees={employeesResult.data} options={optionsResult.data} /> : null}
 
       <section className="section employee-master-layout">
         <article className="queue-toolbar panel-card-soft">
@@ -499,26 +510,38 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
               </div>
               <p className="section-copy section-copy-soft">Focused detail for the selected employee.</p>
             </div>
-            {detail ? (
+            {detail && (canEditEmployees || canManageEmployeeAccess) ? (
               <div className="record-card__actions">
                 <ActionMenu
                   label="Actions"
                   items={[
-                    {
-                      href: `/hr-admin/employees/${detail.id}/edit`,
-                      title: "Edit employee",
-                      description: "Update profile, org mapping, and employment data.",
-                    },
-                    {
-                      href: `/hr-admin/employees/${detail.id}/access`,
-                      title: "Manage access",
-                      description: "Review roles, login state, and membership access.",
-                    },
-                    {
-                      href: `/hr-admin/employees/${detail.id}/bank-accounts`,
-                      title: "Manage bank accounts",
-                      description: "Maintain payout account coverage for payroll readiness.",
-                    },
+                    ...(canEditEmployees
+                      ? [
+                          {
+                            href: `/hr-admin/employees/${detail.id}/edit`,
+                            title: "Edit employee",
+                            description: "Update profile, org mapping, and employment data.",
+                          },
+                        ]
+                      : []),
+                    ...(canManageEmployeeAccess
+                      ? [
+                          {
+                            href: `/hr-admin/employees/${detail.id}/access`,
+                            title: "Manage access",
+                            description: "Review roles, login state, and membership access.",
+                          },
+                        ]
+                      : []),
+                    ...(canEditEmployees
+                      ? [
+                          {
+                            href: `/hr-admin/employees/${detail.id}/bank-accounts`,
+                            title: "Manage bank accounts",
+                            description: "Maintain payout account coverage for payroll readiness.",
+                          },
+                        ]
+                      : []),
                   ]}
                 />
               </div>

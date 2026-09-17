@@ -1103,6 +1103,7 @@ def resolve_regularization(*, regularization: AttendanceRegularization, actor_em
     """Approves or rejects an attendance regularization request."""
 
     action = WorkflowAction.APPROVE if approve else WorkflowAction.REJECT
+    previous_status = regularization.status
     regularization.status = RegularizationStatus.APPROVED if approve else RegularizationStatus.REJECTED
     regularization.manager_comment = comment if approve else regularization.manager_comment
     regularization.rejection_reason = "" if approve else comment
@@ -1177,4 +1178,30 @@ def resolve_regularization(*, regularization: AttendanceRegularization, actor_em
             fallback_body=f"Your attendance regularization was {'approved' if approve else 'rejected'}.",
             payload={"attendance_regularization_id": str(regularization.id), "status": regularization.status},
         )
+    from apps.common.selectors import record_saas_commercial_audit_event
+
+    actor_identifier = (
+        actor_employee.membership.user.username
+        if actor_employee and actor_employee.membership and actor_employee.membership.user
+        else actor_employee.employee_code
+        if actor_employee
+        else ""
+    )
+    record_saas_commercial_audit_event(
+        regularization.tenant,
+        event_type="attendance_regularization_approved" if approve else "attendance_regularization_rejected",
+        actor_identifier=actor_identifier,
+        source_ref="hrms.rbac.attendance_regularization.audit.v1",
+        event_snapshot={
+            "attendance_regularization_id": str(regularization.id),
+            "attendance_record_id": str(regularization.attendance_record_id),
+            "employee_id": str(regularization.employee_id),
+            "previous_status": previous_status,
+            "new_status": regularization.status,
+            "requested_status": regularization.requested_status,
+            "decision": "approved" if approve else "rejected",
+            "comment_present": bool(comment),
+            "workflow_reference": regularization.workflow_reference or "",
+        },
+    )
     return regularization

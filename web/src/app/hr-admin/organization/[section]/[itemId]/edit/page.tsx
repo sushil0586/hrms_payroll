@@ -10,6 +10,7 @@ import {
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminOrganizationFormOptions, getHrAdminOrganizationItem } from "@/lib/api";
 import type { HrAdminOrganizationItem } from "@/lib/types";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = {
   params: Promise<{
@@ -23,6 +24,10 @@ export default async function HrAdminEditOrganizationItemPage({ params }: PagePr
   if (!isOrganizationSectionKey(section)) {
     notFound();
   }
+  await requireSessionPermission({
+    permissionKeys: ["organization.manage"],
+    fallbackPath: `/hr-admin/organization?section=${section}&itemId=${itemId}`,
+  });
 
   const [itemResult, optionsResult] = await Promise.all([
     getHrAdminOrganizationItem(section, itemId),

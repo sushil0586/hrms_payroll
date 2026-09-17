@@ -5,10 +5,12 @@ import { AttendancePolicyAssignmentForm } from "@/app/hr-admin/attendance-policy
 import { attendancePolicyAssignmentToFormValue } from "@/app/hr-admin/attendance-policy-assignments/form-values";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendancePolicyAssignments, getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminEditAttendancePolicyAssignmentPage({ params }: PageProps) {
+  await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-policy-assignments" });
   const { itemId } = await params;
   const [itemsResult, optionsResult] = await Promise.all([getHrAdminAttendancePolicyAssignments(), getHrAdminPolicyOptions()]);
   const item = itemsResult.data.find((entry) => entry.id === itemId);

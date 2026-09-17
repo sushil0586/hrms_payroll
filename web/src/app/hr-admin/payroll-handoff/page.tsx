@@ -5,6 +5,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollFinanceHandoffSetup } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 import type {
   HrAdminPayrollFinanceHandoff,
@@ -1276,6 +1277,10 @@ function DeliveryLedger({
 }
 
 export default async function HrAdminPayrollHandoffPage({ searchParams }: PageProps) {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["finance.handoff.view", "finance.handoff.create"], fallbackPath: "/hr-admin" });
+  const canTransmitHandoff = sessionHasPermission(sessionUser, "finance.handoff.transmit");
+  const canAcknowledgeHandoff = sessionHasPermission(sessionUser, "finance.handoff.acknowledge");
+  const canGenerateAuditPack = sessionHasPermission(sessionUser, "finance.bank_advice.export");
   const currentParams = (await searchParams) ?? {};
   const selectedHandoffId = normalizeParam(currentParams.handoffId);
   const selectedArtifactId = normalizeParam(currentParams.artifactId);
@@ -1438,8 +1443,8 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   id: "transmit-handoff",
                   label: "Transmit handoff",
                   endpoint: selectedHandoff ? `/api/hr-admin/payroll-finance-handoffs/${selectedHandoff.id}/transmit` : "",
-                  disabled: !readiness.transmitReady,
-                  disabledReason: readiness.transmitReady ? "" : readiness.detail,
+                  disabled: !canTransmitHandoff || !readiness.transmitReady,
+                  disabledReason: !canTransmitHandoff ? "Requires finance.handoff.transmit." : readiness.transmitReady ? "" : readiness.detail,
                 },
                 {
                   id: "acknowledge-handoff",
@@ -1448,8 +1453,8 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   profileField: "acknowledgement_profile_ref",
                   profileLabel: "Acknowledgement profile ref",
                   defaultProfileRef: "tenant.payroll.finance.ack.v1",
-                  disabled: !readiness.acknowledgeReady,
-                  disabledReason: readiness.acknowledgeReady ? "" : readiness.detail,
+                  disabled: !canAcknowledgeHandoff || !readiness.acknowledgeReady,
+                  disabledReason: !canAcknowledgeHandoff ? "Requires finance.handoff.acknowledge." : readiness.acknowledgeReady ? "" : readiness.detail,
                 },
                 {
                   id: "generate-audit-pack",
@@ -1458,8 +1463,10 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   profileField: "audit_pack_profile_ref",
                   profileLabel: "Audit pack profile ref",
                   defaultProfileRef: "tenant.payroll.provider.audit.v1",
-                  disabled: !readiness.auditPackReady || auditPackArtifacts.length > 0,
-                  disabledReason: auditPackArtifacts.length > 0
+                  disabled: !canGenerateAuditPack || !readiness.auditPackReady || auditPackArtifacts.length > 0,
+                  disabledReason: !canGenerateAuditPack
+                    ? "Requires finance.bank_advice.export."
+                    : auditPackArtifacts.length > 0
                     ? "Provider audit evidence is already locked for this handoff."
                     : readiness.auditPackReady
                       ? ""

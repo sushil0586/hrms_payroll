@@ -3,8 +3,14 @@ import Link from "next/link";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentRequirements } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminDocumentRequirementsPage() {
+  const sessionUser = await requireSessionPermission({
+    permissionKeys: ["documents.view", "documents.manage"],
+    fallbackPath: "/hr-admin/documents",
+  });
+  const canManageDocuments = sessionHasPermission(sessionUser, "documents.manage");
   const result = await getHrAdminDocumentRequirements();
 
   return (
@@ -12,7 +18,7 @@ export default async function HrAdminDocumentRequirementsPage() {
       <PageIntro
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/document-requirements/new">Create requirement</Link>
+            {canManageDocuments ? <Link className="button button--primary" href="/hr-admin/document-requirements/new">Create requirement</Link> : null}
             <Link className="button button--secondary" href="/hr-admin/documents">Back to documents</Link>
           </>
         }
@@ -41,7 +47,7 @@ export default async function HrAdminDocumentRequirementsPage() {
                 </div>
                 <div className="record-card__actions">
                   <span className="record-chip">{item.is_mandatory ? "Mandatory" : "Optional"}</span>
-                  <Link className="button button--secondary" href={`/hr-admin/document-requirements/${item.id}/edit`}>Edit</Link>
+                  {canManageDocuments ? <Link className="button button--secondary" href={`/hr-admin/document-requirements/${item.id}/edit`}>Edit</Link> : null}
                 </div>
               </div>
               <div className="record-card__details">

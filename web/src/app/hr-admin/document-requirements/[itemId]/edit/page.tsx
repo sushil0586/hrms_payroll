@@ -4,11 +4,16 @@ import { documentRequirementToFormValue } from "@/app/hr-admin/document-requirem
 import { DocumentRequirementForm } from "@/app/hr-admin/document-requirements/document-requirement-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentOptions, getHrAdminDocumentRequirements } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminEditDocumentRequirementPage({ params }: PageProps) {
   const { itemId } = await params;
+  await requireSessionPermission({
+    permissionKeys: ["documents.manage"],
+    fallbackPath: "/hr-admin/document-requirements",
+  });
   const [itemsResult, optionsResult] = await Promise.all([getHrAdminDocumentRequirements(), getHrAdminDocumentOptions()]);
   const item = itemsResult.data.find((entry) => entry.id === itemId) ?? itemsResult.data[0];
 

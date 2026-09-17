@@ -1955,7 +1955,7 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
                 leave_policy=leave_request.leave_policy,
                 start_date=leave_request.start_date,
                 approved_units=leave_request.approved_units,
-            )
+        )
     if leave_request.employee.membership:
         fallback_body = (
             "Your leave cancellation was approved."
@@ -1982,4 +1982,32 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
             fallback_body=fallback_body,
             payload={"leave_request_id": str(leave_request.id), "status": leave_request.status},
         )
+    from apps.common.selectors import record_saas_commercial_audit_event
+
+    actor_identifier = (
+        actor_employee.membership.user.username
+        if actor_employee and actor_employee.membership and actor_employee.membership.user
+        else actor_employee.employee_code
+        if actor_employee
+        else ""
+    )
+    record_saas_commercial_audit_event(
+        leave_request.tenant,
+        event_type="leave_request_approved" if approve else "leave_request_rejected",
+        actor_identifier=actor_identifier,
+        source_ref="hrms.rbac.leave_approval.audit.v1",
+        event_snapshot={
+            "leave_request_id": str(leave_request.id),
+            "employee_id": str(leave_request.employee_id),
+            "leave_type_id": str(leave_request.leave_type_id),
+            "leave_policy_id": str(leave_request.leave_policy_id or ""),
+            "previous_status": previous_status,
+            "new_status": leave_request.status,
+            "request_action": request_action,
+            "approved_units": str(leave_request.approved_units or Decimal("0")),
+            "decision": "approved" if approve else "rejected",
+            "comment_present": bool(comment),
+            "workflow_reference": leave_request.workflow_reference or "",
+        },
+    )
     return leave_request

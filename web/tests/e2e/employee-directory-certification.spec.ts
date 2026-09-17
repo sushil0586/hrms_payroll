@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated } from "../helpers/staging-auth";
+import { gotoAuthenticated, tenantAdmin } from "../helpers/staging-auth";
 
 function directoryPanel(page: Page) {
   return page.locator(".queue-toolbar").filter({ has: page.getByRole("heading", { name: "Employee directory" }) }).first();
@@ -184,6 +184,93 @@ async function expectDirectoryPageCertified(page: Page) {
 }
 
 test.describe("Certification: HR admin employee directory", () => {
+  test("limited employee viewer role sees read-only HR Admin and receives backend denials", async ({ page }) => {
+    test.skip(!process.env.HRMS_API_BASE_URL, "Limited HR role proof requires a live HRMS API.");
+
+    await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);
+    await expectPageReady(page, "Roles & Permissions");
+
+    const suffix = Date.now();
+    const roleResponse = await page.request.post("/api/tenant-admin/roles", {
+      data: {
+        name: `QA Employee Viewer ${suffix}`,
+        code: `qa-employee-viewer-${suffix}`,
+        description: "Browser certification role with read-only employee access.",
+        is_active: true,
+        permission_keys: ["employees.view"],
+      },
+    });
+    expect(roleResponse.ok()).toBeTruthy();
+    const rolePayload = await roleResponse.json();
+    const roleId = rolePayload.role.id as string;
+
+    const username = `qa.hr.viewer.${suffix}`;
+    const inviteResponse = await page.request.post("/api/tenant-admin/memberships", {
+      data: {
+        username,
+        email: `${username}@example.com`,
+        first_name: "QA",
+        last_name: "HR Viewer",
+        membership_status: "active",
+        role_ids: [roleId],
+      },
+    });
+    expect(inviteResponse.ok()).toBeTruthy();
+    const invitePayload = await inviteResponse.json();
+    const generatedPassword = invitePayload.generated_password as string;
+    expect(generatedPassword).toBeTruthy();
+
+    await page.request.post("/api/auth/logout").catch(() => null);
+    await page.context().clearCookies();
+    await gotoAuthenticated(page, "/hr-admin/employees?page_size=5", { username, password: generatedPassword });
+    await expectPageReady(page, "Employees");
+
+    const navigation = page.getByRole("navigation");
+    await expect(navigation.getByRole("link", { name: /People/ })).toBeVisible();
+    await expect(navigation.getByRole("link", { name: /Payroll/ })).toHaveCount(0);
+    await expect(navigation.getByRole("link", { name: /Organization/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "New employee" })).toHaveCount(0);
+    await expect(page.getByTestId("employee-import-workbench")).toHaveCount(0);
+    await expect(page.getByTestId("employee-bank-import-workbench")).toHaveCount(0);
+    await expect(page.getByTestId("employee-manager-import-workbench")).toHaveCount(0);
+
+    const listResponse = await page.request.get("/api/hr-admin/employees");
+    expect(listResponse.ok()).toBeTruthy();
+    const employees = (await listResponse.json()) as Array<{ id: string }>;
+    expect(employees.length).toBeGreaterThan(0);
+
+    await directoryItems(page).first().click();
+    await expect(page).toHaveURL(/employeeId=/);
+    await expect(detailPanel(page).locator("details.action-menu")).toHaveCount(0);
+
+    await page.goto("/hr-admin/employees/new", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/hr-admin\/employees$/);
+    await expectPageReady(page, "Employees");
+
+    const blockedCreateResponse = await page.request.post("/api/hr-admin/employees", {
+      data: {
+        employee_code: `BLOCKED-BROWSER-${suffix}`,
+        first_name: "Blocked",
+        last_name: "Create",
+        work_email: `blocked.browser.${suffix}@example.com`,
+        employment_status: "active",
+      },
+    });
+    expect(blockedCreateResponse.status()).toBe(403);
+    expect(JSON.stringify(await blockedCreateResponse.json())).toContain("employees.create");
+
+    const blockedEditResponse = await page.request.patch(`/api/hr-admin/employees/${employees[0].id}`, {
+      data: { preferred_name: "Blocked Edit" },
+    });
+    expect(blockedEditResponse.status()).toBe(403);
+    expect(JSON.stringify(await blockedEditResponse.json())).toContain("employees.edit");
+
+    const blockedAccessResponse = await page.request.get(`/api/hr-admin/employees/${employees[0].id}/access`);
+    expect(blockedAccessResponse.status()).toBe(403);
+    expect(JSON.stringify(await blockedAccessResponse.json())).toContain("employees.access.manage");
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("reporting manager import validates commits and updates manager coverage", async ({ page }) => {
     test.setTimeout(5 * 60 * 1000);
     const suffix = String(Date.now()).slice(-6);

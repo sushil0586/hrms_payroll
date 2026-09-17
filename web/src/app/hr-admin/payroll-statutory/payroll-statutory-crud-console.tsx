@@ -960,7 +960,15 @@ function StatutoryProfileImportWorkbench({ setup }: { setup: HrAdminPayrollStatu
   );
 }
 
-export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: HrAdminPayrollStatutorySetupResponse }) {
+export function PayrollStatutoryCrudConsole({
+  canManageDeclarations,
+  canManageSetup,
+  initialSetup,
+}: {
+  canManageDeclarations: boolean;
+  canManageSetup: boolean;
+  initialSetup: HrAdminPayrollStatutorySetupResponse;
+}) {
   const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
   const [packForm, setPackForm] = useState<PackForm>(() => emptyPack(initialSetup));
@@ -1081,6 +1089,21 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
     }));
   }
 
+  if (!canManageSetup && !canManageDeclarations) {
+    return (
+      <section className="section section--tight salary-crud-console payroll-statutory-crud-console" aria-labelledby="statutory-crud-console-title">
+        <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+          <div>
+            <span className="workspace-card__eyebrow">Read only</span>
+            <h2 id="statutory-crud-console-title">Statutory setup controls</h2>
+            <p className="section-copy section-copy-soft">You can review statutory packs, filings, declarations, and evidence. Changes require statutory.setup.manage or statutory.declarations.manage.</p>
+          </div>
+          <span className="payroll-setup-count">{setup.packs.length + setup.statutory_components.length + setup.slabs.length + setup.employer_registrations.length + setup.filing_calendars.length + setup.employee_profiles.length + setup.declarations.length + setup.declaration_items.length} records</span>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="section section--tight salary-crud-console payroll-statutory-crud-console" aria-labelledby="statutory-crud-console-title">
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -1098,10 +1121,10 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
         </div>
       ) : null}
 
-      <StatutoryProfileImportWorkbench setup={setup} />
+      {canManageDeclarations ? <StatutoryProfileImportWorkbench setup={setup} /> : null}
 
       <div className="salary-crud-grid payroll-statutory-crud-grid">
-        <form aria-label="Statutory pack form" className="salary-crud-form" data-testid="statutory-pack-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Statutory pack form" className="salary-crud-form" data-testid="statutory-pack-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminPayrollStatutoryPack>("pack", "payroll-statutory-packs", packForm.id, {
             code: packForm.code,
@@ -1133,9 +1156,9 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
           </div>
           <RecordList label="Statutory pack records">{setup.packs.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setPackForm(packToForm(item))}><strong>{item.name}</strong><span>{item.code}</span></button>)}</RecordList>
           <button className="button button--primary" disabled={submitting === "pack"} type="submit">{submitting === "pack" ? "Saving..." : packForm.id ? "Save pack" : "Create pack"}</button>
-        </form>
+        </form> : null}
 
-        <form aria-label="Statutory component form" className="salary-crud-form" data-testid="statutory-component-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Statutory component form" className="salary-crud-form" data-testid="statutory-component-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminPayrollStatutoryComponent>("component", "payroll-statutory-components", componentForm.id, {
             statutory_pack_id: componentForm.statutory_pack_id,
@@ -1175,9 +1198,9 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
           </div>
           <RecordList label="Statutory component records">{setup.statutory_components.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setComponentForm(componentToForm(item))}><strong>{item.name}</strong><span>{item.code}</span></button>)}</RecordList>
           <button className="button button--primary" disabled={submitting === "component" || !packOptions.length} type="submit">{submitting === "component" ? "Saving..." : componentForm.id ? "Save component" : "Create component"}</button>
-        </form>
+        </form> : null}
 
-        <form aria-label="Statutory slab form" className="salary-crud-form" data-testid="statutory-slab-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Statutory slab form" className="salary-crud-form" data-testid="statutory-slab-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminPayrollStatutorySlab>("slab", "payroll-statutory-slabs", slabForm.id, {
             statutory_component_id: slabForm.statutory_component_id,
@@ -1221,9 +1244,9 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
           </div>
           <RecordList label="Statutory slab records">{setup.slabs.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setSlabForm(slabToForm(item))}><strong>{item.name}</strong><span>{item.code}</span></button>)}</RecordList>
           <button className="button button--primary" disabled={submitting === "slab" || !componentOptions.length} type="submit">{submitting === "slab" ? "Saving..." : slabForm.id ? "Save slab" : "Create slab"}</button>
-        </form>
+        </form> : null}
 
-        <form aria-label="Employer statutory registration form" className="salary-crud-form" data-testid="statutory-registration-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Employer statutory registration form" className="salary-crud-form" data-testid="statutory-registration-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminPayrollStatutoryEmployerRegistration>("registration", "payroll-statutory-employer-registrations", registrationForm.id, {
             statutory_pack_id: registrationForm.statutory_pack_id,
@@ -1269,9 +1292,9 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
           </div>
           <RecordList label="Employer statutory registration records">{setup.employer_registrations.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setRegistrationForm(registrationToForm(item))}><strong>{item.name}</strong><span>{item.code}</span></button>)}</RecordList>
           <button className="button button--primary" disabled={submitting === "registration" || !packOptions.length} type="submit">{submitting === "registration" ? "Saving..." : registrationForm.id ? "Save registration" : "Create registration"}</button>
-        </form>
+        </form> : null}
 
-        <form aria-label="Statutory filing calendar form" className="salary-crud-form" data-testid="statutory-filing-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Statutory filing calendar form" className="salary-crud-form" data-testid="statutory-filing-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminPayrollStatutoryFilingCalendar>("filing", "payroll-statutory-filing-calendars", filingForm.id, {
             statutory_pack_id: filingForm.statutory_pack_id,
@@ -1319,9 +1342,9 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
           </div>
           <RecordList label="Statutory filing calendar records">{setup.filing_calendars.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setFilingForm(filingToForm(item))}><strong>{item.name}</strong><span>{item.code}</span></button>)}</RecordList>
           <button className="button button--primary" disabled={submitting === "filing" || !packOptions.length} type="submit">{submitting === "filing" ? "Saving..." : filingForm.id ? "Save filing" : "Create filing"}</button>
-        </form>
+        </form> : null}
 
-        <form aria-label="Employee statutory profile form" className="salary-crud-form" data-testid="statutory-profile-form" onSubmit={(event) => {
+        {canManageDeclarations ? <form aria-label="Employee statutory profile form" className="salary-crud-form" data-testid="statutory-profile-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminEmployeeStatutoryProfile>("profile", "employee-statutory-profiles", profileForm.id, {
             employee_id: profileForm.employee_id,
@@ -1373,9 +1396,9 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
           </div>
           <RecordList label="Employee statutory profile records">{setup.employee_profiles.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setProfileForm(profileToForm(item))}><strong>{item.employee_name}</strong><span>{item.profile_ref}</span></button>)}</RecordList>
           <button className="button button--primary" disabled={submitting === "profile" || !employeeOptions.length} type="submit">{submitting === "profile" ? "Saving..." : profileForm.id ? "Save profile" : "Create profile"}</button>
-        </form>
+        </form> : null}
 
-        <form aria-label="Employee statutory declaration form" className="salary-crud-form" data-testid="statutory-declaration-form" onSubmit={(event) => {
+        {canManageDeclarations ? <form aria-label="Employee statutory declaration form" className="salary-crud-form" data-testid="statutory-declaration-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminEmployeeStatutoryDeclaration>("declaration", "employee-statutory-declarations", declarationForm.id, {
             employee_id: declarationForm.employee_id,
@@ -1417,9 +1440,9 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
           </div>
           <RecordList label="Employee statutory declaration records">{setup.declarations.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setDeclarationForm(declarationToForm(item))}><strong>{item.employee_name}</strong><span>{item.financial_year_code}</span></button>)}</RecordList>
           <button className="button button--primary" disabled={submitting === "declaration" || !employeeOptions.length || !profileOptions.length} type="submit">{submitting === "declaration" ? "Saving..." : declarationForm.id ? "Save declaration" : "Create declaration"}</button>
-        </form>
+        </form> : null}
 
-        <form aria-label="Employee statutory declaration item form" className="salary-crud-form" data-testid="statutory-declaration-item-form" onSubmit={(event) => {
+        {canManageDeclarations ? <form aria-label="Employee statutory declaration item form" className="salary-crud-form" data-testid="statutory-declaration-item-form" onSubmit={(event) => {
           event.preventDefault();
           const path = itemForm.id ? "employee-statutory-declaration-items" : `employee-statutory-declarations/${itemForm.declaration_id}/items`;
           void save<HrAdminEmployeeStatutoryDeclarationItem>("item", path, itemForm.id, {
@@ -1458,7 +1481,7 @@ export function PayrollStatutoryCrudConsole({ initialSetup }: { initialSetup: Hr
           </div>
           <RecordList label="Employee statutory declaration item records">{setup.declaration_items.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setItemForm(itemToForm(item))}><strong>{item.name}</strong><span>{item.section_code}</span></button>)}</RecordList>
           <button className="button button--primary" disabled={submitting === "item" || !declarationOptions.length} type="submit">{submitting === "item" ? "Saving..." : itemForm.id ? "Save declaration item" : "Create declaration item"}</button>
-        </form>
+        </form> : null}
       </div>
     </section>
   );

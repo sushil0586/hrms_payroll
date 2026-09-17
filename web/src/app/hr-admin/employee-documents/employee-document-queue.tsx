@@ -29,6 +29,9 @@ type Props = {
     has_next: boolean;
     has_previous: boolean;
   };
+  canVerifyDocuments: boolean;
+  canExportDocuments: boolean;
+  canManageDocuments: boolean;
 };
 
 function formatFileSize(fileSizeBytes: number) {
@@ -60,6 +63,9 @@ export function EmployeeDocumentQueue({
   categories,
   currentFilters,
   pagination,
+  canVerifyDocuments,
+  canExportDocuments,
+  canManageDocuments,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -196,18 +202,23 @@ export function EmployeeDocumentQueue({
             setActionNotice("");
             router.push(pathname);
           }} type="button">Clear filters</button>
-          <button className="button button--secondary" disabled={actionableItems.length === 0} onClick={toggleActionablePage} type="button">
-            {allActionableSelected ? "Clear selection" : "Select page"}
-          </button>
-          <button className="button button--secondary" disabled={isSubmittingReminder || selectedIds.length === 0} onClick={sendReminder} type="button">
-            {isSubmittingReminder ? "Sending..." : `Send reminder (${selectedIds.length || 0})`}
-          </button>
+          {canManageDocuments ? (
+            <>
+              <button className="button button--secondary" disabled={actionableItems.length === 0} onClick={toggleActionablePage} type="button">
+                {allActionableSelected ? "Clear selection" : "Select page"}
+              </button>
+              <button className="button button--secondary" disabled={isSubmittingReminder || selectedIds.length === 0} onClick={sendReminder} type="button">
+                {isSubmittingReminder ? "Sending..." : `Send reminder (${selectedIds.length || 0})`}
+              </button>
+            </>
+          ) : null}
         </div>
         <div className="queue-toolbar__summary">
           <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> shared state</span>
           <span className="queue-summary-chip"><strong>{verificationStatusOptions.length}</strong> verification outcomes</span>
           <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
         </div>
+        {!canManageDocuments ? <div className="notice"><strong>Read-only document queue.</strong><span className="muted">Reminder actions require documents.manage.</span></div> : null}
         {actionNotice ? <div className="notice"><strong>Reminder action complete.</strong><span className="muted">{actionNotice}</span></div> : null}
         {actionError ? <div className="notice"><strong>Reminder action failed.</strong><span className="muted">{actionError}</span></div> : null}
       </section>
@@ -238,8 +249,8 @@ export function EmployeeDocumentQueue({
                 <p className="section-copy section-copy-soft">{item.employee_name} ({item.employee_code}) • Uploaded by {item.uploaded_by_identifier || "Unknown"}</p>
               </div>
               <div className="record-card__actions">
-                {item.artifact_id ? <Link className="button button--ghost" href={`/api/hr-admin/employee-documents/${item.id}/download`}>Download</Link> : null}
-                <Link className="button button--secondary" href={`/hr-admin/employee-documents/${item.id}/review`}>Review</Link>
+                {canExportDocuments && item.artifact_id ? <Link className="button button--ghost" href={`/api/hr-admin/employee-documents/${item.id}/download`}>Download</Link> : null}
+                {canVerifyDocuments ? <Link className="button button--secondary" href={`/hr-admin/employee-documents/${item.id}/review`}>Review</Link> : null}
               </div>
             </div>
             <div className="detail-grid">
@@ -255,7 +266,7 @@ export function EmployeeDocumentQueue({
               <div className="detail-row"><span className="detail-label">Review steps</span><span className="detail-value">{item.review_history.length}</span></div>
             </div>
             {item.rejection_reason ? <div className="notice"><strong>Latest review note.</strong><span className="muted">{item.rejection_reason}</span></div> : null}
-            <EmployeeDocumentInlineReview item={item} verificationStatusOptions={verificationStatusOptions} />
+            {canVerifyDocuments ? <EmployeeDocumentInlineReview item={item} verificationStatusOptions={verificationStatusOptions} /> : null}
           </article>
         ))}
         {items.length === 0 ? (

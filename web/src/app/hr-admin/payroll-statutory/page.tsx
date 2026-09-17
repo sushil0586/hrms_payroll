@@ -4,6 +4,7 @@ import Link from "next/link";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollStatutorySetup } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import type {
   HrAdminEmployeeStatutoryDeclaration,
   HrAdminEmployeeStatutoryDeclarationItem,
@@ -446,6 +447,12 @@ function PackSummary({ pack }: { pack: HrAdminPayrollStatutoryPack | null }) {
 }
 
 export default async function HrAdminPayrollStatutoryPage({ searchParams }: PageProps) {
+  const sessionUser = await requireSessionPermission({
+    permissionKeys: ["statutory.setup.view", "statutory.setup.manage", "statutory.declarations.view", "statutory.declarations.manage"],
+    fallbackPath: "/hr-admin",
+  });
+  const canManageStatutorySetup = sessionHasPermission(sessionUser, "statutory.setup.manage");
+  const canManageStatutoryDeclarations = sessionHasPermission(sessionUser, "statutory.declarations.manage");
   const currentParams = (await searchParams) ?? {};
   const selectedDeclarationId = normalizeParam(currentParams.declarationId);
   const result = await getHrAdminPayrollStatutorySetup();
@@ -564,7 +571,11 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
         <DeclarationDetail declaration={selectedDeclaration} profile={selectedProfile} proofItems={selectedProofItems} />
       </section>
 
-      <PayrollStatutoryCrudConsole initialSetup={setup} />
+      <PayrollStatutoryCrudConsole
+        canManageDeclarations={canManageStatutoryDeclarations}
+        canManageSetup={canManageStatutorySetup}
+        initialSetup={setup}
+      />
     </main>
   );
 }

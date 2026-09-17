@@ -3,8 +3,13 @@ import Link from "next/link";
 import { EmployeeDocumentUploadForm } from "@/app/hr-admin/employee-documents/employee-document-upload-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentOptions, getHrAdminEmployees } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewEmployeeDocumentPage() {
+  await requireSessionPermission({
+    permissionKeys: ["documents.manage"],
+    fallbackPath: "/hr-admin/employee-documents",
+  });
   const [optionsResult, employeesResult] = await Promise.all([
     getHrAdminDocumentOptions(),
     getHrAdminEmployees(),

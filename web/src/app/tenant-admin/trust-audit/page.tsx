@@ -2,8 +2,8 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getSessionUser, getTenantAdminTrustAuditReview } from "@/lib/api";
-import { sessionHasPermission } from "@/lib/workspace-access";
+import { getTenantAdminTrustAuditReview } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -65,18 +65,20 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
   const supportSessionRef = normalizeParam(currentParams.support_session_ref) || "";
   const page = normalizePositiveNumber(currentParams.page, 1, 10_000);
   const pageSize = normalizePositiveNumber(currentParams.page_size, 12, 50);
-  const [result, sessionUser] = await Promise.all([
-    getTenantAdminTrustAuditReview({
-      event_group: eventGroup,
-      event_type: eventType,
-      actor,
-      source_ref: sourceRef,
-      support_session_ref: supportSessionRef,
-      page,
-      page_size: pageSize,
-    }),
-    getSessionUser(),
-  ]);
+  const sessionUser = await requireSessionPermission({
+    permissionKeys: ["tenant.audit.view", "tenant.audit.export"],
+    workspace: "tenant_admin",
+    fallbackPath: "/tenant-admin",
+  });
+  const result = await getTenantAdminTrustAuditReview({
+    event_group: eventGroup,
+    event_type: eventType,
+    actor,
+    source_ref: sourceRef,
+    support_session_ref: supportSessionRef,
+    page,
+    page_size: pageSize,
+  });
   const data = result.data;
   const canExportAudit = sessionHasPermission(sessionUser, "tenant.audit.export");
   const basePageQuery = {

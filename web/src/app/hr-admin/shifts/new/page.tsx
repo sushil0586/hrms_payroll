@@ -3,8 +3,10 @@ import Link from "next/link";
 import { ShiftForm } from "@/app/hr-admin/shifts/shift-form";
 import { createEmptyShiftValue } from "@/app/hr-admin/shifts/form-values";
 import { PageIntro } from "@/components/patterns/page-intro";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
-export default function HrAdminNewShiftPage() {
+export default async function HrAdminNewShiftPage() {
+  await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/shifts" });
   return (
     <main className="shell">
       <PageIntro

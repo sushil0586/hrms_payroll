@@ -7,10 +7,12 @@ import {
   getHrAdminAttendanceOperationOptions,
   getHrAdminAttendanceRecord,
 } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminEditAttendanceRecordPage({ params }: PageProps) {
+  await requireSessionPermission({ permissionKeys: ["attendance.records.manage"], fallbackPath: "/hr-admin/attendance-records" });
   const { itemId } = await params;
   const [itemResult, optionsResult] = await Promise.all([
     getHrAdminAttendanceRecord(itemId),

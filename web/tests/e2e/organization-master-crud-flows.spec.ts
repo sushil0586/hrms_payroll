@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated } from "../helpers/staging-auth";
+import { gotoAuthenticated, tenantAdmin } from "../helpers/staging-auth";
 
 type SectionKey =
   | "legal_entities"
@@ -427,6 +427,87 @@ async function runSectionCrud(page: Page, section: SectionConfig) {
 }
 
 test.describe("HR admin organization master CRUD", () => {
+  test("limited organization viewer role sees read-only masters and receives backend denials", async ({ page }) => {
+    test.skip(!process.env.HRMS_API_BASE_URL, "Limited organization role proof requires a live HRMS API.");
+
+    await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);
+    await expectPageReady(page, "Roles & Permissions");
+
+    const suffix = Date.now();
+    const roleResponse = await page.request.post("/api/tenant-admin/roles", {
+      data: {
+        name: `QA Organization Viewer ${suffix}`,
+        code: `qa-organization-viewer-${suffix}`,
+        description: "Browser certification role with read-only organization access.",
+        is_active: true,
+        permission_keys: ["organization.view"],
+      },
+    });
+    expect(roleResponse.ok()).toBeTruthy();
+    const rolePayload = await roleResponse.json();
+    const roleId = rolePayload.role.id as string;
+
+    const username = `qa.org.viewer.${suffix}`;
+    const inviteResponse = await page.request.post("/api/tenant-admin/memberships", {
+      data: {
+        username,
+        email: `${username}@example.com`,
+        first_name: "QA",
+        last_name: "Org Viewer",
+        membership_status: "active",
+        role_ids: [roleId],
+      },
+    });
+    expect(inviteResponse.ok()).toBeTruthy();
+    const invitePayload = await inviteResponse.json();
+    const generatedPassword = invitePayload.generated_password as string;
+    expect(generatedPassword).toBeTruthy();
+
+    await page.request.post("/api/auth/logout").catch(() => null);
+    await page.context().clearCookies();
+    await gotoAuthenticated(page, "/hr-admin/organization?section=departments", { username, password: generatedPassword });
+    await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+
+    const navigation = page.getByRole("navigation");
+    await expect(navigation.getByRole("link", { name: /Organization/ })).toBeVisible();
+    await expect(navigation.getByRole("link", { name: /People/ })).toHaveCount(0);
+    await expect(navigation.getByRole("link", { name: /Payroll/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /^Create / })).toHaveCount(0);
+    await expect(page.getByTestId("organization-import-workbench")).toHaveCount(0);
+    await expect(page.locator(".employee-directory-item").first()).toBeVisible();
+    await expect(page.locator(".employee-directory-item").first().getByRole("link", { name: "Edit" })).toHaveCount(0);
+
+    const snapshotResponse = await page.request.get("/api/hr-admin/organization");
+    expect(snapshotResponse.ok()).toBeTruthy();
+    const snapshot = (await snapshotResponse.json()) as { departments: Array<{ id: string; code: string }> };
+    expect(snapshot.departments.length).toBeGreaterThan(0);
+    const department = snapshot.departments[0];
+
+    const detailResponse = await page.request.get(`/api/hr-admin/organization/departments/${department.id}`);
+    expect(detailResponse.ok()).toBeTruthy();
+
+    await page.goto("/hr-admin/organization/departments/new", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/hr-admin\/organization\?section=departments$/);
+    await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+
+    const blockedCreateResponse = await page.request.post("/api/hr-admin/organization/departments", {
+      data: {
+        code: `BLOCKED-ORG-${suffix}`,
+        name: `Blocked Org ${suffix}`,
+        is_active: true,
+      },
+    });
+    expect(blockedCreateResponse.status()).toBe(403);
+    expect(JSON.stringify(await blockedCreateResponse.json())).toContain("organization.manage");
+
+    const blockedEditResponse = await page.request.patch(`/api/hr-admin/organization/departments/${department.id}`, {
+      data: { name: `Blocked Org Edit ${suffix}` },
+    });
+    expect(blockedEditResponse.status()).toBe(403);
+    expect(JSON.stringify(await blockedEditResponse.json())).toContain("organization.manage");
+    await expectNoHorizontalOverflow(page);
+  });
+
   for (const section of sections) {
     test(`${section.singular} page supports granular browser CRUD`, async ({ page }) => {
       test.setTimeout(5 * 60 * 1000);

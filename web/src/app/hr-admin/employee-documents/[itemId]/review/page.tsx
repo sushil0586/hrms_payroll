@@ -4,11 +4,16 @@ import { employeeDocumentToFormValue } from "@/app/hr-admin/employee-documents/f
 import { EmployeeDocumentReviewForm } from "@/app/hr-admin/employee-documents/employee-document-review-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentOptions, getHrAdminEmployeeDocument } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminEmployeeDocumentReviewPage({ params }: PageProps) {
   const { itemId } = await params;
+  await requireSessionPermission({
+    permissionKeys: ["documents.verify"],
+    fallbackPath: "/hr-admin/employee-documents",
+  });
   const [documentResult, optionsResult] = await Promise.all([getHrAdminEmployeeDocument(itemId), getHrAdminDocumentOptions()]);
 
   return (

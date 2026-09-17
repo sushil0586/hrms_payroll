@@ -4,10 +4,12 @@ import { HolidayCalendarForm } from "@/app/hr-admin/holiday-calendars/holiday-ca
 import { holidayCalendarToFormValue } from "@/app/hr-admin/holiday-calendars/form-values";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendanceOperationOptions, getHrAdminHolidayCalendar } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminEditHolidayCalendarPage({ params }: PageProps) {
+  await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/holiday-calendars" });
   const { itemId } = await params;
   const [itemResult, optionsResult] = await Promise.all([
     getHrAdminHolidayCalendar(itemId),

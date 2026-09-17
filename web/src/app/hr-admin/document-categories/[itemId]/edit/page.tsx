@@ -4,11 +4,16 @@ import { documentCategoryToFormValue } from "@/app/hr-admin/document-categories/
 import { DocumentCategoryForm } from "@/app/hr-admin/document-categories/document-category-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentCategory, getHrAdminDocumentOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminEditDocumentCategoryPage({ params }: PageProps) {
   const { itemId } = await params;
+  await requireSessionPermission({
+    permissionKeys: ["documents.manage"],
+    fallbackPath: "/hr-admin/document-categories",
+  });
   const [itemResult, optionsResult] = await Promise.all([getHrAdminDocumentCategory(itemId), getHrAdminDocumentOptions()]);
 
   return (

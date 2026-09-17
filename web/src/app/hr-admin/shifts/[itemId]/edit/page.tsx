@@ -4,10 +4,12 @@ import { ShiftForm } from "@/app/hr-admin/shifts/shift-form";
 import { getHrAdminShift } from "@/lib/api";
 import { shiftToFormValue } from "@/app/hr-admin/shifts/form-values";
 import { PageIntro } from "@/components/patterns/page-intro";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminEditShiftPage({ params }: PageProps) {
+  await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/shifts" });
   const { itemId } = await params;
   const result = await getHrAdminShift(itemId);
 

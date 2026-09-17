@@ -3,6 +3,7 @@ import Link from "next/link";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminConsole } from "@/lib/api";
+import { requireSessionPermission, sessionHasAnyPermission } from "@/lib/workspace-access";
 
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (match) => match.toUpperCase());
@@ -57,6 +58,11 @@ function setupStepBadgeClass(status: "done" | "action" | "watch") {
 }
 
 export default async function TenantAdminConsolePage() {
+  const sessionUser = await requireSessionPermission({
+    permissionKeys: ["tenant.dashboard.view"],
+    workspace: "tenant_admin",
+    fallbackPath: "/",
+  });
   const result = await getTenantAdminConsole();
   const data = result.data;
   const commercial = data.commercial_control;
@@ -72,6 +78,7 @@ export default async function TenantAdminConsolePage() {
       status: data.tenant.legal_name && data.tenant.country_code && data.tenant.timezone ? "done" : "action",
       href: "/tenant-admin/settings",
       action: "Review account",
+      permissions: ["tenant.settings.view"],
     },
     {
       label: "Invite workspace owners",
@@ -79,6 +86,7 @@ export default async function TenantAdminConsolePage() {
       status: data.summary.active_membership_count > 1 ? "done" : "action",
       href: "/tenant-admin/users",
       action: "Manage users",
+      permissions: ["tenant.users.view", "tenant.users.manage"],
     },
     {
       label: "Resolve launch checks",
@@ -86,6 +94,7 @@ export default async function TenantAdminConsolePage() {
       status: blockers.length ? "action" : warnings.length ? "watch" : "done",
       href: "/tenant-admin/security-readiness",
       action: "Open security",
+      permissions: ["tenant.security.view"],
     },
     {
       label: "Publish operating configuration",
@@ -93,6 +102,7 @@ export default async function TenantAdminConsolePage() {
       status: data.configuration_health.published_count ? "done" : "action",
       href: "/tenant-admin/setup",
       action: "Open setup",
+      permissions: ["tenant.setup.view"],
     },
     {
       label: "Validate audit evidence",
@@ -100,9 +110,12 @@ export default async function TenantAdminConsolePage() {
       status: data.recent_audit_events.length ? "done" : "watch",
       href: "/tenant-admin/trust-audit",
       action: "Open audit",
+      permissions: ["tenant.audit.view", "tenant.audit.export"],
     },
   ] as const;
+  const visibleSetupSteps = setupSteps.filter((step) => sessionHasAnyPermission(sessionUser, [...step.permissions]));
   const setupDoneCount = setupSteps.filter((step) => step.status === "done").length;
+  const visibleSetupDoneCount = visibleSetupSteps.filter((step) => step.status === "done").length;
   const setupCompletion = Math.round((setupDoneCount / setupSteps.length) * 100);
   const controlCards = [
     {
@@ -111,6 +124,7 @@ export default async function TenantAdminConsolePage() {
       detail: `${data.summary.role_count} roles configured`,
       href: "/tenant-admin/users",
       action: "Manage users",
+      permissions: ["tenant.users.view", "tenant.users.manage"],
     },
     {
       label: "Plan",
@@ -118,6 +132,7 @@ export default async function TenantAdminConsolePage() {
       detail: `${data.seat_usage.current_value}/${data.seat_usage.limit_value || "unlimited"} seats`,
       href: "/tenant-admin/plan",
       action: "Review plan",
+      permissions: ["tenant.plan.view"],
     },
     {
       label: "Support",
@@ -125,6 +140,7 @@ export default async function TenantAdminConsolePage() {
       detail: activeSupportGrants ? "Active or pending grants" : "No active support grants",
       href: "/tenant-admin/support-access",
       action: "Open support",
+      permissions: ["tenant.support_access.request", "tenant.support_access.approve"],
     },
     {
       label: "Audit",
@@ -132,9 +148,18 @@ export default async function TenantAdminConsolePage() {
       detail: `Last event ${formatDateTime(lastAudit)}`,
       href: "/tenant-admin/trust-audit",
       action: "Review audit",
+      permissions: ["tenant.audit.view", "tenant.audit.export"],
     },
   ];
-  const nextStep = setupSteps.find((step) => step.status === "action") ?? setupSteps.find((step) => step.status === "watch") ?? setupSteps[0];
+  const visibleControlCards = controlCards.filter((item) => sessionHasAnyPermission(sessionUser, item.permissions));
+  const nextStep =
+    visibleSetupSteps.find((step) => step.status === "action") ??
+    visibleSetupSteps.find((step) => step.status === "watch") ??
+    visibleSetupSteps[0];
+  const canOpenSetup = sessionHasAnyPermission(sessionUser, ["tenant.setup.view"]);
+  const canOpenUsers = sessionHasAnyPermission(sessionUser, ["tenant.users.view", "tenant.users.manage"]);
+  const canExportAudit = sessionHasAnyPermission(sessionUser, ["tenant.audit.export"]);
+  const canReviewBlockers = sessionHasAnyPermission(sessionUser, ["tenant.security.view"]);
 
   return (
     <main className="shell shell--workspace">
@@ -145,15 +170,21 @@ export default async function TenantAdminConsolePage() {
         className="page-header-surface page-header-surface--compact"
         actions={
           <>
-            <Link className="button button--primary" href="/tenant-admin/setup">
-              Continue setup
-            </Link>
-            <Link className="button button--secondary" href="/tenant-admin/users">
-              Manage users
-            </Link>
-            <a className="button button--secondary" href="/api/tenant-admin/commercial-support-audit/download">
-              Download audit
-            </a>
+            {canOpenSetup ? (
+              <Link className="button button--primary" href="/tenant-admin/setup">
+                Continue setup
+              </Link>
+            ) : null}
+            {canOpenUsers ? (
+              <Link className="button button--secondary" href="/tenant-admin/users">
+                Manage users
+              </Link>
+            ) : null}
+            {canExportAudit ? (
+              <a className="button button--secondary" href="/api/tenant-admin/commercial-support-audit/download">
+                Download audit
+              </a>
+            ) : null}
           </>
         }
         pills={[data.tenant.code, commercial.plan.edition, commercial.subscription.status]}
@@ -192,13 +223,13 @@ export default async function TenantAdminConsolePage() {
           <div className="tenant-next-action" data-testid="tenant-next-action">
             <div>
               <span>Next action</span>
-              <strong>{nextStep.label}</strong>
-              <p>{nextStep.detail}</p>
+              <strong>{nextStep?.label ?? "No pending action"}</strong>
+              <p>{nextStep?.detail ?? "You have view access to this tenant dashboard."}</p>
             </div>
-            <Link className="button button--primary" href={nextStep.href}>{nextStep.action}</Link>
+            {nextStep ? <Link className="button button--primary" href={nextStep.href}>{nextStep.action}</Link> : null}
           </div>
           <div className="tenant-control-action-list">
-            {controlCards.map((item) => (
+            {visibleControlCards.map((item) => (
               <div className="tenant-control-action" key={item.label}>
                 <div>
                   <strong>{item.label}</strong>
@@ -239,7 +270,7 @@ export default async function TenantAdminConsolePage() {
           </div>
           <div className="form-actions-bar">
             <span className="muted">Open each focused page to complete account, access, support, and evidence tasks.</span>
-            <Link className="button button--primary" href="/tenant-admin/security-readiness">Review blockers</Link>
+            {canReviewBlockers ? <Link className="button button--primary" href="/tenant-admin/security-readiness">Review blockers</Link> : null}
           </div>
         </article>
       </section>
@@ -257,11 +288,11 @@ export default async function TenantAdminConsolePage() {
           </div>
           <div className="tenant-setup-guide__body">
             <div className="tenant-setup-guide__summary">
-              <strong>{setupDoneCount} of {setupSteps.length} launch steps complete</strong>
-              <span>Each action opens the focused page where that responsibility belongs.</span>
+              <strong>{visibleSetupDoneCount} of {visibleSetupSteps.length} visible launch steps complete</strong>
+              <span>Each action opens the focused page where your role has access.</span>
             </div>
             <div className="tenant-setup-step-list">
-              {setupSteps.map((step, index) => (
+              {visibleSetupSteps.map((step, index) => (
                 <div className="tenant-setup-step" key={step.label}>
                   <div className="tenant-setup-step__index">{index + 1}</div>
                   <div>

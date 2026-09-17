@@ -44,6 +44,11 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
   const [error, setError] = useState("");
 
   async function runAction(action: PayrollAction) {
+    if (action.disabled || !action.endpoint) {
+      setMessage("");
+      setError(action.disabledReason || "This action is not available for your current role.");
+      return;
+    }
     setMessage("");
     setError("");
     setBusyAction(action.id);
@@ -91,6 +96,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
                   <span className="muted">{action.profileLabel ?? "Profile ref"}</span>
                   <input
                     className="input-control"
+                    disabled={Boolean(action.disabled)}
                     id={`${action.id}-profile-ref`}
                     name={action.profileField}
                     onChange={(event) => setProfileRefs((current) => ({ ...current, [action.id]: event.target.value }))}
@@ -107,6 +113,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
                   <span className="muted">{action.commentLabel ?? "Comment"}</span>
                   <textarea
                     className="input-control"
+                    disabled={Boolean(action.disabled)}
                     id={`${action.id}-comment`}
                     name={action.commentField}
                     onChange={(event) => setComments((current) => ({ ...current, [action.id]: event.target.value }))}

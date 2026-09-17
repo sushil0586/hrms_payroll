@@ -3,6 +3,7 @@ import Link from "next/link";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getTenantAdminConsole } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (match) => match.toUpperCase());
@@ -19,6 +20,11 @@ function badgeClass(status: "ready" | "warning" | "blocked") {
 }
 
 export default async function TenantSetupGuidePage() {
+  await requireSessionPermission({
+    permissionKeys: ["tenant.setup.view"],
+    workspace: "tenant_admin",
+    fallbackPath: "/tenant-admin",
+  });
   const result = await getTenantAdminConsole();
   const data = result.data;
   const blockers = data.governance_checks.filter((check) => check.status === "blocked");

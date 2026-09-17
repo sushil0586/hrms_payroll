@@ -41,6 +41,40 @@ export function sessionHasAnyPermission(sessionUser: SessionUser | null, permiss
   return permissionKeys.some((permissionKey) => sessionHasPermission(sessionUser, permissionKey));
 }
 
+type RequireSessionPermissionOptions = {
+  permissionKeys: string[];
+  workspace?: keyof SessionUser["workspace_access"];
+  loginPath?: string;
+  fallbackPath?: string;
+};
+
+export async function requireSessionPermission({
+  permissionKeys,
+  workspace,
+  loginPath = "/login",
+  fallbackPath = "/",
+}: RequireSessionPermissionOptions) {
+  const sessionUser = await getSessionUser();
+
+  if (!sessionUser && DEMO_DATA_ENABLED && !API_BASE_URL) {
+    return null;
+  }
+
+  if (!sessionUser) {
+    redirect(loginPath);
+  }
+
+  if (workspace && !sessionCanAccessWorkspace(sessionUser, workspace)) {
+    redirect(fallbackPath);
+  }
+
+  if (!sessionHasAnyPermission(sessionUser, permissionKeys)) {
+    redirect(fallbackPath);
+  }
+
+  return sessionUser;
+}
+
 type RequireWorkspaceAccessOptions = {
   roleCodes?: string[];
   workspace?: keyof SessionUser["workspace_access"];

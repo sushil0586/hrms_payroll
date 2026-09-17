@@ -2,8 +2,8 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getSessionUser, getTenantAdminConsole } from "@/lib/api";
-import { sessionHasPermission } from "@/lib/workspace-access";
+import { getTenantAdminConsole } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TenantChangeRequestActions } from "../tenant-change-request-actions";
 
 function titleCase(value: string) {
@@ -35,7 +35,12 @@ function firstParam(value: string | string[] | undefined) {
 }
 
 export default async function TenantAdminPlanPage({ searchParams }: Props) {
-  const [result, sessionUser] = await Promise.all([getTenantAdminConsole(), getSessionUser()]);
+  const sessionUser = await requireSessionPermission({
+    permissionKeys: ["tenant.plan.view"],
+    workspace: "tenant_admin",
+    fallbackPath: "/tenant-admin",
+  });
+  const result = await getTenantAdminConsole();
   const data = result.data;
   const commercial = data.commercial_control;
   const params = (await searchParams) ?? {};

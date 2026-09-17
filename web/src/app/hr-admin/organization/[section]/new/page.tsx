@@ -9,6 +9,7 @@ import {
 } from "@/app/hr-admin/organization/section-config";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminOrganizationFormOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = {
   params: Promise<{
@@ -21,6 +22,10 @@ export default async function HrAdminNewOrganizationItemPage({ params }: PagePro
   if (!isOrganizationSectionKey(section)) {
     notFound();
   }
+  await requireSessionPermission({
+    permissionKeys: ["organization.manage"],
+    fallbackPath: `/hr-admin/organization?section=${section}`,
+  });
 
   const optionsResult = await getHrAdminOrganizationFormOptions();
   const sectionMeta = ORGANIZATION_SECTION_CONFIG[section];

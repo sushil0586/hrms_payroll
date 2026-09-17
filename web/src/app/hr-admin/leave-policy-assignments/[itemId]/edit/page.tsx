@@ -5,10 +5,12 @@ import { leavePolicyAssignmentToFormValue } from "@/app/hr-admin/leave-policy-as
 import { LeavePolicyAssignmentForm } from "@/app/hr-admin/leave-policy-assignments/leave-policy-assignment-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLeavePolicyAssignments, getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
 export default async function HrAdminEditLeavePolicyAssignmentPage({ params }: PageProps) {
+  await requireSessionPermission({ permissionKeys: ["leave.policies.manage"], fallbackPath: "/hr-admin/leave-policy-assignments" });
   const { itemId } = await params;
   const [itemsResult, optionsResult] = await Promise.all([getHrAdminLeavePolicyAssignments(), getHrAdminPolicyOptions()]);
   const item = itemsResult.data.find((entry) => entry.id === itemId);

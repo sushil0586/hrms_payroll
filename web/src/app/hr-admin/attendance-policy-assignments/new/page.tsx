@@ -4,8 +4,10 @@ import { AttendancePolicyAssignmentForm } from "@/app/hr-admin/attendance-policy
 import { createEmptyAttendancePolicyAssignmentValue } from "@/app/hr-admin/attendance-policy-assignments/form-values";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewAttendancePolicyAssignmentPage() {
+  await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-policy-assignments" });
   const optionsResult = await getHrAdminPolicyOptions();
 
   return (

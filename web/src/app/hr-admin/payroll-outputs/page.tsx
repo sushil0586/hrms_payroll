@@ -5,6 +5,7 @@ import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollOutputSetup } from "@/lib/api";
 import type { HrAdminPayrollOutputArtifact, HrAdminPayrollOutputBatch } from "@/lib/types";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 
 type SearchParamValue = string | string[] | undefined;
@@ -250,6 +251,9 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
 }
 
 export default async function HrAdminPayrollOutputsPage({ searchParams }: PageProps) {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["payroll.outputs.view", "payroll.outputs.publish"], fallbackPath: "/hr-admin" });
+  const canPublishOutputs = sessionHasPermission(sessionUser, "payroll.outputs.publish");
+  const canGenerateHandoff = sessionHasPermission(sessionUser, "finance.handoff.create");
   const currentParams = (await searchParams) ?? {};
   const selectedBatchId = normalizeParam(currentParams.batchId);
   const selectedArtifactId = normalizeParam(currentParams.artifactId);
@@ -379,8 +383,8 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   id: "publish-outputs",
                   label: "Publish outputs",
                   endpoint: selectedBatch ? `/api/hr-admin/payroll-output-batches/${selectedBatch.id}/publish` : "",
-                  disabled: !selectedBatch,
-                  disabledReason: "Select an output batch first.",
+                  disabled: !canPublishOutputs || !selectedBatch,
+                  disabledReason: !canPublishOutputs ? "Requires payroll.outputs.publish." : "Select an output batch first.",
                 },
                 {
                   id: "generate-finance-handoff",
@@ -389,8 +393,8 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   profileField: "handoff_profile_ref",
                   profileLabel: "Handoff profile ref",
                   defaultProfileRef: "tenant.payroll.finance.handoff.v1",
-                  disabled: !selectedBatch,
-                  disabledReason: "Select an output batch first.",
+                  disabled: !canGenerateHandoff || !selectedBatch,
+                  disabledReason: !canGenerateHandoff ? "Requires finance.handoff.create." : "Select an output batch first.",
                 },
               ]}
             />

@@ -4,8 +4,11 @@ import { LeaveBalanceOperations } from "@/app/hr-admin/leave-balances/leave-bala
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLeaveBalances, getHrAdminLeaveBalanceTransactions, getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminLeaveBalancesPage() {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view"], fallbackPath: "/hr-admin" });
+  const canManageBalances = sessionHasPermission(sessionUser, "leave.balances.manage");
   const [balancesResult, transactionsResult, optionsResult] = await Promise.all([
     getHrAdminLeaveBalances(),
     getHrAdminLeaveBalanceTransactions(),
@@ -46,6 +49,7 @@ export default async function HrAdminLeaveBalancesPage() {
         initialBalances={balancesResult.data}
         initialTransactions={transactionsResult.data}
         options={optionsResult.data}
+        canManageBalances={canManageBalances}
       />
     </main>
   );

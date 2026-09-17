@@ -156,6 +156,7 @@ RBAC-0 catalog decision:
 | `leave.requests.create` | Create own leave request | Leave/ESS | Low | Yes | Leave module | employee |
 | `leave.requests.approve` | Approve leave requests | Leave/MSS | High | Yes | Leave module | manager, hr-admin |
 | `leave.policies.manage` | Manage leave policies | Leave Setup | High | Yes | Leave module | hr-admin |
+| `leave.balances.manage` | Manage leave balances | Leave Operations | High | Yes | Leave module | hr-admin |
 | `attendance.view` | View attendance | Attendance | Low | Yes | Attendance module | hr-admin, manager, employee |
 | `attendance.records.manage` | Manage attendance records | Attendance | High | Yes | Attendance module | hr-admin |
 | `attendance.regularization.request` | Request attendance regularization | Attendance/ESS | Low | Yes | Attendance module | employee |
@@ -438,31 +439,199 @@ RBAC-4A implementation evidence:
 - Tenant Admin sidebar and quick links now filter by permissions instead of only workspace persona.
 - Tenant Admin Users page disables invite/update/status controls without `tenant.users.manage`.
 - Tenant Admin Roles page disables add/edit/activate/deactivate controls without `tenant.roles.manage`.
+- Tenant Admin pages now enforce page-level permissions before loading page data, so direct deep links align with permission-filtered menus.
 - Added light inline permission notices so view-only users understand why actions are unavailable without causing layout shift.
-- Extended Tenant Admin role browser certification to create a limited view-only tenant role, sign in as that user, verify permission-filtered menus, verify disabled role/user actions, and prove direct mutation APIs return `403`.
+- Extended Tenant Admin role browser certification to create a limited view-only tenant role, sign in as that user, verify permission-filtered menus, verify protected deep links redirect to the Tenant Admin dashboard, verify disabled role/user actions, and prove direct mutation APIs return `403`.
 
 ### RBAC-5: HR Admin Enforcement
 
-Status: Not started  
+Status: In progress; employee directory, organization master, document viewer, and leave/attendance viewer slices complete locally on 2026-09-17  
 Goal: move HR Admin employee/document/leave/attendance actions to permission checks.
 
 Tasks:
 
-- Enforce employee directory view/create/edit/import.
-- Enforce employee access management.
-- Enforce document category/rule/document review/export.
-- Enforce leave and attendance policy management.
-- Enforce approval actions.
-- Update menus/buttons.
+- Enforce employee directory view/create/edit/import. *(Employee API/view/create/edit complete locally; import UI visibility complete locally.)*
+- Enforce employee access management. *(Employee access API/page/action visibility complete locally.)*
+- Enforce organization master view/manage/import. *(Organization APIs and page controls complete locally.)*
+- Enforce document category/rule/document review/export. *(Core document APIs and read-only UI controls complete locally.)*
+- Enforce leave and attendance policy management. *(Core backend gates and read-only UI behavior complete locally.)*
+- Enforce approval actions. *(Attendance regularization and leave balance review gates complete locally; manager leave approval surfaces pending.)*
+- Update menus/buttons. *(HR Admin sidebar and employee page actions now filter from effective permissions.)*
 
 Exit criteria:
 
 - HR Executive custom role works with limited employee access.
 - Leave Approver custom role can approve leave but cannot edit payroll or employee salary.
 
+RBAC-5A implementation evidence:
+
+- HR Admin backend workspace access now accepts custom roles with effective HR-domain permissions, not only the legacy `hr-admin` role code.
+- Auth session `workspace_access.hr_admin` now becomes true when the default membership has HR-domain permissions such as `employees.view`.
+- HR Admin layout now uses permission-based page access and filters sidebar links from item-level permission metadata.
+- Employee directory page now hides create/import/edit/access/bank-account actions when the user lacks the corresponding permission.
+- Employee create, edit, access, and bank account deep links now have page-level permission guards.
+- Employee APIs now enforce `employees.view`, `employees.create`, `employees.edit`, and `employees.access.manage` before returning or mutating data.
+- Backend proof: `test_custom_hr_employee_viewer_role_gates_employee_mutations` verifies a custom `hr-employee-viewer` role can read employees, receives HR Admin workspace access from `employees.view`, and receives `403` for create/edit/access-management calls.
+- Browser proof added: `employee-directory-certification.spec.ts` creates a temporary `employees.view` role, logs in as that custom HR viewer, verifies read-only HR Admin menu/actions, and verifies backend mutation denials. Local standard run skipped without `HRMS_API_BASE_URL`; run against live/staging with:
+
+```bash
+HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 npm --prefix web run test:e2e -- tests/e2e/employee-directory-certification.spec.ts -g "limited employee viewer role" --project=chromium
+```
+
+RBAC-5B remaining work:
+
+- Apply it to Documents and document verification/export.
+- Apply it to Leave and Attendance policy/approval surfaces.
+- Apply it to Payroll setup, payroll inputs, statutory setup, and report export surfaces.
+- Add one browser proof per major HR vertical for allowed read-only role, allowed manager/processor role, and denied mutation.
+
+RBAC-5B implementation evidence:
+
+- Organization snapshot, detail, and form-options APIs now require `organization.view`.
+- Organization master create/update APIs now require `organization.manage`.
+- Organization catalog page now opens for either `organization.view` or `organization.manage`, but hides create/edit/import controls unless `organization.manage` is present.
+- Organization create/edit deep links now redirect back to the catalog when `organization.manage` is missing.
+- Backend proof: `test_custom_hr_organization_viewer_role_gates_master_mutations` verifies a custom `hr-organization-viewer` role can read organization masters and receives `403` for create/update calls.
+- Browser proof added: `organization-master-crud-flows.spec.ts` creates a temporary `organization.view` role, logs in as that custom organization viewer, verifies read-only Organization menu/actions, verifies create deep-link redirect, and verifies backend mutation denials. Local standard run skipped without `HRMS_API_BASE_URL`; run against live/staging with:
+
+```bash
+HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 npm --prefix web run test:e2e -- tests/e2e/organization-master-crud-flows.spec.ts -g "limited organization viewer" --project=chromium
+```
+
+RBAC-5C next target:
+
+RBAC-5C implementation evidence:
+
+- Document options, categories, requirements, employee document list, and employee document detail now require `documents.view`.
+- Document category/requirement create-update, employee document upload, and reminder actions now require `documents.manage`.
+- Employee document review/update now requires `documents.verify`.
+- Employee document download now requires `documents.export`.
+- Document control center, category list, requirement list, employee document queue, and deep links now hide or redirect unavailable actions for read-only users.
+- Backend proof: `test_custom_hr_document_viewer_role_gates_document_mutations` verifies a custom `hr-document-viewer` role can read document setup/queue data and receives `403` for category create, document verify, and reminder actions.
+- Browser proof added: `employee-documents-onboarding-certification-flows.spec.ts` creates a temporary `documents.view` role, logs in as that custom document viewer, verifies read-only document queue/actions, verifies upload deep-link redirect, and verifies backend mutation denials. Local standard run skipped without `HRMS_API_BASE_URL`; run against live/staging with:
+
+```bash
+HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 npm --prefix web run test:e2e -- tests/e2e/employee-documents-onboarding-certification-flows.spec.ts -g "limited document viewer" --project=chromium
+```
+
+RBAC-5D implementation evidence:
+
+- Leave and Attendance:
+  - `leave.view` now gates leave type, leave policy, leave assignment, leave balance, and leave balance transaction read endpoints.
+  - `leave.policies.manage` now gates leave type/policy/assignment create, edit, detach, conflict preview, and policy preview endpoints.
+  - `leave.balances.manage` now gates leave balance action and balance transaction review endpoints.
+  - `attendance.view` now gates attendance operation options, shifts, holiday calendars, attendance policies, records, regularizations, assignments, roster templates, and rollout history reads.
+  - `attendance.records.manage` now gates attendance record edit and bulk action endpoints.
+  - `attendance.regularization.review` now gates HR regularization approve/reject endpoints.
+  - `attendance.policies.manage` now gates shift, holiday calendar, attendance policy, policy assignment, shift assignment, roster template, conflict preview, policy preview, and rollout mutations.
+  - Attendance records UI now keeps filters/pagination visible for read-only roles while hiding selection, edit, and bulk action controls unless `attendance.records.manage` is present.
+  - Attendance regularization UI now keeps queue visibility for read-only roles while hiding review deep links and inline decisions unless `attendance.regularization.review` is present.
+  - Leave balance UI now allows preview/read-only inspection while disabling commit/action/review controls unless `leave.balances.manage` is present.
+  - Leave/attendance policy list pages hide create/edit controls unless the relevant `*.policies.manage` permission is present.
+  - High-risk form deep links now require the matching manage/review permission before rendering.
+  - Backend proof: `test_custom_hr_leave_viewer_role_gates_leave_mutations` verifies a custom `hr-leave-viewer` role can read leave setup/balances and receives `403` for leave type creation and leave balance mutation.
+  - Backend proof: `test_custom_hr_attendance_viewer_role_gates_attendance_mutations` verifies a custom `hr-attendance-viewer` role can read attendance operations/records/regularizations and receives `403` for shift creation, attendance record edit, and regularization approval.
+
+RBAC-5E implementation evidence:
+
+- Remaining leave/attendance setup list pages now hide create/edit/governance controls for users without policy-management permission:
+  - Leave policy assignments require `leave.policies.manage` for create/edit/governance previews.
+  - Attendance policy assignments require `attendance.policies.manage` for create/edit/governance previews.
+  - Shifts, holiday calendars, employee shift assignments, and shift roster templates require `attendance.policies.manage` for create/edit/rollout controls.
+- Added `web/tests/e2e/hr-admin-leave-attendance-rbac-certification.spec.ts`.
+  - Browser proof creates custom `leave.view` and `attendance.view` roles dynamically through Tenant Admin role APIs.
+  - Browser proof signs in as each limited HR user and verifies read-only UI on leave policies, leave assignments, leave balances, attendance records, attendance regularizations, shifts, and attendance assignments.
+  - Browser proof validates backend denials for leave type creation, leave balance actions, shift creation, and attendance record bulk actions.
+- Verification:
+  - `npm --prefix web run typecheck` passed locally on 2026-09-17.
+  - `cd web && npx playwright test tests/e2e/hr-admin-leave-attendance-rbac-certification.spec.ts --project=chromium` found both tests and skipped locally because `HRMS_API_BASE_URL` was not set. Run this command on staging with the live API env to certify browser behavior end to end.
+
+RBAC-5F implementation evidence:
+
+- Manager leave approval APIs now enforce explicit RBAC:
+  - Manager pending leave queue and leave detail require `leave.view`.
+  - Manager leave approve/reject mutations require `leave.requests.approve`.
+- MSS workspace access now opens for custom roles with `leave.requests.approve` or `attendance.regularization.review`, not only the legacy `manager` role code.
+- MSS approval page now reads effective permissions and keeps decision controls read-only when the user lacks the matching decision permission.
+- MSS decision panel now disables decision notes/buttons and shows a light inline notice when approval/review permission is missing.
+- Backend proof: `test_custom_leave_approver_role_gates_manager_leave_decisions` creates a custom leave queue viewer, proves the user can inspect manager-scoped leave requests with only `leave.view`, receives `403` for approval without `leave.requests.approve`, then receives MSS workspace access and can approve after the permission is granted.
+- Verification:
+  - `.venv/bin/pytest backend/tests/test_phase0_api_smoke.py::test_custom_hr_leave_viewer_role_gates_leave_mutations backend/tests/test_phase0_api_smoke.py::test_custom_leave_approver_role_gates_manager_leave_decisions backend/tests/test_phase0_api_smoke.py::test_custom_hr_attendance_viewer_role_gates_attendance_mutations -q` passed locally on 2026-09-17.
+  - `npm --prefix web run typecheck` passed locally on 2026-09-17.
+  - `.venv/bin/python backend/manage.py check` passed locally on 2026-09-17.
+
+RBAC-5G implementation evidence:
+
+- Manager attendance approval APIs now mirror the same explicit RBAC posture as leave:
+  - Manager pending attendance regularization queue and detail require `attendance.view`.
+  - Manager attendance regularization approve/reject mutations require `attendance.regularization.review`.
+- Custom attendance reviewer roles can inspect their manager-scoped pending regularizations with only `attendance.view`, but cannot approve/reject until `attendance.regularization.review` is granted.
+- Backend proof: `test_custom_attendance_reviewer_role_gates_manager_regularization_decisions` creates a custom attendance queue viewer, proves queue visibility with read permission, proves direct approve API denial without review permission, then grants review permission and proves the regularization can be approved and the attendance record is marked regularized.
+- Verification:
+  - `.venv/bin/pytest backend/tests/test_phase0_api_smoke.py::test_custom_leave_approver_role_gates_manager_leave_decisions backend/tests/test_phase0_api_smoke.py::test_custom_attendance_reviewer_role_gates_manager_regularization_decisions backend/tests/test_phase0_api_smoke.py::test_custom_hr_attendance_viewer_role_gates_attendance_mutations -q` passed locally on 2026-09-17.
+  - `.venv/bin/python backend/manage.py check` passed locally on 2026-09-17.
+
+RBAC-5H implementation evidence:
+
+- Leave and attendance approval decisions now write tenant audit-ledger evidence:
+  - Leave approvals/rejections emit `leave_request_approved` / `leave_request_rejected`.
+  - Attendance regularization approvals/rejections emit `attendance_regularization_approved` / `attendance_regularization_rejected`.
+  - Audit events include actor identifier, previous/new status, subject ids, decision, workflow reference, source ref, and source hash.
+- Backend proof now asserts audit events for custom leave and attendance approver decisions, including status transition and source hash evidence.
+- Added staging-gated browser proof `mss-rbac-approver-certification.spec.ts`:
+  - Creates a custom `leave.view` + `leave.requests.approve` role through Tenant Admin APIs.
+  - Creates a real employee login with that custom role through HR Admin access APIs.
+  - Makes that employee the reporting manager for a seeded employee.
+  - Submits leave through ESS as the seeded employee.
+  - Logs in as the custom approver, approves through MSS, and confirms unrelated HR employee API access remains blocked by `employees.view`.
+  - Restores the seeded reporting manager mapping in cleanup.
+- Verification:
+  - `.venv/bin/pytest backend/tests/test_phase0_api_smoke.py::test_custom_leave_approver_role_gates_manager_leave_decisions backend/tests/test_phase0_api_smoke.py::test_custom_attendance_reviewer_role_gates_manager_regularization_decisions -q` passed locally on 2026-09-17.
+  - `npm --prefix web run typecheck` passed locally on 2026-09-17.
+  - `cd web && npx playwright test tests/e2e/mss-rbac-approver-certification.spec.ts --project=chromium --list` found the staging-gated browser proof locally on 2026-09-17.
+  - `.venv/bin/python backend/manage.py check` passed locally on 2026-09-17.
+
+RBAC-5I implementation evidence:
+
+- Extended staging-gated browser proof `mss-rbac-approver-certification.spec.ts`:
+  - Creates a custom `attendance.view` + `attendance.regularization.review` role through Tenant Admin APIs.
+  - Creates a real employee login with that custom role through HR Admin access APIs.
+  - Makes that employee the reporting manager for a seeded employee.
+  - Submits attendance regularization through ESS as the seeded employee.
+  - Logs in as the custom attendance reviewer, verifies the MSS control center shows attendance queue and hides leave queue, approves through MSS, and confirms direct leave queue API access is blocked by `leave.view`.
+  - Restores the seeded reporting manager mapping in cleanup.
+- MSS control center is now domain-aware:
+  - Leave cards, leave shortcuts, and leave queue counts appear only when the session has `leave.requests.approve`.
+  - Attendance cards, attendance shortcuts, and attendance queue counts appear only when the session has `attendance.regularization.review`.
+  - Hidden queue counts render as `Hidden` instead of exposing unrelated queue volume.
+- Verification:
+  - `npm --prefix web run typecheck` passed locally on 2026-09-17.
+  - `cd web && npx playwright test tests/e2e/mss-rbac-approver-certification.spec.ts --project=chromium --list` found both staging-gated browser proofs locally on 2026-09-17.
+  - `.venv/bin/python backend/manage.py check` passed locally on 2026-09-17.
+
+RBAC-5J implementation evidence:
+
+- HR Admin setup mutations now write tenant audit evidence with source hashes:
+  - Leave policy create/update writes `leave_policy_created` and `leave_policy_updated`.
+  - Leave balance action/review writes `leave_balance_action_recorded` and `leave_balance_transaction_reviewed`.
+  - Attendance policy create/update writes `attendance_policy_created` and `attendance_policy_updated`.
+  - Shift create/update writes `attendance_shift_created` and `attendance_shift_updated`.
+  - Attendance record edit writes `attendance_record_updated`.
+- Audit snapshots include actor identifier, permission used, target object ids, action, changed fields where applicable, and previous/new status where meaningful.
+- Verification:
+  - `.venv/bin/pytest backend/tests/test_phase0_api_smoke.py::test_hr_admin_leave_setup_mutations_write_audit_evidence backend/tests/test_phase0_api_smoke.py::test_hr_admin_attendance_setup_mutations_write_audit_evidence -q` passed locally on 2026-09-17.
+  - `.venv/bin/python backend/manage.py check` passed locally on 2026-09-17.
+  - `npm --prefix web run typecheck` passed locally on 2026-09-17.
+
+RBAC-6 next target:
+
+- Enforce payroll, finance, statutory, and report operations with action-level permissions.
+- Start with report/export APIs because they have high data sensitivity and already have export audit surfaces.
+- Run the MSS RBAC approver Playwright proof on staging with `HRMS_API_BASE_URL` when staging credentials/data are ready.
+
 ### RBAC-6: Payroll, Finance, Statutory, And Reports Enforcement
 
-Status: Not started  
+Status: In progress; report export and payroll artifact download gates complete locally  
 Goal: enforce high-risk payroll and finance operations.
 
 Tasks:
@@ -480,6 +649,94 @@ Exit criteria:
 - Payroll Approver can approve/lock.
 - Finance Viewer can view reports but not transmit handoff.
 - Report export is blocked without export permission.
+
+RBAC-6A implementation evidence:
+
+- Backend report export CSV endpoint now requires category export permission:
+  - HR/core report exports require `reports.hr.export`.
+  - Payroll, bank advice, and finance handoff reports require `reports.payroll.export`.
+  - Compliance/statutory reports require `reports.compliance.export`.
+- Report export audit history now requires `reports.compliance.view`.
+- Report export audit writes now require the matching category export permission for the submitted `report_key`.
+- Verification:
+  - `.venv/bin/pytest backend/tests/test_phase0_api_smoke.py::test_hr_admin_can_persist_and_filter_report_export_audits backend/tests/test_phase0_api_smoke.py::test_report_exports_require_category_export_permissions backend/tests/test_phase0_api_smoke.py::test_report_export_audit_writes_require_report_category_export_permission -q` passed locally on 2026-09-17.
+  - `.venv/bin/python backend/manage.py check` passed locally on 2026-09-17.
+  - `npm --prefix web run typecheck` passed locally on 2026-09-17.
+
+RBAC-6B implementation evidence:
+
+- Next.js report/export proxy routes now pre-check effective permissions through `/auth/session/` before serving sensitive files:
+  - `/api/hr-admin/reports/[reportKey]` requires the same category export permission as the backend.
+  - Compliance summary and statutory package routes require `reports.compliance.export`.
+  - Report export audit history requires `reports.compliance.view`.
+- Payroll output artifact proxy routes now require `payroll.outputs.download` before forwarding download, signed-access, or access-audit export requests.
+- Backend payroll artifact endpoints now enforce `payroll.outputs.download` for:
+  - Artifact download.
+  - Signed access issue.
+  - Signed access revoke.
+  - Access audit export.
+- Verification:
+  - `.venv/bin/pytest backend/tests/test_phase0_api_smoke.py::test_payroll_output_artifact_downloads_require_download_permission backend/tests/test_phase0_api_smoke.py::test_hr_admin_payroll_outputs_generate_and_publish_locked_review backend/tests/test_phase0_api_smoke.py::test_hr_admin_payroll_outputs_support_configured_signed_url_storage_strategy -q` passed locally on 2026-09-17.
+  - `.venv/bin/python backend/manage.py check` passed locally on 2026-09-17.
+  - `npm --prefix web run typecheck` passed locally on 2026-09-17.
+
+RBAC-6C implementation evidence:
+
+- Payroll input/run read APIs now require `payroll.inputs.view`.
+- Payroll input/run create/edit APIs now require `payroll.inputs.manage`.
+- Payroll input lock and final review lock now require `payroll.lock`.
+- Draft payroll calculation now requires `payroll.calculate`.
+- Payroll review setup/open/submit/exception-create/exception-decision now require `payroll.review`.
+- Payroll approve/reject now requires `payroll.approve`.
+- Payroll output setup requires `payroll.outputs.view`.
+- Payroll output generation and publish now require `payroll.publish`.
+- Verification:
+  - `.venv/bin/pytest backend/tests/test_phase0_api_smoke.py::test_payroll_reviewer_role_cannot_perform_high_risk_lifecycle_actions backend/tests/test_phase0_api_smoke.py::test_hr_admin_payroll_review_approves_and_final_locks_run backend/tests/test_phase0_api_smoke.py::test_hr_admin_payroll_outputs_generate_and_publish_locked_review -q` passed locally on 2026-09-17.
+  - `.venv/bin/python backend/manage.py check` passed locally on 2026-09-17.
+  - `npm --prefix web run typecheck` passed locally on 2026-09-17.
+
+RBAC-6D finance handoff/provider gates:
+
+- Status: Complete locally on 2026-09-17.
+- Enforced finance handoff setup/view with `finance.handoff.view` or handoff operator compatibility through `finance.handoff.create`.
+- Enforced generate handoff from payroll outputs with `finance.handoff.create`.
+- Enforced transmit, retry schedule, and requeue actions with `finance.handoff.transmit` or handoff operator compatibility through `finance.handoff.create`.
+- Enforced acknowledgement/reconciliation with `finance.handoff.acknowledge` or handoff operator compatibility through `finance.handoff.create`.
+- Enforced provider audit-pack generation with `finance.bank_advice.export` or handoff operator compatibility through `finance.handoff.create`.
+- Added focused backend proof for a finance handoff viewer that can view setup data but cannot generate, transmit, retry, export audit pack, or acknowledge.
+- Verification:
+  - `.venv/bin/pytest backend/tests/test_phase0_api_smoke.py::test_finance_handoff_viewer_role_cannot_perform_provider_actions backend/tests/test_phase0_api_smoke.py::test_hr_admin_payroll_finance_handoff_generate_and_transmit -q`
+  - `.venv/bin/pytest backend/tests/test_phase0_api_smoke.py -k "finance_handoff or payroll_provider_callback or provider_delivery_retry or provider_delivery_requeue" -q`
+  - `.venv/bin/python backend/manage.py check`
+  - `npm --prefix web run typecheck`
+
+RBAC-6E statutory setup and declaration gates:
+
+- Status: Complete locally on 2026-09-17.
+- Enforced statutory setup dashboard/read APIs with `statutory.setup.view`, `statutory.setup.manage`, `statutory.declarations.view`, or `statutory.declarations.manage` depending on workspace need.
+- Enforced statutory pack, component, slab, employer registration, and filing calendar mutations with `statutory.setup.manage`.
+- Enforced employee statutory profile/declaration/item reads with `statutory.declarations.view` or `statutory.declarations.manage`.
+- Enforced employee statutory profile/declaration/item create/edit/submit/verify/reject/lock actions with `statutory.declarations.manage`.
+- Tightened HR Admin workspace access so built-in employee self-service statutory permissions do not open HR Admin statutory screens.
+- Added focused backend proof for a custom statutory viewer that can inspect setup/declaration lists but cannot create statutory masters or employee statutory profiles.
+- Verification:
+  - `.venv/bin/pytest backend/tests/test_phase0_api_smoke.py -k "payroll_statutory or statutory_declaration" -q`
+  - `.venv/bin/python backend/manage.py check`
+  - `npm --prefix web run typecheck`
+
+RBAC-6F current status:
+
+- First frontend alignment slice is complete locally:
+  - Payroll output publish and finance handoff generation controls now require their matching permissions before enabling.
+  - Finance handoff transmit, acknowledge, and audit-pack controls now require their matching finance permissions before enabling.
+  - Statutory setup/declaration CRUD console now collapses to read-only guidance for statutory viewer roles and only shows setup/declaration mutation forms to users with matching manage permissions.
+  - Shared payroll action panel now blocks disabled/empty actions before network calls and disables action inputs when the action is unavailable.
+- Browser certification hook is added:
+  - `web/tests/e2e/payroll-statutory-rbac-certification.spec.ts` creates temporary statutory viewer, payroll output viewer, and finance handoff viewer roles/users on a live API run.
+  - The spec verifies read-only UI states and direct mutation denials for statutory setup/declarations, output publish/handoff generation, and handoff transmit/acknowledge/audit-pack actions.
+- Remaining RBAC-6F target:
+  - Run the new browser proof against staging after deployment.
+  - Sweep remaining payroll workspaces for lifecycle buttons that still rely only on backend denial.
 
 ### RBAC-7: Manager And Employee Scope Enforcement
 
@@ -554,6 +811,23 @@ Exit criteria:
 | 2026-09-17 | RBAC-3A Tenant Admin Mutation Enforcement | Complete locally | Added reusable permission resolver and enforced `tenant.roles.manage` / `tenant.users.manage` on role and membership mutation APIs; focused backend smoke is green. |
 | 2026-09-17 | RBAC-4A Tenant Admin Permission-Aware UI | Complete locally | Session payload now carries effective permissions; Tenant Admin nav, quick links, role actions, and user actions respond to permission grants. Browser spec now covers limited role menu/action/API denial and skips locally without live API env. |
 | 2026-09-17 | RBAC-5A Tenant Admin Remaining Gates | Complete locally | Enforced `tenant.change_requests.manage`, `tenant.support_access.request`, `tenant.support_access.approve`, `tenant.audit.view`, `tenant.audit.export`, and `tenant.security.view`; plan/settings/support/trust-audit UI now hides or disables sensitive actions by permission. |
+| 2026-09-17 | RBAC-5A HR Employee Directory Gates | Complete locally | Employee APIs and pages enforce/view-hide `employees.view`, `employees.create`, `employees.edit`, `employees.import`, and `employees.access.manage`; focused backend smoke is green. |
+| 2026-09-17 | RBAC-5B HR Organization Gates | Complete locally | Organization snapshot/detail/options/list pages enforce `organization.view`; create/edit/import controls and APIs require `organization.manage`; focused backend smoke is green. |
+| 2026-09-17 | RBAC-5C HR Document Gates | Complete locally | Document setup, queue, verification, reminder, and download APIs/pages enforce `documents.view`, `documents.manage`, `documents.verify`, and `documents.export`; focused backend smoke is green. |
+| 2026-09-17 | RBAC-5D HR Leave And Attendance Gates | Complete locally | Leave/attendance setup/read endpoints and high-risk mutations now enforce `leave.view`, `leave.policies.manage`, `leave.balances.manage`, `attendance.view`, `attendance.records.manage`, `attendance.regularization.review`, and `attendance.policies.manage`; focused backend smoke and web typecheck are green. |
+| 2026-09-17 | RBAC-5E HR Leave And Attendance Browser Proof | Complete locally | Remaining leave/attendance setup list pages now hide privileged controls for read-only roles; added a focused Playwright spec that dynamically creates leave/attendance viewer roles, signs in as limited HR users, checks read-only UI, and proves backend mutation denials. |
+| 2026-09-17 | RBAC-5F Manager Leave Approval Gates | Complete locally | MSS leave queue/detail now require `leave.view`; approve/reject requires `leave.requests.approve`; custom approver roles can receive MSS workspace access without fixed `manager` role code; focused backend smoke, web typecheck, and Django check are green. |
+| 2026-09-17 | RBAC-5G Manager Attendance Approval Gates | Complete locally | MSS attendance regularization queue/detail now require `attendance.view`; approve/reject requires `attendance.regularization.review`; custom attendance reviewer roles are proven with focused backend smoke and Django check. |
+| 2026-09-17 | RBAC-5H MSS Approval Audit And Leave Browser Proof | Complete locally | Leave and attendance decision services now write tenant audit events with source hashes; backend smoke asserts audit evidence; staging-gated browser proof creates a custom leave approver and approves through MSS while unrelated HR access remains denied. |
+| 2026-09-17 | RBAC-5I MSS Attendance Browser Proof And Domain-Aware Control Center | Complete locally | Staging-gated browser proof now covers custom attendance reviewer approval through MSS; MSS control center hides leave or attendance queues when the custom role lacks that approval domain. |
+| 2026-09-17 | RBAC-5J HR Setup Audit Evidence | Complete locally | Leave policy, leave balance, attendance policy, shift, and attendance record setup mutations now write tenant audit events with source hashes; focused backend smoke, Django check, and web typecheck are green. |
+| 2026-09-17 | RBAC-6A Report Export Backend Gates | Complete locally | Backend report export CSV and export-audit evidence APIs now enforce HR/payroll/compliance category export/view permissions; focused backend smoke, Django check, and web typecheck are green. |
+| 2026-09-17 | RBAC-6B Report Proxy And Payroll Artifact Download Gates | Complete locally | Next.js report/package/export-audit proxy routes now pre-check effective permissions, and backend payroll artifact download/signed-access/access-audit endpoints require `payroll.outputs.download`; focused backend smoke, Django check, and web typecheck are green. |
+| 2026-09-17 | RBAC-6C Payroll Lifecycle Gates | Complete locally | Payroll input, calculation, review, approval, lock, output setup, generate, and publish APIs now enforce granular payroll permissions; custom payroll reviewer proof plus admin happy paths are green. |
+| 2026-09-17 | RBAC-6D Finance Handoff And Provider Action Gates | Complete locally | Finance handoff setup, generate, transmit, acknowledge, provider retry/requeue, and provider audit-pack generation now enforce granular finance permissions; finance viewer denial proof plus provider callback/retry regression slice are green. |
+| 2026-09-17 | RBAC-6E Statutory Setup And Declaration Gates | Complete locally | Statutory setup/read APIs, setup master mutations, and employee statutory profile/declaration actions now enforce statutory permissions; statutory viewer denial proof and statutory workflow slice are green. |
+| 2026-09-17 | RBAC-6F Payroll/Statutory Frontend Action Alignment Slice 1 | Complete locally | Payroll output publish/handoff controls, finance handoff transmit/ack/audit-pack controls, and statutory CRUD console visibility now reflect effective permissions; web typecheck is green. |
+| 2026-09-17 | RBAC-6F Payroll/Statutory Browser Proof Hook | Complete locally | Added staging-gated Playwright proof for statutory viewer, payroll output viewer, and finance handoff viewer read-only behavior plus backend denial checks; local run skips cleanly without `HRMS_API_BASE_URL`. |
 | 2026-09-17 | RBAC-8A Last Admin Critical Permission Guard | Complete locally | Role edits and membership role/status changes now block changes that would leave zero active holders of `tenant.users.manage` or `tenant.roles.manage`; focused backend smoke is green and guarded browser proof is added behind `HRMS_ENABLE_RBAC_LOCKOUT_BROWSER_PROOF=1`. |
 
 ## Current Known Gaps
@@ -561,9 +835,8 @@ Exit criteria:
 | Gap | Risk | Target Phase |
 | --- | --- | --- |
 | Platform Admin permission catalog UI is not yet available | Platform team cannot browse/manage catalog from the console yet | RBAC-1B/RBAC-2 |
-| Backend permission helper now covers Tenant Admin critical APIs but not all downstream HR/payroll/report operations | HR, payroll, reports, and export APIs still need permission enforcement | RBAC-6 |
-| Frontend permission context is implemented for Tenant Admin but not yet rolled out across every HR/payroll workspace | Downstream workspaces can still show actions before backend denial | RBAC-6/RBAC-7 |
-| Payroll/report exports not permission-protected at action level | High-risk operations need explicit permission checks | RBAC-6 |
+| Backend permission helper now covers Tenant Admin, core HR employee/org/document/leave/attendance APIs, report export evidence, payroll lifecycle, payroll output artifact downloads, finance handoff/provider actions, and statutory setup/declaration APIs | Remaining risk is certification breadth, not a known launch-critical backend gap in these slices | RBAC-9 |
+| Frontend permission context is implemented for Tenant Admin, MSS approvals/control center, core HR employee/org/document/leave/attendance pages, and the first payroll/statutory action slice | Remaining downstream payroll workspaces still need a final lifecycle button sweep; payroll/statutory browser proof is added and awaits staging execution | RBAC-6F/RBAC-7 |
 | Last-admin guard exists for Tenant Admin role/member mutations but needs browser proof and richer audit-diff evidence | Tenant lockout is blocked locally; certification and audit ergonomics still need completion | RBAC-8/RBAC-9 |
 
 ## Working Definition Of Done

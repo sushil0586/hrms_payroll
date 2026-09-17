@@ -4,8 +4,10 @@ import { createEmptyLeavePolicyValue } from "@/app/hr-admin/leave-policies/form-
 import { LeavePolicyForm } from "@/app/hr-admin/leave-policies/leave-policy-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewLeavePolicyPage() {
+  await requireSessionPermission({ permissionKeys: ["leave.policies.manage"], fallbackPath: "/hr-admin/leave-policies" });
   const optionsResult = await getHrAdminPolicyOptions();
   const defaultStatus = optionsResult.data.leave_policy_statuses[0]?.value || "draft";
   const defaultAccrual = optionsResult.data.accrual_frequencies[0]?.value || "none";

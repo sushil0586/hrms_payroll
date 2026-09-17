@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getMssApprovalInbox } from "@/lib/api";
 import type { ManagerTeamSummary } from "@/lib/types";
+import { requireWorkspaceAccess, sessionHasPermission } from "@/lib/workspace-access";
 
 type ManagerActionStatus = "ready" | "warning" | "blocked";
 
@@ -30,8 +31,11 @@ function actionStatus(value: number, blocked = false): ManagerActionStatus {
   return value > 0 ? "warning" : "ready";
 }
 
-function buildManagerActions(summary: ManagerTeamSummary) {
-  return [
+function buildManagerActions(
+  summary: ManagerTeamSummary,
+  permissions: { canApproveLeave: boolean; canReviewAttendance: boolean },
+) {
+  const actions = [
     {
       label: "Leave approvals",
       value: summary.pending_leave_approvals_count,
@@ -65,14 +69,28 @@ function buildManagerActions(summary: ManagerTeamSummary) {
       status: "ready" as const,
     },
   ];
+  return actions.filter((item) => {
+    if (item.href.includes("queue=leave")) {
+      return permissions.canApproveLeave;
+    }
+    if (item.href.includes("queue=attendance")) {
+      return permissions.canReviewAttendance;
+    }
+    return true;
+  });
 }
 
 export default async function MssControlCenterPage() {
+  const sessionUser = await requireWorkspaceAccess({ workspace: "mss" });
+  const canApproveLeave = sessionHasPermission(sessionUser, "leave.requests.approve");
+  const canReviewAttendance = sessionHasPermission(sessionUser, "attendance.regularization.review");
   const result = await getMssApprovalInbox({ leave_page_size: 5, regularization_page_size: 5 });
   const summary = result.summary;
-  const actions = buildManagerActions(summary);
+  const actions = buildManagerActions(summary, { canApproveLeave, canReviewAttendance });
   const activeSignals = actions.filter((item) => item.status !== "ready").length;
-  const totalPending = summary.pending_leave_approvals_count + summary.pending_attendance_regularizations_count;
+  const visiblePendingLeave = canApproveLeave ? summary.pending_leave_approvals_count : 0;
+  const visiblePendingAttendance = canReviewAttendance ? summary.pending_attendance_regularizations_count : 0;
+  const totalPending = visiblePendingLeave + visiblePendingAttendance;
 
   return (
     <main className="shell shell--mss-control">
@@ -101,8 +119,8 @@ export default async function MssControlCenterPage() {
         <div className="metric-grid-modern">
           <MetricTile label="Team members" value={summary.team_size} trend="Direct and routed reports" />
           <MetricTile label="Pending decisions" value={totalPending} trend="Leave and attendance" />
-          <MetricTile label="Leave approvals" value={summary.pending_leave_approvals_count} trend="Awaiting manager action" />
-          <MetricTile label="Attendance exceptions" value={summary.attendance_exceptions_today} trend="Today signals" />
+          {canApproveLeave ? <MetricTile label="Leave approvals" value={summary.pending_leave_approvals_count} trend="Awaiting manager action" /> : null}
+          {canReviewAttendance ? <MetricTile label="Attendance exceptions" value={summary.attendance_exceptions_today} trend="Today signals" /> : null}
           <MetricTile label="On leave today" value={summary.employees_on_leave_today} trend="Coverage snapshot" />
         </div>
       </section>
@@ -140,8 +158,8 @@ export default async function MssControlCenterPage() {
             <span className={chipClass(totalPending ? "warning" : "ready")}>{totalPending ? "Review" : "Ready"}</span>
           </div>
           <div className="hr-admin-shortcut-grid">
-            <Link className="button button--primary" href="/mss/approvals?queue=leave">Leave queue</Link>
-            <Link className="button button--secondary" href="/mss/approvals?queue=attendance">Attendance queue</Link>
+            {canApproveLeave ? <Link className="button button--primary" href="/mss/approvals?queue=leave">Leave queue</Link> : null}
+            {canReviewAttendance ? <Link className={canApproveLeave ? "button button--secondary" : "button button--primary"} href="/mss/approvals?queue=attendance">Attendance queue</Link> : null}
             <Link className="button button--secondary" href="/mss/notifications">Alerts</Link>
             <Link className="button button--secondary" href="/ess/payslips">My payslips</Link>
             <Link className="button button--secondary" href="/ess/documents">My documents</Link>
@@ -150,15 +168,15 @@ export default async function MssControlCenterPage() {
           <div className="detail-grid">
             <div className="detail-row">
               <span>Leave queue rows</span>
-              <strong>{result.pendingLeave.total_count}</strong>
+              <strong>{canApproveLeave ? result.pendingLeave.total_count : "Hidden"}</strong>
             </div>
             <div className="detail-row">
               <span>Attendance queue rows</span>
-              <strong>{result.pendingRegularizations.total_count}</strong>
+              <strong>{canReviewAttendance ? result.pendingRegularizations.total_count : "Hidden"}</strong>
             </div>
             <div className="detail-row">
               <span>Payroll-impact queue</span>
-              <strong>{summary.pending_attendance_regularizations_count}</strong>
+              <strong>{canReviewAttendance ? summary.pending_attendance_regularizations_count : "Hidden"}</strong>
             </div>
             <div className="detail-row">
               <span>Coverage watch</span>

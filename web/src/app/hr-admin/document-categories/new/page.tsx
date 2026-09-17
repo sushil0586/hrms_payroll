@@ -4,8 +4,13 @@ import { createEmptyDocumentCategoryValue } from "@/app/hr-admin/document-catego
 import { DocumentCategoryForm } from "@/app/hr-admin/document-categories/document-category-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewDocumentCategoryPage() {
+  await requireSessionPermission({
+    permissionKeys: ["documents.manage"],
+    fallbackPath: "/hr-admin/document-categories",
+  });
   const optionsResult = await getHrAdminDocumentOptions();
 
   return (

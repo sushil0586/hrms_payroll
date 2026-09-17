@@ -27,6 +27,7 @@ type Props = {
     has_next: boolean;
     has_previous: boolean;
   };
+  canReviewRegularizations?: boolean;
 };
 
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
@@ -56,6 +57,7 @@ export function AttendanceRegularizationQueue({
   attendanceStatusOptions,
   currentFilters,
   pagination,
+  canReviewRegularizations = true,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -159,11 +161,13 @@ export function AttendanceRegularizationQueue({
                 </div>
                 <p className="section-copy section-copy-soft">{item.employee_code} • {item.attendance_date} • {item.shift || "No shift"}</p>
               </div>
-              <div className="record-card__actions">
-                <Link className="button button--secondary" href={`/hr-admin/attendance-regularizations/${item.id}/review`}>
-                  Review request
-                </Link>
-              </div>
+              {canReviewRegularizations ? (
+                <div className="record-card__actions">
+                  <Link className="button button--secondary" href={`/hr-admin/attendance-regularizations/${item.id}/review`}>
+                    Review request
+                  </Link>
+                </div>
+              ) : null}
             </div>
             <div className="detail-grid">
               <div className="detail-row"><span className="detail-label">Applied at</span><span className="detail-value">{formatDateTime(item.applied_at)}</span></div>
@@ -171,7 +175,11 @@ export function AttendanceRegularizationQueue({
               <div className="detail-row"><span className="detail-label">Manager comment</span><span className="detail-value">{item.manager_comment || "None"}</span></div>
               <div className="detail-row"><span className="detail-label">Workflow reference</span><span className="detail-value">{item.workflow_reference || "Not linked"}</span></div>
             </div>
-            <AttendanceRegularizationInlineReview item={item} />
+            {canReviewRegularizations ? (
+              <AttendanceRegularizationInlineReview item={item} />
+            ) : (
+              <div className="notice"><strong>Read-only regularization view.</strong><span className="muted">Approvals and rejections require attendance regularization review permission.</span></div>
+            )}
           </article>
         ))}
         {items.length === 0 ? (

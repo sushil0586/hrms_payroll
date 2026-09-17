@@ -38,6 +38,7 @@ import {
   getHrAdminPayrollSettlementSetup,
   getMssApprovalInbox,
 } from "@/lib/api";
+import { reportExportPermissionForKey, requireApiRoutePermission } from "@/lib/api-route-permissions";
 import { actorTokenHash, appendBackendReportExportAudit, appendReportExportAudit, type ReportExportAuditInput } from "@/lib/report-export-audit-store";
 
 const API_BASE_URL = process.env.HRMS_API_BASE_URL;
@@ -2447,12 +2448,13 @@ async function getDemoRows(reportKey: string) {
 export async function GET(request: NextRequest, { params }: Props) {
   const { reportKey } = await params;
   const filters = normalizedFilters(request);
+  const permission = await requireApiRoutePermission(request, reportExportPermissionForKey(reportKey));
+  if (!permission.ok) {
+    return permission.response;
+  }
 
   if (API_BASE_URL) {
-    const token = request.cookies.get("hrms_access_token")?.value;
-    if (!token) {
-      return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
-    }
+    const token = permission.token;
     const auditContext = {
       actorDisplay: request.cookies.get("hrms_user_name")?.value || "HR admin",
       request,

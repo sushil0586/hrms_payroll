@@ -101,13 +101,38 @@ def build_workspace_access_payload(
     role_codes = set(_membership_role_codes(default_membership))
     effective_permission_keys = set(effective_permissions or [])
     has_employee_context = bool(default_membership and getattr(default_membership, "employee", None))
-    hr_admin_access = "hr-admin" in role_codes
+    hr_permission_prefixes = (
+        "employees.",
+        "organization.",
+        "documents.",
+        "leave.",
+        "attendance.",
+        "lifecycle.",
+        "letters.",
+        "notifications.",
+        "payroll.",
+        "finance.",
+        "statutory.",
+        "reports.",
+        "audit.hr.",
+    )
+    legacy_hr_admin_access = "hr-admin" in role_codes
+    hr_admin_access = legacy_hr_admin_access or any(
+        permission_key.startswith(hr_permission_prefixes)
+        for permission_key in effective_permission_keys
+    )
     tenant_admin_access = (
-        hr_admin_access
+        legacy_hr_admin_access
         or "tenant-admin" in role_codes
         or any(permission_key.startswith("tenant.") for permission_key in effective_permission_keys)
     )
-    mss_access = hr_admin_access or "manager" in role_codes or _membership_has_pending_mss_assignment(default_membership)
+    mss_access = (
+        legacy_hr_admin_access
+        or "manager" in role_codes
+        or "leave.requests.approve" in effective_permission_keys
+        or "attendance.regularization.review" in effective_permission_keys
+        or _membership_has_pending_mss_assignment(default_membership)
+    )
 
     return {
         "ess": has_employee_context,

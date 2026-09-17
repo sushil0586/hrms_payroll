@@ -4,8 +4,13 @@ import { EmployeeForm } from "@/app/hr-admin/employees/employee-form";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { createEmptyEmployeeFormValue } from "@/app/hr-admin/employees/form-values";
 import { getHrAdminEmployeeFormOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewEmployeePage() {
+  await requireSessionPermission({
+    permissionKeys: ["employees.create"],
+    fallbackPath: "/hr-admin/employees",
+  });
   const optionsResult = await getHrAdminEmployeeFormOptions();
   const defaultStatus = optionsResult.data.employment_statuses.find((item) => item.value === "draft")?.value || optionsResult.data.employment_statuses[0]?.value || "draft";
 

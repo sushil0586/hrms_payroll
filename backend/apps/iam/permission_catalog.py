@@ -67,6 +67,7 @@ PERMISSION_CATALOG: tuple[PermissionDefinition, ...] = (
     PermissionDefinition("leave.requests.create", "Create leave requests", "Leave", "Create self-service leave requests.", "low", True, "leave", "", ("employee",)),
     PermissionDefinition("leave.requests.approve", "Approve leave requests", "Leave", "Approve or reject leave requests.", "high", True, "leave", "", ("manager", "hr-admin")),
     PermissionDefinition("leave.policies.manage", "Manage leave policies", "Leave", "Create and update leave policies and assignments.", "high", True, "leave", "", ("hr-admin",)),
+    PermissionDefinition("leave.balances.manage", "Manage leave balances", "Leave", "Apply, import, and review leave balance adjustments.", "high", True, "leave", "", ("hr-admin",)),
     PermissionDefinition("attendance.view", "View attendance", "Attendance", "View attendance records and summaries.", "low", True, "attendance", "", ("hr-admin", "manager", "employee")),
     PermissionDefinition("attendance.records.manage", "Manage attendance records", "Attendance", "Create and update attendance records.", "high", True, "attendance", "", ("hr-admin",)),
     PermissionDefinition("attendance.regularization.request", "Request attendance regularization", "Attendance", "Create self-service attendance regularization requests.", "low", True, "attendance", "", ("employee",)),

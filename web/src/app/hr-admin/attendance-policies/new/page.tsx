@@ -4,8 +4,10 @@ import { AttendancePolicyForm } from "@/app/hr-admin/attendance-policies/attenda
 import { createEmptyAttendancePolicyValue } from "@/app/hr-admin/attendance-policies/form-values";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewAttendancePolicyPage() {
+  await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-policies" });
   const optionsResult = await getHrAdminPolicyOptions();
   const defaultStatus = optionsResult.data.attendance_policy_statuses[0]?.value || "draft";
   const defaultUnit = optionsResult.data.attendance_units[0]?.value || "day";

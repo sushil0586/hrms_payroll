@@ -4,8 +4,11 @@ import { LeavePolicyAssignmentGovernancePanel } from "@/app/hr-admin/leave-polic
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLeavePolicyAssignments, getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminLeavePolicyAssignmentsPage() {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view", "leave.policies.manage"], fallbackPath: "/hr-admin/policy-assignments" });
+  const canManagePolicies = sessionHasPermission(sessionUser, "leave.policies.manage");
   const [result, optionsResult] = await Promise.all([getHrAdminLeavePolicyAssignments(), getHrAdminPolicyOptions()]);
   const activeCount = result.data.filter((item) => item.is_active).length;
   const conflictingCount = result.data.filter((item) => (item.conflict_count ?? 0) > 0).length;
@@ -19,9 +22,11 @@ export default async function HrAdminLeavePolicyAssignmentsPage() {
         description="Map leave policies to the actual slices of the organization they should govern, with clear priority behavior when multiple rules could apply."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/leave-policy-assignments/new">
-              Create leave assignment
-            </Link>
+            {canManagePolicies ? (
+              <Link className="button button--primary" href="/hr-admin/leave-policy-assignments/new">
+                Create leave assignment
+              </Link>
+            ) : null}
             <Link className="button button--secondary" href="/hr-admin/policy-assignments">
               Back to policy assignments
             </Link>
@@ -39,7 +44,11 @@ export default async function HrAdminLeavePolicyAssignmentsPage() {
         </div>
       </section>
 
-      <LeavePolicyAssignmentGovernancePanel employees={optionsResult.data.employees} leaveTypes={optionsResult.data.leave_types} />
+      {canManagePolicies ? (
+        <LeavePolicyAssignmentGovernancePanel employees={optionsResult.data.employees} leaveTypes={optionsResult.data.leave_types} />
+      ) : (
+        <section className="section"><div className="notice"><strong>Read-only leave assignment view.</strong><span className="muted">Resolution previews and assignment edits require leave policy management permission.</span></div></section>
+      )}
 
       <section className="section queue-layout">
         <div className="queue-list">
@@ -64,9 +73,11 @@ export default async function HrAdminLeavePolicyAssignmentsPage() {
                   </div>
                 </div>
                 <div className="record-card__actions">
-                  <Link className="button button--secondary" href={`/hr-admin/leave-policy-assignments/${item.id}/edit`}>
-                    Edit
-                  </Link>
+                  {canManagePolicies ? (
+                    <Link className="button button--secondary" href={`/hr-admin/leave-policy-assignments/${item.id}/edit`}>
+                      Edit
+                    </Link>
+                  ) : null}
                 </div>
               </div>
               <div className="detail-grid">

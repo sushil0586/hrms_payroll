@@ -1055,7 +1055,9 @@ Implemented:
 - Membership suspend/revoke/update-role flows now block moving the final active admin away from critical permissions.
 - The guard is permission-based, so custom admin roles are protected the same way as system roles.
 - Existing system-role default permissions still work unless explicit role permissions override them.
-- Added an opt-in browser proof that temporarily reduces other critical-permission roles, attempts to remove the final `tenant.users.manage` and `tenant.roles.manage` permissions in the role dialog, expects the lockout message, and restores role permissions in `finally`.
+- Added Tenant Admin page-level permission gates for dashboard, users, roles, plan, setup, support access, trust audit, settings, and security readiness.
+- Extended the limited-role browser proof to assert protected deep links redirect back to the Tenant Admin dashboard instead of rendering unauthorized pages.
+- Added an opt-in browser-authenticated proof that temporarily reduces other critical-permission roles, attempts to remove the final `tenant.users.manage` and `tenant.roles.manage` permissions through the protected role mutation API, expects the lockout response, reloads the Roles page to confirm the critical permissions remain, and restores role permissions in `finally`.
 
 Local evidence:
 - Django system check: `.venv/bin/python backend/manage.py check` -> passed.

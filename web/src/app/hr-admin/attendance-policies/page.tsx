@@ -4,8 +4,11 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { getHrAdminAttendancePolicies } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminAttendancePoliciesPage() {
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin" });
+  const canManagePolicies = sessionHasPermission(sessionUser, "attendance.policies.manage");
   const result = await getHrAdminAttendancePolicies();
   const activeCount = result.data.filter((item) => item.status === "active").length;
 
@@ -17,9 +20,11 @@ export default async function HrAdminAttendancePoliciesPage() {
         description="Set time rules, thresholds, and check-in behavior that drive attendance treatment."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/attendance-policies/new">
-              Create attendance policy
-            </Link>
+            {canManagePolicies ? (
+              <Link className="button button--primary" href="/hr-admin/attendance-policies/new">
+                Create attendance policy
+              </Link>
+            ) : null}
             <Link className="button button--secondary" href="/hr-admin/policies">
               Back to policies
             </Link>
@@ -53,9 +58,11 @@ export default async function HrAdminAttendancePoliciesPage() {
                   <p className="section-copy">{item.code}</p>
                 </div>
                 <div className="record-card__actions">
-                  <Link className="button button--secondary" href={`/hr-admin/attendance-policies/${item.id}/edit`}>
-                    Edit
-                  </Link>
+                  {canManagePolicies ? (
+                    <Link className="button button--secondary" href={`/hr-admin/attendance-policies/${item.id}/edit`}>
+                      Edit
+                    </Link>
+                  ) : null}
                 </div>
               </div>
               <div className="detail-grid">
