@@ -27,6 +27,18 @@ async function authHeaders(page: Page) {
   return { Authorization: `Token ${token}` };
 }
 
+async function loginViaApi(page: Page, persona: { username: string; password: string }) {
+  await page.request.post("/api/auth/logout").catch(() => null);
+  await page.context().clearCookies();
+  const response = await page.request.post("/api/auth/login", {
+    data: {
+      identifier: persona.username,
+      password: persona.password,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
 async function createRoleBackedUser(page: Page, input: { suffix: number; roleName: string; roleCode: string; permissions: string[] }) {
   await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);
   await expectPageReady(page, "Roles & Permissions");
@@ -46,8 +58,7 @@ async function createRoleBackedUser(page: Page, input: { suffix: number; roleNam
   const username = `${input.roleCode}.${input.suffix}`;
   const email = `${username}@example.com`;
 
-  await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);
-  await expectPageReady(page, "Employees");
+  await loginViaApi(page, hrAdmin);
 
   const employeeResponse = await page.request.post("/api/hr-admin/employees", {
     data: {
