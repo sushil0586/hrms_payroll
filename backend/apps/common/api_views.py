@@ -131,6 +131,9 @@ from apps.common.api_serializers import (
     TenantAdminMembershipActionSerializer,
     TenantAdminMembershipInviteSerializer,
     TenantAdminMembershipMutationResultSerializer,
+    TenantAdminRoleActionSerializer,
+    TenantAdminRoleMutationResultSerializer,
+    TenantAdminRoleWriteSerializer,
     TenantAdminSupportAccessGrantActionSerializer,
     TenantAdminSupportAccessGrantCreateSerializer,
     TenantAdminSupportAccessGrantMutationResultSerializer,
@@ -315,6 +318,7 @@ from apps.common.api_serializers import (
 )
 from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, ScopeType, TenantMembership, User
+from apps.iam.permission_checks import user_has_tenant_permission
 from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, EmploymentType, Grade, LegalEntity, Location
 from apps.payroll.models import (
     EmployeeSalaryAssignment,
@@ -463,11 +467,14 @@ from apps.common.selectors import (
     recompute_hrms_saas_launch_audit_pack_checksum,
     sync_hrms_saas_launch_remediation_assignments,
     create_tenant_admin_change_request,
+    create_tenant_admin_role,
     create_support_access_grant,
     evaluate_support_access_session,
     invite_tenant_admin_membership,
     update_tenant_admin_change_request,
     update_tenant_admin_membership,
+    update_tenant_admin_role,
+    update_tenant_admin_role_status,
     update_support_access_grant,
     update_hrms_saas_launch_remediation_assignment,
     update_saas_commercial_subscription,
@@ -6275,6 +6282,10 @@ class TenantAdminContextMixin(EmployeeContextMixin):
         membership = get_default_membership_for_user(self.request.user)
         return membership.tenant if membership else None
 
+    def require_tenant_permission(self, tenant, permission_key: str):
+        if not user_has_tenant_permission(self.request.user, tenant, permission_key):
+            raise exceptions.PermissionDenied(f"Missing tenant permission: {permission_key}.")
+
 
 class MeLeaveSummaryView(EmployeeContextMixin, APIView):
     def get(self, request):
@@ -7572,6 +7583,7 @@ class TenantAdminMembershipListCreateView(TenantAdminContextMixin, APIView):
         tenant = self.get_tenant()
         if not tenant:
             return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.users.manage")
         serializer = TenantAdminMembershipInviteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -7591,6 +7603,7 @@ class TenantAdminMembershipDetailView(TenantAdminContextMixin, APIView):
         tenant = self.get_tenant()
         if not tenant:
             return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.users.manage")
         serializer = TenantAdminMembershipActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -7604,6 +7617,53 @@ class TenantAdminMembershipDetailView(TenantAdminContextMixin, APIView):
         except ValueError as exc:
             return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return response.Response(TenantAdminMembershipMutationResultSerializer(payload).data)
+
+
+class TenantAdminRoleListCreateView(TenantAdminContextMixin, APIView):
+    def post(self, request):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.roles.manage")
+        serializer = TenantAdminRoleWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                payload = create_tenant_admin_role(
+                    tenant,
+                    actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
+                    payload=serializer.validated_data,
+                )
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(TenantAdminRoleMutationResultSerializer(payload).data, status=status.HTTP_201_CREATED)
+
+
+class TenantAdminRoleDetailView(TenantAdminContextMixin, APIView):
+    def patch(self, request, role_id):
+        tenant = self.get_tenant()
+        if not tenant:
+            return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.roles.manage")
+        if "action" in request.data:
+            serializer = TenantAdminRoleActionSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            mutation = update_tenant_admin_role_status
+        else:
+            serializer = TenantAdminRoleWriteSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            mutation = update_tenant_admin_role
+        try:
+            with transaction.atomic():
+                payload = mutation(
+                    tenant,
+                    role_id,
+                    actor_identifier=getattr(request.user, "username", "") or getattr(request.user, "email", ""),
+                    payload=serializer.validated_data,
+                )
+        except ValueError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(TenantAdminRoleMutationResultSerializer(payload).data)
 
 
 class TenantAdminChangeRequestListCreateView(TenantAdminContextMixin, APIView):

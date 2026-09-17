@@ -12,6 +12,7 @@ from django.db import IntegrityError
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.text import slugify
 
 from apps.common.models import (
     HrmsLaunchRemediationAssignment,
@@ -32,6 +33,7 @@ from apps.documents.models import DocumentCategory, DocumentRequirementRule, Emp
 from apps.employee_lifecycle.models import EmployeeExit, EmployeeMovement, EmployeeOnboarding, ExitStatus, OnboardingStatus, ProbationDecision, ProbationReview
 from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMembership, User
+from apps.iam.permission_catalog import get_permission_catalog, get_tenant_assignable_permission_keys
 from apps.leave_management.models import LeaveBalance, LeavePolicy, LeavePolicyStatus, LeaveRequest, LeaveRequestStatus, LeaveType
 from apps.leave_management.services import _get_leave_request_lifecycle_runtime, get_leave_policy_period_year
 from apps.notifications.models import Notification, NotificationEventDefinition, NotificationStatus, NotificationTemplate, NotificationTemplateStatus
@@ -1291,11 +1293,18 @@ TENANT_ADMIN_MEMBERSHIP_MUTATION_SOURCE_REF = "saas.tenant_admin.membership_muta
 
 
 def _tenant_admin_role_payload(role: Role) -> dict:
+    active_membership_count = getattr(role, "active_membership_count", None)
+    if active_membership_count is None:
+        active_membership_count = role.membership_roles.filter(membership__status=MembershipStatus.ACTIVE).count()
     return {
         "id": str(role.id),
         "code": role.code,
         "name": role.name,
+        "description": role.description,
         "is_system_role": role.is_system_role,
+        "is_active": role.is_active,
+        "active_membership_count": active_membership_count,
+        "permission_keys": [item.permission_key for item in role.permissions.order_by("permission_key")],
     }
 
 
@@ -1354,6 +1363,195 @@ def _tenant_admin_membership_management_payload(tenant) -> dict:
             {"value": "update_roles", "label": "Update roles"},
         ],
     }
+
+
+TENANT_ADMIN_ROLE_MUTATION_SOURCE_REF = "saas.tenant_admin.role_mutation.v1"
+
+
+def _tenant_admin_role_management_payload(tenant) -> dict:
+    permission_catalog = _tenant_admin_permission_catalog_payload(tenant)
+    roles = list(
+        Role.objects.filter(tenant=tenant)
+        .prefetch_related("permissions")
+        .annotate(active_membership_count=Count("membership_roles", filter=Q(membership_roles__membership__status=MembershipStatus.ACTIVE), distinct=True))
+        .order_by("-is_active", "name")
+    )
+    return {
+        "roles": [_tenant_admin_role_payload(role) for role in roles],
+        "permission_catalog": permission_catalog,
+        "available_actions": [
+            {"value": "create", "label": "Create role"},
+            {"value": "edit", "label": "Edit role"},
+            {"value": "activate", "label": "Activate"},
+            {"value": "deactivate", "label": "Deactivate"},
+        ],
+    }
+
+
+def _normalize_tenant_admin_role_code(name: str, code: str = "") -> str:
+    normalized = slugify(code or name).lower()
+    if not normalized:
+        raise ValueError("Role code is required.")
+    return normalized[:60]
+
+
+TENANT_ADMIN_PERMISSION_MODULE_ENTITLEMENT_MAP = {
+    "attendance": "attendance",
+    "audit": "core_hr",
+    "documents": "documents",
+    "finance": "payroll",
+    "hr": "core_hr",
+    "iam": "core_hr",
+    "leave": "leave",
+    "notifications": "notifications",
+    "payroll": "payroll",
+    "reports": "core_hr",
+    "security": "core_hr",
+    "statutory": "payroll",
+    "tenant-admin": "core_hr",
+}
+
+
+def _tenant_admin_enabled_entitlement_refs(tenant) -> set[str]:
+    control = describe_saas_commercial_control(tenant, include_history=False)
+    return {str(item["entitlement_ref"]) for item in control.get("entitlements", []) if item.get("enabled")}
+
+
+def _tenant_admin_permission_availability(permission: dict, enabled_entitlements: set[str]) -> tuple[bool, str]:
+    required_module = str(permission.get("required_module") or "")
+    if not required_module:
+        return True, ""
+    required_entitlement = TENANT_ADMIN_PERMISSION_MODULE_ENTITLEMENT_MAP.get(required_module, required_module)
+    if required_entitlement in enabled_entitlements:
+        return True, ""
+    return False, f"Requires the {required_entitlement.replace('_', ' ').title()} entitlement for this tenant plan."
+
+
+def _tenant_admin_permission_catalog_payload(tenant) -> list[dict]:
+    enabled_entitlements = _tenant_admin_enabled_entitlement_refs(tenant)
+    payload = []
+    for permission in get_permission_catalog():
+        is_available, unavailable_reason = _tenant_admin_permission_availability(permission, enabled_entitlements)
+        required_module = str(permission.get("required_module") or "")
+        payload.append(
+            {
+                **permission,
+                "required_entitlement": TENANT_ADMIN_PERMISSION_MODULE_ENTITLEMENT_MAP.get(required_module, required_module),
+                "is_available": is_available,
+                "unavailable_reason": unavailable_reason,
+            }
+        )
+    return payload
+
+
+def _validate_tenant_admin_role_permission_keys(tenant, permission_keys: list[str]) -> None:
+    assignable_keys = get_tenant_assignable_permission_keys()
+    unavailable_keys = sorted(set(permission_keys) - assignable_keys)
+    if unavailable_keys:
+        raise ValueError(f"Unknown or unavailable permission keys: {', '.join(unavailable_keys)}.")
+    available_permission_keys = {
+        permission["key"]
+        for permission in _tenant_admin_permission_catalog_payload(tenant)
+        if permission.get("tenant_assignable") and permission.get("is_available")
+    }
+    unavailable_for_plan_keys = sorted(set(permission_keys) - available_permission_keys)
+    if unavailable_for_plan_keys:
+        raise ValueError(f"Permission keys are not available for this tenant plan: {', '.join(unavailable_for_plan_keys)}.")
+
+
+def _sync_tenant_admin_role_permissions(role: Role, permission_keys: list[str]) -> None:
+    _validate_tenant_admin_role_permission_keys(role.tenant, permission_keys)
+    role.permissions.exclude(permission_key__in=permission_keys).delete()
+    for permission_key in permission_keys:
+        role.permissions.update_or_create(permission_key=permission_key, defaults={"description": ""})
+
+
+def create_tenant_admin_role(tenant, *, actor_identifier: str, payload: dict) -> dict:
+    name = payload["name"].strip()
+    code = _normalize_tenant_admin_role_code(name, payload.get("code", ""))
+    permission_keys = payload.get("permission_keys", [])
+    _validate_tenant_admin_role_permission_keys(tenant, permission_keys)
+    if Role.objects.filter(tenant=tenant, code__iexact=code).exists():
+        raise ValueError("A role with this code already exists for this tenant.")
+    role = Role.objects.create(
+        tenant=tenant,
+        code=code,
+        name=name,
+        description=payload.get("description", ""),
+        is_system_role=False,
+        is_active=payload.get("is_active", True),
+    )
+    _sync_tenant_admin_role_permissions(role, permission_keys)
+    role_payload = _tenant_admin_role_payload(role)
+    record_saas_commercial_audit_event(
+        tenant,
+        event_type="tenant_role_created",
+        actor_identifier=actor_identifier,
+        source_ref=TENANT_ADMIN_ROLE_MUTATION_SOURCE_REF,
+        event_snapshot={"role": role_payload, "action": "create"},
+    )
+    return {"role": role_payload, "console": get_tenant_admin_console_payload(tenant)}
+
+
+def update_tenant_admin_role(tenant, role_id, *, actor_identifier: str, payload: dict) -> dict:
+    role = Role.objects.filter(tenant=tenant, id=role_id).prefetch_related("permissions").first()
+    if not role:
+        raise ValueError("Role not found.")
+    if "permission_keys" in payload:
+        _validate_tenant_admin_role_permission_keys(tenant, payload.get("permission_keys", []))
+    previous_role_payload = _tenant_admin_role_payload(role)
+    role.name = payload["name"].strip()
+    role.description = payload.get("description", "")
+    if not role.is_system_role:
+        role.code = _normalize_tenant_admin_role_code(role.name, payload.get("code", role.code))
+        if Role.objects.filter(tenant=tenant, code__iexact=role.code).exclude(id=role.id).exists():
+            raise ValueError("A role with this code already exists for this tenant.")
+        role.is_active = payload.get("is_active", role.is_active)
+    elif payload.get("is_active") is False:
+        raise ValueError("System roles cannot be deactivated by tenant admin.")
+    role.save()
+    if "permission_keys" in payload:
+        _sync_tenant_admin_role_permissions(role, payload.get("permission_keys", []))
+    role.refresh_from_db()
+    role_payload = _tenant_admin_role_payload(role)
+    record_saas_commercial_audit_event(
+        tenant,
+        event_type="tenant_role_updated",
+        actor_identifier=actor_identifier,
+        source_ref=TENANT_ADMIN_ROLE_MUTATION_SOURCE_REF,
+        event_snapshot={"previous_role": previous_role_payload, "role": role_payload, "action": "edit"},
+    )
+    return {"role": role_payload, "console": get_tenant_admin_console_payload(tenant)}
+
+
+def update_tenant_admin_role_status(tenant, role_id, *, actor_identifier: str, payload: dict) -> dict:
+    role = Role.objects.filter(tenant=tenant, id=role_id).prefetch_related("permissions").first()
+    if not role:
+        raise ValueError("Role not found.")
+    action = payload["action"]
+    if role.is_system_role and action == "deactivate":
+        raise ValueError("System roles cannot be deactivated by tenant admin.")
+    assigned_count = role.membership_roles.filter(membership__status__in=[MembershipStatus.ACTIVE, MembershipStatus.INVITED]).count()
+    if action == "deactivate" and assigned_count:
+        raise ValueError("Remove this role from active or invited members before deactivating it.")
+    previous_role_payload = _tenant_admin_role_payload(role)
+    role.is_active = action == "activate"
+    role.save(update_fields=["is_active", "updated_at"])
+    role.refresh_from_db()
+    role_payload = _tenant_admin_role_payload(role)
+    record_saas_commercial_audit_event(
+        tenant,
+        event_type="tenant_role_activated" if action == "activate" else "tenant_role_deactivated",
+        actor_identifier=actor_identifier,
+        source_ref=TENANT_ADMIN_ROLE_MUTATION_SOURCE_REF,
+        event_snapshot={
+            "previous_role": previous_role_payload,
+            "role": role_payload,
+            "action": action,
+            "note": payload.get("note", ""),
+        },
+    )
+    return {"role": role_payload, "console": get_tenant_admin_console_payload(tenant)}
 
 
 def _ensure_tenant_admin_subscription_allows_activation(tenant, control: dict) -> None:
@@ -2405,6 +2603,7 @@ def get_tenant_admin_console_payload(tenant) -> dict:
             }
             for role in role_rows
         ],
+        "role_management": _tenant_admin_role_management_payload(tenant),
         "configuration_health": {
             "tenant_configuration_count": tenant_configs.count(),
             "published_count": config_status_counts.get(ConfigStatus.PUBLISHED, 0),

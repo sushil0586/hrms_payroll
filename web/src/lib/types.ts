@@ -2474,6 +2474,36 @@ export type TenantAdminConsole = {
     active_membership_count: number;
     is_system_role: boolean;
   }>;
+  role_management: {
+    roles: Array<{
+      id: string;
+      code: string;
+      name: string;
+      description: string;
+      is_system_role: boolean;
+      is_active: boolean;
+      active_membership_count: number;
+      permission_keys: string[];
+    }>;
+    permission_catalog: Array<{
+      key: string;
+      label: string;
+      module: string;
+      description: string;
+      risk_level: "low" | "medium" | "high" | "critical" | string;
+      tenant_assignable: boolean;
+      required_module: string;
+      required_plan: string;
+      required_entitlement: string;
+      is_available: boolean;
+      unavailable_reason: string;
+      default_role_codes: string[];
+    }>;
+    available_actions: Array<{
+      value: string;
+      label: string;
+    }>;
+  };
   configuration_health: {
     tenant_configuration_count: number;
     published_count: number;
@@ -2504,7 +2534,11 @@ export type TenantAdminConsole = {
       id: string;
       code: string;
       name: string;
+      description?: string;
       is_system_role: boolean;
+      is_active?: boolean;
+      active_membership_count?: number;
+      permission_keys?: string[];
     }>;
     memberships?: Array<{
       id: string;
@@ -5452,6 +5486,7 @@ export type SessionUser = {
   default_membership: SessionMembership | null;
   memberships: SessionMembership[];
   workspace_access: SessionWorkspaceAccess;
+  effective_permissions: string[];
 };
 
 export type PlatformTenantListItem = {

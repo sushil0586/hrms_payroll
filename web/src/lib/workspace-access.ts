@@ -30,6 +30,17 @@ export function sessionCanAccessWorkspace(
   return Boolean(sessionUser?.workspace_access?.[workspace]);
 }
 
+export function sessionHasPermission(sessionUser: SessionUser | null, permissionKey: string) {
+  return Boolean(sessionUser?.effective_permissions?.includes(permissionKey));
+}
+
+export function sessionHasAnyPermission(sessionUser: SessionUser | null, permissionKeys: string[]) {
+  if (!permissionKeys.length) {
+    return true;
+  }
+  return permissionKeys.some((permissionKey) => sessionHasPermission(sessionUser, permissionKey));
+}
+
 type RequireWorkspaceAccessOptions = {
   roleCodes?: string[];
   workspace?: keyof SessionUser["workspace_access"];

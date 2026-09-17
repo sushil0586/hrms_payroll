@@ -710,6 +710,7 @@ class TenantAdminConsoleSerializer(serializers.Serializer):
     seat_usage = serializers.JSONField()
     membership_status_counts = serializers.JSONField()
     role_coverage = serializers.JSONField()
+    role_management = serializers.JSONField()
     configuration_health = serializers.JSONField()
     governance_checks = serializers.JSONField()
     membership_management = serializers.JSONField()
@@ -756,6 +757,49 @@ class TenantAdminMembershipMutationResultSerializer(serializers.Serializer):
     membership = serializers.JSONField()
     generated_password = serializers.CharField(required=False, allow_blank=True)
     password_was_set = serializers.BooleanField()
+    console = serializers.JSONField()
+
+
+class TenantAdminRoleWriteSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=255)
+    code = serializers.SlugField(max_length=60, required=False, allow_blank=True)
+    description = serializers.CharField(required=False, allow_blank=True, max_length=1200)
+    is_active = serializers.BooleanField(required=False, default=True)
+    permission_keys = serializers.ListField(child=serializers.CharField(max_length=120), required=False, allow_empty=True)
+
+    def validate_name(self, value):
+        return value.strip()
+
+    def validate_code(self, value):
+        return value.strip().lower()
+
+    def validate_description(self, value):
+        return value.strip()
+
+    def validate_permission_keys(self, value):
+        clean_keys = []
+        seen = set()
+        for item in value:
+            clean_item = item.strip().lower()
+            if not clean_item:
+                continue
+            if clean_item not in seen:
+                clean_keys.append(clean_item)
+                seen.add(clean_item)
+        return clean_keys
+
+
+class TenantAdminRoleActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["activate", "deactivate"])
+    note = serializers.CharField(required=False, allow_blank=True, max_length=1200)
+
+    def validate(self, attrs):
+        attrs["note"] = attrs.get("note", "").strip()
+        return attrs
+
+
+class TenantAdminRoleMutationResultSerializer(serializers.Serializer):
+    role = serializers.JSONField()
     console = serializers.JSONField()
 
 

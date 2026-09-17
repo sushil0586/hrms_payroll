@@ -6,6 +6,7 @@ from rest_framework import serializers
 
 from apps.workflows.models import WorkflowAssignment, WorkflowInstanceStatus
 from apps.iam.models import MembershipStatus, TenantMembership, User
+from apps.iam.permission_checks import get_user_tenant_permission_keys
 
 
 class LoginSerializer(serializers.Serializer):
@@ -63,6 +64,7 @@ class SessionUserSerializer(serializers.Serializer):
     default_membership = MembershipSummarySerializer(allow_null=True)
     memberships = MembershipSummarySerializer(many=True)
     workspace_access = WorkspaceAccessSerializer()
+    effective_permissions = serializers.ListField(child=serializers.CharField())
 
 
 def _membership_role_codes(membership: TenantMembership | None) -> list[str]:
@@ -91,11 +93,20 @@ def _membership_has_pending_mss_assignment(membership: TenantMembership | None) 
     ).filter(Q(membership=membership) | Q(actor_identifier__in=actor_identifiers)).exists()
 
 
-def build_workspace_access_payload(user: User, default_membership: TenantMembership | None) -> dict:
+def build_workspace_access_payload(
+    user: User,
+    default_membership: TenantMembership | None,
+    effective_permissions: list[str] | None = None,
+) -> dict:
     role_codes = set(_membership_role_codes(default_membership))
+    effective_permission_keys = set(effective_permissions or [])
     has_employee_context = bool(default_membership and getattr(default_membership, "employee", None))
     hr_admin_access = "hr-admin" in role_codes
-    tenant_admin_access = hr_admin_access or "tenant-admin" in role_codes
+    tenant_admin_access = (
+        hr_admin_access
+        or "tenant-admin" in role_codes
+        or any(permission_key.startswith("tenant.") for permission_key in effective_permission_keys)
+    )
     mss_access = hr_admin_access or "manager" in role_codes or _membership_has_pending_mss_assignment(default_membership)
 
     return {
@@ -128,6 +139,11 @@ def build_session_user_payload(user: User) -> dict:
         .order_by("-is_default", "created_at")
     )
     default_membership = memberships[0] if memberships else None
+    effective_permissions = (
+        sorted(get_user_tenant_permission_keys(user, default_membership.tenant))
+        if default_membership
+        else []
+    )
 
     return {
         "id": user.id,
@@ -139,5 +155,6 @@ def build_session_user_payload(user: User) -> dict:
         "must_change_password": user.must_change_password,
         "default_membership": build_membership_payload(default_membership) if default_membership else None,
         "memberships": [build_membership_payload(membership) for membership in memberships],
-        "workspace_access": build_workspace_access_payload(user, default_membership),
+        "workspace_access": build_workspace_access_payload(user, default_membership, effective_permissions),
+        "effective_permissions": effective_permissions,
     }

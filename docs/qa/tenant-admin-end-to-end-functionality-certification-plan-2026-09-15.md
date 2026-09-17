@@ -892,11 +892,125 @@ Final launch confidence:
 - Confidence basis: page split is complete, major flows are browser-certified locally and on staging, role/API boundaries are verified, and no critical/high defects remain in the certified Tenant Admin scope.
 - Residual risk: cross-tenant automation currently proves active tenant-code scoping with one tenant-admin persona; a second independent tenant-admin credential would raise confidence further for multi-tenant isolation.
 
+### Phase TA-8: Roles And Permissions Self-Service
+
+Goal: allow Tenant Admin to create and maintain custom tenant roles from the browser instead of requiring backend/admin setup.
+
+Status: Complete locally; staging deployment and live browser certification pending.
+
+Related RBAC plan: `docs/qa/full-rbac-rollout-plan-2026-09-17.md`.
+
+Implemented:
+- Added `/tenant-admin/roles` as a single-responsibility Roles & Permissions workspace.
+- Added sidebar navigation entry `Roles`.
+- Added Tenant Admin role APIs:
+  - `POST /api/v1/tenant-admin/roles/`
+  - `PATCH /api/v1/tenant-admin/roles/<role_id>/`
+- Added Next.js proxy routes:
+  - `/api/tenant-admin/roles`
+  - `/api/tenant-admin/roles/[roleId]`
+- Added role management payload to Tenant Admin console data.
+- Added custom role create, edit, activate, and deactivate support.
+- Protected system roles from tenant-admin deactivation.
+- Blocked deactivation of assigned custom roles until the role is removed from active/invited members.
+- Added role permission-key documentation so custom roles can carry permission intent now, with room for granular enforcement later.
+- Added clear inline validation and disabled-action explanations.
+- Added popup/modal forms for create/update.
+- Added search and empty state for long role lists.
+- Added demo-data support for the new role-management shape.
+
+Local evidence:
+- Django system check: `.venv/bin/python backend/manage.py check` -> passed.
+- Backend focused smoke: `.venv/bin/python -m pytest backend/tests/test_phase0_api_smoke.py -k "tenant_admin_role_crud or tenant_admin_can_create_update_and_deactivate_custom_roles or tenant_admin_console_returns_commercial"` -> `3 passed`.
+- Frontend lint for touched files -> passed.
+- TypeScript: `npm --prefix web run typecheck` -> passed.
+
+Certification assets added:
+- Backend tests for custom role create/update/deactivate, duplicate role code denial, system role deactivation denial, and assigned-role deactivation denial.
+- Browser spec: `tenant-admin-roles-certification.spec.ts` for role page validation, create, edit, protected system-role messaging, search, and no-overflow.
+
+Confidence after TA-8 local:
+
+| Area | Previous | Current | Notes |
+| --- | ---: | ---: | --- |
+| Tenant Admin functionality readiness | 92% | 93-94% | Tenant Admin can now self-serve custom roles instead of depending on backend role setup. |
+| Tenant Admin QA/browser coverage | 92% | 93% local | Backend and TypeScript are green; staging browser proof is still pending. |
+| Tenant Admin user-friendliness | 90-92% | 92-93% | Roles are now a focused page, with protected system-role guidance and clear deactivation blockers. |
+| Tenant Admin public launch readiness | 92% | 93% local | Needs deployment and live Playwright run before raising launch confidence further. |
+
+Next required staging evidence:
+- Deploy this check-in.
+- Run post-deploy smoke.
+- Run live Playwright:
+
+```bash
+HRMS_BASE_URL=https://hrms.accerio.in PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 pnpm --dir web exec playwright test web/tests/e2e/tenant-admin-roles-certification.spec.ts --project=chromium --workers=1 --reporter=line --timeout=720000
+```
+
 ## Current Known Gaps
 
 | Gap | Impact | Target Phase |
 | --- | --- | --- |
 | Cross-tenant proof uses one active tenant-admin persona | True two-tenant tenant-admin isolation needs a second independent tenant-admin credential in the automation matrix | Future multi-tenant hardening |
+| TA-8 staging browser proof pending | Custom role self-service is locally verified but not yet certified on deployed staging | Immediate post-deploy certification |
+| RBAC enforcement is only partially wired | Tenant Admin role/user mutation APIs are protected, but read routes, support access, settings, trust-audit download, and downstream HR/payroll APIs still need permission enforcement | RBAC rollout |
+
+### Phase TA-9: Tenant Admin RBAC Enforcement Foundation
+
+Goal: make Tenant Admin roles operational, not just descriptive, by enforcing the first high-risk permissions on backend APIs.
+
+Status: Complete locally for role and user mutation APIs; wider Tenant Admin permission enforcement remains in the RBAC rollout plan.
+
+Implemented:
+- Added reusable backend permission resolution through `apps.iam.permission_checks`.
+- Preserved existing system-role behavior through catalog default grants when a role has no explicit permission rows.
+- Made explicit saved `RolePermission` rows override default grants, so custom/limited roles can be genuinely restricted.
+- Enforced `tenant.roles.manage` on Tenant Admin role create/update/status APIs.
+- Enforced `tenant.users.manage` on Tenant Admin membership invite/update/status APIs.
+- Kept the existing Tenant Admin/HR Admin workspace role check as an outer gate.
+- Added default Tenant Admin user/role management grants to `hr-admin` because current certified customer-owner operations use the HR Admin tenant operator in demo/staging data.
+
+Local evidence:
+- Django system check: `.venv/bin/python backend/manage.py check` -> passed.
+- Focused backend smoke: `.venv/bin/python -m pytest backend/tests/test_phase0_api_smoke.py -k "tenant_admin_role_crud or tenant_admin_membership_invite_requires_manage_permission"` -> `5 passed`.
+
+Certification added:
+- A view-only role permission set cannot create roles.
+- A view-only user permission set cannot invite tenant members.
+- Denials return `403` and include the missing permission key.
+
+Confidence impact:
+
+| Area | Before TA-9 | After TA-9 Local | Notes |
+| --- | ---: | ---: | --- |
+| Tenant Admin functionality readiness | 93-94% | 94% local | Role/user management now has real backend permission enforcement. |
+| Tenant Admin QA/browser coverage | 93% local | 93-94% local | Backend negative permission coverage added; live browser proof still required after deployment. |
+| Tenant Admin user-friendliness | 92-93% | 92-93% | No UI change in TA-9; user-facing permission messages are backend-ready. |
+| Tenant Admin public launch readiness | 93% local | 94% local | Needs staging deploy/rerun and remaining Tenant Admin permission gates for 95%. |
+
+### Phase TA-10: Permission-Aware Tenant Admin UI
+
+Goal: make Tenant Admin menus and high-risk controls respond to the effective permissions attached to the logged-in user's roles.
+
+Status: Complete locally for Tenant Admin navigation, quick links, user mutations, and role mutations.
+
+Implemented:
+- Added `effective_permissions` to the auth session/login payload.
+- Added frontend permission helpers in `workspace-access.ts`.
+- Tenant Admin sidebar and quick links now hide entries when the user lacks the relevant view/manage permission.
+- Users page disables invite, role update, activate, suspend, and revoke controls without `tenant.users.manage`.
+- Roles page disables add, edit, activate, and deactivate controls without `tenant.roles.manage`.
+- Added light inline notices for view-only users so disabled actions are understandable without changing the page layout.
+- Extended Tenant Admin role browser certification to create a limited view-only tenant role, log in as that user, verify permission-filtered menus, disabled mutation actions, and backend `403` denials.
+
+Local evidence:
+- Django system check: `.venv/bin/python backend/manage.py check` -> passed.
+- Focused backend smoke: `.venv/bin/python -m pytest backend/tests/test_phase0_api_smoke.py -k "tenant_admin_role_crud or tenant_admin_membership_invite_requires_manage_permission or tenant_admin_console_returns_commercial"` -> `6 passed`.
+- TypeScript: `npm --prefix web run typecheck` -> passed.
+- Browser spec command without live API env: `pnpm --dir web exec playwright test web/tests/e2e/tenant-admin-roles-certification.spec.ts --project=chromium --workers=1 --reporter=line --timeout=720000` -> `3 skipped` by the live-API guard.
+
+Next certification target:
+- Run the extended Tenant Admin roles browser spec against staging with `HRMS_API_BASE_URL` configured after deployment.
 
 ## Working Definition Of Done
 

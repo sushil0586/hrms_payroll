@@ -25,6 +25,7 @@ function emailLooksValid(value: string) {
 }
 
 type Props = {
+  canManageUsers: boolean;
   data: TenantAdminConsole;
 };
 
@@ -37,7 +38,7 @@ type Confirmation = {
 
 const PAGE_SIZE = 8;
 
-export function TenantMembershipActions({ data }: Props) {
+export function TenantMembershipActions({ canManageUsers, data }: Props) {
   const router = useRouter();
   const roleOptions = data.membership_management.role_options;
   const activeStatusOptions = useMemo(
@@ -186,6 +187,10 @@ export function TenantMembershipActions({ data }: Props) {
   }
 
   async function inviteMember() {
+    if (!canManageUsers) {
+      setFormError("You need tenant.users.manage to invite tenant users.");
+      return;
+    }
     if (inviteValidation) {
       setFormError(inviteValidation);
       return;
@@ -217,6 +222,10 @@ export function TenantMembershipActions({ data }: Props) {
   }
 
   async function runMembershipAction(membershipId: string, action: "activate" | "suspend" | "revoke" | "update_roles", note = "") {
+    if (!canManageUsers) {
+      setFormError("You need tenant.users.manage to update tenant users.");
+      return;
+    }
     if (action === "update_roles" && editValidation) {
       setFormError(editValidation);
       return;
@@ -258,12 +267,13 @@ export function TenantMembershipActions({ data }: Props) {
         </div>
         <div className="tenant-membership-actions__header-actions">
           <span className="record-chip">{data.seat_usage.current_value}/{data.seat_usage.limit_value || "unlimited"} seats</span>
-          <button className="button button--primary" onClick={() => setInviteOpen(true)} type="button">
+          <button className="button button--primary" disabled={!canManageUsers} onClick={() => setInviteOpen(true)} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
             {actionLabels.invite ?? "Invite member"}
           </button>
         </div>
       </div>
       <p className="tenant-console-empty">Invite users and update roles from focused dialogs. Suspended or revoked users lose tenant workspace access.</p>
+      {!canManageUsers ? <span className="tenant-inline-notice tenant-inline-notice--muted" role="status">You can view tenant users. User changes require tenant.users.manage.</span> : null}
       {notice ? <span className="tenant-inline-notice" role="status">{notice}</span> : null}
 
       <div className="tenant-membership-toolbar">
@@ -294,19 +304,19 @@ export function TenantMembershipActions({ data }: Props) {
             </div>
             <span className="record-chip">{titleCase(membership.membership_status)}</span>
             <div className="tenant-membership-row__actions">
-              <button className="button button--secondary" disabled={busyRef.startsWith(`${membership.id}:`)} onClick={() => openEditDialog(membership)} type="button">
+              <button className="button button--secondary" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={() => openEditDialog(membership)} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
                 {actionLabels.update_roles ?? "Update roles"}
               </button>
               {membership.membership_status === "active" ? (
-                <button className="button button--secondary" disabled={busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "suspend")} type="button">
+                <button className="button button--secondary" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "suspend")} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
                   {actionLabels.suspend ?? "Suspend"}
                 </button>
               ) : (
-                <button className="button button--secondary" disabled={busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "activate")} type="button">
+                <button className="button button--secondary" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "activate")} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
                   {actionLabels.activate ?? "Activate"}
                 </button>
               )}
-              <button className="button button--ghost" disabled={busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "revoke")} type="button">
+              <button className="button button--ghost" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={() => openConfirmation(membership, "revoke")} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
                 {actionLabels.revoke ?? "Revoke"}
               </button>
             </div>

@@ -864,6 +864,206 @@ def test_tenant_admin_can_invite_and_manage_membership_with_audit(api_client: AP
 
 
 @pytest.mark.django_db
+def test_tenant_admin_can_create_update_and_deactivate_custom_roles(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    create_response = api_client.post(
+        "/api/v1/tenant-admin/roles/",
+        {
+            "name": "Leave Approver",
+            "code": "leave-approver",
+            "description": "Reviews leave requests for one department.",
+            "permission_keys": ["leave.requests.approve", "leave.requests.approve", "attendance.view"],
+        },
+        format="json",
+    )
+
+    assert create_response.status_code == 201, create_response.json()
+    created = create_response.json()["role"]
+    assert created["code"] == "leave-approver"
+    assert created["is_system_role"] is False
+    assert created["permission_keys"] == ["attendance.view", "leave.requests.approve"]
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_role_created").exists()
+
+    update_response = api_client.patch(
+        f"/api/v1/tenant-admin/roles/{created['id']}/",
+        {
+            "name": "Leave Review Lead",
+            "code": "leave-review-lead",
+            "description": "Owns departmental leave review.",
+            "permission_keys": ["leave.requests.approve"],
+        },
+        format="json",
+    )
+
+    assert update_response.status_code == 200, update_response.json()
+    assert update_response.json()["role"]["code"] == "leave-review-lead"
+    assert update_response.json()["role"]["permission_keys"] == ["leave.requests.approve"]
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_role_updated").exists()
+
+    deactivate_response = api_client.patch(
+        f"/api/v1/tenant-admin/roles/{created['id']}/",
+        {"action": "deactivate", "note": "Not required for launch."},
+        format="json",
+    )
+
+    assert deactivate_response.status_code == 200, deactivate_response.json()
+    assert deactivate_response.json()["role"]["is_active"] is False
+    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_role_deactivated").exists()
+
+
+@pytest.mark.django_db
+def test_tenant_admin_role_crud_blocks_unknown_permission_keys(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    create_response = api_client.post(
+        "/api/v1/tenant-admin/roles/",
+        {
+            "name": "Unsafe Role",
+            "code": "unsafe-role",
+            "description": "Should not save with unknown permissions.",
+            "permission_keys": ["leave.requests.approve", "unknown.permission"],
+        },
+        format="json",
+    )
+
+    assert create_response.status_code == 400
+    assert "Unknown or unavailable permission keys" in create_response.json()["detail"]
+    assert not Role.objects.filter(tenant=tenant, code="unsafe-role").exists()
+
+
+@pytest.mark.django_db
+def test_tenant_admin_role_crud_blocks_permissions_unavailable_for_plan(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    tenant.subscription_plan = "starter"
+    tenant.save(update_fields=["subscription_plan", "updated_at"])
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    console_response = api_client.get("/api/v1/tenant-admin/console/")
+
+    assert console_response.status_code == 200, console_response.json()
+    payroll_permission = next(
+        item
+        for item in console_response.json()["role_management"]["permission_catalog"]
+        if item["key"] == "payroll.review"
+    )
+    assert payroll_permission["is_available"] is False
+    assert "Payroll" in payroll_permission["unavailable_reason"]
+
+    create_response = api_client.post(
+        "/api/v1/tenant-admin/roles/",
+        {
+            "name": "Payroll Starter Role",
+            "code": "payroll-starter-role",
+            "description": "Should not save when payroll entitlement is disabled.",
+            "permission_keys": ["payroll.review"],
+        },
+        format="json",
+    )
+
+    assert create_response.status_code == 400
+    assert "not available for this tenant plan" in create_response.json()["detail"]
+    assert not Role.objects.filter(tenant=tenant, code="payroll-starter-role").exists()
+
+
+@pytest.mark.django_db
+def test_tenant_admin_role_crud_requires_manage_permission(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    tenant_admin_role = Role.objects.get(tenant=tenant, code="hr-admin")
+    tenant_admin_role.permissions.all().delete()
+    tenant_admin_role.permissions.create(permission_key="tenant.roles.view")
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    create_response = api_client.post(
+        "/api/v1/tenant-admin/roles/",
+        {
+            "name": "Blocked Role",
+            "code": "blocked-role",
+            "description": "Should not save without role management permission.",
+            "permission_keys": ["leave.requests.approve"],
+        },
+        format="json",
+    )
+
+    assert create_response.status_code == 403
+    assert "tenant.roles.manage" in str(create_response.json())
+    assert not Role.objects.filter(tenant=tenant, code="blocked-role").exists()
+
+
+@pytest.mark.django_db
+def test_tenant_admin_membership_invite_requires_manage_permission(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee_role = Role.objects.get(tenant=tenant, code="employee")
+    tenant_admin_role = Role.objects.get(tenant=tenant, code="hr-admin")
+    tenant_admin_role.permissions.all().delete()
+    tenant_admin_role.permissions.create(permission_key="tenant.users.view")
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    invite_response = api_client.post(
+        "/api/v1/tenant-admin/memberships/",
+        {
+            "username": "blocked.viewer",
+            "email": "blocked.viewer@example.com",
+            "first_name": "Blocked",
+            "last_name": "Viewer",
+            "membership_status": MembershipStatus.INVITED,
+            "role_ids": [str(employee_role.id)],
+        },
+        format="json",
+    )
+
+    assert invite_response.status_code == 403
+    assert "tenant.users.manage" in str(invite_response.json())
+    assert not User.objects.filter(username="blocked.viewer").exists()
+
+
+@pytest.mark.django_db
+def test_tenant_admin_role_crud_blocks_duplicate_system_and_assigned_deactivation(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee_role = Role.objects.get(tenant=tenant, code="employee")
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    duplicate_response = api_client.post(
+        "/api/v1/tenant-admin/roles/",
+        {"name": "Employee Copy", "code": "employee"},
+        format="json",
+    )
+
+    assert duplicate_response.status_code == 400
+    assert "already exists" in duplicate_response.json()["detail"]
+
+    system_deactivate_response = api_client.patch(
+        f"/api/v1/tenant-admin/roles/{employee_role.id}/",
+        {"action": "deactivate"},
+        format="json",
+    )
+
+    assert system_deactivate_response.status_code == 400
+    assert "System roles cannot be deactivated" in system_deactivate_response.json()["detail"]
+
+    custom_role = Role.objects.create(tenant=tenant, code="assigned-reviewer", name="Assigned Reviewer")
+    membership = TenantMembership.objects.filter(tenant=tenant, status=MembershipStatus.ACTIVE).first()
+    membership.membership_roles.create(role=custom_role)
+
+    assigned_deactivate_response = api_client.patch(
+        f"/api/v1/tenant-admin/roles/{custom_role.id}/",
+        {"action": "deactivate"},
+        format="json",
+    )
+
+    assert assigned_deactivate_response.status_code == 400
+    assert "Remove this role from active or invited members" in assigned_deactivate_response.json()["detail"]
+
+
+@pytest.mark.django_db
 def test_tenant_admin_membership_activation_respects_configured_seat_limit(api_client: APIClient, bootstrapped_workspace):
     tenant = bootstrapped_workspace["pending_leave"].tenant
     employee_role = Role.objects.get(tenant=tenant, code="employee")
