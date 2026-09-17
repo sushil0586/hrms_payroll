@@ -57,12 +57,13 @@ async function createRoleBackedUser(page: Page, input: { suffix: number; roleNam
 
   const username = `${input.roleCode}.${input.suffix}`;
   const email = `${username}@example.com`;
+  const employeeCodePrefix = input.roleCode.replace(/[^a-z0-9]/gi, "").slice(0, 12).toUpperCase();
 
   await loginViaApi(page, hrAdmin);
 
   const employeeResponse = await page.request.post("/api/hr-admin/employees", {
     data: {
-      employee_code: `QA-RBAC-${String(input.suffix).slice(-8)}`,
+      employee_code: `QA-RBAC-${employeeCodePrefix}-${String(input.suffix).slice(-10)}`,
       employment_status: "active",
       first_name: "QA",
       last_name: "Payroll RBAC",
@@ -70,7 +71,7 @@ async function createRoleBackedUser(page: Page, input: { suffix: number; roleNam
       date_of_joining: "2026-04-01",
     },
   });
-  expect(employeeResponse.ok()).toBeTruthy();
+  expect(employeeResponse.ok(), await employeeResponse.text()).toBeTruthy();
   const employeePayload = (await employeeResponse.json()) as { id: string };
 
   const accessResponse = await page.request.post(`/api/hr-admin/employees/${employeePayload.id}/access`, {
@@ -88,7 +89,7 @@ async function createRoleBackedUser(page: Page, input: { suffix: number; roleNam
       password: rbacPassword,
     },
   });
-  expect(accessResponse.ok()).toBeTruthy();
+  expect(accessResponse.ok(), await accessResponse.text()).toBeTruthy();
 
   await page.request.post("/api/auth/logout").catch(() => null);
   await page.context().clearCookies();
