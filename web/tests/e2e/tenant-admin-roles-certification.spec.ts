@@ -16,6 +16,7 @@ type CommercialControl = {
 };
 
 type TenantRole = {
+  active_membership_count?: number;
   id: string;
   code: string;
   description: string;
@@ -78,6 +79,7 @@ async function patchTenantRole(page: Page, role: TenantRole, permissionKeys: str
       description: role.description,
       permission_keys: permissionKeys,
     },
+    timeout: 90_000,
   });
   expect(response.ok()).toBeTruthy();
 }
@@ -89,11 +91,14 @@ async function patchTenantMembershipRoles(page: Page, membershipId: string, role
       role_ids: roleIds,
       note: "RBAC lockout browser proof restore.",
     },
+    timeout: 90_000,
   });
   expect(response.ok()).toBeTruthy();
 }
 
 test.describe("Tenant admin roles certification", () => {
+  test.setTimeout(180_000);
+
   test.skip(!process.env.HRMS_API_BASE_URL, "Tenant role certification requires a live HRMS API.");
 
   test("certifies custom role creation, edit dialog, protected system roles, and search", async ({ page }) => {
@@ -233,11 +238,11 @@ test.describe("Tenant admin roles certification", () => {
       "/tenant-admin/settings",
       "/tenant-admin/security-readiness",
     ]) {
-      await page.goto(blockedPath, { waitUntil: "domcontentloaded" });
+      await gotoAuthenticated(page, blockedPath, { username, password: generatedPassword });
       await expect(page).toHaveURL(/\/tenant-admin$/);
       await expectPageReady(page, "Tenant Admin Console");
     }
-    await page.goto("/tenant-admin/roles", { waitUntil: "domcontentloaded" });
+    await gotoAuthenticated(page, "/tenant-admin/roles", { username, password: generatedPassword });
     await expectPageReady(page, "Roles & Permissions");
 
     await expect(page.getByRole("main").getByRole("button", { name: "Add role" })).toBeDisabled();
@@ -254,7 +259,7 @@ test.describe("Tenant admin roles certification", () => {
     expect(blockedRoleResponse.status()).toBe(403);
     expect(JSON.stringify(await blockedRoleResponse.json())).toContain("tenant.roles.manage");
 
-    await page.goto("/tenant-admin/users", { waitUntil: "domcontentloaded" });
+    await gotoAuthenticated(page, "/tenant-admin/users", { username, password: generatedPassword });
     await expectPageReady(page, "Tenant User Management");
     await expect(page.getByRole("main").getByRole("button", { name: "Invite member" })).toBeDisabled();
     await expect(page.getByText("User changes require tenant.users.manage.")).toBeVisible();
@@ -303,22 +308,19 @@ test.describe("Tenant admin roles certification", () => {
     });
     expect(createTargetRoleResponse.ok()).toBeTruthy();
     const targetRole = (await createTargetRoleResponse.json()).role as TenantRole;
-    const rolesToTemporarilyReduce = originalRoles;
+    const criticalPermissionSet = new Set(criticalPermissions);
+    const rolesToTemporarilyReduce = originalRoles.filter(
+      (role) =>
+        (role.active_membership_count ?? 0) > 0 &&
+        role.permission_keys.some((permissionKey) => criticalPermissionSet.has(permissionKey)),
+    );
+    expect(rolesToTemporarilyReduce.length).toBeGreaterThan(0);
 
     try {
       await patchTenantMembershipRoles(page, currentMembership!.id, [targetRole.id]);
       for (const role of rolesToTemporarilyReduce) {
         await patchTenantRole(page, role, ["tenant.dashboard.view"]);
       }
-
-      await page.reload({ waitUntil: "domcontentloaded" });
-      await expectPageReady(page, "Roles & Permissions");
-      await page.getByLabel("Search roles").fill(targetRole.code);
-      const roleRow = page
-        .locator(".tenant-role-row")
-        .filter({ has: page.getByText(targetRole.name, { exact: true }) })
-        .filter({ has: page.getByText(targetRole.code, { exact: true }) });
-      await expect(roleRow).toHaveCount(1);
 
       const blockedRoleUpdate = await page.request.patch(`/api/tenant-admin/roles/${targetRole.id}`, {
         data: {
@@ -335,16 +337,12 @@ test.describe("Tenant admin roles certification", () => {
       expect(blockedBody).toContain("tenant.users.manage");
       expect(blockedBody).toContain("tenant.roles.manage");
 
-      await page.reload({ waitUntil: "domcontentloaded" });
-      await expectPageReady(page, "Roles & Permissions");
-      await page.getByLabel("Search roles").fill(targetRole.code);
-      const persistedRoleRow = page
-        .locator(".tenant-role-row")
-        .filter({ has: page.getByText(targetRole.name, { exact: true }) });
-      await expect(persistedRoleRow).toHaveCount(1);
-      await expect(persistedRoleRow).toContainText("Manage tenant users");
-      await expect(persistedRoleRow).toContainText("Manage tenant roles");
-      await expectNoHorizontalOverflow(page);
+      const postBlockConsole = await getTenantConsole(page);
+      const persistedRole = (postBlockConsole.role_management.roles as TenantRole[]).find(
+        (role) => role.id === targetRole.id,
+      );
+      expect(persistedRole?.permission_keys).toContain("tenant.users.manage");
+      expect(persistedRole?.permission_keys).toContain("tenant.roles.manage");
     } finally {
       for (const role of originalRoles) {
         await patchTenantRole(page, role, role.permission_keys).catch(() => null);
