@@ -758,16 +758,16 @@ Exit criteria:
 
 ### RBAC-8: Safety, Audit, And Lockout Prevention
 
-Status: In progress; last-admin critical permission guard complete locally  
+Status: In progress; last-admin critical permission guard and audit-diff evidence complete locally  
 Goal: prevent tenant lockout and produce compliance-grade evidence.
 
 Tasks:
 
 - Prevent removal of last effective `tenant.roles.manage` and `tenant.users.manage` holder. Complete locally.
 - Prevent deactivation of the last active tenant-admin role/membership with admin permissions. Complete locally for membership status and role reassignment flows.
-- Audit previous/new permissions.
+- Audit previous/new permissions. Complete locally with role change summaries.
 - Audit affected assigned user count.
-- Add trust-audit filters for role/permission changes.
+- Add trust-audit filters for role/permission changes. Complete locally for tenant-admin role events.
 - Add rollback guidance.
 
 Exit criteria:
@@ -832,7 +832,9 @@ Exit criteria:
 | 2026-09-17 | RBAC-6F Employee-backed Payroll/Statutory Personas | Complete locally | Staging failure showed HR Admin payroll/statutory setup endpoints require an active employee context, and the seeded admin lacked `employees.create`. Updated the browser proof to create/reuse temporary setup roles with `employees.create` and `employees.access.manage`, attach setup access to the seed admin membership, create a real employee, and provision access before logging in as each limited RBAC persona. The proof is idempotent across staging retries and has a longer timeout for live navigation. Local web typecheck passed and local no-env Playwright skip remains clean. |
 | 2026-09-17 | RBAC-6F Payroll/Statutory Staging Proof | Complete on patched local UI against staging API | `HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 PLAYWRIGHT_PORT=3117 PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 npx playwright test tests/e2e/payroll-statutory-rbac-certification.spec.ts --project=chromium --workers=1` passed `3/3`. The spec now temporarily switches the tenant to `enterprise` during each case, restores the original commercial state afterward, and verifies statutory read-only, payroll output publish/handoff denials, and finance handoff transmit/ack/audit-pack denials. Product fix: Payroll Outputs now displays/checks `payroll.publish`, matching backend enforcement. |
 | 2026-09-17 | RBAC-7A Payroll Lifecycle Permission-Aware UI And Browser Proof | Complete on patched local UI against staging API | Payroll Inputs, Payroll Calculations, and Payroll Review now disable high-risk lifecycle controls by effective permissions. New staging-gated browser proof passed `3/3` against staging API on patched local UI: input viewer cannot manage runs/snapshots/locks, payroll reviewer cannot calculate draft payroll, and review-only user cannot approve, final-lock, or generate outputs. Direct API denial checks verify `payroll.inputs.manage`, `payroll.lock`, `payroll.calculate`, `payroll.approve`, and `payroll.publish`. |
+| 2026-09-17 | RBAC-7A Payroll Lifecycle Direct Staging Proof | Complete on deployed staging | Post-deployment Playwright proof passed `3/3` on staging for payroll input viewer, payroll calculation reviewer, and payroll review-only personas. This closes the deployment verification gap for payroll lifecycle permission-aware UI and backend denials. |
 | 2026-09-17 | RBAC-8A Last Admin Critical Permission Guard | Complete locally | Role edits and membership role/status changes now block changes that would leave zero active holders of `tenant.users.manage` or `tenant.roles.manage`; focused backend smoke is green and guarded browser proof is added behind `HRMS_ENABLE_RBAC_LOCKOUT_BROWSER_PROOF=1`. |
+| 2026-09-17 | RBAC-8B Tenant Admin Audit Diff Evidence | Complete locally | Role and membership mutations now write explicit `change_summary` audit evidence for previous/new permissions, added/removed permissions, critical permission changes, previous/new roles, and added/removed role assignments. Tenant trust-audit `tenant_admin` group now includes role create/update/activate/deactivate events. Focused backend smoke, Django check, and web typecheck are green. |
 
 ## Current Known Gaps
 
@@ -840,8 +842,8 @@ Exit criteria:
 | --- | --- | --- |
 | Platform Admin permission catalog UI is not yet available | Platform team cannot browse/manage catalog from the console yet | RBAC-1B/RBAC-2 |
 | Backend permission helper now covers Tenant Admin, core HR employee/org/document/leave/attendance APIs, report export evidence, payroll lifecycle, payroll output artifact downloads, finance handoff/provider actions, and statutory setup/declaration APIs | Remaining risk is certification breadth, not a known launch-critical backend gap in these slices | RBAC-9 |
-| Frontend permission context is implemented for Tenant Admin, MSS approvals/control center, core HR employee/org/document/leave/attendance pages, payroll/statutory output/handoff/statutory setup action slices, and payroll lifecycle workspaces | Remaining risk is direct staging verification after deployment plus broader regression breadth; payroll/statutory and payroll lifecycle viewer proofs are green against staging API with patched local UI | RBAC-7/RBAC-9 |
-| Last-admin guard exists for Tenant Admin role/member mutations but needs browser proof and richer audit-diff evidence | Tenant lockout is blocked locally; certification and audit ergonomics still need completion | RBAC-8/RBAC-9 |
+| Frontend permission context is implemented for Tenant Admin, MSS approvals/control center, core HR employee/org/document/leave/attendance pages, payroll/statutory output/handoff/statutory setup action slices, and payroll lifecycle workspaces | Remaining risk is broader regression breadth and Platform Admin catalog ergonomics; payroll/statutory and payroll lifecycle viewer proofs are green on staging | RBAC-8/RBAC-9 |
+| Last-admin guard and audit-diff evidence exist for Tenant Admin role/member mutations but still need direct browser/staging proof | Tenant lockout is blocked locally and audit evidence is readable; deployment certification still needs completion | RBAC-8/RBAC-9 |
 
 ## Working Definition Of Done
 

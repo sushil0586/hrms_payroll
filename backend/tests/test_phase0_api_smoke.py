@@ -966,7 +966,14 @@ def test_tenant_admin_can_invite_and_manage_membership_with_audit(api_client: AP
 
     assert role_response.status_code == 200, role_response.json()
     assert role_response.json()["membership"]["roles"][0]["code"] == "manager"
-    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_membership_roles_updated").exists()
+    role_audit = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="tenant_membership_roles_updated",
+    ).latest("occurred_at")
+    assert role_audit.event_snapshot["change_summary"]["previous_role_codes"] == ["employee"]
+    assert role_audit.event_snapshot["change_summary"]["new_role_codes"] == ["manager"]
+    assert role_audit.event_snapshot["change_summary"]["added_role_codes"] == ["manager"]
+    assert role_audit.event_snapshot["change_summary"]["removed_role_codes"] == ["employee"]
 
     suspend_response = api_client.patch(
         f"/api/v1/tenant-admin/memberships/{membership_id}/",
@@ -1017,7 +1024,17 @@ def test_tenant_admin_can_create_update_and_deactivate_custom_roles(api_client: 
     assert update_response.status_code == 200, update_response.json()
     assert update_response.json()["role"]["code"] == "leave-review-lead"
     assert update_response.json()["role"]["permission_keys"] == ["leave.requests.approve"]
-    assert SaasCommercialAuditEvent.objects.filter(tenant=tenant, event_type="tenant_role_updated").exists()
+    update_audit = SaasCommercialAuditEvent.objects.filter(
+        tenant=tenant,
+        event_type="tenant_role_updated",
+    ).latest("occurred_at")
+    change_summary = update_audit.event_snapshot["change_summary"]
+    assert change_summary["previous_role_code"] == "leave-approver"
+    assert change_summary["new_role_code"] == "leave-review-lead"
+    assert change_summary["previous_permission_keys"] == ["attendance.view", "leave.requests.approve"]
+    assert change_summary["new_permission_keys"] == ["leave.requests.approve"]
+    assert change_summary["removed_permission_keys"] == ["attendance.view"]
+    assert change_summary["added_permission_keys"] == []
 
     deactivate_response = api_client.patch(
         f"/api/v1/tenant-admin/roles/{created['id']}/",
@@ -2011,6 +2028,41 @@ def test_tenant_admin_role_update_blocks_removing_last_critical_permissions(api_
     assert response.status_code == 400
     assert "tenant.users.manage" in response.json()["detail"]
     assert "tenant.roles.manage" in response.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_tenant_admin_trust_audit_includes_role_mutations_in_tenant_admin_group(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    hr_admin_role = Role.objects.get(tenant=tenant, code="hr-admin")
+    hr_admin_role.permissions.update_or_create(permission_key="tenant.dashboard.view", defaults={"description": ""})
+    hr_admin_role.permissions.update_or_create(permission_key="tenant.roles.manage", defaults={"description": ""})
+    hr_admin_role.permissions.update_or_create(permission_key="tenant.users.manage", defaults={"description": ""})
+    hr_admin_role.permissions.update_or_create(permission_key="tenant.audit.view", defaults={"description": ""})
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    create_response = api_client.post(
+        "/api/v1/tenant-admin/roles/",
+        {
+            "name": "Audit Visible Role",
+            "code": "audit-visible-role",
+            "description": "Proves role changes show in tenant admin audit filter.",
+            "permission_keys": ["tenant.dashboard.view"],
+        },
+        format="json",
+    )
+
+    assert create_response.status_code == 201, create_response.json()
+
+    audit_response = api_client.get("/api/v1/tenant-admin/trust-audit/?event_group=tenant_admin&page_size=50")
+
+    assert audit_response.status_code == 200, audit_response.json()
+    events = audit_response.json()["events"]
+    role_events = [event for event in events if event["event_type"] == "tenant_role_created"]
+    assert role_events
+    assert "tenant_admin" in role_events[0]["event_group_refs"]
+    assert role_events[0]["event_snapshot"]["change_summary"]["new_role_code"] == "audit-visible-role"
+    assert role_events[0]["event_snapshot"]["change_summary"]["added_permission_keys"] == ["tenant.dashboard.view"]
 
 
 @pytest.mark.django_db

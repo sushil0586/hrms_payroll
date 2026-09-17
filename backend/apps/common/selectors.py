@@ -300,6 +300,10 @@ DEFAULT_SAAS_COMMERCIAL_PROFILE = {
             "tenant_admin": {
                 "label": "Tenant admin actions",
                 "event_types": [
+                    "tenant_role_created",
+                    "tenant_role_updated",
+                    "tenant_role_activated",
+                    "tenant_role_deactivated",
                     "tenant_membership_invited",
                     "tenant_membership_activated",
                     "tenant_membership_suspended",
@@ -1468,6 +1472,64 @@ def _sync_tenant_admin_role_permissions(role: Role, permission_keys: list[str]) 
         role.permissions.update_or_create(permission_key=permission_key, defaults={"description": ""})
 
 
+def _tenant_admin_permission_change_summary(previous_keys: list[str], next_keys: list[str]) -> dict:
+    previous_set = {str(item) for item in previous_keys if str(item)}
+    next_set = {str(item) for item in next_keys if str(item)}
+    return {
+        "previous_permission_keys": sorted(previous_set),
+        "new_permission_keys": sorted(next_set),
+        "added_permission_keys": sorted(next_set - previous_set),
+        "removed_permission_keys": sorted(previous_set - next_set),
+        "critical_permission_changes": {
+            "added": sorted((next_set - previous_set) & set(TENANT_ADMIN_CRITICAL_PERMISSION_KEYS)),
+            "removed": sorted((previous_set - next_set) & set(TENANT_ADMIN_CRITICAL_PERMISSION_KEYS)),
+        },
+    }
+
+
+def _tenant_admin_role_change_summary(previous_role: dict | None, role: dict) -> dict:
+    previous_role = previous_role or {}
+    summary = _tenant_admin_permission_change_summary(
+        previous_role.get("permission_keys") or [],
+        role.get("permission_keys") or [],
+    )
+    summary.update(
+        {
+            "previous_role_code": previous_role.get("code", ""),
+            "new_role_code": role.get("code", ""),
+            "previous_role_name": previous_role.get("name", ""),
+            "new_role_name": role.get("name", ""),
+            "previous_is_active": previous_role.get("is_active"),
+            "new_is_active": role.get("is_active"),
+            "is_system_role": role.get("is_system_role", False),
+        }
+    )
+    return summary
+
+
+def _tenant_admin_membership_role_change_summary(previous_membership: dict, membership: dict) -> dict:
+    previous_roles = previous_membership.get("roles") or []
+    next_roles = membership.get("roles") or []
+    previous_role_codes = sorted({str(item.get("code") or "") for item in previous_roles if isinstance(item, dict) and item.get("code")})
+    next_role_codes = sorted({str(item.get("code") or "") for item in next_roles if isinstance(item, dict) and item.get("code")})
+    previous_role_ids = sorted({str(item.get("id") or "") for item in previous_roles if isinstance(item, dict) and item.get("id")})
+    next_role_ids = sorted({str(item.get("id") or "") for item in next_roles if isinstance(item, dict) and item.get("id")})
+    return {
+        "membership_id": membership.get("id", ""),
+        "username": membership.get("username", previous_membership.get("username", "")),
+        "previous_membership_status": previous_membership.get("membership_status", ""),
+        "new_membership_status": membership.get("membership_status", ""),
+        "previous_role_codes": previous_role_codes,
+        "new_role_codes": next_role_codes,
+        "added_role_codes": sorted(set(next_role_codes) - set(previous_role_codes)),
+        "removed_role_codes": sorted(set(previous_role_codes) - set(next_role_codes)),
+        "previous_role_ids": previous_role_ids,
+        "new_role_ids": next_role_ids,
+        "added_role_ids": sorted(set(next_role_ids) - set(previous_role_ids)),
+        "removed_role_ids": sorted(set(previous_role_ids) - set(next_role_ids)),
+    }
+
+
 def create_tenant_admin_role(tenant, *, actor_identifier: str, payload: dict) -> dict:
     name = payload["name"].strip()
     code = _normalize_tenant_admin_role_code(name, payload.get("code", ""))
@@ -1490,7 +1552,11 @@ def create_tenant_admin_role(tenant, *, actor_identifier: str, payload: dict) ->
         event_type="tenant_role_created",
         actor_identifier=actor_identifier,
         source_ref=TENANT_ADMIN_ROLE_MUTATION_SOURCE_REF,
-        event_snapshot={"role": role_payload, "action": "create"},
+        event_snapshot={
+            "role": role_payload,
+            "action": "create",
+            "change_summary": _tenant_admin_role_change_summary(None, role_payload),
+        },
     )
     return {"role": role_payload, "console": get_tenant_admin_console_payload(tenant)}
 
@@ -1531,7 +1597,12 @@ def update_tenant_admin_role(tenant, role_id, *, actor_identifier: str, payload:
         event_type="tenant_role_updated",
         actor_identifier=actor_identifier,
         source_ref=TENANT_ADMIN_ROLE_MUTATION_SOURCE_REF,
-        event_snapshot={"previous_role": previous_role_payload, "role": role_payload, "action": "edit"},
+        event_snapshot={
+            "previous_role": previous_role_payload,
+            "role": role_payload,
+            "action": "edit",
+            "change_summary": _tenant_admin_role_change_summary(previous_role_payload, role_payload),
+        },
     )
     return {"role": role_payload, "console": get_tenant_admin_console_payload(tenant)}
 
@@ -1566,6 +1637,7 @@ def update_tenant_admin_role_status(tenant, role_id, *, actor_identifier: str, p
             "role": role_payload,
             "action": action,
             "note": payload.get("note", ""),
+            "change_summary": _tenant_admin_role_change_summary(previous_role_payload, role_payload),
         },
     )
     return {"role": role_payload, "console": get_tenant_admin_console_payload(tenant)}
@@ -1803,6 +1875,7 @@ def invite_tenant_admin_membership(tenant, *, actor_identifier: str, payload: di
             "membership": membership_payload,
             "action": "invite",
             "role_ids": role_ids,
+            "change_summary": _tenant_admin_membership_role_change_summary({"roles": []}, membership_payload),
         },
     )
     return {
@@ -1874,6 +1947,10 @@ def update_tenant_admin_membership(tenant, membership_id, *, actor_identifier: s
             "note": payload.get("note", ""),
             "previous_membership": previous_membership_payload,
             "membership": next_membership_payload,
+            "change_summary": _tenant_admin_membership_role_change_summary(
+                previous_membership_payload,
+                next_membership_payload,
+            ),
         },
     )
     return {
