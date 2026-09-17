@@ -1,7 +1,7 @@
 import { expect, type APIResponse, type Page, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, tenantAdmin } from "../helpers/staging-auth";
+import { gotoAuthenticated, hrAdmin, tenantAdmin } from "../helpers/staging-auth";
 
 type CreatedRole = {
   id: string;
@@ -14,6 +14,8 @@ type OutputSetup = {
 type HandoffSetup = {
   handoffs: Array<{ id: string }>;
 };
+
+const rbacPassword = "Password@123";
 
 function apiBaseUrl() {
   return process.env.HRMS_API_BASE_URL ?? "http://127.0.0.1:8012/api/v1";
@@ -42,23 +44,44 @@ async function createRoleBackedUser(page: Page, input: { suffix: number; roleNam
   const rolePayload = (await roleResponse.json()) as { role: CreatedRole };
 
   const username = `${input.roleCode}.${input.suffix}`;
-  const membershipResponse = await page.request.post("/api/tenant-admin/memberships", {
+  const email = `${username}@example.com`;
+
+  await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);
+  await expectPageReady(page, "Employees");
+
+  const employeeResponse = await page.request.post("/api/hr-admin/employees", {
     data: {
-      username,
-      email: `${username}@example.com`,
+      employee_code: `QA-RBAC-${String(input.suffix).slice(-8)}`,
+      employment_status: "active",
       first_name: "QA",
       last_name: "Payroll RBAC",
-      membership_status: "active",
-      role_ids: [rolePayload.role.id],
+      work_email: email,
+      date_of_joining: "2026-04-01",
     },
   });
-  expect(membershipResponse.ok()).toBeTruthy();
-  const membershipPayload = (await membershipResponse.json()) as { generated_password?: string };
-  expect(membershipPayload.generated_password).toBeTruthy();
+  expect(employeeResponse.ok()).toBeTruthy();
+  const employeePayload = (await employeeResponse.json()) as { id: string };
+
+  const accessResponse = await page.request.post(`/api/hr-admin/employees/${employeePayload.id}/access`, {
+    data: {
+      username,
+      email,
+      first_name: "QA",
+      last_name: "Payroll RBAC",
+      display_name: "QA Payroll RBAC",
+      is_user_active: true,
+      must_change_password: false,
+      membership_status: "active",
+      is_default_membership: true,
+      role_ids: [rolePayload.role.id],
+      password: rbacPassword,
+    },
+  });
+  expect(accessResponse.ok()).toBeTruthy();
 
   await page.request.post("/api/auth/logout").catch(() => null);
   await page.context().clearCookies();
-  return { username, password: membershipPayload.generated_password! };
+  return { username, password: rbacPassword };
 }
 
 async function expectForbiddenWithPermission(page: Page, responsePromise: Promise<APIResponse>, permission: string) {

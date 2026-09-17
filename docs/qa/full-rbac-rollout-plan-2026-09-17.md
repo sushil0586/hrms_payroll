@@ -731,6 +731,7 @@ RBAC-6F current status:
   - Finance handoff transmit, acknowledge, and audit-pack controls now require their matching finance permissions before enabling.
   - Statutory setup/declaration CRUD console now collapses to read-only guidance for statutory viewer roles and only shows setup/declaration mutation forms to users with matching manage permissions.
   - Shared payroll action panel now blocks disabled/empty actions before network calls and disables action inputs when the action is unavailable.
+  - HR Admin layout access gate now admits custom payroll/statutory/finance viewer roles instead of redirecting them to the public home page.
 - Browser certification hook is added:
   - `web/tests/e2e/payroll-statutory-rbac-certification.spec.ts` creates temporary statutory viewer, payroll output viewer, and finance handoff viewer roles/users on a live API run.
   - The spec verifies read-only UI states and direct mutation denials for statutory setup/declarations, output publish/handoff generation, and handoff transmit/acknowledge/audit-pack actions.
@@ -826,8 +827,9 @@ Exit criteria:
 | 2026-09-17 | RBAC-6C Payroll Lifecycle Gates | Complete locally | Payroll input, calculation, review, approval, lock, output setup, generate, and publish APIs now enforce granular payroll permissions; custom payroll reviewer proof plus admin happy paths are green. |
 | 2026-09-17 | RBAC-6D Finance Handoff And Provider Action Gates | Complete locally | Finance handoff setup, generate, transmit, acknowledge, provider retry/requeue, and provider audit-pack generation now enforce granular finance permissions; finance viewer denial proof plus provider callback/retry regression slice are green. |
 | 2026-09-17 | RBAC-6E Statutory Setup And Declaration Gates | Complete locally | Statutory setup/read APIs, setup master mutations, and employee statutory profile/declaration actions now enforce statutory permissions; statutory viewer denial proof and statutory workflow slice are green. |
-| 2026-09-17 | RBAC-6F Payroll/Statutory Frontend Action Alignment Slice 1 | Complete locally | Payroll output publish/handoff controls, finance handoff transmit/ack/audit-pack controls, and statutory CRUD console visibility now reflect effective permissions; web typecheck is green. |
+| 2026-09-17 | RBAC-6F Payroll/Statutory Frontend Action Alignment Slice 1 | Complete locally | Payroll output publish/handoff controls, finance handoff transmit/ack/audit-pack controls, statutory CRUD console visibility, and HR Admin layout access now reflect effective permissions; web typecheck is green. |
 | 2026-09-17 | RBAC-6F Payroll/Statutory Browser Proof Hook | Complete locally | Added staging-gated Playwright proof for statutory viewer, payroll output viewer, and finance handoff viewer read-only behavior plus backend denial checks; local run skips cleanly without `HRMS_API_BASE_URL`. |
+| 2026-09-17 | RBAC-6F Employee-backed Payroll/Statutory Personas | Complete locally | Staging failure showed HR Admin payroll/statutory setup endpoints require an active employee context. Updated the browser proof to create a real employee and provision access through HR Admin before logging in as each limited RBAC persona; local web typecheck passed and local no-env Playwright skip remains clean. |
 | 2026-09-17 | RBAC-8A Last Admin Critical Permission Guard | Complete locally | Role edits and membership role/status changes now block changes that would leave zero active holders of `tenant.users.manage` or `tenant.roles.manage`; focused backend smoke is green and guarded browser proof is added behind `HRMS_ENABLE_RBAC_LOCKOUT_BROWSER_PROOF=1`. |
 
 ## Current Known Gaps
