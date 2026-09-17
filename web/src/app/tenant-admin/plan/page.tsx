@@ -2,7 +2,8 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getTenantAdminConsole } from "@/lib/api";
+import { getSessionUser, getTenantAdminConsole } from "@/lib/api";
+import { sessionHasPermission } from "@/lib/workspace-access";
 import { TenantChangeRequestActions } from "../tenant-change-request-actions";
 
 function titleCase(value: string) {
@@ -34,10 +35,12 @@ function firstParam(value: string | string[] | undefined) {
 }
 
 export default async function TenantAdminPlanPage({ searchParams }: Props) {
-  const result = await getTenantAdminConsole();
+  const [result, sessionUser] = await Promise.all([getTenantAdminConsole(), getSessionUser()]);
   const data = result.data;
   const commercial = data.commercial_control;
   const params = (await searchParams) ?? {};
+  const canExportAudit = sessionHasPermission(sessionUser, "tenant.audit.export");
+  const canManageChangeRequests = sessionHasPermission(sessionUser, "tenant.change_requests.manage");
 
   return (
     <main className="shell shell--workspace">
@@ -50,9 +53,11 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
             <Link className="button button--primary" href="/tenant-admin">
               Back to dashboard
             </Link>
-            <a className="button button--secondary" href="/api/tenant-admin/commercial-support-audit/download">
-              Download audit
-            </a>
+            {canExportAudit ? (
+              <a className="button button--secondary" href="/api/tenant-admin/commercial-support-audit/download">
+                Download audit
+              </a>
+            ) : null}
           </>
         }
         pills={[data.tenant.code, commercial.plan.edition, commercial.subscription.status]}
@@ -126,6 +131,7 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
       <section className="section">
         <div className="panel-card-soft tenant-console-panel">
           <TenantChangeRequestActions
+            canManageChangeRequests={canManageChangeRequests}
             data={data}
             initialDescription={firstParam(params.description)}
             initialRequestType={firstParam(params.request_type)}

@@ -36,6 +36,7 @@ function initialPayloadForType(requestTypes: TenantAdminConsole["change_request_
 }
 
 type Props = {
+  canManageChangeRequests: boolean;
   data: TenantAdminConsole;
   initialDescription?: string;
   initialRequestType?: string;
@@ -46,6 +47,7 @@ type Props = {
 const REQUEST_PAGE_SIZE = 5;
 
 export function TenantChangeRequestActions({
+  canManageChangeRequests,
   data,
   initialDescription = "",
   initialRequestType,
@@ -113,6 +115,7 @@ export function TenantChangeRequestActions({
   const currentPayloadValidation = validatePayloadText();
   const canSubmit =
     !busyRef &&
+    canManageChangeRequests &&
     data.change_request_management.enabled &&
     !titleError &&
     !targetError &&
@@ -126,6 +129,11 @@ export function TenantChangeRequestActions({
       setBusyRef("");
       setPayloadError(validation.error);
       setNotice(titleError || targetError || validation.error || "Complete the required request fields.");
+      return;
+    }
+    if (!canManageChangeRequests) {
+      setBusyRef("");
+      setNotice("Your role can view plan details but cannot create or manage change requests.");
       return;
     }
     setPayloadError("");
@@ -240,6 +248,11 @@ export function TenantChangeRequestActions({
         <span>{selectedType?.description}</span>
         <strong>{selectedType?.allowed_payload_fields.join(", ")}</strong>
       </div>
+      {!canManageChangeRequests ? (
+        <div className="tenant-inline-notice tenant-inline-notice--muted" role="note">
+          Your role can review this page, but change request creation and approvals are disabled.
+        </div>
+      ) : null}
       <div className="tenant-membership-actions__footer">
         <button className="button button--primary" disabled={!canSubmit} onClick={submitChangeRequest} type="button">
           {busyRef === "create" ? "Submitting" : "Submit request"}
@@ -265,9 +278,9 @@ export function TenantChangeRequestActions({
         {!pagedRequests.length ? <p className="tenant-console-empty">No change requests recorded yet.</p> : null}
         {pagedRequests.map((request) => {
           const rowBusy = busyRef.startsWith(`${request.id}:`);
-          const canApprove = request.status === "submitted";
-          const canCancel = request.status === "submitted";
-          const canApply = request.status === "approved";
+          const canApprove = canManageChangeRequests && request.status === "submitted";
+          const canCancel = canManageChangeRequests && request.status === "submitted";
+          const canApply = canManageChangeRequests && request.status === "approved";
           const decisionNote = (decisionNotes[request.id] ?? "").trim();
           return (
             <div className="tenant-change-request-row" key={request.id}>
@@ -283,6 +296,9 @@ export function TenantChangeRequestActions({
                 {canApprove || canApply ? <small className="tenant-field-error tenant-field-error--muted">Required for approve, reject, or apply.</small> : null}
               </label>
               <div className="tenant-change-request-row__actions">
+                {!canManageChangeRequests ? (
+                  <span className="tenant-field-error tenant-field-error--muted">Actions need change request management permission.</span>
+                ) : null}
                 <button className="button button--secondary" disabled={rowBusy || !canApprove || !decisionNote} onClick={() => runRequestAction(request.id, "approve")} type="button">
                   {actionLabels.approve ?? "Approve"}
                 </button>

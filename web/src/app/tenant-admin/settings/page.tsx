@@ -2,7 +2,8 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getTenantAdminConsole } from "@/lib/api";
+import { getSessionUser, getTenantAdminConsole } from "@/lib/api";
+import { sessionHasPermission } from "@/lib/workspace-access";
 
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (match) => match.toUpperCase());
@@ -19,9 +20,10 @@ function statusBadgeClass(status: string) {
 }
 
 export default async function TenantAdminSettingsPage() {
-  const result = await getTenantAdminConsole();
+  const [result, sessionUser] = await Promise.all([getTenantAdminConsole(), getSessionUser()]);
   const data = result.data;
   const commercial = data.commercial_control;
+  const canManageChangeRequests = sessionHasPermission(sessionUser, "tenant.change_requests.manage");
 
   return (
     <main className="shell shell--workspace">
@@ -37,12 +39,14 @@ export default async function TenantAdminSettingsPage() {
             <Link className="button button--secondary" href="/tenant-admin/setup">
               Setup guide
             </Link>
-            <Link
-              className="button button--secondary"
-              href="/tenant-admin/plan?request_type=configuration_change&target_ref=tenant.account.profile&title=Update%20tenant%20account%20profile&description=Request%20a%20platform-reviewed%20tenant%20profile%20change."
-            >
-              Request account change
-            </Link>
+            {canManageChangeRequests ? (
+              <Link
+                className="button button--secondary"
+                href="/tenant-admin/plan?request_type=configuration_change&target_ref=tenant.account.profile&title=Update%20tenant%20account%20profile&description=Request%20a%20platform-reviewed%20tenant%20profile%20change."
+              >
+                Request account change
+              </Link>
+            ) : null}
           </>
         }
         pills={[data.tenant.code, data.tenant.country_code, data.tenant.timezone]}

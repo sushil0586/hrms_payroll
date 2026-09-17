@@ -1059,6 +1059,102 @@ def test_custom_tenant_role_with_view_permissions_can_open_tenant_admin_console(
 
 
 @pytest.mark.django_db
+def test_limited_tenant_admin_permissions_gate_sensitive_actions(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    tenant_admin_role = Role.objects.get(tenant=tenant, code="hr-admin")
+    tenant_admin_role.permissions.all().delete()
+    tenant_admin_role.permissions.create(permission_key="tenant.dashboard.view")
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    denied_checks = [
+        (
+            "post",
+            "/api/v1/tenant-admin/change-requests/",
+            {"request_type": SaasTenantChangeRequestType.PLAN_CHANGE},
+            "tenant.change_requests.manage",
+        ),
+        (
+            "post",
+            "/api/v1/tenant-admin/support-access-grants/",
+            {"support_agent_identifier": "support@example.com"},
+            "tenant.support_access.request",
+        ),
+        (
+            "patch",
+            f"/api/v1/tenant-admin/support-access-grants/{uuid4()}/",
+            {"action": "approve"},
+            "tenant.support_access.approve",
+        ),
+        ("get", "/api/v1/tenant-admin/trust-audit/", None, "tenant.audit.view"),
+        ("get", "/api/v1/tenant-admin/security-readiness/", None, "tenant.security.view"),
+        ("get", "/api/v1/tenant-admin/commercial-support-audit/download/", None, "tenant.audit.export"),
+    ]
+
+    for method, path, payload, permission_key in denied_checks:
+        client_method = getattr(api_client, method)
+        response = client_method(path, payload, format="json") if payload is not None else client_method(path)
+        assert response.status_code == 403, (method, path, response.content)
+        assert permission_key in str(response.json())
+
+
+@pytest.mark.django_db
+def test_tenant_admin_role_update_blocks_removing_last_critical_permissions(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    hr_admin_role = Role.objects.get(tenant=tenant, code="hr-admin")
+    for role in Role.objects.filter(tenant=tenant):
+        role.permissions.all().delete()
+        if role.id != hr_admin_role.id:
+            role.permissions.create(permission_key="tenant.dashboard.view")
+    hr_admin_role.permissions.create(permission_key="tenant.dashboard.view")
+    hr_admin_role.permissions.create(permission_key="tenant.users.manage")
+    hr_admin_role.permissions.create(permission_key="tenant.roles.manage")
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.patch(
+        f"/api/v1/tenant-admin/roles/{hr_admin_role.id}/",
+        {
+            "name": hr_admin_role.name,
+            "code": hr_admin_role.code,
+            "description": hr_admin_role.description,
+            "permission_keys": ["tenant.dashboard.view"],
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "tenant.users.manage" in response.json()["detail"]
+    assert "tenant.roles.manage" in response.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_tenant_admin_membership_role_update_blocks_last_admin_lockout(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    hr_admin_role = Role.objects.get(tenant=tenant, code="hr-admin")
+    employee_role = Role.objects.get(tenant=tenant, code="employee")
+    for role in Role.objects.filter(tenant=tenant):
+        role.permissions.all().delete()
+        role.permissions.create(permission_key="tenant.dashboard.view")
+    hr_admin_role.permissions.create(permission_key="tenant.users.manage")
+    hr_admin_role.permissions.create(permission_key="tenant.roles.manage")
+    membership = TenantMembership.objects.get(tenant=tenant, user__username="nisha.rao")
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.patch(
+        f"/api/v1/tenant-admin/memberships/{membership.id}/",
+        {"action": "update_roles", "role_ids": [str(employee_role.id)], "note": "Testing lockout guard."},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "At least one active tenant admin must retain" in response.json()["detail"]
+    membership.refresh_from_db()
+    assert membership.membership_roles.filter(role=hr_admin_role).exists()
+
+
+@pytest.mark.django_db
 def test_tenant_admin_role_crud_blocks_duplicate_system_and_assigned_deactivation(api_client: APIClient, bootstrapped_workspace):
     tenant = bootstrapped_workspace["pending_leave"].tenant
     employee_role = Role.objects.get(tenant=tenant, code="employee")

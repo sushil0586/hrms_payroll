@@ -37,12 +37,14 @@ function formatDateTime(value: string | null) {
 }
 
 type Props = {
+  canApproveSupportAccess: boolean;
+  canRequestSupportAccess: boolean;
   data: TenantAdminConsole;
 };
 
 const SUPPORT_GRANT_PAGE_SIZE = 5;
 
-export function TenantSupportAccessActions({ data }: Props) {
+export function TenantSupportAccessActions({ canApproveSupportAccess, canRequestSupportAccess, data }: Props) {
   const router = useRouter();
   const scopes = data.support_access_management.scope_options;
   const defaultScope = scopes[0]?.value ?? "";
@@ -73,8 +75,9 @@ export function TenantSupportAccessActions({ data }: Props) {
     Number.isFinite(duration) && duration >= 1 && duration <= data.support_access_management.max_duration_minutes
       ? ""
       : `Duration must be between 1 and ${data.support_access_management.max_duration_minutes} minutes.`;
-  const canRequestSupportAccess =
+  const canSubmitSupportAccessRequest =
     !busyRef &&
+    canRequestSupportAccess &&
     data.support_access_management.enabled &&
     !supportAgentError &&
     !reasonError &&
@@ -108,9 +111,13 @@ export function TenantSupportAccessActions({ data }: Props) {
   async function requestSupportAccess() {
     setBusyRef("request");
     setNotice("");
-    if (!canRequestSupportAccess) {
+    if (!canSubmitSupportAccessRequest) {
       setBusyRef("");
-      setNotice(supportAgentError || reasonError || scopeError || durationError || "Complete the required support access fields.");
+      setNotice(
+        !canRequestSupportAccess
+          ? "Your role can view support access but cannot request a new grant."
+          : supportAgentError || reasonError || scopeError || durationError || "Complete the required support access fields."
+      );
       return;
     }
     const response = await fetch("/api/tenant-admin/support-access-grants", {
@@ -223,6 +230,12 @@ export function TenantSupportAccessActions({ data }: Props) {
         </label>
       </div>
 
+      {!canRequestSupportAccess ? (
+        <div className="tenant-inline-notice tenant-inline-notice--muted" role="note">
+          Your role can review support access evidence, but request creation is disabled.
+        </div>
+      ) : null}
+
       <div aria-describedby="support-scope-error" aria-label="Support scopes" className="tenant-role-picker">
         {scopes.map((scope) => (
           <label key={scope.value}>
@@ -240,7 +253,7 @@ export function TenantSupportAccessActions({ data }: Props) {
       <div className="tenant-membership-actions__footer">
         <button
           className="button button--primary"
-          disabled={!canRequestSupportAccess}
+          disabled={!canSubmitSupportAccessRequest}
           onClick={requestSupportAccess}
           type="button"
         >
@@ -280,11 +293,11 @@ export function TenantSupportAccessActions({ data }: Props) {
         {pagedGrants.map((grant) => {
           const rowBusy = busyRef.startsWith(`${grant.id}:`);
           const hasDecisionNote = Boolean((decisionNotes[grant.id] ?? "").trim());
-          const canApprove = grant.status === "requested" && hasDecisionNote;
-          const canStart = grant.status === "approved";
-          const canEnd = grant.status === "active";
-          const canReject = grant.status === "requested" && hasDecisionNote;
-          const canRevoke = (grant.status === "requested" || grant.status === "approved" || grant.status === "active") && hasDecisionNote;
+          const canApprove = canApproveSupportAccess && grant.status === "requested" && hasDecisionNote;
+          const canStart = canApproveSupportAccess && grant.status === "approved";
+          const canEnd = canApproveSupportAccess && grant.status === "active";
+          const canReject = canApproveSupportAccess && grant.status === "requested" && hasDecisionNote;
+          const canRevoke = canApproveSupportAccess && (grant.status === "requested" || grant.status === "approved" || grant.status === "active") && hasDecisionNote;
           return (
             <div className="tenant-support-access-row" key={grant.id}>
               <div>
@@ -308,6 +321,9 @@ export function TenantSupportAccessActions({ data }: Props) {
                 </label>
               </div>
               <div className="tenant-support-access-row__actions">
+                {!canApproveSupportAccess ? (
+                  <span className="tenant-field-error tenant-field-error--muted">Approval actions need support access approval permission.</span>
+                ) : null}
                 <button className="button button--secondary" disabled={rowBusy || !canApprove} onClick={() => runGrantAction(grant.id, "approve")} type="button">
                   {actionLabels.approve ?? "Approve"}
                 </button>

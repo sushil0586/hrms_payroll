@@ -15,6 +15,14 @@ type CommercialControl = {
   };
 };
 
+type TenantRole = {
+  id: string;
+  code: string;
+  description: string;
+  name: string;
+  permission_keys: string[];
+};
+
 function apiBaseUrl() {
   return process.env.HRMS_API_BASE_URL ?? "http://127.0.0.1:8012/api/v1";
 }
@@ -37,6 +45,27 @@ async function patchCommercialControl(page: Page, payload: Record<string, string
   const response = await page.request.patch("/api/hr-admin/saas-control-plane", { data: payload });
   expect(response.ok()).toBeTruthy();
   return (await response.json()) as CommercialControl;
+}
+
+async function getTenantRoles(page: Page) {
+  const response = await page.request.get(`${apiBaseUrl()}/tenant-admin/console/`, {
+    headers: await authHeaders(page),
+  });
+  expect(response.ok()).toBeTruthy();
+  const payload = await response.json();
+  return payload.role_management.roles as TenantRole[];
+}
+
+async function patchTenantRole(page: Page, role: TenantRole, permissionKeys: string[]) {
+  const response = await page.request.patch(`/api/tenant-admin/roles/${role.id}`, {
+    data: {
+      name: role.name,
+      code: role.code,
+      description: role.description,
+      permission_keys: permissionKeys,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
 }
 
 test.describe("Tenant admin roles certification", () => {
@@ -201,5 +230,52 @@ test.describe("Tenant admin roles certification", () => {
     expect(blockedInviteResponse.status()).toBe(403);
     expect(JSON.stringify(await blockedInviteResponse.json())).toContain("tenant.users.manage");
     await expectNoHorizontalOverflow(page);
+  });
+
+  test("certifies last-admin lockout guard in the role edit dialog", async ({ page }) => {
+    test.skip(
+      process.env.HRMS_ENABLE_RBAC_LOCKOUT_BROWSER_PROOF !== "1",
+      "Set HRMS_ENABLE_RBAC_LOCKOUT_BROWSER_PROOF=1 to run the guarded staging lockout proof.",
+    );
+
+    await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);
+    await expectPageReady(page, "Roles & Permissions");
+
+    const criticalPermissions = ["tenant.users.manage", "tenant.roles.manage"];
+    const originalRoles = await getTenantRoles(page);
+    const targetRole =
+      originalRoles.find((role) => role.code === "hr-admin" && criticalPermissions.every((key) => role.permission_keys.includes(key))) ??
+      originalRoles.find((role) => criticalPermissions.every((key) => role.permission_keys.includes(key)));
+    expect(targetRole).toBeTruthy();
+    const rolesToTemporarilyReduce = originalRoles.filter(
+      (role) => role.id !== targetRole!.id && criticalPermissions.some((key) => role.permission_keys.includes(key)),
+    );
+
+    try {
+      for (const role of rolesToTemporarilyReduce) {
+        await patchTenantRole(page, role, role.permission_keys.filter((key) => !criticalPermissions.includes(key)));
+      }
+
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expectPageReady(page, "Roles & Permissions");
+      await page.getByLabel("Search roles").fill(targetRole!.code);
+      const roleRow = page.locator(".tenant-role-row").filter({ hasText: targetRole!.code });
+      await roleRow.getByRole("button", { name: "Edit" }).click();
+      const editDialog = page.getByRole("dialog", { name: "Update tenant role" });
+      await expect(editDialog).toBeVisible();
+      await editDialog.getByRole("tab", { name: "Tenant Admin" }).click();
+      await editDialog.getByRole("checkbox", { name: /^Manage tenant users\b/ }).uncheck();
+      await editDialog.getByRole("checkbox", { name: /^Manage tenant roles\b/ }).uncheck();
+      await editDialog.getByRole("button", { name: "Update role" }).click();
+      await expect(editDialog.getByRole("alert")).toContainText("At least one active tenant admin must retain");
+      await expect(editDialog.getByRole("alert")).toContainText("tenant.users.manage");
+      await expect(editDialog.getByRole("alert")).toContainText("tenant.roles.manage");
+      await expect(editDialog).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+    } finally {
+      for (const role of originalRoles) {
+        await patchTenantRole(page, role, role.permission_keys).catch(() => null);
+      }
+    }
   });
 });

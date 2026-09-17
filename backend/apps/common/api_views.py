@@ -7549,6 +7549,7 @@ class TenantAdminCommercialSupportAuditPackDownloadView(TenantAdminContextMixin,
         tenant = self.get_tenant()
         if not tenant:
             return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.audit.export")
         actor_identifier = getattr(request.user, "username", "") or getattr(request.user, "email", "")
         audit_pack = describe_saas_commercial_support_audit_pack(
             tenant,
@@ -7570,6 +7571,7 @@ class TenantAdminTrustAuditReviewView(TenantAdminContextMixin, APIView):
         tenant = self.get_tenant()
         if not tenant:
             return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.audit.view")
         payload = get_tenant_admin_trust_audit_review(
             tenant,
             event_group=request.query_params.get("event_group") or "all",
@@ -7590,6 +7592,7 @@ class TenantAdminEnterpriseSecurityReadinessView(TenantAdminContextMixin, APIVie
         tenant = self.get_tenant()
         if not tenant:
             return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.security.view")
         payload = get_tenant_admin_enterprise_security_readiness(tenant)
         return response.Response(TenantAdminEnterpriseSecurityReadinessSerializer(payload).data)
 
@@ -7687,6 +7690,7 @@ class TenantAdminChangeRequestListCreateView(TenantAdminContextMixin, APIView):
         tenant = self.get_tenant()
         if not tenant:
             return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.change_requests.manage")
         serializer = TenantAdminChangeRequestCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -7706,6 +7710,7 @@ class TenantAdminChangeRequestDetailView(TenantAdminContextMixin, APIView):
         tenant = self.get_tenant()
         if not tenant:
             return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.change_requests.manage")
         serializer = TenantAdminChangeRequestActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -7726,6 +7731,7 @@ class TenantAdminSupportAccessGrantListCreateView(TenantAdminContextMixin, APIVi
         tenant = self.get_tenant()
         if not tenant:
             return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.support_access.request")
         serializer = TenantAdminSupportAccessGrantCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -7745,6 +7751,7 @@ class TenantAdminSupportAccessGrantDetailView(TenantAdminContextMixin, APIView):
         tenant = self.get_tenant()
         if not tenant:
             return response.Response({"detail": "No active tenant context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(tenant, "tenant.support_access.approve")
         serializer = TenantAdminSupportAccessGrantActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:

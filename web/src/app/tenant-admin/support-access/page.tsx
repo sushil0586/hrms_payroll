@@ -2,7 +2,8 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getTenantAdminConsole } from "@/lib/api";
+import { getSessionUser, getTenantAdminConsole } from "@/lib/api";
+import { sessionHasPermission } from "@/lib/workspace-access";
 import { TenantSupportAccessActions } from "../tenant-support-access-actions";
 
 function titleCase(value: string) {
@@ -10,8 +11,10 @@ function titleCase(value: string) {
 }
 
 export default async function TenantAdminSupportAccessPage() {
-  const result = await getTenantAdminConsole();
+  const [result, sessionUser] = await Promise.all([getTenantAdminConsole(), getSessionUser()]);
   const data = result.data;
+  const canRequestSupportAccess = sessionHasPermission(sessionUser, "tenant.support_access.request");
+  const canApproveSupportAccess = sessionHasPermission(sessionUser, "tenant.support_access.approve");
   const activeGrants = data.support_access_management.recent_grants.filter((grant) =>
     ["requested", "approved", "active"].includes(grant.status),
   );
@@ -47,7 +50,11 @@ export default async function TenantAdminSupportAccessPage() {
 
       <section className="section">
         <div className="panel-card-soft tenant-console-panel">
-          <TenantSupportAccessActions data={data} />
+          <TenantSupportAccessActions
+            canApproveSupportAccess={canApproveSupportAccess}
+            canRequestSupportAccess={canRequestSupportAccess}
+            data={data}
+          />
         </div>
       </section>
 

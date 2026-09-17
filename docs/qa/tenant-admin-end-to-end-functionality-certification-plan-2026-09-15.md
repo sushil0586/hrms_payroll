@@ -1012,6 +1012,67 @@ Local evidence:
 Next certification target:
 - Run the extended Tenant Admin roles browser spec against staging with `HRMS_API_BASE_URL` configured after deployment.
 
+### Phase TA-11: Remaining Tenant Admin Permission Gates
+
+Goal: close the remaining Tenant Admin launch-risk permissions after role/user management: support access, change requests, trust audit export, and enterprise security readiness.
+
+Status: Complete locally; staging deployment and browser rerun pending.
+
+Implemented:
+- Enforced `tenant.change_requests.manage` on change request create/update APIs.
+- Enforced `tenant.support_access.request` on support access grant creation.
+- Enforced `tenant.support_access.approve` on support access approve/start/end/reject/revoke actions.
+- Enforced `tenant.audit.view` on Tenant Trust Audit review.
+- Enforced `tenant.audit.export` on commercial support audit pack download.
+- Enforced `tenant.security.view` on enterprise security readiness.
+- Plan and settings pages now hide commercial audit download/request-change actions when the user lacks permission.
+- Support Access page now separates request permission from approval permission, with light inline notices for view-only/request-only users.
+- Trust Audit page now hides audit-pack download unless export permission exists.
+
+Local evidence:
+- Backend regression added: a limited Tenant Admin with only `tenant.dashboard.view` is denied every sensitive TA-11 endpoint with a `403` and the missing permission key.
+- Validation target: `.venv/bin/python -m pytest backend/tests/test_phase0_api_smoke.py -k "limited_tenant_admin_permissions_gate_sensitive_actions or tenant_admin_role_crud or tenant_admin_membership_invite_requires_manage_permission"`.
+- Frontend validation target: `npm --prefix web run typecheck`.
+
+Confidence impact:
+
+| Area | Before TA-11 | After TA-11 Local | Notes |
+| --- | ---: | ---: | --- |
+| Tenant Admin functionality readiness | 95% | 95% local | Critical Tenant Admin self-service actions now have backend permission gates. |
+| Tenant Admin QA/browser coverage | 95% | 95% local | API regression added; staging browser proof still required after deployment. |
+| Tenant Admin user-friendliness | 94-95% | 95% local | Sensitive actions now hide/disable cleanly instead of surprising users after click. |
+| Tenant Admin public launch readiness | 95% | 95% local | Remaining launch work shifts to cross-workspace RBAC, last-admin safety, and staging proof. |
+
+### Phase TA-12: Last Admin Lockout Protection
+
+Goal: prevent a tenant from accidentally removing the final active admin capability after custom RBAC is enabled.
+
+Status: Complete locally for critical Tenant Admin role and membership mutations; guarded browser proof added and pending staging execution.
+
+Implemented:
+- Added permission-aware lockout guard for `tenant.users.manage` and `tenant.roles.manage`.
+- Role edits now block removing the final critical permission holder.
+- Membership suspend/revoke/update-role flows now block moving the final active admin away from critical permissions.
+- The guard is permission-based, so custom admin roles are protected the same way as system roles.
+- Existing system-role default permissions still work unless explicit role permissions override them.
+- Added an opt-in browser proof that temporarily reduces other critical-permission roles, attempts to remove the final `tenant.users.manage` and `tenant.roles.manage` permissions in the role dialog, expects the lockout message, and restores role permissions in `finally`.
+
+Local evidence:
+- Django system check: `.venv/bin/python backend/manage.py check` -> passed.
+- Focused backend smoke: `.venv/bin/python -m pytest backend/tests/test_phase0_api_smoke.py -k "last_critical_permissions or last_admin_lockout or limited_tenant_admin_permissions_gate_sensitive_actions or tenant_admin_role_crud_requires_manage_permission or tenant_admin_membership_invite_requires_manage_permission"` -> `5 passed`.
+- Frontend typecheck: `npm --prefix web run typecheck` -> passed.
+- Browser spec structure: `pnpm --dir web exec playwright test tests/e2e/tenant-admin-roles-certification.spec.ts --project=chromium --workers=1 --reporter=line --timeout=720000` -> `4 skipped` without live API/env flags.
+- Guarded staging browser command: `HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_RBAC_LOCKOUT_BROWSER_PROOF=1 pnpm --dir web exec playwright test tests/e2e/tenant-admin-roles-certification.spec.ts --project=chromium --workers=1 --reporter=line --timeout=720000`.
+
+Confidence impact:
+
+| Area | Before TA-12 | After TA-12 Local | Notes |
+| --- | ---: | ---: | --- |
+| Tenant Admin functionality readiness | 95% | 95% local | Tenant lockout through role/member mutations is now blocked. |
+| Tenant Admin QA/browser coverage | 95% | 95% local | Backend proof and opt-in browser proof are added; guarded staging execution is pending. |
+| Tenant Admin user-friendliness | 95% | 95% local | Backend message is clear; next UI pass can surface a softer pre-submit warning. |
+| Tenant Admin public launch readiness | 95% | 95% local | Remaining work is staging/browser proof plus downstream HR/payroll RBAC rollout. |
+
 ## Working Definition Of Done
 
 A Tenant Admin page is launch ready only when:

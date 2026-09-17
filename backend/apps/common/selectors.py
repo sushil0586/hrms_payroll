@@ -34,6 +34,7 @@ from apps.employee_lifecycle.models import EmployeeExit, EmployeeMovement, Emplo
 from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMembership, User
 from apps.iam.permission_catalog import get_permission_catalog, get_tenant_assignable_permission_keys
+from apps.iam.permission_checks import get_role_permission_keys
 from apps.leave_management.models import LeaveBalance, LeavePolicy, LeavePolicyStatus, LeaveRequest, LeaveRequestStatus, LeaveType
 from apps.leave_management.services import _get_leave_request_lifecycle_runtime, get_leave_policy_period_year
 from apps.notifications.models import Notification, NotificationEventDefinition, NotificationStatus, NotificationTemplate, NotificationTemplateStatus
@@ -1290,6 +1291,7 @@ def snapshot_saas_commercial_usage(
 
 
 TENANT_ADMIN_MEMBERSHIP_MUTATION_SOURCE_REF = "saas.tenant_admin.membership_mutation.v1"
+TENANT_ADMIN_CRITICAL_PERMISSION_KEYS = ("tenant.users.manage", "tenant.roles.manage")
 
 
 def _tenant_admin_role_payload(role: Role) -> dict:
@@ -1500,6 +1502,16 @@ def update_tenant_admin_role(tenant, role_id, *, actor_identifier: str, payload:
     if "permission_keys" in payload:
         _validate_tenant_admin_role_permission_keys(tenant, payload.get("permission_keys", []))
     previous_role_payload = _tenant_admin_role_payload(role)
+    next_role_active = role.is_active
+    if not role.is_system_role:
+        next_role_active = payload.get("is_active", role.is_active)
+    next_permission_keys = payload.get("permission_keys") if "permission_keys" in payload else None
+    _ensure_tenant_admin_critical_permissions_remain(
+        tenant,
+        changed_role=role,
+        next_permission_keys=next_permission_keys,
+        next_role_active=next_role_active,
+    )
     role.name = payload["name"].strip()
     role.description = payload.get("description", "")
     if not role.is_system_role:
@@ -1534,6 +1546,11 @@ def update_tenant_admin_role_status(tenant, role_id, *, actor_identifier: str, p
     assigned_count = role.membership_roles.filter(membership__status__in=[MembershipStatus.ACTIVE, MembershipStatus.INVITED]).count()
     if action == "deactivate" and assigned_count:
         raise ValueError("Remove this role from active or invited members before deactivating it.")
+    _ensure_tenant_admin_critical_permissions_remain(
+        tenant,
+        changed_role=role,
+        next_role_active=action == "activate",
+    )
     previous_role_payload = _tenant_admin_role_payload(role)
     role.is_active = action == "activate"
     role.save(update_fields=["is_active", "updated_at"])
@@ -1592,6 +1609,96 @@ def _tenant_admin_has_role(membership: TenantMembership, role_code: str) -> bool
     return membership.membership_roles.filter(role__code=role_code).exists()
 
 
+def _projected_role_permission_keys(
+    role: Role,
+    *,
+    changed_role: Role | None = None,
+    next_permission_keys: list[str] | None = None,
+    next_role_active: bool | None = None,
+) -> set[str]:
+    if changed_role and role.id == changed_role.id:
+        if next_role_active is False:
+            return set()
+        if next_permission_keys is not None:
+            return set(next_permission_keys)
+    if not role.is_active:
+        return set()
+    return get_role_permission_keys(role)
+
+
+def _projected_membership_permission_keys(
+    membership: TenantMembership,
+    *,
+    target_membership: TenantMembership | None = None,
+    next_status: str | None = None,
+    next_role_ids: list[str] | None = None,
+    changed_role: Role | None = None,
+    next_permission_keys: list[str] | None = None,
+    next_role_active: bool | None = None,
+) -> set[str]:
+    projected_status = membership.status
+    role_ids_override = None
+    if target_membership and membership.id == target_membership.id:
+        projected_status = next_status or membership.status
+        role_ids_override = next_role_ids
+    if projected_status != MembershipStatus.ACTIVE:
+        return set()
+    if role_ids_override is not None:
+        roles = Role.objects.filter(tenant=membership.tenant, id__in=role_ids_override)
+    else:
+        roles = [membership_role.role for membership_role in membership.membership_roles.all()]
+    permission_keys: set[str] = set()
+    for role in roles:
+        permission_keys.update(
+            _projected_role_permission_keys(
+                role,
+                changed_role=changed_role,
+                next_permission_keys=next_permission_keys,
+                next_role_active=next_role_active,
+            )
+        )
+    return permission_keys
+
+
+def _ensure_tenant_admin_critical_permissions_remain(
+    tenant,
+    *,
+    membership: TenantMembership | None = None,
+    next_status: str | None = None,
+    next_role_ids: list[str] | None = None,
+    changed_role: Role | None = None,
+    next_permission_keys: list[str] | None = None,
+    next_role_active: bool | None = None,
+) -> None:
+    permission_holders = {permission_key: 0 for permission_key in TENANT_ADMIN_CRITICAL_PERMISSION_KEYS}
+    memberships = (
+        TenantMembership.objects.filter(tenant=tenant)
+        .prefetch_related("membership_roles__role__permissions")
+        .select_related("user")
+    )
+    for item in memberships:
+        permission_keys = _projected_membership_permission_keys(
+            item,
+            target_membership=membership,
+            next_status=next_status,
+            next_role_ids=next_role_ids,
+            changed_role=changed_role,
+            next_permission_keys=next_permission_keys,
+            next_role_active=next_role_active,
+        )
+        for permission_key in TENANT_ADMIN_CRITICAL_PERMISSION_KEYS:
+            if permission_key in permission_keys:
+                permission_holders[permission_key] += 1
+
+    missing_permissions = [permission_key for permission_key, holder_count in permission_holders.items() if holder_count == 0]
+    if missing_permissions:
+        raise ValueError(
+            "At least one active tenant admin must retain these permissions before this change can be saved: "
+            + ", ".join(missing_permissions)
+            + "."
+        )
+
+
 def _ensure_tenant_admin_not_orphaned(
     tenant,
     *,
@@ -1599,6 +1706,12 @@ def _ensure_tenant_admin_not_orphaned(
     next_status: str | None = None,
     next_role_ids: list[str] | None = None,
 ) -> None:
+    _ensure_tenant_admin_critical_permissions_remain(
+        tenant,
+        membership=membership,
+        next_status=next_status,
+        next_role_ids=next_role_ids,
+    )
     currently_active_tenant_admin = membership.status == MembershipStatus.ACTIVE and _tenant_admin_has_role(membership, "tenant-admin")
     if not currently_active_tenant_admin:
         return

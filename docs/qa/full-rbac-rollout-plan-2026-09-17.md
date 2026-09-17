@@ -500,13 +500,13 @@ Exit criteria:
 
 ### RBAC-8: Safety, Audit, And Lockout Prevention
 
-Status: Not started  
+Status: In progress; last-admin critical permission guard complete locally  
 Goal: prevent tenant lockout and produce compliance-grade evidence.
 
 Tasks:
 
-- Prevent removal of last effective `tenant.roles.manage` and `tenant.users.manage` holder.
-- Prevent deactivation of the last active tenant-admin role/membership with admin permissions.
+- Prevent removal of last effective `tenant.roles.manage` and `tenant.users.manage` holder. Complete locally.
+- Prevent deactivation of the last active tenant-admin role/membership with admin permissions. Complete locally for membership status and role reassignment flows.
 - Audit previous/new permissions.
 - Audit affected assigned user count.
 - Add trust-audit filters for role/permission changes.
@@ -553,16 +553,18 @@ Exit criteria:
 | 2026-09-17 | RBAC-2C Browser Matrix Certification | Complete locally | Tenant Admin role spec now covers module switching, selected summary, and disabled unavailable-plan payroll permission with restore-safe plan switching. |
 | 2026-09-17 | RBAC-3A Tenant Admin Mutation Enforcement | Complete locally | Added reusable permission resolver and enforced `tenant.roles.manage` / `tenant.users.manage` on role and membership mutation APIs; focused backend smoke is green. |
 | 2026-09-17 | RBAC-4A Tenant Admin Permission-Aware UI | Complete locally | Session payload now carries effective permissions; Tenant Admin nav, quick links, role actions, and user actions respond to permission grants. Browser spec now covers limited role menu/action/API denial and skips locally without live API env. |
+| 2026-09-17 | RBAC-5A Tenant Admin Remaining Gates | Complete locally | Enforced `tenant.change_requests.manage`, `tenant.support_access.request`, `tenant.support_access.approve`, `tenant.audit.view`, `tenant.audit.export`, and `tenant.security.view`; plan/settings/support/trust-audit UI now hides or disables sensitive actions by permission. |
+| 2026-09-17 | RBAC-8A Last Admin Critical Permission Guard | Complete locally | Role edits and membership role/status changes now block changes that would leave zero active holders of `tenant.users.manage` or `tenant.roles.manage`; focused backend smoke is green and guarded browser proof is added behind `HRMS_ENABLE_RBAC_LOCKOUT_BROWSER_PROOF=1`. |
 
 ## Current Known Gaps
 
 | Gap | Risk | Target Phase |
 | --- | --- | --- |
 | Platform Admin permission catalog UI is not yet available | Platform team cannot browse/manage catalog from the console yet | RBAC-1B/RBAC-2 |
-| Backend permission helper only covers first Tenant Admin mutation APIs | HR, payroll, reports, trust-audit download, support access, and settings still need permission enforcement | RBAC-3/RBAC-5/RBAC-6 |
-| No frontend permission context | UI cannot yet hide/disable by granular permission | RBAC-4 |
+| Backend permission helper now covers Tenant Admin critical APIs but not all downstream HR/payroll/report operations | HR, payroll, reports, and export APIs still need permission enforcement | RBAC-6 |
+| Frontend permission context is implemented for Tenant Admin but not yet rolled out across every HR/payroll workspace | Downstream workspaces can still show actions before backend denial | RBAC-6/RBAC-7 |
 | Payroll/report exports not permission-protected at action level | High-risk operations need explicit permission checks | RBAC-6 |
-| Last-admin permission safety missing | Tenant could accidentally remove admin capability once permissions are enforced | RBAC-8 |
+| Last-admin guard exists for Tenant Admin role/member mutations but needs browser proof and richer audit-diff evidence | Tenant lockout is blocked locally; certification and audit ergonomics still need completion | RBAC-8/RBAC-9 |
 
 ## Working Definition Of Done
 
