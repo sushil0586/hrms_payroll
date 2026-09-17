@@ -14,6 +14,7 @@ from apps.platform_policies.models import (
     TenantPolicyPackItemLink,
 )
 from apps.tenants.models import Tenant, TenantOnboardingStatus, TenantStatus
+from apps.tenant_onboarding.models import PublicTenantLead, PublicLeadStatus
 
 
 PASSWORD = "Password@123"
@@ -91,6 +92,57 @@ def test_platform_permission_catalog_requires_platform_staff_and_returns_catalog
     platform_permission = next(item for item in payload if item["key"] == "platform.permission_catalog.manage")
     assert platform_permission["tenant_assignable"] is False
     assert platform_permission["risk_level"] == "critical"
+
+
+@pytest.mark.django_db
+def test_platform_summary_requires_staff_and_returns_dashboard_counts(api_client: APIClient, platform_staff_user: User):
+    anonymous_response = api_client.get("/api/v1/platform/summary/")
+    assert anonymous_response.status_code in {401, 403}
+
+    Tenant.objects.create(
+        code="summary-active",
+        name="Summary Active",
+        status=TenantStatus.ACTIVE,
+        onboarding_status=TenantOnboardingStatus.ACTIVE,
+        is_sandbox=False,
+    )
+    Tenant.objects.create(
+        code="summary-created",
+        name="Summary Created",
+        status=TenantStatus.DRAFT,
+        onboarding_status=TenantOnboardingStatus.CREATED,
+        is_sandbox=True,
+    )
+    PublicTenantLead.objects.create(
+        company_name="Summary Lead",
+        contact_name="Lead Owner",
+        work_email="lead.owner@example.com",
+        status=PublicLeadStatus.NEW,
+        intent="demo",
+    )
+    PlatformPolicyPack.objects.create(
+        code="summary-pack",
+        name="Summary Pack",
+        domain="leave",
+        status=PlatformPolicyPackStatus.PUBLISHED,
+    )
+
+    api_client.force_authenticate(user=platform_staff_user)
+    response = api_client.get("/api/v1/platform/summary/")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["counts"]["tenants"] == 2
+    assert payload["counts"]["active_tenants"] == 1
+    assert payload["counts"]["onboarding_tenants"] == 1
+    assert payload["counts"]["sandbox_tenants"] == 1
+    assert payload["counts"]["active_leads"] == 1
+    assert payload["counts"]["new_leads"] == 1
+    assert payload["counts"]["policy_packs"] == 1
+    assert payload["counts"]["published_policy_packs"] == 1
+    assert payload["first_tenant"]["code"] in {"summary-active", "summary-created"}
+    assert payload["lead_queue"][0]["company_name"] == "Summary Lead"
+    assert payload["stale_onboarding_tenants"][0]["code"] == "summary-created"
 
 
 @pytest.mark.django_db

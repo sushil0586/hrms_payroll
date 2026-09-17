@@ -96,3 +96,76 @@ Results:
 - Platform admin security/guardrail confidence: 91%
 - Platform admin audit/evidence confidence: 92%
 - SaaS tenant onboarding confidence: 93%
+
+## 2026-09-17 Staging Re-Verification
+
+Scope:
+
+- Platform Admin dashboard and all primary sidebar/menu destinations.
+- Tab navigation and URL routing for Control, Leads, Tenants, Launch Checklist, Tenant Admin Users, Setup Templates, Events, and Permissions.
+- Desktop and mobile rendering with screenshot capture.
+- Tenant CRUD and lifecycle transitions: create, edit, suspend, reactivate, and audit.
+- Validation and negative paths: required fields, invalid email, duplicate tenant/template codes, early activation gates, wrong-role denial, unauthenticated denial, and secret-free API errors.
+- DB-backed permission catalog visibility, search, filters, protected platform permissions, and edit dialog behavior.
+- Dialog accessibility: keyboard focus, validation focus retention, Escape close, and no horizontal overflow.
+
+Command:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://hrms.accerio.in PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 npx playwright test tests/e2e/platform-admin-tabs-pagination-certification.spec.ts tests/e2e/platform-admin-permission-catalog-certification.spec.ts tests/e2e/platform-admin-visual-accessibility-certification.spec.ts tests/e2e/platform-admin-negative-security-certification.spec.ts tests/e2e/platform-admin-crud-state-transition-certification.spec.ts --project=chromium --workers=1 --timeout=300000
+```
+
+Result:
+
+- `7 passed (4.9m)`
+
+Verification notes:
+
+- Functional platform workflow is green on staging.
+- CRUD/state-transition certification passed through browser controls.
+- Security and negative validation paths passed.
+- Platform routes render cleanly on desktop and mobile, including visual screenshot capture.
+- Platform menu/navigation is using the DB-backed menu catalog after deployment sync.
+- Permission catalog is using the DB-backed permission catalog after deployment sync.
+- Observation: the default 30-second browser test timeout is too tight for the current staging data volume. The product rendered correctly with launch-run timeout, but platform route performance should be optimized next by reducing route-level overfetching and moving heavy list panels toward server/API pagination.
+
+Updated confidence:
+
+- Platform admin UX confidence: 95%
+- Platform admin functional confidence: 96%
+- Platform admin security/guardrail confidence: 95%
+- Platform admin audit/evidence confidence: 95%
+- Platform admin launch readiness: 95%
+
+## 2026-09-17 Performance Optimization Pass
+
+Scope:
+
+- Added a lightweight Platform Admin summary API for dashboard counters and queue previews.
+- Changed the Platform Admin server renderer to load only the data required by the active panel.
+- Preserved selected-tenant URL state so cross-panel workflows keep the correct tenant context.
+- Kept full list fetches for panels that actually need full CRUD/search interaction.
+
+Commands:
+
+```bash
+.venv/bin/python -m pytest tests/test_tenant_onboarding_api.py
+pnpm --dir web exec tsc --noEmit
+pnpm --dir web lint
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:3212 PLAYWRIGHT_LIVE_SEED_PASSWORD=Password@123 HRMS_API_BASE_URL=http://127.0.0.1:8001/api/v1 HRMS_ENABLE_DEMO_DATA=false npx playwright test tests/e2e/platform-admin-tabs-pagination-certification.spec.ts tests/e2e/platform-admin-permission-catalog-certification.spec.ts tests/e2e/platform-admin-visual-accessibility-certification.spec.ts tests/e2e/platform-admin-negative-security-certification.spec.ts tests/e2e/platform-admin-crud-state-transition-certification.spec.ts --project=chromium --workers=1 --timeout=240000
+```
+
+Results:
+
+- Tenant onboarding API tests: `15 passed`
+- TypeScript: passed
+- ESLint: passed
+- Local Platform Admin browser pack: `7 passed (51.3s)`
+- CRUD/state-transition proof: `1 passed (7.5s)`
+- Visual desktop/mobile route sweep: `1 passed (18.6s)`
+
+Verification notes:
+
+- The previous selected-tenant workflow risk was rechecked through the CRUD certification and passed.
+- Platform Admin no longer fetches leads, tenants, policy packs, selected tenant detail, and onboarding evidence on every route by default.
+- Control/dashboard routes now use the summary API, while Leads, Tenants, Policy Packs, Launch Checklist, Tenant Admin Users, and Events still load the records needed for their active workflow.

@@ -5608,6 +5608,26 @@ export type PlatformPolicyPackListItem = {
   adoption_count: number;
 };
 
+export type PlatformSummary = {
+  counts: {
+    tenants: number;
+    active_tenants: number;
+    sandbox_tenants: number;
+    onboarding_tenants: number;
+    handoff_ready_tenants: number;
+    baseline_pending_tenants: number;
+    leads: number;
+    active_leads: number;
+    new_leads: number;
+    qualified_leads: number;
+    policy_packs: number;
+    published_policy_packs: number;
+  };
+  first_tenant: PlatformTenantListItem | null;
+  lead_queue: PlatformPublicLead[];
+  stale_onboarding_tenants: PlatformTenantListItem[];
+};
+
 export type PlatformPermissionCatalogItem = {
   key: string;
   label: string;

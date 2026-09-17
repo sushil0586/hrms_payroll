@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.db import transaction
+from django.db.models import Count
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone
 from rest_framework import exceptions, permissions, response, status
@@ -40,6 +41,7 @@ from apps.tenant_onboarding.services import (
     provision_tenant_admin_contact,
     set_checklist_item_status,
 )
+from apps.platform_policies.models import PlatformPolicyPack, PlatformPolicyPackStatus
 from apps.tenants.models import Tenant, TenantDomain, TenantOnboardingStatus, TenantStatus
 
 
@@ -524,6 +526,69 @@ class PlatformTenantListCreateView(APIView):
         return response.Response(
             PlatformTenantListItemSerializer(_serialize_tenant(tenant)).data,
             status=status.HTTP_201_CREATED,
+        )
+
+
+class PlatformSummaryView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    def get(self, request):
+        tenants = Tenant.objects.prefetch_related("domains").order_by("name")
+        first_tenant = tenants.first()
+        tenant_status_counts = {
+            item["status"]: item["count"]
+            for item in Tenant.objects.values("status").annotate(count=Count("id"))
+        }
+        onboarding_status_counts = {
+            item["onboarding_status"]: item["count"]
+            for item in Tenant.objects.values("onboarding_status").annotate(count=Count("id"))
+        }
+        lead_status_counts = {
+            item["status"]: item["count"]
+            for item in PublicTenantLead.objects.values("status").annotate(count=Count("id"))
+        }
+        active_lead_statuses = [
+            PublicLeadStatus.NEW,
+            PublicLeadStatus.REVIEWING,
+            PublicLeadStatus.QUALIFIED,
+        ]
+        policy_pack_status_counts = {
+            item["status"]: item["count"]
+            for item in PlatformPolicyPack.objects.values("status").annotate(count=Count("id"))
+        }
+        lead_queue = list(
+            PublicTenantLead.objects.filter(status__in=active_lead_statuses)
+            .order_by("status", "-created_at")[:5]
+        )
+        stale_tenants = list(
+            tenants.exclude(onboarding_status__in=[TenantOnboardingStatus.ACTIVE, TenantOnboardingStatus.HANDOFF_READY])[:5]
+        )
+        return response.Response(
+            {
+                "counts": {
+                    "tenants": tenants.count(),
+                    "active_tenants": tenant_status_counts.get(TenantStatus.ACTIVE, 0),
+                    "sandbox_tenants": Tenant.objects.filter(is_sandbox=True).count(),
+                    "onboarding_tenants": tenants.exclude(onboarding_status=TenantOnboardingStatus.ACTIVE).count(),
+                    "handoff_ready_tenants": onboarding_status_counts.get(TenantOnboardingStatus.HANDOFF_READY, 0),
+                    "baseline_pending_tenants": sum(
+                        onboarding_status_counts.get(status_key, 0)
+                        for status_key in [TenantOnboardingStatus.CREATED, TenantOnboardingStatus.PREPARED]
+                    ),
+                    "leads": PublicTenantLead.objects.count(),
+                    "active_leads": PublicTenantLead.objects.filter(status__in=active_lead_statuses).count(),
+                    "new_leads": lead_status_counts.get(PublicLeadStatus.NEW, 0),
+                    "qualified_leads": lead_status_counts.get(PublicLeadStatus.QUALIFIED, 0),
+                    "policy_packs": PlatformPolicyPack.objects.count(),
+                    "published_policy_packs": policy_pack_status_counts.get(PlatformPolicyPackStatus.PUBLISHED, 0),
+                },
+                "first_tenant": PlatformTenantListItemSerializer(_serialize_tenant(first_tenant)).data if first_tenant else None,
+                "lead_queue": PublicTenantLeadSerializer([_serialize_public_lead(item) for item in lead_queue], many=True).data,
+                "stale_onboarding_tenants": PlatformTenantListItemSerializer(
+                    [_serialize_tenant(item) for item in stale_tenants],
+                    many=True,
+                ).data,
+            }
         )
 
 

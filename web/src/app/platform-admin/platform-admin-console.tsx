@@ -11,6 +11,7 @@ import type {
   PlatformOnboardingAdminContact,
   PlatformPublicLead,
   PlatformPolicyPackListItem,
+  PlatformSummary,
   PlatformTenantListItem,
   PlatformTenantOnboarding,
 } from "@/lib/types";
@@ -22,6 +23,7 @@ type Props = {
   selectedTenant: PlatformTenantListItem | null;
   onboarding: PlatformTenantOnboarding | null;
   policyPacks: PlatformPolicyPackListItem[];
+  summary: PlatformSummary;
 };
 
 type MutationMethod = "POST" | "PATCH";
@@ -261,7 +263,7 @@ function leadDomainSuggestion(lead: PlatformPublicLead) {
   return "";
 }
 
-export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTenant, onboarding, policyPacks }: Props) {
+export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTenant, onboarding, policyPacks, summary }: Props) {
   const router = useRouter();
   const createTenantFirstFieldRef = useRef<HTMLInputElement>(null);
   const addContactFirstFieldRef = useRef<HTMLInputElement>(null);
@@ -288,14 +290,14 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
 
   const tenantCounts = useMemo(() => {
     return {
-      active: tenants.filter((tenant) => tenant.status === "active").length,
-      onboarding: tenants.filter((tenant) => tenant.onboarding_status !== "active").length,
-      sandbox: tenants.filter((tenant) => tenant.is_sandbox).length,
-      handoffReady: tenants.filter((tenant) => tenant.onboarding_status === "handoff_ready").length,
-      baselinePending: tenants.filter((tenant) => ["created", "prepared"].includes(tenant.onboarding_status)).length,
-      publishedPacks: policyPacks.filter((pack) => pack.status === "published").length,
+      active: summary.counts.active_tenants,
+      onboarding: summary.counts.onboarding_tenants,
+      sandbox: summary.counts.sandbox_tenants,
+      handoffReady: summary.counts.handoff_ready_tenants,
+      baselinePending: summary.counts.baseline_pending_tenants,
+      publishedPacks: summary.counts.published_policy_packs,
     };
-  }, [policyPacks, tenants]);
+  }, [summary]);
 
   const provisionableContacts = onboarding?.admin_contacts.filter((contact) => !contact.membership_id) ?? [];
   const primaryContact = onboarding?.admin_contacts.find((contact) => contact.is_primary) ?? onboarding?.admin_contacts[0] ?? null;
@@ -304,7 +306,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const canMarkHandoff = Boolean(selectedTenant && hasBaseline && hasProvisionedPrimaryAdmin);
   const canActivateTenant = Boolean(selectedTenant && onboarding?.handoff_completed_at && hasProvisionedPrimaryAdmin);
   const publishedPacks = policyPacks.filter((pack) => pack.status === "published");
-  const canAdoptBaseline = Boolean(selectedTenant && publishedPacks.length);
+  const publishedPackCount = initialPanel === "policy-packs" ? publishedPacks.length : tenantCounts.publishedPacks;
+  const canAdoptBaseline = Boolean(selectedTenant && publishedPackCount);
   const guidedChecklist = selectedTenant && onboarding ? [
     {
       status: "done" as const,
@@ -314,11 +317,11 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
       actionLabel: "Review tenant",
     },
     {
-      status: hasBaseline ? "done" as const : publishedPacks.length ? "needed" as const : "blocked" as const,
+      status: hasBaseline ? "done" as const : publishedPackCount ? "needed" as const : "blocked" as const,
       title: "Apply setup template",
       detail: hasBaseline
         ? `Initial setup was confirmed ${formatDateTime(onboarding.baseline_published_at)}.`
-        : publishedPacks.length
+        : publishedPackCount
           ? "Choose a published setup template and apply it to this tenant."
           : "Publish at least one setup template before this tenant can receive initial setup.",
       actionHref: buildPanelHref("policy-packs", selectedTenant.id),
@@ -400,12 +403,16 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const newLeads = leads.filter((lead) => lead.status === "new");
   const qualifiedLeads = leads.filter((lead) => lead.status === "qualified");
   const eventTypes = Array.from(new Set(events.map((event) => event.event_type))).sort();
-  const staleOnboardingTenants = tenants.filter((tenant) => !["active", "handoff_ready"].includes(tenant.onboarding_status)).slice(0, 5);
-  const leadQueue = [...newLeads, ...qualifiedLeads, ...activeLeads.filter((lead) => !["new", "qualified"].includes(lead.status))].slice(0, 5);
+  const staleOnboardingTenants = initialPanel === "tenants"
+    ? tenants.filter((tenant) => !["active", "handoff_ready"].includes(tenant.onboarding_status)).slice(0, 5)
+    : summary.stale_onboarding_tenants;
+  const leadQueue = initialPanel === "leads"
+    ? [...newLeads, ...qualifiedLeads, ...activeLeads.filter((lead) => !["new", "qualified"].includes(lead.status))].slice(0, 5)
+    : summary.lead_queue;
   const controlRisks = [
     {
       label: "New public leads",
-      value: newLeads.length,
+      value: summary.counts.new_leads,
       action: "Review and qualify inbound requests.",
       href: buildPanelHref("leads", selectedTenant?.id),
     },
@@ -423,12 +430,12 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     },
   ];
   const tabCounts = {
-    control: activeLeads.length + tenantCounts.onboarding,
-    leads: leads.filter((lead) => ["new", "reviewing", "qualified"].includes(lead.status)).length,
-    tenants: tenants.length,
+    control: summary.counts.active_leads + tenantCounts.onboarding,
+    leads: summary.counts.active_leads,
+    tenants: summary.counts.tenants,
     onboarding: selectedTenant && onboarding ? 2 : 0,
     admins: onboarding?.admin_contacts.length ?? 0,
-    policyPacks: policyPacks.length,
+    policyPacks: summary.counts.policy_packs,
     events: events.length,
   };
   const activeGuide = panelGuides[initialPanel];
@@ -780,11 +787,11 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         <section className="section platform-control-metrics">
           <div className="metric-grid-modern">
             <MetricTile label="Open control actions" value={tabCounts.control} trend="Leads and tenant gates" />
-            <MetricTile label="Tenants" value={tenants.length} trend="Platform catalog" />
+            <MetricTile label="Tenants" value={summary.counts.tenants} trend="Platform catalog" />
             <MetricTile label="Active tenants" value={tenantCounts.active} trend="Activated" />
             <MetricTile label="Onboarding" value={tenantCounts.onboarding} trend="Not yet active" />
-            <MetricTile label="Public leads" value={activeLeads.length} trend={`${newLeads.length} new`} />
-            <MetricTile label="Published packs" value={tenantCounts.publishedPacks} trend={`${policyPacks.length} total packs`} />
+            <MetricTile label="Public leads" value={summary.counts.active_leads} trend={`${summary.counts.new_leads} new`} />
+            <MetricTile label="Published packs" value={tenantCounts.publishedPacks} trend={`${summary.counts.policy_packs} total packs`} />
           </div>
         </section>
       ) : null}
@@ -968,8 +975,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             </div>
             <div className="detail-grid">
               <DetailRow label="Tenant events" value={events.length} />
-              <DetailRow label="Setup templates" value={policyPacks.length} />
-              <DetailRow label="Active leads" value={activeLeads.length} />
+              <DetailRow label="Setup templates" value={summary.counts.policy_packs} />
+              <DetailRow label="Active leads" value={summary.counts.active_leads} />
               <DetailRow label="Selected tenant" value={selectedTenant?.code || "Not selected"} />
             </div>
             <div className="form-actions-bar">

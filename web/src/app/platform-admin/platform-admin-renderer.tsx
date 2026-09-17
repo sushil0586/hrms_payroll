@@ -1,4 +1,4 @@
-import { getPlatformPolicyPacks, getPlatformPublicLeads, getPlatformTenant, getPlatformTenantOnboarding, getPlatformTenants } from "@/lib/api";
+import { getPlatformPolicyPacks, getPlatformPublicLeads, getPlatformSummary, getPlatformTenant, getPlatformTenantOnboarding, getPlatformTenants } from "@/lib/api";
 import type { PlatformTenantListItem } from "@/lib/types";
 
 import { PlatformAdminConsole } from "./platform-admin-console";
@@ -27,18 +27,25 @@ export function resolvePanel(params: Record<string, SearchParamValue>) {
 }
 
 export async function renderPlatformAdminConsole(panel: PlatformPanel, params: Record<string, SearchParamValue> = {}) {
+  const summaryResult = await getPlatformSummary();
+  const requestedTenantId = normalizeParam(params.tenantId);
+  const shouldLoadLeads = panel === "leads";
+  const shouldLoadTenants = panel === "tenants";
+  const shouldLoadPolicyPacks = panel === "policy-packs";
+  const needsSelectedTenant = ["onboarding", "admins", "policy-packs", "events"].includes(panel);
+
   const [leadResult, tenantResult, policyPackResult] = await Promise.all([
-    getPlatformPublicLeads(),
-    getPlatformTenants(),
-    getPlatformPolicyPacks(),
+    shouldLoadLeads ? getPlatformPublicLeads() : Promise.resolve({ data: summaryResult.data.lead_queue }),
+    shouldLoadTenants ? getPlatformTenants() : Promise.resolve({ data: summaryResult.data.stale_onboarding_tenants }),
+    shouldLoadPolicyPacks ? getPlatformPolicyPacks() : Promise.resolve({ data: [] }),
   ]);
-  const selectedTenantId = resolveSelectedTenantId(params, tenantResult.data);
-  const [selectedTenantResult, onboardingResult] = selectedTenantId
-    ? await Promise.all([
-        getPlatformTenant(selectedTenantId),
-        getPlatformTenantOnboarding(selectedTenantId),
-      ])
-    : [null, null];
+  const selectedTenantSeed = summaryResult.data.first_tenant ? [summaryResult.data.first_tenant] : [];
+  const selectedTenantId = resolveSelectedTenantId(params, [...tenantResult.data, ...selectedTenantSeed]);
+  const shouldLoadSelectedTenant = Boolean(selectedTenantId && (needsSelectedTenant || requestedTenantId));
+  const [selectedTenantResult, onboardingResult] = await Promise.all([
+    shouldLoadSelectedTenant ? getPlatformTenant(selectedTenantId) : Promise.resolve(null),
+    selectedTenantId && needsSelectedTenant ? getPlatformTenantOnboarding(selectedTenantId) : Promise.resolve(null),
+  ]);
 
   return (
     <PlatformAdminConsole
@@ -47,6 +54,7 @@ export async function renderPlatformAdminConsole(panel: PlatformPanel, params: R
       onboarding={onboardingResult?.data ?? null}
       policyPacks={policyPackResult.data}
       selectedTenant={selectedTenantResult?.data ?? null}
+      summary={summaryResult.data}
       tenants={tenantResult.data}
     />
   );

@@ -90,6 +90,7 @@ import type {
   PlatformPermissionCatalogItem,
   PlatformPublicLead,
   PlatformPolicyPackListItem,
+  PlatformSummary,
   PlatformTenantListItem,
   PlatformTenantOnboarding,
   SessionUser,
@@ -350,6 +351,10 @@ export async function getPlatformTenants() {
 
 export async function getPlatformPublicLeads() {
   return apiGet<PlatformPublicLead[]>("/platform/leads/");
+}
+
+export async function getPlatformSummary() {
+  return apiGet<PlatformSummary>("/platform/summary/");
 }
 
 export async function getPlatformTenant(tenantId: string) {
