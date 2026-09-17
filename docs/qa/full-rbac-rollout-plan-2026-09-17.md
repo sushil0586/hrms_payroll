@@ -777,7 +777,7 @@ Exit criteria:
 
 ### RBAC-9: Full Certification
 
-Status: Not started  
+Status: In progress  
 Goal: prove full RBAC works through browser and API tests.
 
 Browser certification:
@@ -792,6 +792,36 @@ Browser certification:
 - Confirm plan-restricted permission cannot be assigned.
 - Confirm last-admin guard.
 - Confirm audit evidence.
+
+Safe staging command:
+
+```bash
+cd web
+./scripts/run-rbac9-staging.sh
+```
+
+Safe sweep coverage:
+
+- Tenant Admin role creation, role edit UX, plan-unavailable permissions, limited-role menu/action denials, and direct backend denials.
+- HR Admin leave/attendance read-only roles and mutation denials.
+- MSS custom leave/attendance approvers with unrelated HR API denials.
+- Payroll/statutory viewer roles, output/handoff/statutory action denials, and direct backend denials.
+- Payroll lifecycle viewer/reviewer roles across input, calculation, review, approval, lock, and publish controls.
+
+Current sweep status:
+
+- Tenant Admin role certification passed on staging with `3 passed, 1 skipped`; the skipped case is the destructive last-admin browser proof, reserved for disposable tenants only.
+- HR Admin leave/attendance RBAC certification passed on staging with `2 passed` after the browser proof was hardened to create employee-backed limited users and align assertions to current page headings.
+- MSS custom approver certification exposed a real product issue: the MSS control center and approval inbox fetched both leave and attendance queues even when a custom role only had one approval domain, causing a live Server Component load failure for single-purpose manager roles. The fix is deployed and verified on staging with `2 passed`.
+
+Destructive proof rule:
+
+- Last-admin lockout browser proof is opt-in only and must run on a disposable tenant/environment:
+
+```bash
+cd web
+HRMS_ENABLE_RBAC_LOCKOUT_BROWSER_PROOF=1 npx playwright test tests/e2e/tenant-admin-roles-certification.spec.ts --project=chromium --workers=1 --grep "last-admin lockout"
+```
 
 Exit criteria:
 
@@ -834,6 +864,9 @@ Exit criteria:
 | 2026-09-17 | RBAC-7A Payroll Lifecycle Permission-Aware UI And Browser Proof | Complete on patched local UI against staging API | Payroll Inputs, Payroll Calculations, and Payroll Review now disable high-risk lifecycle controls by effective permissions. New staging-gated browser proof passed `3/3` against staging API on patched local UI: input viewer cannot manage runs/snapshots/locks, payroll reviewer cannot calculate draft payroll, and review-only user cannot approve, final-lock, or generate outputs. Direct API denial checks verify `payroll.inputs.manage`, `payroll.lock`, `payroll.calculate`, `payroll.approve`, and `payroll.publish`. |
 | 2026-09-17 | RBAC-7A Payroll Lifecycle Direct Staging Proof | Complete on deployed staging | Post-deployment Playwright proof passed `3/3` on staging for payroll input viewer, payroll calculation reviewer, and payroll review-only personas. This closes the deployment verification gap for payroll lifecycle permission-aware UI and backend denials. |
 | 2026-09-17 | RBAC-8A Last Admin Critical Permission Guard | Complete locally | Role edits and membership role/status changes now block changes that would leave zero active holders of `tenant.users.manage` or `tenant.roles.manage`; focused backend smoke is green and guarded browser proof is added behind `HRMS_ENABLE_RBAC_LOCKOUT_BROWSER_PROOF=1`. |
+| 2026-09-17 | RBAC-9 Safe Staging Sweep Kickoff | In progress | Added `web/scripts/run-rbac9-staging.sh` to run non-destructive staging RBAC browser proofs. Tenant Admin passed `3 passed, 1 skipped`; HR leave/attendance passed `2 passed`; MSS custom leave/attendance approver proof passed `2/2` on deployed staging after fixing permission-aware queue fetches. |
+| 2026-09-17 | RBAC-9 Payroll And Statutory Deployed Sweep | Complete on deployed staging | `payroll-statutory-rbac-certification.spec.ts` passed `3/3` on deployed staging: statutory viewer read-only evidence and setup denials, payroll output viewer publish/handoff denials, and finance handoff viewer transmit/ack/audit-pack denials. |
+| 2026-09-17 | RBAC-9 Payroll Lifecycle Deployed Sweep | Complete on deployed staging | `payroll-lifecycle-rbac-certification.spec.ts` passed `3/3` on deployed staging: payroll input viewer cannot manage runs/snapshots/locks, payroll reviewer cannot calculate draft payroll, and review-only user cannot approve/final-lock/generate outputs. |
 | 2026-09-17 | RBAC-8B Tenant Admin Audit Diff Evidence | Complete locally | Role and membership mutations now write explicit `change_summary` audit evidence for previous/new permissions, added/removed permissions, critical permission changes, previous/new roles, and added/removed role assignments. Tenant trust-audit `tenant_admin` group now includes role create/update/activate/deactivate events. Focused backend smoke, Django check, and web typecheck are green. |
 | 2026-09-17 | RBAC-8B Deployed Tenant Admin Audit Evidence Proof | Complete on deployed staging | Deployed API proof created a tenant role and confirmed the event appears in `/api/v1/tenant-admin/trust-audit/?event_group=tenant_admin` with `change_summary` including previous/new permission keys and added permissions. Non-destructive Tenant Admin browser certification passed `3/3` on staging; guarded last-admin destructive proof remains deferred for a disposable tenant because the shared staging tenant has multiple active admin holders and setup/cleanup mutations time out under live load. |
 
