@@ -63,7 +63,7 @@ test.describe("Tenant admin roles certification", () => {
     await createDialog.getByRole("tab", { name: "Payroll" }).click();
     await expect(createDialog.getByRole("tab", { name: "Payroll" })).toHaveAttribute("aria-selected", "true");
     await expect(createDialog.locator(".tenant-permission-group").first()).toContainText("Payroll");
-    await createDialog.getByText("Review payroll").click();
+    await createDialog.getByRole("checkbox", { name: /^Review payroll\b/ }).check();
     await expect(createDialog.locator(".tenant-permission-summary")).toContainText("1 selected");
     await expect(createDialog.locator(".tenant-permission-summary")).toContainText("Review payroll");
     await expect(createDialog.getByRole("status")).toContainText("Role is ready to save.");

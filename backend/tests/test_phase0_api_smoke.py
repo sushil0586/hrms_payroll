@@ -1025,6 +1025,40 @@ def test_tenant_admin_membership_invite_requires_manage_permission(api_client: A
 
 
 @pytest.mark.django_db
+def test_custom_tenant_role_with_view_permissions_can_open_tenant_admin_console(api_client: APIClient, bootstrapped_workspace):
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    role = Role.objects.create(
+        tenant=tenant,
+        code="tenant-viewer",
+        name="Tenant Viewer",
+        is_system_role=False,
+        is_active=True,
+    )
+    role.permissions.create(permission_key="tenant.dashboard.view")
+    user = User.objects.create_user(
+        username="tenant.viewer",
+        email="tenant.viewer@example.com",
+        password=PASSWORD,
+        first_name="Tenant",
+        last_name="Viewer",
+    )
+    membership = TenantMembership.objects.create(
+        tenant=tenant,
+        user=user,
+        status=MembershipStatus.ACTIVE,
+        is_default=True,
+    )
+    membership.membership_roles.create(role=role, is_primary=True)
+    token = login(api_client, "tenant.viewer")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    response = api_client.get("/api/v1/tenant-admin/console/")
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["tenant"]["code"] == tenant.code
+
+
+@pytest.mark.django_db
 def test_tenant_admin_role_crud_blocks_duplicate_system_and_assigned_deactivation(api_client: APIClient, bootstrapped_workspace):
     tenant = bootstrapped_workspace["pending_leave"].tenant
     employee_role = Role.objects.get(tenant=tenant, code="employee")

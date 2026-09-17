@@ -318,7 +318,7 @@ from apps.common.api_serializers import (
 )
 from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, ScopeType, TenantMembership, User
-from apps.iam.permission_checks import user_has_tenant_permission
+from apps.iam.permission_checks import get_user_tenant_permission_keys, user_has_tenant_permission
 from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, EmploymentType, Grade, LegalEntity, Location
 from apps.payroll.models import (
     EmployeeSalaryAssignment,
@@ -6277,6 +6277,22 @@ class HrAdminContextMixin(EmployeeContextMixin):
 
 class TenantAdminContextMixin(EmployeeContextMixin):
     workspace_role_codes = ("tenant-admin", "hr-admin")
+
+    def initial(self, request, *args, **kwargs):
+        APIView.initial(self, request, *args, **kwargs)
+        membership = get_default_membership_for_user(request.user)
+        if not membership:
+            raise exceptions.PermissionDenied("No active tenant membership found.")
+        has_workspace_role = membership.membership_roles.filter(
+            role__code__in=self.workspace_role_codes,
+            role__is_active=True,
+        ).exists()
+        has_tenant_permission = any(
+            permission_key.startswith("tenant.")
+            for permission_key in get_user_tenant_permission_keys(request.user, membership.tenant)
+        )
+        if not has_workspace_role and not has_tenant_permission:
+            raise exceptions.PermissionDenied("You do not have access to this workspace.")
 
     def get_tenant(self):
         membership = get_default_membership_for_user(self.request.user)
