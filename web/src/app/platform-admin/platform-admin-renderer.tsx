@@ -12,7 +12,7 @@ export function normalizeParam(value: SearchParamValue) {
 
 function resolveSelectedTenantId(params: Record<string, SearchParamValue>, tenants: PlatformTenantListItem[]) {
   const requested = normalizeParam(params.tenantId);
-  if (requested && tenants.some((tenant) => tenant.id === requested)) {
+  if (requested) {
     return requested;
   }
   return tenants[0]?.id ?? "";
