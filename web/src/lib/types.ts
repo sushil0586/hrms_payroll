@@ -5618,4 +5618,6 @@ export type PlatformPermissionCatalogItem = {
   required_module: string;
   required_plan: string;
   default_role_codes: string[];
+  catalog_source?: "database" | "code" | string;
+  is_active?: boolean;
 };

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from apps.iam.models import MembershipRole, MembershipScope, Role, RolePermission, TenantMembership, User
+from apps.iam.models import MembershipRole, MembershipScope, PermissionCatalogEntry, Role, RolePermission, TenantMembership, User
 
 
 @admin.register(User)
@@ -25,6 +25,14 @@ class UserAdmin(DjangoUserAdmin):
 class RolePermissionInline(admin.TabularInline):
     model = RolePermission
     extra = 0
+
+
+@admin.register(PermissionCatalogEntry)
+class PermissionCatalogEntryAdmin(admin.ModelAdmin):
+    list_display = ("key", "label", "module", "risk_level", "tenant_assignable", "is_active")
+    list_filter = ("module", "risk_level", "tenant_assignable", "is_active", "managed_by_platform")
+    search_fields = ("key", "label", "module", "description", "default_role_codes")
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(Role)

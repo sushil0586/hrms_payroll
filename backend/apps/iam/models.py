@@ -44,6 +44,52 @@ class ScopeType(models.TextChoices):
     TENANT_ALL = "tenant_all", "Tenant Wide"
 
 
+class PermissionCatalogEntry(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Platform-owned catalog row for RBAC permission definitions."""
+
+    class RiskLevel(models.TextChoices):
+        LOW = "low", "Low"
+        MEDIUM = "medium", "Medium"
+        HIGH = "high", "High"
+        CRITICAL = "critical", "Critical"
+
+    key = models.CharField(max_length=120, unique=True)
+    label = models.CharField(max_length=255)
+    module = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    risk_level = models.CharField(max_length=20, choices=RiskLevel.choices, default=RiskLevel.MEDIUM)
+    tenant_assignable = models.BooleanField(default=True)
+    required_module = models.CharField(max_length=120, blank=True)
+    required_plan = models.CharField(max_length=120, blank=True)
+    default_role_codes = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+    managed_by_platform = models.BooleanField(default=True)
+    source_ref = models.CharField(max_length=120, blank=True, default="code_catalog")
+
+    class Meta:
+        ordering = ["module", "key"]
+        verbose_name = "Permission Catalog Entry"
+        verbose_name_plural = "Permission Catalog Entries"
+
+    def __str__(self) -> str:
+        return self.key
+
+    def as_catalog_dict(self) -> dict:
+        return {
+            "key": self.key,
+            "label": self.label,
+            "module": self.module,
+            "description": self.description,
+            "risk_level": self.risk_level,
+            "tenant_assignable": self.tenant_assignable,
+            "required_module": self.required_module,
+            "required_plan": self.required_plan,
+            "default_role_codes": list(self.default_role_codes or []),
+            "catalog_source": "database",
+            "is_active": self.is_active,
+        }
+
+
 class Role(UUIDPrimaryKeyModel, TimeStampedModel):
     """Tenant-scoped business role used for HRMS access control."""
 

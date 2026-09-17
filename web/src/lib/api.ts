@@ -13242,6 +13242,8 @@ function getDemoData<T>(path: string): T {
         required_module: item.required_module,
         required_plan: item.required_plan,
         default_role_codes: item.default_role_codes,
+        catalog_source: "code",
+        is_active: true,
       })) as T;
     case "/tenant-admin/trust-audit/":
       return buildDemoTenantAdminTrustAuditReview() as T;

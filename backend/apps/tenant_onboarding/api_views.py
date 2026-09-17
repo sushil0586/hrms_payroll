@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from django.db import transaction
+from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone
 from rest_framework import exceptions, permissions, response, status
 from rest_framework.views import APIView
 
+from apps.iam.models import PermissionCatalogEntry
 from apps.iam.permission_catalog import get_permission_catalog
 from apps.tenant_onboarding.api_serializers import (
     PlatformMutationResultSerializer,
     PlatformOnboardingAdminContactSerializer,
     PlatformOnboardingAdminContactWriteSerializer,
     PlatformPermissionCatalogItemSerializer,
+    PlatformPermissionCatalogUpdateSerializer,
     PlatformProvisionAdminResultSerializer,
     PlatformProvisionAdminSerializer,
     PlatformTenantListItemSerializer,
@@ -211,8 +214,65 @@ class PlatformPermissionCatalogListView(APIView):
     permission_classes = [IsPlatformStaff]
 
     def get(self, request):
-        payload = sorted(get_permission_catalog(), key=lambda item: (item["module"], item["key"]))
+        try:
+            entries = list(PermissionCatalogEntry.objects.order_by("module", "key"))
+        except (OperationalError, ProgrammingError):
+            entries = []
+        payload = [entry.as_catalog_dict() for entry in entries]
+        if not payload:
+            payload = [
+                {**item, "catalog_source": "code"}
+                for item in sorted(get_permission_catalog(), key=lambda item: (item["module"], item["key"]))
+            ]
         return response.Response(PlatformPermissionCatalogItemSerializer(payload, many=True).data)
+
+
+def _catalog_entry_from_code(permission_key: str) -> PermissionCatalogEntry | None:
+    item = next((catalog_item for catalog_item in get_permission_catalog() if catalog_item["key"] == permission_key), None)
+    if not item:
+        return None
+    entry, _ = PermissionCatalogEntry.objects.get_or_create(
+        key=item["key"],
+        defaults={
+            "label": item["label"],
+            "module": item["module"],
+            "description": item.get("description", ""),
+            "risk_level": item.get("risk_level", "medium"),
+            "tenant_assignable": item.get("tenant_assignable", True),
+            "required_module": item.get("required_module", ""),
+            "required_plan": item.get("required_plan", ""),
+            "default_role_codes": item.get("default_role_codes", []),
+            "is_active": True,
+            "managed_by_platform": True,
+            "source_ref": "code_catalog",
+        },
+    )
+    return entry
+
+
+class PlatformPermissionCatalogDetailView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    def patch(self, request, permission_key: str):
+        serializer = PlatformPermissionCatalogUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            entry = PermissionCatalogEntry.objects.filter(key=permission_key).first() or _catalog_entry_from_code(permission_key)
+        except (OperationalError, ProgrammingError) as exc:
+            raise exceptions.APIException("Permission catalog table is not available. Run database migrations and sync the catalog first.") from exc
+        if entry is None:
+            raise exceptions.NotFound("Permission key is not in the platform catalog.")
+
+        changes = []
+        for field, value in serializer.validated_data.items():
+            if getattr(entry, field) != value:
+                changes.append(field)
+                setattr(entry, field, value)
+        if changes:
+            entry.source_ref = f"platform_update:{_actor_identifier(request)}"
+            entry.save(update_fields=[*changes, "source_ref", "updated_at"])
+
+        return response.Response(PlatformPermissionCatalogItemSerializer(entry.as_catalog_dict()).data)
 
 
 def _get_public_lead_or_404(item_id):

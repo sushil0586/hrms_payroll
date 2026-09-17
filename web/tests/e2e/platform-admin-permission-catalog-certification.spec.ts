@@ -18,12 +18,17 @@ test.describe("Platform admin permission catalog certification", () => {
     await expect(summary.getByText("Tenant assignable")).toBeVisible();
     await expect(summary.getByText("Platform only")).toBeVisible();
     await expect(summary.getByText("Critical risk")).toBeVisible();
+    await expect(summary.getByText("Catalog source")).toBeVisible();
 
     const catalogReview = page.locator(".record-card").filter({ has: page.getByRole("heading", { name: "Catalog review" }) });
     await expect(catalogReview).toBeVisible();
     await expect(catalogReview.getByText("Manage tenant roles")).toBeVisible();
     await expect(catalogReview.getByText("tenant.roles.manage")).toBeVisible();
     await expect(catalogReview.getByText("Tenant Admin")).toBeVisible();
+    await catalogReview.getByRole("button", { name: "Edit" }).first().click();
+    await expect(page.getByRole("dialog", { name: "Edit platform permission" })).toBeVisible();
+    await expect(page.getByText("Keys are immutable.")).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).click();
 
     await page.locator('[name="q"]').fill("permission_catalog");
     await page.getByRole("button", { name: "Apply" }).click();

@@ -2,6 +2,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getPlatformPermissionCatalog } from "@/lib/api";
 import type { PlatformPermissionCatalogItem } from "@/lib/types";
+import { PermissionCatalogActions } from "./permission-catalog-actions";
 
 type PageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -57,9 +58,13 @@ export default async function PlatformAdminPermissionsPage({ searchParams }: Pag
     return matchesSearch && matchesAssignable && matchesRisk;
   });
   const groupedCatalog = groupByModule(filteredCatalog);
+  const moduleOptions = Array.from(new Set(catalog.map((item) => item.module))).sort();
   const tenantAssignableCount = catalog.filter((item) => item.tenant_assignable).length;
   const platformOnlyCount = catalog.length - tenantAssignableCount;
   const criticalCount = catalog.filter((item) => item.risk_level === "critical").length;
+  const inactiveCount = catalog.filter((item) => item.is_active === false).length;
+  const databaseBackedCount = catalog.filter((item) => item.catalog_source === "database").length;
+  const catalogSourceLabel = databaseBackedCount ? "DB-managed" : "Code fallback";
 
   return (
     <>
@@ -72,7 +77,7 @@ export default async function PlatformAdminPermissionsPage({ searchParams }: Pag
             Dashboard
           </a>
         }
-        pills={["Code-backed", "Tenant assignability", "Risk review"]}
+        pills={["DB-sync backed", "Tenant assignability", "Risk review"]}
         showPills
       />
 
@@ -82,6 +87,8 @@ export default async function PlatformAdminPermissionsPage({ searchParams }: Pag
           <MetricTile label="Tenant assignable" value={tenantAssignableCount} trend="Available for tenant roles" />
           <MetricTile label="Platform only" value={platformOnlyCount} trend="Reserved operator controls" />
           <MetricTile label="Critical risk" value={criticalCount} trend="Needs tight governance" />
+          <MetricTile label="Inactive" value={inactiveCount} trend="Visible for reactivation" />
+          <MetricTile label="Catalog source" value={catalogSourceLabel} trend={databaseBackedCount ? `${databaseBackedCount} DB rows` : "Sync pending"} />
         </div>
       </section>
 
@@ -129,7 +136,7 @@ export default async function PlatformAdminPermissionsPage({ searchParams }: Pag
               <span className="record-chip">{filteredCatalog.length} visible</span>
             </div>
             <p className="section-copy">
-              Permission keys are currently deployed with application code. Use this page to review catalog coverage before assigning roles or planning DB-managed catalog changes.
+              Permission keys are platform-owned. This page reads synced DB catalog rows when available and falls back to the deployed code catalog until sync is complete.
             </p>
           </div>
           <div className="platform-permission-modules">
@@ -156,12 +163,14 @@ export default async function PlatformAdminPermissionsPage({ searchParams }: Pag
                           <span className={permission.tenant_assignable ? "record-chip record-chip--accent" : "record-chip"}>
                             {permission.tenant_assignable ? "Tenant assignable" : "Platform only"}
                           </span>
+                          {permission.is_active === false ? <span className="record-chip record-chip--warning">Inactive</span> : null}
                           {permission.required_module ? <span className="record-chip">{permission.required_module}</span> : null}
                           {permission.required_plan ? <span className="record-chip">{permission.required_plan}</span> : null}
                         </div>
                         <div className="platform-permission-row__roles">
                           <span className="muted">Default roles</span>
                           <strong>{permission.default_role_codes.length ? permission.default_role_codes.join(", ") : "None"}</strong>
+                          <PermissionCatalogActions moduleOptions={moduleOptions} permission={permission} />
                         </div>
                       </div>
                     ))}

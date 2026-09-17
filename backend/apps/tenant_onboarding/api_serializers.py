@@ -182,6 +182,37 @@ class PlatformPermissionCatalogItemSerializer(serializers.Serializer):
     required_module = serializers.CharField(allow_blank=True)
     required_plan = serializers.CharField(allow_blank=True)
     default_role_codes = serializers.ListField(child=serializers.CharField())
+    catalog_source = serializers.CharField(required=False, default="code")
+    is_active = serializers.BooleanField(required=False, default=True)
+
+
+class PlatformPermissionCatalogUpdateSerializer(serializers.Serializer):
+    label = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    module = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    description = serializers.CharField(required=False, allow_blank=True)
+    risk_level = serializers.ChoiceField(choices=["low", "medium", "high", "critical"], required=False)
+    tenant_assignable = serializers.BooleanField(required=False)
+    required_module = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    required_plan = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    is_active = serializers.BooleanField(required=False)
+
+    def validate_label(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Permission label is required.")
+        return value
+
+    def validate_module(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Module is required.")
+        return value
+
+    def validate_required_module(self, value):
+        return value.strip()
+
+    def validate_required_plan(self, value):
+        return value.strip()
 
 
 class PublicTenantLeadCreateSerializer(serializers.Serializer):

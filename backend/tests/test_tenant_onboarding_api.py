@@ -1,9 +1,10 @@
 import pytest
+from django.core.management import call_command
 from rest_framework.test import APIClient
 
 from apps.attendance.models import AttendancePolicy, Holiday, HolidayCalendar, Shift
 from apps.employees.models import Employee, EmploymentStatus
-from apps.iam.models import MembershipRole, Role, TenantMembership, User
+from apps.iam.models import MembershipRole, PermissionCatalogEntry, Role, TenantMembership, User
 from apps.leave_management.models import LeavePolicy, LeaveType
 from apps.platform_policies.models import (
     PlatformPolicyPack,
@@ -90,6 +91,71 @@ def test_platform_permission_catalog_requires_platform_staff_and_returns_catalog
     platform_permission = next(item for item in payload if item["key"] == "platform.permission_catalog.manage")
     assert platform_permission["tenant_assignable"] is False
     assert platform_permission["risk_level"] == "critical"
+
+
+@pytest.mark.django_db
+def test_platform_permission_catalog_prefers_synced_db_rows(api_client: APIClient, platform_staff_user: User):
+    call_command("sync_permission_catalog")
+    entry = PermissionCatalogEntry.objects.get(key="tenant.roles.manage")
+    entry.label = "Manage tenant roles from DB"
+    entry.save(update_fields=["label", "updated_at"])
+
+    api_client.force_authenticate(user=platform_staff_user)
+    response = api_client.get("/api/v1/platform/permission-catalog/")
+
+    assert response.status_code == 200, response.json()
+    role_permission = next(item for item in response.json() if item["key"] == "tenant.roles.manage")
+    assert role_permission["label"] == "Manage tenant roles from DB"
+    assert PermissionCatalogEntry.objects.count() >= 70
+
+
+@pytest.mark.django_db
+def test_platform_staff_can_update_permission_catalog_metadata(api_client: APIClient, platform_staff_user: User):
+    call_command("sync_permission_catalog")
+    api_client.force_authenticate(user=platform_staff_user)
+
+    response = api_client.patch(
+        "/api/v1/platform/permission-catalog/tenant.roles.manage/",
+        {
+            "label": "Manage tenant role permissions",
+            "risk_level": "critical",
+            "tenant_assignable": True,
+            "required_plan": "enterprise",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    assert payload["key"] == "tenant.roles.manage"
+    assert payload["label"] == "Manage tenant role permissions"
+    assert payload["risk_level"] == "critical"
+    assert payload["required_plan"] == "enterprise"
+    assert payload["catalog_source"] == "database"
+
+    entry = PermissionCatalogEntry.objects.get(key="tenant.roles.manage")
+    assert entry.source_ref.startswith("platform_update:")
+
+
+@pytest.mark.django_db
+def test_platform_permission_catalog_update_rejects_invalid_or_unknown_keys(api_client: APIClient, platform_staff_user: User):
+    call_command("sync_permission_catalog")
+    api_client.force_authenticate(user=platform_staff_user)
+
+    invalid_response = api_client.patch(
+        "/api/v1/platform/permission-catalog/tenant.roles.manage/",
+        {"label": "   "},
+        format="json",
+    )
+    assert invalid_response.status_code == 400
+    assert "Permission label is required." in str(invalid_response.json())
+
+    missing_response = api_client.patch(
+        "/api/v1/platform/permission-catalog/not.real.permission/",
+        {"label": "Not real"},
+        format="json",
+    )
+    assert missing_response.status_code == 404
 
 
 @pytest.mark.django_db
