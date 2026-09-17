@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady, suppressBrowserTestNoise } from "../helpers/assertions";
 import { gotoAuthenticated, platformAdmin } from "../helpers/staging-auth";
 
 const platformRoutes = [
@@ -10,6 +10,7 @@ const platformRoutes = [
   { path: "/platform-admin/onboarding", heading: "Launch Checklist", tab: "Launch Checklist" },
   { path: "/platform-admin/admins", heading: "Tenant Admin Users", tab: "Tenant Admin Users" },
   { path: "/platform-admin/policy-packs", heading: "Setup Templates", tab: "Setup Templates" },
+  { path: "/platform-admin/permissions", heading: "Permission Catalog", tab: null },
   { path: "/platform-admin/audit-logs", heading: "Audit Logs", tab: "Events" },
 ] as const;
 
@@ -34,13 +35,22 @@ test.describe("Platform admin visual and accessibility certification", () => {
 
       for (const route of platformRoutes) {
         await gotoAuthenticated(page, route.path, platformAdmin);
-        await expectPageReady(page, route.heading);
-        await expect(page.getByRole("tablist", { name: "Platform admin sections" })).toBeVisible();
-        await expect(page.getByRole("tab", { name: new RegExp(`^${route.tab}`) })).toHaveAttribute("aria-selected", "true");
-        await expect(page.getByTestId("platform-admin-panel-guide")).toBeVisible();
+        if (route.tab) {
+          await expectPageReady(page, route.heading);
+        } else {
+          await suppressBrowserTestNoise(page);
+          await expect(page.locator(".app-shell--workspace")).toBeVisible();
+          await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
+        }
+        if (route.tab) {
+          await expect(page.getByRole("tablist", { name: "Platform admin sections" })).toBeVisible();
+          await expect(page.getByRole("tab", { name: new RegExp(`^${route.tab}`) })).toHaveAttribute("aria-selected", "true");
+          await expect(page.getByTestId("platform-admin-panel-guide")).toBeVisible();
+        }
         await expectNoAppError(page);
         await expectNoHorizontalOverflow(page);
-        await attachScreenshot(page, `platform-admin-${route.tab.toLowerCase().replaceAll(" ", "-")}-${viewport.label}`);
+        const screenshotLabel = (route.tab ?? route.heading).toLowerCase().replaceAll(" ", "-");
+        await attachScreenshot(page, `platform-admin-${screenshotLabel}-${viewport.label}`);
       }
     }
   });
