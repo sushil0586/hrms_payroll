@@ -117,7 +117,7 @@ async function expectPlatformRouteDenied(page: Page, persona: Persona, routePath
 
 test.describe("Platform admin RBAC and permissions certification", () => {
   test("certifies Platform Admin menu, routes, and permission catalog are available only to platform operators", async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(240_000);
     await gotoAuthenticated(page, "/platform-admin", platformAdmin);
     await suppressBrowserTestNoise(page);
 

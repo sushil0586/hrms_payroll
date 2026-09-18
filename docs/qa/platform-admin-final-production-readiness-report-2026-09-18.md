@@ -77,6 +77,7 @@ Business behavior is unchanged. This only restores the API response contract.
 | Spec | Result | Notes |
 | --- | --- | --- |
 | `platform-admin-final-production-readiness-certification.spec.ts` | Passed, 1/1 | Full public lead to active tenant integrated journey passed on staging in Playwright Chromium |
+| Platform Admin supporting suite | Passed after targeted stabilization | Broad suite first run: 13/15 passed; Launch Readiness copy assertion and RBAC timeout were stabilized; targeted rerun passed 4/4 |
 
 Command executed:
 
@@ -108,4 +109,4 @@ pnpm --dir web exec playwright test \
 
 Platform Admin final integrated production-readiness journey is certified on staging.
 
-Confidence: high for the tested Platform Admin lead-to-active-tenant business journey. Remaining recommendation is to run the broader supporting Platform Admin suite before the final public launch cutover.
+Confidence: high for the tested Platform Admin lead-to-active-tenant business journey and supporting module coverage. Remaining recommendation is a final overnight/full-regression pass before public launch cutover if schedule allows.

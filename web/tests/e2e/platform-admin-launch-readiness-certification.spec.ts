@@ -243,7 +243,7 @@ test.describe("Platform Admin Launch Readiness certification", () => {
     await expect(notice(page).getByText("Mark Baseline Published", { exact: true })).toBeVisible();
 
     await safeReload(page);
-    await expectBlockedReadiness(page, tenant.id, /Primary tenant admin needs login access/i);
+    await expectBlockedReadiness(page, tenant.id, /Primary tenant admin needs usable login access/i);
     evidence = await onboardingPayload(page, tenant.id);
     expect(evidence.baseline_published_at).toBeTruthy();
     expectEvent(evidence, "baseline_published", new RegExp(packCode));
@@ -252,7 +252,7 @@ test.describe("Platform Admin Launch Readiness certification", () => {
     expect(JSON.stringify(await directHandoff.json())).toContain("Primary tenant admin must be provisioned");
 
     await addPrimaryContact(page, tenant.id, adminEmail, false, runRef);
-    await expectBlockedReadiness(page, tenant.id, /Primary tenant admin needs login access/i);
+    await expectBlockedReadiness(page, tenant.id, /Primary tenant admin needs usable login access/i);
     evidence = await onboardingPayload(page, tenant.id);
     expect(evidence.admin_contacts.some((contact) => contact.email === adminEmail && contact.is_primary && !contact.membership_id)).toBe(true);
 
