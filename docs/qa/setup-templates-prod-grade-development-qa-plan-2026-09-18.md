@@ -426,6 +426,7 @@ Implementation notes:
 - Fixed async form reset handling in Platform Admin create flows so success feedback is not replaced by a `currentTarget` null error.
 - Replaced invalid nested item edit form markup with a button-driven edit handler so draft template item edits submit reliably inside the Apply setup template card.
 - Tightened browser assertions to verify exact visible operator evidence, including `1 created`, `1 updated`, `1 created`, and `2 unchanged` counters.
+- Added negative browser certification for duplicate item key validation, missing dependency validation, header-only publish confirmation, and published-template edit/delete locks.
 
 Evidence:
 
@@ -435,7 +436,7 @@ Evidence:
 - `pnpm --dir web exec playwright test tests/e2e/platform-admin-setup-templates-lifecycle-certification.spec.ts --list`: 1 test discovered.
 - Local database migration applied for `platform_policies.0003_platformpolicypack_source_pack`.
 - Local Playwright platform admin password reset for certification account `platform.admin`.
-- `HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 HRMS_ENABLE_DEMO_DATA=false pnpm --dir web exec playwright test tests/e2e/platform-admin-setup-templates-lifecycle-certification.spec.ts --project=chromium`: 1 passed.
+- `HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 HRMS_ENABLE_DEMO_DATA=false pnpm --dir web exec playwright test tests/e2e/platform-admin-setup-templates-lifecycle-certification.spec.ts --project=chromium`: 2 passed.
 
 ## Quality Checklist
 
@@ -462,7 +463,7 @@ Evidence:
 | 2026-09-18 | Phase 5 | Completed guided setup item authoring/editing forms with advanced JSON override. | API tests 23 passed; Django checks passed; TypeScript passed; lint passed |
 | 2026-09-18 | Phase 6A | Completed tenant adopted-version vs target-template comparison. | API tests 24 passed; Django checks passed; TypeScript passed; lint passed |
 | 2026-09-18 | Phase 6B | Completed gated tenant template upgrade apply with result evidence and safe manual-review handling. | API tests 24 passed; Django checks passed; TypeScript passed; lint passed |
-| 2026-09-18 | Phase 7 | Completed focused real-browser setup-template lifecycle certification and fixed discovered UX/reliability issues. | TypeScript passed; lint passed; API tests 24 passed; Playwright lifecycle spec 1 passed |
+| 2026-09-18 | Phase 7 | Completed focused real-browser setup-template lifecycle certification and fixed discovered UX/reliability issues. | TypeScript passed; lint passed; API tests 24 passed; Playwright lifecycle/guardrail spec 2 passed |
 
 ## Next Recommended Execution
 
@@ -470,6 +471,5 @@ Recommended follow-up:
 
 1. Run the full Platform Admin regression pack against staging after deployment.
 2. Add mobile/tablet screenshot assertions for Setup Templates.
-3. Add negative browser coverage for duplicate item key, invalid dependency, header-only publish confirmation, and published item lock.
-4. Add permission-denial browser coverage for non-platform-admin access.
-5. Capture staging audit evidence for create, publish, adopt, clone, compare, and upgrade actions.
+3. Add permission-denial browser coverage for non-platform-admin access.
+4. Capture staging audit evidence for create, publish, adopt, clone, compare, and upgrade actions.

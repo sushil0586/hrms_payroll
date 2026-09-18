@@ -90,18 +90,24 @@ async function createTemplate(page: Page, packCode: string, packName: string) {
 }
 
 async function addLeaveTypeItem(page: Page, item: { packCode: string; key: string; name: string; runtimeCode: string; runtimeName: string; sortOrder: string }) {
+  await fillLeaveTypeItem(page, item);
+  const addCard = card(page, "Add template item");
+  await addCard.getByRole("button", { name: "Add item" }).click();
+  await expect(notice(page).getByText("Setup template item added.", { exact: true })).toBeVisible();
+}
+
+async function fillLeaveTypeItem(page: Page, item: { packCode: string; key: string; name: string; runtimeCode: string; runtimeName: string; sortOrder: string; dependencyKeys?: string }) {
   const addCard = card(page, "Add template item");
   await selectOptionContaining(namedControl(addCard, "item_policy_pack_id"), item.packCode);
   await namedControl(addCard, "item_type").selectOption("leave_type");
   await namedControl(addCard, "item_key").fill(item.key);
   await namedControl(addCard, "name").fill(item.name);
   await namedControl(addCard, "sort_order").fill(item.sortOrder);
+  await namedControl(addCard, "dependency_keys").fill(item.dependencyKeys ?? "");
   await namedControl(addCard, "payload_code").fill(item.runtimeCode);
   await namedControl(addCard, "payload_name").fill(item.runtimeName);
   await namedControl(addCard, "payload_category").selectOption("paid");
   await namedControl(addCard, "payload_unit").selectOption("day");
-  await addCard.getByRole("button", { name: "Add item" }).click();
-  await expect(notice(page).getByText("Setup template item added.", { exact: true })).toBeVisible();
 }
 
 async function publishTemplate(page: Page, packCode: string) {
@@ -212,5 +218,77 @@ test.describe("Platform Admin setup templates lifecycle certification", () => {
     await expect(applyCard.getByText("Version comparison")).toBeVisible();
     await expect(applyCard.getByText("2 unchanged", { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
+  });
+
+  test("certifies setup-template validation guardrails and published locks", async ({ page }) => {
+    test.setTimeout(240_000);
+    const runRef = uniqueRunRef();
+    const tenantCode = `qa-tpl-neg-${runRef}`;
+    const tenantName = `QA Template Negative Tenant ${runRef}`;
+    const packCode = `qa-template-neg-${runRef}`;
+    const packName = `QA Template Negative Pack ${runRef}`;
+    const headerOnlyCode = `qa-header-only-${runRef}`;
+
+    await gotoAuthenticated(page, "/platform-admin", platformAdmin);
+    await expectPageReady(page, "Platform Admin Dashboard");
+    const tenantId = await createTenantViaApi(page, tenantCode, tenantName);
+    expect(tenantId).toBeTruthy();
+
+    await openSetupTemplates(page, tenantId);
+    await createTemplate(page, packCode, packName);
+    await safeReload(page);
+
+    await openTenantOnboarding(page, tenantId);
+    await addLeaveTypeItem(page, {
+      packCode,
+      key: "guardrail-leave-type",
+      name: "Guardrail Leave",
+      runtimeCode: "guardrail-leave",
+      runtimeName: "Guardrail Leave",
+      sortOrder: "10",
+    });
+
+    await fillLeaveTypeItem(page, {
+      packCode,
+      key: "guardrail-leave-type",
+      name: "Duplicate Guardrail Leave",
+      runtimeCode: "guardrail-leave-duplicate",
+      runtimeName: "Duplicate Guardrail Leave",
+      sortOrder: "20",
+    });
+    await card(page, "Add template item").getByRole("button", { name: "Add item" }).click();
+    await expect(notice(page).getByText("This record already exists. Search the list or use a different code/email.", { exact: true })).toBeVisible();
+
+    await fillLeaveTypeItem(page, {
+      packCode,
+      key: "blocked-dependency-leave",
+      name: "Blocked Dependency Leave",
+      runtimeCode: "blocked-dependency-leave",
+      runtimeName: "Blocked Dependency Leave",
+      sortOrder: "30",
+      dependencyKeys: "missing-leave-type",
+    });
+    await card(page, "Add template item").getByRole("button", { name: "Add item" }).click();
+    await expect(notice(page).getByText(/Unknown dependency keys: missing-leave-type/)).toBeVisible();
+
+    await openSetupTemplates(page, tenantId);
+    await createTemplate(page, headerOnlyCode, `QA Header Only ${runRef}`);
+    await namedControl(card(page, "Setup templates"), "policy_pack_search").fill(headerOnlyCode);
+    const headerOnlyRow = card(page, "Setup templates").locator(".tenant-support-access-row").filter({ hasText: headerOnlyCode }).first();
+    await expect(headerOnlyRow.getByText("Header only", { exact: true })).toBeVisible();
+    await headerOnlyRow.getByRole("button", { name: "Publish" }).click();
+    const headerOnlyDialog = page.getByRole("dialog", { name: "Publish header-only setup template?" });
+    await expect(headerOnlyDialog.getByText("evidence-only baseline")).toBeVisible();
+    await headerOnlyDialog.getByRole("button", { name: "Publish header-only" }).click();
+    await expect(notice(page).getByText("Policy pack published.", { exact: true })).toBeVisible();
+
+    await openSetupTemplates(page, tenantId);
+    await publishTemplate(page, packCode);
+    await safeReload(page);
+    const applyCard = await selectTemplateInApplyCard(page, packCode);
+    const publishedItem = applyCard.locator(".platform-template-preview__item").filter({ hasText: "guardrail-leave-type" }).first();
+    await expect(publishedItem.getByRole("button", { name: "Edit" })).toBeDisabled();
+    await expect(publishedItem.getByRole("button", { name: "Delete" })).toBeDisabled();
+    await expect(publishedItem.getByText("Published templates are locked. Create a new version before editing items.")).toBeVisible();
   });
 });
