@@ -7,7 +7,7 @@ Automation: `web/tests/e2e/platform-admin-admin-access-certification.spec.ts`
 
 ## QA Result
 
-Status: Certified locally. Deployed certification pending until this change set is deployed.
+Status: Certified locally and on deployed staging (`https://hrms.accerio.in`).
 
 This certification targets the tenant-admin lifecycle from a Platform Admin operator perspective:
 
@@ -30,14 +30,14 @@ This certification targets the tenant-admin lifecycle from a Platform Admin oper
 
 | Scenario | Expected | Actual | Result |
 | --- | --- | --- | --- |
-| Contact only | Admin contact appears, but Launch Readiness remains blocked | Automated | Passed locally |
-| Missing contact selection | Browser blocks submit and focuses required input | Automated | Passed locally |
-| Invalid contact email | Browser blocks submit and focuses email | Automated | Passed locally |
-| Valid active provisioning | Contact receives user/membership, status becomes provisioned, audit event exists | Automated | Passed locally |
-| Repeat provisioning | Backend rejects with safe validation, no duplicate access | Automated | Passed locally |
-| Duplicate username | UI shows safe duplicate message, second contact remains unprovisioned | Automated | Passed locally |
-| Invited + inactive user | Contact shows invited, but Launch Readiness remains blocked | Automated | Passed locally |
-| Cross-tenant access | Tenant A admins never appear in Tenant B and vice versa | Automated | Passed locally |
+| Contact only | Admin contact appears, but Launch Readiness remains blocked | Automated | Passed locally and deployed |
+| Missing contact selection | Browser blocks submit and focuses required input | Automated | Passed locally and deployed |
+| Invalid contact email | Browser blocks submit and focuses email | Automated | Passed locally and deployed |
+| Valid active provisioning | Contact receives user/membership, status becomes provisioned, audit event exists | Automated | Passed locally and deployed |
+| Repeat provisioning | Backend rejects with safe validation, no duplicate access | Automated | Passed locally and deployed |
+| Duplicate username | UI shows safe duplicate message, second contact remains unprovisioned | Automated | Passed locally and deployed |
+| Invited + inactive user | Contact shows invited, but Launch Readiness remains blocked | Automated | Passed locally and deployed |
+| Cross-tenant access | Tenant A admins never appear in Tenant B and vice versa | Automated | Passed locally and deployed |
 
 ## Product Corrections Included
 
@@ -76,7 +76,7 @@ The spec verifies tenant-scoped audit evidence for:
 
 | ID | Severity | Type | Scenario | Expected | Actual | Evidence | Recommendation |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| None in local certification | - | - | - | - | - | `platform-admin-admin-access-certification.spec.ts` passed locally | Rerun on deployed staging after deployment |
+| None in certification | - | - | - | - | - | `platform-admin-admin-access-certification.spec.ts` passed locally and deployed | Continue regression with remaining Platform Admin modules |
 
 ## Remaining Gaps / Notes
 
@@ -86,4 +86,4 @@ The spec verifies tenant-scoped audit evidence for:
 
 ## Final Status
 
-Certified with deployed rerun pending.
+Certified.

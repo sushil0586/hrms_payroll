@@ -764,6 +764,14 @@ def test_policy_pack_upgrade_compare_reports_version_drift(api_client: APIClient
         payload={"code": "legacy-leave", "name": "Legacy Leave", "category": "paid", "unit": "day"},
         sort_order=20,
     )
+    PlatformPolicyPackItem.objects.create(
+        policy_pack=v1_pack,
+        item_type="leave_type",
+        item_key="stable-leave-type",
+        name="Stable Leave",
+        payload={"code": "stable-leave", "name": "Stable Leave", "category": "paid", "unit": "day"},
+        sort_order=25,
+    )
 
     adoption_response = api_client.post(
         f"/api/v1/platform-policy-packs/{v1_pack.id}/adopt-for-tenant/",
@@ -796,6 +804,14 @@ def test_policy_pack_upgrade_compare_reports_version_drift(api_client: APIClient
         payload={"code": "sick-leave", "name": "Sick Leave", "category": "paid", "unit": "day"},
         sort_order=30,
     )
+    PlatformPolicyPackItem.objects.create(
+        policy_pack=v2_pack,
+        item_type="leave_type",
+        item_key="stable-leave-type",
+        name="Stable Leave",
+        payload={"code": "stable-leave", "name": "Stable Leave", "category": "paid", "unit": "day"},
+        sort_order=25,
+    )
 
     compare_response = api_client.post(
         f"/api/v1/platform-policy-packs/{v2_pack.id}/upgrade-compare/",
@@ -812,10 +828,12 @@ def test_policy_pack_upgrade_compare_reports_version_drift(api_client: APIClient
     assert body["counts"]["add"] == 1
     assert body["counts"]["change"] == 1
     assert body["counts"]["remove"] == 1
+    assert body["counts"]["unchanged"] == 1
     actions_by_key = {item["item_key"]: item["action"] for item in body["items"]}
     assert actions_by_key["casual-leave-type"] == "change"
     assert actions_by_key["legacy-leave-type"] == "remove"
     assert actions_by_key["sick-leave-type"] == "add"
+    assert actions_by_key["stable-leave-type"] == "unchanged"
 
     apply_response = api_client.post(
         f"/api/v1/platform-policy-packs/{v2_pack.id}/upgrade-apply/",
@@ -827,16 +845,38 @@ def test_policy_pack_upgrade_compare_reports_version_drift(api_client: APIClient
     result_summary = apply_response.json()["result_summary"]
     assert result_summary["counts"]["updated"] == 1
     assert result_summary["counts"]["created"] == 1
-    assert result_summary["counts"]["skipped"] == 1
+    assert result_summary["counts"]["skipped"] == 2
 
     casual_leave = LeaveType.objects.get(tenant=tenant, code="casual-leave")
     sick_leave = LeaveType.objects.get(tenant=tenant, code="sick-leave")
     legacy_leave = LeaveType.objects.get(tenant=tenant, code="legacy-leave")
+    stable_leave = LeaveType.objects.get(tenant=tenant, code="stable-leave")
     assert casual_leave.name == "Casual Leave v2"
     assert casual_leave.source_pack_code == "upgrade-pack-v2"
     assert casual_leave.source_version == 2
     assert sick_leave.source_pack_code == "upgrade-pack-v2"
     assert legacy_leave.source_pack_code == "upgrade-pack"
+    assert stable_leave.source_pack_code == "upgrade-pack"
+
+    no_op_compare_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{v2_pack.id}/upgrade-compare/",
+        {"tenant_id": str(tenant.id)},
+        format="json",
+    )
+
+    assert no_op_compare_response.status_code == 200, no_op_compare_response.json()
+    no_op_compare_body = no_op_compare_response.json()
+    assert no_op_compare_body["can_upgrade"] is False
+    assert no_op_compare_body["counts"]["unchanged"] == 3
+
+    no_op_apply_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{v2_pack.id}/upgrade-apply/",
+        {"tenant_id": str(tenant.id), "notes": "Repeat upgrade"},
+        format="json",
+    )
+
+    assert no_op_apply_response.status_code == 400
+    assert "No actionable setup template upgrade" in str(no_op_apply_response.json())
 
 
 @pytest.mark.django_db

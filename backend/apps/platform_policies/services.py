@@ -603,6 +603,8 @@ def compare_policy_pack_upgrade(*, tenant, target_policy_pack: PlatformPolicyPac
         "unchanged": sum(1 for item in item_results if item["action"] == "unchanged"),
         "detached": sum(1 for item in item_results if item["action"] == "detached"),
     }
+    is_same_pack = bool(current_adoption and current_adoption.policy_pack_id == target_policy_pack.id)
+    has_actionable_changes = counts["add"] > 0 or counts["change"] > 0 or counts["remove"] > 0
     return {
         "tenant_id": str(tenant.id),
         "tenant_code": tenant.code,
@@ -614,7 +616,7 @@ def compare_policy_pack_upgrade(*, tenant, target_policy_pack: PlatformPolicyPac
         "target_policy_pack_name": target_policy_pack.name,
         "target_policy_pack_version": target_policy_pack.version,
         "has_current_adoption": bool(current_adoption),
-        "can_upgrade": counts["detached"] == 0,
+        "can_upgrade": bool(not is_same_pack and counts["detached"] == 0 and (not current_adoption or has_actionable_changes)),
         "counts": counts,
         "items": item_results,
     }
@@ -640,6 +642,10 @@ def upgrade_policy_pack_for_tenant(
     if comparison["counts"]["detached"]:
         raise serializers.ValidationError({
             "detail": "Detached tenant records require manual review before applying a template upgrade."
+        })
+    if not comparison["can_upgrade"]:
+        raise serializers.ValidationError({
+            "detail": "No actionable setup template upgrade is available for this tenant and target version."
         })
 
     current_adoption = (
@@ -669,6 +675,7 @@ def upgrade_policy_pack_for_tenant(
     target_items = list(target_policy_pack.items.order_by("sort_order", "created_at"))
     target_item_keys = {item.item_key for item in target_items}
 
+    compare_actions = {item["item_key"]: item["action"] for item in comparison["items"]}
     for item in target_items:
         delegation_mode, locked_fields = _item_delegation_metadata(target_policy_pack, item.item_key)
         current_link = current_links.get(item.item_key)
@@ -676,6 +683,26 @@ def upgrade_policy_pack_for_tenant(
             target_model=current_link.target_model,
             target_record_id=current_link.target_record_id,
         ) if current_link else None
+        compare_action = compare_actions.get(item.item_key)
+
+        if compare_action == "unchanged" and current_link and current_record:
+            _link_adopted_item(
+                adoption=adoption,
+                item=item,
+                target_model=current_link.target_model,
+                target_record_id=current_record.id,
+            )
+            item_results.append({
+                "item_key": item.item_key,
+                "item_type": item.item_type,
+                "name": item.name,
+                "action": "skipped",
+                "target_model": current_link.target_model,
+                "target_record_id": str(current_record.id),
+                "message": "No template change detected; existing tenant runtime record was retained.",
+                "severity": "info",
+            })
+            continue
 
         action = "updated" if current_record else "created"
         if item.item_type == PlatformPolicyItemType.LEAVE_TYPE:
