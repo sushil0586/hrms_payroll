@@ -349,6 +349,14 @@ def test_platform_staff_can_provision_first_admin_and_activate_tenant(api_client
 
     assert tenant.status == TenantStatus.ACTIVE
     assert tenant.onboarding_status == TenantOnboardingStatus.ACTIVE
+    activation_event = tenant.onboarding_record.events.filter(event_type="tenant_activated").latest("created_at")
+    assert activation_event.actor_identifier == platform_staff_user.username
+    assert activation_event.payload["tenant_id"] == str(tenant.id)
+    assert activation_event.payload["tenant_code"] == "northstar-labs"
+    assert activation_event.payload["tenant_status"] == TenantStatus.ACTIVE
+    assert activation_event.payload["tenant_onboarding_status"] == TenantOnboardingStatus.ACTIVE
+    assert activation_event.payload["activated_by_identifier"] == platform_staff_user.username
+    assert activation_event.payload["onboarding_completed_at"]
     assert membership.is_default is True
     assert membership.employee_code == employee.employee_code
     assert employee.work_email == "ava.patel@northstar.example"

@@ -888,6 +888,14 @@ class PlatformTenantActivateView(APIView):
             event_type="tenant_activated",
             summary=f"Tenant {tenant.code} activated.",
             actor_identifier=_actor_identifier(request),
+            payload={
+                "tenant_id": str(tenant.id),
+                "tenant_code": tenant.code,
+                "tenant_status": tenant.status,
+                "tenant_onboarding_status": tenant.onboarding_status,
+                "activated_by_identifier": tenant.activated_by_identifier,
+                "onboarding_completed_at": tenant.onboarding_completed_at.isoformat() if tenant.onboarding_completed_at else "",
+            },
         )
         return response.Response(
             PlatformMutationResultSerializer(

@@ -14,6 +14,7 @@ import type {
   PlatformPolicyPackAdoptionPreview,
   PlatformPolicyPackUpgradeCompare,
   PlatformPolicyPackListItem,
+  PlatformOnboardingEvent,
   PlatformSummary,
   PlatformTenantListItem,
   PlatformTenantOnboarding,
@@ -145,6 +146,33 @@ function apiErrorMessage(payload: unknown, fallback: string) {
   if (Array.isArray(firstEntry) && firstEntry.length) return friendly(String(firstEntry[0]));
   if (typeof firstEntry === "string") return friendly(firstEntry);
   return fallback;
+}
+
+function redactedAuditValue(key: string, value: unknown): unknown {
+  if (/password|secret|token|credential|authorization|cookie|session/i.test(key)) {
+    return "[redacted]";
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactAuditPayload(item));
+  }
+  if (value && typeof value === "object") {
+    return redactAuditPayload(value);
+  }
+  return value;
+}
+
+function redactAuditPayload(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return Array.isArray(value) ? value.map((item) => redactAuditPayload(item)) : value;
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, redactedAuditValue(key, entry)]),
+  );
+}
+
+function auditEvidenceText(event: PlatformOnboardingEvent | null) {
+  if (!event) return "";
+  return JSON.stringify(redactAuditPayload(event.payload ?? {}), null, 2);
 }
 
 function DetailRow({ label, value }: { label: string; value: string | number | boolean | null | undefined }) {
@@ -519,6 +547,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const [showCreateTenantModal, setShowCreateTenantModal] = useState(false);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [selectedAuditEvent, setSelectedAuditEvent] = useState<PlatformOnboardingEvent | null>(null);
   const [leadPage, setLeadPage] = useState(1);
   const [tenantPage, setTenantPage] = useState(1);
   const [policyPackPage, setPolicyPackPage] = useState(1);
@@ -659,8 +688,9 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     return matchesSearch && matchesStatus && matchesDomain;
   });
   const filteredEvents = events.filter((event) => {
+    const evidenceText = JSON.stringify(redactAuditPayload(event.payload ?? {}));
     const matchesSearch = normalizedEventQuery
-      ? [event.event_type, event.summary, event.actor_identifier, event.created_at]
+      ? [event.event_type, event.summary, event.actor_identifier, event.created_at, evidenceText, onboarding?.tenant_code, onboarding?.tenant_name]
           .map(normalizedSearchText)
           .join(" ")
           .includes(normalizedEventQuery)
@@ -746,17 +776,18 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   }, [showAddContactModal, showCreateTenantModal]);
 
   useEffect(() => {
-    if (!showCreateTenantModal && !showAddContactModal && !confirmAction) return;
+    if (!showCreateTenantModal && !showAddContactModal && !confirmAction && !selectedAuditEvent) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !busyRef) {
         setShowCreateTenantModal(false);
         setShowAddContactModal(false);
         setConfirmAction(null);
+        setSelectedAuditEvent(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [busyRef, confirmAction, showAddContactModal, showCreateTenantModal]);
+  }, [busyRef, confirmAction, selectedAuditEvent, showAddContactModal, showCreateTenantModal]);
 
   async function mutate<T>(path: string, method: MutationMethod, body: Record<string, unknown>, successMessage: string): Promise<T> {
     setBusyRef(path);
@@ -2563,6 +2594,14 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                     </div>
                     <span className="record-chip">{event.actor_identifier || "system"}</span>
                     <span className="record-chip">{formatDateTime(event.created_at)}</span>
+                    <button
+                      aria-label={`View evidence for ${titleCase(event.event_type)}`}
+                      className="button button--secondary button--compact"
+                      type="button"
+                      onClick={() => setSelectedAuditEvent(event)}
+                    >
+                      View evidence
+                    </button>
                   </div>
                 ))}
                 {!filteredEvents.length ? (
@@ -2587,6 +2626,56 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
           </section>
           ) : null}
         </>
+      ) : null}
+      {selectedAuditEvent ? (
+        <div
+          className="tenant-modal-shell"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setSelectedAuditEvent(null);
+            }
+          }}
+        >
+          <div
+            aria-describedby="platform-audit-evidence-description"
+            aria-labelledby="platform-audit-evidence-title"
+            aria-modal="true"
+            className="tenant-modal tenant-modal--audit"
+            role="dialog"
+          >
+            <div className="tenant-modal__header">
+              <div>
+                <span className="eyebrow">Audit evidence</span>
+                <h3 id="platform-audit-evidence-title">{titleCase(selectedAuditEvent.event_type)}</h3>
+              </div>
+              <button
+                aria-label="Close audit evidence"
+                className="button button--secondary"
+                type="button"
+                onClick={() => setSelectedAuditEvent(null)}
+              >
+                Close
+              </button>
+            </div>
+            <p className="tenant-modal__validation" id="platform-audit-evidence-description">
+              {selectedAuditEvent.summary || "Event recorded."}
+            </p>
+            <div className="detail-grid platform-audit-evidence__meta">
+              <DetailRow label="Tenant" value={onboarding ? `${onboarding.tenant_name} (${onboarding.tenant_code})` : "Not selected"} />
+              <DetailRow label="Actor" value={selectedAuditEvent.actor_identifier || "system"} />
+              <DetailRow label="Timestamp" value={formatDateTime(selectedAuditEvent.created_at)} />
+              <DetailRow label="Event ID" value={selectedAuditEvent.id} />
+            </div>
+            <div className="platform-audit-evidence__payload">
+              <div>
+                <strong>Payload</strong>
+                <span className="muted">Sensitive credential-like fields are redacted before display.</span>
+              </div>
+              <pre aria-label="Audit evidence payload">{auditEvidenceText(selectedAuditEvent)}</pre>
+            </div>
+          </div>
+        </div>
       ) : null}
       {showCreateTenantModal ? (
         <div

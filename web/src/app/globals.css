@@ -7544,6 +7544,43 @@ select.input-control {
   width: min(560px, 100%);
 }
 
+.tenant-modal--audit {
+  width: min(900px, 100%);
+}
+
+.platform-audit-evidence__meta {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.platform-audit-evidence__payload {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.platform-audit-evidence__payload > div {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.platform-audit-evidence__payload pre {
+  max-height: min(46vh, 520px);
+  overflow: auto;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .tenant-modal__header,
 .tenant-modal__actions {
   display: flex;
