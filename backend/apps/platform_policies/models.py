@@ -57,6 +57,13 @@ class AdoptionMode(models.TextChoices):
 class PlatformPolicyPack(UUIDPrimaryKeyModel, TimeStampedModel):
     """A publishable baseline pack owned by the platform."""
 
+    source_pack = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="derived_versions",
+        blank=True,
+        null=True,
+    )
     code = models.SlugField(max_length=80, unique=True)
     name = models.CharField(max_length=255)
     domain = models.CharField(max_length=30, choices=PlatformPolicyDomain.choices)

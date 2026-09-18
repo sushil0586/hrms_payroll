@@ -395,6 +395,486 @@ def test_policy_pack_adoption_drives_onboarding_baseline_published(api_client: A
 
 
 @pytest.mark.django_db
+def test_platform_policy_pack_item_create_api_returns_pack_contents(api_client: APIClient, platform_staff_user: User):
+    api_client.force_authenticate(user=platform_staff_user)
+    policy_pack = PlatformPolicyPack.objects.create(
+        code="starter-leave-pack",
+        name="Starter Leave Pack",
+        domain="leave",
+        status=PlatformPolicyPackStatus.DRAFT,
+    )
+
+    response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/items/",
+        {
+            "item_type": "leave_type",
+            "item_key": "casual-leave-type",
+            "name": "Casual Leave",
+            "payload": {
+                "code": "casual-leave",
+                "name": "Casual Leave",
+                "category": "paid",
+                "unit": "day",
+            },
+            "dependency_keys": [],
+            "sort_order": 10,
+            "is_required": True,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201, response.json()
+    body = response.json()
+    assert body["item_count"] == 1
+    assert body["items"][0]["item_key"] == "casual-leave-type"
+    assert body["items"][0]["item_type"] == "leave_type"
+    assert PlatformPolicyPackItem.objects.filter(policy_pack=policy_pack, item_key="casual-leave-type").exists()
+
+
+@pytest.mark.django_db
+def test_platform_policy_pack_publish_requires_header_only_confirmation(api_client: APIClient, platform_staff_user: User):
+    api_client.force_authenticate(user=platform_staff_user)
+    policy_pack = PlatformPolicyPack.objects.create(
+        code="header-only-pack",
+        name="Header Only Pack",
+        domain="leave",
+        status=PlatformPolicyPackStatus.DRAFT,
+    )
+
+    blocked_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/publish/",
+        {},
+        format="json",
+    )
+
+    assert blocked_response.status_code == 400, blocked_response.json()
+    assert "allow_header_only" in blocked_response.json()
+
+    confirmed_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/publish/",
+        {"allow_header_only": True},
+        format="json",
+    )
+
+    assert confirmed_response.status_code == 200, confirmed_response.json()
+    policy_pack.refresh_from_db()
+    assert policy_pack.status == PlatformPolicyPackStatus.PUBLISHED
+
+
+@pytest.mark.django_db
+def test_platform_policy_pack_item_create_validates_payload_and_dependencies(api_client: APIClient, platform_staff_user: User):
+    api_client.force_authenticate(user=platform_staff_user)
+    policy_pack = PlatformPolicyPack.objects.create(
+        code="validation-pack",
+        name="Validation Pack",
+        domain="leave",
+        status=PlatformPolicyPackStatus.DRAFT,
+    )
+
+    missing_payload_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/items/",
+        {
+            "item_type": "shift",
+            "item_key": "general-shift",
+            "payload": {"code": "general-shift"},
+        },
+        format="json",
+    )
+
+    assert missing_payload_response.status_code == 400, missing_payload_response.json()
+    assert "payload" in missing_payload_response.json()
+
+    missing_dependency_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/items/",
+        {
+            "item_type": "leave_policy",
+            "item_key": "casual-leave-policy",
+            "payload": {
+                "code": "casual-leave-policy",
+                "name": "Casual Leave Policy",
+                "leave_type_item_key": "casual-leave-type",
+            },
+        },
+        format="json",
+    )
+
+    assert missing_dependency_response.status_code == 400, missing_dependency_response.json()
+    assert "leave_type_item_key" in str(missing_dependency_response.json())
+
+
+@pytest.mark.django_db
+def test_platform_policy_pack_item_update_delete_and_published_lock(api_client: APIClient, platform_staff_user: User):
+    api_client.force_authenticate(user=platform_staff_user)
+    policy_pack = PlatformPolicyPack.objects.create(
+        code="editable-pack",
+        name="Editable Pack",
+        domain="leave",
+        status=PlatformPolicyPackStatus.DRAFT,
+    )
+    policy_pack_item = PlatformPolicyPackItem.objects.create(
+        policy_pack=policy_pack,
+        item_type="leave_type",
+        item_key="casual-leave-type",
+        name="Casual Leave",
+        payload={"code": "casual-leave", "name": "Casual Leave", "category": "paid", "unit": "day"},
+        sort_order=10,
+        is_required=True,
+    )
+
+    update_response = api_client.patch(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/items/{policy_pack_item.id}/",
+        {
+            "name": "Casual Leave Updated",
+            "payload": {"code": "casual-leave", "name": "Casual Leave Updated", "category": "paid", "unit": "day"},
+            "sort_order": 20,
+            "is_required": False,
+        },
+        format="json",
+    )
+
+    assert update_response.status_code == 200, update_response.json()
+    body = update_response.json()
+    assert body["items"][0]["name"] == "Casual Leave Updated"
+    assert body["items"][0]["payload"]["name"] == "Casual Leave Updated"
+    assert body["items"][0]["sort_order"] == 20
+    assert body["items"][0]["is_required"] is False
+
+    delete_response = api_client.delete(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/items/{policy_pack_item.id}/",
+        format="json",
+    )
+
+    assert delete_response.status_code == 200, delete_response.json()
+    assert delete_response.json()["item_count"] == 0
+    assert not PlatformPolicyPackItem.objects.filter(id=policy_pack_item.id).exists()
+
+    locked_item = PlatformPolicyPackItem.objects.create(
+        policy_pack=policy_pack,
+        item_type="leave_type",
+        item_key="earned-leave-type",
+        name="Earned Leave",
+        payload={"code": "earned-leave", "name": "Earned Leave", "category": "paid", "unit": "day"},
+    )
+    policy_pack.status = PlatformPolicyPackStatus.PUBLISHED
+    policy_pack.save(update_fields=["status"])
+
+    locked_update_response = api_client.patch(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/items/{locked_item.id}/",
+        {"name": "Should Not Save"},
+        format="json",
+    )
+    locked_delete_response = api_client.delete(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/items/{locked_item.id}/",
+        format="json",
+    )
+    locked_create_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/items/",
+        {
+            "item_type": "leave_type",
+            "item_key": "sick-leave-type",
+            "payload": {"code": "sick-leave", "name": "Sick Leave"},
+        },
+        format="json",
+    )
+
+    assert locked_update_response.status_code == 400, locked_update_response.json()
+    assert locked_delete_response.status_code == 400, locked_delete_response.json()
+    assert locked_create_response.status_code == 400, locked_create_response.json()
+    locked_item.refresh_from_db()
+    assert locked_item.name == "Earned Leave"
+
+
+@pytest.mark.django_db
+def test_platform_policy_pack_clone_version_copies_items_and_locks_source(api_client: APIClient, platform_staff_user: User):
+    api_client.force_authenticate(user=platform_staff_user)
+    policy_pack = PlatformPolicyPack.objects.create(
+        code="versioned-leave-pack",
+        name="Versioned Leave Pack",
+        domain="leave",
+        status=PlatformPolicyPackStatus.PUBLISHED,
+        version=1,
+        published_by_identifier=platform_staff_user.username,
+    )
+    source_item = PlatformPolicyPackItem.objects.create(
+        policy_pack=policy_pack,
+        item_type="leave_type",
+        item_key="casual-leave-type",
+        name="Casual Leave",
+        payload={"code": "casual-leave", "name": "Casual Leave", "category": "paid", "unit": "day"},
+        sort_order=10,
+        is_required=True,
+    )
+    PlatformPolicyDelegationRule.objects.create(
+        policy_pack=policy_pack,
+        item_key=source_item.item_key,
+        delegation_mode="locked",
+        locked_paths=["name"],
+        notes="Platform controlled",
+    )
+
+    clone_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/clone-version/",
+        {},
+        format="json",
+    )
+
+    assert clone_response.status_code == 201, clone_response.json()
+    body = clone_response.json()
+    assert body["status"] == PlatformPolicyPackStatus.DRAFT
+    assert body["version"] == 2
+    assert body["source_pack_id"] == str(policy_pack.id)
+    assert body["source_pack_code"] == "versioned-leave-pack"
+    assert body["item_count"] == 1
+    assert body["items"][0]["item_key"] == "casual-leave-type"
+    assert body["items"][0]["payload"]["name"] == "Casual Leave"
+
+    cloned_pack = PlatformPolicyPack.objects.get(id=body["id"])
+    assert cloned_pack.code == "versioned-leave-pack-v2"
+    assert cloned_pack.items.count() == 1
+    assert cloned_pack.delegation_rules.count() == 1
+
+    source_lock_response = api_client.patch(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/items/{source_item.id}/",
+        {"name": "Should Stay Locked"},
+        format="json",
+    )
+    assert source_lock_response.status_code == 400, source_lock_response.json()
+    source_item.refresh_from_db()
+    assert source_item.name == "Casual Leave"
+
+    cloned_item = cloned_pack.items.get(item_key="casual-leave-type")
+    clone_edit_response = api_client.patch(
+        f"/api/v1/platform-policy-packs/{cloned_pack.id}/items/{cloned_item.id}/",
+        {
+            "name": "Casual Leave v2",
+            "payload": {"code": "casual-leave", "name": "Casual Leave v2", "category": "paid", "unit": "day"},
+        },
+        format="json",
+    )
+    assert clone_edit_response.status_code == 200, clone_edit_response.json()
+    source_item.refresh_from_db()
+    cloned_item.refresh_from_db()
+    assert source_item.name == "Casual Leave"
+    assert cloned_item.name == "Casual Leave v2"
+
+
+@pytest.mark.django_db
+def test_platform_policy_pack_clone_version_requires_published_source(api_client: APIClient, platform_staff_user: User):
+    api_client.force_authenticate(user=platform_staff_user)
+    policy_pack = PlatformPolicyPack.objects.create(
+        code="draft-version-pack",
+        name="Draft Version Pack",
+        domain="leave",
+        status=PlatformPolicyPackStatus.DRAFT,
+    )
+
+    response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/clone-version/",
+        {},
+        format="json",
+    )
+
+    assert response.status_code == 400, response.json()
+    assert "Only published setup templates" in str(response.json())
+
+
+@pytest.mark.django_db
+def test_policy_pack_adoption_preview_reports_create_conflict_and_baseline_only(api_client: APIClient, platform_staff_user: User):
+    api_client.force_authenticate(user=platform_staff_user)
+    tenant = Tenant.objects.create(code="previewco", name="Preview Co", status=TenantStatus.ACTIVE)
+    policy_pack = PlatformPolicyPack.objects.create(
+        code="preview-pack",
+        name="Preview Pack",
+        domain="leave",
+        status=PlatformPolicyPackStatus.PUBLISHED,
+        version=1,
+    )
+    PlatformPolicyPackItem.objects.create(
+        policy_pack=policy_pack,
+        item_type="leave_type",
+        item_key="casual-leave-type",
+        name="Casual Leave",
+        payload={"code": "casual-leave", "name": "Casual Leave", "category": "paid", "unit": "day"},
+        sort_order=10,
+    )
+
+    create_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/adoption-preview/",
+        {"tenant_id": str(tenant.id), "adoption_mode": "clone_to_tenant_records"},
+        format="json",
+    )
+
+    assert create_response.status_code == 200, create_response.json()
+    body = create_response.json()
+    assert body["can_apply"] is True
+    assert body["counts"]["create"] == 1
+    assert body["items"][0]["action"] == "create"
+    assert body["items"][0]["target_model"] == "leave_management.LeaveType"
+
+    LeaveType.objects.create(tenant=tenant, code="casual-leave", name="Existing Casual Leave")
+    conflict_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/adoption-preview/",
+        {"tenant_id": str(tenant.id), "adoption_mode": "clone_to_tenant_records"},
+        format="json",
+    )
+
+    assert conflict_response.status_code == 200, conflict_response.json()
+    conflict_body = conflict_response.json()
+    assert conflict_body["can_apply"] is False
+    assert conflict_body["counts"]["conflict"] == 1
+    assert conflict_body["items"][0]["action"] == "conflict"
+
+    baseline_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/adoption-preview/",
+        {"tenant_id": str(tenant.id), "adoption_mode": "baseline_only"},
+        format="json",
+    )
+
+    assert baseline_response.status_code == 200, baseline_response.json()
+    baseline_body = baseline_response.json()
+    assert baseline_body["can_apply"] is True
+    assert baseline_body["counts"]["evidence_only"] == 1
+    assert baseline_body["items"][0]["action"] == "evidence_only"
+
+
+@pytest.mark.django_db
+def test_policy_pack_upgrade_compare_reports_version_drift(api_client: APIClient, platform_staff_user: User):
+    api_client.force_authenticate(user=platform_staff_user)
+    tenant = Tenant.objects.create(code="upgradeco", name="Upgrade Co", status=TenantStatus.ACTIVE)
+    v1_pack = PlatformPolicyPack.objects.create(
+        code="upgrade-pack",
+        name="Upgrade Pack",
+        domain="leave",
+        status=PlatformPolicyPackStatus.PUBLISHED,
+        version=1,
+    )
+    PlatformPolicyPackItem.objects.create(
+        policy_pack=v1_pack,
+        item_type="leave_type",
+        item_key="casual-leave-type",
+        name="Casual Leave",
+        payload={"code": "casual-leave", "name": "Casual Leave", "category": "paid", "unit": "day"},
+        sort_order=10,
+    )
+    PlatformPolicyPackItem.objects.create(
+        policy_pack=v1_pack,
+        item_type="leave_type",
+        item_key="legacy-leave-type",
+        name="Legacy Leave",
+        payload={"code": "legacy-leave", "name": "Legacy Leave", "category": "paid", "unit": "day"},
+        sort_order=20,
+    )
+
+    adoption_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{v1_pack.id}/adopt-for-tenant/",
+        {"tenant_id": str(tenant.id), "adoption_mode": "clone_to_tenant_records"},
+        format="json",
+    )
+    assert adoption_response.status_code == 201, adoption_response.json()
+
+    v2_pack = PlatformPolicyPack.objects.create(
+        source_pack=v1_pack,
+        code="upgrade-pack-v2",
+        name="Upgrade Pack v2",
+        domain="leave",
+        status=PlatformPolicyPackStatus.PUBLISHED,
+        version=2,
+    )
+    PlatformPolicyPackItem.objects.create(
+        policy_pack=v2_pack,
+        item_type="leave_type",
+        item_key="casual-leave-type",
+        name="Casual Leave v2",
+        payload={"code": "casual-leave", "name": "Casual Leave v2", "category": "paid", "unit": "day"},
+        sort_order=10,
+    )
+    PlatformPolicyPackItem.objects.create(
+        policy_pack=v2_pack,
+        item_type="leave_type",
+        item_key="sick-leave-type",
+        name="Sick Leave",
+        payload={"code": "sick-leave", "name": "Sick Leave", "category": "paid", "unit": "day"},
+        sort_order=30,
+    )
+
+    compare_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{v2_pack.id}/upgrade-compare/",
+        {"tenant_id": str(tenant.id)},
+        format="json",
+    )
+
+    assert compare_response.status_code == 200, compare_response.json()
+    body = compare_response.json()
+    assert body["has_current_adoption"] is True
+    assert body["current_policy_pack_version"] == 1
+    assert body["target_policy_pack_version"] == 2
+    assert body["can_upgrade"] is True
+    assert body["counts"]["add"] == 1
+    assert body["counts"]["change"] == 1
+    assert body["counts"]["remove"] == 1
+    actions_by_key = {item["item_key"]: item["action"] for item in body["items"]}
+    assert actions_by_key["casual-leave-type"] == "change"
+    assert actions_by_key["legacy-leave-type"] == "remove"
+    assert actions_by_key["sick-leave-type"] == "add"
+
+    apply_response = api_client.post(
+        f"/api/v1/platform-policy-packs/{v2_pack.id}/upgrade-apply/",
+        {"tenant_id": str(tenant.id), "notes": "Upgrade to v2"},
+        format="json",
+    )
+
+    assert apply_response.status_code == 201, apply_response.json()
+    result_summary = apply_response.json()["result_summary"]
+    assert result_summary["counts"]["updated"] == 1
+    assert result_summary["counts"]["created"] == 1
+    assert result_summary["counts"]["skipped"] == 1
+
+    casual_leave = LeaveType.objects.get(tenant=tenant, code="casual-leave")
+    sick_leave = LeaveType.objects.get(tenant=tenant, code="sick-leave")
+    legacy_leave = LeaveType.objects.get(tenant=tenant, code="legacy-leave")
+    assert casual_leave.name == "Casual Leave v2"
+    assert casual_leave.source_pack_code == "upgrade-pack-v2"
+    assert casual_leave.source_version == 2
+    assert sick_leave.source_pack_code == "upgrade-pack-v2"
+    assert legacy_leave.source_pack_code == "upgrade-pack"
+
+
+@pytest.mark.django_db
+def test_policy_pack_baseline_only_adoption_records_evidence_without_runtime_records(api_client: APIClient, platform_staff_user: User):
+    api_client.force_authenticate(user=platform_staff_user)
+    tenant = Tenant.objects.create(code="baselineonly", name="Baseline Only", status=TenantStatus.ACTIVE)
+    policy_pack = PlatformPolicyPack.objects.create(
+        code="baseline-only-pack",
+        name="Baseline Only Pack",
+        domain="leave",
+        status=PlatformPolicyPackStatus.PUBLISHED,
+        version=1,
+    )
+    PlatformPolicyPackItem.objects.create(
+        policy_pack=policy_pack,
+        item_type="leave_type",
+        item_key="casual-leave-type",
+        name="Casual Leave",
+        payload={"code": "casual-leave", "name": "Casual Leave", "category": "paid", "unit": "day"},
+        sort_order=10,
+    )
+
+    response = api_client.post(
+        f"/api/v1/platform-policy-packs/{policy_pack.id}/adopt-for-tenant/",
+        {"tenant_id": str(tenant.id), "adoption_mode": "baseline_only"},
+        format="json",
+    )
+
+    assert response.status_code == 201, response.json()
+    result_summary = response.json()["result_summary"]
+    assert result_summary["counts"]["evidence_only"] == 1
+    assert result_summary["counts"]["created"] == 0
+    assert result_summary["items"][0]["action"] == "evidence_only"
+    assert not LeaveType.objects.filter(tenant=tenant, code="casual-leave").exists()
+    assert not TenantPolicyPackItemLink.objects.filter(tenant_adoption__tenant=tenant).exists()
+
+
+@pytest.mark.django_db
 def test_policy_pack_adoption_clones_runtime_leave_and_attendance_records(api_client: APIClient, platform_staff_user: User):
     api_client.force_authenticate(user=platform_staff_user)
     tenant = Tenant.objects.create(
@@ -532,6 +1012,11 @@ def test_policy_pack_adoption_clones_runtime_leave_and_attendance_records(api_cl
     )
 
     assert response.status_code == 201, response.json()
+    result_summary = response.json()["result_summary"]
+    assert result_summary["counts"]["created"] == 5
+    assert result_summary["counts"]["failed"] == 0
+    assert result_summary["items"][0]["action"] == "created"
+    assert result_summary["items"][0]["target_model"] == "leave_management.LeaveType"
 
     leave_type = LeaveType.objects.get(tenant=tenant, code="casual-leave")
     leave_policy = LeavePolicy.objects.get(tenant=tenant, code="casual-leave-policy")
@@ -555,6 +1040,8 @@ def test_policy_pack_adoption_clones_runtime_leave_and_attendance_records(api_cl
     assert attendance_policy.holiday_calendar == holiday_calendar
     assert attendance_policy.source_version == 3
     assert TenantPolicyPackItemLink.objects.filter(tenant_adoption__tenant=tenant).count() == 5
+    baseline_event = tenant.onboarding_record.events.filter(event_type="baseline_published").latest("created_at")
+    assert baseline_event.payload["result_summary"]["counts"]["created"] == 5
 
     api_client.force_authenticate(user=create_tenant_hr_admin_user(
         tenant=tenant,

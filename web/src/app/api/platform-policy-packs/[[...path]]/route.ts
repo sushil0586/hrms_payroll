@@ -3,13 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 const API_BASE_URL = process.env.HRMS_API_BASE_URL;
 
 type Props = { params: Promise<{ path?: string[] }> };
+type ProxyMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
 function buildTarget(path: string[] = []) {
   const suffix = path.length ? `${path.join("/")}/` : "";
   return `${API_BASE_URL}/platform-policy-packs/${suffix}`;
 }
 
-async function proxyPolicyPackRequest(request: NextRequest, path: string[] | undefined, method: "GET" | "POST") {
+async function proxyPolicyPackRequest(request: NextRequest, path: string[] | undefined, method: ProxyMethod) {
   if (!API_BASE_URL) {
     return NextResponse.json({ detail: "HRMS_API_BASE_URL is not configured." }, { status: 500 });
   }
@@ -27,7 +28,7 @@ async function proxyPolicyPackRequest(request: NextRequest, path: string[] | und
       "Content-Type": "application/json",
       Authorization: `Token ${token}`,
     },
-    body: method === "GET" ? undefined : JSON.stringify(await request.json().catch(() => ({}))),
+    body: method === "GET" || method === "DELETE" ? undefined : JSON.stringify(await request.json().catch(() => ({}))),
     cache: "no-store",
   });
   const payload = await upstream.json().catch(() => ({}));
@@ -42,4 +43,14 @@ export async function GET(request: NextRequest, { params }: Props) {
 export async function POST(request: NextRequest, { params }: Props) {
   const { path } = await params;
   return proxyPolicyPackRequest(request, path, "POST");
+}
+
+export async function PATCH(request: NextRequest, { params }: Props) {
+  const { path } = await params;
+  return proxyPolicyPackRequest(request, path, "PATCH");
+}
+
+export async function DELETE(request: NextRequest, { params }: Props) {
+  const { path } = await params;
+  return proxyPolicyPackRequest(request, path, "DELETE");
 }

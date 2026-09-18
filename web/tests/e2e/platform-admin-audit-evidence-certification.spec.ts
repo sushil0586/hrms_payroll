@@ -123,7 +123,9 @@ test.describe("Platform admin audit evidence certification", () => {
     await page.reload();
     await namedControl(policyPackCard, "policy_pack_search").fill(packCode);
     await page.locator(".tenant-support-access-row").filter({ hasText: packCode }).getByRole("button", { name: "Publish" }).click();
-    await page.getByRole("dialog", { name: "Publish setup template?" }).getByRole("button", { name: "Publish template" }).click();
+    const publishDialog = page.getByRole("dialog", { name: "Publish header-only setup template?" });
+    await expect(publishDialog.getByText(/evidence-only baseline/i)).toBeVisible();
+    await publishDialog.getByRole("button", { name: "Publish header-only" }).click();
     await expect(notice(page).getByText("Policy pack published.", { exact: true })).toBeVisible();
 
     await openPlatformTab(page, "Tenants");

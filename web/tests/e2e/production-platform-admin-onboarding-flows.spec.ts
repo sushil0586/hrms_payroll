@@ -81,7 +81,9 @@ test.describe("Production platform admin onboarding proof", () => {
     await namedControl(policyPackCard, "policy_pack_search").fill(packCode);
     await expect(page.getByText(packCode)).toBeVisible();
     await page.locator(".tenant-support-access-row").filter({ hasText: packCode }).getByRole("button", { name: "Publish" }).click();
-    await page.getByRole("dialog", { name: "Publish setup template?" }).getByRole("button", { name: "Publish template" }).click();
+    const publishDialog = page.getByRole("dialog", { name: "Publish header-only setup template?" });
+    await expect(publishDialog.getByText(/evidence-only baseline/i)).toBeVisible();
+    await publishDialog.getByRole("button", { name: "Publish header-only" }).click();
     await expect(notice(page).getByText("Policy pack published.", { exact: true })).toBeVisible();
     await safeReload(page);
     await namedControl(policyPackCard, "policy_pack_search").fill(packCode);

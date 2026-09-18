@@ -31,7 +31,7 @@ export async function renderPlatformAdminConsole(panel: PlatformPanel, params: R
   const requestedTenantId = normalizeParam(params.tenantId);
   const shouldLoadLeads = panel === "leads";
   const shouldLoadTenants = panel === "tenants";
-  const shouldLoadPolicyPacks = panel === "policy-packs";
+  const shouldLoadPolicyPacks = panel === "policy-packs" || panel === "onboarding";
   const needsSelectedTenant = ["onboarding", "admins", "policy-packs", "events"].includes(panel);
 
   const [leadResult, tenantResult, policyPackResult] = await Promise.all([

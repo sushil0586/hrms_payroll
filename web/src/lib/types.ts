@@ -5593,6 +5593,9 @@ export type PlatformTenantOnboarding = {
 
 export type PlatformPolicyPackListItem = {
   id: string;
+  source_pack_id: string | null;
+  source_pack_code: string;
+  source_pack_version: number | null;
   code: string;
   name: string;
   domain: string;
@@ -5606,6 +5609,118 @@ export type PlatformPolicyPackListItem = {
   published_by_identifier: string;
   item_count: number;
   adoption_count: number;
+  items?: {
+    id: string;
+    item_type: string;
+    item_key: string;
+    name: string;
+    payload: Record<string, unknown>;
+    dependency_keys: string[];
+    sort_order: number;
+    is_required: boolean;
+  }[];
+};
+
+export type PlatformPolicyPackAdoptionPreview = {
+  tenant_id: string;
+  tenant_code: string;
+  policy_pack_id: string;
+  policy_pack_code: string;
+  policy_pack_name: string;
+  policy_pack_version: number;
+  adoption_mode: string;
+  can_apply: boolean;
+  counts: {
+    total: number;
+    create: number;
+    conflict: number;
+    blocked: number;
+    evidence_only: number;
+  };
+  items: {
+    item_key: string;
+    item_type: string;
+    name: string;
+    action: string;
+    target_model: string;
+    target_key: string;
+    message: string;
+    severity: string;
+  }[];
+};
+
+export type PlatformPolicyPackUpgradeCompare = {
+  tenant_id: string;
+  tenant_code: string;
+  current_policy_pack_id: string;
+  current_policy_pack_code: string;
+  current_policy_pack_version: number | null;
+  target_policy_pack_id: string;
+  target_policy_pack_code: string;
+  target_policy_pack_name: string;
+  target_policy_pack_version: number;
+  has_current_adoption: boolean;
+  can_upgrade: boolean;
+  counts: {
+    total: number;
+    add: number;
+    change: number;
+    remove: number;
+    unchanged: number;
+    detached: number;
+  };
+  items: {
+    item_key: string;
+    item_type: string;
+    name: string;
+    action: string;
+    current_version: number | null;
+    target_version: number;
+    message: string;
+    severity: string;
+  }[];
+};
+
+export type PlatformPolicyPackAdoptionResult = {
+  id: string;
+  tenant_id: string;
+  tenant_code: string;
+  policy_pack_id: string;
+  policy_pack_code: string;
+  policy_pack_name: string;
+  status: string;
+  adoption_mode: string;
+  adopted_at: string | null;
+  adopted_by_identifier: string;
+  notes: string;
+  created_at: string;
+  result_summary: {
+    tenant_id: string;
+    tenant_code: string;
+    policy_pack_id: string;
+    policy_pack_code: string;
+    policy_pack_name: string;
+    policy_pack_version: number;
+    adoption_mode: string;
+    counts: {
+      total: number;
+      created: number;
+      updated?: number;
+      skipped: number;
+      failed: number;
+      evidence_only: number;
+    };
+    items: {
+      item_key: string;
+      item_type: string;
+      name: string;
+      action: string;
+      target_model: string;
+      target_record_id: string;
+      message: string;
+      severity: string;
+    }[];
+  };
 };
 
 export type PlatformSummary = {

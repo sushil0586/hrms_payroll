@@ -10,6 +10,9 @@ import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type {
   PlatformOnboardingAdminContact,
   PlatformPublicLead,
+  PlatformPolicyPackAdoptionResult,
+  PlatformPolicyPackAdoptionPreview,
+  PlatformPolicyPackUpgradeCompare,
   PlatformPolicyPackListItem,
   PlatformSummary,
   PlatformTenantListItem,
@@ -26,8 +29,9 @@ type Props = {
   summary: PlatformSummary;
 };
 
-type MutationMethod = "POST" | "PATCH";
+type MutationMethod = "POST" | "PATCH" | "DELETE";
 type PlatformPanel = "control" | "leads" | "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
+type PlatformPolicyPackItem = NonNullable<PlatformPolicyPackListItem["items"]>[number];
 type ConfirmAction = {
   title: string;
   description: string;
@@ -222,6 +226,183 @@ function DisabledReason({ show, children }: { show: boolean; children: React.Rea
   return <small className="platform-disabled-reason">{children}</small>;
 }
 
+function policyPackItems(pack: PlatformPolicyPackListItem | null | undefined) {
+  return pack?.items ?? [];
+}
+
+function defaultPolicyItemPayload(itemType: string) {
+  if (itemType === "leave_type") {
+    return JSON.stringify({ code: "casual-leave", name: "Casual Leave", category: "paid", unit: "day" }, null, 2);
+  }
+  if (itemType === "leave_policy") {
+    return JSON.stringify({ code: "casual-leave-policy", name: "Casual Leave Policy", leave_type_item_key: "casual-leave-type", annual_entitlement: "12.00", allow_half_day: true }, null, 2);
+  }
+  if (itemType === "shift") {
+    return JSON.stringify({ code: "general-shift", name: "General Shift", start_time: "09:00:00", end_time: "18:00:00", working_hours: "8.00", weekly_off_days: ["sunday"] }, null, 2);
+  }
+  if (itemType === "holiday_calendar") {
+    return JSON.stringify({ code: "india-2026", name: "India 2026", year: 2026, holidays: [{ date: "2026-01-26", name: "Republic Day", holiday_type: "compulsory" }] }, null, 2);
+  }
+  if (itemType === "attendance_policy") {
+    return JSON.stringify({ code: "office-attendance", name: "Office Attendance", default_shift_item_key: "general-shift", holiday_calendar_item_key: "india-2026", full_day_min_hours: "8.00", half_day_min_hours: "4.00" }, null, 2);
+  }
+  return "{}";
+}
+
+function payloadValue(payload: Record<string, unknown> | undefined, key: string, fallback = "") {
+  const value = payload?.[key];
+  if (Array.isArray(value)) return value.join(", ");
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+}
+
+function payloadBoolean(payload: Record<string, unknown> | undefined, key: string, fallback = false) {
+  const value = payload?.[key];
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function payloadJsonArray(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildGuidedPolicyItemPayload(formData: FormData, itemType: string) {
+  const advancedPayload = formValue(formData, "payload");
+  if (advancedPayload.trim()) {
+    return JSON.parse(advancedPayload);
+  }
+  if (itemType === "leave_type") {
+    return {
+      code: formValue(formData, "payload_code"),
+      name: formValue(formData, "payload_name"),
+      category: formValue(formData, "payload_category") || "paid",
+      unit: formValue(formData, "payload_unit") || "day",
+      requires_attachment: formData.has("payload_requires_attachment"),
+      allow_negative_balance: formData.has("payload_allow_negative_balance"),
+      is_approval_required: formData.has("payload_is_approval_required"),
+    };
+  }
+  if (itemType === "leave_policy") {
+    return {
+      code: formValue(formData, "payload_code"),
+      name: formValue(formData, "payload_name"),
+      leave_type_item_key: formValue(formData, "payload_leave_type_item_key"),
+      annual_entitlement: formValue(formData, "payload_annual_entitlement") || "0.00",
+      min_days_per_request: formValue(formData, "payload_min_days_per_request") || "0.50",
+      notice_days_required: Number(formValue(formData, "payload_notice_days_required") || "0"),
+      allow_half_day: formData.has("payload_allow_half_day"),
+    };
+  }
+  if (itemType === "shift") {
+    return {
+      code: formValue(formData, "payload_code"),
+      name: formValue(formData, "payload_name"),
+      start_time: formValue(formData, "payload_start_time") || "09:00:00",
+      end_time: formValue(formData, "payload_end_time") || "18:00:00",
+      working_hours: formValue(formData, "payload_working_hours") || "8.00",
+      weekly_off_days: payloadJsonArray(formValue(formData, "payload_weekly_off_days") || "sunday"),
+    };
+  }
+  if (itemType === "holiday_calendar") {
+    return {
+      code: formValue(formData, "payload_code"),
+      name: formValue(formData, "payload_name"),
+      year: Number(formValue(formData, "payload_year") || new Date().getFullYear()),
+      holidays: [],
+    };
+  }
+  if (itemType === "attendance_policy") {
+    return {
+      code: formValue(formData, "payload_code"),
+      name: formValue(formData, "payload_name"),
+      default_shift_item_key: formValue(formData, "payload_default_shift_item_key"),
+      holiday_calendar_item_key: formValue(formData, "payload_holiday_calendar_item_key"),
+      full_day_min_hours: formValue(formData, "payload_full_day_min_hours") || "8.00",
+      half_day_min_hours: formValue(formData, "payload_half_day_min_hours") || "4.00",
+      allow_regularization: formData.has("payload_allow_regularization"),
+      require_regularization_reason: formData.has("payload_require_regularization_reason"),
+    };
+  }
+  return {};
+}
+
+function formDataFromNamedControls(container: HTMLElement) {
+  const formData = new FormData();
+  container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("[name]").forEach((control) => {
+    if (control instanceof HTMLInputElement && control.type === "checkbox") {
+      if (control.checked) formData.append(control.name, control.value || "on");
+      return;
+    }
+    formData.set(control.name, control.value);
+  });
+  return formData;
+}
+
+function GuidedPolicyItemFields({ itemType, payload }: { itemType: string; payload?: Record<string, unknown> }) {
+  const code = payloadValue(payload, "code");
+  const name = payloadValue(payload, "name");
+
+  return (
+    <div className="platform-guided-payload">
+      <div className="platform-guided-payload__header">
+        <strong>Guided payload fields</strong>
+        <span className="muted">{titleCase(itemType)} setup details used during tenant adoption.</span>
+      </div>
+      <label className="form-field"><span className="muted">Runtime code</span><input className="input-control" name="payload_code" required defaultValue={code} placeholder="casual-leave" /></label>
+      <label className="form-field"><span className="muted">Runtime name</span><input className="input-control" name="payload_name" required defaultValue={name} placeholder="Casual Leave" /></label>
+      {itemType === "leave_type" ? (
+        <>
+          <label className="form-field"><span className="muted">Category</span><select className="input-control" name="payload_category" defaultValue={payloadValue(payload, "category", "paid")}><option value="paid">Paid</option><option value="unpaid">Unpaid</option><option value="sick">Sick</option><option value="vacation">Vacation</option><option value="compensatory">Compensatory</option><option value="maternity">Maternity</option><option value="paternity">Paternity</option><option value="special">Special</option></select></label>
+          <label className="form-field"><span className="muted">Unit</span><select className="input-control" name="payload_unit" defaultValue={payloadValue(payload, "unit", "day")}><option value="day">Day</option><option value="hour">Hour</option></select></label>
+          <label className="form-field"><span className="muted">Requires attachment</span><input name="payload_requires_attachment" type="checkbox" defaultChecked={payloadBoolean(payload, "requires_attachment")} /></label>
+          <label className="form-field"><span className="muted">Allow negative balance</span><input name="payload_allow_negative_balance" type="checkbox" defaultChecked={payloadBoolean(payload, "allow_negative_balance")} /></label>
+          <label className="form-field"><span className="muted">Approval required</span><input name="payload_is_approval_required" type="checkbox" defaultChecked={payloadBoolean(payload, "is_approval_required", true)} /></label>
+        </>
+      ) : null}
+      {itemType === "leave_policy" ? (
+        <>
+          <label className="form-field"><span className="muted">Leave type item key</span><input className="input-control" name="payload_leave_type_item_key" required defaultValue={payloadValue(payload, "leave_type_item_key")} placeholder="casual-leave-type" /></label>
+          <label className="form-field"><span className="muted">Annual entitlement</span><input className="input-control" name="payload_annual_entitlement" defaultValue={payloadValue(payload, "annual_entitlement", "12.00")} /></label>
+          <label className="form-field"><span className="muted">Minimum request days</span><input className="input-control" name="payload_min_days_per_request" defaultValue={payloadValue(payload, "min_days_per_request", "0.50")} /></label>
+          <label className="form-field"><span className="muted">Notice days</span><input className="input-control" name="payload_notice_days_required" defaultValue={payloadValue(payload, "notice_days_required", "0")} min={0} type="number" /></label>
+          <label className="form-field"><span className="muted">Allow half day</span><input name="payload_allow_half_day" type="checkbox" defaultChecked={payloadBoolean(payload, "allow_half_day", true)} /></label>
+        </>
+      ) : null}
+      {itemType === "shift" ? (
+        <>
+          <label className="form-field"><span className="muted">Start time</span><input className="input-control" name="payload_start_time" defaultValue={payloadValue(payload, "start_time", "09:00:00")} /></label>
+          <label className="form-field"><span className="muted">End time</span><input className="input-control" name="payload_end_time" defaultValue={payloadValue(payload, "end_time", "18:00:00")} /></label>
+          <label className="form-field"><span className="muted">Working hours</span><input className="input-control" name="payload_working_hours" defaultValue={payloadValue(payload, "working_hours", "8.00")} /></label>
+          <label className="form-field"><span className="muted">Weekly off days</span><input className="input-control" name="payload_weekly_off_days" defaultValue={payloadValue(payload, "weekly_off_days", "sunday")} /></label>
+        </>
+      ) : null}
+      {itemType === "holiday_calendar" ? (
+        <label className="form-field"><span className="muted">Year</span><input className="input-control" name="payload_year" defaultValue={payloadValue(payload, "year", String(new Date().getFullYear()))} min={2000} type="number" /></label>
+      ) : null}
+      {itemType === "attendance_policy" ? (
+        <>
+          <label className="form-field"><span className="muted">Default shift item key</span><input className="input-control" name="payload_default_shift_item_key" defaultValue={payloadValue(payload, "default_shift_item_key")} placeholder="general-shift" /></label>
+          <label className="form-field"><span className="muted">Holiday calendar item key</span><input className="input-control" name="payload_holiday_calendar_item_key" defaultValue={payloadValue(payload, "holiday_calendar_item_key")} placeholder="india-2026" /></label>
+          <label className="form-field"><span className="muted">Full day min hours</span><input className="input-control" name="payload_full_day_min_hours" defaultValue={payloadValue(payload, "full_day_min_hours", "8.00")} /></label>
+          <label className="form-field"><span className="muted">Half day min hours</span><input className="input-control" name="payload_half_day_min_hours" defaultValue={payloadValue(payload, "half_day_min_hours", "4.00")} /></label>
+          <label className="form-field"><span className="muted">Allow regularization</span><input name="payload_allow_regularization" type="checkbox" defaultChecked={payloadBoolean(payload, "allow_regularization", true)} /></label>
+          <label className="form-field"><span className="muted">Require regularization reason</span><input name="payload_require_regularization_reason" type="checkbox" defaultChecked={payloadBoolean(payload, "require_regularization_reason", true)} /></label>
+        </>
+      ) : null}
+      <details className="platform-advanced-json">
+        <summary>Advanced JSON override</summary>
+        <label className="form-field platform-template-item-payload">
+          <span className="muted">Payload JSON</span>
+          <textarea className="input-control" name="payload" defaultValue="" rows={8} placeholder={defaultPolicyItemPayload(itemType)} />
+          <ValidationNote>Optional. Leave blank to use guided fields. Fill this only when the template needs fields not shown above.</ValidationNote>
+        </label>
+      </details>
+    </div>
+  );
+}
+
 function FilterSummary({
   activeFilters,
   defaultLabel,
@@ -327,6 +508,12 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const [tenantPlanFilter, setTenantPlanFilter] = useState("all");
   const [policyPackStatusFilter, setPolicyPackStatusFilter] = useState("all");
   const [policyPackDomainFilter, setPolicyPackDomainFilter] = useState("all");
+  const [selectedPolicyPackId, setSelectedPolicyPackId] = useState("");
+  const [policyPackItemType, setPolicyPackItemType] = useState("leave_type");
+  const [editingPolicyPackItemId, setEditingPolicyPackItemId] = useState("");
+  const [policyPackPreview, setPolicyPackPreview] = useState<PlatformPolicyPackAdoptionPreview | null>(null);
+  const [policyPackAdoptionResult, setPolicyPackAdoptionResult] = useState<PlatformPolicyPackAdoptionResult | null>(null);
+  const [policyPackUpgradeCompare, setPolicyPackUpgradeCompare] = useState<PlatformPolicyPackUpgradeCompare | null>(null);
   const [eventTypeFilter, setEventTypeFilter] = useState("all");
   const [editingContactId, setEditingContactId] = useState("");
   const [showCreateTenantModal, setShowCreateTenantModal] = useState(false);
@@ -354,9 +541,33 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const hasBaseline = Boolean(onboarding?.baseline_published_at);
   const canMarkHandoff = Boolean(selectedTenant && hasBaseline && hasProvisionedPrimaryAdmin);
   const canActivateTenant = Boolean(selectedTenant && onboarding?.handoff_completed_at && hasProvisionedPrimaryAdmin);
-  const publishedPacks = policyPacks.filter((pack) => pack.status === "published");
+  const publishedPacks = useMemo(() => policyPacks.filter((pack) => pack.status === "published"), [policyPacks]);
+  const draftPacks = useMemo(() => policyPacks.filter((pack) => pack.status === "draft"), [policyPacks]);
+  const selectedPolicyPack = policyPacks.find((pack) => pack.id === selectedPolicyPackId) ?? publishedPacks[0] ?? policyPacks[0] ?? null;
+  const selectedPolicyPackIsDraft = selectedPolicyPack?.status === "draft";
+  const selectedPolicyPackIsPublished = selectedPolicyPack?.status === "published";
+  const selectedPolicyPackItems = policyPackItems(selectedPolicyPack);
+  const selectedPolicyPackItemTypes = selectedPolicyPack
+    ? Array.from(new Set(selectedPolicyPackItems.map((item) => item.item_type)))
+    : [];
   const publishedPackCount = initialPanel === "policy-packs" ? publishedPacks.length : tenantCounts.publishedPacks;
-  const canAdoptBaseline = Boolean(selectedTenant && publishedPackCount);
+  const canAdoptBaseline = Boolean(selectedTenant && selectedPolicyPackIsPublished);
+  const previewMatchesSelection = Boolean(
+    policyPackPreview &&
+    selectedTenant &&
+    selectedPolicyPack &&
+    policyPackPreview.tenant_id === selectedTenant.id &&
+    policyPackPreview.policy_pack_id === selectedPolicyPack.id,
+  );
+  const upgradeCompareMatchesSelection = Boolean(
+    policyPackUpgradeCompare &&
+    selectedTenant &&
+    selectedPolicyPack &&
+    policyPackUpgradeCompare.tenant_id === selectedTenant.id &&
+    policyPackUpgradeCompare.target_policy_pack_id === selectedPolicyPack.id,
+  );
+  const canApplyPreviewedTemplate = Boolean(canAdoptBaseline && previewMatchesSelection && policyPackPreview?.can_apply);
+  const canApplyComparedUpgrade = Boolean(canAdoptBaseline && upgradeCompareMatchesSelection && policyPackUpgradeCompare?.can_upgrade);
   const guidedChecklist = selectedTenant && onboarding ? [
     {
       status: "done" as const,
@@ -699,7 +910,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   async function handleContactCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedTenant) return;
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     try {
       await mutate(
         `/api/platform/tenants/${selectedTenant.id}/admin-contacts`,
@@ -715,7 +927,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         "Admin contact added.",
       );
       setShowAddContactModal(false);
-      event.currentTarget.reset();
+      form.reset();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Admin contact creation failed.");
     }
@@ -774,7 +986,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
 
   async function handlePolicyPackCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     try {
       await mutate(
         "/api/platform-policy-packs",
@@ -792,37 +1005,247 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         },
         "Policy pack created.",
       );
-      event.currentTarget.reset();
+      form.reset();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Policy pack creation failed.");
     }
   }
 
-  async function handlePublishPack(packId: string) {
+  async function handlePolicyPackItemCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const packId = formValue(formData, "item_policy_pack_id");
+    if (!packId) return;
+    let payload: unknown;
+    const itemType = formValue(formData, "item_type") || "leave_type";
     try {
-      await mutate(`/api/platform-policy-packs/${packId}/publish`, "POST", {}, "Policy pack published.");
+      payload = buildGuidedPolicyItemPayload(formData, itemType);
+    } catch {
+      setError("Item payload must be valid JSON.");
+      return;
+    }
+    const dependencyKeys = formValue(formData, "dependency_keys")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    try {
+      await mutate(
+        `/api/platform-policy-packs/${packId}/items`,
+        "POST",
+        {
+          item_type: formValue(formData, "item_type") || "leave_type",
+          item_key: formValue(formData, "item_key"),
+          name: formValue(formData, "name"),
+          payload,
+          dependency_keys: dependencyKeys,
+          sort_order: Number(formValue(formData, "sort_order") || "0"),
+          is_required: formData.has("is_required"),
+        },
+        "Setup template item added.",
+      );
+      form.reset();
+      setPolicyPackItemType("leave_type");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Setup template item creation failed.");
+    }
+  }
+
+  async function handlePolicyPackItemPatch(formData: FormData, packId: string, itemId: string) {
+    let payload: unknown;
+    const itemType = formValue(formData, "item_type") || "leave_type";
+    try {
+      payload = buildGuidedPolicyItemPayload(formData, itemType);
+    } catch {
+      setError("Item payload must be valid JSON.");
+      return;
+    }
+    const dependencyKeys = formValue(formData, "dependency_keys")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    try {
+      await mutate(
+        `/api/platform-policy-packs/${packId}/items/${itemId}`,
+        "PATCH",
+        {
+          item_type: formValue(formData, "item_type") || "leave_type",
+          item_key: formValue(formData, "item_key"),
+          name: formValue(formData, "name"),
+          payload,
+          dependency_keys: dependencyKeys,
+          sort_order: Number(formValue(formData, "sort_order") || "0"),
+          is_required: formData.has("is_required"),
+        },
+        "Setup template item updated.",
+      );
+      setSelectedPolicyPackId(packId);
+      setEditingPolicyPackItemId("");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Setup template item update failed.");
+    }
+  }
+
+  function handlePolicyPackItemPatchClick(event: React.MouseEvent<HTMLButtonElement>, packId: string, itemId: string) {
+    const container = event.currentTarget.closest("[data-policy-pack-item-edit]") as HTMLElement | null;
+    if (!container) return;
+    void handlePolicyPackItemPatch(formDataFromNamedControls(container), packId, itemId);
+  }
+
+  async function handlePolicyPackItemDelete(packId: string, itemId: string) {
+    try {
+      await mutate(`/api/platform-policy-packs/${packId}/items/${itemId}`, "DELETE", {}, "Setup template item deleted.");
+      if (editingPolicyPackItemId === itemId) {
+        setEditingPolicyPackItemId("");
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Setup template item delete failed.");
+    }
+  }
+
+  function requestDeletePolicyPackItem(pack: PlatformPolicyPackListItem, item: PlatformPolicyPackItem) {
+    setConfirmAction({
+      title: "Delete setup template item?",
+      description: `${item.name || titleCase(item.item_key)} will be removed from draft template ${pack.name}. This cannot be undone after confirming.`,
+      confirmLabel: "Delete item",
+      tone: "danger",
+      run: () => handlePolicyPackItemDelete(pack.id, item.id),
+    });
+  }
+
+  async function handlePublishPack(packId: string, options?: { allowHeaderOnly?: boolean }) {
+    try {
+      await mutate(
+        `/api/platform-policy-packs/${packId}/publish`,
+        "POST",
+        options?.allowHeaderOnly ? { allow_header_only: true } : {},
+        "Policy pack published.",
+      );
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Policy pack publish failed.");
     }
   }
 
   function requestPublishPack(pack: PlatformPolicyPackListItem) {
+    const isHeaderOnly = pack.item_count === 0;
     setConfirmAction({
-      title: "Publish setup template?",
-      description: `${pack.name} will become available for tenant setup. Publish only after the template has been reviewed.`,
-      confirmLabel: "Publish template",
-      run: () => handlePublishPack(pack.id),
+      title: isHeaderOnly ? "Publish header-only setup template?" : "Publish setup template?",
+      description: isHeaderOnly
+        ? `${pack.name} has no setup items. It can still be published as an evidence-only baseline, but applying it will not create tenant leave, attendance, shift, or calendar records.`
+        : `${pack.name} will become available for tenant setup with ${pack.item_count} setup item${pack.item_count === 1 ? "" : "s"}. Publish only after the template has been reviewed.`,
+      confirmLabel: isHeaderOnly ? "Publish header-only" : "Publish template",
+      tone: isHeaderOnly ? "danger" : "default",
+      run: () => handlePublishPack(pack.id, { allowHeaderOnly: isHeaderOnly }),
     });
   }
 
-  async function handleAdoptPack(event: React.FormEvent<HTMLFormElement>) {
+  async function handleClonePolicyPackVersion(packId: string) {
+    try {
+      const payload = await mutate<PlatformPolicyPackListItem>(
+        `/api/platform-policy-packs/${packId}/clone-version`,
+        "POST",
+        {},
+        "New draft template version created.",
+      );
+      setSelectedPolicyPackId(payload.id);
+      setEditingPolicyPackItemId("");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Setup template version creation failed.");
+    }
+  }
+
+  function requestClonePolicyPackVersion(pack: PlatformPolicyPackListItem) {
+    setConfirmAction({
+      title: "Create a new draft version?",
+      description: `${pack.name} v${pack.version} will be copied into a new draft version with the same items and delegation rules. Existing published/adopted tenants stay linked to v${pack.version}.`,
+      confirmLabel: "Create version",
+      run: () => handleClonePolicyPackVersion(pack.id),
+    });
+  }
+
+  async function handleAdoptionPreview(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedTenant) return;
     const formData = new FormData(event.currentTarget);
     const packId = formValue(formData, "policy_pack_id");
     if (!packId) return;
     try {
-      await mutate(
+      const payload = await mutate<PlatformPolicyPackAdoptionPreview>(
+        `/api/platform-policy-packs/${packId}/adoption-preview`,
+        "POST",
+        {
+          tenant_id: selectedTenant.id,
+          adoption_mode: formValue(formData, "adoption_mode") || "clone_to_tenant_records",
+        },
+        "Setup template impact preview completed.",
+      );
+      setPolicyPackPreview(payload);
+      setPolicyPackAdoptionResult(null);
+      setPolicyPackUpgradeCompare(null);
+    } catch (nextError) {
+      setPolicyPackPreview(null);
+      setError(nextError instanceof Error ? nextError.message : "Setup template preview failed.");
+    }
+  }
+
+  async function handleUpgradeCompare(form: HTMLFormElement) {
+    if (!selectedTenant) return;
+    const formData = new FormData(form);
+    const packId = formValue(formData, "policy_pack_id");
+    if (!packId) return;
+    try {
+      const payload = await mutate<PlatformPolicyPackUpgradeCompare>(
+        `/api/platform-policy-packs/${packId}/upgrade-compare`,
+        "POST",
+        { tenant_id: selectedTenant.id },
+        "Tenant setup template version compared.",
+      );
+      setPolicyPackUpgradeCompare(payload);
+      setPolicyPackPreview(null);
+      setPolicyPackAdoptionResult(null);
+    } catch (nextError) {
+      setPolicyPackUpgradeCompare(null);
+      setError(nextError instanceof Error ? nextError.message : "Setup template comparison failed.");
+    }
+  }
+
+  async function handleUpgradeApply(form: HTMLFormElement) {
+    if (!selectedTenant) return;
+    const formData = new FormData(form);
+    const packId = formValue(formData, "policy_pack_id");
+    if (!packId) return;
+    try {
+      const payload = await mutate<PlatformPolicyPackAdoptionResult>(
+        `/api/platform-policy-packs/${packId}/upgrade-apply`,
+        "POST",
+        {
+          tenant_id: selectedTenant.id,
+          notes: formValue(formData, "notes"),
+        },
+        "Setup template upgrade applied.",
+      );
+      setPolicyPackPreview(null);
+      setPolicyPackUpgradeCompare(null);
+      setPolicyPackAdoptionResult(payload);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Setup template upgrade failed.");
+    }
+  }
+
+  async function handleAdoptPack(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runAdoptPack(event.currentTarget);
+  }
+
+  async function runAdoptPack(form: HTMLFormElement) {
+    if (!selectedTenant) return;
+    const formData = new FormData(form);
+    const packId = formValue(formData, "policy_pack_id");
+    if (!packId) return;
+    try {
+      const payload = await mutate<PlatformPolicyPackAdoptionResult>(
         `/api/platform-policy-packs/${packId}/adopt-for-tenant`,
         "POST",
         {
@@ -832,6 +1255,9 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
         },
         "Policy pack adopted for tenant.",
       );
+      setPolicyPackPreview(null);
+      setPolicyPackAdoptionResult(payload);
+      setPolicyPackUpgradeCompare(null);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Policy pack adoption failed.");
     }
@@ -1528,6 +1954,64 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
+                  <h2>Add template item</h2>
+                  <span className="record-chip">Content builder</span>
+                </div>
+                <p className="section-copy">Add cloneable setup artifacts to a template before publishing or applying it to tenants.</p>
+              </div>
+              <form className="form-grid" onSubmit={handlePolicyPackItemCreate}>
+                <div className="notice notice--compact platform-validation-strip">
+                  <strong>Item authoring</strong>
+                  <span className="muted">Use valid JSON payloads. Dependencies should reference earlier item keys in the same template.</span>
+                </div>
+                <label className="form-field">
+                  <span className="muted">Template</span>
+                  <select className="input-control" name="item_policy_pack_id" required defaultValue={draftPacks[0]?.id ?? ""}>
+                    <option value="">Select draft template</option>
+                    {draftPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} - {pack.code}</option>)}
+                  </select>
+                  <ValidationNote>Choose the draft template that should own this setup item. Published templates are locked.</ValidationNote>
+                </label>
+                <label className="form-field">
+                  <span className="muted">Item type</span>
+                  <select className="input-control" name="item_type" value={policyPackItemType} onChange={(event) => setPolicyPackItemType(event.target.value)}>
+                    <option value="leave_type">Leave Type</option>
+                    <option value="leave_policy">Leave Policy</option>
+                    <option value="shift">Shift</option>
+                    <option value="holiday_calendar">Holiday Calendar</option>
+                    <option value="attendance_policy">Attendance Policy</option>
+                  </select>
+                </label>
+                <label className="form-field">
+                  <span className="muted">Item key</span>
+                  <input className="input-control" name="item_key" required placeholder="casual-leave-type" />
+                  <ValidationNote>Required and unique inside the selected template.</ValidationNote>
+                </label>
+                <label className="form-field">
+                  <span className="muted">Name</span>
+                  <input className="input-control" name="name" placeholder="Casual Leave" />
+                </label>
+                <label className="form-field">
+                  <span className="muted">Sort order</span>
+                  <input className="input-control" name="sort_order" defaultValue="10" min={0} type="number" />
+                </label>
+                <label className="form-field">
+                  <span className="muted">Dependency keys</span>
+                  <input className="input-control" name="dependency_keys" placeholder="casual-leave-type, general-shift" />
+                  <ValidationNote>Comma-separated keys. Leave blank if this item stands alone.</ValidationNote>
+                </label>
+                <GuidedPolicyItemFields itemType={policyPackItemType} />
+                <label className="form-field"><span className="muted">Required</span><input name="is_required" type="checkbox" defaultChecked /></label>
+                <div className="form-actions-bar">
+                  <span className="muted">After adding items, publish the template and use the adoption preview before applying.</span>
+                  <button className="button button--primary" disabled={Boolean(busyRef) || !draftPacks.length} type="submit">Add item</button>
+                </div>
+              </form>
+            </article>
+
+            <article className="record-card">
+              <div className="record-card__title-wrap">
+                <div className="record-card__title">
                   <h2>Onboarding metadata</h2>
                 </div>
                 <p className="section-copy">Implementation model, setup style, data approach, and policy control posture.</p>
@@ -1729,13 +2213,26 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                     <div>
                       <strong>{pack.name}</strong>
                       <span>{pack.code} - {titleCase(pack.domain)} - v{pack.version}</span>
+                      <span>{pack.item_count ? `${pack.item_count} setup items` : "No setup items configured yet"} - {pack.adoption_count} tenant adoptions</span>
+                      {pack.source_pack_code ? (
+                        <span>Derived from {pack.source_pack_code} v{pack.source_pack_version ?? 1}</span>
+                      ) : null}
                     </div>
                     <StatusChip value={pack.status} />
-                    <div className="platform-action-with-reason">
-                      <button className="button button--secondary" disabled={Boolean(busyRef) || pack.status === "published"} type="button" onClick={() => requestPublishPack(pack)}>Publish</button>
-                      <DisabledReason show={pack.status === "published"}>
-                        Already published.
-                      </DisabledReason>
+                    <span className="record-chip">{pack.item_count ? "Content ready" : "Header only"}</span>
+                    <div className="platform-template-row-actions">
+                      <div className="platform-action-with-reason">
+                        <button className="button button--secondary" disabled={Boolean(busyRef) || pack.status === "published"} type="button" onClick={() => requestPublishPack(pack)}>Publish</button>
+                        <DisabledReason show={pack.status === "published"}>
+                          Already published.
+                        </DisabledReason>
+                      </div>
+                      <div className="platform-action-with-reason">
+                        <button className="button button--secondary" disabled={Boolean(busyRef) || pack.status !== "published"} type="button" onClick={() => requestClonePolicyPackVersion(pack)}>New version</button>
+                        <DisabledReason show={pack.status !== "published"}>
+                          Publish before versioning.
+                        </DisabledReason>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1772,7 +2269,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <label className="form-field"><span className="muted">Description</span><textarea className="input-control" name="description" /></label>
                 <label className="form-field"><span className="muted">Active</span><input name="is_active" type="checkbox" defaultChecked /></label>
                 <div className="form-actions-bar">
-                  <span className="muted">Template items are managed by backend/admin until item-authoring UI is added.</span>
+                  <span className="muted">Add items while the template is draft, then review and publish it for tenant adoption.</span>
                   <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">Create template</button>
                 </div>
               </form>
@@ -1786,7 +2283,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 </div>
                 <p className="section-copy">Apply a published platform setup template to the selected tenant.</p>
               </div>
-              <form className="form-grid" onSubmit={handleAdoptPack}>
+              <form className="form-grid" onSubmit={handleAdoptionPreview}>
                 {!canAdoptBaseline ? (
                   <div className="notice notice--compact platform-validation-strip">
                     <strong>Setup template cannot be applied yet.</strong>
@@ -1798,15 +2295,192 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                     <span className="muted">Select a published template for the chosen tenant. Applying it creates setup evidence used by the readiness check.</span>
                   </div>
                 )}
-                <label className="form-field"><span className="muted">Published template</span><select className="input-control" name="policy_pack_id" required><option value="">Select template</option>{publishedPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} - {pack.code}</option>)}</select></label>
-                <label className="form-field"><span className="muted">Apply mode</span><select className="input-control" name="adoption_mode" defaultValue="clone_to_tenant_records"><option value="clone_to_tenant_records">Copy To Tenant Records</option><option value="baseline_plus_tenant_overrides">Template Plus Tenant Overrides</option><option value="baseline_only">Template Only</option></select></label>
+                <label className="form-field"><span className="muted">Template</span><select className="input-control" name="policy_pack_id" required value={selectedPolicyPack?.id ?? ""} onChange={(event) => { setSelectedPolicyPackId(event.target.value); setEditingPolicyPackItemId(""); setPolicyPackPreview(null); setPolicyPackAdoptionResult(null); setPolicyPackUpgradeCompare(null); }}><option value="">Select template</option>{policyPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} - {pack.code} - {titleCase(pack.status)}</option>)}</select><ValidationNote>Draft templates can be edited here. Only published templates can be applied to tenants.</ValidationNote></label>
+                <label className="form-field"><span className="muted">Apply mode</span><select className="input-control" name="adoption_mode" defaultValue="clone_to_tenant_records" onChange={() => { setPolicyPackPreview(null); setPolicyPackAdoptionResult(null); setPolicyPackUpgradeCompare(null); }}><option value="clone_to_tenant_records">Copy To Tenant Records</option><option value="baseline_plus_tenant_overrides">Template Plus Tenant Overrides</option><option value="baseline_only">Template Only</option></select></label>
+                {selectedPolicyPack ? (
+                  <div className="platform-template-preview">
+                    <div className="record-card__title">
+                      <h3>Adoption preview</h3>
+                      <span className="record-chip">{selectedPolicyPack.item_count} items</span>
+                    </div>
+                    <p className="section-copy">
+                      {selectedPolicyPack.item_count
+                        ? selectedPolicyPackIsDraft
+                          ? "Draft mode lets you edit or delete setup items before publishing this template for tenant adoption."
+                          : "Copy mode will create tenant-owned runtime records from these template items and retain traceability links."
+                        : "This template currently records baseline evidence only because no setup items are configured."}
+                    </p>
+                    <div className="platform-template-preview__chips">
+                      {selectedPolicyPackItemTypes.length ? selectedPolicyPackItemTypes.map((itemType) => (
+                        <span className="record-chip" key={itemType}>{titleCase(itemType)}</span>
+                      )) : <span className="record-chip">No item types</span>}
+                    </div>
+                    {selectedPolicyPackItems.length ? (
+                      <div className="platform-template-preview__items">
+                        {selectedPolicyPackItems.slice(0, 6).map((item) => (
+                          <div className={`platform-template-preview__item ${editingPolicyPackItemId === item.id ? "platform-template-preview__item--editing" : ""}`} key={item.id}>
+                            {editingPolicyPackItemId === item.id && selectedPolicyPackIsDraft ? (
+                              <div className="form-grid platform-template-preview__edit-form" data-policy-pack-item-edit>
+                                <label className="form-field">
+                                  <span className="muted">Item type</span>
+                                  <input name="item_type" type="hidden" value={item.item_type} />
+                                  <input className="input-control" readOnly value={titleCase(item.item_type)} />
+                                  <ValidationNote>Delete and recreate the item if its type must change.</ValidationNote>
+                                </label>
+                                <label className="form-field"><span className="muted">Item key</span><input className="input-control" name="item_key" required defaultValue={item.item_key} /></label>
+                                <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" defaultValue={item.name} /></label>
+                                <label className="form-field"><span className="muted">Sort order</span><input className="input-control" name="sort_order" defaultValue={item.sort_order} min={0} type="number" /></label>
+                                <label className="form-field"><span className="muted">Dependency keys</span><input className="input-control" name="dependency_keys" defaultValue={item.dependency_keys.join(", ")} /></label>
+                                <GuidedPolicyItemFields itemType={item.item_type} payload={item.payload} />
+                                <label className="form-field"><span className="muted">Required</span><input name="is_required" type="checkbox" defaultChecked={item.is_required} /></label>
+                                <div className="form-actions-bar">
+                                  <span className="muted">Saving keeps the item inside this draft template.</span>
+                                  <div className="button-row">
+                                    <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setEditingPolicyPackItemId("")}>Cancel</button>
+                                    <button className="button button--primary" disabled={Boolean(busyRef)} type="button" onClick={(event) => handlePolicyPackItemPatchClick(event, selectedPolicyPack.id, item.id)}>Save item</button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div>
+                                  <strong>{item.name || titleCase(item.item_key)}</strong>
+                                  <span>{titleCase(item.item_type)} - {item.item_key}</span>
+                                  {item.dependency_keys.length ? (
+                                    <span>Depends on {item.dependency_keys.join(", ")}</span>
+                                  ) : null}
+                                </div>
+                                <div className="platform-template-preview__actions">
+                                  <span className="record-chip">{item.is_required ? "Required" : "Optional"}</span>
+                                  <button className="button button--secondary" disabled={Boolean(busyRef) || !selectedPolicyPackIsDraft} type="button" onClick={() => setEditingPolicyPackItemId(item.id)}>Edit</button>
+                                  <button className="button button--danger" disabled={Boolean(busyRef) || !selectedPolicyPackIsDraft} type="button" onClick={() => requestDeletePolicyPackItem(selectedPolicyPack, item)}>Delete</button>
+                                  <DisabledReason show={!selectedPolicyPackIsDraft}>
+                                    Published templates are locked. Create a new version before editing items.
+                                  </DisabledReason>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                        {selectedPolicyPackItems.length > 6 ? (
+                          <div className="notice notice--compact">
+                            <strong>{selectedPolicyPackItems.length - 6} more items are included.</strong>
+                            <span className="muted">The adoption service will process the full ordered template.</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="notice notice--compact">
+                      <strong>Safe adoption behavior</strong>
+                      <span className="muted">The selected mode, tenant, template version, actor, and created records are written to onboarding evidence.</span>
+                    </div>
+                  </div>
+                ) : null}
+                {policyPackPreview ? (
+                  <div className={`platform-adoption-preview ${policyPackPreview.can_apply ? "platform-adoption-preview--ready" : "platform-adoption-preview--blocked"}`} aria-live="polite">
+                    <div className="record-card__title">
+                      <h3>Impact preview</h3>
+                      <span className="record-chip">{policyPackPreview.can_apply ? "Ready" : "Needs review"}</span>
+                    </div>
+                    <div className="platform-adoption-preview__counts">
+                      <span><strong>{policyPackPreview.counts.create}</strong> create</span>
+                      <span><strong>{policyPackPreview.counts.evidence_only}</strong> evidence only</span>
+                      <span><strong>{policyPackPreview.counts.conflict}</strong> conflicts</span>
+                      <span><strong>{policyPackPreview.counts.blocked}</strong> blocked</span>
+                    </div>
+                    <div className="platform-adoption-preview__items">
+                      {policyPackPreview.items.map((item) => (
+                        <div className="platform-adoption-preview__item" key={`${item.item_key}-${item.action}`}>
+                          <div>
+                            <strong>{item.name || titleCase(item.item_key)}</strong>
+                            <span>{titleCase(item.item_type)} - {item.target_model || "No runtime record"} {item.target_key ? `- ${item.target_key}` : ""}</span>
+                            <span>{item.message}</span>
+                          </div>
+                          <span className={`record-chip record-chip--${item.severity === "success" ? "success" : item.severity === "warning" ? "warning" : item.severity === "error" ? "danger" : "neutral"}`}>
+                            {titleCase(item.action)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {policyPackUpgradeCompare && upgradeCompareMatchesSelection ? (
+                  <div className={`platform-adoption-preview ${policyPackUpgradeCompare.can_upgrade ? "platform-adoption-preview--ready" : "platform-adoption-preview--blocked"}`} aria-live="polite">
+                    <div className="record-card__title">
+                      <h3>Version comparison</h3>
+                      <span className="record-chip">{policyPackUpgradeCompare.can_upgrade ? "Upgradeable" : "Manual review"}</span>
+                    </div>
+                    <p className="section-copy">
+                      {policyPackUpgradeCompare.has_current_adoption
+                        ? `Tenant is on ${policyPackUpgradeCompare.current_policy_pack_code} v${policyPackUpgradeCompare.current_policy_pack_version}; target is ${policyPackUpgradeCompare.target_policy_pack_code} v${policyPackUpgradeCompare.target_policy_pack_version}.`
+                        : "This tenant has not adopted a template in this lineage yet. The target version will be treated as a first adoption."}
+                    </p>
+                    <div className="platform-adoption-preview__counts">
+                      <span><strong>{policyPackUpgradeCompare.counts.add}</strong> add</span>
+                      <span><strong>{policyPackUpgradeCompare.counts.change}</strong> change</span>
+                      <span><strong>{policyPackUpgradeCompare.counts.remove}</strong> remove</span>
+                      <span><strong>{policyPackUpgradeCompare.counts.detached}</strong> detached</span>
+                      <span><strong>{policyPackUpgradeCompare.counts.unchanged}</strong> unchanged</span>
+                    </div>
+                    <div className="platform-adoption-preview__items">
+                      {policyPackUpgradeCompare.items.map((item) => (
+                        <div className="platform-adoption-preview__item" key={`${item.item_key}-${item.action}`}>
+                          <div>
+                            <strong>{item.name || titleCase(item.item_key)}</strong>
+                            <span>{titleCase(item.item_type)} - {item.item_key}</span>
+                            <span>{item.message}</span>
+                          </div>
+                          <span className={`record-chip record-chip--${item.severity === "success" ? "success" : item.severity === "warning" ? "warning" : item.severity === "error" ? "danger" : "neutral"}`}>
+                            {titleCase(item.action)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {policyPackAdoptionResult ? (
+                  <div className="platform-adoption-preview platform-adoption-preview--ready" aria-live="polite">
+                    <div className="record-card__title">
+                      <h3>Apply result</h3>
+                      <span className="record-chip record-chip--success">Evidence saved</span>
+                    </div>
+                    <div className="platform-adoption-preview__counts">
+                      <span><strong>{policyPackAdoptionResult.result_summary.counts.created}</strong> created</span>
+                      <span><strong>{policyPackAdoptionResult.result_summary.counts.updated ?? 0}</strong> updated</span>
+                      <span><strong>{policyPackAdoptionResult.result_summary.counts.evidence_only}</strong> evidence only</span>
+                      <span><strong>{policyPackAdoptionResult.result_summary.counts.skipped}</strong> skipped</span>
+                      <span><strong>{policyPackAdoptionResult.result_summary.counts.failed}</strong> failed</span>
+                    </div>
+                    <div className="platform-adoption-preview__items">
+                      {policyPackAdoptionResult.result_summary.items.map((item) => (
+                        <div className="platform-adoption-preview__item" key={`${item.item_key}-${item.action}-${item.target_record_id}`}>
+                          <div>
+                            <strong>{item.name || titleCase(item.item_key)}</strong>
+                            <span>{titleCase(item.item_type)} - {item.target_model || "No runtime record"} {item.target_record_id ? `- ${item.target_record_id}` : ""}</span>
+                            <span>{item.message}</span>
+                          </div>
+                          <span className={`record-chip record-chip--${item.severity === "success" ? "success" : item.severity === "warning" ? "warning" : item.severity === "error" ? "danger" : "neutral"}`}>
+                            {titleCase(item.action)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <label className="form-field"><span className="muted">Notes</span><textarea className="input-control" name="notes" placeholder="Initial platform setup for onboarding." /></label>
                 <div className="form-actions-bar">
-                  <span className="muted">Applying the template writes setup evidence and onboarding history.</span>
+                  <span className="muted">Preview impact first. Applying writes setup evidence and onboarding history.</span>
                   <div className="platform-action-with-reason">
-                    <button className="button button--primary" disabled={Boolean(busyRef) || !canAdoptBaseline} type="submit">Apply template</button>
-                    <DisabledReason show={!canAdoptBaseline}>
-                      Select a tenant and keep at least one setup template published.
+                    <div className="button-row">
+                      <button className="button button--secondary" disabled={Boolean(busyRef) || !canAdoptBaseline} type="button" onClick={(event) => { const form = event.currentTarget.form; if (form) void handleUpgradeCompare(form); }}>Compare version</button>
+                      <button className="button button--secondary" disabled={Boolean(busyRef) || !canApplyComparedUpgrade} type="button" onClick={(event) => { const form = event.currentTarget.form; if (form) void handleUpgradeApply(form); }}>Apply upgrade</button>
+                      <button className="button button--secondary" disabled={Boolean(busyRef) || !canAdoptBaseline} type="submit">Preview impact</button>
+                      <button className="button button--primary" disabled={Boolean(busyRef) || !canApplyPreviewedTemplate} type="button" onClick={(event) => { const form = event.currentTarget.form; if (form) void runAdoptPack(form); }}>Apply template</button>
+                    </div>
+                    <DisabledReason show={!canAdoptBaseline || (!canApplyPreviewedTemplate && !canApplyComparedUpgrade)}>
+                      {!canAdoptBaseline
+                        ? "Select a tenant and choose a published setup template."
+                        : "Use Compare version before applying an upgrade, or run a clean impact preview before first-time template adoption."}
                     </DisabledReason>
                   </div>
                 </div>
