@@ -164,7 +164,7 @@ export default async function TenantAdminSecurityReadinessPage() {
         </div>
       </section>
 
-      <section className="section tenant-console-grid">
+      <section className="section tenant-security-workspace">
         <GroupPanel eyebrow="Identity assurance" title="MFA and SSO" checks={[...checksByPrefix("mfa."), ...checksByPrefix("sso.")]}>
           <div className="support-session-scopes">
             <span className="record-chip">MFA {data.mfa.enforced ? "enforced" : "not enforced"}</span>
@@ -184,7 +184,7 @@ export default async function TenantAdminSecurityReadinessPage() {
         </GroupPanel>
       </section>
 
-      <section className="section tenant-console-grid">
+      <section className="section tenant-security-workspace">
         <GroupPanel eyebrow="Customer evidence" title="Audit and Data Protection" checks={[...checksByPrefix("audit."), ...checksByPrefix("data.")]}>
           <div className="support-session-scopes">
             <span className="record-chip">Retention {data.audit.retention_days}d</span>

@@ -97,6 +97,7 @@ async function patchTenantMembershipRoles(page: Page, membershipId: string, role
 }
 
 test.describe("Tenant admin roles certification", () => {
+  test.describe.configure({ mode: "serial" });
   test.setTimeout(180_000);
 
   test.skip(!process.env.HRMS_API_BASE_URL, "Tenant role certification requires a live HRMS API.");
@@ -240,7 +241,7 @@ test.describe("Tenant admin roles certification", () => {
     ]) {
       await gotoAuthenticated(page, blockedPath, { username, password: generatedPassword });
       await expect(page).toHaveURL(/\/tenant-admin$/);
-      await expectPageReady(page, "Tenant Admin Console");
+      await expectPageReady(page, "Account Control Center");
     }
     await gotoAuthenticated(page, "/tenant-admin/roles", { username, password: generatedPassword });
     await expectPageReady(page, "Roles & Permissions");

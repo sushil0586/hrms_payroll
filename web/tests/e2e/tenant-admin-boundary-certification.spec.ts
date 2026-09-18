@@ -23,7 +23,7 @@ type SessionPayload = {
 const tenantAdminPages = [
   { path: "/tenant-admin", heading: "Tenant Admin Console" },
   { path: "/tenant-admin/users", heading: "Tenant User Management" },
-  { path: "/tenant-admin/plan", heading: "Plans And Subscription" },
+  { path: "/tenant-admin/plan", heading: "Plan & Billing" },
   { path: "/tenant-admin/setup", heading: "Tenant Setup Guide" },
   { path: "/tenant-admin/support-access", heading: "Support Access" },
   { path: "/tenant-admin/trust-audit", heading: "Tenant Trust Audit" },

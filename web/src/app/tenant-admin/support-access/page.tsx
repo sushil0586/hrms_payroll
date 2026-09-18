@@ -53,7 +53,7 @@ export default async function TenantAdminSupportAccessPage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section tenant-support-workspace">
         <div className="panel-card-soft tenant-console-panel">
           <TenantSupportAccessActions
             canApproveSupportAccess={canApproveSupportAccess}
@@ -63,7 +63,7 @@ export default async function TenantAdminSupportAccessPage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section tenant-support-scope-workspace">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>

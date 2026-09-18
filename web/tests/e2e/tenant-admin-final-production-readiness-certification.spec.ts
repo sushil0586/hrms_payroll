@@ -152,7 +152,7 @@ test.describe("Tenant Admin final production-readiness certification", () => {
     await gotoTenant(page, "/tenant-admin/settings", "Tenant Settings");
     await expect(page.getByText("Tenant identifiers are platform-governed.")).toBeVisible();
     await page.getByRole("main").getByRole("link", { name: "Request account change" }).click();
-    await expectPageReady(page, "Plans And Subscription");
+    await expectPageReady(page, "Plan & Billing");
     await expect(page.getByRole("main").getByLabel("Type")).toHaveValue("configuration_change");
     await expect(page.getByRole("main").getByLabel("Target ref")).toHaveValue("tenant.account.profile");
     await page.getByRole("main").getByLabel("Title").fill(qaRequestTitle);

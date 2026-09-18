@@ -100,6 +100,17 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
     () => selectedPermissionKeys.map((key) => permissionByKey.get(key)?.label ?? key),
     [permissionByKey, selectedPermissionKeys]
   );
+  const permissionOverviewGroups = useMemo(() => {
+    return permissionCatalog.reduce<Array<{ module: string; permissions: PermissionItem[] }>>((groups, permission) => {
+      const existing = groups.find((group) => group.module === permission.module);
+      if (existing) {
+        existing.permissions.push(permission);
+      } else {
+        groups.push({ module: permission.module, permissions: [permission] });
+      }
+      return groups;
+    }, []);
+  }, [permissionCatalog]);
 
   function togglePermissionKey(permissionKey: string) {
     const permission = permissionByKey.get(permissionKey);
@@ -242,14 +253,14 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
     <div className="tenant-role-actions">
       <div className="tenant-console-panel__header">
         <div>
-          <span className="workspace-card__eyebrow">Role administration</span>
-          <h2>Roles & permissions</h2>
+          <span className="workspace-card__eyebrow">Roles & Permissions</span>
+          <h2>Access model</h2>
         </div>
         <button className="button button--primary" disabled={!canManageRoles} onClick={openCreateDialog} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
           Add role
         </button>
       </div>
-      <p className="tenant-console-empty">Create custom tenant roles, keep system roles protected, and assign roles from the Users page.</p>
+      <p className="tenant-console-empty">System roles stay protected. Custom roles can be created, edited, activated, deactivated, and assigned from the Users page.</p>
       {!canManageRoles ? <span className="tenant-inline-notice tenant-inline-notice--muted" role="status">You can view tenant roles. Role changes require tenant.roles.manage.</span> : null}
       {notice ? <span className="tenant-inline-notice" role="status">{notice}</span> : null}
       <div className="tenant-membership-toolbar">
@@ -259,58 +270,90 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
         </label>
         <span className="record-chip">{filteredRoles.length} roles</span>
       </div>
-      <div className="tenant-role-list">
-        {filteredRoles.map((role) => {
-          const canDeactivate = !role.is_system_role && role.is_active && role.active_membership_count === 0;
-          const disableReason = role.is_system_role
-            ? "System role is protected."
-            : role.active_membership_count > 0
-              ? "Remove assigned members before deactivation."
-              : role.is_active
-                ? ""
-                : "Inactive role can be reactivated.";
-          return (
-            <div className="tenant-role-row" key={role.id}>
-              <div className="tenant-role-row__main">
-                <strong>{role.name}</strong>
-                <span>{role.code}</span>
-                <p>{role.description || "No description set."}</p>
-                <div className="tenant-role-row__chips">
-                  <span className="record-chip">{role.is_system_role ? "System" : "Custom"}</span>
-                  <span className="record-chip">{role.is_active ? "Active" : "Inactive"}</span>
-                  <span className="record-chip">{role.active_membership_count} assigned</span>
+      <div className="tenant-role-workspace">
+        <div className="tenant-role-list" aria-label="Tenant roles">
+          {filteredRoles.map((role) => {
+            const canDeactivate = !role.is_system_role && role.is_active && role.active_membership_count === 0;
+            const disableReason = role.is_system_role
+              ? "System role is protected."
+              : role.active_membership_count > 0
+                ? "Remove assigned members before deactivation."
+                : role.is_active
+                  ? ""
+                  : "Inactive role can be reactivated.";
+            return (
+              <div className="tenant-role-row" key={role.id}>
+                <div className="tenant-role-row__main">
+                  <strong>{role.name}</strong>
+                  <span>{role.code}</span>
+                  <p>{role.description || "No description set."}</p>
+                  <div className="tenant-role-row__chips">
+                    <span className="record-chip">{role.is_system_role ? "System" : "Custom"}</span>
+                    <span className="record-chip">{role.is_active ? "Active" : "Inactive"}</span>
+                    <span className="record-chip">{role.active_membership_count} assigned</span>
+                    <span className="record-chip">{role.permission_keys.length} permissions</span>
+                  </div>
+                </div>
+                <div className="tenant-role-row__permissions">
+                  <span>
+                    {role.permission_keys.length
+                      ? role.permission_keys.map((key) => permissionLabelByKey.get(key) ?? key).join(", ")
+                      : "No permission keys yet"}
+                  </span>
+                </div>
+                <div className="tenant-role-row__actions">
+                  <button className="button button--secondary" disabled={!canManageRoles || busyRef.startsWith(role.id)} onClick={() => openEditDialog(role)} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
+                    Edit
+                  </button>
+                  {role.is_active ? (
+                    <button className="button button--ghost" disabled={!canManageRoles || !canDeactivate || busyRef === `${role.id}:deactivate`} onClick={() => runStatusAction(role, "deactivate")} title={!canManageRoles ? "Requires tenant.roles.manage" : disableReason} type="button">
+                      Deactivate
+                    </button>
+                  ) : (
+                    <button className="button button--secondary" disabled={!canManageRoles || busyRef === `${role.id}:activate`} onClick={() => runStatusAction(role, "activate")} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
+                      Activate
+                    </button>
+                  )}
+                  {disableReason ? <small>{disableReason}</small> : null}
                 </div>
               </div>
-              <div className="tenant-role-row__permissions">
-                <span>
-                  {role.permission_keys.length
-                    ? role.permission_keys.map((key) => permissionLabelByKey.get(key) ?? key).join(", ")
-                    : "No permission keys yet"}
-                </span>
-              </div>
-              <div className="tenant-role-row__actions">
-                <button className="button button--secondary" disabled={!canManageRoles || busyRef.startsWith(role.id)} onClick={() => openEditDialog(role)} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
-                  Edit
-                </button>
-                {role.is_active ? (
-                  <button className="button button--ghost" disabled={!canManageRoles || !canDeactivate || busyRef === `${role.id}:deactivate`} onClick={() => runStatusAction(role, "deactivate")} title={!canManageRoles ? "Requires tenant.roles.manage" : disableReason} type="button">
-                    Deactivate
-                  </button>
-                ) : (
-                  <button className="button button--secondary" disabled={!canManageRoles || busyRef === `${role.id}:activate`} onClick={() => runStatusAction(role, "activate")} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
-                    Activate
-                  </button>
-                )}
-                {disableReason ? <small>{disableReason}</small> : null}
-              </div>
+            );
+          })}
+          {!filteredRoles.length ? (
+            <div className="tenant-console-empty" role="status">
+              No roles match the current search.
             </div>
-          );
-        })}
-        {!filteredRoles.length ? (
-          <div className="tenant-console-empty" role="status">
-            No roles match the current search.
+          ) : null}
+        </div>
+        <aside className="tenant-permission-overview" aria-label="Permission catalog overview">
+          <div className="tenant-permission-overview__header">
+            <div>
+              <span className="workspace-card__eyebrow">Permission Matrix</span>
+              <h3>Assignable permissions</h3>
+            </div>
+            <span className="record-chip">{permissionCatalog.length} permissions</span>
           </div>
-        ) : null}
+          <p className="tenant-console-empty">Use Edit on a role to change its exact permission set. Risk badges help keep access intentional.</p>
+          <div className="tenant-permission-overview__groups">
+            {permissionOverviewGroups.map((group) => (
+              <section className="tenant-permission-overview__group" key={group.module}>
+                <div>
+                  <strong>{group.module}</strong>
+                  <span>{group.permissions.length} permissions</span>
+                </div>
+                <ul>
+                  {group.permissions.slice(0, 4).map((permission) => (
+                    <li key={permission.key}>
+                      <span>{permission.label}</span>
+                      <small className={`tenant-permission-risk tenant-permission-risk--${permission.risk_level}`}>{riskLabel(permission.risk_level)}</small>
+                    </li>
+                  ))}
+                </ul>
+                {group.permissions.length > 4 ? <small>{group.permissions.length - 4} more in this module</small> : null}
+              </section>
+            ))}
+          </div>
+        </aside>
       </div>
 
       {dialogMode ? (

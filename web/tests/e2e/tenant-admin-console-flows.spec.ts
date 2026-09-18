@@ -11,54 +11,45 @@ test.describe("Tenant admin console", () => {
     });
   }
 
-  async function expectSetupGuideCertified(page: Page) {
-    const setupGuide = page.getByTestId("tenant-setup-guide");
-    await expect(setupGuide).toBeVisible();
-    await expect(setupGuide.getByText("Launch progress", { exact: true })).toBeVisible();
-    await expect(setupGuide.getByRole("heading", { name: "Setup guide" })).toBeVisible();
-    await expect(setupGuide.getByText(/% complete/)).toBeVisible();
-    await expect(setupGuide.getByText(/of \d+ visible launch steps complete/)).toBeVisible();
-    for (const step of [
-      "Confirm company profile",
-      "Invite workspace owners",
-      "Resolve launch checks",
-      "Publish operating configuration",
-      "Validate audit evidence",
-    ]) {
-      const setupStep = setupGuide.locator(".tenant-setup-step").filter({ hasText: step }).first();
-      await expect(setupStep).toBeVisible();
-      await expect(setupStep.locator(".readiness-badge")).toBeVisible();
-      await expect(setupStep.getByRole("link")).toBeVisible();
-    }
-    for (const action of ["Review account", "Manage users", "Open security", "Open setup", "Open audit"]) {
-      await expect(setupGuide.getByRole("link", { name: action })).toBeVisible();
-    }
+  async function expectDashboardPreviewCertified(page: Page) {
+    const dashboardPreview = page.getByTestId("tenant-setup-guide");
+    await expect(dashboardPreview).toBeVisible();
+    await expect(dashboardPreview.getByText("Recently Added Users", { exact: true })).toBeVisible();
+    await expect(dashboardPreview.getByRole("heading", { name: "User Management" })).toBeVisible();
+    await expect(dashboardPreview.getByRole("link", { name: "View all users" })).toBeVisible();
+    await expect(dashboardPreview.getByText("Roles & Permissions", { exact: true })).toBeVisible();
+    await expect(dashboardPreview.getByRole("heading", { name: "Access design" })).toBeVisible();
+    await expect(dashboardPreview.getByRole("link", { name: "Manage all roles" })).toBeVisible();
+    await expect(dashboardPreview.getByText("Permission Matrix", { exact: true })).toBeVisible();
   }
 
   test("shows account, seats, configuration, and commercial evidence", async ({ page }) => {
     await gotoAuthenticated(page, "/tenant-admin");
-    await expectPageReady(page, "Tenant Admin Console");
-    await expect(page.getByRole("main").getByText("Account posture", { exact: true }).first()).toBeVisible();
+    await expectPageReady(page, "Account Control Center");
+    await expect(page.getByRole("main").getByText("Tenant Status", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("main").getByText("Configuration Setup", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("main").getByText("Active Users", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("main").getByText("Plan & Billing", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("tenant-admin-control-center")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Start here" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Items that need your attention" })).toBeVisible();
     await expect(page.getByTestId("tenant-next-action")).toBeVisible();
-    await expect(page.getByTestId("tenant-next-action").getByText("Next action", { exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Readiness snapshot" })).toBeVisible();
-    for (const control of ["Users", "Plan", "Support", "Audit"]) {
-      await expect(page.getByTestId("tenant-admin-control-center").getByText(control, { exact: true })).toBeVisible();
-    }
-    for (const link of ["Manage users", "Review plan", "Open support", "Review audit", "Review blockers"]) {
-      await expect(page.getByTestId("tenant-admin-control-center").getByRole("link", { name: link })).toBeVisible();
-    }
-    await expectSetupGuideCertified(page);
+    await expect(page.getByTestId("tenant-next-action").getByText("Priority", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Complete these key items to ensure smooth operation." })).toBeVisible();
+    await expect(
+      page.getByTestId("tenant-next-action").getByText("Confirm company profile", { exact: true }).first()
+    ).toBeVisible();
+    await expect(page.getByTestId("tenant-next-action").getByRole("link").first()).toBeVisible();
+    await expectDashboardPreviewCertified(page);
     await expectNoHorizontalOverflow(page);
   });
 
   test("certifies focused user management page and member controls", async ({ page }) => {
     await gotoAuthenticated(page, "/tenant-admin/users");
     await expectPageReady(page, "Tenant User Management");
-    await expect(page.getByRole("main").getByText("Member mutations", { exact: true })).toBeVisible();
-    await expect(page.getByText("Invite users and update roles from focused dialogs.")).toBeVisible();
+    await expect(page.getByRole("main").getByText("User Directory", { exact: true })).toBeVisible();
+    await expect(page.getByText("Search, review, invite, activate, suspend, revoke, and update roles without leaving the tenant workspace.")).toBeVisible();
+    await expect(page.getByRole("main").getByText("Security", { exact: true })).toBeVisible();
+    await expect(page.getByRole("main").getByText("Last updated", { exact: true })).toBeVisible();
     const inviteButton = page.getByRole("main").getByRole("button", { name: "Invite member" });
     await expect(inviteButton).toBeVisible();
     await inviteButton.click();
@@ -141,7 +132,7 @@ test.describe("Tenant admin console", () => {
 
     const createdRow = page.locator(".tenant-membership-row").filter({ hasText: email }).first();
     await expect(createdRow).toBeVisible({ timeout: 20_000 });
-    await expect(createdRow.getByText("Invited")).toBeVisible();
+    await expect(createdRow.locator(".record-chip").filter({ hasText: "Invited" })).toBeVisible();
     await captureTenantAdminStep(page, testInfo, "01-invited-member-row");
 
     await page.getByRole("main").getByRole("button", { name: "Invite member" }).click();
@@ -169,7 +160,7 @@ test.describe("Tenant admin console", () => {
     );
     await activateDialog.getByRole("button", { name: "Activate", exact: true }).click();
     await expect((await activateResponse).ok()).toBeTruthy();
-    await expect(createdRow.getByText("Active")).toBeVisible({ timeout: 20_000 });
+    await expect(createdRow.locator(".record-chip").filter({ hasText: "Active" })).toBeVisible({ timeout: 20_000 });
 
     await createdRow.getByRole("button", { name: "Suspend" }).click();
     const suspendDialog = page.getByRole("dialog", { name: "Suspend tenant member" });
@@ -182,7 +173,9 @@ test.describe("Tenant admin console", () => {
     );
     await suspendDialog.getByRole("button", { name: "Suspend", exact: true }).click();
     await expect((await suspendResponse).ok()).toBeTruthy();
-    await expect(createdRow.getByText("Suspended")).toBeVisible({ timeout: 20_000 });
+    await expect(createdRow.locator(".record-chip").filter({ hasText: "Suspended" })).toBeVisible({
+      timeout: 20_000,
+    });
     await captureTenantAdminStep(page, testInfo, "03-suspended-member-row");
 
     await createdRow.getByRole("button", { name: "Activate" }).click();
@@ -194,7 +187,7 @@ test.describe("Tenant admin console", () => {
     );
     await reactivateDialog.getByRole("button", { name: "Activate", exact: true }).click();
     await expect((await reactivateResponse).ok()).toBeTruthy();
-    await expect(createdRow.getByText("Active")).toBeVisible({ timeout: 20_000 });
+    await expect(createdRow.locator(".record-chip").filter({ hasText: "Active" })).toBeVisible({ timeout: 20_000 });
 
     await createdRow.getByRole("button", { name: "Revoke" }).click();
     const revokeDialog = page.getByRole("dialog", { name: "Revoke tenant member" });
@@ -207,7 +200,7 @@ test.describe("Tenant admin console", () => {
     );
     await revokeDialog.getByRole("button", { name: "Revoke", exact: true }).click();
     await expect((await revokeResponse).ok()).toBeTruthy();
-    await expect(createdRow.getByText("Revoked")).toBeVisible({ timeout: 20_000 });
+    await expect(createdRow.locator(".record-chip").filter({ hasText: "Revoked" })).toBeVisible({ timeout: 20_000 });
     await captureTenantAdminStep(page, testInfo, "04-revoked-member-row");
     await expectNoHorizontalOverflow(page);
   });
@@ -268,7 +261,7 @@ test.describe("Tenant admin console", () => {
 
   test("certifies focused plan page and change request lifecycle", async ({ page }) => {
     await gotoAuthenticated(page, "/tenant-admin/plan");
-    await expectPageReady(page, "Plans And Subscription");
+    await expectPageReady(page, "Plan & Billing");
     const requestTitle = `PW Test plan change ${Date.now()}`;
     await expect(page.getByRole("main").getByText("Commercial profile", { exact: true })).toBeVisible();
     await expect(page.getByRole("main").getByText("Usage evidence", { exact: true })).toBeVisible();
@@ -442,8 +435,8 @@ test.describe("Tenant admin console", () => {
   test("keeps guided setup usable on a narrow viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await gotoAuthenticated(page, "/tenant-admin");
-    await expectPageReady(page, "Tenant Admin Console");
-    await expectSetupGuideCertified(page);
+    await expectPageReady(page, "Account Control Center");
+    await expectDashboardPreviewCertified(page);
     await expectNoHorizontalOverflow(page);
   });
 

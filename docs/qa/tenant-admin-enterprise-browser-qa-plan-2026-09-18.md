@@ -85,7 +85,79 @@ For every Tenant Admin route, certify:
 | TA-EQ-4 | Plan/Settings | Prove subscription visibility and governed account/config change workflow. | Plan/settings/change-request certification. | Baseline passed |
 | TA-EQ-5 | Support Access | Prove scoped support request, approval, session, revoke, and audit workflow. | Support access lifecycle certification. | Baseline passed |
 | TA-EQ-6 | Security/Trust | Prove security readiness and trust audit evidence/export. | Security/trust evidence certification. | Baseline passed |
-| TA-EQ-7 | Final Production Readiness | Run full integrated staging journey and publish final confidence. | Final spec, report, defects, confidence level. | Pending deployment rerun |
+| TA-EQ-7 | Final Production Readiness | Run full integrated staging journey and publish final confidence. | Final spec, report, defects, confidence level. | Passed |
+| TA-UX-1 | Enterprise UI Makeover | Apply approved Account Control Center visual system across Tenant Admin shell and dashboard first, then full pages. | Dark navy shell, compact dashboard, action queue, readiness panel, user/role previews, updated tests. | Certified locally |
+| TA-UX-2 | Users/Roles Makeover | Convert access administration to enterprise directory and permission-matrix patterns without changing APIs/RBAC. | Users directory table, status/security columns, role inventory, permission catalog overview, updated assertions. | Certified locally |
+| TA-UX-3 | Commercial/Setup/Governance Makeover | Bring Plan, Settings, Setup, Support, Security, and Trust Audit into the same compact enterprise system. | Split workspaces, denser change-request form/list, audit ledger styling, corrected setup links, updated Plan & Billing heading/tests. | Certified locally |
+| TA-UX-4 | Staging Visual Signoff | Re-run the same browser certification on deployed staging and capture representative screenshots before check-in/deploy signoff. | Staging evidence, screenshots, and final confidence update. | Pending deployment |
+
+## UI Makeover Baseline
+
+Approved direction:
+
+- Dark navy sidebar with grouped information architecture: Overview, Subscription, Tenant Setup, Security & Governance.
+- Light workspace, white cards, blue primary actions, restrained borders and shadows.
+- Compact enterprise SaaS layout with table-first operational surfaces.
+- Dashboard is a control center, not a marketing hero.
+- Keep routes, APIs, RBAC, tenant isolation, validations, and workflows unchanged.
+
+Implemented in this pass:
+
+- Added Tenant Admin-specific workspace tone so Platform Admin and HR Admin are not restyled accidentally.
+- Reworked Tenant Admin fallback navigation labels/groups to match the approved structure.
+- Replaced the dashboard hero/card stack with:
+  - Tenant Status, Configuration Setup, Active Users, Plan & Billing KPI cards.
+  - Action Queue driven from existing setup/support/change-request/audit data.
+  - Tenant Readiness panel separated from setup completion.
+  - Recently Added Users preview linked to the full Users page.
+  - Roles & Permissions preview linked to the full Roles page.
+- Added Tenant Admin enterprise CSS layer for the shell, cards, tables, action queue, readiness list, previews, responsive behavior, and flatter enterprise styling.
+- Updated route/test expectations from `Tenant Admin Console` to `Account Control Center`.
+
+Implemented in the Users/Roles pass:
+
+- Reworked Users from a mutation-card list into a searchable enterprise directory table with User, Email, Roles, Status, Security, Last updated, and Actions columns.
+- Preserved the existing Invite member, Update roles, Activate/Suspend, and Revoke dialogs/actions and their validation behavior.
+- Added clearer user-access copy and tenant seat/role context in the header.
+- Reworked Roles & Permissions into an access-model workspace with:
+  - Left-side system/custom role inventory.
+  - Protected system-role and assigned-role messaging preserved.
+  - Right-side permission catalog overview grouped by module with risk badges.
+  - Existing Add role/Edit role permission editor and backend workflow unchanged.
+- Updated Tenant Admin browser assertions that depended on old labels such as `Member mutations`.
+
+Implemented in the Commercial/Setup/Governance pass:
+
+- Renamed the plan route heading to `Plan & Billing` to match the approved sidebar language.
+- Tightened Plan & Billing into a commercial workspace with subscription evidence, usage snapshots, and a denser governed change-request area.
+- Tightened Settings into a configuration/governance workspace while preserving the platform-reviewed account-change flow.
+- Corrected Setup Guide's `Manage access` action to route directly to `/tenant-admin/users`.
+- Added shared enterprise layout classes for Plan, Settings, Security, Support Access, and Trust Audit split workspaces.
+- Added denser change-request form/list styling and audit-ledger styling while keeping API payloads and transitions unchanged.
+- Updated active browser test expectations from `Plans And Subscription` to `Plan & Billing`.
+
+Implemented in the certification hardening pass:
+
+- Fixed demo workspace bootstrap so the seeded Tenant Admin persona receives the `tenant-admin` role, not only HR Admin permissions.
+- Changed platform admin first-admin provisioning default from `hr-admin` to `tenant-admin` so new tenant admins receive the intended Tenant Admin workspace access by default.
+- Fixed a Roles & Permissions layout overlay so the permission catalog preview cannot intercept role-row edit actions.
+- Hardened browser tests against data-dependent dashboard action-queue content and membership status text collisions.
+
+Verification:
+
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web exec tsc --noEmit` passed.
+- `pnpm --dir web build` passed.
+- `HRMS_API_BASE_URL=http://127.0.0.1:8001/api/v1 pnpm --dir web exec playwright test tests/e2e/tenant-admin-console-flows.spec.ts tests/e2e/tenant-admin-plan-settings-certification.spec.ts tests/e2e/tenant-admin-users-dialog-certification.spec.ts tests/e2e/tenant-admin-roles-certification.spec.ts tests/e2e/tenant-admin-support-access-certification.spec.ts tests/e2e/tenant-admin-security-trust-final-certification.spec.ts tests/e2e/tenant-admin-visual-accessibility-certification.spec.ts --project=chromium --workers=1` passed: **37 passed, 1 skipped** in 2.1m.
+- The skipped case is the existing environment-gated last-admin browser-authenticated mutation guard; the rest of Roles/RBAC, dashboard, users, plan/settings, support access, security, trust audit, desktop routes, and mobile dashboard certification passed locally.
+- Staging browser verification remains required after deployment.
+
+Next UI tasks:
+
+- Run the same Tenant Admin certification pack on staging after deployment.
+- Capture fresh representative screenshots for Dashboard, Users, Roles, Plan & Billing, Support Access, Trust Audit, Settings, and mobile Dashboard.
+- Decide whether Users should expose real Role/Status/Security filters and export now, or keep those as post-certification product enhancements until backend/export contracts are approved.
+- Decide whether Roles should expose a page-level editable permission matrix outside the existing role dialog, or keep the current dialog as the single mutation surface.
 
 ## Decision Escalation Rules
 
@@ -306,12 +378,11 @@ Tenant Admin can be marked current-build enterprise ready only when:
 
 ## Current Next Action
 
-Continue with Phase TA-EQ-7 deployment verification:
+Current next action:
 
-1. Deploy the Support Access hydration fix.
-2. Re-run `tenant-admin-final-production-readiness-certification.spec.ts` on staging.
-3. Re-run the Support Access route console probe or the full Tenant Admin suite if needed.
-4. Mark TA-EQ-7 complete when the integrated journey passes with no console/API errors.
+1. Check in the Tenant Admin final certification changes.
+2. Keep Tenant Admin frozen except critical defects.
+3. Add a second independent Tenant Admin credential later for deeper cross-tenant automation.
 
 ## Execution Log
 
@@ -322,6 +393,8 @@ Continue with Phase TA-EQ-7 deployment verification:
 | 2026-09-18 | TA-EQ-2 Dashboard/Setup Stabilization | Staging `https://hrms.accerio.in`, Chromium | `tenant-admin-console-flows.spec.ts` | 10/10 passed in 4.7m | Updated the dashboard/setup certification to assert dynamic visible-step progress copy. Confirmed dashboard, users, plan, support access, settings, setup, mobile setup, and audit evidence paths pass on staging. |
 | 2026-09-18 | TA-EQ-0 through TA-EQ-6 Baseline | Staging `https://hrms.accerio.in`, Chromium | Combined Tenant Admin suite | 40 passed, 1 skipped, 0 failed in 16.3m | Clean staging baseline across boundary/RBAC, dashboard, users, roles, plan/settings, support access, security readiness, trust audit, and visual/mobile/no-overflow coverage. Skipped item is an intentional environment-gated test. |
 | 2026-09-18 | TA-EQ-7 Final Integrated Journey | Staging `https://hrms.accerio.in`, Chromium | `tenant-admin-final-production-readiness-certification.spec.ts` | Functional journey completed, console gate failed | Added final integrated spec covering dashboard, users, roles, settings/plan change request, support access, security, trust audit export, and backend RBAC denial. It found a real UI quality defect: `/tenant-admin/support-access` emitted React hydration error `#418`. Root cause was timezone-sensitive expiry date formatting in a client component. Fixed locally by setting deterministic `Asia/Kolkata` timezone in `tenant-support-access-actions.tsx`; staging rerun pending deployment. |
+| 2026-09-18 | TA-EQ-7 Deployment Verification | Staging `https://hrms.accerio.in`, Chromium | `tenant-admin-final-production-readiness-certification.spec.ts` | 1/1 passed in 3.2m | Final integrated Tenant Admin journey passed after deployment. Certified dashboard, users, roles, settings/plan change request, support access decision-note workflow, security readiness, trust audit download/checksum, and backend wrong-persona denial. |
+| 2026-09-18 | TA-EQ-7 Hydration Verification | Staging `https://hrms.accerio.in`, Chromium route probe | `/tenant-admin/support-access` console probe | Passed | Confirmed `support-access no console errors`; React hydration error `#418` is no longer emitted on the deployed build. |
 
 ## Current Confidence After Baseline
 
@@ -337,7 +410,7 @@ Continue with Phase TA-EQ-7 deployment verification:
 
 | ID | Module/Page | Issue | Type | Status | Severity | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| TA-EQ-7-001 | Tenant Admin / Support Access | Support Access emitted React hydration error `#418` because support grant expiry dates were formatted without a deterministic timezone in a client component. | UI/UX | Fixed locally, pending deployment verification | Medium | Console probe isolated error to `/tenant-admin/support-access`; final integrated spec failed console gate after functional journey completed. |
+| TA-EQ-7-001 | Tenant Admin / Support Access | Support Access emitted React hydration error `#418` because support grant expiry dates were formatted without a deterministic timezone in a client component. | UI/UX | Closed on staging | Medium | Final integrated spec passed after deployment; Support Access console probe reported no console errors. |
 
 ## Non-Blocking Gaps
 

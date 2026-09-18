@@ -12,7 +12,7 @@ test.describe("Tenant admin plan and settings certification", () => {
     await expect(requestAccountChange).toBeVisible();
     await requestAccountChange.click();
 
-    await expectPageReady(page, "Plans And Subscription");
+    await expectPageReady(page, "Plan & Billing");
     await expect(page.getByRole("main").getByLabel("Type")).toHaveValue("configuration_change");
     await expect(page.getByRole("main").getByLabel("Title")).toHaveValue("Update tenant account profile");
     await expect(page.getByRole("main").getByLabel("Target ref")).toHaveValue("tenant.account.profile");
@@ -26,7 +26,7 @@ test.describe("Tenant admin plan and settings certification", () => {
 
   test("validates configuration-change request fields before submit", async ({ page }) => {
     await gotoAuthenticated(page, "/tenant-admin/plan");
-    await expectPageReady(page, "Plans And Subscription");
+    await expectPageReady(page, "Plan & Billing");
 
     const requestType = page.getByRole("main").getByLabel("Type");
     const title = page.getByRole("main").getByLabel("Title");
@@ -56,7 +56,7 @@ test.describe("Tenant admin plan and settings certification", () => {
 
   test("creates and cancels a disposable configuration-change request", async ({ page }) => {
     await gotoAuthenticated(page, "/tenant-admin/plan");
-    await expectPageReady(page, "Plans And Subscription");
+    await expectPageReady(page, "Plan & Billing");
 
     const requestTitle = `Settings cancel proof ${Date.now()}`;
     await page.getByRole("main").getByLabel("Type").selectOption("configuration_change");
@@ -93,7 +93,7 @@ test.describe("Tenant admin plan and settings certification", () => {
 
   test("keeps the change request queue paginated and role protected", async ({ page }) => {
     await gotoAuthenticated(page, "/tenant-admin/plan");
-    await expectPageReady(page, "Plans And Subscription");
+    await expectPageReady(page, "Plan & Billing");
 
     const rows = page.locator(".tenant-change-request-row");
     await expect(rows.first()).toBeVisible();

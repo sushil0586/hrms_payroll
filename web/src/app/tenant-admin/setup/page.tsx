@@ -54,7 +54,7 @@ export default async function TenantSetupGuidePage() {
       status: data.summary.active_membership_count > 1 ? "ready" : "warning",
       detail: "Invite admins, assign roles, and keep seat usage within plan limits.",
       evidence: `${data.summary.active_membership_count} active members, ${data.role_coverage.length} role groups`,
-      href: "/tenant-admin",
+      href: "/tenant-admin/users",
       action: "Manage access",
     },
     {

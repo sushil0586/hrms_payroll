@@ -253,6 +253,7 @@ class Command(BaseCommand):
 
     def _seed_roles(self, *, tenant, memberships):
         for code, name, membership_key in [
+            ("tenant-admin", "Tenant Admin", "hr_admin"),
             ("hr-admin", "HR Admin", "hr_admin"),
             ("manager", "Manager", "manager"),
             ("employee", "Employee", "employee_riya"),

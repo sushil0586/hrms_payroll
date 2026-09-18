@@ -148,7 +148,7 @@ class PlatformOnboardingAdminContactWriteSerializer(serializers.Serializer):
 
 class PlatformProvisionAdminSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
-    role_code = serializers.CharField(max_length=60, required=False, default="hr-admin")
+    role_code = serializers.CharField(max_length=60, required=False, default="tenant-admin")
     role_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
     password = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)
     must_change_password = serializers.BooleanField(required=False, default=True)

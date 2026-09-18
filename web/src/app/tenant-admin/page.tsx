@@ -19,22 +19,6 @@ function statusBadgeClass(status: string) {
   return "readiness-badge readiness-badge--blocked";
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Not recorded";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
 function openChangeRequestCount(data: Awaited<ReturnType<typeof getTenantAdminConsole>>["data"]) {
   return data.change_request_management.recent_requests.filter((request) =>
     ["submitted", "approved"].includes(request.status),
@@ -57,6 +41,16 @@ function setupStepBadgeClass(status: "done" | "action" | "watch") {
   return "readiness-badge readiness-badge--blocked";
 }
 
+function actionPriorityClass(priority: "high" | "medium" | "low") {
+  if (priority === "high") {
+    return "tenant-priority tenant-priority--high";
+  }
+  if (priority === "medium") {
+    return "tenant-priority tenant-priority--medium";
+  }
+  return "tenant-priority tenant-priority--low";
+}
+
 export default async function TenantAdminConsolePage() {
   const sessionUser = await requireSessionPermission({
     permissionKeys: ["tenant.dashboard.view"],
@@ -70,7 +64,6 @@ export default async function TenantAdminConsolePage() {
   const warnings = data.governance_checks.filter((check) => check.status === "warning");
   const openRequests = openChangeRequestCount(data);
   const activeSupportGrants = activeSupportGrantCount(data);
-  const lastAudit = data.recent_audit_events[0]?.occurred_at ?? null;
   const setupSteps = [
     {
       label: "Confirm company profile",
@@ -115,43 +108,7 @@ export default async function TenantAdminConsolePage() {
   ] as const;
   const visibleSetupSteps = setupSteps.filter((step) => sessionHasAnyPermission(sessionUser, [...step.permissions]));
   const setupDoneCount = setupSteps.filter((step) => step.status === "done").length;
-  const visibleSetupDoneCount = visibleSetupSteps.filter((step) => step.status === "done").length;
   const setupCompletion = Math.round((setupDoneCount / setupSteps.length) * 100);
-  const controlCards = [
-    {
-      label: "Users",
-      value: data.summary.active_membership_count,
-      detail: `${data.summary.role_count} roles configured`,
-      href: "/tenant-admin/users",
-      action: "Manage users",
-      permissions: ["tenant.users.view", "tenant.users.manage"],
-    },
-    {
-      label: "Plan",
-      value: titleCase(commercial.plan.plan_ref),
-      detail: `${data.seat_usage.current_value}/${data.seat_usage.limit_value || "unlimited"} seats`,
-      href: "/tenant-admin/plan",
-      action: "Review plan",
-      permissions: ["tenant.plan.view"],
-    },
-    {
-      label: "Support",
-      value: activeSupportGrants,
-      detail: activeSupportGrants ? "Active or pending grants" : "No active support grants",
-      href: "/tenant-admin/support-access",
-      action: "Open support",
-      permissions: ["tenant.support_access.request", "tenant.support_access.approve"],
-    },
-    {
-      label: "Audit",
-      value: data.recent_audit_events.length,
-      detail: `Last event ${formatDateTime(lastAudit)}`,
-      href: "/tenant-admin/trust-audit",
-      action: "Review audit",
-      permissions: ["tenant.audit.view", "tenant.audit.export"],
-    },
-  ];
-  const visibleControlCards = controlCards.filter((item) => sessionHasAnyPermission(sessionUser, item.permissions));
   const nextStep =
     visibleSetupSteps.find((step) => step.status === "action") ??
     visibleSetupSteps.find((step) => step.status === "watch") ??
@@ -159,150 +116,235 @@ export default async function TenantAdminConsolePage() {
   const canOpenSetup = sessionHasAnyPermission(sessionUser, ["tenant.setup.view"]);
   const canOpenUsers = sessionHasAnyPermission(sessionUser, ["tenant.users.view", "tenant.users.manage"]);
   const canExportAudit = sessionHasAnyPermission(sessionUser, ["tenant.audit.export"]);
-  const canReviewBlockers = sessionHasAnyPermission(sessionUser, ["tenant.security.view"]);
+  const actionQueue = [
+    nextStep
+      ? {
+          priority: nextStep.status === "action" ? "high" : "medium",
+          action: nextStep.label,
+          detail: nextStep.detail,
+          owner: "Tenant Admin",
+          due: nextStep.status === "action" ? "Today" : "This week",
+          status: nextStep.status === "done" ? "ready" : nextStep.status === "watch" ? "review" : "pending",
+          href: nextStep.href,
+          label: nextStep.action,
+        }
+      : null,
+    activeSupportGrants
+      ? {
+          priority: "high",
+          action: "Review support access",
+          detail: `${activeSupportGrants} support grant${activeSupportGrants === 1 ? "" : "s"} active or pending.`,
+          owner: "Tenant Admin",
+          due: "Today",
+          status: "review",
+          href: "/tenant-admin/support-access",
+          label: "Review",
+        }
+      : null,
+    openRequests
+      ? {
+          priority: "medium",
+          action: "Review account change requests",
+          detail: `${openRequests} plan or configuration request${openRequests === 1 ? "" : "s"} require tracking.`,
+          owner: "Finance",
+          due: "This week",
+          status: "pending",
+          href: "/tenant-admin/plan",
+          label: "Open",
+        }
+      : null,
+    canExportAudit
+      ? {
+          priority: "low",
+          action: "Validate audit export",
+          detail: `${data.recent_audit_events.length} recent lifecycle events recorded.`,
+          owner: "Compliance",
+          due: "This week",
+          status: "ready",
+          href: "/tenant-admin/trust-audit",
+          label: "View",
+        }
+      : null,
+  ].filter(Boolean) as Array<{
+    priority: "high" | "medium" | "low";
+    action: string;
+    detail: string;
+    owner: string;
+    due: string;
+    status: string;
+    href: string;
+    label: string;
+  }>;
+  const recentMembers = data.membership_management.recent_memberships.slice(0, 3);
+  const previewRoles = data.role_management.roles.slice(0, 4);
 
   return (
-    <main className="shell shell--workspace">
+    <main className="shell shell--workspace tenant-enterprise-page">
       <PageIntro
-        eyebrow={result.state === "live" ? "Live tenant console" : "Demo tenant console"}
-        title="Tenant Admin Console"
-        description="Start here to see the account state, the next launch action, and the focused pages that need attention."
-        className="page-header-surface page-header-surface--compact"
+        eyebrow="Tenant Admin"
+        title="Account Control Center"
+        description="Manage your organization's users, access, setup, security, and subscription in one place."
+        className="tenant-page-intro"
         actions={
           <>
-            {canOpenSetup ? (
-              <Link className="button button--primary" href="/tenant-admin/setup">
-                Continue setup
-              </Link>
-            ) : null}
-            {canOpenUsers ? (
-              <Link className="button button--secondary" href="/tenant-admin/users">
-                Manage users
-              </Link>
-            ) : null}
             {canExportAudit ? (
               <a className="button button--secondary" href="/api/tenant-admin/commercial-support-audit/download">
                 Download audit
               </a>
             ) : null}
+            {canOpenSetup ? (
+              <Link className="button button--secondary" href="/tenant-admin/settings">
+                Request account change
+              </Link>
+            ) : null}
+            {canOpenUsers ? (
+              <Link className="button button--primary" href="/tenant-admin/users">
+                Invite user
+              </Link>
+            ) : null}
           </>
         }
-        pills={[data.tenant.code, commercial.plan.edition, commercial.subscription.status]}
-        showPills
       />
 
-      <section className="tenant-identity-strip" aria-label="Selected tenant">
-        <div>
-          <span>Selected tenant</span>
-          <h2>{data.tenant.name}</h2>
+      <section className="section tenant-enterprise-kpis" id="dashboard">
+        <div className="tenant-status-card">
+          <span className="tenant-status-card__icon" aria-hidden="true">▦</span>
+          <div>
+            <span className="metric-tile__label">Tenant Status</span>
+            <strong>{data.tenant.name}</strong>
+            <small>{data.tenant.code} · {data.tenant.country_code} · {data.tenant.timezone}</small>
+          </div>
+          <span className={statusBadgeClass(data.tenant.status)}>{titleCase(data.tenant.status)}</span>
         </div>
-        <span className={statusBadgeClass(data.tenant.status)}>{titleCase(data.tenant.status)}</span>
+        <MetricTile label="Configuration Setup" value={`${setupCompletion}%`} trend={`${setupDoneCount} of ${setupSteps.length} required steps complete`} />
+        <MetricTile label="Active Users" value={data.summary.active_membership_count} trend={`${data.summary.role_count} roles configured`} />
+        <MetricTile
+          label="Plan & Billing"
+          value={titleCase(commercial.plan.plan_ref)}
+          trend={data.seat_usage.limit_value ? `${data.seat_usage.current_value} of ${data.seat_usage.limit_value} users` : "Unlimited users"}
+        />
       </section>
 
-      <section className="section" id="dashboard">
-        <div className="metric-grid-modern">
-          <MetricTile label="Account posture" value={titleCase(data.summary.status)} trend={`${data.summary.blocked_check_count} blockers`} />
-          <MetricTile label="Setup" value={`${setupCompletion}%`} trend={`${setupDoneCount}/${setupSteps.length} steps ready`} />
-          <MetricTile label="Plan" value={titleCase(commercial.plan.plan_ref)} trend={commercial.subscription.billing_provider_ref || "Provider pending"} />
-          <MetricTile label="Seats" value={`${data.seat_usage.current_value}/${data.seat_usage.limit_value || "unlimited"}`} trend={titleCase(data.seat_usage.status)} />
-          <MetricTile label="Open requests" value={openRequests} trend="Plan and configuration" />
-        </div>
-      </section>
-
-      <section className="section tenant-control-center" data-testid="tenant-admin-control-center">
-        <article className="panel-card-soft tenant-console-panel tenant-control-card tenant-control-card--primary">
+      <section className="section tenant-control-center tenant-control-center--dashboard" data-testid="tenant-admin-control-center">
+        <article className="panel-card-soft tenant-console-panel tenant-action-queue">
           <div className="tenant-console-panel__header">
             <div>
-              <span className="workspace-card__eyebrow">Control center</span>
-              <h2>Start here</h2>
+              <span className="workspace-card__eyebrow">Action Queue</span>
+              <h2>Items that need your attention</h2>
             </div>
-            <span className={statusBadgeClass(data.summary.commercial_can_launch ? "ready" : data.summary.status)}>
-              {data.summary.commercial_can_launch ? "Can launch" : titleCase(data.summary.status)}
-            </span>
+            <span className="record-chip">{actionQueue.length} open</span>
           </div>
-          <div className="tenant-next-action" data-testid="tenant-next-action">
-            <div>
-              <span>Next action</span>
-              <strong>{nextStep?.label ?? "No pending action"}</strong>
-              <p>{nextStep?.detail ?? "You have view access to this tenant dashboard."}</p>
+          <div className="tenant-action-table" data-testid="tenant-next-action">
+            <div className="tenant-action-table__head">
+              <span>Priority</span>
+              <span>Action</span>
+              <span>Owner</span>
+              <span>Due date</span>
+              <span>Status</span>
+              <span>Action</span>
             </div>
-            {nextStep ? <Link className="button button--primary" href={nextStep.href}>{nextStep.action}</Link> : null}
-          </div>
-          <div className="tenant-control-action-list">
-            {visibleControlCards.map((item) => (
-              <div className="tenant-control-action" key={item.label}>
+            {actionQueue.map((item) => (
+              <div className="tenant-action-table__row" key={`${item.action}-${item.href}`}>
+                <span className={actionPriorityClass(item.priority)}>{titleCase(item.priority)}</span>
                 <div>
-                  <strong>{item.label}</strong>
-                  <span>{item.detail}</span>
+                  <strong>{item.action}</strong>
+                  <small>{item.detail}</small>
                 </div>
-                <span className="record-chip">{item.value}</span>
-                <Link className="button button--secondary" href={item.href}>{item.action}</Link>
+                <span>{item.owner}</span>
+                <span>{item.due}</span>
+                <span className={statusBadgeClass(item.status)}>{titleCase(item.status)}</span>
+                <Link className="button button--secondary button--compact" href={item.href}>{item.label}</Link>
               </div>
             ))}
           </div>
         </article>
 
-        <article className="panel-card-soft tenant-console-panel tenant-control-card">
+        <article className="panel-card-soft tenant-console-panel tenant-readiness-card">
           <div className="tenant-console-panel__header">
             <div>
-              <span className="workspace-card__eyebrow">Account state</span>
-              <h2>Readiness snapshot</h2>
+              <span className="workspace-card__eyebrow">Tenant Readiness</span>
+              <h2>Complete these key items to ensure smooth operation.</h2>
             </div>
-            <span className={statusBadgeClass(data.summary.status)}>{titleCase(data.summary.status)}</span>
+            <span className={statusBadgeClass(data.summary.commercial_can_launch ? "ready" : data.summary.status)}>
+              {setupDoneCount} of {setupSteps.length} ready
+            </span>
           </div>
-          <div className="tenant-console-detail-grid">
-            <div className="detail-row">
-              <span>Warnings</span>
-              <strong>{warnings.length}</strong>
-            </div>
-            <div className="detail-row">
-              <span>Published configs</span>
-              <strong>{data.configuration_health.published_count}</strong>
-            </div>
-            <div className="detail-row">
-              <span>Active members</span>
-              <strong>{data.summary.active_membership_count}</strong>
-            </div>
-            <div className="detail-row">
-              <span>Subscription</span>
-              <strong>{titleCase(commercial.subscription.status)}</strong>
-            </div>
-          </div>
-          <div className="form-actions-bar">
-            <span className="muted">Open each focused page to complete account, access, support, and evidence tasks.</span>
-            {canReviewBlockers ? <Link className="button button--primary" href="/tenant-admin/security-readiness">Review blockers</Link> : null}
+          <div className="tenant-readiness-list">
+            {visibleSetupSteps.slice(0, 4).map((step) => (
+              <div className="tenant-readiness-item" key={step.label}>
+                <span aria-hidden="true">{step.status === "done" ? "✓" : step.status === "watch" ? "!" : "•"}</span>
+                <div>
+                  <strong>{step.label}</strong>
+                  <small>{step.detail}</small>
+                </div>
+                <span className={setupStepBadgeClass(step.status)}>{titleCase(step.status === "done" ? "ready" : step.status)}</span>
+              </div>
+            ))}
           </div>
         </article>
       </section>
 
-      <section className="section" data-testid="tenant-setup-guide">
-        <article className="panel-card-soft tenant-console-panel tenant-setup-guide">
-          <div className="tenant-console-panel__header">
-            <div>
-              <span className="workspace-card__eyebrow">Launch progress</span>
-              <h2>Setup guide</h2>
+      <section className="section tenant-dashboard-preview-grid" data-testid="tenant-setup-guide">
+        {canOpenUsers ? (
+          <article className="panel-card-soft tenant-console-panel tenant-dashboard-preview">
+            <div className="tenant-console-panel__header">
+              <div>
+                <span className="workspace-card__eyebrow">Recently Added Users</span>
+                <h2>User Management</h2>
+              </div>
+              <Link className="button button--secondary button--compact" href="/tenant-admin/users">
+                View all users
+              </Link>
             </div>
-            <span className={statusBadgeClass(data.summary.commercial_can_launch ? "ready" : data.summary.status)}>
-              {setupCompletion}% complete
-            </span>
-          </div>
-          <div className="tenant-setup-guide__body">
-            <div className="tenant-setup-guide__summary">
-              <strong>{visibleSetupDoneCount} of {visibleSetupSteps.length} visible launch steps complete</strong>
-              <span>Each action opens the focused page where your role has access.</span>
-            </div>
-            <div className="tenant-setup-step-list">
-              {visibleSetupSteps.map((step, index) => (
-                <div className="tenant-setup-step" key={step.label}>
-                  <div className="tenant-setup-step__index">{index + 1}</div>
-                  <div>
-                    <strong>{step.label}</strong>
-                    <span>{step.detail}</span>
-                  </div>
-                  <span className={setupStepBadgeClass(step.status)}>{titleCase(step.status)}</span>
-                  <Link className="button button--secondary" href={step.href}>{step.action}</Link>
+            <div className="tenant-dashboard-table">
+              <div className="tenant-dashboard-table__head">
+                <span>User</span>
+                <span>Email</span>
+                <span>Roles</span>
+                <span>Status</span>
+              </div>
+              {recentMembers.map((member) => (
+                <div className="tenant-dashboard-table__row" key={member.id}>
+                  <strong>{member.display_name || member.username}</strong>
+                  <span>{member.email || member.username}</span>
+                  <span>{member.roles.map((role) => role.name).join(", ") || "No role"}</span>
+                  <span className={statusBadgeClass(member.membership_status)}>{titleCase(member.membership_status)}</span>
                 </div>
               ))}
+            </div>
+          </article>
+        ) : null}
+
+        <article className="panel-card-soft tenant-console-panel tenant-dashboard-preview">
+          <div className="tenant-console-panel__header">
+            <div>
+              <span className="workspace-card__eyebrow">Roles & Permissions</span>
+              <h2>Access design</h2>
+            </div>
+            <Link className="button button--secondary button--compact" href="/tenant-admin/roles">
+              Manage all roles
+            </Link>
+          </div>
+          <div className="tenant-role-preview">
+            <div className="tenant-role-preview__list">
+              {previewRoles.map((role) => (
+                <div className="tenant-role-preview__item" key={role.id}>
+                  <div>
+                    <strong>{role.name}</strong>
+                    <span>{role.active_membership_count} assigned users</span>
+                  </div>
+                  <span className="record-chip">{role.is_system_role ? "System" : "Custom"}</span>
+                </div>
+              ))}
+            </div>
+            <div className="tenant-role-preview__matrix">
+              <strong>Permission Matrix</strong>
+              <span>Grouped permissions, protected system roles, and custom-role editing are available on the full Roles page.</span>
+              <div className="tenant-permission-mini-grid" aria-hidden="true">
+                <span>Module</span><span>View</span><span>Create</span><span>Edit</span><span>Delete</span>
+                <span>User Management</span><span>✓</span><span>✓</span><span>✓</span><span>–</span>
+                <span>Tenant Governance</span><span>✓</span><span>–</span><span>✓</span><span>–</span>
+              </div>
             </div>
           </div>
         </article>

@@ -24,6 +24,25 @@ function emailLooksValid(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function formatDate(value?: string | null) {
+  if (!value) return "Not recorded";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Not recorded";
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(parsed);
+}
+
+function securityStateLabel(membership: TenantMembership) {
+  if (membership.membership_status === "invited") return "Invitation pending";
+  if (membership.membership_status === "active") return membership.is_user_active ? "Workspace active" : "User inactive";
+  if (membership.membership_status === "suspended") return "Access suspended";
+  if (membership.membership_status === "revoked") return "Access revoked";
+  return titleCase(membership.membership_status);
+}
+
 type Props = {
   canManageUsers: boolean;
   data: TenantAdminConsole;
@@ -259,20 +278,21 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
   }
 
   return (
-    <div className="tenant-membership-actions">
+    <div className="tenant-membership-actions tenant-directory-panel">
       <div className="tenant-console-panel__header">
         <div>
-          <span className="workspace-card__eyebrow">Member mutations</span>
-          <h2>User access</h2>
+          <span className="workspace-card__eyebrow">User Directory</span>
+          <h2>Users</h2>
         </div>
         <div className="tenant-membership-actions__header-actions">
           <span className="record-chip">{data.seat_usage.current_value}/{data.seat_usage.limit_value || "unlimited"} seats</span>
+          <span className="record-chip">{roleOptions.length} roles available</span>
           <button className="button button--primary" disabled={!canManageUsers} onClick={() => setInviteOpen(true)} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
             {actionLabels.invite ?? "Invite member"}
           </button>
         </div>
       </div>
-      <p className="tenant-console-empty">Invite users and update roles from focused dialogs. Suspended or revoked users lose tenant workspace access.</p>
+      <p className="tenant-console-empty">Search, review, invite, activate, suspend, revoke, and update roles without leaving the tenant workspace.</p>
       {!canManageUsers ? <span className="tenant-inline-notice tenant-inline-notice--muted" role="status">You can view tenant users. User changes require tenant.users.manage.</span> : null}
       {notice ? <span className="tenant-inline-notice" role="status">{notice}</span> : null}
 
@@ -294,15 +314,29 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
         </div>
       </div>
 
-      <div className="tenant-membership-actions__members">
+      <div className="tenant-membership-actions__members tenant-directory-table">
+        <div className="tenant-directory-header" role="row">
+          <span>User</span>
+          <span>Email</span>
+          <span>Roles</span>
+          <span>Status</span>
+          <span>Security</span>
+          <span>Last updated</span>
+          <span>Actions</span>
+        </div>
         {pagedMemberships.map((membership) => (
-          <div className="tenant-membership-row" key={membership.id}>
-            <div>
+          <div className="tenant-membership-row tenant-directory-row" key={membership.id}>
+            <div className="tenant-directory-row__identity">
               <strong>{membership.display_name}</strong>
-              <span>{membership.email}</span>
-              <span>{membership.roles.map((role) => role.name).join(", ") || "No role"}</span>
+              <span>{membership.username || "Username not set"}</span>
             </div>
+            <span>{membership.email}</span>
+            <span>{membership.roles.map((role) => role.name).join(", ") || "No role"}</span>
             <span className="record-chip">{titleCase(membership.membership_status)}</span>
+            <span className={`tenant-security-state tenant-security-state--${membership.membership_status === "active" && membership.is_user_active ? "ready" : "attention"}`}>
+              {securityStateLabel(membership)}
+            </span>
+            <span>{formatDate(membership.updated_at ?? membership.created_at)}</span>
             <div className="tenant-membership-row__actions">
               <button className="button button--secondary" disabled={!canManageUsers || busyRef.startsWith(`${membership.id}:`)} onClick={() => openEditDialog(membership)} title={!canManageUsers ? "Requires tenant.users.manage" : undefined} type="button">
                 {actionLabels.update_roles ?? "Update roles"}

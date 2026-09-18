@@ -27,7 +27,7 @@ type Props = {
   productLabel: string;
   workspaceLabel: string;
   searchHint: string;
-  workspaceTone?: "admin" | "employee" | "manager";
+  workspaceTone?: "admin" | "employee" | "manager" | "tenant";
   userLabel?: string | null;
   navTitle?: string;
   navItems: WorkspaceNavItem[];

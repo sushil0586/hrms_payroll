@@ -118,7 +118,7 @@ test.describe("Production tenant and role isolation proof", () => {
     await expectPageReady(page, "Tenant Admin Console");
     await expectVisibleText(page, [
       "Role coverage",
-      "Member mutations",
+      "User Directory",
       "Support access",
       "Scoped support grants",
       "Request access",

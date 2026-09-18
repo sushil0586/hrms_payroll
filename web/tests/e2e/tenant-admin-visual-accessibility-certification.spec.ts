@@ -6,18 +6,18 @@ import { gotoAuthenticated, tenantAdmin } from "../helpers/staging-auth";
 const routes = [
   {
     path: "/tenant-admin",
-    heading: "Tenant Admin Console",
+    heading: "Account Control Center",
     landmark: "tenant-admin-control-center",
-    requiredLabels: ["Dashboard", "Users", "Plan", "Setup Guide", "Support Access", "Trust Audit", "Settings", "Security"],
+    requiredLabels: ["Dashboard", "Users", "Roles", "Plan", "Setup Guide", "Support Access", "Trust Audit", "Settings", "Security"],
   },
   {
     path: "/tenant-admin/users",
     heading: "Tenant User Management",
-    requiredText: ["Member mutations", "Invite member", "Search members"],
+    requiredText: ["User Directory", "Invite member", "Search members"],
   },
   {
     path: "/tenant-admin/plan",
-    heading: "Plans And Subscription",
+    heading: "Plan & Billing",
     requiredText: ["Commercial profile", "Current subscription", "Recent meter snapshots"],
   },
   {
@@ -58,8 +58,8 @@ async function attachRouteScreenshot(page: Page, testInfo: TestInfo, name: strin
 async function expectTenantShell(page: Page) {
   await expect(page.getByRole("navigation", { name: "Tenant Admin navigation" })).toBeVisible();
   await expect(page.getByText("Account Control Center", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Home" }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Tenant" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /Dashboard/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /Users/ }).first()).toBeVisible();
 }
 
 test.describe("Tenant admin visual accessibility certification", () => {
@@ -86,11 +86,12 @@ test.describe("Tenant admin visual accessibility certification", () => {
   test("certifies mobile dashboard and navigation wrapping", async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await gotoAuthenticated(page, "/tenant-admin", tenantAdmin);
-    await expectPageReady(page, "Tenant Admin Console");
-    await expectTenantShell(page);
+    await expectPageReady(page, "Account Control Center");
+    await expect(page.getByRole("banner").getByText("Search users, setup, audit...")).toBeVisible();
+    await expect(page.getByRole("banner").getByText("Nisha Rao")).toBeVisible();
     await expect(page.getByTestId("tenant-next-action")).toBeVisible();
     await expect(page.getByTestId("tenant-setup-guide")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Manage users" }).first()).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link").first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await attachRouteScreenshot(page, testInfo, "mobile-tenant-admin-dashboard");
   });

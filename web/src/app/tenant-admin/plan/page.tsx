@@ -51,8 +51,8 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
     <main className="shell shell--workspace">
       <PageIntro
         eyebrow={result.state === "live" ? "Live plan control" : "Demo plan control"}
-        title="Plans And Subscription"
-        description="Review commercial posture and request plan or configuration changes."
+        title="Plan & Billing"
+        description="Review subscription, seat usage, billing provider status, invoices evidence, and governed commercial change requests."
         actions={
           <>
             <Link className="button button--primary" href="/tenant-admin">
@@ -78,7 +78,7 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
         </div>
       </section>
 
-      <section className="section tenant-console-grid">
+      <section className="section tenant-commercial-workspace">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>
@@ -134,7 +134,7 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
       </section>
 
       <section className="section">
-        <div className="panel-card-soft tenant-console-panel">
+        <div className="panel-card-soft tenant-console-panel tenant-change-request-workspace">
           <TenantChangeRequestActions
             canManageChangeRequests={canManageChangeRequests}
             data={data}

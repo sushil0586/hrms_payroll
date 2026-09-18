@@ -67,7 +67,7 @@ export default async function TenantAdminSettingsPage() {
         </div>
       </section>
 
-      <section className="section tenant-console-grid">
+      <section className="section tenant-settings-workspace">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>

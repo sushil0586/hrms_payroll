@@ -129,7 +129,7 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
         </div>
       </section>
 
-      <section className="section tenant-console-grid">
+      <section className="section tenant-audit-filter-workspace">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>
@@ -175,8 +175,8 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
         </div>
       </section>
 
-      <section className="section tenant-console-grid">
-        <div className="panel-card-soft tenant-console-panel">
+      <section className="section tenant-audit-filter-workspace">
+        <div className="panel-card-soft tenant-console-panel tenant-audit-ledger">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Event types</span>

@@ -3,15 +3,34 @@ import { getWorkspaceMenuSource } from "@/lib/ui/menu-catalog";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 const TENANT_ADMIN_NAV_ITEMS = [
-  { href: "/tenant-admin", label: "Dashboard", shortLabel: "DB", blurb: "Account posture", permissions: ["tenant.dashboard.view"] },
-  { href: "/tenant-admin/users", label: "Users", shortLabel: "US", blurb: "Invites and roles", permissions: ["tenant.users.view", "tenant.users.manage"] },
-  { href: "/tenant-admin/roles", label: "Roles", shortLabel: "RO", blurb: "Access design", permissions: ["tenant.roles.view", "tenant.roles.manage"] },
-  { href: "/tenant-admin/plan", label: "Plan", shortLabel: "PL", blurb: "Subscription", permissions: ["tenant.plan.view"] },
+  { href: "/tenant-admin", label: "Dashboard", shortLabel: "DB", blurb: "Tenant overview", permissions: ["tenant.dashboard.view"] },
+  { href: "/tenant-admin/users", label: "Users", shortLabel: "US", blurb: "Manage users", permissions: ["tenant.users.view", "tenant.users.manage"] },
+  { href: "/tenant-admin/roles", label: "Roles & Permissions", shortLabel: "RP", blurb: "Roles and access", permissions: ["tenant.roles.view", "tenant.roles.manage"] },
+  { href: "/tenant-admin/plan", label: "Plan & Billing", shortLabel: "PB", blurb: "Subscription details", permissions: ["tenant.plan.view"] },
   { href: "/tenant-admin/setup", label: "Setup Guide", shortLabel: "SG", blurb: "Launch steps", permissions: ["tenant.setup.view"] },
+  { href: "/tenant-admin/settings", label: "Settings", shortLabel: "ST", blurb: "Tenant configuration", permissions: ["tenant.settings.view"] },
+  { href: "/tenant-admin/security-readiness", label: "Security", shortLabel: "SE", blurb: "Access and policies", permissions: ["tenant.security.view"] },
   { href: "/tenant-admin/support-access", label: "Support Access", shortLabel: "SA", blurb: "Assisted operations", permissions: ["tenant.support_access.request", "tenant.support_access.approve"] },
-  { href: "/tenant-admin/trust-audit", label: "Trust Audit", shortLabel: "TA", blurb: "Evidence review", permissions: ["tenant.audit.view", "tenant.audit.export"] },
-  { href: "/tenant-admin/settings", label: "Settings", shortLabel: "ST", blurb: "Account controls", permissions: ["tenant.settings.view"] },
-  { href: "/tenant-admin/security-readiness", label: "Security", shortLabel: "SE", blurb: "Enterprise readiness", permissions: ["tenant.security.view"] },
+  { href: "/tenant-admin/trust-audit", label: "Audit Trail", shortLabel: "AT", blurb: "Activity logs", permissions: ["tenant.audit.view", "tenant.audit.export"] },
+];
+
+const TENANT_ADMIN_NAV_GROUPS = [
+  {
+    title: "Overview",
+    items: TENANT_ADMIN_NAV_ITEMS.slice(0, 3),
+  },
+  {
+    title: "Subscription",
+    items: TENANT_ADMIN_NAV_ITEMS.slice(3, 4),
+  },
+  {
+    title: "Tenant Setup",
+    items: TENANT_ADMIN_NAV_ITEMS.slice(4, 6),
+  },
+  {
+    title: "Security & Governance",
+    items: TENANT_ADMIN_NAV_ITEMS.slice(6),
+  },
 ];
 
 const TENANT_ADMIN_QUICK_LINKS = [
@@ -29,7 +48,7 @@ export default async function TenantAdminLayout({ children }: { children: React.
   const menuSource = await getWorkspaceMenuSource({
     workspace: "tenant-admin",
     sessionUser,
-    fallbackGroups: [{ title: "Workspace", items: TENANT_ADMIN_NAV_ITEMS }],
+    fallbackGroups: TENANT_ADMIN_NAV_GROUPS,
     fallbackQuickLinks: TENANT_ADMIN_QUICK_LINKS,
   });
 
@@ -44,7 +63,7 @@ export default async function TenantAdminLayout({ children }: { children: React.
       searchHint="Search users, setup, audit..."
       userLabel={userLabel}
       workspaceLabel="Account Control Center"
-      workspaceTone="admin"
+      workspaceTone="tenant"
     >
       {children}
     </WorkspaceChrome>
