@@ -33,6 +33,7 @@ function formatDateTime(value: string | null) {
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Kolkata",
   }).format(date);
 }
 

@@ -78,14 +78,14 @@ For every Tenant Admin route, certify:
 
 | Phase | Name | Objective | Deliverable | Status |
 | --- | --- | --- | --- | --- |
-| TA-EQ-0 | Fresh Discovery | Discover actual deployed Tenant Admin menus, pages, controls, APIs, and workflows in browser. | Updated inventory, screenshots, console/API/performance notes. | Planned |
-| TA-EQ-1 | Shell/RBAC/Menu | Prove menus are DB/permission-driven and unauthorized access fails closed. | Shell/RBAC certification results and defect list. | Planned |
-| TA-EQ-2 | Dashboard/Setup | Prove the account control center and setup guide work as intended. | Dashboard/setup browser certification. | Planned |
-| TA-EQ-3 | Users/Roles | Prove tenant user lifecycle, custom roles, permission assignment, and last-admin safety. | Users/roles CRUD and RBAC certification. | Planned |
-| TA-EQ-4 | Plan/Settings | Prove subscription visibility and governed account/config change workflow. | Plan/settings/change-request certification. | Planned |
-| TA-EQ-5 | Support Access | Prove scoped support request, approval, session, revoke, and audit workflow. | Support access lifecycle certification. | Planned |
-| TA-EQ-6 | Security/Trust | Prove security readiness and trust audit evidence/export. | Security/trust evidence certification. | Planned |
-| TA-EQ-7 | Final Production Readiness | Run full integrated staging journey and publish final confidence. | Final spec, report, defects, confidence level. | Planned |
+| TA-EQ-0 | Fresh Discovery | Discover actual deployed Tenant Admin menus, pages, controls, APIs, and workflows in browser. | Updated inventory, screenshots, console/API/performance notes. | Baseline passed |
+| TA-EQ-1 | Shell/RBAC/Menu | Prove menus are DB/permission-driven and unauthorized access fails closed. | Shell/RBAC certification results and defect list. | Baseline passed |
+| TA-EQ-2 | Dashboard/Setup | Prove the account control center and setup guide work as intended. | Dashboard/setup browser certification. | Baseline passed |
+| TA-EQ-3 | Users/Roles | Prove tenant user lifecycle, custom roles, permission assignment, and last-admin safety. | Users/roles CRUD and RBAC certification. | Baseline passed |
+| TA-EQ-4 | Plan/Settings | Prove subscription visibility and governed account/config change workflow. | Plan/settings/change-request certification. | Baseline passed |
+| TA-EQ-5 | Support Access | Prove scoped support request, approval, session, revoke, and audit workflow. | Support access lifecycle certification. | Baseline passed |
+| TA-EQ-6 | Security/Trust | Prove security readiness and trust audit evidence/export. | Security/trust evidence certification. | Baseline passed |
+| TA-EQ-7 | Final Production Readiness | Run full integrated staging journey and publish final confidence. | Final spec, report, defects, confidence level. | Pending deployment rerun |
 
 ## Decision Escalation Rules
 
@@ -306,9 +306,40 @@ Tenant Admin can be marked current-build enterprise ready only when:
 
 ## Current Next Action
 
-Start Phase TA-EQ-0 on staging:
+Continue with Phase TA-EQ-7 deployment verification:
 
-1. Browser-login as Tenant Admin.
-2. Rediscover all Tenant Admin menus/routes/actions.
-3. Update this document with actual deployed inventory and any gaps.
-4. Then run or extend Playwright coverage module by module.
+1. Deploy the Support Access hydration fix.
+2. Re-run `tenant-admin-final-production-readiness-certification.spec.ts` on staging.
+3. Re-run the Support Access route console probe or the full Tenant Admin suite if needed.
+4. Mark TA-EQ-7 complete when the integrated journey passes with no console/API errors.
+
+## Execution Log
+
+| Date | Phase | Environment | Evidence | Result | Notes |
+| --- | --- | --- | --- | --- | --- |
+| 2026-09-18 | TA-EQ-0 Fresh Discovery | Staging `https://hrms.accerio.in`, Chromium | `tenant-admin-visual-accessibility-certification.spec.ts` | 9/9 passed in 2.2m | Confirmed deployed Tenant Admin routes for dashboard, users, plan, setup, support access, trust audit, settings, security readiness, and mobile dashboard/navigation wrapping. Screenshots captured by Playwright attachments. No horizontal overflow found in certified routes. |
+| 2026-09-18 | TA-EQ-0/Functional Baseline | Staging `https://hrms.accerio.in`, Chromium | Combined Tenant Admin suite | 38 passed, 1 skipped, 2 failed in 18.1m | Failures were both stale test assertions expecting hard-coded `of 5 launch steps complete`. Live UI now correctly uses permission-aware copy: `X of Y visible launch steps complete`. No functional workflow failure found in that run. |
+| 2026-09-18 | TA-EQ-2 Dashboard/Setup Stabilization | Staging `https://hrms.accerio.in`, Chromium | `tenant-admin-console-flows.spec.ts` | 10/10 passed in 4.7m | Updated the dashboard/setup certification to assert dynamic visible-step progress copy. Confirmed dashboard, users, plan, support access, settings, setup, mobile setup, and audit evidence paths pass on staging. |
+| 2026-09-18 | TA-EQ-0 through TA-EQ-6 Baseline | Staging `https://hrms.accerio.in`, Chromium | Combined Tenant Admin suite | 40 passed, 1 skipped, 0 failed in 16.3m | Clean staging baseline across boundary/RBAC, dashboard, users, roles, plan/settings, support access, security readiness, trust audit, and visual/mobile/no-overflow coverage. Skipped item is an intentional environment-gated test. |
+| 2026-09-18 | TA-EQ-7 Final Integrated Journey | Staging `https://hrms.accerio.in`, Chromium | `tenant-admin-final-production-readiness-certification.spec.ts` | Functional journey completed, console gate failed | Added final integrated spec covering dashboard, users, roles, settings/plan change request, support access, security, trust audit export, and backend RBAC denial. It found a real UI quality defect: `/tenant-admin/support-access` emitted React hydration error `#418`. Root cause was timezone-sensitive expiry date formatting in a client component. Fixed locally by setting deterministic `Asia/Kolkata` timezone in `tenant-support-access-actions.tsx`; staging rerun pending deployment. |
+
+## Current Confidence After Baseline
+
+| Area | Confidence | Notes |
+| --- | ---: | --- |
+| Functional readiness | 95% | Staging browser suite passed across Tenant Admin dashboard, users, roles, plan/settings, support access, security, trust audit, setup, and boundaries. |
+| Browser QA coverage | 95% | 40 passing staging tests plus route screenshots/mobile/no-overflow coverage. |
+| UI/UX readiness | 93-95% | No alignment or overflow issue found in certified routes. Dashboard progress copy is now permission-aware and tested dynamically. |
+| RBAC and menu confidence | 94-95% | Limited role menu visibility, disabled actions, backend denials, wrong-persona route denial, and last-admin lockout passed. |
+| Tenant isolation confidence | 90-92% | Active tenant scoping and wrong-role denial passed. True two-tenant automation still needs a second independent tenant-admin credential. |
+
+## Open Defects
+
+| ID | Module/Page | Issue | Type | Status | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| TA-EQ-7-001 | Tenant Admin / Support Access | Support Access emitted React hydration error `#418` because support grant expiry dates were formatted without a deterministic timezone in a client component. | UI/UX | Fixed locally, pending deployment verification | Medium | Console probe isolated error to `/tenant-admin/support-access`; final integrated spec failed console gate after functional journey completed. |
+
+## Non-Blocking Gaps
+
+- Add a second independent Tenant Admin credential for true two-tenant isolation automation.
+- Add a single final integrated Tenant Admin production-readiness spec, similar to Platform Admin, so the end-to-end release evidence is one coherent customer-owner journey rather than only module-level suites.

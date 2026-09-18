@@ -17,7 +17,7 @@ test.describe("Tenant admin console", () => {
     await expect(setupGuide.getByText("Launch progress", { exact: true })).toBeVisible();
     await expect(setupGuide.getByRole("heading", { name: "Setup guide" })).toBeVisible();
     await expect(setupGuide.getByText(/% complete/)).toBeVisible();
-    await expect(setupGuide.getByText(/of 5 launch steps complete/)).toBeVisible();
+    await expect(setupGuide.getByText(/of \d+ visible launch steps complete/)).toBeVisible();
     for (const step of [
       "Confirm company profile",
       "Invite workspace owners",
