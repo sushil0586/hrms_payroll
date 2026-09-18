@@ -8996,6 +8996,21 @@ select.input-control {
 
 }
 
+@media (max-width: 1179px) {
+  .workspace-tone--admin .support-session-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-tone--admin .app-main,
+  .workspace-tone--admin .app-content,
+  .workspace-tone--admin main,
+  .workspace-tone--admin section,
+  .workspace-tone--admin article {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
 @media (min-width: 1320px) {
   .salary-setup-workspace {
     grid-template-columns: minmax(220px, 240px) minmax(0, 1fr) minmax(280px, 310px);
@@ -9215,6 +9230,10 @@ select.input-control {
 
   .public-workspace-grid {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-tone--admin .support-session-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
