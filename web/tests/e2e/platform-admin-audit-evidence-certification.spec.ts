@@ -58,7 +58,7 @@ function uniqueRunRef() {
   return new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14).toLowerCase();
 }
 
-async function openPlatformTab(page: Page, name: "Tenants" | "Launch Checklist" | "Tenant Admin Users" | "Setup Templates" | "Events") {
+async function openPlatformTab(page: Page, name: "Tenants" | "Launch Readiness" | "Admin Access" | "Setup Templates" | "Audit Logs") {
   await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();
   await expect(page.getByRole("tab", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-selected", "true");
 }
@@ -123,6 +123,7 @@ test.describe("Platform admin audit evidence certification", () => {
     await page.reload();
     await namedControl(policyPackCard, "policy_pack_search").fill(packCode);
     await page.locator(".tenant-support-access-row").filter({ hasText: packCode }).getByRole("button", { name: "Publish" }).click();
+    await page.getByRole("dialog", { name: "Publish setup template?" }).getByRole("button", { name: "Publish template" }).click();
     await expect(notice(page).getByText("Policy pack published.", { exact: true })).toBeVisible();
 
     await openPlatformTab(page, "Tenants");
@@ -159,7 +160,7 @@ test.describe("Platform admin audit evidence certification", () => {
     evidence = await onboardingPayload(page, tenantId ?? "");
     expectEvent(evidence, "tenant_prepared", new RegExp(tenantCode));
 
-    await openPlatformTab(page, "Tenant Admin Users");
+    await openPlatformTab(page, "Admin Access");
     const contactsCard = await openAddContactDialog(page);
     await namedControl(contactsCard, "full_name").fill(adminName);
     await namedControl(contactsCard, "email").fill(adminEmail);
@@ -173,7 +174,7 @@ test.describe("Platform admin audit evidence certification", () => {
     expectEvent(evidence, "admin_contact_added", new RegExp(adminEmail));
     expect(evidence.admin_contacts.some((contact) => contact.email === adminEmail && contact.is_primary)).toBeTruthy();
 
-    await openPlatformTab(page, "Tenant Admin Users");
+    await openPlatformTab(page, "Admin Access");
     const adminContactsCard = card(page, "Admin contacts");
     await adminContactsCard.locator(".tenant-support-access-row").filter({ hasText: adminEmail }).getByRole("button", { name: "Edit" }).click();
     const editContactForm = adminContactsCard.locator(".platform-contact-edit-form");
@@ -186,7 +187,7 @@ test.describe("Platform admin audit evidence certification", () => {
     expectEvent(evidence, "admin_contact_updated", new RegExp(adminEmail));
     expect(evidence.admin_contacts.some((contact) => contact.email === adminEmail && contact.job_title === "People Operations Lead" && contact.notes.includes(tenantCode))).toBeTruthy();
 
-    await openPlatformTab(page, "Tenant Admin Users");
+    await openPlatformTab(page, "Admin Access");
     const provisionCard = card(page, "Create tenant admin login");
     await namedControl(provisionCard, "contact_id").selectOption({ label: `${adminName} - ${adminEmail}` });
     await namedControl(provisionCard, "username").fill(`qa.audit.${runRef}`);
@@ -213,10 +214,12 @@ test.describe("Platform admin audit evidence certification", () => {
     expectChecklist(evidence, "baseline_published");
     expect(evidence.baseline_published_at).toBeTruthy();
 
-    await openPlatformTab(page, "Launch Checklist");
-    await card(page, "Launch checklist").getByRole("button", { name: "Mark ready" }).click();
+    await openPlatformTab(page, "Launch Readiness");
+    await card(page, "Launch readiness").getByRole("button", { name: "Mark ready" }).click();
+    await page.getByRole("dialog", { name: "Mark customer ready?" }).getByRole("button", { name: "Mark ready" }).click();
     await expect(notice(page).getByText("Mark Handoff Ready", { exact: true })).toBeVisible();
-    await card(page, "Launch checklist").getByRole("button", { name: "Activate tenant" }).click();
+    await card(page, "Launch readiness").getByRole("button", { name: "Activate tenant" }).click();
+    await page.getByRole("dialog", { name: "Activate tenant?" }).getByRole("button", { name: "Activate tenant" }).click();
     await expect(notice(page).getByText("Activate", { exact: true })).toBeVisible();
     evidence = await onboardingPayload(page, tenantId ?? "");
     expectEvent(evidence, "handoff_marked_ready", new RegExp(tenantCode));
@@ -227,7 +230,7 @@ test.describe("Platform admin audit evidence certification", () => {
     expect(evidence.handoff_completed_at).toBeTruthy();
 
     await page.reload();
-    await openPlatformTab(page, "Events");
+    await openPlatformTab(page, "Audit Logs");
     const eventsCard = card(page, "Onboarding events");
     for (const eventType of ["tenant_created", "tenant_prepared", "admin_contact_added", "first_admin_provisioned", "baseline_published", "handoff_marked_ready", "tenant_activated"]) {
       await namedControl(eventsCard, "event_search").fill(eventType);

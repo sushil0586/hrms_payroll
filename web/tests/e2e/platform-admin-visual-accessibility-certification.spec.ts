@@ -7,11 +7,11 @@ const platformRoutes = [
   { path: "/platform-admin", heading: "Platform Admin Dashboard", tab: "Control" },
   { path: "/platform-admin/leads", heading: "Leads", tab: "Leads" },
   { path: "/platform-admin/tenants", heading: "Tenants", tab: "Tenants" },
-  { path: "/platform-admin/onboarding", heading: "Launch Checklist", tab: "Launch Checklist" },
-  { path: "/platform-admin/admins", heading: "Tenant Admin Users", tab: "Tenant Admin Users" },
+  { path: "/platform-admin/onboarding", heading: "Launch Readiness", tab: "Launch Readiness" },
+  { path: "/platform-admin/admins", heading: "Admin Access", tab: "Admin Access" },
   { path: "/platform-admin/policy-packs", heading: "Setup Templates", tab: "Setup Templates" },
   { path: "/platform-admin/permissions", heading: "Permission Catalog", tab: null },
-  { path: "/platform-admin/audit-logs", heading: "Audit Logs", tab: "Events" },
+  { path: "/platform-admin/audit-logs", heading: "Audit Logs", tab: "Audit Logs" },
 ] as const;
 
 const viewports = [
@@ -74,7 +74,7 @@ test.describe("Platform admin visual and accessibility certification", () => {
     await page.keyboard.press("Escape");
     await expect(createTenantDialog).toBeHidden();
 
-    await page.getByRole("tab", { name: /^Tenant Admin Users/ }).click();
+    await page.getByRole("tab", { name: /^Admin Access/ }).click();
     const addContactButton = page.locator("article").filter({ has: page.getByRole("heading", { name: "Admin contacts" }) }).first().getByRole("button", { name: "Add contact" });
     await expect(addContactButton).toBeVisible();
     await addContactButton.click();

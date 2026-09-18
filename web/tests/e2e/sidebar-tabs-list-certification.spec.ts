@@ -49,9 +49,11 @@ async function certifyTabs(page: Page) {
   for (let index = 0; index < count; index += 1) {
     const tab = tabs.nth(index);
     const label = (await tab.innerText()).trim().replace(/\s+/g, " ");
+    const tabName = label.replace(/\s+\d+$/, "").trim();
     await expect(tab, `tab ${label}`).toBeVisible();
     await tab.click();
-    await expect(tab, `active tab ${label}`).toHaveAttribute("aria-selected", "true");
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+    await expect(page.getByRole("tab", { name: new RegExp(`^${tabName}`) }).first(), `active tab ${label}`).toHaveAttribute("aria-selected", "true");
     await expectNoHorizontalOverflow(page);
   }
 }

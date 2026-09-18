@@ -170,3 +170,4 @@ Verification notes:
 - Platform Admin no longer fetches leads, tenants, policy packs, selected tenant detail, and onboarding evidence on every route by default.
 - Control/dashboard routes now use the summary API, while Leads, Tenants, Policy Packs, Launch Checklist, Tenant Admin Users, and Events still load the records needed for their active workflow.
 - Staging re-verification initially passed 6 of 7 tests, with CRUD failing on large staging data because explicit `tenantId` routing could fall back to a summary preview tenant. The resolver was tightened to trust an explicit URL tenant id, then the exact CRUD/state-transition test passed locally in `8.5s`.
+- Post-deployment staging re-verification passed the full Platform Admin pack: `7 passed (2.7m)`.

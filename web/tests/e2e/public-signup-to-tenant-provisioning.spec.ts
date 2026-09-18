@@ -1,10 +1,21 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { gotoAuthenticated, platformAdmin } from "../helpers/staging-auth";
 
 function uniqueSuffix() {
   return `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
+async function waitForLeadStatusChange(page: Page, action: () => Promise<void>) {
+  const responsePromise = page.waitForResponse(
+    (response) => response.url().includes("/api/platform/leads/") && response.request().method() === "PATCH",
+    { timeout: 30_000 },
+  );
+  await action();
+  const response = await responsePromise;
+  expect(response.ok()).toBeTruthy();
+  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
 }
 
 test.describe("PLF-1/2 public signup to tenant provisioning", () => {
@@ -37,7 +48,7 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await expectNoHorizontalOverflow(page);
 
     await gotoAuthenticated(page, "/platform-admin/leads", platformAdmin);
-    await expectPageReady(page, "Platform Admin Dashboard");
+    await expectPageReady(page, "Leads");
     const leadsPanel = page.getByTestId("platform-admin-leads-panel");
     await expect(leadsPanel).toBeVisible();
     await leadsPanel.getByRole("textbox", { name: "Search" }).fill(companyName);
@@ -49,12 +60,12 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await expect(leadRow.getByText("125 employees")).toBeVisible();
     await expect(leadRow.getByText("Convert to tenant")).toBeVisible();
 
-    await leadRow.getByRole("button", { name: "Reviewing" }).click();
-    await expect(page.getByText("Lead marked Reviewing.")).toBeVisible();
+    await waitForLeadStatusChange(page, () => leadRow.getByRole("button", { name: "Reviewing" }).click());
     await leadsPanel.getByRole("textbox", { name: "Search" }).fill(companyName);
     const reviewingRow = page.locator(".tenant-support-access-row--stacked").filter({ hasText: companyName }).first();
-    await reviewingRow.getByRole("button", { name: "Qualified" }).click();
-    await expect(page.getByText("Lead marked Qualified.")).toBeVisible();
+    await expect(reviewingRow.getByText("Reviewing")).toBeVisible();
+    await waitForLeadStatusChange(page, () => reviewingRow.getByRole("button", { name: "Qualified" }).click());
+    await expect(reviewingRow.getByText("Qualified")).toBeVisible();
 
     await leadsPanel.getByRole("textbox", { name: "Search" }).fill(companyName);
     const qualifiedRow = page.locator(".tenant-support-access-row--stacked").filter({ hasText: companyName }).first();
@@ -77,8 +88,8 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await expect(adminContactRow).toBeVisible();
     await expect(adminContactRow.getByText(contactName)).toBeVisible();
     await expect(adminContactRow.getByText(workEmail)).toBeVisible();
-    const provisionForm = adminsPanel.locator("article").filter({ hasText: "Provision first admin" }).first();
-    await expect(provisionForm.getByRole("button", { name: "Provision admin" })).toBeVisible();
+    const provisionForm = adminsPanel.locator("article").filter({ hasText: "Create tenant admin login" }).first();
+    await expect(provisionForm.getByRole("button", { name: "Create login access" })).toBeVisible();
     await provisionForm.locator('[name="contact_id"]').selectOption({ label: `${contactName} - ${workEmail}` });
     await provisionForm.locator('[name="username"]').fill(adminUsername);
     await provisionForm.locator('[name="role_code"]').selectOption("tenant-admin");
@@ -87,7 +98,7 @@ test.describe("PLF-1/2 public signup to tenant provisioning", () => {
     await provisionForm.locator('[name="membership_status"]').selectOption("active");
     await provisionForm.locator('[name="must_change_password"]').setChecked(false);
     await provisionForm.locator('[name="is_user_active"]').setChecked(true);
-    await provisionForm.getByRole("button", { name: "Provision admin" }).click();
+    await provisionForm.getByRole("button", { name: "Create login access" }).click();
 
     await expect(page.getByText("First admin provisioned.")).toBeVisible();
     await expect(adminContactRow.getByText("Provisioned")).toBeVisible();

@@ -3546,6 +3546,25 @@ select.input-control {
   line-height: 1.35;
 }
 
+.platform-disabled-reason {
+  display: block;
+  max-width: 260px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.platform-action-with-reason {
+  display: grid;
+  min-width: 0;
+  justify-items: end;
+  gap: 5px;
+}
+
+.platform-action-with-reason .button {
+  width: fit-content;
+}
+
 .platform-list-filters {
   display: grid;
   gap: 10px;
@@ -7738,6 +7757,59 @@ select.input-control {
   display: grid;
   min-width: 0;
   gap: 14px;
+}
+
+.record-card > .tenant-support-access-list + .form-grid {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(226, 232, 240, 0.86);
+}
+
+.record-card > .tenant-support-access-list + .form-grid .platform-validation-strip {
+  position: relative;
+  z-index: 0;
+}
+
+.platform-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  min-width: 0;
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.72);
+  color: #334155;
+  font-size: 12px;
+}
+
+.platform-filter-summary > div,
+.platform-filter-summary__context {
+  min-width: 0;
+}
+
+.platform-filter-summary strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.platform-filter-summary__context {
+  flex: 1 1 220px;
+  color: #64748b;
+  overflow-wrap: anywhere;
+}
+
+.platform-filter-summary .button {
+  min-height: 34px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.tenant-support-access-row {
+  position: relative;
+  z-index: 1;
 }
 
 .tenant-support-access-form {

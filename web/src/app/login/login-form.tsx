@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 function workspaceHrefFor(user: {
+  default_membership?: {
+    role_codes?: string[];
+  } | null;
   workspace_access?: {
     platform_admin?: boolean;
     hr_admin?: boolean;
@@ -12,7 +15,9 @@ function workspaceHrefFor(user: {
     ess?: boolean;
   };
 }) {
+  const roleCodes = new Set(user.default_membership?.role_codes ?? []);
   if (user.workspace_access?.platform_admin) return "/platform-admin";
+  if (roleCodes.has("tenant-admin") && !roleCodes.has("hr-admin")) return "/tenant-admin";
   if (user.workspace_access?.hr_admin) return "/hr-admin";
   if (user.workspace_access?.tenant_admin) return "/tenant-admin";
   if (user.workspace_access?.mss) return "/mss/approvals";

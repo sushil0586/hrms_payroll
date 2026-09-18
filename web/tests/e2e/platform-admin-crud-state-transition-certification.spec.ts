@@ -41,7 +41,7 @@ function uniqueRunRef() {
   return new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14).toLowerCase();
 }
 
-async function openPlatformTab(page: Page, name: "Tenants" | "Launch Checklist" | "Events") {
+async function openPlatformTab(page: Page, name: "Tenants" | "Launch Readiness" | "Audit Logs") {
   await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();
   await expect(page.getByRole("tab", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-selected", "true");
 }
@@ -110,7 +110,7 @@ test.describe("Platform admin CRUD and state transition certification", () => {
     const createdTenant = await tenantByCode(page, tenantCode);
     await page.goto(`/platform-admin/onboarding?tenantId=${createdTenant.id}`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
-    await expectPageReady(page, "Launch Checklist");
+    await expectPageReady(page, "Launch Readiness");
     await expect(card(page, tenantName)).toBeVisible();
 
     const setupCard = card(page, "Edit tenant setup");
@@ -163,7 +163,7 @@ test.describe("Platform admin CRUD and state transition certification", () => {
     await expect(card(page, "Tenant pipeline").locator(".employee-directory-item").filter({ hasText: updatedTenantName })).toBeVisible();
     await expect(card(page, "Tenant pipeline").locator(".employee-directory-item").filter({ hasText: "Enterprise" })).toBeVisible();
 
-    await openPlatformTab(page, "Launch Checklist");
+    await openPlatformTab(page, "Launch Readiness");
     const reactivateSetupCard = card(page, "Edit tenant setup");
     await namedControl(reactivateSetupCard, "status").selectOption("active");
     await reactivateSetupCard.getByRole("button", { name: "Save tenant" }).click();
@@ -175,7 +175,7 @@ test.describe("Platform admin CRUD and state transition certification", () => {
     expect(evidence.tenant_status).toBe("active");
     expectEvent(evidence, "tenant_updated", new RegExp(tenantCode));
 
-    await openPlatformTab(page, "Events");
+    await openPlatformTab(page, "Audit Logs");
     const eventsCard = card(page, "Onboarding events");
     await namedControl(eventsCard, "event_search").fill("tenant updated");
     await expect(eventsCard.locator(".tenant-support-access-row").filter({ hasText: "Tenant Updated" }).first()).toBeVisible();

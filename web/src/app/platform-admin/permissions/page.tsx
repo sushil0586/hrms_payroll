@@ -67,7 +67,7 @@ export default async function PlatformAdminPermissionsPage({ searchParams }: Pag
   const catalogSourceLabel = databaseBackedCount ? "DB-managed" : "Code fallback";
 
   return (
-    <>
+    <main className="shell">
       <PageIntro
         eyebrow="RBAC control"
         title="Permission Catalog"
@@ -186,6 +186,6 @@ export default async function PlatformAdminPermissionsPage({ searchParams }: Pag
           </div>
         </div>
       </section>
-    </>
+    </main>
   );
 }

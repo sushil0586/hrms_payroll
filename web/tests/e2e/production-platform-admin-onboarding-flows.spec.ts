@@ -29,7 +29,22 @@ function notice(page: Page): Locator {
   return page.locator(".notice").first();
 }
 
-async function openPlatformTab(page: Page, name: "Tenants" | "Launch Checklist" | "Tenant Admin Users" | "Setup Templates" | "Events") {
+async function safeReload(page: Page) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
+      await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+      return;
+    } catch (error) {
+      if (attempt === 3 || !String(error).includes("ERR_NETWORK_IO_SUSPENDED")) {
+        throw error;
+      }
+      await page.waitForTimeout(1_000);
+    }
+  }
+}
+
+async function openPlatformTab(page: Page, name: "Tenants" | "Launch Readiness" | "Admin Access" | "Setup Templates" | "Audit Logs") {
   await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();
   await expect(page.getByRole("tab", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-selected", "true");
 }
@@ -62,12 +77,13 @@ test.describe("Production platform admin onboarding proof", () => {
     await namedControl(policyPackCard, "description").fill("Browser-created baseline pack for platform admin onboarding proof.");
     await policyPackCard.getByRole("button", { name: "Create template" }).click();
     await expect(notice(page).getByText("Policy pack created.", { exact: true })).toBeVisible();
-    await page.reload();
+    await safeReload(page);
     await namedControl(policyPackCard, "policy_pack_search").fill(packCode);
     await expect(page.getByText(packCode)).toBeVisible();
     await page.locator(".tenant-support-access-row").filter({ hasText: packCode }).getByRole("button", { name: "Publish" }).click();
+    await page.getByRole("dialog", { name: "Publish setup template?" }).getByRole("button", { name: "Publish template" }).click();
     await expect(notice(page).getByText("Policy pack published.", { exact: true })).toBeVisible();
-    await page.reload();
+    await safeReload(page);
     await namedControl(policyPackCard, "policy_pack_search").fill(packCode);
     await expect(card(page, "Setup templates").locator(".tenant-support-access-row").filter({ hasText: packCode }).getByText("Published", { exact: true })).toBeVisible();
 
@@ -110,9 +126,9 @@ test.describe("Production platform admin onboarding proof", () => {
       await namedControl(onboardingCard, "customer_handoff_notes").fill(`Customer handoff note for ${tenantCode}.`);
       await onboardingCard.getByRole("button", { name: "Save onboarding" }).click();
       await expect(notice(page).getByText("Onboarding metadata updated.", { exact: true })).toBeVisible();
-      await page.reload();
+      await safeReload(page);
 
-      await openPlatformTab(page, "Tenant Admin Users");
+      await openPlatformTab(page, "Admin Access");
       const contactsCard = await openAddContactDialog(page);
       await namedControl(contactsCard, "full_name").fill(adminName);
       await namedControl(contactsCard, "email").fill(adminEmail);
@@ -122,7 +138,7 @@ test.describe("Production platform admin onboarding proof", () => {
       await namedControl(contactsCard, "notes").fill(`Primary admin contact for ${tenantCode}.`);
       await contactsCard.getByRole("button", { name: "Add contact" }).click();
       await expect(notice(page).getByText("Admin contact added.", { exact: true })).toBeVisible();
-      await page.reload();
+      await safeReload(page);
       await expect(card(page, "Admin contacts").getByText(adminEmail, { exact: true })).toBeVisible();
 
       const provisionCard = card(page, "Create tenant admin login");
@@ -136,7 +152,7 @@ test.describe("Production platform admin onboarding proof", () => {
       await namedControl(provisionCard, "is_user_active").setChecked(true);
       await provisionCard.getByRole("button", { name: "Create login access" }).click();
       await expect(notice(page).getByText("First admin provisioned.", { exact: true })).toBeVisible();
-      await page.reload();
+      await safeReload(page);
       await expect(
         card(page, "Admin contacts").locator(".tenant-support-access-row").filter({ hasText: adminEmail }).getByText("Provisioned", { exact: true }),
       ).toBeVisible();
@@ -148,20 +164,23 @@ test.describe("Production platform admin onboarding proof", () => {
       await namedControl(adoptCard, "notes").fill(`Adopting ${packCode} for ${tenantCode}.`);
       await adoptCard.getByRole("button", { name: "Apply template" }).click();
       await expect(notice(page).getByText("Policy pack adopted for tenant.", { exact: true })).toBeVisible();
-      await page.reload();
-      await openPlatformTab(page, "Launch Checklist");
-      await expect(card(page, tenantName).getByText("baseline_published").or(page.getByText("Baseline Published")).first()).toBeVisible();
+      await safeReload(page);
+      await openPlatformTab(page, "Launch Readiness");
+      await expect(card(page, tenantName).getByText("baseline_published").or(page.getByText("Initial setup confirmed")).first()).toBeVisible();
 
-      const gatesCard = card(page, "Launch checklist");
+      const gatesCard = card(page, "Launch readiness");
       await gatesCard.getByRole("button", { name: "Confirm setup" }).click();
+      await page.getByRole("dialog", { name: "Confirm initial setup?" }).getByRole("button", { name: "Confirm setup" }).click();
       await expect(notice(page).getByText("Mark Baseline Published", { exact: true })).toBeVisible();
-      await page.reload();
-      await card(page, "Launch checklist").getByRole("button", { name: "Mark ready" }).click();
+      await safeReload(page);
+      await card(page, "Launch readiness").getByRole("button", { name: "Mark ready" }).click();
+      await page.getByRole("dialog", { name: "Mark customer ready?" }).getByRole("button", { name: "Mark ready" }).click();
       await expect(notice(page).getByText("Mark Handoff Ready", { exact: true })).toBeVisible();
-      await page.reload();
-      await card(page, "Launch checklist").getByRole("button", { name: "Activate tenant" }).click();
+      await safeReload(page);
+      await card(page, "Launch readiness").getByRole("button", { name: "Activate tenant" }).click();
+      await page.getByRole("dialog", { name: "Activate tenant?" }).getByRole("button", { name: "Activate tenant" }).click();
       await expect(notice(page).getByText("Activate", { exact: true })).toBeVisible();
-      await page.reload();
+      await safeReload(page);
       await expect(page.getByText("Active").first()).toBeVisible();
 
       await page.request.post("/api/auth/logout").catch(() => null);

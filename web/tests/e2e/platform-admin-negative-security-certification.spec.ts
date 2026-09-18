@@ -48,7 +48,7 @@ async function expectDenied(response: APIResponse) {
   expect(serialized).not.toContain("secret");
 }
 
-async function openPlatformTab(page: Page, name: "Tenants" | "Launch Checklist" | "Tenant Admin Users" | "Setup Templates" | "Events") {
+async function openPlatformTab(page: Page, name: "Tenants" | "Launch Readiness" | "Admin Access" | "Setup Templates" | "Audit Logs") {
   await page.getByRole("tab", { name: new RegExp(`^${name}`) }).click();
   await expect(page.getByRole("tab", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-selected", "true");
 }
@@ -109,12 +109,12 @@ test.describe("Platform admin negative and security certification", () => {
     await expect(notice(page).getByText(/already exists|unique|tenant creation failed|platform action failed/i)).toBeVisible();
     await createTenant.getByRole("button", { name: "Cancel" }).click();
 
-    await openPlatformTab(page, "Launch Checklist");
-    const gates = card(page, "Launch checklist");
+    await openPlatformTab(page, "Launch Readiness");
+    const gates = card(page, "Launch readiness");
     await expect(gates.locator(".platform-gate-checklist")).toBeVisible();
     await expect(gates.getByText("Initial setup confirmed")).toBeVisible();
     await expect(gates.getByText("Primary tenant admin has login access")).toBeVisible();
-    await expect(gates.getByText("Ready for tenant admin", { exact: true })).toBeVisible();
+    await expect(gates.getByText("Go-live handoff ready", { exact: true })).toBeVisible();
     await expect(gates.getByText("Initial setup must be confirmed first.")).toBeVisible();
     await expect(gates.getByRole("link", { name: "Open setup templates" })).toBeVisible();
     await expect(gates.getByRole("button", { name: "Mark ready" })).toBeDisabled();
@@ -130,7 +130,7 @@ test.describe("Platform admin negative and security certification", () => {
     expect(directActivationResponse.status()).toBe(400);
     expect(JSON.stringify(await directActivationResponse.json())).toContain("Tenant handoff must be ready");
 
-    await openPlatformTab(page, "Tenant Admin Users");
+    await openPlatformTab(page, "Admin Access");
     const addContact = await openAddContactDialog(page);
     await namedControl(addContact, "full_name").fill("Invalid Admin");
     await namedControl(addContact, "email").fill("not-an-email");

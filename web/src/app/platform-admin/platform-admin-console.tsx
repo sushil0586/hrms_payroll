@@ -28,6 +28,13 @@ type Props = {
 
 type MutationMethod = "POST" | "PATCH";
 type PlatformPanel = "control" | "leads" | "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
+type ConfirmAction = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  tone?: "default" | "danger";
+  run: () => Promise<void>;
+};
 
 const PAGE_SIZE = 8;
 
@@ -35,10 +42,10 @@ const platformTabs: { panel: PlatformPanel; label: string; countKey: "control" |
   { panel: "control", label: "Control", countKey: "control" },
   { panel: "leads", label: "Leads", countKey: "leads" },
   { panel: "tenants", label: "Tenants", countKey: "tenants" },
-  { panel: "onboarding", label: "Launch Checklist", countKey: "onboarding" },
-  { panel: "admins", label: "Tenant Admin Users", countKey: "admins" },
+  { panel: "onboarding", label: "Launch Readiness", countKey: "onboarding" },
+  { panel: "admins", label: "Admin Access", countKey: "admins" },
   { panel: "policy-packs", label: "Setup Templates", countKey: "policyPacks" },
-  { panel: "events", label: "Events", countKey: "events" },
+  { panel: "events", label: "Audit Logs", countKey: "events" },
 ];
 
 const panelGuides: Record<PlatformPanel, { title: string; description: string; steps: string[] }> = {
@@ -58,12 +65,12 @@ const panelGuides: Record<PlatformPanel, { title: string; description: string; s
     steps: ["Find or create tenant", "Select tenant", "Open onboarding"],
   },
   onboarding: {
-    title: "Launch Checklist",
-    description: "Move the selected customer through setup template adoption, tenant admin access, and launch readiness.",
-    steps: ["Verify tenant setup", "Confirm setup and admin access", "Activate when ready"],
+    title: "Launch Readiness",
+    description: "Move the selected customer through setup template adoption, admin access, go-live handoff, and activation.",
+    steps: ["Verify tenant setup", "Confirm setup and admin access", "Complete go-live handoff"],
   },
   admins: {
-    title: "Tenant Admin Users",
+    title: "Admin Access",
     description: "Create customer admin contacts and provision the first login user for the customer organization.",
     steps: ["Add primary contact", "Create login access", "Share login securely"],
   },
@@ -83,7 +90,7 @@ const panelPills: Record<PlatformPanel, string[]> = {
   control: ["Action queue", "Tenant readiness", "Launch blockers"],
   leads: ["Public signup", "Qualification", "Tenant conversion"],
   tenants: ["Customer registry", "Create tenant", "Select workspace"],
-  onboarding: ["Setup details", "Launch checklist", "Readiness evidence"],
+  onboarding: ["Setup details", "Launch readiness", "Go-live evidence"],
   admins: ["Admin contacts", "Login access", "Secure sharing"],
   "policy-packs": ["Setup templates", "Publish", "Apply"],
   events: ["Audit evidence", "Actor trail", "Timeline"],
@@ -121,7 +128,7 @@ function apiErrorMessage(payload: unknown, fallback: string) {
   const friendly = (message: string) => {
     if (/Primary tenant admin must be provisioned/i.test(message)) return "Create login access for the primary tenant admin before marking this customer ready.";
     if (/Baseline must be published/i.test(message)) return "Apply and confirm an initial setup template before marking this customer ready.";
-    if (/Tenant handoff must be ready/i.test(message)) return "Mark the customer ready for the tenant admin before activation.";
+    if (/Tenant handoff must be ready/i.test(message)) return "Complete go-live handoff before activation.";
     if (/At least one adopted policy pack is required/i.test(message)) return "Apply a published setup template to this tenant before confirming setup.";
     if (/already exists|duplicate/i.test(message)) return "This record already exists. Search the list or use a different code/email.";
     return message;
@@ -210,6 +217,46 @@ function ValidationNote({ children }: { children: React.ReactNode }) {
   return <small className="platform-validation-note">{children}</small>;
 }
 
+function DisabledReason({ show, children }: { show: boolean; children: React.ReactNode }) {
+  if (!show) return null;
+  return <small className="platform-disabled-reason">{children}</small>;
+}
+
+function FilterSummary({
+  activeFilters,
+  defaultLabel,
+  label,
+  onReset,
+  total,
+  visible,
+}: {
+  activeFilters: string[];
+  defaultLabel?: string;
+  label: string;
+  onReset: () => void;
+  total: number;
+  visible: number;
+}) {
+  const hasActiveFilters = activeFilters.length > 0;
+
+  return (
+    <div className="platform-filter-summary" aria-live="polite">
+      <div>
+        <strong>{visible}</strong>
+        <span> of {total} {label}</span>
+      </div>
+      <span className="platform-filter-summary__context">
+        {hasActiveFilters ? `Filtered by ${activeFilters.join(", ")}` : defaultLabel || "Showing all records"}
+      </span>
+      {hasActiveFilters ? (
+        <button className="button button--secondary" type="button" onClick={onReset}>
+          Reset filters
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function clampPage(page: number, totalCount: number) {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   return Math.min(Math.max(page, 1), totalPages);
@@ -272,6 +319,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const [error, setError] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [leadQuery, setLeadQuery] = useState("");
+  const [leadStatusFilter, setLeadStatusFilter] = useState("active");
   const [tenantQuery, setTenantQuery] = useState("");
   const [policyPackQuery, setPolicyPackQuery] = useState("");
   const [eventQuery, setEventQuery] = useState("");
@@ -283,6 +331,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const [editingContactId, setEditingContactId] = useState("");
   const [showCreateTenantModal, setShowCreateTenantModal] = useState(false);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [leadPage, setLeadPage] = useState(1);
   const [tenantPage, setTenantPage] = useState(1);
   const [policyPackPage, setPolicyPackPage] = useState(1);
@@ -340,14 +389,14 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     },
     {
       status: onboarding.handoff_completed_at ? "done" as const : canMarkHandoff ? "needed" as const : "blocked" as const,
-      title: "Mark ready for tenant admin",
+      title: "Complete go-live handoff",
       detail: onboarding.handoff_completed_at
         ? `Customer readiness was marked ${formatDateTime(onboarding.handoff_completed_at)}.`
         : canMarkHandoff
           ? "Setup and primary admin access are complete. Mark this customer ready."
           : "Complete setup template and tenant admin login before marking ready.",
       actionHref: buildPanelHref("onboarding", selectedTenant.id),
-      actionLabel: onboarding.handoff_completed_at ? "View readiness" : "Open launch checklist",
+      actionLabel: onboarding.handoff_completed_at ? "View readiness" : "Open launch readiness",
     },
     {
       status: selectedTenant.status === "active" ? "done" as const : canActivateTenant ? "needed" as const : "blocked" as const,
@@ -366,9 +415,16 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const normalizedTenantQuery = tenantQuery.trim().toLowerCase();
   const normalizedPolicyPackQuery = policyPackQuery.trim().toLowerCase();
   const normalizedEventQuery = normalizedSearchText(eventQuery.trim());
-  const filteredLeads = normalizedLeadQuery
-    ? leads.filter((lead) => [lead.company_name, lead.contact_name, lead.work_email, lead.intent, lead.status, lead.preferred_plan, lead.industry].join(" ").toLowerCase().includes(normalizedLeadQuery))
-    : leads;
+  const filteredLeads = leads.filter((lead) => {
+    const matchesSearch = normalizedLeadQuery
+      ? [lead.company_name, lead.contact_name, lead.work_email, lead.intent, lead.status, lead.preferred_plan, lead.industry].join(" ").toLowerCase().includes(normalizedLeadQuery)
+      : true;
+    const matchesStatus =
+      leadStatusFilter === "all" ||
+      (leadStatusFilter === "active" && ["new", "reviewing", "qualified"].includes(lead.status)) ||
+      lead.status === leadStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
   const filteredTenants = tenants.filter((tenant) => {
     const matchesSearch = normalizedTenantQuery
       ? [tenant.name, tenant.code, tenant.primary_domain, tenant.subscription_plan, tenant.status, tenant.onboarding_status].join(" ").toLowerCase().includes(normalizedTenantQuery)
@@ -399,6 +455,24 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const tenantPageData = paginate(filteredTenants, tenantPage);
   const policyPackPageData = paginate(filteredPolicyPacks, policyPackPage);
   const eventPageData = paginate(filteredEvents, eventPage);
+  const leadActiveFilters = [
+    normalizedLeadQuery ? `search "${leadQuery.trim()}"` : "",
+    leadStatusFilter !== "active" ? `status ${leadStatusFilter === "all" ? "all leads" : titleCase(leadStatusFilter)}` : "",
+  ].filter(Boolean);
+  const tenantActiveFilters = [
+    normalizedTenantQuery ? `search "${tenantQuery.trim()}"` : "",
+    tenantStatusFilter !== "all" ? `status ${titleCase(tenantStatusFilter)}` : "",
+    tenantPlanFilter !== "all" ? `plan ${titleCase(tenantPlanFilter)}` : "",
+  ].filter(Boolean);
+  const policyPackActiveFilters = [
+    normalizedPolicyPackQuery ? `search "${policyPackQuery.trim()}"` : "",
+    policyPackStatusFilter !== "all" ? `status ${titleCase(policyPackStatusFilter)}` : "",
+    policyPackDomainFilter !== "all" ? `domain ${titleCase(policyPackDomainFilter)}` : "",
+  ].filter(Boolean);
+  const eventActiveFilters = [
+    normalizedEventQuery ? `search "${eventQuery.trim()}"` : "",
+    eventTypeFilter !== "all" ? `type ${titleCase(eventTypeFilter)}` : "",
+  ].filter(Boolean);
   const activeLeads = leads.filter((lead) => ["new", "reviewing", "qualified"].includes(lead.status));
   const newLeads = leads.filter((lead) => lead.status === "new");
   const qualifiedLeads = leads.filter((lead) => lead.status === "qualified");
@@ -455,16 +529,17 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   }, [showAddContactModal, showCreateTenantModal]);
 
   useEffect(() => {
-    if (!showCreateTenantModal && !showAddContactModal) return;
+    if (!showCreateTenantModal && !showAddContactModal && !confirmAction) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !busyRef) {
         setShowCreateTenantModal(false);
         setShowAddContactModal(false);
+        setConfirmAction(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [busyRef, showAddContactModal, showCreateTenantModal]);
+  }, [busyRef, confirmAction, showAddContactModal, showCreateTenantModal]);
 
   async function mutate<T>(path: string, method: MutationMethod, body: Record<string, unknown>, successMessage: string): Promise<T> {
     setBusyRef(path);
@@ -521,6 +596,20 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Lead update failed.");
     }
+  }
+
+  function requestLeadStatus(lead: PlatformPublicLead, status: string) {
+    if (status !== "closed") {
+      void handleLeadStatus(lead.id, status);
+      return;
+    }
+    setConfirmAction({
+      title: "Close this lead?",
+      description: `${lead.company_name} will leave the active lead queue. You can still find it later by showing closed leads.`,
+      confirmLabel: "Close lead",
+      tone: "danger",
+      run: () => handleLeadStatus(lead.id, status),
+    });
   }
 
   async function handleLeadConvert(event: React.FormEvent<HTMLFormElement>, leadId: string) {
@@ -717,6 +806,15 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     }
   }
 
+  function requestPublishPack(pack: PlatformPolicyPackListItem) {
+    setConfirmAction({
+      title: "Publish setup template?",
+      description: `${pack.name} will become available for tenant setup. Publish only after the template has been reviewed.`,
+      confirmLabel: "Publish template",
+      run: () => handlePublishPack(pack.id),
+    });
+  }
+
   async function handleAdoptPack(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedTenant) return;
@@ -751,6 +849,32 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Tenant state action failed.");
     }
+  }
+
+  function requestTenantAction(action: "mark-baseline-published" | "mark-handoff-ready" | "activate") {
+    if (!selectedTenant) return;
+    const copy = {
+      "mark-baseline-published": {
+        title: "Confirm initial setup?",
+        description: `This records that ${selectedTenant.name} has received the initial setup/template baseline. Continue only after the setup is reviewed.`,
+        confirmLabel: "Confirm setup",
+      },
+      "mark-handoff-ready": {
+        title: "Mark customer ready?",
+        description: `This records the go-live handoff point for ${selectedTenant.name}. Tenant admin access should already be created.`,
+        confirmLabel: "Mark ready",
+      },
+      activate: {
+        title: "Activate tenant?",
+        description: `${selectedTenant.name} will become active for customer use. This should only happen after readiness and admin access are complete.`,
+        confirmLabel: "Activate tenant",
+      },
+    }[action];
+    setConfirmAction({
+      ...copy,
+      tone: action === "activate" ? "danger" : "default",
+      run: () => handleTenantAction(action),
+    });
   }
 
   return (
@@ -887,7 +1011,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               <DetailRow label="Active" value={tenantCounts.active} />
               <DetailRow label="Not active" value={tenantCounts.onboarding} />
               <DetailRow label="Setup pending" value={tenantCounts.baselinePending} />
-              <DetailRow label="Ready for tenant admin" value={tenantCounts.handoffReady} />
+              <DetailRow label="Go-live handoff ready" value={tenantCounts.handoffReady} />
               <DetailRow label="Sandbox" value={tenantCounts.sandbox} />
               <DetailRow label="Published packs" value={tenantCounts.publishedPacks} />
             </div>
@@ -1011,6 +1135,40 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               value={leadQuery}
             />
           </label>
+          <div className="platform-list-filters" aria-label="Lead filters">
+            <label className="form-field">
+              <span className="muted">Lead status</span>
+              <select
+                className="input-control"
+                name="lead_status_filter"
+                onChange={(event) => {
+                  setLeadStatusFilter(event.target.value);
+                  setLeadPage(1);
+                }}
+                value={leadStatusFilter}
+              >
+                <option value="active">Active leads</option>
+                <option value="all">All leads</option>
+                <option value="new">New</option>
+                <option value="reviewing">Reviewing</option>
+                <option value="qualified">Qualified</option>
+                <option value="converted">Converted</option>
+                <option value="closed">Closed</option>
+              </select>
+            </label>
+          </div>
+          <FilterSummary
+            activeFilters={leadActiveFilters}
+            defaultLabel="Default view: active leads"
+            label="leads"
+            onReset={() => {
+              setLeadQuery("");
+              setLeadStatusFilter("active");
+              setLeadPage(1);
+            }}
+            total={leads.length}
+            visible={filteredLeads.length}
+          />
           <div className="tenant-support-access-list">
             {leadPageData.items.map((lead) => (
               <div className="tenant-support-access-row tenant-support-access-row--stacked" key={lead.id}>
@@ -1024,9 +1182,9 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <span className="record-chip">{titleCase(lead.intent)}</span>
                 <span className="record-chip">{formatDateTime(lead.created_at)}</span>
                 <div className="button-row">
-                  <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleLeadStatus(lead.id, "reviewing")}>Reviewing</button>
-                  <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleLeadStatus(lead.id, "qualified")}>Qualified</button>
-                  <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleLeadStatus(lead.id, "closed")}>Close</button>
+                  <button className="button button--secondary" disabled={Boolean(busyRef) || lead.status === "reviewing"} type="button" onClick={() => requestLeadStatus(lead, "reviewing")}>Reviewing</button>
+                  <button className="button button--secondary" disabled={Boolean(busyRef) || lead.status === "qualified"} type="button" onClick={() => requestLeadStatus(lead, "qualified")}>Qualified</button>
+                  <button className="button button--danger" disabled={Boolean(busyRef) || lead.status === "closed" || Boolean(lead.converted_tenant_id)} type="button" onClick={() => requestLeadStatus(lead, "closed")}>Close</button>
                 </div>
                 {lead.converted_tenant_id ? (
                   <div className="notice notice--compact notice--success">
@@ -1136,7 +1294,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <option value="created">Created</option>
                 <option value="prepared">Prepared</option>
                 <option value="baseline_published">Initial setup confirmed</option>
-                <option value="handoff_ready">Ready for tenant admin</option>
+                <option value="handoff_ready">Go-live handoff ready</option>
               </select>
             </label>
             <label className="form-field">
@@ -1158,6 +1316,18 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             </label>
           </div>
 
+          <FilterSummary
+            activeFilters={tenantActiveFilters}
+            label="tenants"
+            onReset={() => {
+              setTenantQuery("");
+              setTenantStatusFilter("all");
+              setTenantPlanFilter("all");
+              setTenantPage(1);
+            }}
+            total={tenants.length}
+            visible={filteredTenants.length}
+          />
           <div className="employee-directory-list">
             {tenantPageData.items.map((tenant) => (
               <div className={`employee-directory-item${selectedTenant?.id === tenant.id ? " employee-directory-item--active" : ""}`} key={tenant.id}>
@@ -1246,7 +1416,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <article className="record-card">
               <div className="record-card__title-wrap">
                 <div className="record-card__title">
-                  <h2>Launch checklist</h2>
+                  <h2>Launch readiness</h2>
                   <StatusChip value={onboarding.tenant_onboarding_status} />
                 </div>
                 <p className="section-copy">Follow these steps in order to make the customer ready for launch.</p>
@@ -1275,25 +1445,35 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <GateChecklistItem
                   complete={hasProvisionedPrimaryAdmin}
                   label="Primary tenant admin has login access"
-                  detail={hasProvisionedPrimaryAdmin ? `${primaryContact?.email || "Primary admin"} has tenant access.` : `Create login access for ${primaryContact?.email || "the primary contact"} from Tenant Admin Users.`}
+                  detail={hasProvisionedPrimaryAdmin ? `${primaryContact?.email || "Primary admin"} has tenant access.` : `Create login access for ${primaryContact?.email || "the primary contact"} from Admin Access.`}
                 />
                 <GateChecklistItem
                   complete={Boolean(onboarding.handoff_completed_at)}
-                  label="Ready for tenant admin"
+                  label="Go-live handoff ready"
                   detail={onboarding.handoff_completed_at ? `Marked ${formatDateTime(onboarding.handoff_completed_at)}` : "Available after setup confirmation and primary admin access are complete."}
                 />
               </ol>
               <div className="form-actions-bar">
                 <span className="muted">Setup confirmed at: {formatDateTime(onboarding.baseline_published_at)}</span>
-                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => handleTenantAction("mark-baseline-published")}>Confirm setup</button>
+                <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => requestTenantAction("mark-baseline-published")}>Confirm setup</button>
               </div>
               <div className="form-actions-bar">
-                <span className="muted">Ready for tenant admin at: {formatDateTime(onboarding.handoff_completed_at)}</span>
-                <button className="button button--secondary" disabled={Boolean(busyRef) || !canMarkHandoff} type="button" onClick={() => handleTenantAction("mark-handoff-ready")}>Mark ready</button>
+                <span className="muted">Go-live handoff at: {formatDateTime(onboarding.handoff_completed_at)}</span>
+                <div className="platform-action-with-reason">
+                  <button className="button button--secondary" disabled={Boolean(busyRef) || !canMarkHandoff} type="button" onClick={() => requestTenantAction("mark-handoff-ready")}>Mark ready</button>
+                  <DisabledReason show={!canMarkHandoff}>
+                    Needs confirmed initial setup and primary admin login access.
+                  </DisabledReason>
+                </div>
               </div>
               <div className="form-actions-bar">
                 <span className="muted">Primary admin: {primaryContact?.email || "Not set"}</span>
-                <button className="button button--primary" disabled={Boolean(busyRef) || !canActivateTenant} type="button" onClick={() => handleTenantAction("activate")}>Activate tenant</button>
+                <div className="platform-action-with-reason">
+                  <button className="button button--primary" disabled={Boolean(busyRef) || !canActivateTenant} type="button" onClick={() => requestTenantAction("activate")}>Activate tenant</button>
+                  <DisabledReason show={!canActivateTenant}>
+                    Needs go-live handoff and primary admin login access.
+                  </DisabledReason>
+                </div>
               </div>
               {!hasBaseline ? (
                 <div className="notice notice--compact platform-gate-next-step">
@@ -1305,8 +1485,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               {hasBaseline && !hasProvisionedPrimaryAdmin ? (
                 <div className="notice notice--compact platform-gate-next-step">
                   <strong>Primary tenant admin needs login access before this customer can be marked ready.</strong>
-                  <span className="muted">Open Tenant Admin Users, create login access for {primaryContact?.email || "the primary contact"}, then return here.</span>
-                  <Link className="button button--secondary" href={buildPanelHref("admins", selectedTenant.id)}>Open tenant admin users</Link>
+                  <span className="muted">Open Admin Access, create login access for {primaryContact?.email || "the primary contact"}, then return here.</span>
+                  <Link className="button button--secondary" href={buildPanelHref("admins", selectedTenant.id)}>Open admin access</Link>
                 </div>
               ) : null}
             </article>
@@ -1459,7 +1639,12 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <label className="form-field"><span className="muted">User active</span><input name="is_user_active" type="checkbox" defaultChecked /></label>
                 <div className="form-actions-bar">
                   <span className="muted">Creating login access completes the primary tenant-admin checklist item.</span>
-                  <button className="button button--primary" disabled={Boolean(busyRef) || !provisionableContacts.length} type="submit">Create login access</button>
+                  <div className="platform-action-with-reason">
+                    <button className="button button--primary" disabled={Boolean(busyRef) || !provisionableContacts.length} type="submit">Create login access</button>
+                    <DisabledReason show={!provisionableContacts.length}>
+                      Add a primary contact or select a tenant with an unprovisioned contact.
+                    </DisabledReason>
+                  </div>
                 </div>
               </form>
             </article>
@@ -1526,6 +1711,18 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                   </select>
                 </label>
               </div>
+              <FilterSummary
+                activeFilters={policyPackActiveFilters}
+                label="setup templates"
+                onReset={() => {
+                  setPolicyPackQuery("");
+                  setPolicyPackStatusFilter("all");
+                  setPolicyPackDomainFilter("all");
+                  setPolicyPackPage(1);
+                }}
+                total={policyPacks.length}
+                visible={filteredPolicyPacks.length}
+              />
               <div className="tenant-support-access-list">
                 {policyPackPageData.items.map((pack) => (
                   <div className="tenant-support-access-row" key={pack.id}>
@@ -1534,7 +1731,12 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                       <span>{pack.code} - {titleCase(pack.domain)} - v{pack.version}</span>
                     </div>
                     <StatusChip value={pack.status} />
-                    <button className="button button--secondary" disabled={Boolean(busyRef) || pack.status === "published"} type="button" onClick={() => handlePublishPack(pack.id)}>Publish</button>
+                    <div className="platform-action-with-reason">
+                      <button className="button button--secondary" disabled={Boolean(busyRef) || pack.status === "published"} type="button" onClick={() => requestPublishPack(pack)}>Publish</button>
+                      <DisabledReason show={pack.status === "published"}>
+                        Already published.
+                      </DisabledReason>
+                    </div>
                   </div>
                 ))}
                 {!filteredPolicyPacks.length ? (
@@ -1601,7 +1803,12 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <label className="form-field"><span className="muted">Notes</span><textarea className="input-control" name="notes" placeholder="Initial platform setup for onboarding." /></label>
                 <div className="form-actions-bar">
                   <span className="muted">Applying the template writes setup evidence and onboarding history.</span>
-                  <button className="button button--primary" disabled={Boolean(busyRef) || !canAdoptBaseline} type="submit">Apply template</button>
+                  <div className="platform-action-with-reason">
+                    <button className="button button--primary" disabled={Boolean(busyRef) || !canAdoptBaseline} type="submit">Apply template</button>
+                    <DisabledReason show={!canAdoptBaseline}>
+                      Select a tenant and keep at least one setup template published.
+                    </DisabledReason>
+                  </div>
                 </div>
               </form>
 
@@ -1656,6 +1863,17 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                   </select>
                 </label>
               </div>
+              <FilterSummary
+                activeFilters={eventActiveFilters}
+                label="audit events"
+                onReset={() => {
+                  setEventQuery("");
+                  setEventTypeFilter("all");
+                  setEventPage(1);
+                }}
+                total={events.length}
+                visible={filteredEvents.length}
+              />
               <div className="tenant-support-access-list">
                 {eventPageData.items.map((event) => (
                   <div className="tenant-support-access-row" key={event.id}>
@@ -1780,6 +1998,52 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <button className="button button--primary" disabled={Boolean(busyRef)} type="submit">Add contact</button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+      {confirmAction ? (
+        <div
+          className="tenant-modal-shell"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !busyRef) {
+              setConfirmAction(null);
+            }
+          }}
+        >
+          <div
+            aria-describedby="platform-confirm-action-description"
+            aria-labelledby="platform-confirm-action-title"
+            aria-modal="true"
+            className="tenant-modal tenant-modal--small"
+            role="dialog"
+          >
+            <div className="tenant-modal__header">
+              <div>
+                <span className="eyebrow">Confirm action</span>
+                <h3 id="platform-confirm-action-title">{confirmAction.title}</h3>
+              </div>
+              <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setConfirmAction(null)}>Close</button>
+            </div>
+            <div className="tenant-modal__validation" id="platform-confirm-action-description">
+              <strong>{confirmAction.tone === "danger" ? "This changes customer state." : "Review before continuing."}</strong>
+              <span>{confirmAction.description}</span>
+            </div>
+            <div className="tenant-modal__actions">
+              <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setConfirmAction(null)}>Cancel</button>
+              <button
+                className={`button ${confirmAction.tone === "danger" ? "button--danger" : "button--primary"}`}
+                disabled={Boolean(busyRef)}
+                type="button"
+                onClick={async () => {
+                  const action = confirmAction;
+                  setConfirmAction(null);
+                  await action.run();
+                }}
+              >
+                {confirmAction.confirmLabel}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
