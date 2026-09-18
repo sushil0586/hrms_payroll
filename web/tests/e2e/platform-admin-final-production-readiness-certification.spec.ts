@@ -1,7 +1,7 @@
 import { expect, type APIResponse, type Locator, type Page, test } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin, platformAdmin } from "../helpers/staging-auth";
+import { gotoAuthenticated, hrAdmin, platformAdmin, type Persona } from "../helpers/staging-auth";
 
 type Tenant = {
   id: string;
@@ -97,6 +97,12 @@ async function gotoPlatform(page: Page, path: string, heading: string | RegExp) 
   await page.goto(path, { waitUntil: "domcontentloaded" });
   await safeWait(page);
   await expectPageReady(page, heading);
+}
+
+async function loginAs(page: Page, persona: Persona, path: string) {
+  await page.request.post("/api/auth/logout").catch(() => null);
+  await page.context().clearCookies();
+  await gotoAuthenticated(page, path, persona);
 }
 
 async function getLead(page: Page, leadId: string) {
@@ -401,7 +407,7 @@ test.describe("Platform Admin final production-readiness certification", () => {
     expect(tenantActivated?.payload.tenant_status).toBe("active");
     expectNoSensitiveData(onboarding.recent_events);
 
-    await gotoAuthenticated(page, "/platform-admin/tenants", hrAdmin);
+    await loginAs(page, hrAdmin, "/platform-admin/tenants");
     await expect(page).toHaveURL(/\/$/);
     await expect(page.locator('a[href^="/platform-admin"]')).toHaveCount(0);
     await expectDenied(await page.request.get(`/api/platform/tenants/${tenantId}/onboarding`), "restricted launch readiness");
@@ -410,7 +416,7 @@ test.describe("Platform Admin final production-readiness certification", () => {
       data: { tenant_id: tenantId, mode: "clone_to_tenant_records" },
     }), "restricted setup adoption");
 
-    await gotoAuthenticated(page, `/platform-admin/admins?tenantId=${tenantId}`, platformAdmin);
+    await loginAs(page, platformAdmin, `/platform-admin/admins?tenantId=${tenantId}`);
     const secondContext = await browser.newContext();
     const secondPage = await secondContext.newPage();
     await gotoAuthenticated(secondPage, `/platform-admin/audit-logs?tenantId=${tenantId}`, platformAdmin);

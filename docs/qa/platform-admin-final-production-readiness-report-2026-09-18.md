@@ -7,9 +7,9 @@ Primary journey spec: `web/tests/e2e/platform-admin-final-production-readiness-c
 
 ## Certification Status
 
-Status: Not fully certified yet. A release-blocking staging defect was found during the final integrated lead-to-active-tenant journey.
+Status: Certified after deployment rerun.
 
-The defect has been fixed locally and backend regression tests pass. The final staging journey must be rerun after deployment of the fix.
+A release-blocking staging defect was found during the first final integrated lead-to-active-tenant journey. The defect was fixed, deployed, and the final integrated staging journey now passes.
 
 ## Final Journey Scope
 
@@ -72,18 +72,20 @@ Business behavior is unchanged. This only restores the API response contract.
 | --- | --- | --- |
 | `platform-admin-final-production-readiness-certification.spec.ts` | Failed | Blocked at lead conversion because staging does not yet include the API response fix |
 
-## Required Post-Deployment Rerun
+## Post-Deployment Staging Verification
 
-After check-in and deployment, run:
+| Spec | Result | Notes |
+| --- | --- | --- |
+| `platform-admin-final-production-readiness-certification.spec.ts` | Passed, 1/1 | Full public lead to active tenant integrated journey passed on staging in Playwright Chromium |
+
+Command executed:
 
 ```bash
-PLAYWRIGHT_BASE_URL=https://hrms.accerio.in \
-HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 \
-HRMS_ENABLE_DEMO_DATA=false \
-pnpm --dir web exec playwright test tests/e2e/platform-admin-final-production-readiness-certification.spec.ts --project=chromium --workers=1
+PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_API_BASE_URL=https://hrms.accerio.in/api/v1 HRMS_ENABLE_DEMO_DATA=false pnpm --dir web exec playwright test tests/e2e/platform-admin-final-production-readiness-certification.spec.ts --project=chromium --workers=1
 ```
 
-Then run the Platform Admin supporting suite set:
+Optional supporting suite command for full Platform Admin regression:
+
 
 ```bash
 PLAYWRIGHT_BASE_URL=https://hrms.accerio.in \
@@ -104,6 +106,6 @@ pnpm --dir web exec playwright test \
 
 ## Release Decision
 
-Do not mark Platform Admin final production readiness complete until the fix is deployed and the integrated journey passes on staging.
+Platform Admin final integrated production-readiness journey is certified on staging.
 
-Confidence after local fix: high for the specific conversion defect, pending staging proof.
+Confidence: high for the tested Platform Admin lead-to-active-tenant business journey. Remaining recommendation is to run the broader supporting Platform Admin suite before the final public launch cutover.
