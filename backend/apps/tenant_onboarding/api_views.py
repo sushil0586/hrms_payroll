@@ -9,7 +9,7 @@ from django.utils import timezone
 from rest_framework import exceptions, permissions, response, status
 from rest_framework.views import APIView
 
-from apps.iam.models import PermissionCatalogEntry
+from apps.iam.models import MembershipStatus, PermissionCatalogEntry
 from apps.iam.permission_catalog import get_permission_catalog
 from apps.tenant_onboarding.api_serializers import (
     PlatformMutationResultSerializer,
@@ -113,7 +113,9 @@ def _serialize_onboarding(item: TenantOnboarding) -> dict:
                 "is_primary": contact.is_primary,
                 "provisioning_status": contact.provisioning_status,
                 "user_id": contact.user_id,
+                "user_is_active": contact.user.is_active if contact.user_id and contact.user else None,
                 "membership_id": contact.membership_id,
+                "membership_status": contact.membership.status if contact.membership_id and contact.membership else "",
                 "invited_at": contact.invited_at,
                 "first_login_at": contact.first_login_at,
                 "notes": contact.notes,
@@ -173,7 +175,9 @@ def _serialize_admin_contact(contact: TenantOnboardingAdminContact) -> dict:
         "is_primary": contact.is_primary,
         "provisioning_status": contact.provisioning_status,
         "user_id": contact.user_id,
+        "user_is_active": contact.user.is_active if contact.user_id and contact.user else None,
         "membership_id": contact.membership_id,
+        "membership_status": contact.membership.status if contact.membership_id and contact.membership else "",
         "invited_at": contact.invited_at,
         "first_login_at": contact.first_login_at,
         "notes": contact.notes,
@@ -814,6 +818,10 @@ class PlatformTenantMarkHandoffReadyView(APIView):
             raise exceptions.ValidationError("Baseline must be published before handoff is marked ready.")
         if not primary_contact or not primary_contact.membership_id:
             raise exceptions.ValidationError("Primary tenant admin must be provisioned before handoff is marked ready.")
+        if primary_contact.user and not primary_contact.user.is_active:
+            raise exceptions.ValidationError("Primary tenant admin login must be active before handoff is marked ready.")
+        if primary_contact.membership and primary_contact.membership.status in {MembershipStatus.SUSPENDED, MembershipStatus.REVOKED}:
+            raise exceptions.ValidationError("Primary tenant admin membership must be active or invited before handoff is marked ready.")
         onboarding.handoff_completed_at = timezone.now()
         onboarding.save(update_fields=["handoff_completed_at", "updated_at"])
         tenant.onboarding_status = TenantOnboardingStatus.HANDOFF_READY
@@ -858,6 +866,10 @@ class PlatformTenantActivateView(APIView):
             AdminProvisioningStatus.ACTIVATED,
         }:
             raise exceptions.ValidationError("Primary tenant admin must be provisioned before activation.")
+        if primary_contact.user and not primary_contact.user.is_active:
+            raise exceptions.ValidationError("Primary tenant admin login must be active before activation.")
+        if primary_contact.membership and primary_contact.membership.status in {MembershipStatus.SUSPENDED, MembershipStatus.REVOKED}:
+            raise exceptions.ValidationError("Primary tenant admin membership must be active or invited before activation.")
         tenant.status = TenantStatus.ACTIVE
         tenant.onboarding_status = TenantOnboardingStatus.ACTIVE
         tenant.onboarding_completed_at = timezone.now()

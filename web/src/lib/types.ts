@@ -5550,7 +5550,9 @@ export type PlatformOnboardingAdminContact = {
   is_primary: boolean;
   provisioning_status: string;
   user_id: string | null;
+  user_is_active: boolean | null;
   membership_id: string | null;
+  membership_status: string;
   invited_at: string | null;
   first_login_at: string | null;
   notes: string;

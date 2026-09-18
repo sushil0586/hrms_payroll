@@ -538,9 +538,19 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const provisionableContacts = onboarding?.admin_contacts.filter((contact) => !contact.membership_id) ?? [];
   const primaryContact = onboarding?.admin_contacts.find((contact) => contact.is_primary) ?? onboarding?.admin_contacts[0] ?? null;
   const hasProvisionedPrimaryAdmin = Boolean(primaryContact?.membership_id);
+  const primaryAdminMembershipBlocked = Boolean(primaryContact?.membership_status && ["suspended", "revoked"].includes(primaryContact.membership_status));
+  const primaryAdminUserInactive = primaryContact?.user_is_active === false;
+  const hasUsablePrimaryAdmin = Boolean(hasProvisionedPrimaryAdmin && !primaryAdminMembershipBlocked && !primaryAdminUserInactive);
+  const primaryAdminAccessDetail = hasUsablePrimaryAdmin
+    ? `${primaryContact?.email || "Primary tenant admin"} has usable tenant access.`
+    : hasProvisionedPrimaryAdmin
+      ? `${primaryContact?.email || "Primary tenant admin"} has login access, but the user or membership is not active.`
+      : primaryContact
+        ? `Create login access for ${primaryContact.email}.`
+        : "Add a primary tenant admin contact before creating login access.";
   const hasBaseline = Boolean(onboarding?.baseline_published_at);
-  const canMarkHandoff = Boolean(selectedTenant && hasBaseline && hasProvisionedPrimaryAdmin);
-  const canActivateTenant = Boolean(selectedTenant && onboarding?.handoff_completed_at && hasProvisionedPrimaryAdmin);
+  const canMarkHandoff = Boolean(selectedTenant && hasBaseline && hasUsablePrimaryAdmin);
+  const canActivateTenant = Boolean(selectedTenant && onboarding?.handoff_completed_at && hasUsablePrimaryAdmin);
   const publishedPacks = useMemo(() => policyPacks.filter((pack) => pack.status === "published"), [policyPacks]);
   const draftPacks = useMemo(() => policyPacks.filter((pack) => pack.status === "draft"), [policyPacks]);
   const selectedPolicyPack = policyPacks.find((pack) => pack.id === selectedPolicyPackId) ?? publishedPacks[0] ?? policyPacks[0] ?? null;
@@ -588,15 +598,11 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
       actionLabel: hasBaseline ? "View templates" : "Apply template",
     },
     {
-      status: hasProvisionedPrimaryAdmin ? "done" as const : primaryContact ? "needed" as const : "blocked" as const,
+      status: hasUsablePrimaryAdmin ? "done" as const : primaryContact ? "needed" as const : "blocked" as const,
       title: "Create tenant admin login",
-      detail: hasProvisionedPrimaryAdmin
-        ? `${primaryContact?.email || "Primary tenant admin"} has tenant admin access.`
-        : primaryContact
-          ? `Create login access for ${primaryContact.email}.`
-          : "Add a primary tenant admin contact before creating login access.",
+      detail: primaryAdminAccessDetail,
       actionHref: buildPanelHref("admins", selectedTenant.id),
-      actionLabel: hasProvisionedPrimaryAdmin ? "View admin users" : primaryContact ? "Create login access" : "Add admin contact",
+      actionLabel: hasUsablePrimaryAdmin ? "View admin users" : primaryContact ? "Create login access" : "Add admin contact",
     },
     {
       status: onboarding.handoff_completed_at ? "done" as const : canMarkHandoff ? "needed" as const : "blocked" as const,
@@ -1869,9 +1875,9 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                   detail={hasBaseline ? `Confirmed ${formatDateTime(onboarding.baseline_published_at)}` : "Apply a published setup template, then confirm setup."}
                 />
                 <GateChecklistItem
-                  complete={hasProvisionedPrimaryAdmin}
+                  complete={hasUsablePrimaryAdmin}
                   label="Primary tenant admin has login access"
-                  detail={hasProvisionedPrimaryAdmin ? `${primaryContact?.email || "Primary admin"} has tenant access.` : `Create login access for ${primaryContact?.email || "the primary contact"} from Admin Access.`}
+                  detail={primaryAdminAccessDetail}
                 />
                 <GateChecklistItem
                   complete={Boolean(onboarding.handoff_completed_at)}
@@ -1888,7 +1894,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <div className="platform-action-with-reason">
                   <button className="button button--secondary" disabled={Boolean(busyRef) || !canMarkHandoff} type="button" onClick={() => requestTenantAction("mark-handoff-ready")}>Mark ready</button>
                   <DisabledReason show={!canMarkHandoff}>
-                    Needs confirmed initial setup and primary admin login access.
+                    Needs confirmed initial setup and active primary admin login access.
                   </DisabledReason>
                 </div>
               </div>
@@ -1897,7 +1903,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <div className="platform-action-with-reason">
                   <button className="button button--primary" disabled={Boolean(busyRef) || !canActivateTenant} type="button" onClick={() => requestTenantAction("activate")}>Activate tenant</button>
                   <DisabledReason show={!canActivateTenant}>
-                    Needs go-live handoff and primary admin login access.
+                    Needs go-live handoff and active primary admin login access.
                   </DisabledReason>
                 </div>
               </div>
@@ -1908,10 +1914,10 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                   <Link className="button button--secondary" href={buildPanelHref("policy-packs", selectedTenant.id)}>Open setup templates</Link>
                 </div>
               ) : null}
-              {hasBaseline && !hasProvisionedPrimaryAdmin ? (
+              {hasBaseline && !hasUsablePrimaryAdmin ? (
                 <div className="notice notice--compact platform-gate-next-step">
-                  <strong>Primary tenant admin needs login access before this customer can be marked ready.</strong>
-                  <span className="muted">Open Admin Access, create login access for {primaryContact?.email || "the primary contact"}, then return here.</span>
+                  <strong>Primary tenant admin needs usable login access before this customer can be marked ready.</strong>
+                  <span className="muted">{primaryAdminAccessDetail}</span>
                   <Link className="button button--secondary" href={buildPanelHref("admins", selectedTenant.id)}>Open admin access</Link>
                 </div>
               ) : null}

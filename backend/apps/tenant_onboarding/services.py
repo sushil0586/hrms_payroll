@@ -169,7 +169,11 @@ def provision_tenant_admin_contact(
 
     contact.user = user
     contact.membership = membership
-    contact.provisioning_status = AdminProvisioningStatus.PROVISIONED
+    contact.provisioning_status = (
+        AdminProvisioningStatus.INVITED
+        if membership.status == MembershipStatus.INVITED
+        else AdminProvisioningStatus.PROVISIONED
+    )
     contact.save(update_fields=["user", "membership", "provisioning_status", "updated_at"])
     _ensure_single_primary_contact(contact)
 
