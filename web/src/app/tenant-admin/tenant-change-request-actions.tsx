@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import type { TenantAdminConsole } from "@/lib/types";
+import type { TenantAdminChangeRequestMutationResult, TenantAdminConsole } from "@/lib/types";
 
 function apiErrorMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object") {
@@ -70,7 +70,7 @@ export function TenantChangeRequestActions({
   const [payloadError, setPayloadError] = useState("");
 
   const selectedType = requestTypes.find((item) => item.value === requestType) ?? requestTypes[0];
-  const requests = data.change_request_management.recent_requests;
+  const [requests, setRequests] = useState(data.change_request_management.recent_requests);
   const requestPageCount = Math.max(1, Math.ceil(requests.length / REQUEST_PAGE_SIZE));
   const boundedRequestPageIndex = Math.min(requestPageIndex, requestPageCount - 1);
   const pagedRequests = requests.slice(
@@ -108,6 +108,17 @@ export function TenantChangeRequestActions({
     } catch {
       return { error: "Payload must be valid JSON.", payload: null };
     }
+  }
+
+  function upsertRequest(request: TenantAdminConsole["change_request_management"]["recent_requests"][number]) {
+    setRequests((current) => {
+      const existingIndex = current.findIndex((item) => item.id === request.id);
+      if (existingIndex === -1) {
+        return [request, ...current];
+      }
+      return current.map((item) => (item.id === request.id ? request : item));
+    });
+    setRequestPageIndex(0);
   }
 
   const titleError = title.trim() ? "" : "Title is required.";
@@ -148,13 +159,16 @@ export function TenantChangeRequestActions({
         requested_payload: validation.payload,
       }),
     });
-    const result = await response.json().catch(() => ({}));
+    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminChangeRequestMutationResult>;
     setBusyRef("");
     if (!response.ok) {
       setNotice(apiErrorMessage(result, "Change request could not be submitted."));
       return;
     }
     setNotice("Change request submitted.");
+    if (result.change_request) {
+      upsertRequest(result.change_request);
+    }
     setTitle("");
     setDescription("");
     router.refresh();
@@ -171,13 +185,16 @@ export function TenantChangeRequestActions({
         decision_note: decisionNotes[requestId] ?? "",
       }),
     });
-    const result = await response.json().catch(() => ({}));
+    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminChangeRequestMutationResult>;
     setBusyRef("");
     if (!response.ok) {
       setNotice(apiErrorMessage(result, "Change request action could not be saved."));
       return;
     }
     setNotice(`${actionLabels[action] ?? titleCase(action)} saved.`);
+    if (result.change_request) {
+      upsertRequest(result.change_request);
+    }
     router.refresh();
   }
 
@@ -188,7 +205,7 @@ export function TenantChangeRequestActions({
           <span className="workspace-card__eyebrow">Change requests</span>
           <h2>Billing and configuration queue</h2>
         </div>
-        <span className="record-chip">{data.change_request_management.recent_requests.length} requests</span>
+        <span className="record-chip">{requests.length} requests</span>
       </div>
 
       <div className="tenant-change-request-form">

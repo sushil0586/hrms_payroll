@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import type { TenantAdminConsole } from "@/lib/types";
+import type { TenantAdminConsole, TenantAdminMembershipMutationResult } from "@/lib/types";
 
 function apiErrorMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object") {
@@ -65,7 +65,10 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
     [data.membership_management.status_options]
   );
   const defaultRoleId = roleOptions[0]?.id ?? "";
-  const memberships = data.membership_management.memberships?.length ? data.membership_management.memberships : data.membership_management.recent_memberships;
+  const initialMemberships = data.membership_management.memberships?.length
+    ? data.membership_management.memberships
+    : data.membership_management.recent_memberships;
+  const [memberships, setMemberships] = useState<TenantMembership[]>(initialMemberships);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<EditingMember>(null);
   const [memberSearch, setMemberSearch] = useState("");
@@ -205,6 +208,16 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
     setPageIndex(0);
   }
 
+  function upsertMembership(membership: TenantMembership) {
+    setMemberships((current) => {
+      const existingIndex = current.findIndex((item) => item.id === membership.id);
+      if (existingIndex === -1) {
+        return [membership, ...current];
+      }
+      return current.map((item) => (item.id === membership.id ? membership : item));
+    });
+  }
+
   async function inviteMember() {
     if (!canManageUsers) {
       setFormError("You need tenant.users.manage to invite tenant users.");
@@ -229,13 +242,18 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
         role_ids: selectedRoleIds,
       }),
     });
-    const result = await response.json().catch(() => ({}));
+    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminMembershipMutationResult>;
     setBusyRef("");
     if (!response.ok) {
       setFormError(apiErrorMessage(result, "Membership invite could not be saved."));
       return;
     }
     setNotice(result.generated_password ? "Invite saved. Temporary password was generated." : "Invite saved.");
+    if (result.membership) {
+      upsertMembership(result.membership);
+      setMemberSearch(result.membership.email);
+      setPageIndex(0);
+    }
     closeInviteDialog();
     router.refresh();
   }
@@ -265,13 +283,18 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const result = await response.json().catch(() => ({}));
+    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminMembershipMutationResult>;
     setBusyRef("");
     if (!response.ok) {
       setFormError(apiErrorMessage(result, "Membership action could not be saved."));
       return;
     }
     setNotice(`${actionLabels[action] ?? titleCase(action)} saved.`);
+    if (result.membership) {
+      upsertMembership(result.membership);
+      setMemberSearch(result.membership.email);
+      setPageIndex(0);
+    }
     setEditingMember(null);
     closeConfirmation();
     router.refresh();

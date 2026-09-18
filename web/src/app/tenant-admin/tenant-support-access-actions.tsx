@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import type { TenantAdminConsole } from "@/lib/types";
+import type { TenantAdminConsole, TenantAdminSupportAccessGrantMutationResult } from "@/lib/types";
 
 function apiErrorMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object") {
@@ -56,6 +56,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
   const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
   const [sessionRefs, setSessionRefs] = useState<Record<string, string>>({});
   const [grantSearch, setGrantSearch] = useState("");
+  const [grantRows, setGrantRows] = useState(data.support_access_management.recent_grants);
   const [grantPageIndex, setGrantPageIndex] = useState(0);
   const [busyRef, setBusyRef] = useState("");
   const [notice, setNotice] = useState("");
@@ -85,7 +86,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
     !scopeError &&
     !durationError;
   const normalizedGrantSearch = grantSearch.trim().toLowerCase();
-  const grants = data.support_access_management.recent_grants.filter((grant) => {
+  const grants = grantRows.filter((grant) => {
     if (!normalizedGrantSearch) {
       return true;
     }
@@ -109,6 +110,18 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
   const firstVisibleGrant = grants.length ? boundedGrantPageIndex * SUPPORT_GRANT_PAGE_SIZE + 1 : 0;
   const lastVisibleGrant = Math.min(grants.length, (boundedGrantPageIndex + 1) * SUPPORT_GRANT_PAGE_SIZE);
 
+  function upsertGrant(grant: TenantAdminConsole["support_access_management"]["recent_grants"][number]) {
+    setGrantRows((current) => {
+      const existingIndex = current.findIndex((item) => item.id === grant.id);
+      if (existingIndex === -1) {
+        return [grant, ...current];
+      }
+      return current.map((item) => (item.id === grant.id ? grant : item));
+    });
+    setGrantSearch(grant.reason);
+    setGrantPageIndex(0);
+  }
+
   async function requestSupportAccess() {
     setBusyRef("request");
     setNotice("");
@@ -131,15 +144,19 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
         requested_duration_minutes: duration,
       }),
     });
-    const result = await response.json().catch(() => ({}));
+    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminSupportAccessGrantMutationResult>;
     setBusyRef("");
     if (!response.ok) {
       setNotice(apiErrorMessage(result, "Support access request could not be saved."));
       return;
     }
     setNotice("Support access requested.");
-    setGrantSearch(reason.trim());
-    setGrantPageIndex(0);
+    if (result.support_access_grant) {
+      upsertGrant(result.support_access_grant);
+    } else {
+      setGrantSearch(reason.trim());
+      setGrantPageIndex(0);
+    }
     setSupportAgentIdentifier("");
     setReason("");
     router.refresh();
@@ -157,17 +174,15 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
         session_ref: sessionRefs[grantId] ?? "",
       }),
     });
-    const result = await response.json().catch(() => ({}));
+    const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminSupportAccessGrantMutationResult>;
     setBusyRef("");
     if (!response.ok) {
       setNotice(apiErrorMessage(result, "Support access action could not be saved."));
       return;
     }
     setNotice(`${actionLabels[action] ?? titleCase(action)} saved.`);
-    const refreshedGrant = (result as { support_access_grant?: { reason?: unknown } }).support_access_grant;
-    if (typeof refreshedGrant?.reason === "string" && refreshedGrant.reason) {
-      setGrantSearch(refreshedGrant.reason);
-      setGrantPageIndex(0);
+    if (result.support_access_grant) {
+      upsertGrant(result.support_access_grant);
     }
     router.refresh();
   }

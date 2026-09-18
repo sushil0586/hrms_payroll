@@ -293,7 +293,7 @@ test.describe("Tenant admin console", () => {
 
     const createdRequest = page.locator(".tenant-change-request-row").filter({ hasText: requestTitle }).first();
     await expect(createdRequest).toBeVisible({ timeout: 20_000 });
-    await expect(createdRequest.getByText("Submitted")).toBeVisible();
+    await expect(createdRequest.locator(".record-chip").filter({ hasText: "Submitted" })).toBeVisible();
     await expect(createdRequest.getByLabel("Decision note")).toBeVisible();
     await expect(createdRequest.getByText("Required for approve, reject, or apply.")).toBeVisible();
     await expect(createdRequest.getByRole("button", { name: "Approve" })).toBeDisabled();
@@ -313,7 +313,9 @@ test.describe("Tenant admin console", () => {
     );
     await createdRequest.getByRole("button", { name: "Approve" }).click();
     await expect((await approveResponse).ok()).toBeTruthy();
-    await expect(createdRequest.getByText("Approved")).toBeVisible({ timeout: 20_000 });
+    await expect(createdRequest.locator(".record-chip").filter({ hasText: "Approved" })).toBeVisible({
+      timeout: 20_000,
+    });
     await expect(createdRequest.getByRole("button", { name: "Mark applied" })).toBeEnabled();
 
     const appliedNote = "Applied after browser CRUD verification.";
@@ -326,7 +328,9 @@ test.describe("Tenant admin console", () => {
     );
     await createdRequest.getByRole("button", { name: "Mark applied" }).click();
     await expect((await applyResponse).ok()).toBeTruthy();
-    await expect(createdRequest.getByText("Applied")).toBeVisible({ timeout: 20_000 });
+    await expect(createdRequest.locator(".record-chip").filter({ hasText: "Applied" })).toBeVisible({
+      timeout: 20_000,
+    });
     await expectNoHorizontalOverflow(page);
   });
 

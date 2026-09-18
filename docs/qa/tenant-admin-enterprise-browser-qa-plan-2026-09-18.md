@@ -89,7 +89,7 @@ For every Tenant Admin route, certify:
 | TA-UX-1 | Enterprise UI Makeover | Apply approved Account Control Center visual system across Tenant Admin shell and dashboard first, then full pages. | Dark navy shell, compact dashboard, action queue, readiness panel, user/role previews, updated tests. | Certified locally |
 | TA-UX-2 | Users/Roles Makeover | Convert access administration to enterprise directory and permission-matrix patterns without changing APIs/RBAC. | Users directory table, status/security columns, role inventory, permission catalog overview, updated assertions. | Certified locally |
 | TA-UX-3 | Commercial/Setup/Governance Makeover | Bring Plan, Settings, Setup, Support, Security, and Trust Audit into the same compact enterprise system. | Split workspaces, denser change-request form/list, audit ledger styling, corrected setup links, updated Plan & Billing heading/tests. | Certified locally |
-| TA-UX-4 | Staging Visual Signoff | Re-run the same browser certification on deployed staging and capture representative screenshots before check-in/deploy signoff. | Staging evidence, screenshots, and final confidence update. | Pending deployment |
+| TA-UX-4 | Staging Visual Signoff | Re-run the same browser certification on deployed staging and capture representative screenshots before check-in/deploy signoff. | Staging evidence, screenshots, and final confidence update. | Fix pending deployment |
 
 ## UI Makeover Baseline
 
@@ -142,6 +142,7 @@ Implemented in the certification hardening pass:
 - Changed platform admin first-admin provisioning default from `hr-admin` to `tenant-admin` so new tenant admins receive the intended Tenant Admin workspace access by default.
 - Fixed a Roles & Permissions layout overlay so the permission catalog preview cannot intercept role-row edit actions.
 - Hardened browser tests against data-dependent dashboard action-queue content and membership status text collisions.
+- Added immediate client-side row updates for Tenant Admin memberships, change requests, and support access grants after successful mutation responses. This removes the staging delay where rows could remain visually stale until `router.refresh()` completed.
 
 Verification:
 
@@ -150,11 +151,13 @@ Verification:
 - `pnpm --dir web build` passed.
 - `HRMS_API_BASE_URL=http://127.0.0.1:8001/api/v1 pnpm --dir web exec playwright test tests/e2e/tenant-admin-console-flows.spec.ts tests/e2e/tenant-admin-plan-settings-certification.spec.ts tests/e2e/tenant-admin-users-dialog-certification.spec.ts tests/e2e/tenant-admin-roles-certification.spec.ts tests/e2e/tenant-admin-support-access-certification.spec.ts tests/e2e/tenant-admin-security-trust-final-certification.spec.ts tests/e2e/tenant-admin-visual-accessibility-certification.spec.ts --project=chromium --workers=1` passed: **37 passed, 1 skipped** in 2.1m.
 - The skipped case is the existing environment-gated last-admin browser-authenticated mutation guard; the rest of Roles/RBAC, dashboard, users, plan/settings, support access, security, trust audit, desktop routes, and mobile dashboard certification passed locally.
+- Staging pre-fix run with `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in ... --workers=1` produced **30 passed, 4 skipped, 4 failed**. Passing areas included dashboard, users page controls, unauthorized membership denial, membership audit evidence, setup, settings, security readiness, trust audit export, support validation/create/reject/search/denial, user dialogs, and all desktop/mobile visual routes. The four failures were successful mutation responses whose rows did not update visually fast enough on staging: membership activation, plan approval/apply, support approval/start, and configuration cancel.
+- Focused local post-fix mutation run passed: `HRMS_API_BASE_URL=http://127.0.0.1:8001/api/v1 pnpm --dir web exec playwright test tests/e2e/tenant-admin-console-flows.spec.ts tests/e2e/tenant-admin-plan-settings-certification.spec.ts --project=chromium --workers=1 --grep "invite and access lifecycle|plan page and change request lifecycle|support access page and support lifecycle|creates and cancels" --timeout=90000` -> **4 passed**.
 - Staging browser verification remains required after deployment.
 
 Next UI tasks:
 
-- Run the same Tenant Admin certification pack on staging after deployment.
+- Deploy the client-side row-state fix and rerun the same Tenant Admin certification pack on staging.
 - Capture fresh representative screenshots for Dashboard, Users, Roles, Plan & Billing, Support Access, Trust Audit, Settings, and mobile Dashboard.
 - Decide whether Users should expose real Role/Status/Security filters and export now, or keep those as post-certification product enhancements until backend/export contracts are approved.
 - Decide whether Roles should expose a page-level editable permission matrix outside the existing role dialog, or keep the current dialog as the single mutation surface.
