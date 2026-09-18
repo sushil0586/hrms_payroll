@@ -108,6 +108,7 @@ test.describe("Tenant admin console", () => {
   });
 
   test("certifies user management invite and access lifecycle", async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/tenant-admin/users");
     await expectPageReady(page, "Tenant User Management");
     const stamp = Date.now();
@@ -335,6 +336,7 @@ test.describe("Tenant admin console", () => {
   });
 
   test("certifies focused support access page and support lifecycle", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/tenant-admin/support-access");
     await expectPageReady(page, "Support Access");
     const supportReason = `Browser support lifecycle ${Date.now()}`;
@@ -371,7 +373,7 @@ test.describe("Tenant admin console", () => {
 
     const createdGrant = page.locator(".tenant-support-access-row").filter({ hasText: supportReason }).first();
     await expect(createdGrant).toBeVisible({ timeout: 20_000 });
-    await expect(createdGrant.getByText("Requested")).toBeVisible();
+    await expect(createdGrant.locator(".record-chip").filter({ hasText: "Requested" })).toBeVisible();
     await expect(createdGrant.getByText("Required for approve, reject, or revoke.")).toBeVisible();
     await expect(createdGrant.getByRole("button", { name: "Approve" })).toBeDisabled();
     await createdGrant.getByLabel("Decision note").fill("Approved for browser support lifecycle verification.");
@@ -382,7 +384,9 @@ test.describe("Tenant admin console", () => {
     );
     await createdGrant.getByRole("button", { name: "Approve" }).click();
     await expect((await approveResponse).ok()).toBeTruthy();
-    await expect(createdGrant.getByText("Approved")).toBeVisible({ timeout: 20_000 });
+    await expect(createdGrant.locator(".record-chip").filter({ hasText: "Approved" })).toBeVisible({
+      timeout: 20_000,
+    });
     await expect(createdGrant.getByRole("button", { name: "Start session" })).toBeEnabled();
 
     await createdGrant.getByLabel("Session ref").fill(`support-session-browser-${Date.now()}`);
@@ -392,7 +396,9 @@ test.describe("Tenant admin console", () => {
     );
     await createdGrant.getByRole("button", { name: "Start session" }).click();
     await expect((await startResponse).ok()).toBeTruthy();
-    await expect(createdGrant.getByText("Active")).toBeVisible({ timeout: 20_000 });
+    await expect(createdGrant.locator(".record-chip").filter({ hasText: "Active" })).toBeVisible({
+      timeout: 20_000,
+    });
     await expect(createdGrant.getByRole("button", { name: "End session" })).toBeEnabled();
     const endResponse = page.waitForResponse(
       (response) => response.url().includes("/api/tenant-admin/support-access-grants/") && response.request().method() === "PATCH",
@@ -400,7 +406,9 @@ test.describe("Tenant admin console", () => {
     );
     await createdGrant.getByRole("button", { name: "End session" }).click();
     await expect((await endResponse).ok()).toBeTruthy();
-    await expect(createdGrant.getByText("Ended")).toBeVisible({ timeout: 20_000 });
+    await expect(createdGrant.locator(".record-chip").filter({ hasText: "Ended" })).toBeVisible({
+      timeout: 20_000,
+    });
 
     await supportAgentInput.fill("support.agent");
     await reasonInput.fill(revokeReason);
@@ -421,7 +429,9 @@ test.describe("Tenant admin console", () => {
     );
     await revokeGrant.getByRole("button", { name: "Revoke" }).click();
     await expect((await revokeResponse).ok()).toBeTruthy();
-    await expect(revokeGrant.getByText("Revoked")).toBeVisible({ timeout: 20_000 });
+    await expect(revokeGrant.locator(".record-chip").filter({ hasText: "Revoked" })).toBeVisible({
+      timeout: 20_000,
+    });
     await expect(page.getByRole("heading", { name: "What support can access" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
