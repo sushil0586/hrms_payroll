@@ -6,6 +6,8 @@ import { getHrAdminSaasResilienceReadiness } from "@/lib/api";
 import type { HrAdminSaasResilienceReadiness } from "@/lib/types";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
+import { OperationsGovernanceStrip } from "../operations-governance-strip";
+
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
@@ -76,6 +78,18 @@ export default async function HrAdminSaasResiliencePage() {
         }
         pills={[data.profile_ref, data.profile_source, titleCase(data.summary.status)]}
         showPills
+      />
+
+      <OperationsGovernanceStrip
+        current="resilience"
+        title="Backup, restore, and retention proof"
+        description="Review resilience evidence that protects tenant payroll, documents, audit trails, and support records without exposing platform-only controls."
+        metrics={[
+          { label: "posture", value: titleCase(data.summary.status), tone: data.summary.status === "ready" ? "ready" : data.summary.status === "warning" ? "warning" : "blocked" },
+          { label: "blockers", value: data.summary.blocker_count, tone: data.summary.blocker_count ? "blocked" : "ready" },
+          { label: "warnings", value: data.summary.warning_count, tone: data.summary.warning_count ? "warning" : "ready" },
+          { label: "checks", value: `${data.summary.passed_check_count}/${data.summary.check_count}`, tone: "neutral" },
+        ]}
       />
 
       <section className="section">

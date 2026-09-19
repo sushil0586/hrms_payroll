@@ -4,12 +4,16 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployees } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
+import { ReportInsightsStrip } from "../report-insights-strip";
 import { WorkforceReportWorkspace } from "./workforce-report-workspace";
 
 export default async function WorkforceReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
   const result = await getHrAdminEmployees();
+  const employees = result.data;
+  const activeCount = employees.filter((item) => item.employment_status === "active").length;
+  const managerGapCount = employees.filter((item) => !item.reporting_manager && item.direct_reports_count === 0).length;
 
   return (
     <main className="shell">
@@ -37,7 +41,20 @@ export default async function WorkforceReportPage() {
         showPills
       />
 
-      <WorkforceReportWorkspace employees={result.data} />
+      <ReportInsightsStrip
+        current="workforce"
+        eyebrow="Workforce report"
+        title="Employee master evidence"
+        description="Inspect workforce structure, manager coverage, access readiness, organization mapping, and exportable employee master evidence."
+        metrics={[
+          { label: "employees", value: employees.length, tone: "neutral" },
+          { label: "active", value: activeCount, tone: "ready" },
+          { label: "manager gaps", value: managerGapCount, tone: managerGapCount ? "warning" : "ready" },
+          { label: "source", value: result.state === "live" ? "Live" : "Demo", tone: result.state === "live" ? "ready" : "warning" },
+        ]}
+      />
+
+      <WorkforceReportWorkspace employees={employees} />
     </main>
   );
 }

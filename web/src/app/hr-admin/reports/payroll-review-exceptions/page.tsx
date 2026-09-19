@@ -4,6 +4,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReviewSetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
+import { ReportInsightsStrip } from "../report-insights-strip";
 import { PayrollReviewExceptionsReportWorkspace } from "./payroll-review-exceptions-report-workspace";
 
 export default async function PayrollReviewExceptionsReportPage() {
@@ -35,6 +36,19 @@ export default async function PayrollReviewExceptionsReportPage() {
         }
         pills={["Review exceptions", "Decision evidence", "Approval impact"]}
         showPills
+      />
+
+      <ReportInsightsStrip
+        current="payroll"
+        eyebrow="Payroll exception report"
+        title="Review exception evidence"
+        description="Inspect calculation and review exceptions by severity, status, component, decision state, and approval impact."
+        metrics={[
+          { label: "exceptions", value: result.data.summary.exception_count, tone: result.data.summary.exception_count ? "warning" : "ready" },
+          { label: "open", value: result.data.summary.open_exception_count, tone: result.data.summary.open_exception_count ? "warning" : "ready" },
+          { label: "blockers", value: result.data.summary.open_blocker_count, tone: result.data.summary.open_blocker_count ? "blocked" : "ready" },
+          { label: "approvals", value: result.data.summary.approval_count, tone: "neutral" },
+        ]}
       />
 
       <PayrollReviewExceptionsReportWorkspace reviews={result.data.reviews} exceptions={result.data.exceptions} />

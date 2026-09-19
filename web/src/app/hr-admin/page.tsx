@@ -110,41 +110,120 @@ export default async function HrAdminLandingPage() {
   const configSummary = launchConfigSummary(launchConfigChecks);
   const commandActions = buildHrAdminActions(dashboard);
   const openCommandCount = commandActions.filter((action) => action.status !== "ready").length;
+  const tenantReadinessItems = [
+    {
+      label: "Payroll readiness",
+      detail: "Leave, attendance, and employee source data",
+      status: commandActions[0].status,
+      value: commandActions[0].value,
+      href: "/hr-admin/payroll-readiness",
+    },
+    {
+      label: "Document verification",
+      detail: "Employee documents pending or rejected",
+      status: commandActions[2].status,
+      value: commandActions[2].value,
+      href: "/hr-admin/employee-documents",
+    },
+    {
+      label: "Launch guardrails",
+      detail: `${configSummary.ready} ready, ${configSummary.warnings} warnings, ${configSummary.blocked} blockers`,
+      status: configSummary.status,
+      value: configSummary.blocked + configSummary.warnings,
+      href: "/hr-admin/launch-remediation",
+    },
+    {
+      label: "Notification delivery",
+      detail: "Failed and pending delivery events",
+      status: commandActions[4].status,
+      value: commandActions[4].value,
+      href: "/hr-admin/notification-delivery",
+    },
+  ];
+  const focusWorkspaces = [
+    {
+      eyebrow: hrAdminModuleMetadata.employees.eyebrow,
+      title: hrAdminModuleMetadata.employees.title,
+      description: "Maintain employee records, access readiness, reporting lines, and payroll-critical profile data.",
+      href: hrAdminModuleMetadata.employees.href,
+      cta: "Open employees",
+      details: [
+        { label: "Profiles", value: dashboard.overview.total_employees },
+        { label: "Active", value: activeEmployees },
+        { label: "Managers", value: dashboard.workforce.managers_with_reports },
+      ],
+    },
+    {
+      eyebrow: hrAdminModuleMetadata.payroll.eyebrow,
+      title: "Payroll Control",
+      description: "Track payroll readiness, input blockers, review exceptions, output publication, and finance handoff.",
+      href: hrAdminModuleMetadata.payroll.href,
+      cta: "Open payroll",
+      details: [
+        { label: "Input blockers", value: commandActions[0].value },
+        { label: "Launch status", value: launchAuditStatusLabel[launchAudit.status] },
+        { label: "Open actions", value: openCommandCount },
+      ],
+    },
+    {
+      eyebrow: hrAdminModuleMetadata.attendance.eyebrow,
+      title: hrAdminModuleMetadata.attendance.title,
+      description: "Resolve attendance exceptions, review regularizations, and keep shifts and calendars ready.",
+      href: hrAdminModuleMetadata.attendance.href,
+      cta: "Open attendance",
+      details: [
+        { label: "Regularizations", value: dashboard.operations.pending_regularizations },
+        { label: "Policies", value: dashboard.governance.active_attendance_policies },
+        { label: "Layer", value: "Time ops" },
+      ],
+    },
+    {
+      eyebrow: hrAdminModuleMetadata.reports.eyebrow,
+      title: hrAdminModuleMetadata.reports.title,
+      description: "Open workforce, compliance, payroll, and audit reports without changing master data.",
+      href: hrAdminModuleMetadata.reports.href,
+      cta: "Open reports",
+      details: [
+        { label: "Approvals", value: dashboard.overview.pending_approvals },
+        { label: "Documents", value: dashboard.documents.pending_verification },
+        { label: "Delivery issues", value: dashboard.delivery.failed_notifications },
+      ],
+    },
+  ];
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-enterprise-dashboard">
       <PageIntro
-        eyebrow={state === "live" ? "Live admin" : "Demo admin"}
-        title="Control center"
-        description="People, policy, workflow, and review controls in one place."
+        eyebrow="HR Admin"
+        title="People Operations Control Center"
+        description="Prioritize workforce, payroll, attendance, document, and launch-readiness work from one calm operating view."
         actions={
           <>
-          <Link className="button button--primary" href="/hr-admin/lifecycle">
-            Lifecycle
-          </Link>
-          <Link className="button button--secondary" href="/hr-admin/employee-documents">
-            Documents
-          </Link>
-          <Link className="button button--secondary" href="/hr-admin/reports">
-            Reports
-          </Link>
+            <Link className="button button--primary" href="/hr-admin/payroll-readiness">
+              Resolve payroll blockers
+            </Link>
+            <Link className="button button--secondary" href="/hr-admin/employees">
+              Open employees
+            </Link>
+            <Link className="button button--secondary" href="/hr-admin/reports">
+              Reports
+            </Link>
           </>
         }
         pills={[
-          "Live queues",
-          "Guided actions",
-          "Short headers",
+          state === "live" ? "Live workspace" : "Demo workspace",
+          `${openCommandCount} active signals`,
+          `${launchAudit.passed_gate_count}/${launchAudit.gate_count} launch gates`,
         ]}
         showPills
       />
 
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Employees in workspace" value={dashboard.overview.total_employees} trend="People coverage snapshot" />
-          <MetricTile label="Active employees" value={activeEmployees} trend="Healthy operating baseline" />
-          <MetricTile label="Departments configured" value={dashboard.overview.configured_departments} trend="Org structure depth" />
-          <MetricTile label="Pending approvals" value={dashboard.overview.pending_approvals} trend="Cross-module action load" />
-          <MetricTile label="Launch audit" value={launchAuditStatusLabel[launchAudit.status]} trend={`${launchAudit.passed_gate_count}/${launchAudit.gate_count} gates passed`} />
+      <section className="section hr-admin-kpi-strip">
+        <div className="metric-grid-modern hr-admin-kpi-strip__grid">
+          <MetricTile label="Tenant status" value={launchAuditStatusLabel[launchAudit.status]} trend={`${launchAudit.blocker_count} blockers, ${launchAudit.warning_count} warnings`} />
+          <MetricTile label="Active employees" value={activeEmployees} trend={`${dashboard.overview.total_employees} total profiles`} />
+          <MetricTile label="Configuration setup" value={`${launchAudit.passed_gate_count}/${launchAudit.gate_count}`} trend="Launch gates passed" />
+          <MetricTile label="Action queue" value={openCommandCount} trend="Signals needing review" />
         </div>
       </section>
 
@@ -152,8 +231,8 @@ export default async function HrAdminLandingPage() {
         <article className="panel-card-soft hr-admin-control-card hr-admin-control-card--primary">
           <div className="hr-admin-control-card__header">
             <div>
-              <span className="workspace-card__eyebrow">Command queue</span>
-              <h2>Today&apos;s operating priorities</h2>
+              <span className="workspace-card__eyebrow">Action queue</span>
+              <h2>Items that need your attention</h2>
             </div>
             <span className="queue-summary-chip"><strong>{openCommandCount}</strong> active signals</span>
           </div>
@@ -175,20 +254,24 @@ export default async function HrAdminLandingPage() {
         <article className="panel-card-soft hr-admin-control-card">
           <div className="hr-admin-control-card__header">
             <div>
-              <span className="workspace-card__eyebrow">Fast actions</span>
-              <h2>Operator shortcuts</h2>
+              <span className="workspace-card__eyebrow">Tenant readiness</span>
+              <h2>Operational readiness</h2>
             </div>
             <span className={launchAuditChipClass(launchAudit.status)}>{launchAuditStatusLabel[launchAudit.status]}</span>
           </div>
-          <div className="hr-admin-shortcut-grid">
-            <Link className="button button--primary" href="/hr-admin/payroll-inputs">Payroll inputs</Link>
-            <Link className="button button--secondary" href="/hr-admin/payroll-review">Payroll review</Link>
-            <Link className="button button--secondary" href="/hr-admin/employees">Employees</Link>
-            <Link className="button button--secondary" href="/hr-admin/reports">Reports</Link>
-            <Link className="button button--secondary" href="/hr-admin/generated-letters">Letters</Link>
-            <Link className="button button--secondary" href="/hr-admin/saas-operations">Ops health</Link>
+          <div className="hr-admin-readiness-list">
+            {tenantReadinessItems.map((item) => (
+              <Link className="hr-admin-readiness-row" href={item.href} key={item.label}>
+                <span className={launchAuditChipClass(item.status)}>{launchAuditStatusLabel[item.status]}</span>
+                <div>
+                  <strong>{item.label}</strong>
+                  <small>{item.detail}</small>
+                </div>
+                <span className="record-chip">{item.value}</span>
+              </Link>
+            ))}
           </div>
-          <div className="detail-grid">
+          <div className="detail-grid hr-admin-mini-detail-grid">
             <div className="detail-row">
               <span>Pending approvals</span>
               <strong>{dashboard.overview.pending_approvals}</strong>
@@ -209,12 +292,12 @@ export default async function HrAdminLandingPage() {
         </article>
       </section>
 
-      <section className="section">
+      <section className="section hr-admin-secondary-grid">
         <div className="hr-admin-launch-audit panel-card-soft">
           <div className="hr-admin-launch-audit__header">
             <div>
-              <span className="workspace-card__eyebrow">SaaS launch audit</span>
-              <h2>{launchAudit.audit_profile_ref}</h2>
+              <span className="workspace-card__eyebrow">Launch audit</span>
+              <h2>Launch readiness posture</h2>
             </div>
             <div className="hr-admin-launch-audit__summary">
               <span className={launchAuditChipClass(launchAudit.status)}>{launchAuditStatusLabel[launchAudit.status]}</span>
@@ -231,7 +314,7 @@ export default async function HrAdminLandingPage() {
           </div>
 
           <div className="hr-admin-launch-audit__modules">
-            {launchAuditModules.map((module) => (
+            {launchAuditModules.slice(0, 4).map((module) => (
               <article className="hr-admin-launch-audit__module" key={module.module_ref}>
                 <div>
                   <span className={launchAuditChipClass(module.status)}>{launchAuditStatusLabel[module.status]}</span>
@@ -263,14 +346,12 @@ export default async function HrAdminLandingPage() {
           ) : null}
 
           <div className="hr-admin-launch-audit__evidence">
-            {launchAudit.evidence_refs.map((evidenceRef) => (
+            {launchAudit.evidence_refs.slice(0, 4).map((evidenceRef) => (
               <code key={evidenceRef}>{evidenceRef}</code>
             ))}
           </div>
         </div>
-      </section>
 
-      <section className="section">
         <div className="launch-config-guard panel-card-soft">
           <div className="launch-config-guard__header">
             <div>
@@ -285,7 +366,7 @@ export default async function HrAdminLandingPage() {
             </div>
           </div>
           <div className="launch-config-guard__grid">
-            {launchConfigChecks.map((check) => (
+            {launchConfigChecks.slice(0, 4).map((check) => (
               <article className="launch-config-guard__item" key={check.ref}>
                 <span className={launchConfigChipClass(check.severity)}>{launchAuditStatusLabel[check.severity]}</span>
                 <strong>{check.label}</strong>
@@ -297,130 +378,27 @@ export default async function HrAdminLandingPage() {
       </section>
 
       <section className="section">
-        <div className="workspace-grid-modern">
-          <WorkspaceCard
-            eyebrow={hrAdminModuleMetadata.attendance.eyebrow}
-            title={hrAdminModuleMetadata.attendance.title}
-            description={hrAdminModuleMetadata.attendance.description}
-            href={hrAdminModuleMetadata.attendance.href}
-            cta="Explore attendance"
-            details={[
-              { label: "Attendance policies", value: dashboard.governance.active_attendance_policies },
-              { label: "Operational layer", value: "Shifts and calendars" },
-            ]}
-          />
-
-          <WorkspaceCard
-            eyebrow={hrAdminModuleMetadata.reports.eyebrow}
-            title={hrAdminModuleMetadata.reports.title}
-            description={hrAdminModuleMetadata.reports.description}
-            href={hrAdminModuleMetadata.reports.href}
-            cta="Explore reports"
-            details={[
-              { label: "Pending approvals", value: dashboard.overview.pending_approvals },
-              { label: "Document reviews", value: dashboard.documents.pending_verification },
-              { label: "Failed notifications", value: dashboard.delivery.failed_notifications },
-            ]}
-          />
-
-          <WorkspaceCard
-            eyebrow={hrAdminModuleMetadata.payroll.eyebrow}
-            title={hrAdminModuleMetadata.payroll.title}
-            description={hrAdminModuleMetadata.payroll.description}
-            href={hrAdminModuleMetadata.payroll.href}
-            cta="Open readiness"
-            details={[
-              { label: "Source checks", value: "Employee, leave, attendance" },
-              { label: "Configuration", value: "Tenant profile" },
-              { label: "Phase", value: "0" },
-            ]}
-          />
-
-          <WorkspaceCard
-            eyebrow={hrAdminModuleMetadata.employees.eyebrow}
-            title={hrAdminModuleMetadata.employees.title}
-            description={hrAdminModuleMetadata.employees.description}
-            href={hrAdminModuleMetadata.employees.href}
-            cta="Explore employees"
-            details={[
-              { label: "Profiles loaded", value: dashboard.overview.total_employees },
-              { label: "Active employees", value: activeEmployees },
-              { label: "Managers mapped", value: dashboard.workforce.managers_with_reports },
-            ]}
-          />
-
-          <WorkspaceCard
-            eyebrow={hrAdminModuleMetadata.organization.eyebrow}
-            title={hrAdminModuleMetadata.organization.title}
-            description={hrAdminModuleMetadata.organization.description}
-            href={hrAdminModuleMetadata.organization.href}
-            cta="Explore organization"
-            details={[
-              { label: "Departments", value: dashboard.overview.configured_departments },
-              { label: "Branches", value: dashboard.overview.active_branches },
-              { label: "Active memberships", value: dashboard.overview.active_memberships },
-            ]}
-          />
-
-          <WorkspaceCard
-            eyebrow={hrAdminModuleMetadata.policies.eyebrow}
-            title={hrAdminModuleMetadata.policies.title}
-            description={hrAdminModuleMetadata.policies.description}
-            href={hrAdminModuleMetadata.policies.href}
-            cta="Explore policies"
-            details={[
-              { label: "Leave policies", value: dashboard.governance.active_leave_policies },
-              { label: "Attendance policies", value: dashboard.governance.active_attendance_policies },
-            ]}
-          />
-
-          <WorkspaceCard
-            eyebrow={hrAdminModuleMetadata.workflows.eyebrow}
-            title={hrAdminModuleMetadata.workflows.title}
-            description={hrAdminModuleMetadata.workflows.description}
-            href={hrAdminModuleMetadata.workflows.href}
-            cta="Explore workflows"
-            details={[
-              { label: "Workflow templates", value: dashboard.governance.workflow_templates },
-              { label: "Pending approvals", value: dashboard.overview.pending_approvals },
-            ]}
-          />
-
-          <WorkspaceCard
-            eyebrow={hrAdminModuleMetadata.documents.eyebrow}
-            title={hrAdminModuleMetadata.documents.title}
-            description={hrAdminModuleMetadata.documents.description}
-            href={hrAdminModuleMetadata.documents.href}
-            cta="Explore documents"
-            details={[
-              { label: "Document categories", value: dashboard.documents.active_document_categories },
-              { label: "Upload governance", value: "Configured by category" },
-            ]}
-          />
-
-          <WorkspaceCard
-            eyebrow={hrAdminModuleMetadata.lifecycle.eyebrow}
-            title={hrAdminModuleMetadata.lifecycle.title}
-            description={hrAdminModuleMetadata.lifecycle.description}
-            href={hrAdminModuleMetadata.lifecycle.href}
-            cta="Explore lifecycle"
-            details={[
-              { label: "Active onboardings", value: dashboard.operations.pending_onboardings },
-              { label: "Coverage", value: "Join to exit" },
-            ]}
-          />
-
-          <WorkspaceCard
-            eyebrow={hrAdminModuleMetadata.notifications.eyebrow}
-            title={hrAdminModuleMetadata.notifications.title}
-            description={hrAdminModuleMetadata.notifications.description}
-            href={hrAdminModuleMetadata.notifications.href}
-            cta="Explore notifications"
-            details={[
-              { label: "Templates", value: dashboard.governance.active_notification_templates },
-              { label: "Mode", value: "Event-driven" },
-            ]}
-          />
+        <div className="hr-admin-section-heading">
+          <div>
+            <span className="workspace-card__eyebrow">Focused workspaces</span>
+            <h2>Open the right workspace</h2>
+          </div>
+          <Link className="button button--secondary" href="/hr-admin/reports">
+            View all reports
+          </Link>
+        </div>
+        <div className="workspace-grid-modern hr-admin-workspace-grid">
+          {focusWorkspaces.map((workspace) => (
+            <WorkspaceCard
+              cta={workspace.cta}
+              description={workspace.description}
+              details={workspace.details}
+              eyebrow={workspace.eyebrow}
+              href={workspace.href}
+              key={workspace.title}
+              title={workspace.title}
+            />
+          ))}
         </div>
       </section>
     </main>

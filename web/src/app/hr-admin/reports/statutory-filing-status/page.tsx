@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
+import { ComplianceEvidenceStrip } from "@/app/hr-admin/compliance-evidence-strip";
 import { getHrAdminPayrollFinanceHandoffSetup, getHrAdminPayrollStatutorySetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
@@ -38,6 +39,19 @@ export default async function StatutoryFilingStatusReportPage() {
         }
         pills={["Compliance", "Filing calendar", "Due status"]}
         showPills
+      />
+
+      <ComplianceEvidenceStrip
+        current="reports"
+        eyebrow="Filing calendar"
+        title="Statutory filing evidence"
+        description="Track due dates, overdue exposure, acknowledgement state, route readiness, and generated filing artifacts."
+        metrics={[
+          { label: "filings", value: statutoryResult.data.summary.filing_calendar_count, tone: "neutral" },
+          { label: "due", value: statutoryResult.data.summary.due_filing_calendar_count, tone: statutoryResult.data.summary.due_filing_calendar_count ? "warning" : "ready" },
+          { label: "registrations", value: statutoryResult.data.summary.active_employer_registration_count, tone: "ready" },
+          { label: "artifacts", value: handoffResult.data.summary.statutory_filing_artifact_count ?? 0, tone: (handoffResult.data.summary.statutory_filing_artifact_count ?? 0) ? "ready" : "warning" },
+        ]}
       />
 
       <StatutoryFilingStatusReportWorkspace

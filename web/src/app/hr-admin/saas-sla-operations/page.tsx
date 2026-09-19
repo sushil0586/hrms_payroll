@@ -5,6 +5,8 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminSaasSlaOperations } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
+import { OperationsGovernanceStrip } from "../operations-governance-strip";
+
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
@@ -62,6 +64,18 @@ export default async function HrAdminSaasSlaOperationsPage() {
         }
         pills={[data.profile_ref, data.profile_source, titleCase(data.summary.status)]}
         showPills
+      />
+
+      <OperationsGovernanceStrip
+        current="sla"
+        title="Incident and SLA operating view"
+        description="Track service-impact incidents, response targets, escalation ownership, and breached tenant-facing commitments."
+        metrics={[
+          { label: "posture", value: titleCase(data.summary.status), tone: data.summary.status === "ready" ? "ready" : data.summary.status === "warning" ? "warning" : "blocked" },
+          { label: "open incidents", value: data.summary.open_incident_count, tone: data.summary.open_incident_count ? "warning" : "ready" },
+          { label: "breached", value: data.summary.breached_incident_count, tone: data.summary.breached_incident_count ? "blocked" : "ready" },
+          { label: "at risk", value: data.summary.at_risk_incident_count, tone: data.summary.at_risk_incident_count ? "warning" : "ready" },
+        ]}
       />
 
       <section className="section">

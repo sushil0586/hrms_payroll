@@ -11,6 +11,7 @@ import {
   getHrAdminShiftRosterTemplates,
   getHrAdminShifts,
 } from "@/lib/api";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminAttendanceOperationsPage() {
   const [shiftsResult, calendarsResult, recordsResult, regularizationsResult, shiftAssignmentsResult, rosterTemplatesResult] = await Promise.all([
@@ -54,6 +55,16 @@ export default async function HrAdminAttendanceOperationsPage() {
           "Correction and exception workflows",
           "Shift and calendar foundations",
         ]}
+      />
+
+      <TimeLeaveOperationsStrip
+        current="overview"
+        title="Attendance operations command"
+        description="Move between attendance records, correction queues, shift coverage, calendars, and leave ledgers without mixing setup and review work."
+        primaryMetricLabel="records"
+        primaryMetricValue={recordsResult.data.total_count}
+        secondaryMetricLabel="regularizations"
+        secondaryMetricValue={regularizationsResult.data.total_count}
       />
 
       <section className="section">

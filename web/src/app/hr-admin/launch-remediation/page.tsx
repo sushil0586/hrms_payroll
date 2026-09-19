@@ -5,6 +5,8 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLaunchRemediations } from "@/lib/api";
 import type { HrAdminLaunchRemediationAssignment } from "@/lib/types";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
+
+import { OperationsGovernanceStrip } from "../operations-governance-strip";
 import { LaunchRemediationActions } from "./launch-remediation-actions";
 
 type SearchParamValue = string | string[] | undefined;
@@ -79,6 +81,18 @@ export default async function HrAdminLaunchRemediationPage({ searchParams }: Pag
         }
         pills={["Owner workflow", "Tenant scoped", "Audit trail"]}
         showPills
+      />
+
+      <OperationsGovernanceStrip
+        current="remediation"
+        title="Launch blocker command desk"
+        description="Use this page to route unresolved launch blockers and warnings to the right HR owner, capture accepted-risk decisions, and keep audit evidence attached to every launch gate."
+        metrics={[
+          { label: "open", value: data.summary.open_count, tone: data.summary.open_count ? "warning" : "ready" },
+          { label: "blockers", value: data.summary.blocker_count, tone: data.summary.blocker_count ? "blocked" : "ready" },
+          { label: "overdue", value: data.summary.overdue_count, tone: data.summary.overdue_count ? "blocked" : "ready" },
+          { label: "escalated", value: data.summary.escalated_count, tone: data.summary.escalated_count ? "warning" : "ready" },
+        ]}
       />
 
       <section className="section">

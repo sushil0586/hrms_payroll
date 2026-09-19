@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
+import { ComplianceEvidenceStrip } from "@/app/hr-admin/compliance-evidence-strip";
 import { getHrAdminEmployeeDocuments } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
@@ -10,6 +11,10 @@ export default async function DocumentComplianceReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
   const result = await getHrAdminEmployeeDocuments({ page: 1, page_size: 500 });
+  const documents = result.data.items;
+  const pendingVerificationCount = documents.filter((item) => item.verification_status === "pending").length;
+  const expiryRiskCount = documents.filter((item) => item.is_expired || item.is_expiring_soon).length;
+  const reuploadCount = documents.filter((item) => item.reupload_requested).length;
 
   return (
     <main className="shell">
@@ -37,7 +42,20 @@ export default async function DocumentComplianceReportPage() {
         showPills
       />
 
-      <DocumentComplianceReportWorkspace documents={result.data.items} />
+      <ComplianceEvidenceStrip
+        current="documents"
+        eyebrow="Document evidence"
+        title="Employee document compliance"
+        description="Track verification state, expiry exposure, re-upload risk, and document evidence across the employee file."
+        metrics={[
+          { label: "documents", value: documents.length, tone: "neutral" },
+          { label: "pending", value: pendingVerificationCount, tone: pendingVerificationCount ? "warning" : "ready" },
+          { label: "expiry risk", value: expiryRiskCount, tone: expiryRiskCount ? "blocked" : "ready" },
+          { label: "re-upload", value: reuploadCount, tone: reuploadCount ? "warning" : "ready" },
+        ]}
+      />
+
+      <DocumentComplianceReportWorkspace documents={documents} />
     </main>
   );
 }

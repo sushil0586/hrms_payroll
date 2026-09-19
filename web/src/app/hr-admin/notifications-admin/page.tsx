@@ -6,6 +6,8 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { WorkspaceCard } from "@/components/patterns/workspace-card";
 import { getHrAdminNotificationDiagnostics, getHrAdminNotificationEvents, getHrAdminNotifications, getHrAdminNotificationOptions, getHrAdminNotificationTemplates } from "@/lib/api";
 
+import { OperationsGovernanceStrip } from "../operations-governance-strip";
+
 export default async function HrAdminNotificationsAdminPage() {
   const [templatesResult, eventsResult, notificationsResult, optionsResult, diagnosticsResult] = await Promise.all([
     getHrAdminNotificationTemplates(),
@@ -60,6 +62,18 @@ export default async function HrAdminNotificationsAdminPage() {
         }
         pills={["Delivery", "Templates", "Events", "Queue"]}
         showPills
+      />
+
+      <OperationsGovernanceStrip
+        current="notifications"
+        title="Notification operations control"
+        description="Use this page to manage tenant-facing communication reliability: channels, reusable content, trigger rules, queue failures, diagnostics, and audit-ready recovery paths."
+        metrics={[
+          { label: "enabled channels", value: enabledChannels, tone: enabledChannels ? "ready" : "warning" },
+          { label: "failed delivery", value: failedNotifications, tone: failedNotifications ? "blocked" : "ready" },
+          { label: "untested active", value: activeEventsWithoutTests, tone: activeEventsWithoutTests ? "warning" : "ready" },
+          { label: "source", value: state === "live" ? "Live" : "Demo", tone: state === "live" ? "ready" : "warning" },
+        ]}
       />
 
       <section className="section">

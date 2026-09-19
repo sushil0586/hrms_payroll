@@ -1,0 +1,926 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HR Admin Enterprise UI Prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f3f6fa;
+        --panel: #ffffff;
+        --panel-soft: #f8fafc;
+        --line: #d9e1ec;
+        --line-soft: #edf2f7;
+        --text: #111827;
+        --muted: #667085;
+        --muted-2: #98a2b3;
+        --blue: #2563eb;
+        --blue-dark: #1d4ed8;
+        --green: #0f8a5f;
+        --amber: #b45309;
+        --red: #b91c1c;
+        --nav: #0f172a;
+        --nav-2: #111827;
+        --shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+        --radius: 8px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        background: linear-gradient(180deg, var(--nav), #111827);
+        color: #e5e7eb;
+        padding: 18px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 8px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .brand-mark {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: var(--blue);
+        font-weight: 800;
+      }
+
+      .brand strong,
+      .brand span {
+        display: block;
+      }
+
+      .brand span {
+        color: #9ca3af;
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      .nav-section {
+        display: grid;
+        gap: 6px;
+      }
+
+      .nav-title {
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0 10px 4px;
+      }
+
+      .nav-item {
+        display: grid;
+        grid-template-columns: 28px 1fr auto;
+        align-items: center;
+        gap: 10px;
+        min-height: 42px;
+        padding: 8px 10px;
+        border-radius: var(--radius);
+        color: #cbd5e1;
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .nav-item span:first-child {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.08);
+        font-size: 11px;
+      }
+
+      .nav-item small {
+        display: block;
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 500;
+        margin-top: 1px;
+      }
+
+      .nav-item.active {
+        background: rgba(37, 99, 235, 0.18);
+        color: #fff;
+        outline: 1px solid rgba(96, 165, 250, 0.28);
+      }
+
+      .nav-count {
+        min-width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.1);
+        color: #dbeafe;
+        font-size: 11px;
+      }
+
+      .sidebar-card {
+        margin-top: auto;
+        border-radius: var(--radius);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 14px;
+      }
+
+      .sidebar-card strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .sidebar-card p {
+        margin: 6px 0 0;
+        color: #aeb9c9;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .main {
+        min-width: 0;
+      }
+
+      .topbar {
+        height: 62px;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: minmax(260px, 560px) 1fr auto;
+        align-items: center;
+        gap: 18px;
+        padding: 0 26px;
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+
+      .search {
+        height: 38px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .top-meta {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 14px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .user-chip {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 13px;
+      }
+
+      .avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        background: #dbeafe;
+        color: #1d4ed8;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+      }
+
+      .content {
+        padding: 22px 26px 32px;
+        display: grid;
+        gap: 18px;
+      }
+
+      .page-header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: start;
+        gap: 20px;
+      }
+
+      .eyebrow {
+        color: #475569;
+        font-size: 11px;
+        font-weight: 850;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 28px;
+        line-height: 1.15;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: 16px;
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+
+      h3 {
+        font-size: 14px;
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+
+      .description {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .button {
+        min-height: 36px;
+        border-radius: var(--radius);
+        border: 1px solid var(--line);
+        background: #fff;
+        color: #1f2937;
+        padding: 8px 13px;
+        font-size: 13px;
+        font-weight: 750;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .button.primary {
+        background: var(--blue);
+        border-color: var(--blue);
+        color: #fff;
+      }
+
+      .button.ghost {
+        background: #f8fafc;
+      }
+
+      .grid-4 {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .workspace-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.75fr);
+        gap: 14px;
+        align-items: start;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .panel.pad {
+        padding: 16px;
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 16px 12px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .panel-header p {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .metric {
+        min-height: 104px;
+        padding: 15px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .metric span {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .metric strong {
+        font-size: 26px;
+        line-height: 1;
+      }
+
+      .metric small {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .chip,
+      .status {
+        min-height: 24px;
+        border-radius: 999px;
+        padding: 4px 9px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      .chip {
+        background: #f1f5f9;
+        color: #475569;
+      }
+
+      .status.ready {
+        background: #dcfce7;
+        color: #047857;
+      }
+
+      .status.warning {
+        background: #fef3c7;
+        color: #b45309;
+      }
+
+      .status.blocked {
+        background: #fee2e2;
+        color: #b91c1c;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      .table th {
+        color: #475569;
+        background: #f8fafc;
+        font-size: 11px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .table td {
+        padding: 12px;
+        border-bottom: 1px solid var(--line-soft);
+        vertical-align: middle;
+      }
+
+      .table tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .person {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .mini-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        background: #e0ecff;
+        color: #1d4ed8;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .person strong,
+      .stack strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .person small,
+      .stack small,
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .toolbar {
+        padding: 14px 16px;
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(130px, 180px)) auto;
+        gap: 10px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .input,
+      .select {
+        min-height: 36px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+        color: #334155;
+        padding: 0 11px;
+        font: inherit;
+        font-size: 13px;
+      }
+
+      .queue-list {
+        display: grid;
+      }
+
+      .queue-row {
+        display: grid;
+        grid-template-columns: 92px 1fr 124px 112px 96px;
+        gap: 12px;
+        align-items: center;
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .queue-row:last-child {
+        border-bottom: 0;
+      }
+
+      .detail-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line-soft);
+        font-size: 13px;
+      }
+
+      .detail-row span {
+        color: var(--muted);
+      }
+
+      .stepper {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .step {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+        padding: 12px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .step.active {
+        border-color: #93c5fd;
+        background: #eff6ff;
+      }
+
+      .step strong {
+        font-size: 13px;
+      }
+
+      .screen-tabs {
+        display: flex;
+        gap: 8px;
+        position: sticky;
+        top: 62px;
+        z-index: 4;
+        background: var(--bg);
+        padding: 0 0 2px;
+      }
+
+      .screen-tabs a {
+        color: #475569;
+        text-decoration: none;
+      }
+
+      .screen {
+        display: grid;
+        gap: 18px;
+        scroll-margin-top: 84px;
+      }
+
+      .divider {
+        height: 1px;
+        background: var(--line);
+        margin: 8px 0;
+      }
+
+      @media (max-width: 1100px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .topbar,
+        .page-header,
+        .workspace-grid,
+        .grid-4,
+        .grid-3 {
+          grid-template-columns: 1fr;
+        }
+
+        .toolbar {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .stepper {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">HR</div>
+          <div>
+            <strong>HRMS</strong>
+            <span>HR Admin</span>
+          </div>
+        </div>
+
+        <nav class="nav-section" aria-label="HR Admin navigation">
+          <div class="nav-title">Command</div>
+          <div class="nav-item active"><span>CC</span><div>Control Center<small>Daily command view</small></div><b class="nav-count">8</b></div>
+          <div class="nav-item"><span>LG</span><div>Launch Readiness<small>Release blockers</small></div></div>
+        </nav>
+
+        <nav class="nav-section">
+          <div class="nav-title">Workforce</div>
+          <div class="nav-item"><span>PE</span><div>Employees<small>Employee masters</small></div></div>
+          <div class="nav-item"><span>LC</span><div>Lifecycle<small>Join to exit</small></div><b class="nav-count">12</b></div>
+          <div class="nav-item"><span>DO</span><div>Documents<small>Verification queue</small></div><b class="nav-count">6</b></div>
+        </nav>
+
+        <nav class="nav-section">
+          <div class="nav-title">Time & Leave</div>
+          <div class="nav-item"><span>AT</span><div>Attendance<small>Records and shifts</small></div><b class="nav-count">5</b></div>
+          <div class="nav-item"><span>LV</span><div>Leave<small>Balances and policy</small></div></div>
+        </nav>
+
+        <nav class="nav-section">
+          <div class="nav-title">Payroll</div>
+          <div class="nav-item"><span>PY</span><div>Payroll Control<small>Close workflow</small></div><b class="nav-count">3</b></div>
+          <div class="nav-item"><span>ST</span><div>Statutory<small>India compliance</small></div></div>
+          <div class="nav-item"><span>RP</span><div>Reports<small>Analytics and exports</small></div></div>
+        </nav>
+
+        <div class="sidebar-card">
+          <strong>September Payroll</strong>
+          <p>Review exceptions before output publication. 3 blockers remain.</p>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="search">⌕ Search employees, payroll runs, approvals, reports...</div>
+          <div></div>
+          <div class="top-meta">
+            <span>Tenant: Northstar Foods</span>
+            <span class="status ready">Live</span>
+            <div class="user-chip"><span class="avatar">NR</span> Nisha Rao</div>
+          </div>
+        </header>
+
+        <div class="content">
+          <div class="screen-tabs">
+            <a class="button ghost" href="#control-center">Prototype 1: Control Center</a>
+            <a class="button ghost" href="#employee-directory">Prototype 2: Employee Directory</a>
+            <a class="button ghost" href="#payroll-cycle">Prototype 3: Payroll Cycle</a>
+          </div>
+
+          <section class="screen" id="control-center">
+            <div class="page-header">
+              <div>
+                <div class="eyebrow">HR Admin</div>
+                <h1>People Operations Control Center</h1>
+                <p class="description">Daily operating priorities across workforce, attendance, documents, payroll, and launch readiness.</p>
+              </div>
+              <div class="actions">
+                <a class="button ghost" href="#">Download audit</a>
+                <a class="button" href="#">Open reports</a>
+                <a class="button primary" href="#">Resolve payroll blockers</a>
+              </div>
+            </div>
+
+            <div class="grid-4">
+              <article class="panel metric"><span>Active employees</span><strong>486</strong><small>12 joined this month</small></article>
+              <article class="panel metric"><span>Payroll readiness</span><strong>91%</strong><small>3 blockers, 14 warnings</small></article>
+              <article class="panel metric"><span>Pending HR actions</span><strong>28</strong><small>Leave, documents, lifecycle</small></article>
+              <article class="panel metric"><span>Notification health</span><strong>99.1%</strong><small>4 failed deliveries</small></article>
+            </div>
+
+            <div class="workspace-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div><div class="eyebrow">Command Queue</div><h2>Today&apos;s work</h2><p>Only actionable items appear here.</p></div>
+                  <span class="chip">8 open</span>
+                </div>
+                <div class="queue-list">
+                  <div class="queue-row">
+                    <span class="status blocked">Blocked</span>
+                    <div class="stack"><strong>Resolve payroll input blockers</strong><small>3 employees missing bank or attendance source data.</small></div>
+                    <span class="muted">Payroll</span>
+                    <span class="muted">Today</span>
+                    <a class="button" href="#payroll-cycle">Open</a>
+                  </div>
+                  <div class="queue-row">
+                    <span class="status warning">Review</span>
+                    <div class="stack"><strong>Approve attendance regularizations</strong><small>5 requests affect September payroll.</small></div>
+                    <span class="muted">Attendance</span>
+                    <span class="muted">Today</span>
+                    <a class="button" href="#">Review</a>
+                  </div>
+                  <div class="queue-row">
+                    <span class="status warning">Review</span>
+                    <div class="stack"><strong>Verify employee documents</strong><small>6 pending documents, 2 rejected.</small></div>
+                    <span class="muted">Documents</span>
+                    <span class="muted">This week</span>
+                    <a class="button" href="#">Open</a>
+                  </div>
+                  <div class="queue-row">
+                    <span class="status ready">Ready</span>
+                    <div class="stack"><strong>Launch audit export</strong><small>Evidence pack is available for signoff.</small></div>
+                    <span class="muted">Audit</span>
+                    <span class="muted">Anytime</span>
+                    <a class="button" href="#">Export</a>
+                  </div>
+                </div>
+              </section>
+
+              <aside class="panel pad">
+                <div class="panel-header" style="padding:0 0 12px;border-bottom:0">
+                  <div><div class="eyebrow">Risk Posture</div><h2>Payroll and workforce readiness</h2></div>
+                  <span class="status warning">Review</span>
+                </div>
+                <div class="detail-grid">
+                  <div class="detail-row"><span>Payroll blockers</span><strong>3</strong></div>
+                  <div class="detail-row"><span>Attendance exceptions</span><strong>5</strong></div>
+                  <div class="detail-row"><span>Document backlog</span><strong>6</strong></div>
+                  <div class="detail-row"><span>Lifecycle queue</span><strong>12</strong></div>
+                  <div class="detail-row"><span>Launch blockers</span><strong>0</strong></div>
+                </div>
+                <div class="divider"></div>
+                <div class="grid-3">
+                  <a class="button" href="#employee-directory">Employees</a>
+                  <a class="button" href="#payroll-cycle">Payroll</a>
+                  <a class="button" href="#">Reports</a>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="screen" id="employee-directory">
+            <div class="page-header">
+              <div>
+                <div class="eyebrow">Workforce</div>
+                <h1>Employee Directory Workbench</h1>
+                <p class="description">Search, filter, inspect, import, and maintain employee master records without leaving context.</p>
+              </div>
+              <div class="actions">
+                <a class="button ghost" href="#">Export</a>
+                <a class="button" href="#">Import employees</a>
+                <a class="button primary" href="#">Add employee</a>
+              </div>
+            </div>
+
+            <div class="grid-4">
+              <article class="panel metric"><span>Total employees</span><strong>512</strong><small>486 active</small></article>
+              <article class="panel metric"><span>Access ready</span><strong>94%</strong><small>29 need review</small></article>
+              <article class="panel metric"><span>Manager gaps</span><strong>7</strong><small>Reporting line missing</small></article>
+              <article class="panel metric"><span>Payroll blockers</span><strong>3</strong><small>Bank and cost center</small></article>
+            </div>
+
+            <div class="workspace-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div><div class="eyebrow">Directory</div><h2>Employees</h2><p>One table, clear filters, row actions.</p></div>
+                  <span class="chip">Showing 1-5 of 512</span>
+                </div>
+                <div class="toolbar">
+                  <input class="input" value="" placeholder="Search name, code, email, manager..." />
+                  <select class="select"><option>Status: Active</option></select>
+                  <select class="select"><option>Department: All</option></select>
+                  <select class="select"><option>Risk: All</option></select>
+                  <a class="button primary" href="#">Apply</a>
+                </div>
+                <table class="table">
+                  <thead><tr><th>Employee</th><th>Role</th><th>Status</th><th>Access</th><th>Payroll</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td><div class="person"><span class="mini-avatar">AR</span><div><strong>Aditi Rao</strong><small>EMP-1024 · aditi@northstarfoods.com</small></div></div></td>
+                      <td><div class="stack"><strong>HR Executive</strong><small>People Operations</small></div></td>
+                      <td><span class="status ready">Active</span></td>
+                      <td><span class="status ready">Ready</span></td>
+                      <td><span class="status ready">Ready</span></td>
+                      <td><a class="button" href="#">View</a></td>
+                    </tr>
+                    <tr>
+                      <td><div class="person"><span class="mini-avatar">KB</span><div><strong>Karan Bansal</strong><small>EMP-1031 · karan@northstarfoods.com</small></div></div></td>
+                      <td><div class="stack"><strong>Ops Manager</strong><small>Manufacturing</small></div></td>
+                      <td><span class="status ready">Active</span></td>
+                      <td><span class="status warning">MFA</span></td>
+                      <td><span class="status blocked">Blocked</span></td>
+                      <td><a class="button" href="#">Fix</a></td>
+                    </tr>
+                    <tr>
+                      <td><div class="person"><span class="mini-avatar">PS</span><div><strong>Priya Sharma</strong><small>EMP-1038 · priya@northstarfoods.com</small></div></div></td>
+                      <td><div class="stack"><strong>Finance Analyst</strong><small>Finance</small></div></td>
+                      <td><span class="status warning">On notice</span></td>
+                      <td><span class="status ready">Ready</span></td>
+                      <td><span class="status warning">Review</span></td>
+                      <td><a class="button" href="#">View</a></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </section>
+
+              <aside class="panel pad">
+                <div class="panel-header" style="padding:0 0 12px;border-bottom:0">
+                  <div><div class="eyebrow">Selected Employee</div><h2>Karan Bansal</h2><p>EMP-1031 · Manufacturing</p></div>
+                  <span class="status blocked">Payroll blocked</span>
+                </div>
+                <div class="detail-grid">
+                  <div class="detail-row"><span>Legal entity</span><strong>Northstar Foods Pvt Ltd</strong></div>
+                  <div class="detail-row"><span>Branch</span><strong>Jaipur Plant</strong></div>
+                  <div class="detail-row"><span>Manager</span><strong>Nisha Rao</strong></div>
+                  <div class="detail-row"><span>Cost center</span><strong>Missing</strong></div>
+                  <div class="detail-row"><span>Bank account</span><strong>Pending verification</strong></div>
+                  <div class="detail-row"><span>Documents</span><strong>4 of 5 ready</strong></div>
+                </div>
+                <div class="divider"></div>
+                <div class="actions" style="justify-content:flex-start">
+                  <a class="button primary" href="#">Edit employee</a>
+                  <a class="button" href="#">Manage access</a>
+                  <a class="button ghost" href="#">Open audit</a>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="screen" id="payroll-cycle">
+            <div class="page-header">
+              <div>
+                <div class="eyebrow">Payroll</div>
+                <h1>Payroll Cycle Control</h1>
+                <p class="description">A guided close workflow for readiness, inputs, calculation, review, outputs, and finance handoff.</p>
+              </div>
+              <div class="actions">
+                <a class="button ghost" href="#">Download evidence</a>
+                <a class="button" href="#">Open reports</a>
+                <a class="button primary" href="#">Generate calculation</a>
+              </div>
+            </div>
+
+            <div class="stepper">
+              <div class="step"><span class="status ready">Ready</span><strong>Readiness</strong><small>Source data checked</small></div>
+              <div class="step active"><span class="status warning">Review</span><strong>Inputs</strong><small>3 blockers remain</small></div>
+              <div class="step"><span class="chip">Locked</span><strong>Calculation</strong><small>Waiting for inputs</small></div>
+              <div class="step"><span class="chip">Pending</span><strong>Review</strong><small>Exception queue</small></div>
+              <div class="step"><span class="chip">Pending</span><strong>Outputs</strong><small>Payslips and register</small></div>
+              <div class="step"><span class="chip">Pending</span><strong>Handoff</strong><small>Finance package</small></div>
+            </div>
+
+            <div class="grid-4">
+              <article class="panel metric"><span>Run</span><strong>Sep 2026</strong><small>Monthly payroll</small></article>
+              <article class="panel metric"><span>Employees</span><strong>486</strong><small>3 blocked</small></article>
+              <article class="panel metric"><span>Gross preview</span><strong>1.82 Cr</strong><small>Before final calc</small></article>
+              <article class="panel metric"><span>Close risk</span><strong>Medium</strong><small>Attendance and bank gaps</small></article>
+            </div>
+
+            <div class="workspace-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div><div class="eyebrow">Exception Queue</div><h2>Input blockers</h2><p>Fix these before calculation can be generated.</p></div>
+                  <span class="status warning">3 blockers</span>
+                </div>
+                <table class="table">
+                  <thead><tr><th>Employee</th><th>Issue</th><th>Owner</th><th>Impact</th><th>Action</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td><div class="person"><span class="mini-avatar">KB</span><div><strong>Karan Bansal</strong><small>EMP-1031</small></div></div></td>
+                      <td><div class="stack"><strong>Bank account pending</strong><small>Salary payout cannot be finalized.</small></div></td>
+                      <td>HR Admin</td>
+                      <td><span class="status blocked">High</span></td>
+                      <td><a class="button" href="#">Resolve</a></td>
+                    </tr>
+                    <tr>
+                      <td><div class="person"><span class="mini-avatar">MN</span><div><strong>Meera Nair</strong><small>EMP-1042</small></div></div></td>
+                      <td><div class="stack"><strong>Attendance exception</strong><small>2 missing punches in period.</small></div></td>
+                      <td>Manager</td>
+                      <td><span class="status warning">Medium</span></td>
+                      <td><a class="button" href="#">Review</a></td>
+                    </tr>
+                    <tr>
+                      <td><div class="person"><span class="mini-avatar">RS</span><div><strong>Rahul Singh</strong><small>EMP-1050</small></div></div></td>
+                      <td><div class="stack"><strong>Cost center missing</strong><small>Finance allocation incomplete.</small></div></td>
+                      <td>HR Admin</td>
+                      <td><span class="status warning">Medium</span></td>
+                      <td><a class="button" href="#">Map</a></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </section>
+
+              <aside class="panel pad">
+                <div class="panel-header" style="padding:0 0 12px;border-bottom:0">
+                  <div><div class="eyebrow">Selected Run</div><h2>September 2026 Payroll</h2><p>Period 01 Sep - 30 Sep</p></div>
+                  <span class="status warning">Input review</span>
+                </div>
+                <div class="detail-grid">
+                  <div class="detail-row"><span>Input snapshot</span><strong>Draft</strong></div>
+                  <div class="detail-row"><span>Attendance lock</span><strong>Pending</strong></div>
+                  <div class="detail-row"><span>Leave sync</span><strong>Ready</strong></div>
+                  <div class="detail-row"><span>Provider rails</span><strong>Sandbox</strong></div>
+                  <div class="detail-row"><span>Audit events</span><strong>218</strong></div>
+                </div>
+                <div class="divider"></div>
+                <div class="actions" style="justify-content:flex-start">
+                  <a class="button primary" href="#">Lock inputs</a>
+                  <a class="button" href="#">Preview snapshot</a>
+                  <a class="button ghost" href="#">Open audit</a>
+                </div>
+              </aside>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

@@ -5,6 +5,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendancePolicyAssignments, getHrAdminPolicyOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminAttendancePolicyAssignmentsPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/policy-assignments" });
@@ -34,6 +35,16 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
           </>
         }
         pills={["Priority-driven precedence", "Scope-aware rollout", "Employee override support"]}
+      />
+
+      <TimeLeaveOperationsStrip
+        current="assignments"
+        title="Attendance assignment governance"
+        description="Map attendance policy behavior to tenant scopes and keep overlap, priority, and employee override review visible."
+        primaryMetricLabel="assignments"
+        primaryMetricValue={result.data.length}
+        secondaryMetricLabel="active"
+        secondaryMetricValue={activeCount}
       />
 
       <section className="section">

@@ -5,6 +5,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { getHrAdminAttendancePolicies } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminAttendancePoliciesPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin" });
@@ -31,6 +32,16 @@ export default async function HrAdminAttendancePoliciesPage() {
           </>
         }
         pills={["Threshold-based attendance rules", "Shift and holiday linkage", "Regularization-aware behavior"]}
+      />
+
+      <TimeLeaveOperationsStrip
+        current="policies"
+        title="Attendance policy configuration"
+        description="Configure late marks, shift linkage, holiday behavior, and attendance interpretation before assigning policy scope."
+        primaryMetricLabel="policies"
+        primaryMetricValue={result.data.length}
+        secondaryMetricLabel="active"
+        secondaryMetricValue={activeCount}
       />
 
       <section className="section">

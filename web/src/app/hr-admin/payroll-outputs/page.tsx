@@ -7,6 +7,7 @@ import { getHrAdminPayrollOutputSetup } from "@/lib/api";
 import type { HrAdminPayrollOutputArtifact, HrAdminPayrollOutputBatch } from "@/lib/types";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
+import { PayrollCycleJourney } from "../payroll-cycle-journey";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -306,6 +307,16 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
         }
         pills={["Payslip artifacts", "Register snapshot", "Publish controlled"]}
         showPills
+      />
+
+      <PayrollCycleJourney
+        current="outputs"
+        selectedRunName={selectedBatch?.payroll_run_name}
+        selectedRunStatus={selectedBatch?.status}
+        primaryMetricLabel="artifacts"
+        primaryMetricValue={visibleArtifacts.length}
+        secondaryMetricLabel="published"
+        secondaryMetricValue={selectedBatch?.published_artifact_count ?? setup.summary.published_artifact_count}
       />
 
       <section className="section section--tight">

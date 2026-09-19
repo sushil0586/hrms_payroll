@@ -4,6 +4,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
+import { ReportInsightsStrip } from "../report-insights-strip";
 import { PayrollInputExceptionsReportWorkspace } from "./payroll-input-exceptions-report-workspace";
 
 export default async function PayrollInputExceptionsReportPage() {
@@ -35,6 +36,19 @@ export default async function PayrollInputExceptionsReportPage() {
         }
         pills={["Pre-close", "Snapshot evidence", "Source hash"]}
         showPills
+      />
+
+      <ReportInsightsStrip
+        current="payroll"
+        eyebrow="Payroll input report"
+        title="Input exception evidence"
+        description="Review pre-close input readiness across employee snapshots, blockers, warnings, lock state, and source hash evidence."
+        metrics={[
+          { label: "runs", value: result.data.summary.run_count, tone: "neutral" },
+          { label: "snapshots", value: result.data.summary.snapshot_count, tone: "neutral" },
+          { label: "locked", value: result.data.summary.locked_snapshot_count, tone: "ready" },
+          { label: "blocked", value: result.data.summary.blocked_snapshot_count, tone: result.data.summary.blocked_snapshot_count ? "blocked" : "ready" },
+        ]}
       />
 
       <PayrollInputExceptionsReportWorkspace runs={result.data.runs} snapshots={result.data.snapshots} />

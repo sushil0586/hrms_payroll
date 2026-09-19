@@ -5,6 +5,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { getHrAdminLeaveTypes } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminLeaveTypesPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view", "leave.policies.manage"], fallbackPath: "/hr-admin" });
@@ -31,6 +32,16 @@ export default async function HrAdminLeaveTypesPage() {
           </>
         }
         pills={["Foundational leave buckets", "Approval and balance behavior", "Policy-ready structure"]}
+      />
+
+      <TimeLeaveOperationsStrip
+        current="policies"
+        title="Leave type configuration"
+        description="Maintain foundational leave categories before policy rules, assignments, accrual, and approval behavior are applied."
+        primaryMetricLabel="leave types"
+        primaryMetricValue={result.data.length}
+        secondaryMetricLabel="active"
+        secondaryMetricValue={activeCount}
       />
 
       <section className="section">

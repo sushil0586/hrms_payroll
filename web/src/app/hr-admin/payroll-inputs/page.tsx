@@ -5,6 +5,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
 import type { HrAdminPayrollInputSnapshot, HrAdminPayrollRun } from "@/lib/types";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { PayrollCycleJourney } from "../payroll-cycle-journey";
 import { PayrollInputOperationsPanel } from "./payroll-input-operations-panel";
 
 type SearchParamValue = string | string[] | undefined;
@@ -208,6 +209,16 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
         }
         pills={["Snapshot based", "Input locked", "Rule referenced"]}
         showPills
+      />
+
+      <PayrollCycleJourney
+        current="inputs"
+        selectedRunName={selectedRun?.name}
+        selectedRunStatus={selectedRun?.status}
+        primaryMetricLabel="snapshots"
+        primaryMetricValue={selectedRun?.snapshot_count ?? setup.summary.snapshot_count}
+        secondaryMetricLabel="locked"
+        secondaryMetricValue={selectedRun?.locked_count ?? setup.summary.locked_snapshot_count}
       />
 
       <section className="section section--tight">

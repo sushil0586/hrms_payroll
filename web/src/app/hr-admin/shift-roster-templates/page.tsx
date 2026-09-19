@@ -5,6 +5,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPolicyOptions, getHrAdminShiftRosterRollouts, getHrAdminShiftRosterTemplates } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminShiftRosterTemplatesPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-operations" });
@@ -28,6 +29,16 @@ export default async function HrAdminShiftRosterTemplatesPage() {
             <Link className="button button--secondary" href="/hr-admin/attendance-operations">Back to attendance operations</Link>
           </>
         }
+      />
+
+      <TimeLeaveOperationsStrip
+        current="shifts"
+        title="Roster template rollout"
+        description="Create repeatable shift patterns and roll them out safely across teams or employee selections."
+        primaryMetricLabel="templates"
+        primaryMetricValue={result.data.length}
+        secondaryMetricLabel="rollout ready"
+        secondaryMetricValue={publishedCount}
       />
 
       <section className="section">

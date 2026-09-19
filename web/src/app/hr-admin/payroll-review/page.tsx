@@ -4,6 +4,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReviewSetup } from "@/lib/api";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
+import { PayrollCycleJourney } from "../payroll-cycle-journey";
 import { PayrollReviewExceptionActions } from "./payroll-review-exception-actions";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import type {
@@ -238,6 +239,16 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
         }
         pills={["Exception controlled", "Approval captured", "Final lock"]}
         showPills
+      />
+
+      <PayrollCycleJourney
+        current="review"
+        selectedRunName={selectedReview?.payroll_run_name}
+        selectedRunStatus={selectedReview?.status}
+        primaryMetricLabel="exceptions"
+        primaryMetricValue={visibleExceptions.length}
+        secondaryMetricLabel="approvals"
+        secondaryMetricValue={visibleApprovals.length}
       />
 
       <section className="section section--tight">

@@ -10,6 +10,8 @@ import {
   getHrAdminOnboardings,
 } from "@/lib/api";
 
+import { ComplianceEvidenceStrip } from "../compliance-evidence-strip";
+
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
@@ -203,6 +205,19 @@ export default async function HrAdminAuditPage({ searchParams }: PageProps) {
           </>
         }
         pills={["Cross-module history", "Recent workflow trace", "Delivery visibility"]}
+      />
+
+      <ComplianceEvidenceStrip
+        current="audit"
+        eyebrow="Trust layer"
+        title="Audit and evidence timeline"
+        description="Review approval decisions, document verification, lifecycle checklist movement, exit clearance, and notification delivery events in one auditable path."
+        metrics={[
+          { label: "events", value: events.length, tone: "neutral" },
+          { label: "approvals", value: attendanceApprovalCount, tone: "ready" },
+          { label: "documents", value: documentEventCount, tone: "ready" },
+          { label: "delivery logs", value: notificationEventCount, tone: notificationEventCount ? "warning" : "neutral" },
+        ]}
       />
 
       <section className="section">

@@ -22,6 +22,7 @@ import type {
   HrAdminPayrollStoragePolicyRegistryEntry,
 } from "@/lib/types";
 
+import { ComplianceEvidenceStrip } from "../compliance-evidence-strip";
 import { LaunchRehearsalActions } from "./launch-rehearsal-actions";
 import { MappingPackLifecycleActions } from "./mapping-pack-lifecycle-actions";
 import { MappingPackRuleBuilder } from "./mapping-pack-rule-builder";
@@ -588,6 +589,19 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
         }
         pills={["Bank", "Accounting", "Statutory"]}
         showPills
+      />
+
+      <ComplianceEvidenceStrip
+        current="providers"
+        eyebrow="Provider governance"
+        title="Provider certification and live-rail control"
+        description="Review provider readiness, certification evidence, mapping packs, callbacks, retries, launch rehearsals, and blocked live-rail gates before handoff uses any connection."
+        metrics={[
+          { label: "connections", value: setup.summary.connection_count, tone: "neutral" },
+          { label: "certified", value: setup.summary.certified_connection_count, tone: "ready" },
+          { label: "blocked", value: setup.summary.blocked_connection_count, tone: setup.summary.blocked_connection_count ? "blocked" : "ready" },
+          { label: "failure buckets", value: blockedFailureBucketCount, tone: blockedFailureBucketCount ? "blocked" : warningFailureBucketCount ? "warning" : "ready" },
+        ]}
       />
 
       <section className="section section--tight">

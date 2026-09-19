@@ -5,6 +5,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLeavePolicyAssignments, getHrAdminPolicyOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminLeavePolicyAssignmentsPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view", "leave.policies.manage"], fallbackPath: "/hr-admin/policy-assignments" });
@@ -33,6 +34,16 @@ export default async function HrAdminLeavePolicyAssignmentsPage() {
           </>
         }
         pills={["Priority-driven precedence", "Structure-based targeting", "Employee override support"]}
+      />
+
+      <TimeLeaveOperationsStrip
+        current="assignments"
+        title="Leave assignment governance"
+        description="Map leave policies to legal entity, branch, department, employment type, or employee overrides with visible overlap risk."
+        primaryMetricLabel="assignments"
+        primaryMetricValue={result.data.length}
+        secondaryMetricLabel="blocking risks"
+        secondaryMetricValue={blockingCount}
       />
 
       <section className="section">

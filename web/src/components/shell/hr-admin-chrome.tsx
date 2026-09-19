@@ -15,19 +15,20 @@ type Props = {
 export function HrAdminChrome({ children, navGroups, navItems, quickLinks, userLabel }: Props) {
   return (
     <WorkspaceChrome
-      footerDescription="Governance, policy execution, and lifecycle control in one sober workspace."
+      footerDescription="People operations, payroll readiness, compliance evidence, and workforce workflows in one focused control center."
       navItems={navItems ?? hrAdminNavigation.flatMap((group) => group.items)}
       navGroups={navGroups}
-      productLabel="Nexora"
+      footerTitle="HRMS Workspace"
+      productLabel="HRMS"
       quickLinks={quickLinks ?? [
         { href: "/ess", label: "ESS" },
         { href: "/mss/approvals", label: "MSS" },
       ]}
       roleLabel="HR Admin"
-      searchHint="Search people, policy, workflow, and review actions"
+      searchHint="Search employees, payroll, leave, attendance, reports..."
       userLabel={userLabel}
-      workspaceLabel="People operations"
-      workspaceTone="admin"
+      workspaceLabel="People Operations"
+      workspaceTone="hr"
     >
       {children}
     </WorkspaceChrome>

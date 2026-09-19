@@ -5,6 +5,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeShiftAssignments, getHrAdminPolicyOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminEmployeeShiftAssignmentsPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-operations" });
@@ -33,6 +34,16 @@ export default async function HrAdminEmployeeShiftAssignmentsPage() {
             </Link>
           </>
         }
+      />
+
+      <TimeLeaveOperationsStrip
+        current="shifts"
+        title="Employee shift assignment governance"
+        description="Assign employees to fixed shifts, weekly rotations, or temporary overrides with effective windows and overlap review."
+        primaryMetricLabel="assignments"
+        primaryMetricValue={result.data.length}
+        secondaryMetricLabel="primary"
+        secondaryMetricValue={primaryCount}
       />
 
       <section className="section">

@@ -5,6 +5,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendanceOperationOptions, getHrAdminAttendanceRegularizations } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -46,6 +47,15 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
         description="Review correction requests across the tenant to understand operational bottlenecks, exception quality, and approval pressure."
         actions={<Link className="button button--secondary" href="/hr-admin/attendance-operations">Back to attendance operations</Link>}
         pills={["Server-driven review queue", "Status-focused triage", "In-context approval decisions"]}
+      />
+      <TimeLeaveOperationsStrip
+        current="regularizations"
+        title="Attendance correction queue"
+        description="Triage requested attendance corrections, review context, and preserve approval evidence."
+        primaryMetricLabel="requests"
+        primaryMetricValue={result.data.total_count}
+        secondaryMetricLabel="status options"
+        secondaryMetricValue={optionsResult.data.regularization_statuses.length}
       />
       <section className="section">
         <div className="metric-grid-modern">

@@ -15,6 +15,7 @@ import type {
   HrAdminPayrollStatutoryPack,
 } from "@/lib/types";
 
+import { ComplianceEvidenceStrip } from "../compliance-evidence-strip";
 import { PayrollStatutoryCrudConsole } from "./payroll-statutory-crud-console";
 
 type SearchParamValue = string | string[] | undefined;
@@ -491,6 +492,19 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
             </Link>
           </>
         }
+      />
+
+      <ComplianceEvidenceStrip
+        current="statutory"
+        eyebrow="Payroll compliance"
+        title="Statutory evidence control"
+        description="Track packs, employer registrations, employee profiles, declarations, proof verification, and due filing calendars from one statutory evidence path."
+        metrics={[
+          { label: "active packs", value: setup.summary.active_pack_count, tone: setup.summary.active_pack_count ? "ready" : "warning" },
+          { label: "due filings", value: setup.summary.due_filing_calendar_count, tone: setup.summary.due_filing_calendar_count ? "warning" : "ready" },
+          { label: "declarations", value: setup.summary.declaration_count, tone: "neutral" },
+          { label: "proofs verified", value: setup.summary.verified_declaration_item_count, tone: "ready" },
+        ]}
       />
 
       <section className="payroll-setup-metrics" aria-label="Payroll statutory metrics">

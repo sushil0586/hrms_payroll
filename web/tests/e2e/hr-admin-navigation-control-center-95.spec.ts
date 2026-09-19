@@ -10,36 +10,66 @@ type HrAdminNavItem = {
 
 const navGroups: { title: string; items: HrAdminNavItem[] }[] = [
   {
-    title: "Workspace",
+    title: "Command",
     items: [
-      { href: "/hr-admin", label: "Overview" },
-      { href: "/hr-admin/employees", label: "People" },
+      { href: "/hr-admin", label: "Dashboard" },
+      { href: "/hr-admin/launch-remediation", label: "Launch Readiness" },
+    ],
+  },
+  {
+    title: "Workforce",
+    items: [
+      { href: "/hr-admin/employees", label: "Employees" },
       { href: "/hr-admin/lifecycle", label: "Lifecycle" },
       { href: "/hr-admin/employee-documents", label: "Documents" },
-      { href: "/hr-admin/reports", label: "Reports" },
-      { href: "/hr-admin/payroll-readiness", label: "Payroll" },
+    ],
+  },
+  {
+    title: "Time & Leave",
+    items: [
+      { href: "/hr-admin/attendance-operations", label: "Attendance" },
+      { href: "/hr-admin/leave-balances", label: "Leave" },
+      { href: "/hr-admin/policies", label: "Policies" },
+    ],
+  },
+  {
+    title: "Payroll",
+    items: [
+      { href: "/hr-admin/payroll-readiness", label: "Payroll Control" },
+      { href: "/hr-admin/payroll-inputs", label: "Inputs" },
+      { href: "/hr-admin/payroll-calculations", label: "Calculation" },
+      { href: "/hr-admin/payroll-review", label: "Review" },
+      { href: "/hr-admin/payroll-outputs", label: "Outputs" },
+      { href: "/hr-admin/payroll-handoff", label: "Handoff" },
+    ],
+  },
+  {
+    title: "Compliance",
+    items: [
       { href: "/hr-admin/payroll-statutory", label: "Statutory" },
       { href: "/hr-admin/payroll-providers", label: "Providers" },
+      { href: "/hr-admin/audit", label: "Audit" },
+    ],
+  },
+  {
+    title: "Insights",
+    items: [
+      { href: "/hr-admin/reports", label: "Reports" },
+    ],
+  },
+  {
+    title: "Setup",
+    items: [
+      { href: "/hr-admin/organization", label: "Organization" },
+      { href: "/hr-admin/workflows", label: "Workflows" },
     ],
   },
   {
     title: "Operations",
     items: [
-      { href: "/hr-admin/attendance-operations", label: "Attendance" },
       { href: "/hr-admin/notifications-admin", label: "Notifications" },
-      { href: "/hr-admin/launch-remediation", label: "Launch" },
-      { href: "/hr-admin/saas-control-plane", label: "SaaS" },
+      { href: "/hr-admin/import-history", label: "Imports" },
       { href: "/hr-admin/saas-operations", label: "Ops Health" },
-      { href: "/hr-admin/saas-resilience", label: "Resilience" },
-      { href: "/hr-admin/saas-sla-operations", label: "SLA Ops" },
-    ],
-  },
-  {
-    title: "Governance",
-    items: [
-      { href: "/hr-admin/organization", label: "Organization" },
-      { href: "/hr-admin/policies", label: "Policies" },
-      { href: "/hr-admin/workflows", label: "Workflows" },
     ],
   },
 ];
@@ -70,7 +100,7 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
     page,
   }) => {
     await gotoAuthenticated(page, "/hr-admin", hrAdmin);
-    await expectPageReady(page, "Control center");
+    await expectPageReady(page, "People Operations Control Center");
     await openHrAdminNavGroups(page);
 
     const nav = page.getByRole("navigation", { name: /hr admin navigation/i });
@@ -92,7 +122,7 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
     }
 
     await expect(page.getByLabel("Search placeholder")).toContainText(
-      "Search people, policy, workflow, and review actions",
+      "Search employees, payroll, leave, attendance, reports...",
     );
     await expect(page.getByRole("link", { name: "ESS", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "MSS", exact: true })).toBeVisible();
@@ -108,12 +138,10 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
       "Open attendance",
       "Open delivery",
       "Resolve launch",
-      "Payroll inputs",
-      "Payroll review",
-      "Employees",
-      "Reports",
-      "Letters",
-      "Ops health",
+      "Resolve payroll blockers",
+      "Open employees",
+      "Open payroll",
+      "Open reports",
     ]) {
       const link = controlCenter.getByRole("link", { name: action }).or(page.getByRole("link", { name: action }));
       await expect(link.first()).toBeVisible();
@@ -128,7 +156,7 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
   test("keeps HR Admin navigation usable without overflow on mobile", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await gotoAuthenticated(page, "/hr-admin", hrAdmin);
-    await expectPageReady(page, "Control center");
+    await expectPageReady(page, "People Operations Control Center");
     await openHrAdminNavGroups(page);
 
     const nav = page.getByRole("navigation", { name: /hr admin navigation/i });
@@ -138,7 +166,7 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
       await expect(nav.getByText(group.title, { exact: true })).toBeVisible();
     }
 
-    for (const item of ["Overview", "People", "Payroll", "Attendance", "Organization", "Policies"]) {
+    for (const item of ["Dashboard", "Employees", "Payroll Control", "Attendance", "Organization", "Policies"]) {
       await expect(nav.getByText(item, { exact: true }).or(nav.getByLabel(`${item} unavailable`))).toBeVisible();
     }
 

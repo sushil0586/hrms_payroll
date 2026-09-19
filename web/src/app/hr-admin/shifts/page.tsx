@@ -5,6 +5,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { getHrAdminShifts } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminShiftsPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-operations" });
@@ -24,6 +25,16 @@ export default async function HrAdminShiftsPage() {
           </>
         }
         pills={["Time-window setup", "Weekly-off patterns", "Attendance-ready shift logic"]}
+      />
+
+      <TimeLeaveOperationsStrip
+        current="shifts"
+        title="Shift master configuration"
+        description="Define working-time windows, weekly-off patterns, grace rules, and night-shift behavior before assigning employees."
+        primaryMetricLabel="shifts"
+        primaryMetricValue={result.data.length}
+        secondaryMetricLabel="active"
+        secondaryMetricValue={result.data.filter((item) => item.is_active).length}
       />
 
       <section className="section">

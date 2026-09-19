@@ -6,6 +6,7 @@ import { getHrAdminPayrollCalculationSetup } from "@/lib/api";
 import type { HrAdminPayrollCalculationLine, HrAdminPayrollRun, HrAdminPayrollRunCalculation, HrAdminPayrollValidationIssue } from "@/lib/types";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
+import { PayrollCycleJourney } from "../payroll-cycle-journey";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -439,6 +440,16 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
         }
         pills={["Draft calculation", "Rule traced", "Adjustment sourced", "Validation gated"]}
         showPills
+      />
+
+      <PayrollCycleJourney
+        current="calculations"
+        selectedRunName={selectedRun?.name}
+        selectedRunStatus={selectedRun?.status}
+        primaryMetricLabel="lines"
+        primaryMetricValue={visibleLines.length}
+        secondaryMetricLabel="open checks"
+        secondaryMetricValue={visibleValidationIssues.length}
       />
 
       <section className="section section--tight">

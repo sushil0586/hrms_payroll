@@ -7,6 +7,7 @@ import { getHrAdminDashboard } from "@/lib/api";
 import { reportCatalog } from "@/lib/report-catalog";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
+import { ReportInsightsStrip } from "./report-insights-strip";
 import { ReportCatalogWorkspace } from "./report-catalog-workspace";
 
 function InsightPanel({
@@ -68,6 +69,19 @@ export default async function HrAdminReportsPage() {
         }
         pills={["Workforce", "Compliance", "Delivery"]}
         showPills
+      />
+
+      <ReportInsightsStrip
+        current="catalog"
+        eyebrow="HR insights"
+        title="Report control center"
+        description="Find operational, payroll, compliance, lifecycle, document, delivery, and export reports from one consistent evidence-ready workspace."
+        metrics={[
+          { label: "reports", value: reportCatalog.length, tone: "neutral" },
+          { label: "employees", value: overview.total_employees, tone: "neutral" },
+          { label: "approvals", value: overview.pending_approvals, tone: overview.pending_approvals ? "warning" : "ready" },
+          { label: "failed delivery", value: delivery.failed_notifications, tone: delivery.failed_notifications ? "blocked" : "ready" },
+        ]}
       />
 
       <section className="section">

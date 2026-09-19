@@ -83,6 +83,14 @@ function countProvisioned(items: HrAdminEmployeeListItem[]) {
   return items.filter((item) => item.has_access).length;
 }
 
+function countWithWarnings(items: HrAdminEmployeeListItem[]) {
+  return items.filter((item) => getEmployeeWarnings(item).length > 0).length;
+}
+
+function countManagersNeedingReview(items: HrAdminEmployeeListItem[]) {
+  return items.filter((item) => getEmployeeManagerWarnings(item).length > 0).length;
+}
+
 function formatMembershipStatus(value: string) {
   return value ? value.replaceAll("_", " ") : "Not provisioned";
 }
@@ -221,9 +229,46 @@ function EmployeeDetailPanel({ detail }: { detail: HrAdminEmployeeDetail | null 
   const structuralWarnings = getEmployeeStructuralWarnings(detail);
   const accessWarnings = getEmployeeAccessWarnings(detail);
   const managerWarnings = getEmployeeManagerWarnings(detail);
+  const allWarnings = [...structuralWarnings, ...accessWarnings, ...managerWarnings];
 
   return (
     <>
+      <div className="hr-employee-profile-summary">
+        <div className="hr-employee-avatar" aria-hidden="true">
+          {detail.full_name
+            .split(" ")
+            .map((part) => part[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase()}
+        </div>
+        <div>
+          <h3>{detail.full_name}</h3>
+          <p>
+            {detail.employee_code} • {detail.department || "No department"} • {detail.designation || "No designation"}
+          </p>
+        </div>
+        <span className={`record-chip${detail.employment_status === "active" ? " record-chip--accent" : ""}`}>
+          {detail.employment_status.replace("_", " ")}
+        </span>
+      </div>
+      <div className="hr-employee-readiness-strip">
+        <span className={structuralWarnings.length ? "hr-employee-readiness-pill hr-employee-readiness-pill--warn" : "hr-employee-readiness-pill"}>
+          Structure {structuralWarnings.length ? "review" : "ready"}
+        </span>
+        <span className={accessWarnings.length ? "hr-employee-readiness-pill hr-employee-readiness-pill--warn" : "hr-employee-readiness-pill"}>
+          Access {accessWarnings.length ? "review" : "ready"}
+        </span>
+        <span className={managerWarnings.length ? "hr-employee-readiness-pill hr-employee-readiness-pill--warn" : "hr-employee-readiness-pill"}>
+          Manager chain {managerWarnings.length ? "review" : "ready"}
+        </span>
+      </div>
+      {allWarnings.length ? (
+        <div className="platform-validation-strip platform-validation-strip--warning">
+          <strong>{allWarnings.length} readiness item{allWarnings.length === 1 ? "" : "s"} need review.</strong>
+          <span>{allWarnings.slice(0, 3).join(", ")}.</span>
+        </div>
+      ) : null}
       {structuralWarnings.length ? (
         <div className="notice">
           <strong>Structural review needed.</strong>
@@ -306,16 +351,21 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const canEditEmployees = sessionHasPermission(sessionUser, "employees.edit");
   const canImportEmployees = sessionHasPermission(sessionUser, "employees.import");
   const canManageEmployeeAccess = sessionHasPermission(sessionUser, "employees.access.manage");
+  const accessReadinessPercent = employeesResult.data.length
+    ? Math.round((countProvisioned(employeesResult.data) / employeesResult.data.length) * 100)
+    : 0;
+  const workforceWarnings = countWithWarnings(employeesResult.data);
+  const managerReviews = countManagersNeedingReview(employeesResult.data);
 
   const tabs = ["all", "active", "on_notice", "inactive", "exited"];
 
   return (
-    <main className="shell">
+    <main className="shell hr-employee-workbench">
       <PageIntro
         eyebrow={state === "live" ? "Live employees" : "Demo employees"}
         title="Employees"
-        description="Directory, access, and org fit."
-        className="page-header-surface page-header-surface--compact"
+        description="Operate the employee master, access readiness, manager structure, and payroll prerequisites from one focused workbench."
+        className="page-header-surface page-header-surface--compact hr-employee-page-header"
         titleClassName="text-heading-premium page-title-soft"
         descriptionClassName="text-body-premium"
         actions={
@@ -334,24 +384,61 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
         showPills
       />
 
+      <section className="section hr-employee-command-grid">
+        <div className="hr-employee-command-panel panel-card-soft">
+          <div>
+            <span className="eyebrow-soft">Workforce command</span>
+            <h2 className="section-heading-soft">Keep employee data ready for access, payroll, and approvals.</h2>
+            <p className="section-copy section-copy-soft">
+              Use the directory for daily lookup, the selected profile for correction work, and imports for controlled bulk updates.
+            </p>
+          </div>
+          <div className="hr-employee-command-actions">
+            {canImportEmployees ? <a className="button button--secondary" href="#employee-imports">Import updates</a> : null}
+            {canCreateEmployees ? (
+              <Link className="button button--primary" href="/hr-admin/employees/new">
+                New employee
+              </Link>
+            ) : null}
+          </div>
+        </div>
+        <div className="hr-employee-health-panel panel-card-soft">
+          <div
+            className="hr-employee-health-ring"
+            aria-label={`${accessReadinessPercent}% access provisioned`}
+            style={{
+              background: `radial-gradient(circle at center, #fff 57%, transparent 58%), conic-gradient(var(--hr-employee-accent) 0 ${accessReadinessPercent}%, rgba(226, 232, 240, 0.95) ${accessReadinessPercent}% 100%)`,
+            }}
+          >
+            <strong>{accessReadinessPercent}%</strong>
+            <span>access ready</span>
+          </div>
+          <div>
+            <h3>Operational readiness</h3>
+            <p>{workforceWarnings ? `${workforceWarnings} employees need review before clean payroll and access operations.` : "No visible directory readiness warnings in the current master data."}</p>
+          </div>
+        </div>
+      </section>
+
       <section className="section">
-        <div className="metric-grid-modern">
+        <div className="hr-employee-kpi-grid">
           <MetricTile className="metric-tile-soft" label="Employees in scope" labelClassName="metric-label-soft" value={employeesResult.data.length} valueClassName="metric-value-soft" trend="Master coverage" trendClassName="metric-trend-soft" />
           <MetricTile className="metric-tile-soft" label="Active employees" labelClassName="metric-label-soft" value={countByStatus(employeesResult.data, "active")} valueClassName="metric-value-soft" trend="Current workforce" trendClassName="metric-trend-soft" />
           <MetricTile className="metric-tile-soft" label="Access provisioned" labelClassName="metric-label-soft" value={countProvisioned(employeesResult.data)} valueClassName="metric-value-soft" trend="Login-ready employees" trendClassName="metric-trend-soft" />
           <MetricTile className="metric-tile-soft" label="Departments represented" labelClassName="metric-label-soft" value={departmentOptions.length} valueClassName="metric-value-soft" trend="Org spread" trendClassName="metric-trend-soft" />
           <MetricTile
             className="metric-tile-soft"
-            label="Managers in reporting chain"
+            label="Manager reviews"
             labelClassName="metric-label-soft"
-            value={new Set(employeesResult.data.map((employee) => employee.reporting_manager).filter(Boolean)).size}
+            value={managerReviews}
             valueClassName="metric-value-soft"
-            trend="Leadership coverage"
+            trend="Reassignment risk"
             trendClassName="metric-trend-soft"
           />
         </div>
       </section>
 
+      <div id="employee-imports" />
       {canImportEmployees && canCreateEmployees ? <EmployeeImportWorkbench employees={employeesResult.data} options={optionsResult.data} /> : null}
       {canImportEmployees && canEditEmployees ? <EmployeeBankImportWorkbench employees={employeesResult.data} /> : null}
       {canImportEmployees && canEditEmployees ? <EmployeeManagerImportWorkbench employees={employeesResult.data} options={optionsResult.data} /> : null}
@@ -361,7 +448,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
           <div className="queue-toolbar__header">
             <div>
               <h2 className="section-heading-soft">Employee directory</h2>
-              <p className="section-copy section-copy-soft">Filter first, then inspect one record in context.</p>
+              <p className="section-copy section-copy-soft">Search and filter the master list, then inspect one record in context.</p>
             </div>
             <div className="queue-toolbar__meta">
               <span className="queue-summary-chip">
@@ -447,15 +534,28 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                   key={employee.id}
                 >
                   <div className="employee-directory-item__header">
-                    <div>
-                      <strong>{employee.full_name}</strong>
-                      <p className="section-copy">
-                        {employee.employee_code} • {employee.department || "No department"} • {employee.designation || "No designation"}
-                      </p>
+                    <div className="hr-employee-list-identity">
+                      <span className="hr-employee-avatar hr-employee-avatar--small" aria-hidden="true">
+                        {employee.full_name
+                          .split(" ")
+                          .map((part) => part[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </span>
+                      <div>
+                        <strong>{employee.full_name}</strong>
+                        <p className="section-copy">
+                          {employee.employee_code} • {employee.department || "No department"} • {employee.designation || "No designation"}
+                        </p>
+                      </div>
                     </div>
-                    <span className={`record-chip${employee.employment_status === "active" ? " record-chip--accent" : ""}`}>
-                      {employee.employment_status}
-                    </span>
+                    <div className="hr-employee-row-status">
+                      {warnings.length ? <span className="record-chip record-chip--warning">{warnings.length} review</span> : null}
+                      <span className={`record-chip${employee.employment_status === "active" ? " record-chip--accent" : ""}`}>
+                        {employee.employment_status.replace("_", " ")}
+                      </span>
+                    </div>
                   </div>
                   <div className="employee-directory-item__meta">
                     <span>{employee.branch || "No branch"}</span>

@@ -5,6 +5,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { getHrAdminLeavePolicies } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminLeavePoliciesPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view", "leave.policies.manage"], fallbackPath: "/hr-admin" });
@@ -31,6 +32,16 @@ export default async function HrAdminLeavePoliciesPage() {
           </>
         }
         pills={["Entitlement and accrual rules", "Eligibility and notice control", "Assignment-ready policy objects"]}
+      />
+
+      <TimeLeaveOperationsStrip
+        current="policies"
+        title="Leave policy configuration"
+        description="Configure entitlement, accrual, eligibility, evidence, and approval behavior before assigning policies to employee scopes."
+        primaryMetricLabel="policies"
+        primaryMetricValue={result.data.length}
+        secondaryMetricLabel="active"
+        secondaryMetricValue={activeCount}
       />
 
       <section className="section">

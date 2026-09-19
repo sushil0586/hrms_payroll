@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
+import { ComplianceEvidenceStrip } from "@/app/hr-admin/compliance-evidence-strip";
 import { getHrAdminPayrollFinanceHandoffSetup, getHrAdminPayrollStatutorySetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
@@ -32,6 +33,19 @@ export default async function ComplianceSummaryReportPage() {
         }
         pills={["Compliance", "Control report", "Launch gates"]}
         showPills
+      />
+
+      <ComplianceEvidenceStrip
+        current="reports"
+        eyebrow="Compliance summary"
+        title="Launch-readiness evidence"
+        description="Summarize statutory setup, employee coverage, deduction evidence, filing calendars, provider receipts, and blocked compliance actions."
+        metrics={[
+          { label: "active packs", value: statutoryResult.data.summary.active_pack_count, tone: "ready" },
+          { label: "due filings", value: statutoryResult.data.summary.due_filing_calendar_count, tone: statutoryResult.data.summary.due_filing_calendar_count ? "warning" : "ready" },
+          { label: "artifacts", value: handoffResult.data.summary.finance_artifact_count, tone: handoffResult.data.summary.finance_artifact_count ? "ready" : "warning" },
+          { label: "retries", value: handoffResult.data.summary.provider_retry_event_count ?? 0, tone: (handoffResult.data.summary.provider_retry_event_count ?? 0) ? "warning" : "neutral" },
+        ]}
       />
 
       <ComplianceSummaryReportWorkspace statutory={statutoryResult.data} handoff={handoffResult.data} />

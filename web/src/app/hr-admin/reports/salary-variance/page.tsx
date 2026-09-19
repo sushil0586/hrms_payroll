@@ -4,6 +4,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReviewSetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
+import { ReportInsightsStrip } from "../report-insights-strip";
 import { SalaryVarianceReportWorkspace } from "./salary-variance-report-workspace";
 
 export default async function SalaryVarianceReportPage() {
@@ -35,6 +36,19 @@ export default async function SalaryVarianceReportPage() {
         }
         pills={["Variance", "Configurable baseline", "Review drilldown"]}
         showPills
+      />
+
+      <ReportInsightsStrip
+        current="payroll"
+        eyebrow="Payroll variance"
+        title="Salary variance evidence"
+        description="Review employee-level pay movement using prior-period baselines, calculation-line evidence, and payroll review drilldown."
+        metrics={[
+          { label: "reviews", value: result.data.summary.review_count, tone: "neutral" },
+          { label: "open", value: result.data.summary.open_review_count, tone: result.data.summary.open_review_count ? "warning" : "ready" },
+          { label: "exceptions", value: result.data.summary.exception_count, tone: result.data.summary.exception_count ? "warning" : "ready" },
+          { label: "blockers", value: result.data.summary.open_blocker_count, tone: result.data.summary.open_blocker_count ? "blocked" : "ready" },
+        ]}
       />
 
       <SalaryVarianceReportWorkspace lines={result.data.lines} reviews={result.data.reviews} />

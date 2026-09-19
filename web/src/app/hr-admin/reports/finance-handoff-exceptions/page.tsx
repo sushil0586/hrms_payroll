@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
+import { ComplianceEvidenceStrip } from "@/app/hr-admin/compliance-evidence-strip";
 import { getHrAdminPayrollFinanceHandoffSetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
@@ -35,6 +36,19 @@ export default async function FinanceHandoffExceptionsReportPage() {
         }
         pills={["Exception queue", "Retry evidence", "Audit pack"]}
         showPills
+      />
+
+      <ComplianceEvidenceStrip
+        current="reports"
+        eyebrow="Finance exception evidence"
+        title="Handoff exception control"
+        description="Inspect failed, queued, retried, acknowledged, and audit-pack-ready handoff evidence for finance operations."
+        metrics={[
+          { label: "handoffs", value: result.data.summary.handoff_count, tone: "neutral" },
+          { label: "deliveries", value: result.data.deliveries.length, tone: "neutral" },
+          { label: "callbacks", value: result.data.callback_events.length, tone: "neutral" },
+          { label: "dead letters", value: result.data.summary.dead_lettered_provider_retry_event_count ?? 0, tone: (result.data.summary.dead_lettered_provider_retry_event_count ?? 0) ? "blocked" : "ready" },
+        ]}
       />
 
       <FinanceHandoffExceptionsReportWorkspace

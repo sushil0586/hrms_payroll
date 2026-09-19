@@ -6,6 +6,7 @@ import { getHrAdminSaasCommercialControl } from "@/lib/api";
 import type { HrAdminSaasCommercialUsageLimit } from "@/lib/types";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
+import { OperationsGovernanceStrip } from "../operations-governance-strip";
 import { CommercialLifecycleActions } from "./commercial-lifecycle-actions";
 
 function titleCase(value: string) {
@@ -68,6 +69,18 @@ export default async function HrAdminSaasControlPlanePage() {
         }
         pills={[data.profile_ref, data.subscription.billing_provider_ref || "billing provider pending", data.plan.edition]}
         showPills
+      />
+
+      <OperationsGovernanceStrip
+        current="commercial"
+        title="Commercial and entitlement control"
+        description="Validate whether this tenant's HRMS plan, usage limits, billing references, and enabled entitlements support the current HR Admin workflows."
+        metrics={[
+          { label: "launch gate", value: data.summary.can_launch ? "Ready" : "Blocked", tone: data.summary.can_launch ? "ready" : "blocked" },
+          { label: "usage exceptions", value: data.summary.exceeded_usage_limit_count, tone: data.summary.exceeded_usage_limit_count ? "blocked" : "ready" },
+          { label: "near limits", value: data.summary.near_usage_limit_count, tone: data.summary.near_usage_limit_count ? "warning" : "ready" },
+          { label: "entitlements", value: `${data.summary.enabled_entitlement_count}/${data.summary.entitlement_count}`, tone: "neutral" },
+        ]}
       />
 
       <section className="section">

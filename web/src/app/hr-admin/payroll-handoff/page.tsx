@@ -6,7 +6,9 @@ import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollFinanceHandoffSetup } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { ComplianceEvidenceStrip } from "../compliance-evidence-strip";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
+import { PayrollCycleJourney } from "../payroll-cycle-journey";
 import type {
   HrAdminPayrollFinanceHandoff,
   HrAdminPayrollOutputArtifact,
@@ -1341,6 +1343,29 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
         }
         pills={["Bank advice", "Accounting export", "Statutory filings"]}
         showPills
+      />
+
+      <ComplianceEvidenceStrip
+        current="handoff"
+        eyebrow="Finance evidence"
+        title="Handoff evidence control"
+        description="Package and trace bank advice, accounting exports, statutory filing artifacts, provider deliveries, callbacks, retries, worker jobs, reconciliation, and audit packs."
+        metrics={[
+          { label: "handoffs", value: setup.summary.handoff_count, tone: "neutral" },
+          { label: "artifacts", value: setup.summary.finance_artifact_count, tone: setup.summary.finance_artifact_count ? "ready" : "warning" },
+          { label: "callbacks", value: setup.summary.provider_callback_event_count ?? 0, tone: "neutral" },
+          { label: "audit packs", value: setup.summary.provider_audit_pack_count ?? auditPackArtifacts.length, tone: (setup.summary.provider_audit_pack_count ?? auditPackArtifacts.length) ? "ready" : "warning" },
+        ]}
+      />
+
+      <PayrollCycleJourney
+        current="handoff"
+        selectedRunName={selectedHandoff?.payroll_run_name}
+        selectedRunStatus={selectedHandoff?.status}
+        primaryMetricLabel="finance artifacts"
+        primaryMetricValue={visibleArtifacts.length}
+        secondaryMetricLabel="deliveries"
+        secondaryMetricValue={selectedHandoffDeliveries.length}
       />
 
       <section className="section section--tight">

@@ -5,6 +5,7 @@ import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReadiness } from "@/lib/api";
 import type { HrAdminPayrollReadinessItem } from "@/lib/types";
+import { PayrollCycleJourney } from "../payroll-cycle-journey";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -191,6 +192,16 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
         }
         pills={["Configurable", "Tenant scoped", readiness.configuration.profile_name]}
         showPills
+      />
+
+      <PayrollCycleJourney
+        current="readiness"
+        selectedRunName={readiness.period.label}
+        selectedRunStatus={readiness.summary.blocked ? "blocked" : readiness.summary.warnings ? "warning" : "ready"}
+        primaryMetricLabel="ready"
+        primaryMetricValue={readiness.summary.ready}
+        secondaryMetricLabel="blocked"
+        secondaryMetricValue={readiness.summary.blocked}
       />
 
       <section className="section section--tight">

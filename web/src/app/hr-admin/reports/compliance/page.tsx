@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
+import { ComplianceEvidenceStrip } from "@/app/hr-admin/compliance-evidence-strip";
 import { getHrAdminPayrollFinanceHandoffSetup, getHrAdminPayrollStatutorySetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 import { reportCatalog } from "@/lib/report-catalog";
@@ -57,6 +58,19 @@ export default async function ComplianceReportHubPage() {
         }
         pills={["Compliance", "Exports", "Provider evidence"]}
         showPills
+      />
+
+      <ComplianceEvidenceStrip
+        current="reports"
+        eyebrow="Compliance reports"
+        title="Report evidence control"
+        description="Use this hub to inspect statutory deductions, filing status, provider receipts, readiness reports, and export evidence before compliance sign-off."
+        metrics={[
+          { label: "filing calendars", value: statutory.summary.filing_calendar_count, tone: "neutral" },
+          { label: "due filings", value: statutory.summary.due_filing_calendar_count, tone: statutory.summary.due_filing_calendar_count ? "warning" : "ready" },
+          { label: "artifacts", value: handoff.summary.statutory_filing_artifact_count ?? 0, tone: (handoff.summary.statutory_filing_artifact_count ?? 0) ? "ready" : "warning" },
+          { label: "callbacks", value: handoff.summary.provider_callback_event_count ?? 0, tone: "neutral" },
+        ]}
       />
 
       <section className="section section--tight" aria-label="Compliance report hub">

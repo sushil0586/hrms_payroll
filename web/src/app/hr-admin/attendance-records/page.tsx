@@ -5,6 +5,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminAttendanceOperationOptions, getHrAdminAttendanceRecords } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -50,6 +51,15 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
         description="Review daily attendance rows to spot exceptions, late marks, source gaps, and lock state before payroll-ready processing later."
         actions={<Link className="button button--secondary" href="/hr-admin/attendance-operations">Back to attendance operations</Link>}
         pills={["Server-driven filters", "Bulk lock and status actions", "Queue-ready exception review"]}
+      />
+      <TimeLeaveOperationsStrip
+        current="records"
+        title="Attendance records workbench"
+        description="Review raw and interpreted attendance rows before they become payroll source data."
+        primaryMetricLabel="rows"
+        primaryMetricValue={result.data.total_count}
+        secondaryMetricLabel="page"
+        secondaryMetricValue={result.data.page}
       />
       <section className="section">
         <div className="metric-grid-modern">

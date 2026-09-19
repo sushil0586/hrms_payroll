@@ -4,6 +4,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollOutputSetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
+import { ReportInsightsStrip } from "../report-insights-strip";
 import { PayrollRegisterReportWorkspace } from "./payroll-register-report-workspace";
 
 export default async function PayrollRegisterReportPage() {
@@ -35,6 +36,19 @@ export default async function PayrollRegisterReportPage() {
         }
         pills={["Payroll finance", "Locked snapshots", "Export audited"]}
         showPills
+      />
+
+      <ReportInsightsStrip
+        current="payroll"
+        eyebrow="Payroll report"
+        title="Payroll register evidence"
+        description="Inspect finance-ready payroll registers backed by locked output artifacts, source hashes, export controls, and tenant-scoped output evidence."
+        metrics={[
+          { label: "batches", value: result.data.summary.output_batch_count, tone: "neutral" },
+          { label: "published", value: result.data.summary.published_batch_count, tone: result.data.summary.published_batch_count ? "ready" : "warning" },
+          { label: "artifacts", value: result.data.summary.artifact_count, tone: "ready" },
+          { label: "payslips", value: result.data.summary.payslip_count, tone: "neutral" },
+        ]}
       />
 
       <PayrollRegisterReportWorkspace artifacts={result.data.artifacts} batches={result.data.output_batches} />

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
+import { ComplianceEvidenceStrip } from "@/app/hr-admin/compliance-evidence-strip";
 import { getHrAdminPayrollFinanceHandoffSetup, getHrAdminPayrollStatutorySetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
@@ -38,6 +39,19 @@ export default async function StatutoryDeductionsReportPage() {
         }
         pills={["Compliance", "Config driven", "Source hash"]}
         showPills
+      />
+
+      <ComplianceEvidenceStrip
+        current="reports"
+        eyebrow="Deduction evidence"
+        title="Statutory deduction source control"
+        description="Review component-wise statutory deduction evidence using statutory setup, employer registrations, filing calendars, and published payroll artifacts."
+        metrics={[
+          { label: "components", value: statutoryResult.data.summary.active_statutory_component_count, tone: "ready" },
+          { label: "registrations", value: statutoryResult.data.summary.active_employer_registration_count, tone: "ready" },
+          { label: "filings", value: statutoryResult.data.summary.filing_calendar_count, tone: "neutral" },
+          { label: "artifacts", value: handoffResult.data.summary.statutory_filing_artifact_count ?? 0, tone: (handoffResult.data.summary.statutory_filing_artifact_count ?? 0) ? "ready" : "warning" },
+        ]}
       />
 
       <StatutoryDeductionsReportWorkspace

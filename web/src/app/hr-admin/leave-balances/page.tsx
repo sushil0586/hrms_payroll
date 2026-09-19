@@ -5,6 +5,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLeaveBalances, getHrAdminLeaveBalanceTransactions, getHrAdminPolicyOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminLeaveBalancesPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view"], fallbackPath: "/hr-admin" });
@@ -34,6 +35,16 @@ export default async function HrAdminLeaveBalancesPage() {
             </Link>
           </>
         }
+      />
+
+      <TimeLeaveOperationsStrip
+        current="balances"
+        title="Leave balance ledger"
+        description="Inspect employee-policy balances, controlled adjustments, encashment, and maker-checker review pressure."
+        primaryMetricLabel="balances"
+        primaryMetricValue={balancesResult.data.length}
+        secondaryMetricLabel="pending reviews"
+        secondaryMetricValue={pendingReviewsCount}
       />
 
       <section className="section">

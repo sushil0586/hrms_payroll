@@ -5,6 +5,8 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminSaasOperationalHealth } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
+import { OperationsGovernanceStrip } from "../operations-governance-strip";
+
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
@@ -64,6 +66,18 @@ export default async function HrAdminSaasOperationsPage() {
         }
         pills={[data.profile_ref, data.tenant.code, titleCase(data.summary.status)]}
         showPills
+      />
+
+      <OperationsGovernanceStrip
+        current="overview"
+        title="Tenant operating command"
+        description="Use this page to triage HR-facing service health, failed delivery, provider queues, support access, and launch blockers before users are impacted."
+        metrics={[
+          { label: "posture", value: titleCase(data.summary.status), tone: data.summary.status === "ready" ? "ready" : data.summary.status === "warning" ? "warning" : "blocked" },
+          { label: "blocked signals", value: data.summary.blocked_signal_count, tone: data.summary.blocked_signal_count ? "blocked" : "ready" },
+          { label: "open remediation", value: data.summary.open_remediation_count, tone: data.summary.open_remediation_count ? "warning" : "ready" },
+          { label: "source", value: result.state === "live" ? "Live" : "Demo", tone: result.state === "live" ? "ready" : "warning" },
+        ]}
       />
 
       <section className="section">
