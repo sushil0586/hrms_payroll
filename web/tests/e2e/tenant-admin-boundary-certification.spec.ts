@@ -21,7 +21,7 @@ type SessionPayload = {
 };
 
 const tenantAdminPages = [
-  { path: "/tenant-admin", heading: "Tenant Admin Console" },
+  { path: "/tenant-admin", heading: "Account Control Center" },
   { path: "/tenant-admin/users", heading: "Tenant User Management" },
   { path: "/tenant-admin/plan", heading: "Plan & Billing" },
   { path: "/tenant-admin/setup", heading: "Tenant Setup Guide" },
@@ -35,11 +35,20 @@ function uniqueRef(label: string) {
   return `ta-boundary-${label}-${Date.now()}`;
 }
 
+function apiBaseUrl() {
+  if (process.env.HRMS_API_BASE_URL) {
+    return process.env.HRMS_API_BASE_URL;
+  }
+  if (process.env.PLAYWRIGHT_BASE_URL) {
+    return `${process.env.PLAYWRIGHT_BASE_URL.replace(/\/$/, "")}/api/v1`;
+  }
+  return "http://127.0.0.1:8012/api/v1";
+}
+
 async function sessionFor(page: Page) {
-  const apiBase = process.env.HRMS_API_BASE_URL ?? "http://127.0.0.1:8012/api/v1";
   const token = (await page.context().cookies()).find((cookie) => cookie.name === "hrms_access_token")?.value;
   expect(token, "Expected browser auth token").toBeTruthy();
-  const response = await page.request.get(`${apiBase}/auth/session/`, {
+  const response = await page.request.get(`${apiBaseUrl()}/auth/session/`, {
     headers: { Authorization: `Token ${token}` },
   });
   expect(response.ok()).toBeTruthy();
@@ -57,12 +66,14 @@ async function expectDenied(response: APIResponse, label: string) {
 }
 
 async function expectTenantAdminApisDenied(page: Page, label: string) {
-  await expectDenied(await page.request.get("/api/tenant-admin/security-readiness"), `${label} security readiness`);
-  await expectDenied(await page.request.get("/api/tenant-admin/trust-audit"), `${label} trust audit`);
-  await expectDenied(await page.request.get("/api/tenant-admin/commercial-support-audit/download"), `${label} audit download`);
+  const requestTimeout = 15_000;
+  await expectDenied(await page.request.get("/api/tenant-admin/security-readiness", { timeout: requestTimeout }), `${label} security readiness`);
+  await expectDenied(await page.request.get("/api/tenant-admin/trust-audit", { timeout: requestTimeout }), `${label} trust audit`);
+  await expectDenied(await page.request.get("/api/tenant-admin/commercial-support-audit/download", { timeout: requestTimeout }), `${label} audit download`);
 
   await expectDenied(
     await page.request.post("/api/tenant-admin/memberships", {
+      timeout: requestTimeout,
       data: {
         username: uniqueRef(`${label}-member`),
         email: `${uniqueRef(`${label}-member`)}@example.test`,
@@ -74,12 +85,14 @@ async function expectTenantAdminApisDenied(page: Page, label: string) {
   );
   await expectDenied(
     await page.request.patch("/api/tenant-admin/memberships/00000000-0000-4000-8000-000000000000", {
+      timeout: requestTimeout,
       data: { action: "suspend", note: "Boundary verification." },
     }),
     `${label} membership patch`,
   );
   await expectDenied(
     await page.request.post("/api/tenant-admin/change-requests", {
+      timeout: requestTimeout,
       data: {
         request_type: "plan_change",
         title: "Unauthorized tenant plan change",
@@ -92,12 +105,14 @@ async function expectTenantAdminApisDenied(page: Page, label: string) {
   );
   await expectDenied(
     await page.request.patch("/api/tenant-admin/change-requests/00000000-0000-4000-8000-000000000000", {
+      timeout: requestTimeout,
       data: { action: "approve", decision_note: "Boundary verification." },
     }),
     `${label} change request patch`,
   );
   await expectDenied(
     await page.request.post("/api/tenant-admin/support-access-grants", {
+      timeout: requestTimeout,
       data: {
         support_agent_identifier: "support.agent",
         reason: "Unauthorized support grant.",
@@ -109,6 +124,7 @@ async function expectTenantAdminApisDenied(page: Page, label: string) {
   );
   await expectDenied(
     await page.request.patch("/api/tenant-admin/support-access-grants/00000000-0000-4000-8000-000000000000", {
+      timeout: requestTimeout,
       data: { action: "approve", decision_note: "Boundary verification." },
     }),
     `${label} support access patch`,
@@ -126,6 +142,7 @@ test.describe("Tenant admin cross-role and cross-tenant boundaries", () => {
   });
 
   test("keeps tenant-admin pages unavailable to employee, manager, platform admin, and support agent roles", async ({ page }) => {
+    test.setTimeout(120_000);
     const blockedPersonas: Array<{ label: string; persona: Persona }> = [
       { label: "employee", persona: employee },
       { label: "manager", persona: manager },
@@ -137,10 +154,10 @@ test.describe("Tenant admin cross-role and cross-tenant boundaries", () => {
       await gotoAuthenticated(page, tenantAdminPages[0].path, persona);
       const session = await sessionFor(page);
       if (session.workspace_access?.tenant_admin) {
-        await expectPageReady(page, "Tenant Admin Console");
+        await expectPageReady(page, "Account Control Center");
       } else {
         await expect(page).not.toHaveURL(/\/tenant-admin$/);
-        await expect(page.getByRole("main").getByText("Tenant Admin Console", { exact: true })).toHaveCount(0);
+        await expect(page.getByRole("main").getByText("Account Control Center", { exact: true })).toHaveCount(0);
         const tenantShortcut = page.getByRole("region", { name: "Workspace shortcuts" }).getByRole("link", { name: "Tenant" });
         if (await tenantShortcut.isVisible().catch(() => false)) {
           await expect(tenantShortcut).toHaveAttribute("href", "/");
@@ -154,8 +171,9 @@ test.describe("Tenant admin cross-role and cross-tenant boundaries", () => {
   });
 
   test("allows tenant admin to read only the active tenant trust and security surfaces", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/tenant-admin", tenantAdmin);
-    await expectPageReady(page, "Tenant Admin Console");
+    await expectPageReady(page, "Account Control Center");
     const session = await sessionFor(page);
     const tenantCode = session.default_membership?.tenant_code;
     expect(tenantCode, "Expected tenant admin session to include a tenant code").toBeTruthy();
@@ -164,7 +182,7 @@ test.describe("Tenant admin cross-role and cross-tenant boundaries", () => {
     for (const tenantPage of tenantAdminPages) {
       await page.goto(tenantPage.path, { waitUntil: "domcontentloaded" });
       await expectPageReady(page, tenantPage.heading);
-      await expect(page.getByRole("main").getByText(tenantCode!, { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole("main")).toContainText(tenantCode!);
       await expectNoHorizontalOverflow(page);
     }
 

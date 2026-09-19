@@ -15,7 +15,13 @@ function uniqueRunRef() {
 }
 
 function apiBaseUrl() {
-  return process.env.HRMS_API_BASE_URL ?? "http://127.0.0.1:8012/api/v1";
+  if (process.env.HRMS_API_BASE_URL) {
+    return process.env.HRMS_API_BASE_URL;
+  }
+  if (process.env.PLAYWRIGHT_BASE_URL) {
+    return `${process.env.PLAYWRIGHT_BASE_URL.replace(/\/$/, "")}/api/v1`;
+  }
+  return "http://127.0.0.1:8012/api/v1";
 }
 
 async function authHeaders(page: Page) {
@@ -91,13 +97,17 @@ test.describe("Tenant Admin final production-readiness certification", () => {
       }
     });
 
-    await gotoTenant(page, "/tenant-admin", "Tenant Admin Console");
+    await gotoTenant(page, "/tenant-admin", "Account Control Center");
     const initialConsole = await tenantConsole(page);
     await expect(page.getByTestId("tenant-admin-control-center")).toBeVisible();
-    await expect(page.getByTestId("tenant-setup-guide")).toContainText(/of \d+ visible launch steps complete/);
-    for (const link of ["Manage users", "Review plan", "Open support", "Review audit", "Review blockers"]) {
-      await expect(page.getByTestId("tenant-admin-control-center").getByRole("link", { name: link })).toBeVisible();
-    }
+    await expect(page.getByRole("main").getByText("Tenant Status", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("main").getByText("Configuration Setup", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("main").getByText("Active Users", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("main").getByText("Plan & Billing", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Items that need your attention" })).toBeVisible();
+    await expect(page.getByTestId("tenant-next-action").getByRole("link").first()).toBeVisible();
+    await expect(page.getByTestId("tenant-setup-guide").getByRole("link", { name: "View all users" })).toBeVisible();
+    await expect(page.getByTestId("tenant-setup-guide").getByRole("link", { name: "Manage all roles" })).toBeVisible();
     await testInfo.attach("tenant-admin-final-01-dashboard", {
       body: await page.screenshot({ fullPage: true }),
       contentType: "image/png",

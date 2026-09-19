@@ -31,7 +31,13 @@ type TenantMembership = {
 };
 
 function apiBaseUrl() {
-  return process.env.HRMS_API_BASE_URL ?? "http://127.0.0.1:8012/api/v1";
+  if (process.env.HRMS_API_BASE_URL) {
+    return process.env.HRMS_API_BASE_URL;
+  }
+  if (process.env.PLAYWRIGHT_BASE_URL) {
+    return `${process.env.PLAYWRIGHT_BASE_URL.replace(/\/$/, "")}/api/v1`;
+  }
+  return "http://127.0.0.1:8012/api/v1";
 }
 
 async function authHeaders(page: Page) {
@@ -100,7 +106,10 @@ test.describe("Tenant admin roles certification", () => {
   test.describe.configure({ mode: "serial" });
   test.setTimeout(180_000);
 
-  test.skip(!process.env.HRMS_API_BASE_URL, "Tenant role certification requires a live HRMS API.");
+  test.skip(
+    !process.env.HRMS_API_BASE_URL && !process.env.PLAYWRIGHT_BASE_URL,
+    "Tenant role certification requires a live HRMS API.",
+  );
 
   test("certifies custom role creation, edit dialog, protected system roles, and search", async ({ page }) => {
     await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);

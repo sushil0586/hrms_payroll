@@ -53,6 +53,22 @@ This plan treats the running browser application as the source of truth. Existin
 | `/api/tenant-admin/trust-audit` | Evidence filtering | group/type/session filters, pagination, empty state | unauthenticated/wrong role denial, cross-tenant leakage checks |
 | `/api/tenant-admin/commercial-support-audit/download` | Audit export | JSON contract, checksum, tenant code, evidence groups | unauthenticated/wrong role denial |
 
+## Intended Functionality Audit
+
+This separates true operational pages from evidence/readiness pages so data-only areas are judged against the right product intent.
+
+| Page | Intended Functionality | Current Action Model | Browser Proof | Product Decision |
+| --- | --- | --- | --- | --- |
+| `/tenant-admin` Dashboard | Customer-owner control center: summarize tenant health, active users, plan, readiness, action queue, and shortcuts. | Navigation and audit export; no direct mutation by design. | Stage console spec and final integrated journey passed. | Working as intended. Dashboard should stay summary-focused. |
+| `/tenant-admin/users` Users | Tenant access administration. Invite users, update roles, activate, suspend, reactivate, revoke, search, paginate, and audit. | Full CRUD-style lifecycle through dialogs and guarded row actions. | Stage console, users dialog, and final integrated journey passed. | Working as intended. |
+| `/tenant-admin/roles` Roles & Permissions | Tenant role governance. Create/edit custom roles, protect system roles, assign permissions, enforce last-admin/limited-role guards. | Full custom-role CRUD through role dialog; system roles are locked. | Stage Roles pack passed 3/3 executable tests: custom role create/edit/search, plan-disabled permissions, limited-role menus/actions/backend denials. Last-admin destructive proof remains intentionally gated. | Working as intended. Run the gated last-admin proof only in a controlled release window. |
+| `/tenant-admin/plan` Plan & Billing | Read commercial posture and submit governed plan/configuration/account change requests. | Plan data is read-only; changes go through request queue with submit/cancel/approve/apply where authorized. | Stage plan/settings and final integrated journey passed. | Working as intended. Direct subscription edit should remain Platform Admin/billing governed. |
+| `/tenant-admin/setup` Setup Guide | Launch-readiness checklist and routing hub for Tenant Admin/HR Admin setup responsibilities. | Readiness evidence plus deep links to owning workspaces; no direct mutation by design. | Stage console setup tests passed. | Working as intended, but HR Admin-owned links should be reviewed with true tenant-admin-only credentials to avoid confusing access-denied paths. |
+| `/tenant-admin/settings` Settings | Read tenant-owned account profile and configuration posture; request platform-reviewed account changes. | Account identifiers are read-only; changes route to prefilled governed request. | Stage settings and plan/settings tests passed. | Working as intended. |
+| `/tenant-admin/support-access` Support Access | Govern vendor/support access. Request, approve, reject, start, end, revoke, search, paginate, and audit sessions. | Full lifecycle through scoped grant form and guarded row actions. | Stage console and support-access certifications passed. | Working as intended. |
+| `/tenant-admin/security-readiness` Security | Show enterprise security posture: MFA, SSO, SCIM, sessions, audit, data protection, blockers. | Evidence/readiness only; directs to Trust Audit. | Stage security/trust tests passed. | Working as intended. Future edit actions need product decision because ownership may be Platform Admin/security configuration. |
+| `/tenant-admin/trust-audit` Audit Trail | Customer-visible evidence ledger with event group/type/session filters, pagination, and audit download. | Filtering/navigation/export; no mutation by design. | Stage security/trust, boundary, and final integrated journey passed. | Working as intended. |
+
 ## Enterprise QA Scope
 
 For every Tenant Admin route, certify:
@@ -89,7 +105,7 @@ For every Tenant Admin route, certify:
 | TA-UX-1 | Enterprise UI Makeover | Apply approved Account Control Center visual system across Tenant Admin shell and dashboard first, then full pages. | Dark navy shell, compact dashboard, action queue, readiness panel, user/role previews, updated tests. | Certified locally |
 | TA-UX-2 | Users/Roles Makeover | Convert access administration to enterprise directory and permission-matrix patterns without changing APIs/RBAC. | Users directory table, status/security columns, role inventory, permission catalog overview, updated assertions. | Certified locally |
 | TA-UX-3 | Commercial/Setup/Governance Makeover | Bring Plan, Settings, Setup, Support, Security, and Trust Audit into the same compact enterprise system. | Split workspaces, denser change-request form/list, audit ledger styling, corrected setup links, updated Plan & Billing heading/tests. | Certified locally |
-| TA-UX-4 | Staging Visual Signoff | Re-run the same browser certification on deployed staging and capture representative screenshots before check-in/deploy signoff. | Staging evidence, screenshots, and final confidence update. | Fix pending deployment |
+| TA-UX-4 | Staging Visual Signoff | Re-run the same browser certification on deployed staging and capture representative screenshots before check-in/deploy signoff. | Staging evidence, screenshots, and final confidence update. | Passed |
 
 ## UI Makeover Baseline
 
@@ -153,7 +169,14 @@ Verification:
 - The skipped case is the existing environment-gated last-admin browser-authenticated mutation guard; the rest of Roles/RBAC, dashboard, users, plan/settings, support access, security, trust audit, desktop routes, and mobile dashboard certification passed locally.
 - Staging pre-fix run with `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in ... --workers=1` produced **30 passed, 4 skipped, 4 failed**. Passing areas included dashboard, users page controls, unauthorized membership denial, membership audit evidence, setup, settings, security readiness, trust audit export, support validation/create/reject/search/denial, user dialogs, and all desktop/mobile visual routes. The four failures were successful mutation responses whose rows did not update visually fast enough on staging: membership activation, plan approval/apply, support approval/start, and configuration cancel.
 - Focused local post-fix mutation run passed: `HRMS_API_BASE_URL=http://127.0.0.1:8001/api/v1 pnpm --dir web exec playwright test tests/e2e/tenant-admin-console-flows.spec.ts tests/e2e/tenant-admin-plan-settings-certification.spec.ts --project=chromium --workers=1 --grep "invite and access lifecycle|plan page and change request lifecycle|support access page and support lifecycle|creates and cancels" --timeout=90000` -> **4 passed**.
-- Staging browser verification remains required after deployment.
+- Post-deployment focused staging verification passed: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_ENABLE_DEMO_DATA=false pnpm --dir web exec playwright test tests/e2e/tenant-admin-console-flows.spec.ts --project=chromium --workers=1 --grep "invite and access lifecycle|support access page and support lifecycle"` -> **2 passed** in 1.7m.
+- Post-deployment full Tenant Admin console staging verification passed: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_ENABLE_DEMO_DATA=false pnpm --dir web exec playwright test tests/e2e/tenant-admin-console-flows.spec.ts --project=chromium --workers=1` -> **10 passed** in 3.6m.
+- Post-deployment broad Tenant Admin staging verification found stale certification assumptions, not product failures: old `Tenant Admin Console` heading expectations and local-only API defaults. Updated the boundary/final specs to use `Account Control Center`, derive staging API base from `PLAYWRIGHT_BASE_URL`, and certify combined tenant-code UI pills correctly.
+- Post-fix staging boundary verification passed: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_ENABLE_DEMO_DATA=false pnpm --dir web exec playwright test tests/e2e/tenant-admin-boundary-certification.spec.ts --project=chromium --workers=1` -> **3 passed** in 1.9m.
+- Post-fix staging final integrated Tenant Admin journey passed: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_ENABLE_DEMO_DATA=false pnpm --dir web exec playwright test tests/e2e/tenant-admin-boundary-certification.spec.ts tests/e2e/tenant-admin-final-production-readiness-certification.spec.ts --project=chromium --workers=1` -> final journey **passed** in 2.4m; boundary failures in that run were test-timeout/assertion issues fixed by the later boundary-only pass.
+- Post-fix staging Roles & Permissions certification passed: `PLAYWRIGHT_BASE_URL=https://hrms.accerio.in HRMS_ENABLE_DEMO_DATA=false pnpm --dir web exec playwright test tests/e2e/tenant-admin-roles-certification.spec.ts --project=chromium --workers=1` -> **3 passed, 1 skipped** in 3.4m. The skipped test is the intentionally gated last-admin browser-authenticated destructive guard.
+- `pnpm --dir web lint` passed after certification updates.
+- `pnpm --dir web exec tsc --noEmit` passed after certification updates.
 
 Next UI tasks:
 
