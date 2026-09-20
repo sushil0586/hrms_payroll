@@ -185,8 +185,9 @@ test.describe("Production live/disposable mutation readiness", () => {
     await expect(page.getByRole("button", { name: "Run rehearsal" })).toBeVisible();
 
     await gotoAuthenticated(page, "/tenant-admin");
-    await expectPageReady(page, "Tenant Admin Console");
-    await expect(page.getByRole("button", { name: /Submit request|Request access|Invite member/ }).first()).toBeVisible();
+    await expectPageReady(page, "Account Control Center");
+    await expect(page.getByRole("link", { name: "Invite user" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Request account change" })).toBeVisible();
 
     await page.request.post("/api/auth/logout");
     if (apiBaseConfigured) {

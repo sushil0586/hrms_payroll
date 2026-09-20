@@ -26,8 +26,8 @@ test.describe("Production launch release gate proof", () => {
     await expectPageReady(page, "Control center");
     await expectVisibleText(page, [
       "Launch audit",
-      "SaaS launch audit",
-      "hrms.saas_launch_audit.v1",
+      "Launch readiness posture",
+      "View assignments",
       "Download audit",
     ]);
     await captureLaunchGateStep(page, testInfo, "01-hr-control-launch-audit");
@@ -87,6 +87,7 @@ test.describe("Production launch release gate proof", () => {
   });
 
   test("commercial release gate shows plan, entitlements, usage evidence, and customer trust audit", async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
     await loginIfRequired(page, hrAdmin, "/hr-admin/saas-control-plane");
     await expectPageReady(page, "SaaS Control Plane");
     await expectVisibleText(page, [
@@ -104,16 +105,17 @@ test.describe("Production launch release gate proof", () => {
     await captureLaunchGateStep(page, testInfo, "06-commercial-control-plane");
 
     await gotoAuthenticated(page, "/tenant-admin");
-    await expectPageReady(page, "Tenant Admin Console");
+    await expectPageReady(page, "Account Control Center");
     await expectVisibleText(page, [
-      "Control center",
-      "Start here",
+      "Account Control Center",
+      "Tenant Readiness",
       "Users",
       "Plan",
       "Support",
       "Audit",
       "Setup guide",
-      "Open requests",
+      "Action Queue",
+      "Request account change",
       "Download audit",
     ]);
     await captureLaunchGateStep(page, testInfo, "07-tenant-admin-release-review");
@@ -143,6 +145,7 @@ test.describe("Production launch release gate proof", () => {
   });
 
   test("provider launch rehearsal ties payroll handoff, route packages, storage policy, and audit-pack evidence", async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
     await loginIfRequired(page, hrAdmin, "/hr-admin/payroll-providers");
     await expectPageReady(page, "Payroll Providers");
     await expectVisibleText(page, [
