@@ -30,6 +30,99 @@ async function expectPagination(root: Locator) {
   await expect(pagination.getByText(/Page \d+/)).toBeVisible();
 }
 
+function boxesOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+) {
+  const tolerance = 1;
+  return !(
+    a.x + a.width <= b.x + tolerance ||
+    b.x + b.width <= a.x + tolerance ||
+    a.y + a.height <= b.y + tolerance ||
+    b.y + b.height <= a.y + tolerance
+  );
+}
+
+async function expectReadinessActionsFit(page: Page) {
+  const actions = page.locator(".platform-readiness-actions");
+  await expect(actions).toBeVisible();
+  const actionBox = await actions.boundingBox();
+  expect(actionBox, "readiness action bounds").toBeTruthy();
+  const buttons = actions.getByRole("button");
+  await expect(buttons).toHaveCount(3);
+  const boxes = [];
+  for (let index = 0; index < 3; index += 1) {
+    const button = buttons.nth(index);
+    await expect(button).toBeVisible();
+    const box = await button.boundingBox();
+    expect(box, `readiness action ${index} bounds`).toBeTruthy();
+    if (actionBox && box) {
+      expect(box.x, `readiness action ${index} left edge`).toBeGreaterThanOrEqual(actionBox.x - 1);
+      expect(box.x + box.width, `readiness action ${index} right edge`).toBeLessThanOrEqual(actionBox.x + actionBox.width + 1);
+      expect(box.width, `readiness action ${index} usable width`).toBeGreaterThan(90);
+      boxes.push(box);
+    }
+  }
+  for (let left = 0; left < boxes.length; left += 1) {
+    for (let right = left + 1; right < boxes.length; right += 1) {
+      expect(boxesOverlap(boxes[left], boxes[right]), `readiness action ${left} overlaps ${right}`).toBeFalsy();
+    }
+  }
+}
+
+async function expectSetupTemplateActionsFit(page: Page) {
+  const setupCard = card(page, "Setup templates");
+  const firstTemplateRow = setupCard.locator(".platform-template-row").first();
+  if ((await firstTemplateRow.count()) > 0) {
+    await expect(firstTemplateRow).toBeVisible();
+    const rowBox = await firstTemplateRow.boundingBox();
+    expect(rowBox, "setup template row bounds").toBeTruthy();
+    const rowButtons = firstTemplateRow.getByRole("button");
+    await expect(rowButtons).toHaveCount(2);
+    const boxes = [];
+    for (let index = 0; index < 2; index += 1) {
+      const button = rowButtons.nth(index);
+      await expect(button).toBeVisible();
+      const box = await button.boundingBox();
+      expect(box, `setup template action ${index} bounds`).toBeTruthy();
+      if (rowBox && box) {
+        expect(box.x, `setup template action ${index} left edge`).toBeGreaterThanOrEqual(rowBox.x - 1);
+        expect(box.x + box.width, `setup template action ${index} right edge`).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+        expect(box.width, `setup template action ${index} usable width`).toBeGreaterThan(70);
+        boxes.push(box);
+      }
+    }
+    if (boxes.length === 2) {
+      expect(boxesOverlap(boxes[0], boxes[1]), "setup template row actions overlap").toBeFalsy();
+    }
+  }
+
+  const adoptionActions = card(page, "Apply setup template").locator(".platform-adoption-actions .button-row");
+  await expect(adoptionActions).toBeVisible();
+  const actionsBox = await adoptionActions.boundingBox();
+  expect(actionsBox, "setup adoption actions bounds").toBeTruthy();
+  const adoptionButtons = adoptionActions.getByRole("button");
+  await expect(adoptionButtons).toHaveCount(4);
+  const actionBoxes = [];
+  for (let index = 0; index < 4; index += 1) {
+    const button = adoptionButtons.nth(index);
+    await expect(button).toBeVisible();
+    const box = await button.boundingBox();
+    expect(box, `adoption action ${index} bounds`).toBeTruthy();
+    if (actionsBox && box) {
+      expect(box.x, `adoption action ${index} left edge`).toBeGreaterThanOrEqual(actionsBox.x - 1);
+      expect(box.x + box.width, `adoption action ${index} right edge`).toBeLessThanOrEqual(actionsBox.x + actionsBox.width + 1);
+      expect(box.width, `adoption action ${index} usable width`).toBeGreaterThan(80);
+      actionBoxes.push(box);
+    }
+  }
+  for (let left = 0; left < actionBoxes.length; left += 1) {
+    for (let right = left + 1; right < actionBoxes.length; right += 1) {
+      expect(boxesOverlap(actionBoxes[left], actionBoxes[right]), `adoption action ${left} overlaps ${right}`).toBeFalsy();
+    }
+  }
+}
+
 async function expectSearchNarrowsList(page: Page, searchName: string, listSelector: string) {
   const listCountBefore = await page.locator(listSelector).count();
   await page.locator(`[name="${searchName}"]`).fill("__no_matching_platform_admin_record__");
@@ -130,6 +223,7 @@ test.describe("Platform admin tabbed workspace certification", () => {
     await expect(card(page, "Launch readiness").getByRole("button", { name: "Confirm setup" })).toBeVisible();
     await expect(card(page, "Launch readiness").getByRole("button", { name: "Mark ready" })).toBeVisible();
     await expect(card(page, "Launch readiness").getByRole("button", { name: "Activate tenant" })).toBeVisible();
+    await expectReadinessActionsFit(page);
     await expectNamedControls(card(page, "Edit tenant setup"), [
       "name",
       "legal_name",
@@ -210,6 +304,7 @@ test.describe("Platform admin tabbed workspace certification", () => {
     ]);
     await expectNamedControls(card(page, "Apply setup template"), ["policy_pack_id", "adoption_mode", "notes"]);
     await expect(card(page, "Apply setup template").getByText(/Before adoption|Setup template cannot be applied yet/)).toBeVisible();
+    await expectSetupTemplateActionsFit(page);
 
     await openTab(page, "Audit Logs");
     await expect(page.getByTestId("platform-admin-events-panel")).toBeVisible();

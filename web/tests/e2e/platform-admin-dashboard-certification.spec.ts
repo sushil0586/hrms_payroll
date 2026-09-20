@@ -71,6 +71,46 @@ async function expectNoBrowserNoise(page: Page, errors: string[], failedRequests
   expect(failedRequests, "unexpected failed platform admin requests").toEqual([]);
 }
 
+function boxesOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+) {
+  const tolerance = 1;
+  return !(
+    a.x + a.width <= b.x + tolerance ||
+    b.x + b.width <= a.x + tolerance ||
+    a.y + a.height <= b.y + tolerance ||
+    b.y + b.height <= a.y + tolerance
+  );
+}
+
+async function expectShortcutButtonsFit(page: Page) {
+  const shortcuts = card(page, "Command shortcuts");
+  const shortcutGrid = shortcuts.locator(".platform-command-grid");
+  const gridBox = await shortcutGrid.boundingBox();
+  expect(gridBox, "shortcut grid bounds").toBeTruthy();
+  const buttons = shortcutGrid.getByRole("link");
+  await expect(buttons).toHaveCount(6);
+  const boxes = [];
+  for (let index = 0; index < 6; index += 1) {
+    const button = buttons.nth(index);
+    await expect(button).toBeVisible();
+    const box = await button.boundingBox();
+    expect(box, `shortcut ${index} bounds`).toBeTruthy();
+    if (gridBox && box) {
+      expect(box.x, `shortcut ${index} left edge`).toBeGreaterThanOrEqual(gridBox.x - 1);
+      expect(box.x + box.width, `shortcut ${index} right edge`).toBeLessThanOrEqual(gridBox.x + gridBox.width + 1);
+      expect(box.width, `shortcut ${index} usable width`).toBeGreaterThan(90);
+      boxes.push(box);
+    }
+  }
+  for (let left = 0; left < boxes.length; left += 1) {
+    for (let right = left + 1; right < boxes.length; right += 1) {
+      expect(boxesOverlap(boxes[left], boxes[right]), `shortcut ${left} overlaps shortcut ${right}`).toBeFalsy();
+    }
+  }
+}
+
 async function openDashboard(page: Page) {
   await gotoAuthenticated(page, "/platform-admin", platformAdmin);
   await expectPageReady(page, "Platform Admin Dashboard");
@@ -120,6 +160,7 @@ test.describe("Platform admin dashboard certification", () => {
       for (const lead of summary.lead_queue.slice(0, 3)) {
         await expect(missionQueue.getByText(lead.company_name, { exact: true })).toBeVisible();
       }
+      await expect(missionQueue.getByRole("link", { name: "Open queue" }).first()).toHaveAttribute("href", /\/platform-admin\/leads/);
     } else {
       await expect(missionQueue.getByText("No active public leads need review.")).toBeVisible();
     }
@@ -129,6 +170,7 @@ test.describe("Platform admin dashboard certification", () => {
     await expect(detailRow(tenantPipeline, "Not active").locator(".detail-value")).toHaveText(String(summary.counts.onboarding_tenants));
     await expect(detailRow(tenantPipeline, "Setup pending").locator(".detail-value")).toHaveText(String(summary.counts.baseline_pending_tenants));
     await expect(detailRow(tenantPipeline, "Go-live handoff ready").locator(".detail-value")).toHaveText(String(summary.counts.handoff_ready_tenants));
+    await expect(tenantPipeline.getByRole("link", { name: "Open tenants" })).toHaveAttribute("href", /\/platform-admin\/tenants/);
 
     const riskRadar = card(page, "Risk radar");
     await expect(riskRadar.getByText("New public leads")).toBeVisible();
@@ -137,6 +179,15 @@ test.describe("Platform admin dashboard certification", () => {
     await expect(riskRadar.getByText("Review and qualify inbound requests.")).toBeVisible();
     await expect(riskRadar.getByText("Move prepared tenants through setup confirmation, admin access, readiness, and activation.")).toBeVisible();
     await expect(riskRadar.getByRole("link", { name: "Resolve" })).toHaveCount(3);
+    const riskExpectations = [
+      { label: "New public leads", path: /\/platform-admin\/leads/ },
+      { label: "Tenants not active", path: /\/platform-admin\/tenants/ },
+      { label: "Published setup templates", path: /\/platform-admin\/policy-packs/ },
+    ];
+    for (const item of riskExpectations) {
+      const riskRow = riskRadar.locator(".platform-dashboard-row").filter({ hasText: item.label }).first();
+      await expect(riskRow.getByRole("link", { name: "Resolve" })).toHaveAttribute("href", item.path);
+    }
 
     const blockers = card(page, "Activation blockers");
     await expect(blockers.locator(".record-chip").first()).toHaveText(`${summary.stale_onboarding_tenants.length} shown`);
@@ -171,6 +222,7 @@ test.describe("Platform admin dashboard certification", () => {
       await expect(shortcut, `${item.name} shortcut`).toBeVisible();
       await expect(shortcut).toHaveAttribute("href", item.path);
     }
+    await expectShortcutButtonsFit(page);
 
     await shortcuts.getByRole("link", { name: "Review leads" }).click();
     await expect(page).toHaveURL(/\/platform-admin\/leads/);
@@ -180,7 +232,9 @@ test.describe("Platform admin dashboard certification", () => {
     await page.getByRole("link", { name: "Dashboard", exact: true }).click();
     await expect(page.getByTestId("platform-admin-control-center")).toBeVisible();
 
-    await card(page, "Evidence trail").getByRole("link", { name: "Open events" }).click();
+    const evidenceTrail = card(page, "Evidence trail");
+    await expect(evidenceTrail.getByRole("link", { name: "Open events" })).toHaveAttribute("href", /\/platform-admin\/audit-logs/);
+    await evidenceTrail.getByRole("link", { name: "Open events" }).click();
     await expect(page).toHaveURL(/\/platform-admin\/audit-logs/);
     await expect(page.getByTestId("platform-admin-events-panel")).toBeVisible();
 
@@ -199,6 +253,7 @@ test.describe("Platform admin dashboard certification", () => {
       for (const heading of requiredDashboardCards) {
         await expect(card(page, heading), `${heading} card at ${viewport.label}`).toBeVisible();
       }
+      await expectShortcutButtonsFit(page);
       const screenshot = await page.screenshot({ fullPage: true, animations: "disabled" });
       expect(screenshot.length, `${viewport.label} dashboard screenshot`).toBeGreaterThan(1000);
       await test.info().attach(`platform-admin-dashboard-${viewport.label}`, {

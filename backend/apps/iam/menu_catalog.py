@@ -19,16 +19,16 @@ class MenuDefinition:
 
 
 MENU_DEFINITIONS: tuple[MenuDefinition, ...] = (
-    MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin", "Dashboard", "DB", "Action queue", tuple(), 10),
-    MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/leads", "Leads", "LD", "Signup requests", tuple(), 20),
+    MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin", "Dashboard", "DB", "Command center", tuple(), 10),
+    MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/leads", "Leads", "LD", "Signup queue", tuple(), 20),
     MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/tenants", "Tenants", "TN", "Customer registry", tuple(), 30),
-    MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/onboarding", "Launch Checklist", "LC", "Readiness gates", tuple(), 40),
-    MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/admins", "Tenant Admin Users", "TA", "Login access", tuple(), 50),
-    MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/policy-packs", "Setup Templates", "ST", "Default setup", tuple(), 60),
+    MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/onboarding", "Launch Readiness", "LR", "Go-live gates", tuple(), 40),
+    MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/admins", "Admin Access", "AA", "Customer logins", tuple(), 50),
+    MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/policy-packs", "Setup Templates", "ST", "Baseline setup", tuple(), 60),
     MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/permissions", "Permissions", "PM", "RBAC catalog", ("platform.permission_catalog.manage",), 70),
     MenuDefinition("platform-admin", "Workspace", "sidebar", "/platform-admin/audit-logs", "Audit Logs", "AU", "Action evidence", tuple(), 80),
     MenuDefinition("platform-admin", "Quick Links", "quick_link", "/", "Home", "", "", tuple(), 10),
-    MenuDefinition("platform-admin", "Quick Links", "quick_link", "/platform-admin", "Tenants", "", "", tuple(), 20),
+    MenuDefinition("platform-admin", "Quick Links", "quick_link", "/platform-admin", "Dashboard", "", "", tuple(), 20),
     MenuDefinition("platform-admin", "Quick Links", "quick_link", "/platform-admin/policy-packs", "Templates", "", "", tuple(), 30),
 
     MenuDefinition("tenant-admin", "Workspace", "sidebar", "/tenant-admin", "Dashboard", "DB", "Account posture", ("tenant.dashboard.view",), 10),
