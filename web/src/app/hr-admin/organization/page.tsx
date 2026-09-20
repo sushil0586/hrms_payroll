@@ -5,8 +5,9 @@ import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminOrganizationItem, getHrAdminOrganizationSnapshot } from "@/lib/api";
 import type { HrAdminOrganizationItem, HrAdminOrganizationSnapshot } from "@/lib/types";
-import { isOrganizationSectionKey } from "@/app/hr-admin/organization/section-config";
+import { ORGANIZATION_SECTION_CONFIG, isOrganizationSectionKey, type OrganizationSectionKey } from "@/app/hr-admin/organization/section-config";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { OrganizationGuidedSetup } from "./organization-guided-setup";
 import { OrganizationImportWorkbench } from "./organization-import-workbench";
 
 type SearchParamValue = string | string[] | undefined;
@@ -295,6 +296,30 @@ function getSections(snapshot: HrAdminOrganizationSnapshot) {
   } as const;
 }
 
+const masterDescriptions: Record<OrganizationSectionKey, string> = {
+  legal_entities: "Legal employer records used for compliance, payroll, and employee assignment.",
+  locations: "Physical offices or work locations used by branches and employee records.",
+  branches: "Operating branches linked to legal entities and locations.",
+  business_units: "High-level business structure for grouping departments and ownership.",
+  departments: "Department hierarchy used for reporting, policy assignment, and workflows.",
+  cost_centers: "Finance allocation masters used by employees and payroll reporting.",
+  grades: "Level structure that supports designation mapping and compensation bands.",
+  designations: "Job titles attached to employees, usually mapped to a grade.",
+  employment_types: "Worker categories such as full time, contractor, intern, or consultant.",
+};
+
+const masterDependencyLabels: Record<OrganizationSectionKey, string> = {
+  legal_entities: "Feeds branches, cost centers, employees",
+  locations: "Feeds branches and employees",
+  branches: "Feeds employee assignment",
+  business_units: "Feeds departments and employees",
+  departments: "Feeds employee assignment and workflows",
+  cost_centers: "Feeds payroll and finance reporting",
+  grades: "Feeds designations and employee profiles",
+  designations: "Feeds employee profiles",
+  employment_types: "Feeds payroll eligibility and employee profiles",
+};
+
 function itemMeta(item: HrAdminOrganizationItem, section: string) {
   switch (section) {
     case "legal_entities":
@@ -351,13 +376,21 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
     { key: "active", label: "Active" },
     { key: "inactive", label: "Inactive" },
   ];
+  const masterCards = (Object.keys(ORGANIZATION_SECTION_CONFIG) as OrganizationSectionKey[]).map((key) => ({
+    key,
+    label: ORGANIZATION_SECTION_CONFIG[key].label,
+    singular: ORGANIZATION_SECTION_CONFIG[key].singular,
+    items: sections[key].items,
+    description: masterDescriptions[key],
+    dependency: masterDependencyLabels[key],
+  }));
 
   return (
     <main className="shell">
       <PageIntro
         eyebrow={snapshotResult.state === "live" ? "Live structure mode" : "Demo structure mode"}
-        title="Organization setup review for the structural backbone of the HRMS."
-        description="Validate the master setup that drives permissions, policy scoping, workflows, leave assignments, attendance rules, and later payroll processing."
+        title="Organization masters"
+        description="Create and maintain the master data that drives employee records, reporting lines, policies, workflows, and payroll readiness."
         actions={
           <>
             <Link className="button button--secondary" href="/hr-admin">
@@ -389,9 +422,51 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
         </div>
       </section>
 
-      {canManageOrganization ? <OrganizationImportWorkbench snapshot={snapshotResult.data} /> : null}
+      <section className="section organization-master-hub">
+        <div className="tenant-console-panel__header">
+          <div>
+            <span className="workspace-card__eyebrow">Master data library</span>
+            <h2>Maintain every organization master from one place</h2>
+            <p className="section-copy">Use these cards for everyday HR changes. Add one record at a time, review existing data, and keep inactive records visible for audit.</p>
+          </div>
+          <div className="queue-toolbar__meta">
+            <span className="queue-summary-chip">
+              <strong>{masterCards.reduce((total, card) => total + card.items.length, 0)}</strong> total masters
+            </span>
+            <span className="queue-summary-chip">
+              <strong>{masterCards.length}</strong> setup areas
+            </span>
+          </div>
+        </div>
+        <div className="organization-master-hub__grid">
+          {masterCards.map((card) => (
+            <article className={`organization-master-card${sectionKey === card.key ? " organization-master-card--active" : ""}`} key={card.key}>
+              <div className="organization-master-card__header">
+                <div>
+                  <h3>{card.label}</h3>
+                  <p>{card.description}</p>
+                </div>
+                <span className="record-chip">{card.items.length}</span>
+              </div>
+              <span className="organization-master-card__dependency">{card.dependency}</span>
+              <div className="organization-master-card__actions">
+                <Link className="button button--secondary" href={buildHref("/hr-admin/organization", currentParams, { section: card.key, itemId: undefined, page: "1" })}>
+                  Manage
+                </Link>
+                {canManageOrganization ? (
+                  <Link className="button button--primary" href={`/hr-admin/organization/${card.key}/new`}>
+                    Add {card.singular.toLowerCase()}
+                  </Link>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
-      <section className="section employee-master-layout">
+      {canManageOrganization ? <OrganizationGuidedSetup snapshot={snapshotResult.data} /> : null}
+
+      <section className="section employee-master-layout" id="structure-catalog">
         <article className="queue-toolbar">
           <div className="queue-toolbar__header">
             <div>
@@ -567,6 +642,8 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
           </div>
         </article>
       </section>
+
+      {canManageOrganization ? <OrganizationImportWorkbench snapshot={snapshotResult.data} /> : null}
     </main>
   );
 }
