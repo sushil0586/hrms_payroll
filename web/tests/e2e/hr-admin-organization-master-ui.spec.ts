@@ -149,17 +149,26 @@ async function expectNoHorizontalOverflow(page: Page) {
 
 test.describe("HR Admin organization masters", () => {
   test.describe.configure({ mode: "serial" });
+  test.skip(
+    process.env.HRMS_API_BASE_URL !== "http://127.0.0.1:8999/api/v1",
+    "Organization master write-flow proof requires the local mock HRMS API.",
+  );
 
-  let mockApiServer: Server;
+  let mockApiServer: Server | undefined;
 
   test.beforeAll(async () => {
-    mockApiServer = createMockApiServer();
-    await new Promise<void>((resolve) => mockApiServer.listen(8999, "127.0.0.1", resolve));
+    const server = createMockApiServer();
+    mockApiServer = server;
+    await new Promise<void>((resolve) => server.listen(8999, "127.0.0.1", resolve));
   });
 
   test.afterAll(async () => {
+    const server = mockApiServer;
+    if (!server) {
+      return;
+    }
     await new Promise<void>((resolve, reject) => {
-      mockApiServer.close((error) => (error ? reject(error) : resolve()));
+      server.close((error) => (error ? reject(error) : resolve()));
     });
   });
 

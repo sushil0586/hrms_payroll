@@ -138,6 +138,19 @@ function leaveBalanceSampleCsv(balances: HrAdminLeaveBalance[], suffix: string) 
   return `${leaveBalanceImportHeaders.join(",")}\n${rows.map((row) => row.map(csvCell).join(",")).join("\n")}`;
 }
 
+function readCsvUpload(file: File) {
+  if (typeof file.text === "function") {
+    return file.text();
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("Unable to read CSV file."));
+    reader.readAsText(file);
+  });
+}
+
 const defaultActionValue: HrAdminLeaveBalanceActionInput = {
   employee_id: null,
   leave_policy_id: null,
@@ -290,7 +303,14 @@ function LeaveBalanceImportWorkbench({
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (!file) return;
-                  file.text().then(setCsvText);
+                  readCsvUpload(file)
+                    .then((text) => {
+                      setCsvText(text);
+                      setMessage("");
+                      setRows([]);
+                      event.target.value = "";
+                    })
+                    .catch(() => setMessage("CSV upload could not be read. Paste the rows into the import box and preview again."));
                 }}
               />
             </label>

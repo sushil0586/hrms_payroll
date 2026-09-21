@@ -191,7 +191,7 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
             <input checked={isPrimary} onChange={(e) => setIsPrimary(e.target.checked)} type="checkbox" />
           </label>
         </div>
-        <div className="form-actions-bar">
+        <div className="form-actions-bar form-actions-bar--static">
           <span className="muted">Use preview first when rolling out a new roster pattern to a broad team scope.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--secondary" disabled={isLoading} onClick={() => runRollout(true)} type="button">{isLoading ? "Running..." : "Preview rollout"}</button>

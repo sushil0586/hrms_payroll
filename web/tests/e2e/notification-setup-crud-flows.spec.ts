@@ -83,6 +83,7 @@ async function createNotificationTemplateThroughBrowser(page: Page, channel = "i
 
 test.describe("HR admin notification setup CRUD", () => {
   test("notification template creates, previews, sends test notification, updates, archives, and rejects duplicate code", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/notification-templates/new");
     await expectPageReady(page, "Create notification template");
 

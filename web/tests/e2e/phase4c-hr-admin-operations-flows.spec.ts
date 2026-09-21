@@ -263,14 +263,15 @@ test.describe("Phase 4C HR-admin operations certification", () => {
     await expect(page.getByText("Tracked balances")).toBeVisible();
     await expect(page.getByText("Encashed units")).toBeVisible();
     await expect(page.getByText("Net adjustments")).toBeVisible();
-    await expect(page.getByText("Pending reviews")).toBeVisible();
+    await expect(page.locator(".metric-tile__label", { hasText: "Pending reviews" })).toBeVisible();
 
-    await expect(field(page, "Employee")).toBeVisible();
-    await expect(field(page, "Leave policy")).toBeVisible();
-    await expect(field(page, "Action")).toHaveValue("credit_adjustment");
-    await expect(field(page, "Units")).toHaveValue("0.00");
-    await expect(field(page, "Effective date")).toBeVisible();
-    await expect(field(page, "Reason")).toBeVisible();
+    const balanceOperations = page.locator("section").filter({ has: page.getByRole("heading", { name: "Balance operations" }) });
+    await expect(field(balanceOperations, "Employee")).toBeVisible();
+    await expect(field(balanceOperations, "Leave policy")).toBeVisible();
+    await expect(field(balanceOperations, "Action")).toHaveValue("credit_adjustment");
+    await expect(field(balanceOperations, "Units")).toHaveValue("0.00");
+    await expect(field(balanceOperations, "Effective date")).toBeVisible();
+    await expect(field(balanceOperations, "Reason")).toBeVisible();
     const invalid = await submitAndCapture<Record<string, unknown>>(
       page,
       "/api/hr-admin/leave-balances/actions",
@@ -283,11 +284,11 @@ test.describe("Phase 4C HR-admin operations certification", () => {
     expect(invalid.status).toBe(400);
     await expect(page.getByText("Action failed.")).toBeVisible();
 
-    await field(page, "Employee").selectOption({ index: 1 });
-    await field(page, "Leave policy").selectOption({ index: 1 });
-    await field(page, "Units").fill("0.01");
-    await field(page, "Effective date").fill(new Date().toISOString().slice(0, 10));
-    await field(page, "Reason").fill(reason);
+    await field(balanceOperations, "Employee").selectOption({ index: 1 });
+    await field(balanceOperations, "Leave policy").selectOption({ index: 1 });
+    await field(balanceOperations, "Units").fill("0.01");
+    await field(balanceOperations, "Effective date").fill(new Date().toISOString().slice(0, 10));
+    await field(balanceOperations, "Reason").fill(reason);
     const actionResult = await submitAndCapture<{ message: string; transaction: { id: string; status: string; reason: string } }>(
       page,
       "/api/hr-admin/leave-balances/actions",

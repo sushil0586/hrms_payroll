@@ -196,15 +196,15 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
             {allSelected ? "Clear selection" : "Select page"}
           </button>
         </div>
-        <div className="queue-toolbar__grid">
-          <label className="form-field">
-            <span className="muted">Bulk owner</span>
-            <select className="input-control" onChange={(event) => setBulkOwner(event.target.value)} value={bulkOwner}>
-              <option value="">Clear owner assignment</option>
-              {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <div className="form-field" style={{ alignSelf: "end" }}>
+        <div className="queue-toolbar__bulk-grid">
+          <div className="queue-toolbar__bulk-group">
+            <label className="form-field">
+              <span className="muted">Bulk owner</span>
+              <select className="input-control" onChange={(event) => setBulkOwner(event.target.value)} value={bulkOwner}>
+                <option value="">Clear owner assignment</option>
+                {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
             <div className="queue-toolbar__actions">
               <button
                 className="button button--primary"
@@ -224,13 +224,13 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
               </button>
             </div>
           </div>
-          <label className="form-field">
-            <span className="muted">Bulk decision</span>
-            <select className="input-control" onChange={(event) => setBulkDecision(event.target.value)} value={bulkDecision}>
-              {probationDecisionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <div className="form-field" style={{ alignSelf: "end" }}>
+          <div className="queue-toolbar__bulk-group">
+            <label className="form-field">
+              <span className="muted">Bulk decision</span>
+              <select className="input-control" onChange={(event) => setBulkDecision(event.target.value)} value={bulkDecision}>
+                {probationDecisionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
             <div className="queue-toolbar__actions">
               <button
                 className="button button--secondary"

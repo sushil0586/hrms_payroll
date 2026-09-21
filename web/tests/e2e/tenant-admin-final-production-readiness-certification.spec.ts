@@ -1,7 +1,7 @@
 import { expect, type APIResponse, type Page, test } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, supportAgent, tenantAdmin } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated, tenantAdmin } from "../helpers/staging-auth";
 
 type TenantConsole = {
   tenant: {
@@ -218,8 +218,8 @@ test.describe("Tenant Admin final production-readiness certification", () => {
     expect(auditBody.tenant.code).toBe(initialConsole.tenant.code);
     expect(auditBody.evidence_checksum_sha256).toMatch(/^[a-f0-9]{64}$/);
 
-    await loginViaApi(page, supportAgent);
-    await expectDenied(await page.request.get("/api/tenant-admin/trust-audit"), "support agent trust audit denial");
+    await loginViaApi(page, employee);
+    await expectDenied(await page.request.get("/api/tenant-admin/trust-audit"), "employee trust audit denial");
     await expectDenied(
       await page.request.post("/api/tenant-admin/memberships", {
         data: {
@@ -228,7 +228,7 @@ test.describe("Tenant Admin final production-readiness certification", () => {
           role_ids: [],
         },
       }),
-      "support agent membership mutation denial"
+      "employee membership mutation denial"
     );
 
     await testInfo.attach("tenant-admin-final-02-trust-audit", {

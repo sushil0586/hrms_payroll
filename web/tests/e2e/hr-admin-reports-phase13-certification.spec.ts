@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, suppressBrowserTestNoise } from "../helpers/assertions";
+import { gotoAuthenticated } from "../helpers/staging-auth";
 
 type ReportRoute = {
   path: string;
@@ -52,15 +53,7 @@ const representativeReports: ReportRoute[] = [
 ];
 
 async function gotoDemoHrAdmin(page: Page, path: string) {
-  await page.context().addCookies([
-    {
-      name: "hrms_access_token",
-      value: "playwright-demo-token",
-      url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100",
-    },
-  ]);
-  await page.goto(path, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+  await gotoAuthenticated(page, path);
   await suppressBrowserTestNoise(page);
 }
 

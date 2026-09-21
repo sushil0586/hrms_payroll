@@ -43,6 +43,22 @@ async function selectOptionContaining(locator: Locator, text: string) {
   return value;
 }
 
+async function expectBulkOwnerActionInline(page: Page) {
+  const ownerControl = field(page, "Bulk owner");
+  const assignButton = page.getByRole("button", { name: /Assign owner/ }).first();
+  const ownerBox = await ownerControl.boundingBox();
+  const buttonBox = await assignButton.boundingBox();
+  expect(ownerBox).not.toBeNull();
+  expect(buttonBox).not.toBeNull();
+  if (!ownerBox || !buttonBox) {
+    return;
+  }
+
+  const ownerCenterY = ownerBox.y + ownerBox.height / 2;
+  const buttonCenterY = buttonBox.y + buttonBox.height / 2;
+  expect(Math.abs(ownerCenterY - buttonCenterY), "Assign owner button should stay inline with the bulk owner control").toBeLessThanOrEqual(12);
+}
+
 async function createDisposableEmployee(page: Page, prefix: string) {
   const employeeCode = uniqueRef(prefix);
   const loginResponse = await page.request.post("/api/auth/login", {
@@ -111,6 +127,7 @@ async function expectProbationQueueCertified(page: Page, workflowRef?: string) {
   for (const action of ["Apply filters", "Clear filters", "Select page", /Assign owner/, /Clear owner/, /Set decision/]) {
     await expect(page.getByRole("button", { name: action }).first()).toBeVisible();
   }
+  await expectBulkOwnerActionInline(page);
   if (workflowRef) {
     await expect(card(page, workflowRef)).toBeVisible();
     await expect(card(page, workflowRef).getByRole("link", { name: "Edit" })).toBeVisible();

@@ -25,11 +25,11 @@ const viewports = [
 ];
 
 const routes: Phase8Route[] = [
-  { path: "/", heading: "Choose your workspace", label: "workspace-chooser" },
+  { path: "/", heading: /Run payroll, compliance, and employee operations/i, label: "public-landing" },
   { path: "/hr-admin", heading: "Control center", persona: hrAdmin, label: "hr-admin-control", expectsSidebar: true },
   { path: "/hr-admin/employees", heading: "Employees", persona: hrAdmin, label: "hr-admin-employees", expectsSidebar: true },
   { path: "/hr-admin/saas-control-plane", heading: "SaaS Control Plane", persona: hrAdmin, label: "saas-control-plane", expectsSidebar: true },
-  { path: "/tenant-admin", heading: "Tenant Admin Console", persona: hrAdmin, label: "tenant-admin" },
+  { path: "/tenant-admin", heading: "Account Control Center", persona: hrAdmin, label: "tenant-admin" },
   { path: "/platform-admin", heading: "Platform Admin", persona: platformAdmin, label: "platform-admin" },
   { path: "/ess/payslips", heading: "Payslips", persona: employee, label: "ess-payslips", expectsSidebar: true },
   { path: "/mss/approvals", heading: "Manager inbox", persona: manager, label: "mss-approvals", expectsSidebar: true },
@@ -51,7 +51,7 @@ async function openRoute(page: Page, route: Phase8Route) {
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
 }
 
-async function expectWorkspaceShellAccessible(page: Page, route: Phase8Route) {
+async function expectWorkspaceShellAccessible(page: Page, route: Phase8Route, viewportWidth: number) {
   await expect(page.getByRole("main")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
 
@@ -61,7 +61,7 @@ async function expectWorkspaceShellAccessible(page: Page, route: Phase8Route) {
   const linkCount = await visibleLinks.count();
   expect(buttonCount + linkCount, `${route.path} should expose at least one interactive command`).toBeGreaterThan(0);
 
-  if (route.expectsSidebar) {
+  if (route.expectsSidebar && viewportWidth >= 768) {
     await expect(page.locator("aside").first()).toBeVisible();
     await expect(page.locator("nav[aria-label]").first()).toBeVisible();
   }
@@ -184,7 +184,7 @@ test.describe("Phase 8A workspace shell UX and accessibility", () => {
       for (const route of routes) {
         await openRoute(page, route);
         await expectPageReady(page, route.heading);
-        await expectWorkspaceShellAccessible(page, route);
+        await expectWorkspaceShellAccessible(page, route, viewport.width);
         await expectNoHorizontalOverflow(page);
         const issues = await collectUiIssues(page);
         expect(issues, `${route.path} UX/accessibility issues at ${viewport.label}`).toEqual([]);

@@ -125,14 +125,19 @@ async function createNamedEmployeeFromBrowser(page: Page, input: { code: string;
 async function expectDirectoryPageCertified(page: Page) {
   await expectPageReady(page, "Employees");
   await expect(page.getByRole("link", { name: "Admin" })).toHaveAttribute("href", "/hr-admin");
-  await expect(page.getByRole("link", { name: "New employee" })).toHaveAttribute("href", "/hr-admin/employees/new");
+  const newEmployeeLinks = page.getByRole("link", { name: "New employee" });
+  const newEmployeeLinkCount = await newEmployeeLinks.count();
+  expect(newEmployeeLinkCount).toBeGreaterThanOrEqual(1);
+  for (let index = 0; index < newEmployeeLinkCount; index += 1) {
+    await expect(newEmployeeLinks.nth(index)).toHaveAttribute("href", "/hr-admin/employees/new");
+  }
 
   for (const metric of [
     "Employees in scope",
     "Active employees",
     "Access provisioned",
     "Departments represented",
-    "Managers in reporting chain",
+    "Manager reviews",
   ]) {
     await expect(page.locator(".metric-tile, .metric-tile-soft").filter({ hasText: metric }).first()).toBeVisible();
   }

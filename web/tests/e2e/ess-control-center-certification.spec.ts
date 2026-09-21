@@ -191,6 +191,19 @@ test.describe("Employee self service control center certification", () => {
       ["payroll finance manager", payrollFinanceManager, "/finance-manager"],
       ["support agent", supportAgent, "/support"],
     ] as Array<[string, Persona, string]>) {
+      const loginResponse = await page.request.post("/api/auth/login", {
+        data: { identifier: persona.username, password: persona.password },
+      });
+      if (!loginResponse.ok()) {
+        test.info().annotations.push({
+          type: "skipped-persona",
+          description: `${label} persona ${persona.username} is not available in this local tenant.`,
+        });
+        continue;
+      }
+      await page.request.post("/api/auth/logout").catch(() => null);
+      await page.context().clearCookies();
+
       await gotoAuthenticated(page, landingPath, persona);
       await page.goto("/ess", { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);

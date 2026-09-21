@@ -56,7 +56,7 @@ test.describe("HR admin leave balance import flows", () => {
       mimeType: "text/csv",
       buffer: Buffer.from(csv),
     });
-    await expect(workbench.getByLabel("Leave balance CSV data")).toContainText(first.employee_code);
+    await expect(workbench.getByLabel("Leave balance CSV data")).toHaveValue(new RegExp(first.employee_code));
     await workbench.getByRole("button", { name: "Preview leave import" }).click();
 
     await expect(workbench.getByText("Preview ready. Commit ready leave balance actions after checking blocked rows.")).toBeVisible();

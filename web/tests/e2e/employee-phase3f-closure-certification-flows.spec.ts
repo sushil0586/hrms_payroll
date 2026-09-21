@@ -19,6 +19,20 @@ function detailValue(page: Page, label: string) {
   return page.locator(".detail-row").filter({ hasText: label }).locator(".detail-value").first();
 }
 
+async function createDocumentCategory(page: Page, prefix: string) {
+  const code = uniqueRef(prefix);
+  const response = await page.request.post("/api/hr-admin/document-categories", {
+    data: {
+      code,
+      name: `Browser ${code}`,
+      category_type: "other",
+      metadata_schema: { source: "playwright" },
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  return code;
+}
+
 async function selectFirstNonEmptyOption(locator: Locator) {
   const value = await locator.evaluate((element) => {
     const select = element as HTMLSelectElement;
@@ -99,6 +113,7 @@ async function createReviewedDocument(page: Page, note: string) {
     },
   });
   expect(employeeResponse.ok()).toBeTruthy();
+  await createDocumentCategory(page, "AUD_DOC_CAT");
   const title = uniqueRef("AUD_DOC");
   await gotoAuthenticated(page, "/hr-admin/employee-documents/new");
   await page.reload();

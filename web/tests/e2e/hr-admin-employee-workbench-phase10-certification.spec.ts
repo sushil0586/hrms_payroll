@@ -40,10 +40,51 @@ async function expectEmployeeWorkbenchReady(page: Page) {
   await expect(page.getByRole("heading", { level: 1, name: "Employees" })).toBeVisible();
   await expect(page.getByText("Workforce command")).toBeVisible();
   await expect(page.getByText("Operational readiness")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Access readiness review" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Review access" })).toHaveAttribute("href", "/hr-admin/employees?readiness=access_review&page_size=25");
   await expect(directoryPanel(page)).toBeVisible();
   await expect(detailPanel(page)).toBeVisible();
   await expectNoAppError(page);
   await expectNoHorizontalOverflow(page);
+}
+
+async function expectDirectoryAndDetailDoNotOverlap(page: Page) {
+  const directoryBox = await directoryPanel(page).boundingBox();
+  const detailBox = await detailPanel(page).boundingBox();
+  expect(directoryBox).not.toBeNull();
+  expect(detailBox).not.toBeNull();
+  if (!directoryBox || !detailBox) {
+    return;
+  }
+
+  const hasVerticalSeparation = directoryBox.y + directoryBox.height <= detailBox.y || detailBox.y + detailBox.height <= directoryBox.y;
+  const hasHorizontalSeparation = directoryBox.x + directoryBox.width <= detailBox.x || detailBox.x + detailBox.width <= directoryBox.x;
+  expect(hasVerticalSeparation || hasHorizontalSeparation).toBe(true);
+}
+
+async function expectDirectoryFiltersStayInsidePanel(page: Page) {
+  const panel = directoryPanel(page);
+  const panelBox = await panel.boundingBox();
+  expect(panelBox).not.toBeNull();
+  if (!panelBox) {
+    return;
+  }
+
+  const controls = panel.locator(".directory-filter-bar input:not([type='hidden']), .directory-filter-bar select, .directory-filter-bar button, .directory-filter-bar a.button");
+  const count = await controls.count();
+  for (let index = 0; index < count; index += 1) {
+    const control = controls.nth(index);
+    if (!(await control.isVisible().catch(() => false))) {
+      continue;
+    }
+    const box = await control.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) {
+      continue;
+    }
+    expect(box.x, "Filter control should not escape left edge").toBeGreaterThanOrEqual(panelBox.x - 1);
+    expect(box.x + box.width, "Filter control should not escape right edge").toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
+  }
 }
 
 test.describe("HR Admin employee workbench phase 10 certification", () => {
@@ -66,9 +107,11 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
     await expect(fieldByLabel(panel, "Search")).toBeVisible();
     await expect(fieldByLabel(panel, "Department")).toBeVisible();
     await expect(fieldByLabel(panel, "Manager review")).toBeVisible();
+    await expect(fieldByLabel(panel, "Readiness")).toBeVisible();
     await expect(fieldByLabel(panel, "Page size")).toBeVisible();
     await expect(panel.getByRole("button", { name: "Apply" })).toBeVisible();
     await expect(panel.getByRole("link", { name: "Reset" })).toHaveAttribute("href", "/hr-admin/employees");
+    await expectDirectoryFiltersStayInsidePanel(page);
 
     for (const status of ["all", "active", "on notice", "inactive", "exited"]) {
       await expect(panel.locator(".employee-status-filter").getByRole("link", { name: new RegExp(`^${status}\\b`, "i") })).toBeVisible();
@@ -130,8 +173,9 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
     }
   });
 
-  test("certifies employee workbench responsive integrity at 1366px and tablet width", async ({ page }) => {
+  test("certifies employee workbench responsive integrity at wide desktop and tablet widths", async ({ page }) => {
     for (const viewport of [
+      { width: 1920, height: 1080 },
       { width: 1366, height: 900 },
       { width: 820, height: 1180 },
     ]) {
@@ -140,6 +184,8 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
       await expectEmployeeWorkbenchReady(page);
       await expect(directoryItems(page).first()).toBeVisible();
       await expect(fieldByLabel(directoryPanel(page), "Search")).toBeVisible();
+      await expectDirectoryAndDetailDoNotOverlap(page);
+      await expectDirectoryFiltersStayInsidePanel(page);
       await expectNoHorizontalOverflow(page);
     }
   });
