@@ -38,7 +38,7 @@ type Props = {
 };
 
 function isActivePath(pathname: string, href: string) {
-  if (href === "/platform-admin") {
+  if (href === "/platform-admin" || href === "/tenant-admin" || href === "/hr-admin" || href === "/ess" || href === "/mss") {
     return pathname === href;
   }
   return href === pathname || pathname.startsWith(`${href}/`);
@@ -73,6 +73,7 @@ function NavEntry({
   }
   return (
     <Link
+      aria-current={active ? "page" : undefined}
       className={`nav-item${active ? " nav-item--active" : ""}`}
       href={item.href}
       onMouseEnter={() => router.prefetch(item.href)}

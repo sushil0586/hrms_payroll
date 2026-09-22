@@ -63,6 +63,19 @@ const viewports = [
   { label: "mobile", width: 390, height: 844 },
 ] as const;
 
+function expectedNavLabel(path: string) {
+  if (path === "/tenant-admin") return "Dashboard";
+  if (path.includes("/users")) return "Users";
+  if (path.includes("/roles")) return "Roles";
+  if (path.includes("/plan")) return "Plan";
+  if (path.includes("/setup")) return "Setup Guide";
+  if (path.includes("/settings")) return "Settings";
+  if (path.includes("/security-readiness")) return "Security";
+  if (path.includes("/support-access")) return "Support Access";
+  if (path.includes("/trust-audit")) return "Trust Audit";
+  return "";
+}
+
 function normalizeTenantHref(rawHref: string, baseUrl: string) {
   const url = new URL(rawHref, baseUrl);
   if (url.origin !== new URL(baseUrl).origin) {
@@ -154,6 +167,30 @@ async function expectNoVisibleControlCollisions(page: Page, route: TenantRoute) 
   expect(issues, `${route.path} has clipped or overlapping controls`).toEqual([]);
 }
 
+async function expectVisibleControlsAreReachable(page: Page, route: TenantRoute) {
+  const issues = await page.locator("main button, main a.button, main input:not([type='hidden']), main select, main textarea, main summary").evaluateAll((elements) => {
+    return elements.flatMap((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden" || rect.width <= 0 || rect.height <= 0) {
+        return [];
+      }
+      const label = (element.textContent || element.getAttribute("aria-label") || element.getAttribute("placeholder") || element.getAttribute("name") || element.tagName).trim();
+      const inputType = element instanceof HTMLInputElement ? element.type : "";
+      const minimumSize = inputType === "checkbox" || inputType === "radio" ? 16 : 28;
+      const issue =
+        rect.left < -1 || rect.right > document.documentElement.clientWidth + 1
+          ? "outside horizontal viewport"
+          : rect.width < minimumSize || rect.height < minimumSize
+            ? "too small"
+            : "";
+      return issue ? [`${label || element.tagName} is ${issue}`] : [];
+    }).slice(0, 8);
+  });
+
+  expect(issues, `${route.path} has unreachable or undersized visible controls`).toEqual([]);
+}
+
 async function expectVisibleTenantLinksResolve(page: Page, route: TenantRoute) {
   const hrefs = await page.locator("a[href]").evaluateAll((links) =>
     [...new Set(
@@ -179,8 +216,13 @@ async function auditTenantRoute(page: Page, route: TenantRoute) {
   await suppressBrowserTestNoise(page);
   await expect(page.getByRole("main"), `${route.path} should expose a main landmark`).toBeVisible();
   await expect(page.getByRole("heading", { level: 1, name: route.heading }), `${route.path} should expose the expected H1`).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" }), `${route.path} should expose a visible logout control`).toBeVisible();
   if ((page.viewportSize()?.width ?? 1440) >= 980) {
-    await expect(page.getByRole("navigation", { name: "Tenant Admin navigation" })).toBeVisible();
+    const navigation = page.getByRole("navigation", { name: "Tenant Admin navigation" });
+    await expect(navigation).toBeVisible();
+    const activeLinks = await navigation.locator('a[aria-current="page"]').evaluateAll((links) => links.map((link) => link.textContent?.replace(/\s+/g, " ").trim() ?? ""));
+    expect(activeLinks, `${route.path} should mark exactly one active side-nav item`).toHaveLength(1);
+    expect(activeLinks[0], `${route.path} should mark the current side-nav item`).toContain(expectedNavLabel(route.path));
   } else {
     await expect(page.getByRole("banner").getByText("Search users, setup, audit...")).toBeVisible();
   }
@@ -192,7 +234,21 @@ async function auditTenantRoute(page: Page, route: TenantRoute) {
   await expectVisibleLinksAreReal(page, route.path);
   await expectVisibleTenantLinksResolve(page, route);
   await auditVisibleControls(page, route.path, 72);
+  await expectVisibleControlsAreReachable(page, route);
   await expectNoVisibleControlCollisions(page, route);
+}
+
+async function expectDialogOpensAndCloses(page: Page, buttonName: string | RegExp, dialogName: string | RegExp) {
+  const trigger = page.getByRole("button", { name: buttonName }).first();
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toBeEnabled();
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: dialogName }).first();
+  await expect(dialog).toBeVisible();
+  const close = dialog.getByRole("button", { name: /close|cancel/i }).first();
+  await expect(close).toBeVisible();
+  await close.click();
+  await expect(dialog).toBeHidden();
 }
 
 test.describe("Tenant Admin usability audit", () => {
@@ -206,4 +262,17 @@ test.describe("Tenant Admin usability audit", () => {
       }
     });
   }
+
+  test("safe tenant-admin actions open the intended dialogs", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1440, height: 960 });
+
+    await gotoAuthenticated(page, "/tenant-admin/users", tenantAdmin);
+    await expectDialogOpensAndCloses(page, /invite member/i, /invite tenant member/i);
+    await expectDialogOpensAndCloses(page, /update roles/i, /update tenant member roles/i);
+
+    await gotoAuthenticated(page, "/tenant-admin/roles", tenantAdmin);
+    await expectDialogOpensAndCloses(page, /add role/i, /create tenant role/i);
+    await expectDialogOpensAndCloses(page, /^edit$/i, /update tenant role/i);
+  });
 });

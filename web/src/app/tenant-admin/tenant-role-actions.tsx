@@ -283,16 +283,32 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
                   : "Inactive role can be reactivated.";
             return (
               <div className="tenant-role-row" key={role.id}>
-                <div className="tenant-role-row__main">
-                  <strong>{role.name}</strong>
-                  <span>{role.code}</span>
-                  <p>{role.description || "No description set."}</p>
-                  <div className="tenant-role-row__chips">
-                    <span className="record-chip">{role.is_system_role ? "System" : "Custom"}</span>
-                    <span className="record-chip">{role.is_active ? "Active" : "Inactive"}</span>
-                    <span className="record-chip">{role.active_membership_count} assigned</span>
-                    <span className="record-chip">{role.permission_keys.length} permissions</span>
+                <div className="tenant-role-row__header">
+                  <div className="tenant-role-row__main">
+                    <strong>{role.name}</strong>
+                    <span>{role.code}</span>
+                    <p>{role.description || "No description set."}</p>
                   </div>
+                  <div className="tenant-role-row__actions">
+                    <button className="button button--secondary" disabled={!canManageRoles || busyRef.startsWith(role.id)} onClick={() => openEditDialog(role)} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
+                      Edit
+                    </button>
+                    {role.is_active ? (
+                      <button className="button button--ghost" disabled={!canManageRoles || !canDeactivate || busyRef === `${role.id}:deactivate`} onClick={() => runStatusAction(role, "deactivate")} title={!canManageRoles ? "Requires tenant.roles.manage" : disableReason} type="button">
+                        Deactivate
+                      </button>
+                    ) : (
+                      <button className="button button--secondary" disabled={!canManageRoles || busyRef === `${role.id}:activate`} onClick={() => runStatusAction(role, "activate")} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
+                        Activate
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="tenant-role-row__chips">
+                  <span className="record-chip">{role.is_system_role ? "System" : "Custom"}</span>
+                  <span className="record-chip">{role.is_active ? "Active" : "Inactive"}</span>
+                  <span className="record-chip">{role.active_membership_count} assigned</span>
+                  <span className="record-chip">{role.permission_keys.length} permissions</span>
                 </div>
                 <div className="tenant-role-row__permissions">
                   <span>
@@ -300,20 +316,6 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
                       ? role.permission_keys.map((key) => permissionLabelByKey.get(key) ?? key).join(", ")
                       : "No permission keys yet"}
                   </span>
-                </div>
-                <div className="tenant-role-row__actions">
-                  <button className="button button--secondary" disabled={!canManageRoles || busyRef.startsWith(role.id)} onClick={() => openEditDialog(role)} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
-                    Edit
-                  </button>
-                  {role.is_active ? (
-                    <button className="button button--ghost" disabled={!canManageRoles || !canDeactivate || busyRef === `${role.id}:deactivate`} onClick={() => runStatusAction(role, "deactivate")} title={!canManageRoles ? "Requires tenant.roles.manage" : disableReason} type="button">
-                      Deactivate
-                    </button>
-                  ) : (
-                    <button className="button button--secondary" disabled={!canManageRoles || busyRef === `${role.id}:activate`} onClick={() => runStatusAction(role, "activate")} title={!canManageRoles ? "Requires tenant.roles.manage" : undefined} type="button">
-                      Activate
-                    </button>
-                  )}
                   {disableReason ? <small>{disableReason}</small> : null}
                 </div>
               </div>

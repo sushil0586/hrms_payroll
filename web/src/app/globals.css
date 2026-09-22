@@ -6304,7 +6304,7 @@ select.input-control {
   order: 3;
 }
 
-.workspace-tone--tenant .topbar-actions--workspace > .button {
+.workspace-tone--tenant .topbar-actions--workspace > .button--compact {
   display: none;
 }
 
@@ -10605,26 +10605,33 @@ select.input-control {
 .tenant-role-row {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(220px, 1.15fr) minmax(180px, 0.85fr) auto;
-  align-items: start;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.86);
-  padding: 14px;
+  padding: 16px;
 }
 
 .tenant-role-row__main,
-.tenant-role-row__permissions,
-.tenant-role-row__actions {
+.tenant-role-row__permissions {
   display: grid;
   min-width: 0;
-  gap: 7px;
+  gap: 6px;
+}
+
+.tenant-role-row__header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .tenant-role-row__main strong {
   color: #111827;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
@@ -10647,12 +10654,23 @@ select.input-control {
   gap: 6px;
 }
 
+.tenant-role-row__permissions {
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
 .tenant-role-row__actions {
-  justify-items: end;
+  display: flex;
+  min-width: max-content;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .tenant-role-row__actions .button {
-  min-width: 116px;
+  min-width: 112px;
 }
 
 .tenant-role-active-toggle {
@@ -10914,6 +10932,14 @@ select.input-control {
   padding: 7px 10px;
 }
 
+.tenant-role-picker input[type="checkbox"],
+.tenant-role-picker input[type="radio"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+}
+
 .tenant-membership-actions__footer {
   display: flex;
   min-width: 0;
@@ -10969,7 +10995,7 @@ select.input-control {
 }
 
 .tenant-directory-table {
-  overflow: auto;
+  overflow-x: auto;
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 10px;
   background: #fff;
@@ -10978,10 +11004,17 @@ select.input-control {
 .tenant-directory-header,
 .tenant-directory-row {
   display: grid;
-  min-width: 980px;
-  grid-template-columns: minmax(170px, 1.05fr) minmax(210px, 1.2fr) minmax(150px, 0.9fr) minmax(100px, 0.6fr) minmax(160px, 0.9fr) minmax(120px, 0.65fr) minmax(270px, 1fr);
+  min-width: 0;
+  grid-template-columns:
+    minmax(142px, 1fr)
+    minmax(160px, 1fr)
+    minmax(104px, 0.62fr)
+    minmax(92px, 0.48fr)
+    minmax(128px, 0.68fr)
+    minmax(96px, 0.5fr)
+    minmax(124px, 0.56fr);
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .tenant-directory-header {
@@ -11059,11 +11092,19 @@ select.input-control {
 }
 
 .tenant-membership-row__actions {
-  display: flex;
+  display: grid;
   min-width: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+  gap: 6px;
+}
+
+.tenant-membership-row__actions .button {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 9px 10px;
+  white-space: normal;
 }
 
 .tenant-membership-toolbar {
