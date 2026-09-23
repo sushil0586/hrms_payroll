@@ -64,6 +64,27 @@ async function createDisposableEmployeeFromBrowser(page: Page, suffix: string) {
   return (await response.json()) as { id: string; employee_code: string; full_name: string };
 }
 
+async function createDisposableStatutoryPackFromBrowser(page: Page, suffix: string) {
+  const packForm = page.getByTestId("statutory-pack-form");
+  const packCode = uniqueCode(`STAT_IMP_PACK_${suffix}`);
+  const packResult = await submitAndCapture<{ id: string; code: string; name: string }>(page, "payroll-statutory-packs", "POST", async () => {
+    await field(packForm, "Code").fill(packCode);
+    await field(packForm, "Name").fill(`Import ${packCode}`);
+    await field(packForm, "Country code").fill("IN");
+    await field(packForm, "Jurisdiction reference").fill("country:IN:import");
+    await field(packForm, "Status").selectOption("active");
+    await field(packForm, "Effective from").fill("2026-04-01");
+    await field(packForm, "Effective to").fill("2027-03-31");
+    await field(packForm, "Currency code").fill("INR");
+    await field(packForm, "Statutory profile reference").fill(`payroll.statutory.import.${suffix}.v1`);
+    await field(packForm, "Validation profile reference").fill(`payroll.statutory.import.validation.${suffix}.v1`);
+    await field(packForm, "Config profile reference").fill("statutory.import.pack.profile.v1");
+    await packForm.getByRole("button", { name: "Create pack" }).click();
+  });
+  expect(packResult.ok).toBeTruthy();
+  return packResult.payload;
+}
+
 async function expectFields(scope: Locator, labels: string[]) {
   for (const label of labels) {
     await expect(field(scope, label)).toBeVisible();
@@ -100,16 +121,8 @@ test.describe("HR admin payroll statutory flows", () => {
 
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory");
     await expectPageReady(page, "Payroll Statutory");
-
-    const packOption = await page.getByTestId("statutory-profile-form").locator("select").nth(1).evaluate((element) => {
-      const select = element as HTMLSelectElement;
-      const option = Array.from(select.options).find((item) => item.value);
-      return { value: option?.value ?? "", label: option?.textContent ?? "" };
-    });
-    expect(packOption.value).toBeTruthy();
-    const packCodeMatch = packOption.label.match(/\(([^)]+)\)/);
-    const packCode = packCodeMatch?.[1] ?? "";
-    expect(packCode).toBeTruthy();
+    const pack = await createDisposableStatutoryPackFromBrowser(page, suffix);
+    const packCode = pack.code;
 
     const csv = [
       "employee_code,statutory_pack_code,profile_ref,effective_from,effective_to,status,pan_number,uan_number,pf_number,esi_number,pf_applicable,esi_applicable,professional_tax_state,lwf_state,tax_regime,declaration_status,previous_employment_income,previous_employment_tax_deducted,source_ref,config_profile_ref",

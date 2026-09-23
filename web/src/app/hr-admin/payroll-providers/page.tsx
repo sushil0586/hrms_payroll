@@ -1117,7 +1117,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 <span className="payroll-setup-count">{selectedMappingPacks.length} packs</span>
               </div>
               <div className="payroll-table-scroll">
-                <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table">
+                <table className="payroll-readiness-table payroll-setup-table payroll-provider-run-table payroll-provider-mapping-table">
                   <thead>
                     <tr>
                       <th>Pack</th>

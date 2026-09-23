@@ -7849,6 +7849,29 @@ select.input-control {
   overflow-x: clip;
 }
 
+:where(
+  .shell--payroll-setup,
+  .shell--salary-setup,
+  .shell--payroll-statutory,
+  .shell--payroll-adjustments,
+  .shell--payroll-providers
+) :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: 38px;
+}
+
+:where(
+  .shell--payroll-setup,
+  .shell--salary-setup,
+  .shell--payroll-statutory,
+  .shell--payroll-adjustments,
+  .shell--payroll-providers
+) :is(input[type="checkbox"], input[type="radio"]) {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+}
+
 .payroll-setup-metrics {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
@@ -10171,9 +10194,15 @@ select.input-control {
 .payroll-provider-cert-actions {
   display: flex;
   min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+.payroll-provider-cert-actions .button {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .payroll-provider-cert-actions span {
@@ -12087,6 +12116,7 @@ select.input-control {
 .payroll-provider-launch-actions {
   display: flex;
   min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
@@ -12137,6 +12167,46 @@ select.input-control {
   min-width: 1120px;
 }
 
+.payroll-provider-mapping-table {
+  min-width: 940px;
+  table-layout: fixed;
+}
+
+.payroll-provider-mapping-table th:nth-child(1),
+.payroll-provider-mapping-table td:nth-child(1) {
+  width: 20%;
+}
+
+.payroll-provider-mapping-table th:nth-child(2),
+.payroll-provider-mapping-table td:nth-child(2) {
+  width: 10%;
+}
+
+.payroll-provider-mapping-table th:nth-child(3),
+.payroll-provider-mapping-table td:nth-child(3) {
+  width: 12%;
+}
+
+.payroll-provider-mapping-table th:nth-child(4),
+.payroll-provider-mapping-table td:nth-child(4) {
+  width: 16%;
+}
+
+.payroll-provider-mapping-table th:nth-child(5),
+.payroll-provider-mapping-table td:nth-child(5) {
+  width: 12%;
+}
+
+.payroll-provider-mapping-table th:nth-child(6),
+.payroll-provider-mapping-table td:nth-child(6) {
+  width: 12%;
+}
+
+.payroll-provider-mapping-table th:nth-child(7),
+.payroll-provider-mapping-table td:nth-child(7) {
+  width: 18%;
+}
+
 .payroll-provider-run-table code,
 .payroll-provider-run-table span,
 .payroll-provider-run-table strong {
@@ -12146,15 +12216,19 @@ select.input-control {
 .payroll-provider-mapping-actions {
   display: flex;
   min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
 
 .payroll-provider-mapping-actions .button {
+  flex: 1 1 76px;
+  min-width: 0;
   min-height: 30px;
   padding: 6px 9px;
   font-size: 12px;
+  white-space: normal;
 }
 
 .payroll-provider-mapping-actions span {
@@ -12168,6 +12242,7 @@ select.input-control {
 .payroll-provider-mapping-toolbar {
   display: grid;
   min-width: 0;
+  max-width: 100%;
   gap: 8px;
 }
 
@@ -12645,6 +12720,17 @@ select.input-control {
 
 .payroll-adjustment-control-grid {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.payroll-adjustment-control-grid label {
+  min-width: 0;
+}
+
+.payroll-adjustment-control-grid input,
+.payroll-adjustment-control-grid select,
+.payroll-adjustment-control-grid textarea {
+  width: 100%;
+  min-width: 0;
 }
 
 .payroll-adjustment-table {

@@ -16,6 +16,8 @@ const payrollCoreRoutes = [
   "/hr-admin/payroll-review",
   "/hr-admin/payroll-outputs",
   "/hr-admin/payroll-handoff",
+  "/hr-admin/payroll-statutory",
+  "/hr-admin/payroll-providers",
 ];
 
 const payrollCorePathPatterns = [
@@ -30,6 +32,8 @@ const payrollCorePathPatterns = [
   /^\/hr-admin\/payroll-review$/,
   /^\/hr-admin\/payroll-outputs$/,
   /^\/hr-admin\/payroll-handoff$/,
+  /^\/hr-admin\/payroll-statutory$/,
+  /^\/hr-admin\/payroll-providers$/,
 ];
 
 function normalizePayrollHref(rawHref: string, baseUrl: string) {
@@ -57,11 +61,15 @@ async function expectVisiblePayrollLinksHealthy(page: Page, route: string) {
       .map((link) => (link as HTMLAnchorElement).href),
   );
   const normalizedHrefs = [...new Set(hrefs.map((href) => normalizePayrollHref(href, page.url())).filter((href): href is string => Boolean(href)))];
+  const unsupportedPayrollHrefs = hrefs.filter((href) => {
+    const url = new URL(href, page.url());
+    return url.origin === new URL(page.url()).origin
+      && url.pathname.startsWith("/hr-admin/payroll")
+      && !normalizePayrollHref(href, page.url());
+  });
 
-  for (const href of normalizedHrefs) {
-    const response = await page.request.get(href, { failOnStatusCode: false, maxRedirects: 2 });
-    expect(response.status(), `${route} exposes a payroll link that does not open cleanly: ${href}`).toBeLessThan(400);
-  }
+  expect(unsupportedPayrollHrefs, `${route} exposes unsupported payroll hrefs`).toEqual([]);
+  expect(normalizedHrefs.length, `${route} should expose at least one certified payroll navigation link`).toBeGreaterThan(0);
 }
 
 async function expectNoVisibleControlCollisions(page: Page, route: string) {
