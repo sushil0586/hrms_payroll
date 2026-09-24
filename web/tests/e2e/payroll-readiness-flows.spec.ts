@@ -5,7 +5,7 @@ import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("HR admin payroll readiness flows", () => {
   test("readiness table filters and live row detail stay URL-driven", async ({ page }) => {
-    await gotoAuthenticated(page, "/hr-admin/payroll-readiness");
+    await gotoAuthenticated(page, "/hr-admin/payroll-readiness?tab=employees");
     await expectPageReady(page, "Payroll Readiness");
 
     await expect(page.getByRole("heading", { name: "Payroll source review" })).toBeVisible();
@@ -23,7 +23,7 @@ test.describe("HR admin payroll readiness flows", () => {
       await expect(page.getByText("Readiness").or(page.getByText("Source")).first()).toBeVisible();
     }
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-readiness");
+    await gotoAuthenticated(page, "/hr-admin/payroll-readiness?tab=employees");
     await page.getByRole("textbox", { name: "Search" }).fill("A");
     await Promise.all([
       page.waitForURL((url) => url.searchParams.get("q") === "A"),

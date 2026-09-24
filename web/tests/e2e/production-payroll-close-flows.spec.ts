@@ -15,7 +15,7 @@ async function captureCloseStep(page: Page, testInfo: TestInfo, name: string) {
 test.describe("Production payroll close proof", () => {
   test("traces payroll close from source readiness to employee payslip evidence", async ({ page }, testInfo) => {
     test.setTimeout(90_000);
-    await loginIfRequired(page, hrAdmin, "/hr-admin/payroll-readiness");
+    await loginIfRequired(page, hrAdmin, "/hr-admin/payroll-readiness?tab=employees");
     await expectPageReady(page, "Payroll Readiness");
     await expect(page.getByRole("heading", { name: "Payroll source review" })).toBeVisible();
     await expectVisibleText(page, [

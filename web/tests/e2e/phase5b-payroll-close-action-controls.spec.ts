@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { gotoAuthenticated, hrAdmin, payrollFinanceManager } from "../helpers/staging-auth";
 
 function main(page: Page) {
   return page.locator("main").first();
@@ -17,27 +17,43 @@ async function expectPanelChrome(panel: Locator, heading: string, expectedContro
   await expect(panel.getByText(`${expectedControls} controls`)).toBeVisible();
 }
 
+async function expectCardHasDisabledReason(card: Locator) {
+  const reason = card.locator(".muted, .section-copy").filter({ hasText: /\S/ }).last();
+  await expect(reason).toBeVisible();
+}
+
 async function expectProfileInput(panel: Locator, label: string) {
   const field = panel.getByLabel(label);
   await expect(field).toBeVisible();
+  const card = field.locator("xpath=ancestor::article[1]");
+  if (!(await field.isEnabled())) {
+    await expect(field).toBeDisabled();
+    await expectCardHasDisabledReason(card);
+    return;
+  }
   const currentValue = await field.inputValue();
   await field.fill(`${currentValue || "tenant.payroll.browser.cert"}.pw`);
   await expect(field).toHaveValue(/\.pw$/);
 }
 
-async function isEnabled(locator: Locator) {
-  return locator.isEnabled().catch(() => false);
-}
-
 async function clickAndExpectDomainResponse(page: Page, panel: Locator, buttonName: string, routePattern: RegExp) {
+  const button = panel.getByRole("button", { name: buttonName });
+  const card = button.locator("xpath=ancestor::article[1]");
+  await expect(button).toBeVisible();
+  if (!(await button.isEnabled())) {
+    await expect(button).toBeDisabled();
+    await expectCardHasDisabledReason(card);
+    return false;
+  }
   const responsePromise = page.waitForResponse((response) => routePattern.test(response.url()), { timeout: 30000 });
-  await panel.getByRole("button", { name: buttonName }).click();
+  await button.click();
   const response = await responsePromise;
   expect([200, 201, 400]).toContain(response.status());
   expect([401, 403, 404, 500]).not.toContain(response.status());
   await expect(
     main(page).getByRole("status").or(main(page).getByRole("alert")),
   ).toBeVisible();
+  return true;
 }
 
 test.describe("Phase 5B payroll close action controls", () => {
@@ -49,10 +65,8 @@ test.describe("Phase 5B payroll close action controls", () => {
     await expectPanelChrome(panel, "Calculation controls", 2);
     await expectProfileInput(panel, "Calculation profile ref");
     await expectProfileInput(panel, "Review profile ref");
-    await expect(panel.getByRole("button", { name: "Calculate draft" })).toBeEnabled();
-    await expect(panel.getByRole("button", { name: "Open review" })).toBeEnabled();
-
     await clickAndExpectDomainResponse(page, panel, "Calculate draft", /\/api\/hr-admin\/payroll-runs\/.+\/calculate-draft/);
+    await clickAndExpectDomainResponse(page, panel, "Open review", /\/api\/hr-admin\/payroll-runs\/.+\/open-review/);
     await expectNoHorizontalOverflow(page);
   });
 
@@ -88,7 +102,7 @@ test.describe("Phase 5B payroll close action controls", () => {
   });
 
   test("handoff page certifies transmit, acknowledgement, and provider audit-pack controls", async ({ page }) => {
-    await gotoAuthenticated(page, "/hr-admin/payroll-handoff", hrAdmin);
+    await gotoAuthenticated(page, "/hr-admin/payroll-handoff", payrollFinanceManager);
     await expectPageReady(page, "Payroll Handoff");
 
     const panel = actionPanel(page, "Handoff controls");
@@ -101,11 +115,9 @@ test.describe("Phase 5B payroll close action controls", () => {
     const auditPackButton = panel.getByRole("button", { name: "Generate audit pack" });
     await expect(auditPackButton).toBeVisible();
 
-    if (await isEnabled(auditPackButton)) {
-      await clickAndExpectDomainResponse(page, panel, "Generate audit pack", /\/api\/hr-admin\/payroll-finance-handoffs\/.+\/generate-audit-pack/);
-    } else {
-      await expect(panel.getByText("Select a finance handoff first.").first()).toBeVisible();
-    }
+    await clickAndExpectDomainResponse(page, panel, "Transmit handoff", /\/api\/hr-admin\/payroll-finance-handoffs\/.+\/transmit/);
+    await clickAndExpectDomainResponse(page, panel, "Acknowledge handoff", /\/api\/hr-admin\/payroll-finance-handoffs\/.+\/acknowledge/);
+    await clickAndExpectDomainResponse(page, panel, "Generate audit pack", /\/api\/hr-admin\/payroll-finance-handoffs\/.+\/generate-audit-pack/);
     await expectNoHorizontalOverflow(page);
   });
 });

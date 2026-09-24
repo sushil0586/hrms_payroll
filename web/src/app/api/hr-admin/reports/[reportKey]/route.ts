@@ -428,6 +428,25 @@ const REPORT_EVIDENCE_COLUMNS: Record<string, string[]> = {
     "source_hash",
     "detail_href",
   ],
+  "provider-filing-receipts": [
+    "artifact_title",
+    "artifact_kind",
+    "delivery_status",
+    "provider_status",
+    "provider_ref",
+    "channel_ref",
+    "external_reference",
+    "submitted_at",
+    "acknowledged_at",
+    "reconciled_at",
+    "attempt_count",
+    "callback_count",
+    "retry_count",
+    "job_count",
+    "payload_checksum_sha256",
+    "failure_code",
+    "failure_reason",
+  ],
 };
 
 function evidenceColumnsForReport(reportKey: string, rows: Array<Record<string, unknown>>) {

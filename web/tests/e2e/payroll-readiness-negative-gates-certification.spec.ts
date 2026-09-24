@@ -70,7 +70,7 @@ test.describe("Phase 5L payroll readiness negative gates certification", () => {
     test.setTimeout(4 * 60 * 1000);
     const employee = await createEmployeeWithoutBank(page);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-readiness?q=${employee.employee_code}&page_size=10`);
+    await gotoAuthenticated(page, `/hr-admin/payroll-readiness?tab=employees&q=${employee.employee_code}&page_size=10`);
     await expectPageReady(page, "Payroll Readiness");
 
     const row = page.locator(".payroll-readiness-table tbody tr").filter({ hasText: employee.employee_code }).first();
@@ -89,7 +89,7 @@ test.describe("Phase 5L payroll readiness negative gates certification", () => {
     await expect(page).toHaveURL(/status=ready/);
     await expect(page.locator(".payroll-readiness-table tbody tr").filter({ hasText: employee.employee_code })).toHaveCount(0);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-readiness?q=${employee.employee_code}&status=warning&page_size=10`);
+    await gotoAuthenticated(page, `/hr-admin/payroll-readiness?tab=employees&q=${employee.employee_code}&status=warning&page_size=10`);
     await expect(page.locator(".payroll-readiness-table tbody tr").filter({ hasText: employee.employee_code })).toBeVisible();
     await expect(page.locator(".pagination-bar").getByText("1-1")).toBeVisible();
     await expectNoHorizontalOverflow(page);

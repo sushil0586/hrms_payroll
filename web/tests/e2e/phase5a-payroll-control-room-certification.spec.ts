@@ -52,13 +52,17 @@ test.describe("Phase 5A payroll control room certification", () => {
     await expectHeaderLinks(page, [
       ["Setup", "/hr-admin/payroll-setup"],
       ["Inputs", "/hr-admin/payroll-inputs"],
-      ["Admin", "/hr-admin"],
-      ["Reports", "/hr-admin/reports"],
+      ["Review", "/hr-admin/payroll-review"],
+      ["Report", "/hr-admin/reports/payroll-close-readiness"],
     ]);
     for (const label of ["Employees in scope", "Ready", "Warnings", "Blocked", "Pending approvals"]) {
       await expect(metric(page, label)).toBeVisible();
     }
-    await expect(main(page).getByText("Readiness table")).toBeVisible();
+    await expect(main(page).getByText("Current decision")).toBeVisible();
+    await expect(main(page).getByText("What to do next")).toBeVisible();
+    await main(page).locator(".payroll-readiness-tab", { hasText: "Employees" }).click();
+    await expect(page).toHaveURL(/tab=employees/);
+    await expect(main(page).getByText("Employee table")).toBeVisible();
     await expect(main(page).getByRole("heading", { name: "Payroll source review" })).toBeVisible();
     await expect(main(page).getByLabel("Search")).toBeVisible();
     await expect(main(page).getByLabel("Period start")).toHaveValue(/\d{4}-\d{2}-\d{2}/);

@@ -81,7 +81,7 @@ test.describe("P100-3 pilot 100 workforce certification", () => {
   test("payroll readiness exposes the intentional missing-bank blockers", async ({ page }) => {
     test.setTimeout(5 * 60 * 1000);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-readiness?q=${seedPrefix}_E096&page_size=10`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-readiness?tab=employees&q=${seedPrefix}_E096&page_size=10`, hrAdmin);
     await expectPageReady(page, "Payroll Readiness");
     await expect(page.locator(".pagination-bar").getByText("1-1")).toBeVisible();
     const row = page.locator(".payroll-readiness-table tbody tr").filter({ hasText: `${seedPrefix}_E096` }).first();

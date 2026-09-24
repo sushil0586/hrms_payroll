@@ -39,7 +39,14 @@ test.describe("HR admin payroll handoff flows", () => {
         artifactLink.click(),
       ]);
       await expect(page).toHaveURL(/artifactId=/);
-      await expect(page.getByText("Locked evidence").or(page.getByText("Storage")).or(page.getByText("Provider")).first()).toBeVisible();
+      const detailPanel = page.locator("main .payroll-handoff-detail-panel").first();
+      await expect(detailPanel).toBeVisible();
+      await expect(
+        detailPanel.getByText("Locked evidence")
+          .or(detailPanel.getByText("Storage governance"))
+          .or(detailPanel.getByText("Provider acknowledgement"))
+          .first(),
+      ).toBeVisible();
     }
 
     await expectNoHorizontalOverflow(page);

@@ -94,12 +94,12 @@ test.describe("Phase 5 readiness bank coverage gate certification", () => {
     test.setTimeout(5 * 60 * 1000);
     const employee = await createEmployeeWithPrimaryBank(page);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-readiness?q=${employee.employee_code}&page_size=10`);
+    await gotoAuthenticated(page, `/hr-admin/payroll-readiness?tab=employees&q=${employee.employee_code}&page_size=10`);
     await expectPageReady(page, "Payroll Readiness");
     await expect(main(page).getByRole("link", { name: "Setup", exact: true })).toHaveAttribute("href", "/hr-admin/payroll-setup");
     await expect(main(page).getByRole("link", { name: "Inputs", exact: true })).toHaveAttribute("href", "/hr-admin/payroll-inputs");
-    await expect(main(page).getByRole("link", { name: "Admin", exact: true })).toHaveAttribute("href", "/hr-admin");
-    await expect(main(page).getByRole("link", { name: "Reports", exact: true })).toHaveAttribute("href", "/hr-admin/reports");
+    await expect(main(page).getByRole("link", { name: "Review", exact: true })).toHaveAttribute("href", "/hr-admin/payroll-review");
+    await expect(main(page).getByRole("link", { name: "Report", exact: true })).toHaveAttribute("href", "/hr-admin/reports/payroll-close-readiness");
 
     for (const label of ["Search", "Period start", "Period end", "Page size"]) {
       await expect(page.getByLabel(label, { exact: true })).toBeVisible();

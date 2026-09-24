@@ -26,7 +26,7 @@ const routeExpectations: RouteExpectation[] = [
     path: "/hr-admin/payroll-readiness",
     heading: /Payroll/i,
     selectors: [".payroll-cycle-journey"],
-    visibleText: ["Payroll source review"],
+    visibleText: ["Current decision", "What to do next"],
   },
   {
     path: "/hr-admin/attendance-records",

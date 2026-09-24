@@ -9,7 +9,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.employees.models import Employee, EmploymentStatus
-from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMembership, User
+from apps.iam.models import MembershipRole, MembershipStatus, Role, RolePermission, TenantMembership, User
+from apps.iam.permission_catalog import get_permission_catalog
 from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, EmploymentType, Grade, LegalEntity, Location
 from apps.tenants.models import Tenant
 
@@ -89,8 +90,22 @@ class Command(BaseCommand):
                     "is_active": True,
                 },
             )
+            self._ensure_default_role_permissions(role)
             roles[code] = role
         return roles
+
+    def _ensure_default_role_permissions(self, role: Role) -> None:
+        permission_keys = sorted(
+            permission["key"]
+            for permission in get_permission_catalog()
+            if role.code in permission.get("default_role_codes", [])
+        )
+        for permission_key in permission_keys:
+            RolePermission.objects.update_or_create(
+                role=role,
+                permission_key=permission_key,
+                defaults={"description": "Seeded catalog-default permission."},
+            )
 
     def _seed_user(
         self,

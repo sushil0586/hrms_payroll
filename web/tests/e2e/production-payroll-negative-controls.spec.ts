@@ -14,7 +14,7 @@ async function captureNegativeStep(page: Page, testInfo: TestInfo, name: string)
 
 test.describe("Production payroll negative controls", () => {
   test("source-data blockers and blocked input snapshots stay visible before payroll close", async ({ page }, testInfo) => {
-    await loginIfRequired(page, hrAdmin, "/hr-admin/payroll-readiness");
+    await loginIfRequired(page, hrAdmin, "/hr-admin/payroll-readiness?tab=employees");
     await expectPageReady(page, "Payroll Readiness");
     await expect(page.getByRole("heading", { name: "Payroll source review" })).toBeVisible();
     await expectVisibleText(page, [
@@ -23,7 +23,7 @@ test.describe("Production payroll negative controls", () => {
       "Ready",
       "Warnings",
       "Blocked",
-      "Readiness table",
+      "Employee table",
     ]);
     await captureNegativeStep(page, testInfo, "01-readiness-blocked-source-data");
 

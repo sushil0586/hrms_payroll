@@ -43,7 +43,7 @@ const pilotManager: Persona = {
 
 const pilotRoutes: PilotRoute[] = [
   { path: `/hr-admin/employees?q=${prefix}&page_size=50`, heading: "Employees", label: "employee-directory", expectedText: "100", pagination: true },
-  { path: `/hr-admin/payroll-readiness?q=${prefix}_E096&page_size=10`, heading: "Payroll Readiness", label: "payroll-readiness", expectedText: "Missing primary bank account", pagination: true },
+  { path: `/hr-admin/payroll-readiness?tab=employees&q=${prefix}_E096&page_size=10`, heading: "Payroll Readiness", label: "payroll-readiness", expectedText: "Missing primary bank account", pagination: true },
   { path: "/hr-admin/payroll-inputs", heading: "Payroll Inputs", label: "payroll-inputs", expectedText: /Snapshots|Payroll runs/i },
   { path: "/hr-admin/payroll-calculations", heading: "Payroll Calculations", label: "payroll-calculations", expectedText: prefix },
   { path: "/hr-admin/payroll-review", heading: "Payroll Review", label: "payroll-review", expectedText: /Review controls|Exceptions/i },

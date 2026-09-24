@@ -16,8 +16,8 @@ const payrollRoutes: PayrollRouteExpectation[] = [
     path: "/hr-admin/payroll-readiness",
     heading: "Payroll Readiness",
     currentStep: "Readiness",
-    selectors: [".payroll-cycle-journey", ".payroll-readiness-workspace", ".payroll-readiness-table"],
-    visibleText: ["Payroll source review", "Readiness table", "Employee trace"],
+    selectors: [".payroll-cycle-journey", ".payroll-readiness-tabs", ".payroll-readiness-summary-grid"],
+    visibleText: ["Current decision", "What to do next", "Summary", "Issues", "Employees", "Setup Health", "Evidence"],
   },
   {
     path: "/hr-admin/payroll-inputs",
@@ -120,6 +120,68 @@ async function expectPayrollRoute(page: Page, route: PayrollRouteExpectation) {
 }
 
 test.describe("HR Admin payroll cycle phase 11 certification", () => {
+  test("certifies payroll readiness tab navigation and preserved employee review", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 960 });
+    await gotoDemoHrAdmin(page, "/hr-admin/payroll-readiness");
+
+    await expect(page.locator(".payroll-readiness-summary-grid")).toBeVisible();
+    await expect(page.locator("main").getByText("Current decision")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Fix blockers" })).toHaveAttribute("href", /tab=issues/);
+    await expect(page.getByRole("link", { name: "Fix blockers" })).toHaveAttribute("href", /status=blocked/);
+    await expect(page.getByRole("link", { name: "Check setup health" })).toHaveAttribute("href", /tab=setup/);
+
+    await page.locator(".payroll-readiness-tab", { hasText: "Issues" }).click();
+    await expect(page).toHaveURL(/\/hr-admin\/payroll-readiness\?tab=issues/);
+    await expect(page.locator(".payroll-readiness-issue-grid")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open blocked employees" })).toHaveAttribute("href", /tab=employees/);
+    await expect(page.getByRole("link", { name: "Open blocked employees" })).toHaveAttribute("href", /status=blocked/);
+    await expect(page.locator(".payroll-readiness-issue-card .button").first()).toHaveAttribute("href", /^\/hr-admin\//);
+
+    await page.locator(".payroll-readiness-tab", { hasText: "Employees" }).click();
+    await expect(page).toHaveURL(/\/hr-admin\/payroll-readiness\?tab=employees/);
+    await expect(page.locator(".payroll-readiness-table")).toBeVisible();
+    await expect(page.locator(".payroll-readiness-detail-panel")).toBeVisible();
+    await page.getByRole("link", { name: /^Warning\b/ }).click();
+    await expect(page).toHaveURL(/status=warning/);
+    await expect(page).toHaveURL(/tab=employees/);
+    await page.getByRole("link", { name: /^All\b/ }).click();
+    await expect(page).toHaveURL(/status=all/);
+
+    await page.getByLabel("Search", { exact: true }).fill("");
+    await page.getByLabel("Period start", { exact: true }).fill("2026-09-01");
+    await page.getByLabel("Period end", { exact: true }).fill("2026-09-30");
+    await Promise.all([
+      page.waitForURL((url) =>
+        url.searchParams.get("tab") === "employees" &&
+        url.searchParams.get("period_start") === "2026-09-01" &&
+        url.searchParams.get("period_end") === "2026-09-30",
+      ),
+      page.getByRole("button", { name: "Apply" }).click(),
+    ]);
+
+    const firstEmployee = page.locator(".payroll-readiness-table tbody a").first();
+    await expect(firstEmployee).toBeVisible();
+    await firstEmployee.click();
+    await expect(page).toHaveURL(/employeeId=/);
+    await expect(page.locator(".payroll-readiness-detail-panel[aria-label$='readiness detail']")).toBeVisible();
+
+    await page.locator(".payroll-readiness-tab", { hasText: "Setup Health" }).click();
+    await expect(page).toHaveURL(/\/hr-admin\/payroll-readiness\?tab=setup/);
+    const setupGrid = page.locator(".payroll-readiness-setup-grid");
+    await expect(setupGrid).toBeVisible();
+    await expect(setupGrid.getByRole("link", { name: "Open setup" })).toHaveAttribute("href", "/hr-admin/payroll-setup");
+    await expect(setupGrid.getByRole("link", { name: "Open employees" })).toHaveAttribute("href", "/hr-admin/employees");
+    await expect(setupGrid.getByRole("link", { name: "Open providers" })).toHaveAttribute("href", "/hr-admin/payroll-providers");
+
+    await page.locator(".payroll-readiness-tab", { hasText: "Evidence" }).click();
+    await expect(page).toHaveURL(/\/hr-admin\/payroll-readiness\?tab=evidence/);
+    await expect(page.locator(".payroll-readiness-evidence-grid")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open close readiness report" })).toHaveAttribute("href", "/hr-admin/reports/payroll-close-readiness");
+
+    await expectNoAppError(page);
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("certifies payroll cycle steps, route ownership, action panels, and safe states", async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1440, height: 960 });

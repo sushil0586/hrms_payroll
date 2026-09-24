@@ -7601,6 +7601,139 @@ select.input-control {
   grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
 }
 
+.payroll-readiness-tabs {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 4px;
+  border: 1px solid rgba(203, 213, 225, 0.74);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.payroll-readiness-tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.payroll-readiness-tab strong {
+  min-width: 24px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #2563eb;
+  font-size: 12px;
+  text-align: center;
+}
+
+.payroll-readiness-tab--active {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: 0 10px 24px -20px rgba(37, 99, 235, 0.6);
+}
+
+.payroll-readiness-summary-grid {
+  display: grid;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.payroll-readiness-status-card,
+.payroll-readiness-next-panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(203, 213, 225, 0.74);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 40px -32px rgba(15, 23, 42, 0.28);
+}
+
+.payroll-readiness-status-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border-left-width: 5px;
+}
+
+.payroll-readiness-status-card--ready {
+  border-left-color: #10b981;
+}
+
+.payroll-readiness-status-card--warning {
+  border-left-color: #f59e0b;
+}
+
+.payroll-readiness-status-card--blocked {
+  border-left-color: #ef4444;
+}
+
+.payroll-readiness-status-card h2,
+.payroll-readiness-next-panel h2,
+.payroll-readiness-empty-state h2 {
+  margin: 0;
+  color: #111827;
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+
+.payroll-readiness-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.payroll-readiness-next-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.payroll-readiness-top-list {
+  display: grid;
+  gap: 8px;
+}
+
+.payroll-readiness-top-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #1f2937;
+}
+
+.payroll-readiness-top-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.payroll-readiness-top-item strong {
+  min-width: 28px;
+  text-align: right;
+}
+
 .payroll-readiness-workspace {
   display: grid;
   gap: 16px;
@@ -7793,6 +7926,90 @@ select.input-control {
 .payroll-readiness-table td:first-child span {
   color: #64748b;
   font-size: 12px;
+}
+
+.payroll-readiness-issue-grid,
+.payroll-readiness-setup-grid,
+.payroll-readiness-evidence-grid {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.payroll-readiness-issue-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.payroll-readiness-setup-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.payroll-readiness-evidence-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.payroll-readiness-issue-card,
+.payroll-readiness-setup-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.payroll-readiness-issue-card--blocked {
+  border-left: 4px solid #ef4444;
+}
+
+.payroll-readiness-issue-card--warning {
+  border-left: 4px solid #f59e0b;
+}
+
+.payroll-readiness-issue-card__header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.payroll-readiness-issue-card__header strong {
+  color: #475569;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.payroll-readiness-issue-card h3,
+.payroll-readiness-setup-card h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.payroll-readiness-issue-card .button,
+.payroll-readiness-setup-card .button {
+  justify-self: start;
+}
+
+.payroll-readiness-setup-card p {
+  margin: 0;
+  color: #64748b;
+}
+
+.payroll-readiness-empty-state {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  min-height: 180px;
+  padding: 20px;
+  border: 1px dashed rgba(203, 213, 225, 0.9);
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
 .readiness-badge {
@@ -12854,6 +13071,10 @@ select.input-control {
   .form-shell-card__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
+  }
+
+  .payroll-readiness-summary-grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
   }
 
   .payroll-readiness-workspace {
