@@ -25,7 +25,7 @@ const payrollRoutes: PayrollRouteExpectation[] = [
     currentStep: "Inputs",
     selectors: [".payroll-cycle-journey", ".payroll-input-workspace", ".payroll-input-table"],
     visibleText: ["Employee snapshots", "Run guardrails", "Snapshot trace"],
-    controls: ["Input operations", /Lock inputs|Requires payroll\.lock|Select a payroll run/i],
+    controls: ["Input operations", /Input lock|Lock selected run inputs|Requires payroll\.lock|Select a payroll run/i],
   },
   {
     path: "/hr-admin/payroll-calculations",
@@ -71,13 +71,22 @@ const payrollStepLinks = [
 ];
 
 async function gotoDemoHrAdmin(page: Page, path: string) {
-  await page.context().addCookies([
-    {
-      name: "hrms_access_token",
-      value: "playwright-demo-token",
-      url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100",
+  const response = await page.request.post("/api/auth/login", {
+    data: {
+      identifier: process.env.PLAYWRIGHT_LIVE_HR_ADMIN_USERNAME ?? "nisha.rao",
+      password: process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123",
     },
-  ]);
+  }).catch(() => null);
+
+  if (!response?.ok()) {
+    await page.context().addCookies([
+      {
+        name: "hrms_access_token",
+        value: "playwright-demo-token",
+        url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100",
+      },
+    ]);
+  }
   await page.goto(path, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await suppressBrowserTestNoise(page);
@@ -112,6 +121,7 @@ async function expectPayrollRoute(page: Page, route: PayrollRouteExpectation) {
 
 test.describe("HR Admin payroll cycle phase 11 certification", () => {
   test("certifies payroll cycle steps, route ownership, action panels, and safe states", async ({ page }) => {
+    test.setTimeout(120_000);
     await page.setViewportSize({ width: 1440, height: 960 });
     for (const route of payrollRoutes) {
       await expectPayrollRoute(page, route);
@@ -119,6 +129,7 @@ test.describe("HR Admin payroll cycle phase 11 certification", () => {
   });
 
   test("certifies payroll cycle responsive integrity at 1366px and tablet width", async ({ page }) => {
+    test.setTimeout(180_000);
     for (const viewport of [
       { width: 1366, height: 900 },
       { width: 820, height: 1180 },

@@ -17326,6 +17326,58 @@ def test_email_smtp_backend_is_ses_sandbox_ready_without_secret_leak(api_client:
 
 
 @pytest.mark.django_db
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    DEFAULT_FROM_EMAIL="Nexora HRMS <notifications@verified-domain.example>",
+)
+def test_notification_processor_task_delivers_pending_email(api_client: APIClient, bootstrapped_workspace):
+    from apps.notifications.tasks import process_pending_notifications_task
+
+    tenant = bootstrapped_workspace["pending_leave"].tenant
+    employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")
+    membership = employee.membership
+    config = NotificationChannelConfiguration.objects.get(tenant=tenant, channel="email")
+    config.backend_key = NotificationDeliveryBackend.EMAIL_SMTP
+    config.sender_address = "Nexora HRMS <notifications@verified-domain.example>"
+    config.save(update_fields=["backend_key", "sender_address", "updated_at"])
+
+    Notification.objects.create(
+        tenant=tenant,
+        channel="email",
+        audience_type="membership",
+        recipient_membership=membership,
+        recipient_identifier=membership.user.username,
+        subject_type="employee_invite",
+        subject_identifier="celery-email-proof-1",
+        title="Celery email proof",
+        subject="Celery email proof subject",
+        body="This email proves Celery can process the notification queue.",
+        status="pending",
+        priority="high",
+        scheduled_for=timezone.now(),
+        payload={},
+    )
+
+    mail.outbox = []
+    result = process_pending_notifications_task(
+        tenant_code=tenant.code,
+        limit=10,
+        channels=["email", "unknown"],
+    )
+
+    assert result == {
+        "processed": 1,
+        "tenant_code": tenant.code,
+        "channels": ["email"],
+        "status": "processed",
+    }
+    notification = Notification.objects.get(tenant=tenant, subject_identifier="celery-email-proof-1")
+    assert notification.status == NotificationStatus.DELIVERED
+    assert len(mail.outbox) == 1
+    assert mail.outbox[0].subject == "Celery email proof subject"
+
+
+@pytest.mark.django_db
 def test_hr_admin_can_retry_notification_delivery(api_client: APIClient, bootstrapped_workspace):
     tenant = bootstrapped_workspace["pending_leave"].tenant
     employee = Employee.objects.get(tenant=tenant, employee_code="EMP-0042")

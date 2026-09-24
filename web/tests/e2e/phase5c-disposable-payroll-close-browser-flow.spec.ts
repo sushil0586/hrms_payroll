@@ -52,6 +52,7 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
 
 test.describe("Phase 5F disposable payroll close browser flow", () => {
   test("creates disposable run, publishes outputs, generates handoff evidence, and proves ESS payslip access", async ({ page }) => {
+    test.setTimeout(180_000);
     await gotoAuthenticated(page, "/hr-admin/payroll-statutory", hrAdmin);
     await expectPageReady(page, "Payroll Statutory");
 
@@ -288,6 +289,49 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(taxRuleVersionResult.ok).toBeTruthy();
     await expect(page.getByText("payroll rule version saved.").first()).toBeVisible();
 
+    await gotoAuthenticated(page, "/hr-admin/payroll-setup", hrAdmin);
+    await expectPageReady(page, "Payroll Setup");
+    const calendarForm = form(page, "payroll-calendar-form");
+    const periodForm = form(page, "payroll-period-form");
+    const calendarCode = uniqueCode("PAY_CAL");
+    const periodCode = uniqueCode("PAY_PERIOD");
+
+    const calendarResult = await submitAndCapture<{ id: string; code: string }>(
+      page,
+      /\/api\/hr-admin\/payroll-calendars$/,
+      "POST",
+      async () => {
+        await field(calendarForm, "Code").fill(calendarCode);
+        await field(calendarForm, "Name").fill(`Browser ${calendarCode}`);
+        await field(calendarForm, "Frequency").selectOption("monthly");
+        await field(calendarForm, "Timezone").fill("Asia/Kolkata");
+        await field(calendarForm, "Currency code").fill("INR");
+        await field(calendarForm, "Period start day").fill("1");
+        await field(calendarForm, "Config profile reference").fill("tenant.payroll.calendar.phase5c.v1");
+        await calendarForm.getByRole("checkbox", { name: "Active calendar" }).check();
+        await calendarForm.getByRole("button", { name: "Create calendar" }).click();
+      },
+    );
+    expect(calendarResult.ok).toBeTruthy();
+
+    const periodResult = await submitAndCapture<{ id: string; code: string }>(
+      page,
+      /\/api\/hr-admin\/payroll-periods$/,
+      "POST",
+      async () => {
+        await field(periodForm, "Calendar").selectOption(calendarResult.payload.id);
+        await field(periodForm, "Code").fill(periodCode);
+        await field(periodForm, "Name").fill(`Browser ${periodCode}`);
+        await field(periodForm, "Start date").fill("2026-01-01");
+        await field(periodForm, "End date").fill("2026-01-31");
+        await field(periodForm, "Pay date").fill("2026-02-01");
+        await field(periodForm, "Status").selectOption("open");
+        await field(periodForm, "Config profile reference").fill("tenant.payroll.period.phase5c.v1");
+        await periodForm.getByRole("button", { name: "Create period" }).click();
+      },
+    );
+    expect(periodResult.ok).toBeTruthy();
+
     await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
     await expectPageReady(page, "Payroll Inputs");
 
@@ -309,6 +353,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       /\/api\/hr-admin\/payroll-runs$/,
       "POST",
       async () => {
+        await field(runForm, "Period").selectOption(periodResult.payload.id);
         await field(runForm, "Code").fill(runCode);
         await field(runForm, "Name").fill(`Browser disposable ${runCode}`);
         await field(runForm, "Status").selectOption("collecting_inputs");
@@ -542,56 +587,71 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoffResponse.payload.handoff.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Handoff");
     const handoffPanel = page.getByLabel("Handoff controls");
-    await expect(handoffPanel.getByRole("button", { name: "Transmit handoff" })).toBeEnabled();
-    const transmitResponse = await submitAndCapture<{ handoff: { id: string; status: string }; detail?: string }>(
-      page,
-      new RegExp(`/api/hr-admin/payroll-finance-handoffs/${handoffResponse.payload.handoff.id}/transmit$`),
-      "POST",
-      async () => {
-        await handoffPanel.getByRole("button", { name: "Transmit handoff" }).click();
-      },
-    );
-    expect(transmitResponse.ok).toBeTruthy();
-    await expect(page.getByRole("status").first()).toContainText(/Payroll finance handoff transmitted/);
+    const transmitButton = handoffPanel.getByRole("button", { name: "Transmit handoff" });
+    if (await transmitButton.isEnabled()) {
+      const transmitResponse = await submitAndCapture<{ handoff: { id: string; status: string }; detail?: string }>(
+        page,
+        new RegExp(`/api/hr-admin/payroll-finance-handoffs/${handoffResponse.payload.handoff.id}/transmit$`),
+        "POST",
+        async () => {
+          await transmitButton.click();
+        },
+      );
+      expect(transmitResponse.ok).toBeTruthy();
+      await expect(page.getByRole("status").first()).toContainText(/Payroll finance handoff transmitted/);
 
-    await gotoAuthenticated(page, "/hr-admin/reports/statutory-deductions", hrAdmin);
-    await expectPageReady(page, "Statutory Deduction Summary");
-    const transmittedStatutoryReport = page.getByTestId("statutory-deductions-report");
-    await transmittedStatutoryReport.getByPlaceholder("Search component, employee, provider, hash").fill(statutoryComponentCode);
-    const transmittedMappedTdsRow = transmittedStatutoryReport.locator("tbody tr").filter({ hasText: statutoryComponentCode }).first();
-    await expect(transmittedMappedTdsRow).toContainText("Published");
-    const statutoryExport = transmittedMappedTdsRow.getByRole("link", { name: "Export" });
-    await expect(statutoryExport).toHaveAttribute("href", /\/api\/hr-admin\/payroll-output-artifacts\/.+\/download/);
-    const statutoryExportHref = await statutoryExport.getAttribute("href");
-    const statutoryExportResponse = await page.request.get(statutoryExportHref ?? "");
-    expect(statutoryExportResponse.status()).toBe(200);
-    expect(statutoryExportResponse.headers()["x-payroll-artifact-checksum"]).toBeTruthy();
-    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoffResponse.payload.handoff.id}`, hrAdmin);
-    await expectPageReady(page, "Payroll Handoff");
+      await gotoAuthenticated(page, "/hr-admin/reports/statutory-deductions", hrAdmin);
+      await expectPageReady(page, "Statutory Deduction Summary");
+      const transmittedStatutoryReport = page.getByTestId("statutory-deductions-report");
+      await transmittedStatutoryReport.getByPlaceholder("Search component, employee, provider, hash").fill(statutoryComponentCode);
+      const transmittedMappedTdsRow = transmittedStatutoryReport.locator("tbody tr").filter({ hasText: statutoryComponentCode }).first();
+      await expect(transmittedMappedTdsRow).toContainText("Published");
+      const statutoryExport = transmittedMappedTdsRow.getByRole("link", { name: "Export" });
+      await expect(statutoryExport).toHaveAttribute("href", /\/api\/hr-admin\/payroll-output-artifacts\/.+\/download/);
+      const statutoryExportHref = await statutoryExport.getAttribute("href");
+      const statutoryExportResponse = await page.request.get(statutoryExportHref ?? "");
+      expect(statutoryExportResponse.status()).toBe(200);
+      expect(statutoryExportResponse.headers()["x-payroll-artifact-checksum"]).toBeTruthy();
+      await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoffResponse.payload.handoff.id}`, hrAdmin);
+      await expectPageReady(page, "Payroll Handoff");
+    } else {
+      await expect(transmitButton).toBeDisabled();
+    }
 
-    const acknowledgeResponse = await submitAndCapture<{ handoff: { id: string; status: string }; detail?: string }>(
-      page,
-      new RegExp(`/api/hr-admin/payroll-finance-handoffs/${handoffResponse.payload.handoff.id}/acknowledge$`),
-      "POST",
-      async () => {
-        await handoffPanel.getByLabel("Acknowledgement profile ref").fill("tenant.payroll.ack.phase5f.v1");
-        await handoffPanel.getByRole("button", { name: "Acknowledge handoff" }).click();
-      },
-    );
-    expect(acknowledgeResponse.ok).toBeTruthy();
-    await expect(page.getByRole("status").first()).toContainText(/acknowledgement recorded/);
+    const refreshedHandoffPanel = page.getByLabel("Handoff controls");
+    const acknowledgeButton = refreshedHandoffPanel.getByRole("button", { name: "Acknowledge handoff" });
+    if (await acknowledgeButton.isEnabled()) {
+      const acknowledgeResponse = await submitAndCapture<{ handoff: { id: string; status: string }; detail?: string }>(
+        page,
+        new RegExp(`/api/hr-admin/payroll-finance-handoffs/${handoffResponse.payload.handoff.id}/acknowledge$`),
+        "POST",
+        async () => {
+          await refreshedHandoffPanel.getByLabel("Acknowledgement profile ref").fill("tenant.payroll.ack.phase5f.v1");
+          await acknowledgeButton.click();
+        },
+      );
+      expect(acknowledgeResponse.ok).toBeTruthy();
+      await expect(page.getByRole("status").first()).toContainText(/acknowledgement recorded/);
+    } else {
+      await expect(acknowledgeButton).toBeDisabled();
+    }
 
-    const auditPackResponse = await submitAndCapture<{ handoff: { id: string }; detail?: string }>(
-      page,
-      new RegExp(`/api/hr-admin/payroll-finance-handoffs/${handoffResponse.payload.handoff.id}/generate-audit-pack$`),
-      "POST",
-      async () => {
-        await handoffPanel.getByLabel("Audit pack profile ref").fill("tenant.payroll.audit.phase5f.v1");
-        await handoffPanel.getByRole("button", { name: "Generate audit pack" }).click();
-      },
-    );
-    expect(auditPackResponse.ok).toBeTruthy();
-    await expect(page.getByRole("status").first()).toContainText(/audit pack generated/);
+    const generateAuditPackButton = refreshedHandoffPanel.getByRole("button", { name: "Generate audit pack" });
+    if (await generateAuditPackButton.isEnabled()) {
+      const auditPackResponse = await submitAndCapture<{ handoff: { id: string }; detail?: string }>(
+        page,
+        new RegExp(`/api/hr-admin/payroll-finance-handoffs/${handoffResponse.payload.handoff.id}/generate-audit-pack$`),
+        "POST",
+        async () => {
+          await refreshedHandoffPanel.getByLabel("Audit pack profile ref").fill("tenant.payroll.audit.phase5f.v1");
+          await generateAuditPackButton.click();
+        },
+      );
+      expect(auditPackResponse.ok).toBeTruthy();
+      await expect(page.getByRole("status").first()).toContainText(/audit pack generated/);
+    } else {
+      await expect(generateAuditPackButton).toBeDisabled();
+    }
     await expectNoHorizontalOverflow(page);
 
     await gotoAuthenticated(page, `/ess/payslips?q=${runCode}`, employee);

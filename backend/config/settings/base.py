@@ -153,6 +153,7 @@ SPECTACULAR_SETTINGS = {
 
 CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+CELERY_BEAT_SCHEDULE = {}
 
 # Email delivery is routed through Django's mail backend. Local and test
 # environments can keep console/locmem backends, while staging/production can
@@ -167,6 +168,17 @@ EMAIL_USE_SSL = env_bool("DJANGO_EMAIL_USE_SSL", False)
 EMAIL_TIMEOUT = env_int("DJANGO_EMAIL_TIMEOUT", 20)
 DEFAULT_FROM_EMAIL = os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "hrms@example.local")
 SERVER_EMAIL = os.getenv("DJANGO_SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+
+NOTIFICATION_PROCESSOR_ENABLED = env_bool("HRMS_NOTIFICATION_PROCESSOR_ENABLED", False)
+NOTIFICATION_PROCESSOR_INTERVAL_SECONDS = env_int("HRMS_NOTIFICATION_PROCESSOR_INTERVAL_SECONDS", 60)
+NOTIFICATION_PROCESSOR_LIMIT = env_int("HRMS_NOTIFICATION_PROCESSOR_LIMIT", 100)
+
+if NOTIFICATION_PROCESSOR_ENABLED:
+    CELERY_BEAT_SCHEDULE["process-pending-notifications"] = {
+        "task": "notifications.process_pending",
+        "schedule": max(10, NOTIFICATION_PROCESSOR_INTERVAL_SECONDS),
+        "kwargs": {"limit": NOTIFICATION_PROCESSOR_LIMIT},
+    }
 
 # Payroll artifact storage keeps secrets outside artifact snapshots. Production
 # deployments can populate these from a secret manager or inject SDK clients.
