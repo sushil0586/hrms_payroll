@@ -1,22 +1,16 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { LogoutButton } from "@/app/components/logout-button";
 import { PublicLeadForm } from "@/app/public-lead-form";
 import { getSessionUser } from "@/lib/api";
-import { sessionCanAccessWorkspace, sessionHasAnyRole } from "@/lib/workspace-access";
+import { getPrimaryWorkspaceHref } from "@/lib/workspace-routing";
 
 export default async function HomePage() {
   const sessionUser = await getSessionUser();
-  const canAccessPlatformAdmin = sessionCanAccessWorkspace(sessionUser, "platform_admin");
-  const canAccessEss = sessionCanAccessWorkspace(sessionUser, "ess");
-  const canAccessHrAdmin = sessionHasAnyRole(sessionUser, ["hr-admin"]);
-  const canAccessMss = sessionCanAccessWorkspace(sessionUser, "mss");
-  const canAccessTenantAdmin = sessionCanAccessWorkspace(sessionUser, "tenant_admin");
-  const platformAdminHref = sessionUser ? (canAccessPlatformAdmin ? "/platform-admin" : "/") : "/login";
-  const hrAdminHref = sessionUser ? (canAccessHrAdmin ? "/hr-admin" : "/") : "/login";
-  const tenantAdminHref = sessionUser ? (canAccessTenantAdmin ? "/tenant-admin" : "/") : "/login";
-  const essHref = sessionUser ? (canAccessEss ? "/ess" : "/") : "/login";
-  const mssHref = sessionUser ? (canAccessMss ? "/mss/approvals" : "/") : "/login";
+
+  if (sessionUser) {
+    redirect(getPrimaryWorkspaceHref(sessionUser) ?? "/workspace-access");
+  }
 
   return (
     <main className="shell marketing-shell">
@@ -29,7 +23,7 @@ export default async function HomePage() {
           <a href="#pricing">Pricing</a>
           <a href="#signup">Public signup</a>
           <a href="#contact">Contact</a>
-          {sessionUser ? <LogoutButton /> : <Link className="button button--secondary" href="/login">Sign in</Link>}
+          <Link className="button button--secondary" href="/login">Sign in</Link>
         </div>
       </nav>
 
@@ -94,23 +88,6 @@ export default async function HomePage() {
           </div>
         </aside>
       </section>
-
-      {sessionUser ? (
-        <section className="marketing-section marketing-workspace-strip" aria-label="Workspace shortcuts">
-          <div>
-            <span className="hero__eyebrow">Signed in</span>
-            <h2>Choose your workspace</h2>
-            <p>{sessionUser.display_name || sessionUser.first_name || sessionUser.username}</p>
-          </div>
-          <div className="marketing-workspace-strip__actions">
-            <Link className="button button--primary" href={hrAdminHref}>{canAccessHrAdmin ? "HR admin" : "HR admin restricted"}</Link>
-            <Link className="button button--secondary" href={platformAdminHref}>{canAccessPlatformAdmin ? "Platform" : "Platform restricted"}</Link>
-            <Link className="button button--secondary" href={tenantAdminHref}>{canAccessTenantAdmin ? "Tenant" : "Tenant restricted"}</Link>
-            <Link className="button button--secondary" href={essHref}>ESS</Link>
-            <Link className="button button--secondary" href={mssHref}>{canAccessMss ? "MSS" : "MSS restricted"}</Link>
-          </div>
-        </section>
-      ) : null}
 
       <section className="marketing-section">
         <div className="marketing-section__header">
