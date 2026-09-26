@@ -7,6 +7,8 @@ function uniqueCode(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
 }
 
+const payrollEmployeeCode = process.env.PLAYWRIGHT_PAYROLL_STAGE_EMPLOYEE_CODE ?? "EMP-0042";
+
 function form(page: Page, testId: string) {
   return page.getByTestId(testId);
 }
@@ -389,7 +391,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       "POST",
       async () => {
         await field(snapshotForm, "Payroll run").selectOption(runResult.payload.id);
-        await selectOptionContaining(field(snapshotForm, "Employee"), "EMP-0042");
+        await selectOptionContaining(field(snapshotForm, "Employee"), payrollEmployeeCode);
         await field(snapshotForm, "Snapshot status").selectOption("ready");
         await field(snapshotForm, "Input profile ref").fill("tenant.payroll.input.phase5c.v1");
         await field(snapshotForm, "Config profile reference").fill("tenant.payroll.snapshot.phase5c.v1");

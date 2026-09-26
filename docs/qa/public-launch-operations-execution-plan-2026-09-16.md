@@ -413,9 +413,14 @@ Sandbox smoke sequence:
 - Process the queue:
 
 ```bash
-cd backend
-python manage.py process_notifications --tenant-code <tenant-code> --channel email --limit 10
+cd /var/www/hrms-payroll-saas/current/backend
+set -a
+. /var/www/hrms-payroll-saas/shared/backend.env
+set +a
+./.venv/bin/python3 manage.py process_notifications --tenant-code <tenant-code> --channel email --limit 10
 ```
+
+For the EC2 systemd deployment, the same command should normally run through `hrms-payroll-notification-worker.timer`, which points at `/var/www/hrms-payroll-saas/shared/backend.env`.
 
 - Confirm:
   - Email arrives in the verified recipient inbox.

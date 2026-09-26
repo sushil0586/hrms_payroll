@@ -76,7 +76,7 @@ Current status as of September 5, 2026:
 
 ## 5. Operational Limitations
 
-- Background commands such as `process_notifications` and `send_document_expiry_reminders` must be scheduled in deployment infrastructure before production-like pilot use.
+- Stage now runs `process_notifications` through `hrms-payroll-notification-worker.timer`, which loads `/var/www/hrms-payroll-saas/shared/backend.env` and processes queued notifications every minute. Production must carry the same systemd timer or an equivalent Celery/cron worker before launch. `send_document_expiry_reminders` still needs environment-specific scheduling if expiry reminders are in launch scope.
 - Observability, alerting, backups, and secrets management need environment-specific setup outside the app code.
 - Cross-browser coverage remains future work; current browser gates are Chromium-based.
 - Manual pilot screenshot review should be repeated whenever visual baselines or major UI surfaces change.
@@ -95,4 +95,3 @@ Before pilot kickoff, record:
 - notification provider scope
 - data import or seeded workspace approach
 - rollback and support escalation path
-

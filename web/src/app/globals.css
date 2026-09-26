@@ -3835,6 +3835,19 @@ select.input-control {
   border-color: rgba(99, 102, 241, 0.28);
 }
 
+.auth-recovery-link {
+  color: #3157d5;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.auth-recovery-link:hover {
+  color: #1d3fb3;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .public-shell {
   width: min(1760px, calc(100% - 56px));
   padding: 10px 0 36px;

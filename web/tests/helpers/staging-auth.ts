@@ -46,6 +46,9 @@ export function personaForRoute(path: string): Persona {
   if (path.startsWith("/platform-admin")) {
     return platformAdmin;
   }
+  if (path.startsWith("/tenant-admin")) {
+    return tenantAdmin;
+  }
   if (path.startsWith("/ess")) {
     return employee;
   }

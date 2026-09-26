@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 
 from django.db import transaction
@@ -24,6 +25,9 @@ ROLE_NAME_BY_CODE = {
     "tenant-admin": "Tenant Admin",
     "hr-admin": "HR Admin",
 }
+
+
+logger = logging.getLogger(__name__)
 
 
 def add_onboarding_event(
@@ -165,6 +169,12 @@ def provision_tenant_admin_contact(
         role=role,
         is_primary=True,
     )
+    try:
+        from apps.iam.services import queue_invite_email
+
+        queue_invite_email(membership=membership, generated_password=generated_password)
+    except Exception:
+        logger.exception("Failed to queue provisioned tenant admin invite email for membership %s", membership.id)
     employee = _ensure_first_admin_employee_context(contact, membership)
 
     contact.user = user

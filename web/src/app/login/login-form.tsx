@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -103,7 +104,9 @@ export function LoginForm() {
       {error ? <div className="notice"><span className="muted">{error}</span></div> : null}
 
       <div className="form-actions-bar auth-form-shell__actions">
-        <span className="muted">Your role-specific workspace becomes available after sign-in.</span>
+        <Link className="auth-recovery-link" href="/forgot-password">
+          Forgot password?
+        </Link>
         <div className="form-actions-bar__buttons">
           <button className="button button--primary" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Signing in..." : "Sign in"}

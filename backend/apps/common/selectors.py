@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 import secrets
 import uuid
 from copy import deepcopy
@@ -68,6 +69,9 @@ from apps.payroll.models import (
 from apps.platform_config.models import ConfigCategory, ConfigDataType, ConfigStatus, ConfigurationDefinition, TenantConfiguration
 from apps.tenants.models import Tenant, TenantStatus
 from apps.workflows.models import WorkflowAssignment, WorkflowInstanceStatus, WorkflowStatus, WorkflowTemplate
+
+
+logger = logging.getLogger(__name__)
 
 
 PAYROLL_READINESS_CONFIG_KEY = "payroll.readiness_profile.v1"
@@ -1864,6 +1868,12 @@ def invite_tenant_admin_membership(tenant, *, actor_identifier: str, payload: di
         is_default=payload.get("is_default_membership", False),
     )
     _apply_tenant_admin_membership_roles(membership, role_ids)
+    try:
+        from apps.iam.services import queue_invite_email
+
+        queue_invite_email(membership=membership, generated_password=generated_password)
+    except Exception:
+        logger.exception("Failed to queue tenant admin invite email for membership %s", membership.id)
     membership_payload = _tenant_admin_membership_payload(membership)
     record_saas_commercial_audit_event(
         tenant,
