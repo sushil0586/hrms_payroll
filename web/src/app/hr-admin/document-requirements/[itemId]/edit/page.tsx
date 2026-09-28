@@ -18,7 +18,7 @@ export default async function HrAdminEditDocumentRequirementPage({ params }: Pag
   const item = itemsResult.data.find((entry) => entry.id === itemId) ?? itemsResult.data[0];
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         actions={<Link className="button button--secondary" href="/hr-admin/document-requirements">Back to document requirements</Link>}
         description="Adjust the organizational scope and due timing for this required document rule."

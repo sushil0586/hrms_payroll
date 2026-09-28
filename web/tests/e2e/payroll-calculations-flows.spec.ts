@@ -9,8 +9,11 @@ test.describe("HR admin payroll calculation flows", () => {
     await expectPageReady(page, "Payroll Calculations");
 
     await expect(page.getByRole("heading", { name: "Calculation queue" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Calculation run review" })).toBeVisible();
+    await expect(page.getByText("Selected run").first()).toBeVisible();
     await expect(page.getByText("Calculation attempts").first()).toBeVisible();
     await expect(page.getByText("Calculation validation").first()).toBeVisible();
+    await expect(page.getByText("Selected line").or(page.getByText("No line selected")).first()).toBeVisible();
     await expect(page.getByText("Latest net pay").or(page.getByText("No calculations")).first()).toBeVisible();
     await expect(page.getByText("Validation").or(page.getByText("Calculation validation")).first()).toBeVisible();
 

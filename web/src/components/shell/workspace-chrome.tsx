@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
 import { LogoutButton } from "@/app/components/logout-button";
+import { payrollCycleOperationalHrefs } from "@/lib/ui/navigation";
 
 export type WorkspaceNavItem = {
   href: string;
@@ -40,6 +41,18 @@ type Props = {
 function isActivePath(pathname: string, href: string) {
   if (href === "/platform-admin" || href === "/tenant-admin" || href === "/hr-admin" || href === "/ess" || href === "/mss") {
     return pathname === href;
+  }
+  if (href === "/hr-admin/payroll-readiness") {
+    return [
+      "/hr-admin/payroll-readiness",
+      ...payrollCycleOperationalHrefs,
+    ].some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  }
+  if (href === "/hr-admin/payroll-adjustments") {
+    return [
+      "/hr-admin/payroll-adjustments",
+      "/hr-admin/payroll-settlements",
+    ].some((path) => pathname === path || pathname.startsWith(`${path}/`));
   }
   return href === pathname || pathname.startsWith(`${href}/`);
 }
@@ -173,6 +186,47 @@ export function WorkspaceChrome({
           </div>
 
           <div className="topbar-actions topbar-actions--workspace">
+            <details className="mobile-workspace-nav">
+              <summary className="button button--secondary button--compact">Menu</summary>
+              <nav
+                aria-label={`${roleLabel} mobile navigation`}
+                className="mobile-workspace-nav__panel"
+              >
+                {groups.map((group) => (
+                  <div className="mobile-workspace-nav__group" key={group.title}>
+                    <span>{group.title}</span>
+                    {group.items.map((item) => {
+                      const active = isActivePath(pathname, item.href);
+                      if (item.disabled) {
+                        return (
+                          <div
+                            aria-disabled="true"
+                            className="mobile-workspace-nav__link mobile-workspace-nav__link--disabled"
+                            key={item.href}
+                            title={item.disabledReason || `${item.label} is unavailable`}
+                          >
+                            <strong>{item.label}</strong>
+                            <small>{item.disabledReason || item.blurb || "Unavailable"}</small>
+                          </div>
+                        );
+                      }
+                      return (
+                        <Link
+                          aria-current={active ? "page" : undefined}
+                          className={`mobile-workspace-nav__link${active ? " mobile-workspace-nav__link--active" : ""}`}
+                          href={item.href}
+                          key={item.href}
+                          onMouseEnter={() => router.prefetch(item.href)}
+                        >
+                          <strong>{item.label}</strong>
+                          {item.blurb ? <small>{item.blurb}</small> : null}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ))}
+              </nav>
+            </details>
             {quickLinks.map((item) => (
               <Link
                 className="button button--secondary button--compact"

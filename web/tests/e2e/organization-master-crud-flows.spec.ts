@@ -564,6 +564,8 @@ test.describe("HR admin organization master CRUD", () => {
     await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
     const workbench = page.getByTestId("organization-import-workbench");
     await expect(workbench).toBeVisible();
+    await expect(workbench.getByRole("heading", { name: "Organization master import" })).toBeHidden();
+    await page.getByTestId("organization-import-disclosure").locator("summary").click();
     await expect(workbench.getByRole("heading", { name: "Organization master import" })).toBeVisible();
     await expect(workbench.getByRole("button", { name: "Load sample template" })).toBeVisible();
     await expect(workbench.getByRole("button", { name: "Copy template" })).toBeVisible();

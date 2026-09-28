@@ -14,18 +14,18 @@ export default async function HrAdminGeneratedLettersPage() {
   const generatedWithArtifacts = lettersResult.data.items.filter((item) => item.artifact_id).length;
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         eyebrow={lettersResult.state === "live" && optionsResult.state === "live" ? "Live letter mode" : "Demo letter mode"}
         title="Generated HR letters"
-        description="Preview employee variables, generate letter artifacts, and keep issued records attached to employee history."
+        description="Preview variables, generate HR letters, and keep issued files attached to employee records."
         actions={
           <>
             <Link className="button button--secondary" href="/hr-admin/documents">Open document control center</Link>
             <Link className="button button--ghost" href="/hr-admin/employee-documents">Open employee documents</Link>
           </>
         }
-        pills={["Employee context rendering", "Stored generated artifacts", "Workflow reference ready"]}
+        pills={["Preview first", "Stored artifacts", "Workflow reference"]}
       />
       <section className="section">
         <div className="metric-grid-modern">

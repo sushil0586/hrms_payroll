@@ -1,10 +1,49 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, gotoAuthenticated, manager } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated, hrAdmin, manager, type Persona } from "../helpers/staging-auth";
+
+type SubmitCapture<T> = {
+  ok: boolean;
+  status: number;
+  requestBody: unknown;
+  payload: T;
+};
+
+type RegularizationSubmission = {
+  id: string;
+  status: string;
+  workflow_reference?: string;
+};
+
+type EmployeeListItem = {
+  id: string;
+  employee_code: string;
+};
+
+type LeaveBalanceItem = {
+  employee_code: string;
+  employee_id: string;
+  leave_policy_id: string;
+  leave_policy_name: string;
+};
+
+type PendingRegularizationItem = {
+  id: string;
+  employee_code?: string;
+  employee?: string;
+};
+
+type PendingRegularizationList = {
+  items?: PendingRegularizationItem[];
+};
 
 function uniqueRef(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
+}
+
+function apiBaseUrl() {
+  return process.env.HRMS_API_BASE_URL ?? "http://127.0.0.1:8012/api/v1";
 }
 
 function field(scope: Page | Locator, label: string, index = 0) {
@@ -15,13 +54,33 @@ function card(page: Page, text: string | RegExp) {
   return page.locator("article.record-card, a.tableish__row").filter({ hasText: text }).first();
 }
 
+async function authenticateForSetup(page: Page, persona: Persona) {
+  await page.request.post("/api/auth/logout").catch(() => null);
+  await page.context().clearCookies();
+  const response = await page.request.post("/api/auth/login", {
+    data: { identifier: persona.username, password: persona.password },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+
+async function authHeaders(page: Page) {
+  const token = (await page.context().cookies()).find((cookie) => cookie.name === "hrms_access_token")?.value;
+  expect(token).toBeTruthy();
+  return { Authorization: `Token ${token}` };
+}
+
 function isoDateFromToday(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
-async function submitAndCapture<T>(page: Page, path: string, method: "POST", action: () => Promise<void>) {
+async function submitAndCapture<T>(
+  page: Page,
+  path: string,
+  method: "POST",
+  action: () => Promise<void>,
+): Promise<SubmitCapture<T>> {
   const [response] = await Promise.all([
     page.waitForResponse((item) => item.url().includes(path) && item.request().method() === method),
     action(),
@@ -34,7 +93,113 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST", act
   };
 }
 
+async function submitRegularizationFromAvailableRecord(page: Page, reason: string, requestedStatus: string) {
+  const attendanceSelect = field(page, "Attendance record");
+  const recordIds = await attendanceSelect.locator("option").evaluateAll((options) =>
+    options
+      .map((option) => (option as HTMLOptionElement).value)
+      .filter((value) => value.length > 0),
+  );
+  expect(recordIds.length, "ESS should offer attendance records for regularization").toBeGreaterThan(0);
+
+  let lastResult: SubmitCapture<RegularizationSubmission> | null = null;
+
+  for (const recordId of recordIds) {
+    await attendanceSelect.selectOption(recordId);
+    await field(page, "Requested check-in").fill("");
+    await field(page, "Requested check-out").fill("");
+    await field(page, "Requested status").selectOption(requestedStatus);
+    await field(page, "Reason", 1).fill(reason);
+
+    const result = await submitAndCapture<RegularizationSubmission>(
+      page,
+      "/api/me/attendance-regularizations",
+      "POST",
+      async () => {
+        await page.getByRole("button", { name: "Submit regularization" }).click();
+      },
+    );
+    if (result.ok) {
+      return { attendanceRecordId: recordId, result };
+    }
+    lastResult = result;
+  }
+
+  return { attendanceRecordId: recordIds[0], result: lastResult };
+}
+
+async function getHrEmployeeByCode(page: Page, employeeCode: string) {
+  const response = await page.request.get(`${apiBaseUrl()}/hr-admin/employees/`, {
+    headers: await authHeaders(page),
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const payload = await response.json();
+  const employees = (Array.isArray(payload) ? payload : payload.items ?? payload.results ?? []) as EmployeeListItem[];
+  const matched = employees.find((item) => item.employee_code === employeeCode);
+  expect(matched, `Expected employee ${employeeCode} to exist`).toBeTruthy();
+  return matched!;
+}
+
+async function topUpSeedLeaveBalance(page: Page) {
+  const response = await page.request.get(`${apiBaseUrl()}/hr-admin/leave-balances/?q=EMP-0042`, {
+    headers: await authHeaders(page),
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const balances = (await response.json()) as LeaveBalanceItem[];
+  const balance =
+    balances.find((item) => item.employee_code === "EMP-0042" && /CL|Casual/i.test(item.leave_policy_name)) ??
+    balances.find((item) => item.employee_code === "EMP-0042");
+  expect(balance, "Expected Riya to have at least one leave balance").toBeTruthy();
+  const creditResponse = await page.request.post(`${apiBaseUrl()}/hr-admin/leave-balances/actions/`, {
+    headers: await authHeaders(page),
+    data: {
+      employee_id: balance!.employee_id,
+      leave_policy_id: balance!.leave_policy_id,
+      action: "credit_adjustment",
+      units: "20.00",
+      reason: "Playwright TL certification balance top-up.",
+    },
+  });
+  expect(creditResponse.ok(), await creditResponse.text()).toBeTruthy();
+}
+
+async function ensureSeedManager(page: Page) {
+  await authenticateForSetup(page, hrAdmin);
+  await page.goto("/hr-admin/employees", { waitUntil: "domcontentloaded" });
+  const targetEmployee = await getHrEmployeeByCode(page, "EMP-0042");
+  const seedManager = await getHrEmployeeByCode(page, "EMP-0002");
+  const response = await page.request.patch(`${apiBaseUrl()}/hr-admin/employees/${targetEmployee.id}/`, {
+    headers: await authHeaders(page),
+    data: { reporting_manager_id: seedManager.id },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  await topUpSeedLeaveBalance(page);
+}
+
+async function clearSeedPendingRegularizations(page: Page) {
+  await authenticateForSetup(page, manager);
+  await page.goto("/mss/approvals?queue=attendance", { waitUntil: "domcontentloaded" });
+  const response = await page.request.get(`${apiBaseUrl()}/manager/attendance-regularizations/pending/?page_size=100`, {
+    headers: await authHeaders(page),
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const payload = (await response.json()) as PendingRegularizationList | PendingRegularizationItem[];
+  const items = (Array.isArray(payload) ? payload : payload.items ?? []) as PendingRegularizationItem[];
+  for (const item of items.filter((entry) => entry.employee_code === "EMP-0042" || /Riya Sharma/i.test(entry.employee ?? ""))) {
+    const rejectResponse = await page.request.post(`${apiBaseUrl()}/manager/attendance-regularizations/${item.id}/reject/`, {
+      headers: await authHeaders(page),
+      data: { comment: "Playwright TL certification cleanup." },
+    });
+    expect([200, 404], await rejectResponse.text()).toContain(rejectResponse.status());
+  }
+}
+
 test.describe("Phase 4A ESS to MSS leave certification", () => {
+  test.beforeEach(async ({ page }) => {
+    await ensureSeedManager(page);
+    await clearSeedPendingRegularizations(page);
+  });
+
   test("employee submits leave through ESS and manager approves through MSS", async ({ page }) => {
     test.setTimeout(4 * 60 * 1000);
     const reason = uniqueRef("LEAVE_APPROVAL");
@@ -187,16 +352,11 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     await expect(field(page, "Requested check-out")).toBeVisible();
     await expect(field(page, "Reason", 1)).toBeVisible();
 
-    await field(page, "Requested status").selectOption("remote");
-    await field(page, "Reason", 1).fill(reason);
-    const regularizationResult = await submitAndCapture<{ id: string; status: string; workflow_reference: string }>(
-      page,
-      "/api/me/attendance-regularizations",
-      "POST",
-      async () => {
-        await page.getByRole("button", { name: "Submit regularization" }).click();
-      },
-    );
+    const { result: regularizationResult } = await submitRegularizationFromAvailableRecord(page, reason, "remote");
+    expect(regularizationResult, "regularization submission should produce a response").not.toBeNull();
+    if (!regularizationResult) {
+      throw new Error("Regularization submission did not produce a response.");
+    }
     expect(regularizationResult.ok).toBeTruthy();
     expect(regularizationResult.status).toBe(201);
     expect(regularizationResult.requestBody).toMatchObject({
@@ -250,8 +410,6 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
 
     await gotoAuthenticated(page, "/ess", employee);
     await expectPageReady(page, "Self service");
-    const attendanceRecordId = await field(page, "Attendance record").inputValue();
-
     await field(page, "Requested check-in").fill("2026-09-09T18:10");
     await field(page, "Requested check-out").fill("2026-09-09T09:05");
     await field(page, "Reason", 1).fill(invalidReason);
@@ -268,18 +426,15 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     await expect(page.getByText("Submission failed.")).toBeVisible();
     await expect(page.getByText("Requested check-out cannot be earlier than requested check-in.")).toBeVisible();
 
-    await field(page, "Requested check-in").fill("");
-    await field(page, "Requested check-out").fill("");
-    await field(page, "Requested status").selectOption("late");
-    await field(page, "Reason", 1).fill(duplicateReason);
-    const firstPending = await submitAndCapture<{ id: string; status: string }>(
+    const { attendanceRecordId, result: firstPending } = await submitRegularizationFromAvailableRecord(
       page,
-      "/api/me/attendance-regularizations",
-      "POST",
-      async () => {
-        await page.getByRole("button", { name: "Submit regularization" }).click();
-      },
+      duplicateReason,
+      "late",
     );
+    expect(firstPending, "first pending regularization should produce a response").not.toBeNull();
+    if (!firstPending) {
+      throw new Error("First pending regularization did not produce a response.");
+    }
     expect(firstPending.ok).toBeTruthy();
     expect(firstPending.payload.status).toBe("pending");
 

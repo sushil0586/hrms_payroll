@@ -14,7 +14,7 @@ export default async function HrAdminNewDocumentRequirementPage() {
   const optionsResult = await getHrAdminDocumentOptions();
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         actions={<Link className="button button--secondary" href="/hr-admin/document-requirements">Back to document requirements</Link>}
         description="Scope a document requirement by org structure and employment context."

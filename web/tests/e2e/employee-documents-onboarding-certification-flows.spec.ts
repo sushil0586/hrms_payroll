@@ -115,7 +115,7 @@ async function expectDocumentsQueueCertified(page: Page, title?: string) {
   for (const metric of ["Documents in queue", "Categories configured", "Expiring on page", "Expired on page"]) {
     await expect(page.locator(".metric-tile, .metric-tile-soft").filter({ hasText: metric }).first()).toBeVisible();
   }
-  await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review queue" })).toBeVisible();
   for (const label of ["Search", "Verification status", "Record status", "Category", "Expiry focus", "Rows per page"]) {
     await expect(field(page, label), `${label} queue filter should be visible`).toBeVisible();
   }

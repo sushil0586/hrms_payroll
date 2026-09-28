@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, gotoAuthenticated, hrAdmin, tenantAdmin } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated, hrAdmin, manager, tenantAdmin } from "../helpers/staging-auth";
 
 type RolePayload = {
   role: {
@@ -26,9 +26,19 @@ type AttendanceRecordOption = {
 
 type AttendanceRegularizationList = {
   items: Array<{
+    id?: string;
     attendance_record_id: string;
     status: string;
+    employee?: string;
+    employee_code?: string;
   }>;
+};
+
+type LeaveBalanceItem = {
+  employee_code: string;
+  employee_id: string;
+  leave_policy_id: string;
+  leave_policy_name: string;
 };
 
 const customPassword = "Password@123";
@@ -107,6 +117,8 @@ async function createCustomAttendanceReviewerRole(page: Page, suffix: string) {
 }
 
 async function getEmployeeByCode(page: Page, employeeCode: string) {
+  await page.request.post("/api/auth/logout").catch(() => null);
+  await page.context().clearCookies();
   await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);
   const response = await page.request.get(`${apiBaseUrl()}/hr-admin/employees/`, {
     headers: await authHeaders(page),
@@ -119,6 +131,8 @@ async function getEmployeeByCode(page: Page, employeeCode: string) {
 }
 
 async function createApproverEmployeeWithAccess(page: Page, suffix: string, roleId: string) {
+  await page.request.post("/api/auth/logout").catch(() => null);
+  await page.context().clearCookies();
   await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);
   const employeeCode = `QA-MSS-${suffix}`;
   const email = `qa.mss.${suffix}@example.test`;
@@ -154,6 +168,47 @@ async function createApproverEmployeeWithAccess(page: Page, suffix: string, role
   return { ...created, username, password: customPassword };
 }
 
+async function topUpRiyaLeaveBalance(page: Page) {
+  await page.request.post("/api/auth/logout").catch(() => null);
+  await page.context().clearCookies();
+  await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);
+  const response = await page.request.get("/api/hr-admin/leave-balances/?q=EMP-0042");
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const balances = (await response.json()) as LeaveBalanceItem[];
+  const balance =
+    balances.find((item) => item.employee_code === "EMP-0042" && /CL|Casual/i.test(item.leave_policy_name)) ??
+    balances.find((item) => item.employee_code === "EMP-0042");
+  expect(balance, "Expected Riya to have a leave balance for custom MSS proof").toBeTruthy();
+  const creditResponse = await page.request.post("/api/hr-admin/leave-balances/actions/", {
+    data: {
+      employee_id: balance!.employee_id,
+      leave_policy_id: balance!.leave_policy_id,
+      action: "credit_adjustment",
+      units: "20.00",
+      reason: "Playwright MSS RBAC certification balance top-up.",
+    },
+  });
+  expect(creditResponse.ok(), await creditResponse.text()).toBeTruthy();
+}
+
+async function clearRiyaPendingRegularizations(page: Page) {
+  await gotoAuthenticated(page, "/mss/approvals?queue=attendance", manager);
+  const response = await page.request.get(`${apiBaseUrl()}/manager/attendance-regularizations/pending/?page_size=100`, {
+    headers: await authHeaders(page),
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const regularizations = (await response.json()) as AttendanceRegularizationList;
+  for (const item of regularizations.items.filter((entry) => entry.employee_code === "EMP-0042" || /Riya Sharma/i.test(entry.employee ?? ""))) {
+    if (!item.id) {
+      continue;
+    }
+    const rejectResponse = await page.request.post(`/api/manager/attendance-regularizations/${item.id}/reject`, {
+      data: { comment: "Playwright MSS RBAC certification cleanup." },
+    });
+    expect([200, 404], await rejectResponse.text()).toContain(rejectResponse.status());
+  }
+}
+
 async function selectRegularizableAttendanceRecord(page: Page) {
   const [recordsResponse, regularizationsResponse] = await Promise.all([
     page.request.get("/api/me/attendance-records"),
@@ -184,9 +239,10 @@ test.describe("MSS RBAC approver certification", () => {
     const roleId = await createCustomLeaveApproverRole(page, suffix);
     const approver = await createApproverEmployeeWithAccess(page, suffix, roleId);
     const targetEmployee = await getEmployeeByCode(page, "EMP-0042");
-    const seedManager = await getEmployeeByCode(page, "EMP-0043");
+    const seedManager = await getEmployeeByCode(page, "EMP-0002");
     const reason = uniqueRef("MSS_RBAC_LEAVE");
     const decisionNote = `${reason}_APPROVED_BY_CUSTOM_ROLE`;
+    await topUpRiyaLeaveBalance(page);
 
     try {
       await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);
@@ -209,7 +265,7 @@ test.describe("MSS RBAC approver certification", () => {
           await page.getByRole("button", { name: "Submit leave" }).click();
         },
       );
-      expect(leaveResult.ok).toBeTruthy();
+      expect(leaveResult.ok, JSON.stringify(leaveResult.payload)).toBeTruthy();
       expect(leaveResult.payload.status).toBe("pending");
 
       await gotoAuthenticated(page, `/mss/approvals?queue=leave&leaveId=${leaveResult.payload.id}`, approver);
@@ -252,9 +308,10 @@ test.describe("MSS RBAC approver certification", () => {
     const roleId = await createCustomAttendanceReviewerRole(page, suffix);
     const reviewer = await createApproverEmployeeWithAccess(page, `att-${suffix}`, roleId);
     const targetEmployee = await getEmployeeByCode(page, "EMP-0042");
-    const seedManager = await getEmployeeByCode(page, "EMP-0043");
+    const seedManager = await getEmployeeByCode(page, "EMP-0002");
     const reason = uniqueRef("MSS_RBAC_ATTENDANCE");
     const decisionNote = `${reason}_APPROVED_BY_CUSTOM_ROLE`;
+    await clearRiyaPendingRegularizations(page);
 
     try {
       await gotoAuthenticated(page, "/hr-admin/employees", hrAdmin);

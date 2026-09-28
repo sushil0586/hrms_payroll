@@ -9578,7 +9578,7 @@ def get_hr_admin_payroll_adjustment_setup_payload(actor) -> dict:
         "employee",
         "pay_group_assignment__pay_group",
         "salary_assignment__structure_version__structure",
-    ).order_by("employee__employee_code")[:200]
+    ).order_by("-payroll_run__created_at", "employee__employee_code")[:200]
     adjustments = PayrollAdjustment.objects.filter(tenant=tenant).select_related(
         "payroll_run",
         "payroll_run__period",
@@ -9820,7 +9820,7 @@ def get_hr_admin_payroll_settlement_setup_payload(actor) -> dict:
         "employee",
         "pay_group_assignment__pay_group",
         "salary_assignment__structure_version__structure",
-    ).order_by("employee__employee_code")[:200]
+    ).order_by("-payroll_run__created_at", "employee__employee_code")[:200]
     settlements = PayrollSettlement.objects.filter(tenant=tenant).select_related(
         "payroll_run",
         "payroll_run__period",

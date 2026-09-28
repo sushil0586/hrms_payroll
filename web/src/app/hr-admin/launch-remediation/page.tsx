@@ -67,12 +67,12 @@ export default async function HrAdminLaunchRemediationPage({ searchParams }: Pag
     <main className="shell shell--workspace">
       <PageIntro
         eyebrow={result.state === "live" ? "Live launch desk" : "Demo launch desk"}
-        title="Launch Remediation"
-        description="Release blockers, warnings, owner routing, and launch-risk decisions."
+        title="Launch Blockers"
+        description="Route blockers, assign owners, and capture launch-risk decisions."
         actions={
           <>
             <Link className="button button--secondary" href="/hr-admin">
-              Control center
+              Dashboard
             </Link>
             <a className="button button--primary" href="/api/hr-admin/saas-launch-audit/download">
               Download audit
@@ -85,8 +85,8 @@ export default async function HrAdminLaunchRemediationPage({ searchParams }: Pag
 
       <OperationsGovernanceStrip
         current="remediation"
-        title="Launch blocker command desk"
-        description="Use this page to route unresolved launch blockers and warnings to the right HR owner, capture accepted-risk decisions, and keep audit evidence attached to every launch gate."
+        title="Blocker routing"
+        description="Assign unresolved launch risks, record decisions, and keep gate evidence current."
         metrics={[
           { label: "open", value: data.summary.open_count, tone: data.summary.open_count ? "warning" : "ready" },
           { label: "blockers", value: data.summary.blocker_count, tone: data.summary.blocker_count ? "blocked" : "ready" },
@@ -110,7 +110,7 @@ export default async function HrAdminLaunchRemediationPage({ searchParams }: Pag
         <form className="queue-toolbar panel-card-soft launch-remediation-toolbar" method="get">
           <div className="queue-toolbar__header">
             <div>
-              <h2>Assignment filters</h2>
+              <h2>Filters</h2>
               <p>{data.total_count} launch remediation rows in the current view.</p>
             </div>
             <div className="queue-toolbar__actions">

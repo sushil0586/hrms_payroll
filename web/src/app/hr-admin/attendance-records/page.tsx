@@ -44,10 +44,10 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
   ]);
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live attendance records mode" : "Demo attendance records mode"}
-        title="Attendance records review window."
+        title="Attendance records"
         description="Review daily attendance rows to spot exceptions, late marks, source gaps, and lock state before payroll-ready processing later."
         actions={<Link className="button button--secondary" href="/hr-admin/attendance-operations">Back to attendance operations</Link>}
         pills={["Server-driven filters", "Bulk lock and status actions", "Queue-ready exception review"]}

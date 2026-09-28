@@ -34,11 +34,11 @@ export default async function HrAdminProbationReviewsPage({ searchParams }: Page
   ]);
 
   return (
-    <main className="shell">
+    <main className="shell hr-lifecycle-workbench">
       <PageIntro
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live lifecycle mode" : "Demo lifecycle mode"}
-        title="Probation reviews with clearer decisions and safer extension handling."
-        description="Watch review dates, confirmation outcomes, owner allocation, and extension blockers from one focused review queue."
+        title="Probation reviews"
+        description="Review confirmation decisions, extensions, owners, and blockers."
         actions={
           <>
             <Link className="button button--primary" href="/hr-admin/probation-reviews/new">Create probation review</Link>

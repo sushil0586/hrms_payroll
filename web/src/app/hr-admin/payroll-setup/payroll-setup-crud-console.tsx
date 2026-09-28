@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type {
@@ -11,8 +11,11 @@ import type {
   HrAdminPayrollSetupResponse,
 } from "@/lib/types";
 
+import { SetupRecordList } from "../payroll-shared/setup-record-list";
+
 type SaveMode = "create" | "edit";
 type ConfigFamily = "calendar" | "period" | "payGroup" | "assignment";
+type PayrollActionTab = ConfigFamily;
 type ApiItem = HrAdminPayrollCalendar | HrAdminPayrollPeriod | HrAdminPayGroup | HrAdminPayGroupAssignment;
 
 type CalendarForm = {
@@ -76,6 +79,91 @@ const familyLabels: Record<ConfigFamily, string> = {
   payGroup: "pay group",
   assignment: "pay group assignment",
 };
+
+const actionTabs: Array<{ key: PayrollActionTab; label: string; detail: string; anchors: string[] }> = [
+  { key: "calendar", label: "Calendars", detail: "Payroll year and frequency", anchors: ["payroll-calendar-form"] },
+  { key: "period", label: "Periods", detail: "Monthly payroll windows", anchors: ["payroll-period-form"] },
+  { key: "payGroup", label: "Pay groups", detail: "Employee payroll cohorts", anchors: ["pay-group-form"] },
+  { key: "assignment", label: "Assignments", detail: "Employee group mapping", anchors: ["pay-group-assignment-form"] },
+];
+
+const actionGuidance: Record<
+  PayrollActionTab,
+  {
+    title: string;
+    summary: string;
+    primaryStatLabel: string;
+    secondaryStatLabel: string;
+    emptyLabel: string;
+    guardrails: string[];
+  }
+> = {
+  calendar: {
+    title: "Create the payroll calendar once, then reuse it for every run.",
+    summary: "Use calendars for frequency, currency, timezone, and period-start convention. Most tenants need only one active calendar per country payroll.",
+    primaryStatLabel: "Calendars",
+    secondaryStatLabel: "Active",
+    emptyLabel: "No calendars yet",
+    guardrails: ["Use stable codes such as IN-MONTHLY.", "Keep only launch-ready calendars active.", "Create periods after saving the calendar."],
+  },
+  period: {
+    title: "Open clean payroll windows for calculation and close.",
+    summary: "Periods define the date boundary and pay date. Keep draft periods editable, then open only the run that payroll teams are actively processing.",
+    primaryStatLabel: "Periods",
+    secondaryStatLabel: "Open",
+    emptyLabel: "No periods yet",
+    guardrails: ["Pick the correct calendar first.", "Dates should not overlap inside one calendar.", "Open one operational period at a time."],
+  },
+  payGroup: {
+    title: "Group employees by payroll policy and operating scope.",
+    summary: "Pay groups decide which employees are pulled into a run. Scope by legal entity, branch, location, department, or employment type only when needed.",
+    primaryStatLabel: "Pay groups",
+    secondaryStatLabel: "Active",
+    emptyLabel: "No pay groups yet",
+    guardrails: ["Start broad, then narrow only for real differences.", "Avoid duplicate groups for the same cohort.", "Use active groups for live payroll only."],
+  },
+  assignment: {
+    title: "Attach employees to the right payroll group.",
+    summary: "Assignments make employees eligible for a payroll run. Use effective dates so transfers and policy changes remain auditable.",
+    primaryStatLabel: "Assignments",
+    secondaryStatLabel: "Employees assigned",
+    emptyLabel: "No assignments yet",
+    guardrails: ["Assign only active employees in scope.", "Use effective dates for mid-cycle changes.", "Review unassigned employees before payroll lock."],
+  },
+};
+
+function actionTabFromHash(hash: string): PayrollActionTab {
+  const normalized = hash.replace(/^#/, "");
+  return actionTabs.find((tab) => tab.anchors.includes(normalized))?.key ?? "calendar";
+}
+
+function ActionTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: PayrollActionTab;
+  onChange: (tab: PayrollActionTab) => void;
+}) {
+  return (
+    <nav aria-label="Payroll setup action groups" className="setup-action-tabs">
+      {actionTabs.map((tab) => (
+        <button
+          aria-current={activeTab === tab.key ? "page" : undefined}
+          className={`setup-action-tab${activeTab === tab.key ? " setup-action-tab--active" : ""}`}
+          key={tab.key}
+          type="button"
+          onClick={() => {
+            onChange(tab.key);
+            window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${tab.anchors[0]}`);
+          }}
+        >
+          <strong>{tab.label}</strong>
+          <span>{tab.detail}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
 
 function getConfigProfileRef(snapshot: Record<string, unknown>) {
   return typeof snapshot.profile_ref === "string" ? snapshot.profile_ref : "";
@@ -297,6 +385,97 @@ function BooleanField({ checked, label, onChange }: { checked: boolean; label: s
   );
 }
 
+function ActionSidecar({ activeTab, setup }: { activeTab: PayrollActionTab; setup: HrAdminPayrollSetupResponse }) {
+  const guidance = actionGuidance[activeTab];
+  const stats: Record<PayrollActionTab, { primary: number; secondary: number; latest?: string }> = {
+    calendar: {
+      primary: setup.calendars.length,
+      secondary: setup.summary.active_calendar_count,
+      latest: setup.calendars[0]?.name,
+    },
+    period: {
+      primary: setup.periods.length,
+      secondary: setup.summary.open_period_count,
+      latest: setup.periods[0]?.name,
+    },
+    payGroup: {
+      primary: setup.pay_groups.length,
+      secondary: setup.summary.active_pay_group_count,
+      latest: setup.pay_groups[0]?.name,
+    },
+    assignment: {
+      primary: setup.assignments.length,
+      secondary: setup.summary.assigned_employee_count,
+      latest: setup.assignments[0]?.employee_name,
+    },
+  };
+  const activeStats = stats[activeTab];
+
+  return (
+    <aside className="setup-action-sidecar" aria-label={`${guidance.primaryStatLabel} guidance`}>
+      <div className="setup-action-sidecar__hero">
+        <span className="workspace-card__eyebrow">Setup guidance</span>
+        <h3>{guidance.title}</h3>
+        <p>{guidance.summary}</p>
+      </div>
+
+      <div className="setup-action-sidecar__stats" aria-label={`${guidance.primaryStatLabel} footprint`}>
+        <div>
+          <span>{guidance.primaryStatLabel}</span>
+          <strong>{activeStats.primary}</strong>
+        </div>
+        <div>
+          <span>{guidance.secondaryStatLabel}</span>
+          <strong>{activeStats.secondary}</strong>
+        </div>
+      </div>
+
+      <div className="setup-action-sidecar__section">
+        <strong>Current record</strong>
+        <span>{activeStats.latest ?? guidance.emptyLabel}</span>
+      </div>
+
+      <div className="setup-action-sidecar__section">
+        <strong>Before saving</strong>
+        <ul>
+          {guidance.guardrails.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+    </aside>
+  );
+}
+
+function ActionFlowStrip({ activeTab }: { activeTab: PayrollActionTab }) {
+  const label = actionTabs.find((tab) => tab.key === activeTab)?.label ?? "Setup";
+  return (
+    <div className="setup-action-flow" aria-label={`${label} workflow`}>
+      <div>
+        <span>1</span>
+        <strong>Select area</strong>
+      </div>
+      <div>
+        <span>2</span>
+        <strong>Fill required fields</strong>
+      </div>
+      <div>
+        <span>3</span>
+        <strong>Save and reuse</strong>
+      </div>
+    </div>
+  );
+}
+
+function DependencyNotice({ children }: { children: string }) {
+  return (
+    <div className="notice notice--soft" role="note">
+      <strong>Before creating</strong>
+      <span className="muted">{children}</span>
+    </div>
+  );
+}
+
 function FormHeader({ mode, title, onReset }: { mode: SaveMode; title: string; onReset: () => void }) {
   return (
     <div className="salary-crud-form__header">
@@ -314,12 +493,28 @@ function FormHeader({ mode, title, onReset }: { mode: SaveMode; title: string; o
 export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdminPayrollSetupResponse }) {
   const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
+  const [activeActionTab, setActiveActionTab] = useState<PayrollActionTab>("calendar");
   const [calendarForm, setCalendarForm] = useState<CalendarForm>(() => emptyCalendarForm(initialSetup));
   const [periodForm, setPeriodForm] = useState<PeriodForm>(() => emptyPeriodForm(initialSetup));
   const [payGroupForm, setPayGroupForm] = useState<PayGroupForm>(() => emptyPayGroupForm(initialSetup));
   const [assignmentForm, setAssignmentForm] = useState<AssignmentForm>(() => emptyAssignmentForm(initialSetup));
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [submitting, setSubmitting] = useState<ConfigFamily | null>(null);
+  const [recordPages, setRecordPages] = useState<Record<PayrollActionTab, number>>({
+    calendar: 1,
+    period: 1,
+    payGroup: 1,
+    assignment: 1,
+  });
+
+  useEffect(() => {
+    function syncFromHash() {
+      setActiveActionTab(actionTabFromHash(window.location.hash));
+    }
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, []);
 
   const calendarOptions = useMemo(
     () => setup.calendars.map((item) => ({ value: item.id, label: `${item.name} (${item.code})` })),
@@ -362,6 +557,10 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
     payGroupForm.branch_id && !selectedBranch?.location_id
       ? "This branch has no mapped location. Select a location manually when location scope is required."
       : "";
+
+  function setRecordPage(tab: PayrollActionTab, page: number) {
+    setRecordPages((current) => ({ ...current, [tab]: Math.max(1, page) }));
+  }
 
   function updatePayGroupLegalEntity(value: string) {
     setPayGroupForm((current) => {
@@ -480,11 +679,16 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
   }
 
   return (
-    <section className="section section--tight salary-crud-console payroll-crud-console" aria-labelledby="payroll-crud-console-title">
+    <section
+      className="section section--tight salary-crud-console payroll-crud-console"
+      aria-labelledby="payroll-crud-console-title"
+      data-active-action={activeActionTab}
+    >
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
         <div>
-          <span className="workspace-card__eyebrow">Browser CRUD</span>
-          <h2 id="payroll-crud-console-title">Payroll setup controls</h2>
+          <span className="workspace-card__eyebrow">Setup actions</span>
+          <h2 id="payroll-crud-console-title">Maintain payroll setup</h2>
+          <p className="section-copy">Choose one setup area, update the form, and use the guidance panel to confirm the change fits the payroll flow.</p>
         </div>
         <span className="payroll-setup-count">{setup.calendars.length + setup.periods.length + setup.pay_groups.length + setup.assignments.length} records</span>
       </div>
@@ -496,11 +700,24 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
         </div>
       ) : null}
 
-      <div className="salary-crud-grid payroll-crud-grid">
+      <ActionTabs activeTab={activeActionTab} onChange={setActiveActionTab} />
+
+      <div className="setup-action-context">
+        <div>
+          <strong>{actionTabs.find((tab) => tab.key === activeActionTab)?.label}</strong>
+          <span>{actionTabs.find((tab) => tab.key === activeActionTab)?.detail}</span>
+        </div>
+        <span>{calendarOptions.length ? "Ready for payroll setup changes" : "Create a calendar first"}</span>
+      </div>
+      <ActionFlowStrip activeTab={activeActionTab} />
+
+      <div className="salary-crud-grid payroll-crud-grid setup-action-panel">
+        {activeActionTab === "calendar" ? (
         <form
           aria-label="Payroll calendar form"
           className="salary-crud-form"
           data-testid="payroll-calendar-form"
+          id="payroll-calendar-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save<HrAdminPayrollCalendar>("calendar", "payroll-calendars", calendarForm.id, {
@@ -528,23 +745,31 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           <div className="toggle-field-list salary-crud-toggle-list">
             <BooleanField label="Active calendar" checked={calendarForm.is_active} onChange={(checked) => setCalendarForm((current) => ({ ...current, is_active: checked }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Payroll calendar records">
-            {setup.calendars.slice(0, 8).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setCalendarForm(calendarToForm(item))}>
-                <strong>{item.name}</strong>
-                <span>{item.code}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={calendarForm.id}
+            emptyLabel="No calendars yet"
+            items={setup.calendars}
+            label="Payroll calendar records"
+            page={recordPages.calendar}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("calendar", page)}
+            onSelect={(item) => setCalendarForm(calendarToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "calendar"} type="submit">
+              {submitting === "calendar" ? "Saving..." : calendarForm.id ? "Save calendar" : "Create calendar"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "calendar"} type="submit">
-            {submitting === "calendar" ? "Saving..." : calendarForm.id ? "Save calendar" : "Create calendar"}
-          </button>
         </form>
+        ) : null}
 
+        {activeActionTab === "period" ? (
         <form
           aria-label="Payroll period form"
           className="salary-crud-form"
           data-testid="payroll-period-form"
+          id="payroll-period-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save<HrAdminPayrollPeriod>("period", "payroll-periods", periodForm.id, {
@@ -560,6 +785,7 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           }}
         >
           <FormHeader mode={periodForm.id ? "edit" : "create"} title="Period" onReset={() => setPeriodForm(emptyPeriodForm(setup))} />
+          {!calendarOptions.length ? <DependencyNotice>Create a payroll calendar before adding periods.</DependencyNotice> : null}
           <div className="form-grid salary-crud-form-grid">
             <SelectField label="Calendar" required value={periodForm.calendar_id} options={calendarOptions} onChange={(value) => setPeriodForm((current) => ({ ...current, calendar_id: value }))} />
             <TextField label="Code" required value={periodForm.code} onChange={(value) => setPeriodForm((current) => ({ ...current, code: value }))} />
@@ -570,23 +796,31 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
             <SelectField label="Status" required value={periodForm.status} options={periodStatusOptions} onChange={(value) => setPeriodForm((current) => ({ ...current, status: value }))} />
             <TextField label="Config profile reference" value={periodForm.config_profile_ref} onChange={(value) => setPeriodForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Payroll period records">
-            {setup.periods.slice(0, 8).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setPeriodForm(periodToForm(item))}>
-                <strong>{item.name}</strong>
-                <span>{item.code}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={periodForm.id}
+            emptyLabel="No periods yet"
+            items={setup.periods}
+            label="Payroll period records"
+            page={recordPages.period}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("period", page)}
+            onSelect={(item) => setPeriodForm(periodToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "period" || !calendarOptions.length} type="submit">
+              {submitting === "period" ? "Saving..." : periodForm.id ? "Save period" : "Create period"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "period" || !calendarOptions.length} type="submit">
-            {submitting === "period" ? "Saving..." : periodForm.id ? "Save period" : "Create period"}
-          </button>
         </form>
+        ) : null}
 
+        {activeActionTab === "payGroup" ? (
         <form
           aria-label="Pay group form"
           className="salary-crud-form"
           data-testid="pay-group-form"
+          id="pay-group-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save<HrAdminPayGroup>("payGroup", "pay-groups", payGroupForm.id, {
@@ -605,6 +839,7 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           }}
         >
           <FormHeader mode={payGroupForm.id ? "edit" : "create"} title="Pay group" onReset={() => setPayGroupForm(emptyPayGroupForm(setup))} />
+          {!calendarOptions.length ? <DependencyNotice>Create a payroll calendar before adding pay groups.</DependencyNotice> : null}
           <div className="form-grid salary-crud-form-grid">
             <SelectField label="Calendar" required value={payGroupForm.calendar_id} options={calendarOptions} onChange={(value) => setPayGroupForm((current) => ({ ...current, calendar_id: value }))} />
             <TextField label="Code" required value={payGroupForm.code} onChange={(value) => setPayGroupForm((current) => ({ ...current, code: value }))} />
@@ -633,23 +868,31 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
             <SelectField label="Employment type" value={payGroupForm.employment_type_id} options={optionItems(setup.options.employment_types, "All employment types")} onChange={(value) => setPayGroupForm((current) => ({ ...current, employment_type_id: value }))} />
             <TextField label="Config profile reference" value={payGroupForm.config_profile_ref} onChange={(value) => setPayGroupForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Pay group records">
-            {setup.pay_groups.slice(0, 8).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setPayGroupForm(payGroupToForm(item))}>
-                <strong>{item.name}</strong>
-                <span>{item.code}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={payGroupForm.id}
+            emptyLabel="No pay groups yet"
+            items={setup.pay_groups}
+            label="Pay group records"
+            page={recordPages.payGroup}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("payGroup", page)}
+            onSelect={(item) => setPayGroupForm(payGroupToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "payGroup" || !calendarOptions.length} type="submit">
+              {submitting === "payGroup" ? "Saving..." : payGroupForm.id ? "Save pay group" : "Create pay group"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "payGroup" || !calendarOptions.length} type="submit">
-            {submitting === "payGroup" ? "Saving..." : payGroupForm.id ? "Save pay group" : "Create pay group"}
-          </button>
         </form>
+        ) : null}
 
+        {activeActionTab === "assignment" ? (
         <form
           aria-label="Pay group assignment form"
           className="salary-crud-form"
           data-testid="pay-group-assignment-form"
+          id="pay-group-assignment-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save<HrAdminPayGroupAssignment>("assignment", "pay-group-assignments", assignmentForm.id, {
@@ -663,6 +906,8 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           }}
         >
           <FormHeader mode={assignmentForm.id ? "edit" : "create"} title="Assignment" onReset={() => setAssignmentForm(emptyAssignmentForm(setup))} />
+          {!payGroupOptions.length ? <DependencyNotice>Create at least one pay group before assigning employees.</DependencyNotice> : null}
+          {payGroupOptions.length && !employeeOptions.length ? <DependencyNotice>Add active employees before creating pay group assignments.</DependencyNotice> : null}
           <div className="form-grid salary-crud-form-grid">
             <SelectField label="Pay group" required value={assignmentForm.pay_group_id} options={payGroupOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, pay_group_id: value }))} />
             <SelectField label="Employee" required value={assignmentForm.employee_id} options={employeeOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, employee_id: value }))} />
@@ -671,18 +916,26 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
             <SelectField label="Status" required value={assignmentForm.status} options={payGroupStatusOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, status: value }))} />
             <TextField label="Config profile reference" value={assignmentForm.config_profile_ref} onChange={(value) => setAssignmentForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Pay group assignment records">
-            {setup.assignments.slice(0, 8).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setAssignmentForm(assignmentToForm(item))}>
-                <strong>{item.employee_name}</strong>
-                <span>{item.pay_group_name}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={assignmentForm.id}
+            emptyLabel="No assignments yet"
+            items={setup.assignments}
+            label="Pay group assignment records"
+            page={recordPages.assignment}
+            renderPrimary={(item) => item.employee_name}
+            renderSecondary={(item) => item.pay_group_name}
+            onPageChange={(page) => setRecordPage("assignment", page)}
+            onSelect={(item) => setAssignmentForm(assignmentToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "assignment" || !payGroupOptions.length || !employeeOptions.length} type="submit">
+              {submitting === "assignment" ? "Saving..." : assignmentForm.id ? "Save assignment" : "Create assignment"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "assignment" || !payGroupOptions.length || !employeeOptions.length} type="submit">
-            {submitting === "assignment" ? "Saving..." : assignmentForm.id ? "Save assignment" : "Create assignment"}
-          </button>
         </form>
+        ) : null}
+
+        <ActionSidecar activeTab={activeActionTab} setup={setup} />
       </div>
     </section>
   );

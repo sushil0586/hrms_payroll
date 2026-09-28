@@ -13,10 +13,10 @@ export default async function HrAdminShiftsPage() {
   const result = await getHrAdminShifts();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" ? "Live shift mode" : "Demo shift mode"}
-        title="Shift admin for working-time setup."
+        title="Shifts"
         description="Configure the attendance windows, grace rules, and weekly-off patterns that operational attendance depends on."
         actions={
           <>

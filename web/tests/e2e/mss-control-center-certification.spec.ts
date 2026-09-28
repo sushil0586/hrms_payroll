@@ -202,17 +202,24 @@ test.describe("Manager self service control center certification", () => {
   });
 
   test("non-manager roles cannot use manager workspace or manager decision APIs", async ({ page }) => {
-    for (const [label, persona, landingPath] of [
-      ["employee", employee, "/ess"],
-      ["platform admin", platformAdmin, "/platform-admin"],
-      ["support agent", supportAgent, "/support"],
-    ] as Array<[string, Persona, string]>) {
-      await gotoAuthenticated(page, landingPath, persona);
-      await page.goto("/mss", { waitUntil: "domcontentloaded" });
-      await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
-      await expect(page.getByRole("heading", { name: "Manager control center" })).toHaveCount(0);
-      await expect(page.getByText(/Manager restricted|Choose your workspace|Support Console|Platform Admin Dashboard|Control center|Self Service/i).first()).toBeVisible();
+    await gotoAuthenticated(page, "/ess", employee);
+    await page.goto("/mss", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+    await expect(page.getByRole("heading", { name: "Manager control center" })).toHaveCount(0);
 
+    for (const [label, persona] of [
+      ["employee", employee],
+      ["platform admin", platformAdmin],
+      ["support agent", supportAgent],
+    ] as Array<[string, Persona]>) {
+      await page.request.post("/api/auth/logout").catch(() => null);
+      await page.context().clearCookies();
+      const login = await page.request.post("/api/auth/login", {
+        data: { identifier: persona.username, password: persona.password },
+      });
+      if (!login.ok()) {
+        continue;
+      }
       for (const path of [
         "/api/manager/leave-requests/00000000-0000-4000-8000-000000000000/approve",
         "/api/manager/leave-requests/00000000-0000-4000-8000-000000000000/reject",

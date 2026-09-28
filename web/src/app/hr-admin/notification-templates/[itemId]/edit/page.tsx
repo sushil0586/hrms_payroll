@@ -16,7 +16,7 @@ export default async function HrAdminEditNotificationTemplatePage({ params }: Pa
   const state = itemResult.state === "live" && optionsResult.state === "live" ? "live" : "demo";
 
   return (
-    <main className="shell">
+    <main className="shell notification-shell">
       <PageIntro
         eyebrow={state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Edit notification template"

@@ -8,7 +8,7 @@ export default async function HrAdminWorkflowTemplatesPage() {
   const result = await getHrAdminWorkflowTemplates();
 
   return (
-    <main className="shell">
+    <main className="shell shell--workspace workflow-workbench">
       <PageIntro
         actions={
           <>
@@ -24,7 +24,7 @@ export default async function HrAdminWorkflowTemplatesPage() {
       />
 
       <section className="section">
-        <div className="metrics-grid">
+        <div className="metric-grid-modern workflow-metric-grid">
           <MetricTile label="Templates" trend="Reusable flows" value={result.data.length} />
           <MetricTile label="Active templates" trend="Visible in this catalog" value={result.data.filter((item) => item.status === "active").length} />
           <MetricTile label="Steps" trend="Across all templates" value={result.data.reduce((sum, item) => sum + item.steps.length, 0)} />
@@ -32,9 +32,9 @@ export default async function HrAdminWorkflowTemplatesPage() {
       </section>
 
       <section className="section">
-        <div className="queue-list">
+        <div className="queue-list workflow-catalog-list">
           {result.data.map((item) => (
-            <article className="record-card" key={item.id}>
+            <article className="record-card workflow-catalog-card" key={item.id}>
               <div className="record-card__header">
                 <div className="record-card__title-block">
                   <h3>{item.name}</h3>
@@ -54,7 +54,7 @@ export default async function HrAdminWorkflowTemplatesPage() {
                 <div><span className="record-card__label">Steps</span><strong>{item.steps.length}</strong></div>
               </div>
 
-              <div className="record-card__notes">
+              <div className="record-card__notes workflow-step-notes">
                 <strong>Approval steps</strong>
                 {item.steps.map((step) => (
                   <div className="detail-row" key={step.id}>
@@ -70,6 +70,18 @@ export default async function HrAdminWorkflowTemplatesPage() {
               </div>
             </article>
           ))}
+          {result.data.length === 0 ? (
+            <section className="card panel panel-card-soft workflow-empty-state">
+              <div>
+                <span className="eyebrow">No workflow templates</span>
+                <h2 className="section-heading-soft">Create the first approval template.</h2>
+                <p className="section-copy section-copy-soft">
+                  Templates define reusable approval chains before they are assigned to teams or org scopes.
+                </p>
+              </div>
+              <Link className="button button--primary" href="/hr-admin/workflow-templates/new">Create workflow template</Link>
+            </section>
+          ) : null}
         </div>
       </section>
     </main>

@@ -9,7 +9,7 @@ export default async function HrAdminNewWorkflowTemplatePage() {
   const optionsResult = await getHrAdminWorkflowOptions();
 
   return (
-    <main className="shell">
+    <main className="shell shell--workspace workflow-workbench">
       <PageIntro
         actions={<Link className="button button--secondary" href="/hr-admin/workflow-templates">Back to workflow templates</Link>}
         description="Define an approval template with reusable steps that can later be assigned by branch, department, or grade."

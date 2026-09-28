@@ -55,7 +55,7 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
 test.describe("Phase 5F disposable payroll close browser flow", () => {
   test("creates disposable run, publishes outputs, generates handoff evidence, and proves ESS payslip access", async ({ page }) => {
     test.setTimeout(180_000);
-    await gotoAuthenticated(page, "/hr-admin/payroll-statutory", hrAdmin);
+    await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions", hrAdmin);
     await expectPageReady(page, "Payroll Statutory");
 
     const statutoryPackForm = form(page, "statutory-pack-form");
@@ -168,7 +168,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     );
     expect(statutoryFilingResult.ok).toBeTruthy();
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-rules", hrAdmin);
+    await gotoAuthenticated(page, "/hr-admin/payroll-rules?tab=actions", hrAdmin);
     await expectPageReady(page, "Payroll Rules");
 
     const ruleDefinitionForm = form(page, "payroll-rule-definition-form");
@@ -291,7 +291,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
     expect(taxRuleVersionResult.ok).toBeTruthy();
     await expect(page.getByText("payroll rule version saved.").first()).toBeVisible();
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-setup", hrAdmin);
+    await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions", hrAdmin);
     await expectPageReady(page, "Payroll Setup");
     const calendarForm = form(page, "payroll-calendar-form");
     const periodForm = form(page, "payroll-period-form");

@@ -8,7 +8,7 @@ import { requireSessionPermission } from "@/lib/workspace-access";
 export default async function HrAdminNewShiftPage() {
   await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/shifts" });
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow="Attendance operations"
         title="Create shift"

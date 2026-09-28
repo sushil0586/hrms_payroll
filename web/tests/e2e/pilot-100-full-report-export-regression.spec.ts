@@ -178,10 +178,13 @@ test.describe.serial("P100-10 full report and export regression certification", 
 
     for (const report of readyReportTargets) {
       await test.step(`employee route denied: ${report.key}`, async () => {
-        await page.goto(report.route, { waitUntil: "domcontentloaded" });
+        await page.goto(report.route, { waitUntil: "domcontentloaded" }).catch((error: Error) => {
+          if (!error.message.includes("net::ERR_ABORTED")) throw error;
+        });
         await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
         await expect(page.getByTestId(`${report.key}-report`)).toHaveCount(0);
-        await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
+        await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
+        await expect(page.getByRole("heading", { name: report.heading })).toHaveCount(0);
       });
     }
 

@@ -17,10 +17,10 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
   const activeCount = result.data.filter((item) => item.is_active).length;
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" ? "Live attendance assignment mode" : "Demo attendance assignment mode"}
-        title="Attendance policy assignments by scope."
+        title="Attendance assignments"
         description="Map attendance behavior to the branches, locations, departments, employment types, or employees that should inherit it."
         actions={
           <>

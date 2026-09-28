@@ -11,7 +11,7 @@ export default async function HrAdminNewHolidayCalendarPage() {
   const optionsResult = await getHrAdminAttendanceOperationOptions();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live calendar mode" : "Demo calendar mode"}
         title="Create holiday calendar"

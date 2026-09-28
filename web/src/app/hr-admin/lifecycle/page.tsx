@@ -64,7 +64,7 @@ export default async function HrAdminLifecyclePage({ searchParams }: PageProps) 
   const documentUpcomingCount = queueResult.data.items.filter((item) => item.document_attention_state === "warning" || item.document_attention_state === "upcoming").length;
 
   return (
-    <main className="shell">
+    <main className="shell hr-lifecycle-workbench">
       <PageIntro
         eyebrow={state === "live" ? "Live lifecycle" : "Demo lifecycle"}
         title="Lifecycle"

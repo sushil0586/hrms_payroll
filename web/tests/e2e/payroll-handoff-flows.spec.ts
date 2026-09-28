@@ -9,7 +9,10 @@ test.describe("HR admin payroll handoff flows", () => {
     await expectPageReady(page, "Payroll Handoff");
 
     await expect(page.getByRole("heading", { name: "Handoffs" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Finance handoff desk" })).toBeVisible();
+    await expect(page.getByText("Selected handoff").or(page.getByText("No package selected")).first()).toBeVisible();
     await expect(page.getByText("Finance artifacts").first()).toBeVisible();
+    await expect(page.getByText("Selected artifact").or(page.getByText("No package selected")).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Delivery acknowledgements" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Provider retries" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Provider jobs" })).toBeVisible();

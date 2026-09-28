@@ -140,8 +140,8 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
   }
 
   return (
-    <section className="section queue-layout">
-      <section className="queue-toolbar panel-card-soft">
+    <section className="section queue-layout lifecycle-queue-layout">
+      <section className="queue-toolbar panel-card-soft lifecycle-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Probation reviews</h2>
@@ -196,7 +196,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
             {allSelected ? "Clear selection" : "Select page"}
           </button>
         </div>
-        <div className="queue-toolbar__bulk-grid">
+        <div className="queue-toolbar__bulk-grid lifecycle-bulk-grid">
           <div className="queue-toolbar__bulk-group">
             <label className="form-field">
               <span className="muted">Bulk owner</span>
@@ -263,11 +263,11 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
         {error ? <div className="notice"><strong>Bulk action failed.</strong><span className="muted">{error}</span></div> : null}
       </section>
 
-      <div className="queue-list">
+      <div className="queue-list lifecycle-record-list">
         {items.map((item) => {
           const isSelected = selectedIds.includes(item.id);
           return (
-          <article className="record-card panel-card-soft" key={item.id}>
+          <article className="record-card panel-card-soft lifecycle-record-card" key={item.id}>
             <div className="record-card__header">
               <div className="record-card__title-wrap">
                 <label className="record-card__title">
@@ -285,7 +285,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
                 <Link className="button button--secondary" href={`/hr-admin/probation-reviews/${item.id}/edit`}>Edit</Link>
               </div>
             </div>
-            <div className="detail-grid">
+            <div className="detail-grid lifecycle-detail-grid">
               <div className="detail-row"><span className="detail-label">Decision</span><span className="detail-value">{item.decision}</span></div>
               <div className="detail-row"><span className="detail-label">Probation end</span><span className="detail-value">{item.probation_end_date || "TBD"}</span></div>
               <div className="detail-row"><span className="detail-label">Reviewer</span><span className="detail-value">{item.reviewer_identifier || "Unassigned"}</span></div>

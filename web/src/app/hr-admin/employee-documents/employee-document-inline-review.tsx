@@ -57,17 +57,17 @@ export function EmployeeDocumentInlineReview({ item, verificationStatusOptions }
   }
 
   return (
-    <div className="inline-review-panel">
+    <div className="inline-review-panel document-inline-review-panel">
       <div className="inline-review-panel__header">
         <div>
           <h3>Quick review</h3>
-          <p className="section-copy section-copy-soft">Update the verification outcome in place, or open the full review page.</p>
+          <p className="section-copy section-copy-soft">Update outcome and follow-up without leaving the queue.</p>
         </div>
         <Link className="button button--secondary" href={`/hr-admin/employee-documents/${item.id}/review`}>
           Full review
         </Link>
       </div>
-      <div className="form-grid">
+      <div className="form-grid document-inline-review-grid">
         <label className="form-field">
           <span className="muted">Verification status</span>
           <select
@@ -119,7 +119,7 @@ export function EmployeeDocumentInlineReview({ item, verificationStatusOptions }
         </div>
       ) : null}
       <div className="form-actions-bar">
-        <span className="muted">Quick review updates the queue immediately.</span>
+        <span className="muted">Queue updates immediately after save.</span>
         <div className="form-actions-bar__buttons">
           <button
             className="button button--ghost"

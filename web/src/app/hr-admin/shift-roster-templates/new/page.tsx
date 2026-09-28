@@ -11,10 +11,10 @@ export default async function HrAdminNewShiftRosterTemplatePage() {
   const optionsResult = await getHrAdminPolicyOptions();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live roster template mode" : "Demo roster template mode"}
-        title="Create roster template."
+        title="Create roster template"
         description="Build a repeatable shift pattern that can be previewed and rolled out at employee scope later."
         actions={<Link className="button button--secondary" href="/hr-admin/shift-roster-templates">Back to roster templates</Link>}
       />

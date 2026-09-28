@@ -48,6 +48,7 @@ export function LaunchRemediationActions({
   const [decisionNote, setDecisionNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
 
   async function submitAction(action: "acknowledge" | "assign" | "set_due_date" | "send_reminder" | "escalate" | "ignore") {
     setIsSaving(true);
@@ -71,54 +72,84 @@ export function LaunchRemediationActions({
       return;
     }
     setNotice("Assignment updated.");
+    setIsOpen(false);
     router.refresh();
   }
 
   return (
     <div className="launch-remediation-actions">
-      <div className="launch-remediation-actions__inputs">
-        <label>
-          <span>Owner role</span>
-          <input value={ownerRoleRef} onChange={(event) => setOwnerRoleRef(event.target.value)} />
-        </label>
-        <label>
-          <span>Assignee</span>
-          <input value={assignee} onChange={(event) => setAssignee(event.target.value)} placeholder="person or queue" />
-        </label>
-        <label>
-          <span>Due date</span>
-          <input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
-        </label>
-        <label>
-          <span>Escalation owner</span>
-          <input value={escalationOwnerRoleRef} onChange={(event) => setEscalationOwnerRoleRef(event.target.value)} placeholder="role code" />
-        </label>
-        <label>
-          <span>Decision note</span>
-          <input value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} placeholder="required for ignore/escalate" />
-        </label>
+      <div className="launch-remediation-actions__summary">
+        {notice ? <span role="status">{notice}</span> : <span>Owner, due date, escalation, and risk decision.</span>}
+        <button className="button button--secondary" type="button" onClick={() => setIsOpen(true)}>
+          Manage
+        </button>
       </div>
-      <div className="launch-remediation-actions__buttons">
-        <button className="button button--secondary" type="button" onClick={() => submitAction("acknowledge")} disabled={isSaving}>
-          Acknowledge
-        </button>
-        <button className="button button--secondary" type="button" onClick={() => submitAction("assign")} disabled={isSaving}>
-          Assign owner
-        </button>
-        <button className="button button--secondary" type="button" onClick={() => submitAction("set_due_date")} disabled={isSaving || !dueAt}>
-          Set due date
-        </button>
-        <button className="button button--secondary" type="button" onClick={() => submitAction("send_reminder")} disabled={isSaving}>
-          Send reminder
-        </button>
-        <button className="button button--secondary" type="button" onClick={() => submitAction("escalate")} disabled={isSaving || !escalationOwnerRoleRef.trim()}>
-          Escalate
-        </button>
-        <button className="button button--ghost" type="button" onClick={() => submitAction("ignore")} disabled={isSaving || !decisionNote.trim()}>
-          Ignore
-        </button>
-        {notice ? <span role="status">{notice}</span> : null}
-      </div>
+      {isOpen ? (
+        <div className="modal-shell launch-remediation-modal-shell" role="presentation">
+          <section
+            aria-modal="true"
+            aria-labelledby={`launch-remediation-action-${assignmentId}`}
+            className="modal launch-remediation-modal"
+            role="dialog"
+          >
+            <div className="modal__header">
+              <div>
+                <span className="workspace-card__eyebrow">Launch action</span>
+                <h2 id={`launch-remediation-action-${assignmentId}`}>Manage blocker</h2>
+                <p>Update routing, due date, reminder, escalation, or accepted-risk decision.</p>
+              </div>
+              <button className="button button--ghost" type="button" onClick={() => setIsOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="launch-remediation-actions__inputs">
+              <label>
+                <span>Owner role</span>
+                <input value={ownerRoleRef} onChange={(event) => setOwnerRoleRef(event.target.value)} />
+              </label>
+              <label>
+                <span>Assignee</span>
+                <input value={assignee} onChange={(event) => setAssignee(event.target.value)} placeholder="person or queue" />
+              </label>
+              <label>
+                <span>Due date</span>
+                <input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
+              </label>
+              <label>
+                <span>Escalation owner</span>
+                <input value={escalationOwnerRoleRef} onChange={(event) => setEscalationOwnerRoleRef(event.target.value)} placeholder="role code" />
+              </label>
+              <label className="launch-remediation-actions__note">
+                <span>Decision note</span>
+                <input value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} placeholder="required for ignore or escalate" />
+              </label>
+            </div>
+
+            <div className="launch-remediation-actions__buttons">
+              <button className="button button--secondary" type="button" onClick={() => submitAction("acknowledge")} disabled={isSaving}>
+                Acknowledge
+              </button>
+              <button className="button button--secondary" type="button" onClick={() => submitAction("assign")} disabled={isSaving}>
+                Assign
+              </button>
+              <button className="button button--secondary" type="button" onClick={() => submitAction("set_due_date")} disabled={isSaving || !dueAt}>
+                Set due
+              </button>
+              <button className="button button--secondary" type="button" onClick={() => submitAction("send_reminder")} disabled={isSaving}>
+                Remind
+              </button>
+              <button className="button button--secondary" type="button" onClick={() => submitAction("escalate")} disabled={isSaving || !escalationOwnerRoleRef.trim()}>
+                Escalate
+              </button>
+              <button className="button button--ghost" type="button" onClick={() => submitAction("ignore")} disabled={isSaving || !decisionNote.trim()}>
+                Ignore
+              </button>
+            </div>
+            {notice ? <span className="launch-remediation-modal__notice" role="status">{notice}</span> : null}
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

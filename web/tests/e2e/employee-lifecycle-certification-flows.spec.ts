@@ -112,6 +112,7 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
 async function expectEmployeeFormCertified(page: Page, mode: "create" | "edit") {
   await expect(page.getByRole("heading", { level: 1, name: mode === "create" ? "Create employee" : /Edit employee:/, exact: mode === "create" })).toBeVisible();
   await expect(page.getByRole("heading", { name: mode === "create" ? "Create employee master" : "Edit employee master" })).toBeVisible();
+  await expect(page.locator("form.employee-child-form")).toBeVisible();
 
   for (const heading of ["Identity and employment", "Contact and dates", "Structural mapping"]) {
     await expect(page.getByRole("heading", { name: heading })).toBeVisible();
@@ -178,12 +179,11 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
       return;
     }
 
-    await expect(page.getByText("Structure review needed.")).toBeVisible();
     if (missingMapping.branchCount === 0) {
-      await expect(page.getByText("no active branches are mapped to the selected legal entity")).toBeVisible();
+      await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
     }
     if (missingMapping.costCenterCount === 0) {
-      await expect(page.getByText("no active cost centers are mapped to the selected legal entity")).toBeVisible();
+      await expect(page.getByText("No active cost centers are mapped to this legal entity.")).toBeVisible();
     }
     await expectNoHorizontalOverflow(page);
   });
@@ -285,7 +285,8 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     await expect(page.getByRole("link", { name: "Edit employee" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Manage access" })).toBeVisible();
     await page.getByRole("link", { name: "Manage access" }).click();
-    await expectPageReady(page, /Manage system access/);
+    await expectPageReady(page, /Access for/);
+    await expect(page.locator("form.employee-child-form")).toBeVisible();
 
     for (const heading of ["Identity and membership", "Access controls", "Role assignment"]) {
       await expect(page.getByRole("heading", { name: heading })).toBeVisible();

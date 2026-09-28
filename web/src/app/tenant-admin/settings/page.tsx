@@ -67,12 +67,13 @@ export default async function TenantAdminSettingsPage() {
         </div>
       </section>
 
-      <section className="section tenant-settings-workspace">
+      <section className="section tenant-settings-workspace tenant-settings-workspace--phase3">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Tenant account</span>
               <h2>{data.tenant.name}</h2>
+              <p className="tenant-console-empty">Core identity values are visible here; governed changes should be raised through a change request.</p>
             </div>
             <span className={statusBadgeClass(data.tenant.status)}>{titleCase(data.tenant.status)}</span>
           </div>
@@ -101,7 +102,8 @@ export default async function TenantAdminSettingsPage() {
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Governance checks</span>
-              <h2>Self-service readiness</h2>
+              <h2>Readiness checks</h2>
+              <p className="tenant-console-empty">Resolve blockers before enabling production account operations.</p>
             </div>
             <span className={statusBadgeClass(data.summary.status)}>{titleCase(data.summary.status)}</span>
           </div>
@@ -124,7 +126,8 @@ export default async function TenantAdminSettingsPage() {
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Configuration health</span>
-              <h2>Published posture</h2>
+              <h2>Published setup</h2>
+              <p className="tenant-console-empty">Recently published tenant configuration records that support account readiness.</p>
             </div>
             <span className="record-chip">{data.configuration_health.tenant_configuration_count} configs</span>
           </div>

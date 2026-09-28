@@ -76,7 +76,7 @@ test.describe("Phase PLF-5B PF ECR readiness certification", () => {
     await page.goto("/hr-admin/reports/pf-ecr-readiness", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("pf-ecr-readiness-report")).toHaveCount(0);
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("heading", { name: /Run payroll, compliance, and employee operations/ })).toBeVisible();
+    await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
+    await expect(page.getByRole("heading", { name: /PF ECR Readiness/i })).toHaveCount(0);
   });
 });

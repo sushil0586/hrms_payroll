@@ -20,7 +20,7 @@ export default async function HrAdminLeaveBalancesPage() {
   const pendingReviewsCount = transactionsResult.data.filter((item) => item.status === "pending").length;
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={balancesResult.state === "live" ? "Live leave balance mode" : "Demo leave balance mode"}
         title="Leave balances"

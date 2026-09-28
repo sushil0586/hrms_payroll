@@ -9,8 +9,10 @@ test.describe("HR admin payroll settlement flows", () => {
     await expectPageReady(page, "Payroll Settlements");
 
     await expect(page.getByRole("heading", { name: "Settlement runs" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Full-and-final orchestration" })).toBeVisible();
+
+    await page.getByRole("link", { name: /Register/ }).click();
     await expect(page.getByText("Full-and-final packages").first()).toBeVisible();
-    await expect(page.getByText("Source").or(page.getByText("Totals")).or(page.getByText("No settlements")).first()).toBeVisible();
 
     const settlementLink = page.locator("main table a[href*='settlementId=']").first();
     if (await settlementLink.isVisible().catch(() => false)) {
@@ -24,6 +26,9 @@ test.describe("HR admin payroll settlement flows", () => {
       await expect(page).toHaveURL(/settlementId=/);
       await expect(page.getByText("Source hash").or(page.getByText("Trace")).or(page.getByText("Line")).first()).toBeVisible();
     }
+
+    await page.getByRole("link", { name: /Actions/ }).click();
+    await expect(page.getByLabel("Settlement certification actions")).toBeVisible();
 
     await expectNoHorizontalOverflow(page);
   });

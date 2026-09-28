@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type {
   HrAdminLeaveBalance,
   HrAdminLeaveBalanceActionInput,
@@ -27,6 +28,9 @@ type LeaveBalanceImportRow = {
   status: ImportStatus;
   message: string;
 };
+
+const BALANCE_PAGE_SIZE = 12;
+const TRANSACTION_PAGE_SIZE = 8;
 
 const leaveBalanceImportHeaders = [
   "employee_code",
@@ -379,6 +383,8 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reviewReasonById, setReviewReasonById] = useState<Record<string, string>>({});
   const [reviewingTransactionId, setReviewingTransactionId] = useState<string | null>(null);
+  const [balancePage, setBalancePage] = useState(1);
+  const [transactionPage, setTransactionPage] = useState(1);
 
   const filteredBalances = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -411,6 +417,18 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
       ].some((value) => value.toLowerCase().includes(normalizedQuery));
     });
   }, [employeeFilter, policyFilter, query, transactionStatusFilter, transactions]);
+
+  useEffect(() => {
+    setBalancePage(1);
+    setTransactionPage(1);
+  }, [employeeFilter, policyFilter, query, transactionStatusFilter]);
+
+  const balanceTotalPages = Math.max(1, Math.ceil(filteredBalances.length / BALANCE_PAGE_SIZE));
+  const transactionTotalPages = Math.max(1, Math.ceil(filteredTransactions.length / TRANSACTION_PAGE_SIZE));
+  const safeBalancePage = Math.min(balancePage, balanceTotalPages);
+  const safeTransactionPage = Math.min(transactionPage, transactionTotalPages);
+  const pagedBalances = filteredBalances.slice((safeBalancePage - 1) * BALANCE_PAGE_SIZE, safeBalancePage * BALANCE_PAGE_SIZE);
+  const pagedTransactions = filteredTransactions.slice((safeTransactionPage - 1) * TRANSACTION_PAGE_SIZE, safeTransactionPage * TRANSACTION_PAGE_SIZE);
 
   function update<Key extends keyof HrAdminLeaveBalanceActionInput>(key: Key, value: HrAdminLeaveBalanceActionInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
@@ -599,8 +617,24 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
       </section>
 
       <section className="section queue-layout">
+        <div className="queue-toolbar__header">
+          <div>
+            <h2 className="section-heading-soft">Balance ledger</h2>
+            <p className="section-copy section-copy-soft">Current employee-policy balances matching the selected filters.</p>
+          </div>
+          <div className="queue-toolbar__meta">
+            <span className="queue-summary-chip">
+              <strong>{filteredBalances.length}</strong>
+              balances
+            </span>
+            <span className="queue-summary-chip">
+              <strong>{BALANCE_PAGE_SIZE}</strong>
+              rows per page
+            </span>
+          </div>
+        </div>
         <div className="queue-list">
-          {filteredBalances.map((item) => (
+          {pagedBalances.map((item) => (
             <article className="record-card panel-card-soft" key={item.id}>
               <div className="record-card__header">
                 <div className="record-card__title-wrap">
@@ -651,11 +685,38 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
             </article>
           ))}
         </div>
+        <PaginationBar
+          hasNext={safeBalancePage < balanceTotalPages}
+          hasPrevious={safeBalancePage > 1}
+          onFirst={() => setBalancePage(1)}
+          onLast={() => setBalancePage(balanceTotalPages)}
+          onNext={() => setBalancePage((page) => Math.min(balanceTotalPages, page + 1))}
+          onPrevious={() => setBalancePage((page) => Math.max(1, page - 1))}
+          page={safeBalancePage}
+          pageSize={BALANCE_PAGE_SIZE}
+          totalCount={filteredBalances.length}
+        />
       </section>
 
       <section className="section queue-layout">
+        <div className="queue-toolbar__header">
+          <div>
+            <h2 className="section-heading-soft">Transaction review</h2>
+            <p className="section-copy section-copy-soft">Adjustment, encashment, and maker-checker activity for the same filter set.</p>
+          </div>
+          <div className="queue-toolbar__meta">
+            <span className="queue-summary-chip">
+              <strong>{filteredTransactions.length}</strong>
+              transactions
+            </span>
+            <span className="queue-summary-chip">
+              <strong>{TRANSACTION_PAGE_SIZE}</strong>
+              rows per page
+            </span>
+          </div>
+        </div>
         <div className="queue-list">
-          {filteredTransactions.map((item) => (
+          {pagedTransactions.map((item) => (
             <article className="record-card panel-card-soft" key={item.id}>
               <div className="record-card__header">
                 <div className="record-card__title-wrap">
@@ -754,6 +815,17 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
             </article>
           ))}
         </div>
+        <PaginationBar
+          hasNext={safeTransactionPage < transactionTotalPages}
+          hasPrevious={safeTransactionPage > 1}
+          onFirst={() => setTransactionPage(1)}
+          onLast={() => setTransactionPage(transactionTotalPages)}
+          onNext={() => setTransactionPage((page) => Math.min(transactionTotalPages, page + 1))}
+          onPrevious={() => setTransactionPage((page) => Math.max(1, page - 1))}
+          page={safeTransactionPage}
+          pageSize={TRANSACTION_PAGE_SIZE}
+          totalCount={filteredTransactions.length}
+        />
       </section>
     </>
   );

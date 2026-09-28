@@ -6,15 +6,58 @@ import { getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
 import type { HrAdminPayrollInputSnapshot, HrAdminPayrollRun } from "@/lib/types";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
+import { PayrollWorkflowGuide } from "../payroll-workflow-guide";
 import { PayrollInputOperationsPanel } from "./payroll-input-operations-panel";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
 };
+type PageSize = 10 | 25 | 50;
 
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function parsePositiveInteger(value: SearchParamValue, fallback: number) {
+  const parsed = Number.parseInt(normalizeParam(value) ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizePageSize(value: SearchParamValue): PageSize {
+  const parsed = parsePositiveInteger(value, 10);
+  return parsed === 25 || parsed === 50 ? parsed : 10;
+}
+
+function paginate<T>(items: T[], page: number, pageSize: PageSize) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * pageSize;
+  return {
+    items: items.slice(start, start + pageSize),
+    page: safePage,
+    pageSize,
+    totalPages,
+  };
+}
+
+function inputHref(currentParams: Record<string, SearchParamValue>, overrides: Record<string, string | number | undefined>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(currentParams)) {
+    const normalized = normalizeParam(value);
+    if (normalized) {
+      params.set(key, normalized);
+    }
+  }
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined || value === "") {
+      params.delete(key);
+    } else {
+      params.set(key, String(value));
+    }
+  }
+  const query = params.toString();
+  return `/hr-admin/payroll-inputs${query ? `?${query}` : ""}`;
 }
 
 function titleCase(value: string) {
@@ -36,6 +79,48 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
 }
 
+function PaginationControls({
+  ariaLabel,
+  currentParams,
+  page,
+  pageParam,
+  pageSize,
+  pageSizeParam,
+  totalPages,
+}: {
+  ariaLabel: string;
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageParam: string;
+  pageSize: PageSize;
+  pageSizeParam: string;
+  totalPages: number;
+}) {
+  return (
+    <nav aria-label={ariaLabel} className="payroll-setup-pagination">
+      <span>{page} of {totalPages}</span>
+      <div className="payroll-setup-pagination__sizes">
+        {[10, 25, 50].map((size) => (
+          <Link
+            aria-current={pageSize === size ? "page" : undefined}
+            className="button button--secondary button--compact"
+            href={inputHref(currentParams, { [pageSizeParam]: size, [pageParam]: 1 })}
+            key={size}
+          >
+            {size}
+          </Link>
+        ))}
+      </div>
+      <div className="payroll-setup-pagination__actions">
+        <Link aria-disabled={page === 1} className="button button--secondary button--compact" href={inputHref(currentParams, { [pageParam]: 1 })}>First</Link>
+        <Link aria-disabled={page === 1} className="button button--secondary button--compact" href={inputHref(currentParams, { [pageParam]: Math.max(1, page - 1) })}>Previous</Link>
+        <Link aria-disabled={page === totalPages} className="button button--secondary button--compact" href={inputHref(currentParams, { [pageParam]: Math.min(totalPages, page + 1) })}>Next</Link>
+        <Link aria-disabled={page === totalPages} className="button button--secondary button--compact" href={inputHref(currentParams, { [pageParam]: totalPages })}>Last</Link>
+      </div>
+    </nav>
+  );
+}
+
 function CompactSnapshotRows({ snapshot }: { snapshot: Record<string, unknown> }) {
   const entries = Object.entries(snapshot).slice(0, 4);
   if (!entries.length) {
@@ -53,18 +138,35 @@ function CompactSnapshotRows({ snapshot }: { snapshot: Record<string, unknown> }
   );
 }
 
-function RunRail({ runs, selectedRun }: { runs: HrAdminPayrollRun[]; selectedRun: HrAdminPayrollRun | null }) {
+function RunRail({
+  currentParams,
+  page,
+  pageSize,
+  runs,
+  selectedRun,
+}: {
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageSize: PageSize;
+  runs: HrAdminPayrollRun[];
+  selectedRun: HrAdminPayrollRun | null;
+}) {
+  const pagedRuns = paginate(runs, page, pageSize);
+
   return (
     <aside className="payroll-setup-rail payroll-input-run-rail">
-      <div className="payroll-setup-panel__header">
-        <span className="workspace-card__eyebrow">Runs</span>
-        <h2>Input control</h2>
+      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+        <div>
+          <span className="workspace-card__eyebrow">Runs</span>
+          <h2>Input control</h2>
+        </div>
+        <span className="payroll-setup-count">{runs.length}</span>
       </div>
       <div className="payroll-setup-card-list">
-        {runs.map((run) => (
+        {pagedRuns.items.map((run) => (
           <Link
             className={`payroll-setup-mini-card payroll-input-run-card ${selectedRun?.id === run.id ? "is-selected" : ""}`}
-            href={`/hr-admin/payroll-inputs?runId=${run.id}`}
+            href={inputHref(currentParams, { runId: run.id, snapshotId: undefined, snapshotPage: 1 })}
             key={run.id}
           >
             <div>
@@ -78,10 +180,61 @@ function RunRail({ runs, selectedRun }: { runs: HrAdminPayrollRun[]; selectedRun
               <span>{run.blocked_count} blocked</span>
             </div>
             <code>{run.input_profile_ref}</code>
+            {selectedRun?.id === run.id ? <span className="payroll-rule-selected-marker">Selected run</span> : null}
           </Link>
         ))}
       </div>
+      {runs.length > pageSize ? (
+        <PaginationControls
+          ariaLabel="payroll input run pagination"
+          currentParams={currentParams}
+          page={pagedRuns.page}
+          pageParam="runPage"
+          pageSize={pagedRuns.pageSize}
+          pageSizeParam="runSize"
+          totalPages={pagedRuns.totalPages}
+        />
+      ) : null}
     </aside>
+  );
+}
+
+function SnapshotCard({
+  currentParams,
+  selected,
+  snapshot,
+}: {
+  currentParams: Record<string, SearchParamValue>;
+  selected: boolean;
+  snapshot: HrAdminPayrollInputSnapshot;
+}) {
+  const issueCount = snapshot.blockers.length + snapshot.warnings.length;
+
+  return (
+    <article className={`payroll-input-snapshot-card ${selected ? "is-selected" : ""}`}>
+      <div className="payroll-input-snapshot-card__header">
+        <div>
+          <h3>{snapshot.employee_name}</h3>
+          <p>{snapshot.employee_code} / {snapshot.pay_group_name || "No pay group"}</p>
+        </div>
+        <StatusBadge status={snapshot.snapshot_status} />
+      </div>
+      <div className="payroll-input-snapshot-card__meta">
+        <span><strong>Salary</strong>{snapshot.salary_structure_name || "Missing"}</span>
+        <span><strong>Attendance</strong>{String(snapshot.attendance_snapshot.present_days ?? 0)}/{String(snapshot.attendance_snapshot.working_days ?? 0)}</span>
+        <span><strong>Issues</strong>{issueCount}</span>
+      </div>
+      <div className="payroll-input-snapshot-card__footer">
+        <code>{snapshot.source_hash.slice(0, 16)}</code>
+        <Link
+          className="button button--secondary button--compact"
+          href={inputHref(currentParams, { runId: snapshot.payroll_run_id, snapshotId: snapshot.id })}
+        >
+          Inspect
+        </Link>
+      </div>
+      {selected ? <span className="payroll-rule-selected-marker">Selected for detail</span> : null}
+    </article>
   );
 }
 
@@ -168,12 +321,17 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
   const currentParams = (await searchParams) ?? {};
   const selectedRunId = normalizeParam(currentParams.runId);
   const selectedSnapshotId = normalizeParam(currentParams.snapshotId);
+  const runPage = parsePositiveInteger(currentParams.runPage, 1);
+  const runSize = normalizePageSize(currentParams.runSize);
+  const snapshotPage = parsePositiveInteger(currentParams.snapshotPage, 1);
+  const snapshotSize = normalizePageSize(currentParams.snapshotSize);
   const result = await getHrAdminPayrollInputSnapshotSetup();
   const setup = result.data;
   const selectedRun = setup.runs.find((item) => item.id === selectedRunId) ?? setup.runs[0] ?? null;
   const visibleSnapshots = selectedRun
     ? setup.snapshots.filter((item) => item.payroll_run_id === selectedRun.id)
     : setup.snapshots;
+  const pagedSnapshots = paginate(visibleSnapshots, snapshotPage, snapshotSize);
   const selectedSnapshot =
     visibleSnapshots.find((item) => item.id === selectedSnapshotId) ??
     visibleSnapshots[0] ??
@@ -221,6 +379,16 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
         secondaryMetricValue={selectedRun?.locked_count ?? setup.summary.locked_snapshot_count}
       />
 
+      <PayrollWorkflowGuide
+        title="Input snapshot review"
+        description="Choose one payroll run, inspect employee source snapshots, then lock inputs only after blockers are clear."
+        steps={[
+          { label: "Select run", detail: "Scope the period and pay group snapshot set." },
+          { label: "Inspect employee", detail: "Open one snapshot to verify source evidence." },
+          { label: "Lock inputs", detail: "Use operations after warnings and blockers are understood." },
+        ]}
+      />
+
       <section className="section section--tight">
         <div className="metric-grid-modern payroll-setup-metrics">
           <MetricTile className="metric-tile-soft" label="Runs" value={setup.summary.run_count} trend={`${setup.summary.collecting_run_count} collecting`} />
@@ -232,7 +400,7 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
 
       <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-input-workspace">
-          <RunRail runs={setup.runs} selectedRun={selectedRun} />
+          <RunRail currentParams={currentParams} page={runPage} pageSize={runSize} runs={setup.runs} selectedRun={selectedRun} />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -243,39 +411,35 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
               {selectedRun ? <StatusBadge status={selectedRun.status} /> : null}
             </div>
 
-            <div className="payroll-table-scroll">
-              <table className="payroll-readiness-table payroll-setup-table payroll-input-table">
-                <thead>
-                  <tr>
-                    <th>Employee</th>
-                    <th>Status</th>
-                    <th>Pay group</th>
-                    <th>Salary</th>
-                    <th>Attendance</th>
-                    <th>Issues</th>
-                    <th>Hash</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleSnapshots.map((snapshot) => (
-                    <tr className={selectedSnapshot?.id === snapshot.id ? "is-selected" : ""} key={snapshot.id}>
-                      <td>
-                        <Link href={`/hr-admin/payroll-inputs?runId=${snapshot.payroll_run_id}&snapshotId=${snapshot.id}`}>
-                          <strong>{snapshot.employee_name}</strong>
-                          <span>{snapshot.employee_code}</span>
-                        </Link>
-                      </td>
-                      <td><StatusBadge status={snapshot.snapshot_status} /></td>
-                      <td>{snapshot.pay_group_name || "Missing"}</td>
-                      <td>{snapshot.salary_structure_name || "Missing"}</td>
-                      <td>{String(snapshot.attendance_snapshot.present_days ?? 0)}/{String(snapshot.attendance_snapshot.working_days ?? 0)}</td>
-                      <td>{snapshot.blockers.length + snapshot.warnings.length}</td>
-                      <td><code>{snapshot.source_hash.slice(0, 10)}</code></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="payroll-input-snapshot-list">
+              {pagedSnapshots.items.length ? (
+                pagedSnapshots.items.map((snapshot) => (
+                  <SnapshotCard
+                    currentParams={currentParams}
+                    key={snapshot.id}
+                    selected={selectedSnapshot?.id === snapshot.id}
+                    snapshot={snapshot}
+                  />
+                ))
+              ) : (
+                <div className="payroll-setup-empty-state">
+                  <strong>No input snapshots</strong>
+                  <span>Collect and lock inputs from the actions panel before calculation.</span>
+                </div>
+              )}
             </div>
+
+            {visibleSnapshots.length > snapshotSize ? (
+              <PaginationControls
+                ariaLabel="payroll input snapshot pagination"
+                currentParams={currentParams}
+                page={pagedSnapshots.page}
+                pageParam="snapshotPage"
+                pageSize={pagedSnapshots.pageSize}
+                pageSizeParam="snapshotSize"
+                totalPages={pagedSnapshots.totalPages}
+              />
+            ) : null}
 
             <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">

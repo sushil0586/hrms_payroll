@@ -142,8 +142,8 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
   }
 
   return (
-    <section className="section queue-layout">
-      <section className="queue-toolbar panel-card-soft">
+    <section className="section queue-layout lifecycle-queue-layout">
+      <section className="queue-toolbar panel-card-soft lifecycle-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Movements</h2>
@@ -206,7 +206,7 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
             {allSelected ? "Clear selection" : "Select page"}
           </button>
         </div>
-        <div className="queue-toolbar__bulk-grid">
+        <div className="queue-toolbar__bulk-grid lifecycle-bulk-grid">
           <div className="queue-toolbar__bulk-group">
             <label className="form-field">
             <span className="muted">Bulk owner</span>
@@ -263,11 +263,11 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
         {error ? <div className="notice"><strong>Bulk movement action failed.</strong><span className="muted">{error}</span></div> : null}
       </section>
 
-      <div className="queue-list">
+      <div className="queue-list lifecycle-record-list">
         {items.map((item) => {
           const isSelected = selectedIds.includes(item.id);
           return (
-          <article className="record-card panel-card-soft" key={item.id}>
+          <article className="record-card panel-card-soft lifecycle-record-card" key={item.id}>
             <div className="record-card__header">
               <div className="record-card__title-wrap">
                 <label className="record-card__title">
@@ -285,7 +285,7 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
                 <Link className="button button--secondary" href={`/hr-admin/movements/${item.id}/edit`}>Edit</Link>
               </div>
             </div>
-            <div className="detail-grid">
+            <div className="detail-grid lifecycle-detail-grid">
               <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{item.status}</span></div>
               <div className="detail-row"><span className="detail-label">From department</span><span className="detail-value">{item.from_department || "NA"}</span></div>
               <div className="detail-row"><span className="detail-label">To department</span><span className="detail-value">{item.to_department || "NA"}</span></div>

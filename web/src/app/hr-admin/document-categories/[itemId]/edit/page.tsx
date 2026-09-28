@@ -17,7 +17,7 @@ export default async function HrAdminEditDocumentCategoryPage({ params }: PagePr
   const [itemResult, optionsResult] = await Promise.all([getHrAdminDocumentCategory(itemId), getHrAdminDocumentOptions()]);
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         actions={<Link className="button button--secondary" href="/hr-admin/document-categories">Back to document categories</Link>}
         description="Update behavior, validation, and upload expectations for this category."

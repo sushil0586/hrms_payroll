@@ -17,10 +17,10 @@ export default async function HrAdminEditLeavePolicyAssignmentPage({ params }: P
   if (!item) notFound();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={itemsResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
-        title="Edit leave policy assignment."
+        title="Edit leave assignment"
         description="Fine-tune which scope receives this policy and in what priority order."
         actions={<Link className="button button--secondary" href="/hr-admin/leave-policy-assignments">Back to leave assignments</Link>}
         pills={["Scope refinement", "Priority tuning", "Controlled rollout"]}

@@ -16,7 +16,7 @@ export default async function HrAdminNewEmployeeDocumentPage() {
   ]);
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         eyebrow={optionsResult.state === "live" && employeesResult.state === "live" ? "Live upload mode" : "Demo upload mode"}
         title="Upload employee document"

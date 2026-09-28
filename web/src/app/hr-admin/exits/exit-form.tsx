@@ -182,7 +182,7 @@ export function ExitForm({ initialValue, lifecycleTemplates, mode, options, item
   }
 
   return (
-    <form aria-label="Exit record form" className="section form-layout-modern" data-testid="exit-record-form" onSubmit={handleSubmit}>
+    <form aria-label="Exit record form" className="section form-layout-modern lifecycle-child-form" data-testid="exit-record-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>{mode === "create" ? "Create exit record" : "Edit exit record"}</h2>
@@ -356,13 +356,16 @@ export function ExitForm({ initialValue, lifecycleTemplates, mode, options, item
           </div>
         ) : null}
 
-        <div className="form-shell-card__actions">
-          <button className="button button--primary" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Saving..." : mode === "create" ? "Create exit" : "Save changes"}
-          </button>
-          <button className="button button--secondary" onClick={() => router.back()} type="button">
-            Cancel
-          </button>
+        <div className="form-actions-bar">
+          <span className="muted">This exit will update the exit queue and lifecycle inbox after save.</span>
+          <div className="form-actions-bar__buttons">
+            <button className="button button--primary" disabled={isSubmitting} type="submit">
+              {isSubmitting ? "Saving..." : mode === "create" ? "Create exit" : "Save changes"}
+            </button>
+            <button className="button button--secondary" onClick={() => router.back()} type="button">
+              Cancel
+            </button>
+          </div>
         </div>
       </section>
     </form>

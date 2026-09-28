@@ -193,11 +193,12 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
         <div>
           <span className="workspace-card__eyebrow">Support access</span>
           <h2>Scoped support grants</h2>
+          <p className="tenant-section-copy">Create a time-bound request, then review every grant from the ledger below.</p>
         </div>
         <span className="record-chip">{data.support_access_management.max_duration_minutes} min max</span>
       </div>
 
-      <div className="tenant-support-access-form">
+      <div className="tenant-support-access-form tenant-support-access-form--phase4">
         <label>
           <span>Support agent</span>
           <input
@@ -304,7 +305,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
         </div>
       </div>
 
-      <div className="tenant-support-access-list">
+      <div className="tenant-support-access-list tenant-support-access-list--phase4">
         {!pagedGrants.length ? <p className="tenant-console-empty">No support grants match the current search.</p> : null}
         {pagedGrants.map((grant) => {
           const rowBusy = busyRef.startsWith(`${grant.id}:`);
@@ -316,7 +317,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
           const canRevoke = canApproveSupportAccess && (grant.status === "requested" || grant.status === "approved" || grant.status === "active") && hasDecisionNote;
           return (
             <div className="tenant-support-access-row" key={grant.id}>
-              <div>
+              <div className="tenant-support-access-row__summary">
                 <strong>{grant.support_agent_identifier}</strong>
                 <span>{grant.reason}</span>
                 <span>{grant.scope_refs.join(", ")}</span>

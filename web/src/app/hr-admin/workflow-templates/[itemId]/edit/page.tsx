@@ -14,7 +14,7 @@ export default async function HrAdminEditWorkflowTemplatePage({ params }: PagePr
   const [itemResult, optionsResult] = await Promise.all([getHrAdminWorkflowTemplate(itemId), getHrAdminWorkflowOptions()]);
 
   return (
-    <main className="shell">
+    <main className="shell shell--workspace workflow-workbench">
       <PageIntro
         actions={<Link className="button button--secondary" href="/hr-admin/workflow-templates">Back to workflow templates</Link>}
         description="Adjust routing, actors, escalation timing, and the reusable step chain for this template."

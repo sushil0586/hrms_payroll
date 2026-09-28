@@ -341,7 +341,7 @@ test.describe("Certification: HR admin employee directory", () => {
     await expect(detailPanel(page).locator(".detail-row").filter({ hasText: "Reporting Manager" }).getByText(manager.full_name)).toBeVisible();
 
     await gotoAuthenticated(page, `/hr-admin/import-history`);
-    await expectPageReady(page, "Import History");
+    await expectPageReady(page, "Import history");
     const history = page.getByTestId("import-history-workspace");
     await expect(history).toBeVisible();
     await expect(history.getByText("Import batches")).toBeVisible();
@@ -351,15 +351,16 @@ test.describe("Certification: HR admin employee directory", () => {
     await expect(history.getByLabel("Import type")).toBeVisible();
     await expect(history.getByLabel("Import status")).toBeVisible();
     await history.getByLabel("Search imports").fill("reporting_manager_mappings");
-    await expect(history.locator("tbody tr").filter({ hasText: "Reporting Manager Mappings" }).first()).toBeVisible();
+    await expect(history.locator(".import-history-card").filter({ hasText: "Reporting Manager Mappings" }).first()).toBeVisible();
     await history.getByLabel("Import type").selectOption("reporting_manager_mappings");
     await history.getByLabel("Import status").selectOption("committed");
-    const importHistoryRow = history.locator("tbody tr").filter({ hasText: "Reporting Manager Mappings" }).first();
-    await expect(importHistoryRow.locator(".record-chip", { hasText: "Committed" })).toBeVisible();
-    await expect(importHistoryRow).toContainText("5 total");
-    await expect(importHistoryRow).toContainText("1 created");
-    await expect(importHistoryRow).toContainText("4 blocked");
-    await expect(importHistoryRow).toContainText(/[a-f0-9]{20}/);
+    const importHistoryCard = history.locator(".import-history-card").filter({ hasText: "Reporting Manager Mappings" }).first();
+    await expect(importHistoryCard.locator(".record-chip", { hasText: "Committed" })).toBeVisible();
+    await expect(importHistoryCard).toContainText("5 total");
+    await expect(importHistoryCard).toContainText("1 created");
+    await expect(importHistoryCard).toContainText("4 blocked");
+    await expect(importHistoryCard).toContainText(/[a-f0-9]{20}/);
+    await expect(importHistoryCard.getByRole("link", { name: "Open employees" })).toHaveAttribute("href", "/hr-admin/employees");
     await expect(history.getByLabel("Import history pagination")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

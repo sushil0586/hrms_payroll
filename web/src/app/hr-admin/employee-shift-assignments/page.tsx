@@ -17,7 +17,7 @@ export default async function HrAdminEmployeeShiftAssignmentsPage() {
   const primaryCount = result.data.filter((item) => item.is_primary).length;
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" ? "Live shift assignment mode" : "Demo shift assignment mode"}
         title="Shift assignments"

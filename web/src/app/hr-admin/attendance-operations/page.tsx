@@ -34,7 +34,7 @@ export default async function HrAdminAttendanceOperationsPage() {
       : "demo";
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={state === "live" ? "Live attendance operations mode" : "Demo attendance operations mode"}
         title="Attendance operations"

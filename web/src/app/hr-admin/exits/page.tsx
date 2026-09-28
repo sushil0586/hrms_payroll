@@ -34,7 +34,7 @@ export default async function HrAdminExitsPage({ searchParams }: PageProps) {
   ]);
 
   return (
-    <main className="shell">
+    <main className="shell hr-lifecycle-workbench">
       <PageIntro
         actions={
           <>

@@ -36,10 +36,10 @@ export default async function HrAdminEmployeeBankAccountsPage({ params }: PagePr
     <main className="shell">
       <PageIntro
         eyebrow={state === "live" ? "Live banking mode" : "Demo banking mode"}
-        title={`Bank accounts for ${employeeResult.data.full_name}.`}
-        description="Maintain employee payout accounts for payroll readiness, bank advice, and finance handoff coverage."
+        title={`Bank accounts for ${employeeResult.data.full_name}`}
+        description="Maintain payout accounts used by payroll readiness and bank advice exports."
         actions={<Link className="button button--secondary" href={`/hr-admin/employees?employeeId=${employeeId}`}>Back to employee detail</Link>}
-        pills={["Payroll readiness", "Primary payout account", "Tenant scoped"]}
+        pills={["Payout", "Primary", "Payroll ready"]}
       />
 
       <section className="section">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import type {
@@ -12,8 +12,11 @@ import type {
   HrAdminSalaryStructureVersion,
 } from "@/lib/types";
 
+import { SetupRecordList } from "../payroll-shared/setup-record-list";
+
 type SaveMode = "create" | "edit";
 type ConfigFamily = "component" | "structure" | "version" | "line" | "assignment";
+type SalaryActionTab = "import" | ConfigFamily;
 type ApiItem =
   | HrAdminSalaryComponent
   | HrAdminSalaryStructure
@@ -122,6 +125,139 @@ const familyLabels: Record<ConfigFamily, string> = {
   line: "component line",
   assignment: "employee salary assignment",
 };
+
+const actionTabs: Array<{ key: SalaryActionTab; label: string; detail: string; anchors: string[] }> = [
+  { key: "import", label: "Import", detail: "Bulk salary assignments", anchors: ["salary-assignment-import-workbench"] },
+  { key: "component", label: "Components", detail: "Earnings and deduction catalog", anchors: ["salary-component-form"] },
+  { key: "structure", label: "Structures", detail: "Salary plan containers", anchors: ["salary-structure-form"] },
+  { key: "version", label: "Versions", detail: "Effective dated CTC versions", anchors: ["salary-version-form"] },
+  { key: "line", label: "Lines", detail: "Component amounts and formulas", anchors: ["salary-line-form"] },
+  { key: "assignment", label: "Assignments", detail: "Employee salary coverage", anchors: ["salary-assignment-form"] },
+];
+
+const actionGuidance: Record<
+  SalaryActionTab,
+  {
+    title: string;
+    summary: string;
+    primaryStatLabel: string;
+    secondaryStatLabel: string;
+    emptyLabel: string;
+    guardrails: string[];
+  }
+> = {
+  import: {
+    title: "Load salary coverage in bulk, then review exceptions.",
+    summary: "Use import when many employees need salary structure assignments. Preview first, commit only clean rows, and keep blocked rows visible for correction.",
+    primaryStatLabel: "Assignments",
+    secondaryStatLabel: "Ready rows",
+    emptyLabel: "No salary assignments yet",
+    guardrails: ["Use employee codes from the People master.", "Match structure name and version exactly.", "Commit only rows marked ready."],
+  },
+  component: {
+    title: "Define the salary components that appear in structures and payslips.",
+    summary: "Components describe earnings, deductions, formulas, tax treatment, rounding, and payslip visibility before they are used in salary structures.",
+    primaryStatLabel: "Components",
+    secondaryStatLabel: "Active",
+    emptyLabel: "No salary components yet",
+    guardrails: ["Use stable component codes.", "Confirm tax and prorate flags before activation.", "Map statutory and accounting references where required."],
+  },
+  structure: {
+    title: "Create reusable salary plans for pay groups.",
+    summary: "Structures group versions and lines. Keep the structure name business-readable so HR can choose the right plan during assignment.",
+    primaryStatLabel: "Structures",
+    secondaryStatLabel: "Active",
+    emptyLabel: "No salary structures yet",
+    guardrails: ["Attach to a pay group only when the structure is group-specific.", "Keep currency aligned to payroll.", "Activate only launch-ready structures."],
+  },
+  version: {
+    title: "Control effective-dated CTC versions.",
+    summary: "Versions let salary structures change over time without overwriting history. Use dates carefully because payroll snapshots depend on them.",
+    primaryStatLabel: "Versions",
+    secondaryStatLabel: "Active",
+    emptyLabel: "No salary versions yet",
+    guardrails: ["Avoid overlapping effective windows.", "Keep annual CTC realistic for the structure.", "Use draft until all component lines are ready."],
+  },
+  line: {
+    title: "Build the component mix inside each salary version.",
+    summary: "Lines define the amount, percentage, formula, and display order for each component in a salary structure version.",
+    primaryStatLabel: "Lines",
+    secondaryStatLabel: "Active",
+    emptyLabel: "No component lines yet",
+    guardrails: ["Choose either fixed amount, percentage, or formula intentionally.", "Keep display order payslip-friendly.", "Disable lines instead of deleting payroll history."],
+  },
+  assignment: {
+    title: "Assign employees to the correct salary version.",
+    summary: "Assignments make employees eligible for payroll calculations. Effective dates preserve transfer, increment, and correction history.",
+    primaryStatLabel: "Assignments",
+    secondaryStatLabel: "Employees covered",
+    emptyLabel: "No employee assignments yet",
+    guardrails: ["Use active employees in scope.", "Select an active structure version for live payroll.", "Record a clear assignment reason for audit."],
+  },
+};
+
+function actionTabFromHash(hash: string): SalaryActionTab {
+  const normalized = hash.replace(/^#/, "");
+  return actionTabs.find((tab) => tab.anchors.includes(normalized))?.key ?? "import";
+}
+
+function ActionTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: SalaryActionTab;
+  onChange: (tab: SalaryActionTab) => void;
+}) {
+  return (
+    <nav aria-label="Salary setup action groups" className="setup-action-tabs">
+      {actionTabs.map((tab) => (
+        <button
+          aria-current={activeTab === tab.key ? "page" : undefined}
+          className={`setup-action-tab${activeTab === tab.key ? " setup-action-tab--active" : ""}`}
+          key={tab.key}
+          type="button"
+          onClick={() => {
+            onChange(tab.key);
+            window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${tab.anchors[0]}`);
+          }}
+        >
+          <strong>{tab.label}</strong>
+          <span>{tab.detail}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function ActionFlowStrip({ activeTab }: { activeTab: SalaryActionTab }) {
+  const label = actionTabs.find((tab) => tab.key === activeTab)?.label ?? "Setup";
+
+  return (
+    <div className="setup-action-flow" role="region" aria-label={`${label} workflow`}>
+      <div>
+        <span>1</span>
+        <strong>Select area</strong>
+      </div>
+      <div>
+        <span>2</span>
+        <strong>Fill required fields</strong>
+      </div>
+      <div>
+        <span>3</span>
+        <strong>Save and reuse</strong>
+      </div>
+    </div>
+  );
+}
+
+function DependencyNotice({ children }: { children: ReactNode }) {
+  return (
+    <div className="notice notice--soft" role="note">
+      <strong>Before creating</strong>
+      <span className="muted">{children}</span>
+    </div>
+  );
+}
 
 function getConfigProfileRef(snapshot: Record<string, unknown>) {
   return typeof snapshot.profile_ref === "string" ? snapshot.profile_ref : "";
@@ -449,6 +585,87 @@ function BooleanField({ checked, label, onChange }: { checked: boolean; label: s
   );
 }
 
+function ActionSidecar({
+  activeTab,
+  importReadyCount,
+  setup,
+}: {
+  activeTab: SalaryActionTab;
+  importReadyCount: number;
+  setup: HrAdminSalarySetupResponse;
+}) {
+  const guidance = actionGuidance[activeTab];
+  const activeLineCount = setup.structure_components.filter((item) => item.is_active).length;
+  const stats: Record<SalaryActionTab, { primary: number; secondary: number; latest?: string }> = {
+    import: {
+      primary: setup.assignments.length,
+      secondary: importReadyCount,
+      latest: setup.assignments[0]?.employee_name,
+    },
+    component: {
+      primary: setup.components.length,
+      secondary: setup.summary.active_component_count,
+      latest: setup.components[0]?.name,
+    },
+    structure: {
+      primary: setup.structures.length,
+      secondary: setup.summary.active_structure_count,
+      latest: setup.structures[0]?.name,
+    },
+    version: {
+      primary: setup.versions.length,
+      secondary: setup.summary.active_version_count,
+      latest: setup.versions[0]?.structure_name,
+    },
+    line: {
+      primary: setup.structure_components.length,
+      secondary: activeLineCount,
+      latest: setup.structure_components[0]?.component_name,
+    },
+    assignment: {
+      primary: setup.assignments.length,
+      secondary: setup.summary.assigned_employee_count,
+      latest: setup.assignments[0]?.employee_name,
+    },
+  };
+  const activeStats = stats[activeTab];
+
+  return (
+    <aside className="setup-action-sidecar" aria-label={`${guidance.primaryStatLabel} guidance`}>
+      <div className="setup-action-sidecar__hero">
+        <span className="workspace-card__eyebrow">Setup guidance</span>
+        <h3>{guidance.title}</h3>
+        <p>{guidance.summary}</p>
+      </div>
+
+      <div className="setup-action-sidecar__stats" aria-label={`${guidance.primaryStatLabel} footprint`}>
+        <div>
+          <span>{guidance.primaryStatLabel}</span>
+          <strong>{activeStats.primary}</strong>
+        </div>
+        <div>
+          <span>{guidance.secondaryStatLabel}</span>
+          <strong>{activeStats.secondary}</strong>
+        </div>
+      </div>
+
+      <div className="setup-action-sidecar__section">
+        <strong>Current record</strong>
+        <span>{activeStats.latest ?? guidance.emptyLabel}</span>
+      </div>
+
+      <div className="setup-action-sidecar__section">
+        <strong>Before saving</strong>
+        <ul>
+          {guidance.guardrails.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+    </aside>
+  );
+}
+
 function FormHeader({ mode, title, onReset }: { mode: SaveMode; title: string; onReset: () => void }) {
   return (
     <div className="salary-crud-form__header">
@@ -466,6 +683,7 @@ function FormHeader({ mode, title, onReset }: { mode: SaveMode; title: string; o
 export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdminSalarySetupResponse }) {
   const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
+  const [activeActionTab, setActiveActionTab] = useState<SalaryActionTab>("import");
   const [componentForm, setComponentForm] = useState<ComponentForm>(() => emptyComponentForm(initialSetup));
   const [structureForm, setStructureForm] = useState<StructureForm>(() => emptyStructureForm(initialSetup));
   const [versionForm, setVersionForm] = useState<VersionForm>(() => emptyVersionForm(initialSetup));
@@ -477,6 +695,22 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
   const [assignmentImportRows, setAssignmentImportRows] = useState<AssignmentImportRow[]>([]);
   const [assignmentImportMessage, setAssignmentImportMessage] = useState("");
   const [isAssignmentImportCommitting, setIsAssignmentImportCommitting] = useState(false);
+  const [recordPages, setRecordPages] = useState<Record<ConfigFamily, number>>({
+    component: 1,
+    structure: 1,
+    version: 1,
+    line: 1,
+    assignment: 1,
+  });
+
+  useEffect(() => {
+    function syncFromHash() {
+      setActiveActionTab(actionTabFromHash(window.location.hash));
+    }
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, []);
 
   const structureOptions = useMemo(
     () => setup.structures.map((item) => ({ value: item.id, label: `${item.name} (${item.code})` })),
@@ -517,6 +751,10 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
   const assignmentVersionWarning =
     selectedAssignmentVersion && selectedAssignmentVersion.status !== "active" ? "Selected structure version is not active yet." : "";
   const assignmentImportReadyCount = assignmentImportRows.filter((row) => row.status === "ready").length;
+
+  function setRecordPage(tab: ConfigFamily, page: number) {
+    setRecordPages((current) => ({ ...current, [tab]: Math.max(1, page) }));
+  }
 
   function buildAssignmentImportRow(row: Record<string, string>, index: number, batchKeys: Set<string>): AssignmentImportRow {
     const errors: string[] = [];
@@ -716,7 +954,11 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
   }
 
   return (
-    <section className="section section--tight salary-crud-console" aria-labelledby="salary-crud-console-title">
+    <section
+      className="section section--tight salary-crud-console"
+      data-active-action={activeActionTab}
+      aria-labelledby="salary-crud-console-title"
+    >
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
         <div>
           <span className="workspace-card__eyebrow">Browser CRUD</span>
@@ -732,7 +974,21 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
         </div>
       ) : null}
 
-      <article className="salary-crud-form salary-import-workbench" data-testid="salary-assignment-import-workbench">
+      <ActionTabs activeTab={activeActionTab} onChange={setActiveActionTab} />
+
+      <div className="setup-action-context">
+        <div>
+          <strong>{actionTabs.find((tab) => tab.key === activeActionTab)?.label}</strong>
+          <span>{actionTabs.find((tab) => tab.key === activeActionTab)?.detail}</span>
+        </div>
+        <span>{setup.components.length && setup.structures.length ? "Ready for salary setup changes" : "Create components and structures first"}</span>
+      </div>
+
+      <ActionFlowStrip activeTab={activeActionTab} />
+
+      {activeActionTab === "import" ? (
+      <div className="salary-crud-grid setup-action-panel salary-action-import-panel">
+      <article className="salary-crud-form salary-import-workbench" data-testid="salary-assignment-import-workbench" id="salary-assignment-import-workbench">
         <div className="salary-crud-form__header">
           <div>
             <span className="workspace-card__eyebrow">Bulk onboarding</span>
@@ -742,6 +998,14 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
             <strong>{assignmentImportReadyCount}</strong> ready
           </span>
         </div>
+        {!versionOptions.length || !employeeOptions.length ? (
+          <DependencyNotice>
+            {[
+              !versionOptions.length ? "Create salary versions" : "",
+              !employeeOptions.length ? "add active employees" : "",
+            ].filter(Boolean).join(" and ")} before importing salary assignments.
+          </DependencyNotice>
+        ) : null}
         <div className="organization-import-grid">
           <label className="form-field">
             <span className="muted">CSV data</span>
@@ -808,12 +1072,18 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           </div>
         ) : null}
       </article>
+      <ActionSidecar activeTab={activeActionTab} importReadyCount={assignmentImportReadyCount} setup={setup} />
+      </div>
+      ) : null}
 
-      <div className="salary-crud-grid">
+      {activeActionTab !== "import" ? (
+      <div className="salary-crud-grid setup-action-panel">
+        {activeActionTab === "component" ? (
         <form
           aria-label="Salary component form"
           className="salary-crud-form"
           data-testid="salary-component-form"
+          id="salary-component-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save<HrAdminSalaryComponent>("component", "salary-components", componentForm.id, {
@@ -853,23 +1123,31 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
             <BooleanField label="Taxable" checked={componentForm.is_taxable} onChange={(checked) => setComponentForm((current) => ({ ...current, is_taxable: checked }))} />
             <BooleanField label="Proratable" checked={componentForm.is_proratable} onChange={(checked) => setComponentForm((current) => ({ ...current, is_proratable: checked }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Salary component records">
-            {setup.components.slice(0, 8).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setComponentForm(componentToForm(item))}>
-                <strong>{item.name}</strong>
-                <span>{item.code}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={componentForm.id}
+            emptyLabel="No salary components yet"
+            items={setup.components}
+            label="Salary component records"
+            page={recordPages.component}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("component", page)}
+            onSelect={(item) => setComponentForm(componentToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "component"} type="submit">
+              {submitting === "component" ? "Saving..." : componentForm.id ? "Save component" : "Create component"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "component"} type="submit">
-            {submitting === "component" ? "Saving..." : componentForm.id ? "Save component" : "Create component"}
-          </button>
         </form>
+        ) : null}
 
+        {activeActionTab === "structure" ? (
         <form
           aria-label="Salary structure form"
           className="salary-crud-form"
           data-testid="salary-structure-form"
+          id="salary-structure-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save<HrAdminSalaryStructure>("structure", "salary-structures", structureForm.id, {
@@ -900,23 +1178,31 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
             <TextField label="Description" value={structureForm.description} onChange={(value) => setStructureForm((current) => ({ ...current, description: value }))} />
             <TextField label="Config profile reference" value={structureForm.config_profile_ref} onChange={(value) => setStructureForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Salary structure records">
-            {setup.structures.slice(0, 8).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setStructureForm(structureToForm(item))}>
-                <strong>{item.name}</strong>
-                <span>{item.code}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={structureForm.id}
+            emptyLabel="No salary structures yet"
+            items={setup.structures}
+            label="Salary structure records"
+            page={recordPages.structure}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("structure", page)}
+            onSelect={(item) => setStructureForm(structureToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "structure"} type="submit">
+              {submitting === "structure" ? "Saving..." : structureForm.id ? "Save structure" : "Create structure"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "structure"} type="submit">
-            {submitting === "structure" ? "Saving..." : structureForm.id ? "Save structure" : "Create structure"}
-          </button>
         </form>
+        ) : null}
 
+        {activeActionTab === "version" ? (
         <form
           aria-label="Salary structure version form"
           className="salary-crud-form"
           data-testid="salary-version-form"
+          id="salary-version-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save<HrAdminSalaryStructureVersion>("version", "salary-structure-versions", versionForm.id, {
@@ -932,6 +1218,9 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           }}
         >
           <FormHeader mode={versionForm.id ? "edit" : "create"} title="Version" onReset={() => setVersionForm(emptyVersionForm(setup))} />
+          {!structureOptions.length ? (
+            <DependencyNotice>Create a salary structure before adding effective-dated versions.</DependencyNotice>
+          ) : null}
           <div className="form-grid salary-crud-form-grid">
             <SelectField
               label="Structure"
@@ -950,23 +1239,31 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
             <SelectField label="Status" required value={versionForm.status} options={statusOptions} onChange={(value) => setVersionForm((current) => ({ ...current, status: value }))} />
             <TextField label="Config profile reference" value={versionForm.config_profile_ref} onChange={(value) => setVersionForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Salary structure version records">
-            {setup.versions.slice(0, 8).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setVersionForm(versionToForm(item))}>
-                <strong>{item.structure_name}</strong>
-                <span>Version {item.version}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={versionForm.id}
+            emptyLabel="No salary versions yet"
+            items={setup.versions}
+            label="Salary structure version records"
+            page={recordPages.version}
+            renderPrimary={(item) => item.structure_name}
+            renderSecondary={(item) => `Version ${item.version}`}
+            onPageChange={(page) => setRecordPage("version", page)}
+            onSelect={(item) => setVersionForm(versionToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "version" || !structureOptions.length} type="submit">
+              {submitting === "version" ? "Saving..." : versionForm.id ? "Save version" : "Create version"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "version" || !structureOptions.length} type="submit">
-            {submitting === "version" ? "Saving..." : versionForm.id ? "Save version" : "Create version"}
-          </button>
         </form>
+        ) : null}
 
+        {activeActionTab === "line" ? (
         <form
           aria-label="Salary structure component line form"
           className="salary-crud-form"
           data-testid="salary-line-form"
+          id="salary-line-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save<HrAdminSalaryStructureComponent>("line", "salary-structure-components", lineForm.id, {
@@ -983,6 +1280,12 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           }}
         >
           <FormHeader mode={lineForm.id ? "edit" : "create"} title="Component line" onReset={() => setLineForm(emptyLineForm(setup))} />
+          {!versionOptions.length ? (
+            <DependencyNotice>Create a salary structure version before adding component lines.</DependencyNotice>
+          ) : null}
+          {versionOptions.length && !componentOptions.length ? (
+            <DependencyNotice>Create salary components before adding lines to a structure version.</DependencyNotice>
+          ) : null}
           <div className="form-grid salary-crud-form-grid">
             <SelectField label="Structure version" required value={lineForm.structure_version_id} options={versionOptions} onChange={(value) => setLineForm((current) => ({ ...current, structure_version_id: value }))} />
             <SelectField label="Component" required value={lineForm.component_id} options={componentOptions} onChange={(value) => setLineForm((current) => ({ ...current, component_id: value }))} />
@@ -996,23 +1299,31 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           <div className="toggle-field-list salary-crud-toggle-list">
             <BooleanField label="Active line" checked={lineForm.is_active} onChange={(checked) => setLineForm((current) => ({ ...current, is_active: checked }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Salary component line records">
-            {setup.structure_components.slice(0, 8).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setLineForm(lineToForm(item))}>
-                <strong>{item.component_name}</strong>
-                <span>{item.structure_name}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={lineForm.id}
+            emptyLabel="No component lines yet"
+            items={setup.structure_components}
+            label="Salary component line records"
+            page={recordPages.line}
+            renderPrimary={(item) => item.component_name}
+            renderSecondary={(item) => item.structure_name}
+            onPageChange={(page) => setRecordPage("line", page)}
+            onSelect={(item) => setLineForm(lineToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "line" || !versionOptions.length || !componentOptions.length} type="submit">
+              {submitting === "line" ? "Saving..." : lineForm.id ? "Save component line" : "Create component line"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "line" || !versionOptions.length || !componentOptions.length} type="submit">
-            {submitting === "line" ? "Saving..." : lineForm.id ? "Save component line" : "Create component line"}
-          </button>
         </form>
+        ) : null}
 
+        {activeActionTab === "assignment" ? (
         <form
           aria-label="Employee salary assignment form"
           className="salary-crud-form"
           data-testid="salary-assignment-form"
+          id="salary-assignment-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save<HrAdminEmployeeSalaryAssignment>("assignment", "employee-salary-assignments", assignmentForm.id, {
@@ -1028,6 +1339,12 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           }}
         >
           <FormHeader mode={assignmentForm.id ? "edit" : "create"} title="Employee assignment" onReset={() => setAssignmentForm(emptyAssignmentForm(setup))} />
+          {!versionOptions.length ? (
+            <DependencyNotice>Create an active salary version before assigning employees.</DependencyNotice>
+          ) : null}
+          {versionOptions.length && !employeeOptions.length ? (
+            <DependencyNotice>Add active employees before creating salary assignments.</DependencyNotice>
+          ) : null}
           <div className="form-grid salary-crud-form-grid">
             <SelectField label="Employee" required value={assignmentForm.employee_id} options={employeeOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, employee_id: value }))} />
             <SelectField
@@ -1046,19 +1363,27 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
             <TextField label="Assignment reason" value={assignmentForm.assignment_reason} onChange={(value) => setAssignmentForm((current) => ({ ...current, assignment_reason: value }))} />
             <TextField label="Config profile reference" value={assignmentForm.config_profile_ref} onChange={(value) => setAssignmentForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Employee salary assignment records">
-            {setup.assignments.slice(0, 8).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setAssignmentForm(assignmentToForm(item))}>
-                <strong>{item.employee_name}</strong>
-                <span>{item.structure_name} v{item.structure_version}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={assignmentForm.id}
+            emptyLabel="No employee assignments yet"
+            items={setup.assignments}
+            label="Employee salary assignment records"
+            page={recordPages.assignment}
+            renderPrimary={(item) => item.employee_name}
+            renderSecondary={(item) => `${item.structure_name} v${item.structure_version}`}
+            onPageChange={(page) => setRecordPage("assignment", page)}
+            onSelect={(item) => setAssignmentForm(assignmentToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "assignment" || !employeeOptions.length || !versionOptions.length} type="submit">
+              {submitting === "assignment" ? "Saving..." : assignmentForm.id ? "Save assignment" : "Create assignment"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "assignment" || !employeeOptions.length || !versionOptions.length} type="submit">
-            {submitting === "assignment" ? "Saving..." : assignmentForm.id ? "Save assignment" : "Create assignment"}
-          </button>
         </form>
+        ) : null}
+        <ActionSidecar activeTab={activeActionTab} importReadyCount={assignmentImportReadyCount} setup={setup} />
       </div>
+      ) : null}
     </section>
   );
 }

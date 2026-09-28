@@ -191,6 +191,9 @@ test.describe("HR Admin organization masters", () => {
     await expect(page.getByRole("heading", { name: "Organization masters", exact: true })).toBeVisible();
     await expect(page.getByText("Master data library")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Maintain every organization master from one place" })).toBeVisible();
+    await expect(page.getByTestId("organization-guided-setup-disclosure")).toContainText("Guided setup");
+    await expect(page.getByTestId("organization-import-disclosure")).toContainText("CSV import");
+    await expect(page.getByRole("heading", { name: "Organization master import" })).toBeHidden();
 
     for (const master of masterCards) {
       const card = page.locator(".organization-master-card", { has: page.getByRole("heading", { name: master.label }) });
@@ -239,7 +242,11 @@ test.describe("HR Admin organization masters", () => {
     });
 
     await page.goto("/hr-admin/organization");
-    await expect(page.getByText("Guided setup")).toBeVisible();
+    const guidedSetup = page.getByTestId("organization-guided-setup-disclosure");
+    await expect(guidedSetup).toBeVisible();
+    await expect(guidedSetup.getByRole("button", { name: "Save organization setup" })).toBeHidden();
+    await guidedSetup.locator("summary").click();
+    await expect(guidedSetup.getByRole("button", { name: "Save organization setup" })).toBeVisible();
 
     await page.locator('input[value="BU-OPS"]').fill("BU-ACCERIO-OPS");
     await page.locator('input[value="DEP-PEOPLE"]').fill("DEP-ACCERIO-PEOPLE");

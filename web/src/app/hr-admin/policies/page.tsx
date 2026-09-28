@@ -40,7 +40,7 @@ export default async function HrAdminPoliciesPage() {
       : "demo";
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={state === "live" ? "Live policy mode" : "Demo policy mode"}
         title="Policy control"

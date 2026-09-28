@@ -65,6 +65,7 @@ async function createDisposableEmployeeFromBrowser(page: Page, suffix: string) {
 }
 
 async function createDisposableStatutoryPackFromBrowser(page: Page, suffix: string) {
+  await openStatutoryActionTab(page, /Catalog/);
   const packForm = page.getByTestId("statutory-pack-form");
   const packCode = uniqueCode(`STAT_IMP_PACK_${suffix}`);
   const packResult = await submitAndCapture<{ id: string; code: string; name: string }>(page, "payroll-statutory-packs", "POST", async () => {
@@ -99,6 +100,10 @@ async function expectOptions(scope: Locator, label: string, minimum = 1) {
   expect(count).toBeGreaterThanOrEqual(minimum);
 }
 
+async function openStatutoryActionTab(page: Page, name: RegExp | string) {
+  await page.getByRole("navigation", { name: "Statutory setup action groups" }).getByRole("button", { name }).click();
+}
+
 async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "PATCH", action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => item.url().includes(`/api/hr-admin/${path}`) && item.request().method() === method),
@@ -119,7 +124,7 @@ test.describe("HR admin payroll statutory flows", () => {
     const profileRef = `payroll.profile.import.${suffix}.v1`;
     const duplicateProfileRef = `payroll.profile.import.duplicate.${suffix}.v1`;
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-statutory");
+    await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions");
     await expectPageReady(page, "Payroll Statutory");
     const pack = await createDisposableStatutoryPackFromBrowser(page, suffix);
     const packCode = pack.code;
@@ -133,6 +138,7 @@ test.describe("HR admin payroll statutory flows", () => {
     ].join("\n");
 
     const workbench = page.getByTestId("statutory-profile-import-workbench");
+    await openStatutoryActionTab(page, /Import/);
     await expect(workbench).toBeVisible();
     await expect(workbench.getByRole("heading", { name: "Employee statutory profile import" })).toBeVisible();
     await expect(workbench.getByRole("button", { name: "Load sample template" })).toBeVisible();
@@ -192,13 +198,40 @@ test.describe("HR admin payroll statutory flows", () => {
       await expect(page.locator(".metric-tile").filter({ hasText: metric }).or(page.locator(".metric-tile-soft").filter({ hasText: metric })).first()).toBeVisible();
     }
 
+    const statutoryTabs = page.getByRole("navigation", { name: "Payroll statutory sections" });
+    for (const tab of ["Overview", "Declarations", "Compliance", "Catalog", "Setup Actions"]) {
+      await expect(statutoryTabs.getByRole("link", { name: new RegExp(tab) })).toBeVisible();
+    }
+
+    await expect(page.getByRole("heading", { name: /Review statutory gaps before payroll close|Statutory setup is ready/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "TDS e-file report" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Review declarations" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open compliance" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Setup actions", exact: true })).toBeVisible();
+
+    await statutoryTabs.getByRole("link", { name: /Declarations/ }).click();
+    await expect(page).toHaveURL(/tab=declarations/);
     await expect(page.getByRole("heading", { name: "Proof review queue" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Declarations and proof evidence" })).toBeVisible();
+    for (const header of ["Employee", "Year", "Status", "Tax Regime", "Declared", "Verified", "Proofs"]) {
+      await expect(page.getByRole("columnheader", { name: header }).first()).toBeVisible();
+    }
+
+    await statutoryTabs.getByRole("link", { name: /Compliance/ }).click();
+    await expect(page).toHaveURL(/tab=compliance/);
     await expect(page.getByRole("heading", { name: "TDS e-file report" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Registration coverage" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Upcoming filing obligations" })).toBeVisible();
+
+    await statutoryTabs.getByRole("link", { name: /Catalog/ }).click();
+    await expect(page).toHaveURL(/tab=catalog/);
     await expect(page.getByRole("heading", { name: "Statutory component catalog" })).toBeVisible();
+
+    await statutoryTabs.getByRole("link", { name: /Setup Actions/ }).click();
+    await expect(page).toHaveURL(/tab=actions/);
     await expect(page.getByRole("heading", { name: "Statutory setup controls" })).toBeVisible();
+
+    await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=overview");
     const tdsReport = page.getByTestId("tds-compliance-report");
     await expect(tdsReport).toBeVisible();
     for (const text of [
@@ -216,11 +249,7 @@ test.describe("HR admin payroll statutory flows", () => {
       await expect(page.getByText(text, { exact: false }).first()).toBeVisible();
     }
     await expect(tdsReport.getByText(/Ready|Needs setup/).first()).toBeVisible();
-    for (const header of ["Employee", "Year", "Status", "Tax Regime", "Declared", "Verified", "Proofs"]) {
-      await expect(page.getByRole("columnheader", { name: header }).first()).toBeVisible();
-    }
-    await expect(page.getByText("Locked").or(page.getByText("Verified")).or(page.getByText("No statutory")).first()).toBeVisible();
-
+    await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=declarations");
     const declarationLink = page.locator("main a[href*='declarationId=']").first();
     if (await declarationLink.isVisible().catch(() => false)) {
       await declarationLink.click();
@@ -232,7 +261,7 @@ test.describe("HR admin payroll statutory flows", () => {
   });
 
   test("statutory setup browser CRUD covers configuration, employee declarations, and proof actions", async ({ page }) => {
-    await gotoAuthenticated(page, "/hr-admin/payroll-statutory");
+    await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions");
     await expectPageReady(page, "Payroll Statutory");
 
     const packForm = page.getByTestId("statutory-pack-form");
@@ -244,6 +273,7 @@ test.describe("HR admin payroll statutory flows", () => {
     const declarationForm = page.getByTestId("statutory-declaration-form");
     const itemForm = page.getByTestId("statutory-declaration-item-form");
 
+    await openStatutoryActionTab(page, /Catalog/);
     await expectFields(packForm, [
       "Code",
       "Name",
@@ -391,6 +421,7 @@ test.describe("HR admin payroll statutory flows", () => {
     }).then((result) => expect(result.ok).toBeTruthy());
     await expect(field(slabForm, "Employer rate percent")).toHaveValue("13.0000");
 
+    await openStatutoryActionTab(page, /Compliance/);
     await expectFields(registrationForm, [
       "Statutory pack",
       "Statutory component",
@@ -490,6 +521,7 @@ test.describe("HR admin payroll statutory flows", () => {
       await filingForm.getByRole("button", { name: "Save filing" }).click();
     }).then((result) => expect(result.ok).toBeTruthy());
 
+    await openStatutoryActionTab(page, /Profiles/);
     await expectFields(profileForm, [
       "Employee",
       "Statutory pack",
@@ -538,6 +570,7 @@ test.describe("HR admin payroll statutory flows", () => {
       await profileForm.getByRole("button", { name: "Save profile" }).click();
     }).then((result) => expect(result.ok).toBeTruthy());
 
+    await openStatutoryActionTab(page, /Declarations/);
     await expectFields(declarationForm, [
       "Employee",
       "Employee statutory profile",
@@ -625,23 +658,30 @@ test.describe("HR admin payroll statutory flows", () => {
 
   test("statutory setup controls remain usable on mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await gotoAuthenticated(page, "/hr-admin/payroll-statutory");
+    await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions");
     await expectPageReady(page, "Payroll Statutory");
 
     await expect(page.getByRole("heading", { name: "Statutory setup controls" })).toBeVisible();
-    for (const testId of [
-      "statutory-pack-form",
-      "statutory-component-form",
-      "statutory-slab-form",
-      "statutory-registration-form",
-      "statutory-filing-form",
-      "statutory-profile-form",
-      "statutory-declaration-form",
-      "statutory-declaration-item-form",
-    ]) {
+    await expect(page.getByRole("navigation", { name: "Statutory setup action groups" })).toBeVisible();
+
+    await openStatutoryActionTab(page, /Catalog/);
+    for (const testId of ["statutory-pack-form", "statutory-component-form", "statutory-slab-form"]) {
       await expect(page.getByTestId(testId)).toBeVisible();
     }
     await expect(field(page.getByTestId("statutory-pack-form"), "Country code")).toBeVisible();
+
+    await openStatutoryActionTab(page, /Compliance/);
+    await expect(page.getByTestId("statutory-registration-form")).toBeVisible();
+    await expect(page.getByTestId("statutory-filing-form")).toBeVisible();
+    await expect(field(page.getByTestId("statutory-registration-form"), "Registration number")).toBeVisible();
+
+    await openStatutoryActionTab(page, /Profiles/);
+    await expect(page.getByTestId("statutory-profile-form")).toBeVisible();
+    await expect(field(page.getByTestId("statutory-profile-form"), "PAN number")).toBeVisible();
+
+    await openStatutoryActionTab(page, /Declarations/);
+    await expect(page.getByTestId("statutory-declaration-form")).toBeVisible();
+    await expect(page.getByTestId("statutory-declaration-item-form")).toBeVisible();
     await expect(field(page.getByTestId("statutory-declaration-item-form"), "Proof status")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

@@ -12,7 +12,7 @@ export default async function HrAdminHolidayCalendarsPage() {
   const result = await getHrAdminHolidayCalendars();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" ? "Live calendar mode" : "Demo calendar mode"}
         title="Holiday calendars"

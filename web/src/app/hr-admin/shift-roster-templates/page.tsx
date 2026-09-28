@@ -18,10 +18,10 @@ export default async function HrAdminShiftRosterTemplatesPage() {
   const publishedCount = result.data.filter((item) => item.status === "published" || item.status === "locked").length;
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" ? "Live roster template mode" : "Demo roster template mode"}
-        title="Shift roster templates for repeat rollout."
+        title="Roster templates"
         description="Define reusable shift patterns once, then publish and roll them out across teams with less manual scheduling work."
         actions={
           <>

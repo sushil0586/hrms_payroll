@@ -142,7 +142,7 @@ async function createLeaveType(page: Page, prefix = "LT"): Promise<CreatedRecord
   const code = codeFor(prefix);
   const name = `PW Test Leave Type ${runSuffix}`;
   await gotoAuthenticated(page, "/hr-admin/leave-types/new");
-  await expectPageReady(page, "Create leave type.");
+  await expectPageReady(page, "Create leave type");
   await expect(page.getByRole("heading", { name: "Identity and presentation" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Behavior switches" })).toBeVisible();
   await expectFields(page, ["Code", "Name", "Short code", "Category", "Unit", "Color code", "Description"]);

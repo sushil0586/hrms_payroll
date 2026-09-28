@@ -93,13 +93,11 @@ export function DocumentRequirementForm({ initialValue, mode, options, itemId }:
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern document-child-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>{mode === "create" ? "Create document requirement" : "Edit document requirement"}</h2>
-          <p className="section-copy">
-            Scope this requirement by org structure and employment context so compliance rules stay flexible across clients.
-          </p>
+          <p className="section-copy">Scope the requirement by organization and employment context.</p>
         </div>
 
         <FormSection description="Choose the category and the org filters where the rule should apply." title="Requirement scope">
@@ -129,13 +127,16 @@ export function DocumentRequirementForm({ initialValue, mode, options, itemId }:
           </div>
         ) : null}
 
-        <div className="form-shell-card__actions">
-          <button className="button button--primary" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Saving..." : mode === "create" ? "Create requirement" : "Save changes"}
-          </button>
-          <button className="button button--secondary" onClick={() => router.back()} type="button">
-            Cancel
-          </button>
+        <div className="form-actions-bar">
+          <span className="muted">Requirement changes affect compliance checks for matching employees.</span>
+          <div className="form-actions-bar__buttons">
+            <button className="button button--secondary" onClick={() => router.back()} type="button">
+              Cancel
+            </button>
+            <button className="button button--primary" disabled={isSubmitting} type="submit">
+              {isSubmitting ? "Saving..." : mode === "create" ? "Create requirement" : "Save changes"}
+            </button>
+          </div>
         </div>
       </section>
     </form>

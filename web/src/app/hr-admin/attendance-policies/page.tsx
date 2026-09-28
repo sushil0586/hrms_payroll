@@ -14,7 +14,7 @@ export default async function HrAdminAttendancePoliciesPage() {
   const activeCount = result.data.filter((item) => item.status === "active").length;
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" ? "Live attendance policy mode" : "Demo attendance policy mode"}
         title="Attendance policies"

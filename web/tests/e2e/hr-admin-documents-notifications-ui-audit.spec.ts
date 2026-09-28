@@ -7,21 +7,73 @@ import { gotoAuthenticated } from "../helpers/staging-auth";
 const documentsNotificationsRoutes = [
   "/hr-admin/documents",
   "/hr-admin/employee-documents",
+  "/hr-admin/employee-documents/new",
   "/hr-admin/document-categories",
+  "/hr-admin/document-categories/new",
   "/hr-admin/document-requirements",
+  "/hr-admin/document-requirements/new",
   "/hr-admin/generated-letters",
   "/hr-admin/notifications",
   "/hr-admin/notifications-admin",
   "/hr-admin/notification-templates",
+  "/hr-admin/notification-templates/new",
   "/hr-admin/notification-events",
+  "/hr-admin/notification-events/new",
   "/hr-admin/notification-delivery",
   "/hr-admin/notification-diagnostics",
   "/hr-admin/import-history",
 ];
 
-const documentsNotificationsPathPatterns = documentsNotificationsRoutes.map(
-  (route) => new RegExp(`^${route.replaceAll("/", "\\/")}$`),
-);
+const documentsNotificationsPathPatterns = [
+  ...documentsNotificationsRoutes.map(
+    (route) => new RegExp(`^${route.replaceAll("/", "\\/")}$`),
+  ),
+  /^\/hr-admin\/employee-documents\/[^/]+\/review$/,
+  /^\/hr-admin\/document-categories\/[^/]+\/edit$/,
+  /^\/hr-admin\/document-requirements\/[^/]+\/edit$/,
+  /^\/hr-admin\/notifications\/[^/]+\/review$/,
+  /^\/hr-admin\/notification-templates\/[^/]+\/edit$/,
+  /^\/hr-admin\/notification-events\/[^/]+\/edit$/,
+];
+
+const dynamicDocumentsNotificationsRoutes = [
+  {
+    name: "employee document review",
+    sourceRoute: "/hr-admin/employee-documents",
+    actionName: "Review",
+    expectedUrl: /\/hr-admin\/employee-documents\/[^/]+\/review/,
+  },
+  {
+    name: "document category edit",
+    sourceRoute: "/hr-admin/document-categories",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/document-categories\/[^/]+\/edit/,
+  },
+  {
+    name: "document requirement edit",
+    sourceRoute: "/hr-admin/document-requirements",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/document-requirements\/[^/]+\/edit/,
+  },
+  {
+    name: "notification review",
+    sourceRoute: "/hr-admin/notifications",
+    actionName: "Review",
+    expectedUrl: /\/hr-admin\/notifications\/[^/]+\/review/,
+  },
+  {
+    name: "notification template edit",
+    sourceRoute: "/hr-admin/notification-templates",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/notification-templates\/[^/]+\/edit/,
+  },
+  {
+    name: "notification event edit",
+    sourceRoute: "/hr-admin/notification-events",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/notification-events\/[^/]+\/edit/,
+  },
+];
 
 function normalizeDocumentsNotificationsHref(rawHref: string, baseUrl: string) {
   const url = new URL(rawHref, baseUrl);
@@ -43,7 +95,8 @@ async function expectVisibleDocumentsNotificationsLinksHealthy(page: Page, route
       .filter((link) => {
         const rect = link.getBoundingClientRect();
         const style = window.getComputedStyle(link);
-        return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+        const hiddenByClosedDisclosure = Boolean(link.closest("details:not([open])") && link.tagName !== "SUMMARY");
+        return !hiddenByClosedDisclosure && rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
       })
       .map((link) => (link as HTMLAnchorElement).href),
   );
@@ -64,7 +117,8 @@ async function expectVisibleDocumentDownloadsHealthy(page: Page, route: string) 
         const href = (link as HTMLAnchorElement).getAttribute("href") ?? "";
         const rect = link.getBoundingClientRect();
         const style = window.getComputedStyle(link);
-        return href.includes("/download") && rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+        const hiddenByClosedDisclosure = Boolean(link.closest("details:not([open])") && link.tagName !== "SUMMARY");
+        return !hiddenByClosedDisclosure && href.includes("/download") && rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
       })
       .map((link) => (link as HTMLAnchorElement).getAttribute("href") ?? "")
       .filter(Boolean),
@@ -110,6 +164,9 @@ async function expectNoVisibleControlCollisions(page: Page, route: string) {
     }
 
     const boxes = elements.flatMap((element, index) => {
+      if (element.closest("details:not([open])") && element.tagName !== "SUMMARY") {
+        return [];
+      }
       const rect = clippedRect(element);
       const style = window.getComputedStyle(element);
       if (rect.width <= 0 || rect.height <= 0 || style.display === "none" || style.visibility === "hidden") {
@@ -155,8 +212,7 @@ async function expectNoVisibleControlCollisions(page: Page, route: string) {
   expect(collisions, `${route} has clipped or overlapping document/notification/import controls`).toEqual([]);
 }
 
-async function auditDocumentsNotificationsRoute(page: Page, route: string) {
-  await gotoAuthenticated(page, route);
+async function auditCurrentDocumentsNotificationsPage(page: Page, route: string) {
   await suppressBrowserTestNoise(page);
   await expect(page.locator("main.shell:not(.app-loading-shell)").first()).toBeVisible();
   await expect(page.locator("h1").first()).toBeVisible();
@@ -169,6 +225,26 @@ async function auditDocumentsNotificationsRoute(page: Page, route: string) {
   await expectVisibleDocumentDownloadsHealthy(page, route);
 }
 
+async function auditDocumentsNotificationsRoute(page: Page, route: string) {
+  await gotoAuthenticated(page, route);
+  await auditCurrentDocumentsNotificationsPage(page, route);
+}
+
+async function auditLinkedDocumentsNotificationsRoute(
+  page: Page,
+  sourceRoute: string,
+  actionName: string,
+  expectedUrl: RegExp,
+  routeName: string,
+) {
+  await gotoAuthenticated(page, sourceRoute);
+  const action = page.getByRole("link", { name: actionName, exact: true }).first();
+  await expect(action, `${sourceRoute} should expose a ${routeName} link`).toBeVisible();
+  await action.click();
+  await expect(page, `${routeName} should open the intended child page`).toHaveURL(expectedUrl);
+  await auditCurrentDocumentsNotificationsPage(page, routeName);
+}
+
 test.describe("HR Admin documents, notifications, and imports UI audit", () => {
   test("certifies documents/notifications/import page layout, controls, links, and downloads", async ({ page }) => {
     test.setTimeout(480_000);
@@ -176,6 +252,16 @@ test.describe("HR Admin documents, notifications, and imports UI audit", () => {
 
     for (const route of documentsNotificationsRoutes) {
       await auditDocumentsNotificationsRoute(page, route);
+    }
+
+    for (const dynamicRoute of dynamicDocumentsNotificationsRoutes) {
+      await auditLinkedDocumentsNotificationsRoute(
+        page,
+        dynamicRoute.sourceRoute,
+        dynamicRoute.actionName,
+        dynamicRoute.expectedUrl,
+        dynamicRoute.name,
+      );
     }
   });
 });

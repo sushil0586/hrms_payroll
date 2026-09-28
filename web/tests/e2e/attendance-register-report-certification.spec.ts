@@ -99,8 +99,7 @@ test.describe("Phase R4-R daily attendance register report certification", () =>
     await page.goto("/hr-admin/reports/attendance-register", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("attendance-register-report")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Export filtered CSV" })).toHaveCount(0);
 
     const csvResponse = await page.request.get("/api/hr-admin/reports/attendance-register?sort=date_desc");
     expect([401, 403]).toContain(csvResponse.status());

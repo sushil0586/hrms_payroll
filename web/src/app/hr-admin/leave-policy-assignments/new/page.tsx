@@ -11,10 +11,10 @@ export default async function HrAdminNewLeavePolicyAssignmentPage() {
   const optionsResult = await getHrAdminPolicyOptions();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
-        title="Create leave policy assignment."
+        title="Create leave assignment"
         description="Use assignment priority and scope to determine which leave policy wins when more than one rule could apply."
         actions={<Link className="button button--secondary" href="/hr-admin/leave-policy-assignments">Back to leave assignments</Link>}
         pills={["Priority-based resolution", "Structure-aware targeting", "Employee override capable"]}

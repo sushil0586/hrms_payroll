@@ -29,6 +29,10 @@ async function expectOptions(scope: Locator, label: string, minimum = 1) {
   expect(count).toBeGreaterThanOrEqual(minimum);
 }
 
+async function openSalaryActionTab(page: Page, name: RegExp | string) {
+  await page.getByRole("navigation", { name: "Salary setup action groups" }).getByRole("button", { name }).click();
+}
+
 async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "PATCH", action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => item.url().includes(`/api/hr-admin/${path}`) && item.request().method() === method),
@@ -39,11 +43,49 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
 }
 
 test.describe("HR admin salary setup flows", () => {
+  test("salary setup action tabs keep a consistent form guidance structure", async ({ page }) => {
+    await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions");
+    await expectPageReady(page, "Salary Setup");
+
+    await expect(page.getByRole("navigation", { name: "Salary setup action groups" })).toBeVisible();
+    await expect(page.locator(".setup-action-flow")).toBeVisible();
+    await expect(page.locator(".setup-action-sidecar")).toBeVisible();
+    await expect(page.getByTestId("salary-assignment-import-workbench")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Import workflow" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Preview import" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Commit ready rows" })).toBeVisible();
+
+    const forms: Array<{
+      tab: RegExp;
+      workflow: string;
+      testId: string;
+      fields: string[];
+    }> = [
+      { tab: /Components/, workflow: "Components workflow", testId: "salary-component-form", fields: ["Code", "Component type"] },
+      { tab: /Structures/, workflow: "Structures workflow", testId: "salary-structure-form", fields: ["Code", "Currency code"] },
+      { tab: /Versions/, workflow: "Versions workflow", testId: "salary-version-form", fields: ["Structure", "Annual CTC"] },
+      { tab: /Lines/, workflow: "Lines workflow", testId: "salary-line-form", fields: ["Structure version", "Component"] },
+      { tab: /Assignments/, workflow: "Assignments workflow", testId: "salary-assignment-form", fields: ["Employee", "Structure version"] },
+    ];
+
+    for (const item of forms) {
+      await openSalaryActionTab(page, item.tab);
+      await expect(page.getByRole("region", { name: item.workflow })).toBeVisible();
+      await expect(page.locator(".setup-action-sidecar")).toBeVisible();
+      const form = page.getByTestId(item.testId);
+      await expect(form).toBeVisible();
+      await expectFields(form, item.fields);
+      await expect(form.locator(".salary-crud-record-list")).toBeVisible();
+      await expect(form.locator(".salary-crud-form__actions")).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+    }
+  });
+
   test("salary assignment import workbench uploads validates commits and updates coverage", async ({ page }) => {
     test.setTimeout(5 * 60 * 1000);
     const suffix = String(Date.now()).slice(-6);
 
-    await gotoAuthenticated(page, "/hr-admin/salary-setup");
+    await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions");
     await expectPageReady(page, "Salary Setup");
 
     const employeeCode = `SALIMP-${suffix}`;
@@ -75,13 +117,14 @@ test.describe("HR admin salary setup flows", () => {
       },
     });
     expect(employeeResponse.ok()).toBeTruthy();
-    await gotoAuthenticated(page, "/hr-admin/salary-setup");
+    await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions");
     await expectPageReady(page, "Salary Setup");
 
     const structureForm = page.getByTestId("salary-structure-form");
     const versionForm = page.getByTestId("salary-version-form");
     const structureCode = uniqueCode("SAL_IMPORT_STRUCT");
     const structureNameForImport = `Browser Import ${structureCode}`;
+    await openSalaryActionTab(page, /Structures/);
     const structure = await submitAndCapture<{ id: string; code: string; name: string }>(page, "salary-structures", "POST", async () => {
       await field(structureForm, "Code").fill(structureCode);
       await field(structureForm, "Name").fill(structureNameForImport);
@@ -94,6 +137,7 @@ test.describe("HR admin salary setup flows", () => {
     });
     await expect(page.getByText(structureCode).first()).toBeVisible();
 
+    await openSalaryActionTab(page, /Versions/);
     const version = await submitAndCapture<{ id: string; version: number }>(page, "salary-structure-versions", "POST", async () => {
       await field(versionForm, "Structure").selectOption(structure.id);
       await field(versionForm, "Version").fill("1");
@@ -108,6 +152,7 @@ test.describe("HR admin salary setup flows", () => {
     await expect(page.getByText(`Version ${version.version}`).first()).toBeVisible();
 
     const assignmentForm = page.getByTestId("salary-assignment-form");
+    await openSalaryActionTab(page, /Assignments/);
     await expectOptions(assignmentForm, "Employee");
     await expect(field(assignmentForm, "Employee").locator("option").filter({ hasText: employeeCode })).toHaveCount(1);
     const structureName = structureNameForImport;
@@ -123,6 +168,7 @@ test.describe("HR admin salary setup flows", () => {
     ].join("\n");
 
     const workbench = page.getByTestId("salary-assignment-import-workbench");
+    await openSalaryActionTab(page, /Import/);
     await expect(workbench).toBeVisible();
     await expect(workbench.getByRole("heading", { name: "Salary assignment import" })).toBeVisible();
     await expect(workbench.getByRole("button", { name: "Load sample template" })).toBeVisible();
@@ -162,7 +208,7 @@ test.describe("HR admin salary setup flows", () => {
     await gotoAuthenticated(page, "/hr-admin/salary-setup");
     await expectPageReady(page, "Salary Setup");
 
-    for (const link of ["Payroll Setup", "Readiness", "Inputs", "Rules", "Calculations"]) {
+    for (const link of ["Payroll Setup", "Readiness", "Rules", "Add setup"]) {
       await expect(page.getByRole("link", { name: link, exact: true })).toBeVisible();
     }
 
@@ -170,33 +216,44 @@ test.describe("HR admin salary setup flows", () => {
       await expect(page.locator(".metric-tile-soft").filter({ hasText: metric })).toBeVisible();
     }
 
+    await expect(page.getByRole("link", { name: /Overview/ })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("heading", { name: "Salary setup summary" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Review assignments" })).toBeVisible();
+
+    const tabs = page.getByLabel("Salary setup sections");
+
+    await tabs.getByRole("link", { name: /Components/ }).click();
+    await expect(page).toHaveURL(/tab=components/);
+    await expect(page.getByRole("heading", { name: "Component catalog" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Component" })).toBeVisible();
+    await expect(page.getByLabel("components pagination")).toBeVisible();
+
+    await tabs.getByRole("link", { name: /Structures/ }).click();
+    await expect(page).toHaveURL(/tab=structures/);
     await expect(page.getByRole("heading", { name: "Catalog" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Version matrix" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Effective-dated salary versions" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Structure composition" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Employee salary coverage" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Salary setup controls" })).toBeVisible();
-
-    for (const header of ["Structure", "Status", "Pay group", "Versions", "Assignments", "Currency", "Component", "Type", "Value", "Rule reference", "Employee", "Effective", "Annual CTC", "Reason"]) {
+    await expect(page.getByRole("columnheader", { name: "Structure" }).first()).toBeVisible();
+    for (const header of ["Status", "Pay group", "Versions", "Assignments", "Currency", "Component", "Type", "Value", "Rule reference"]) {
       await expect(page.getByRole("columnheader", { name: header }).first()).toBeVisible();
     }
 
-    await expect(page.locator(".salary-component-stack")).toBeVisible();
-    await expect(page.locator(".salary-version-grid")).toHaveCount(1);
-    await expect(page.locator(".salary-setup-detail-panel").first()).toBeVisible();
-
-    const structureLink = page.locator("main a[href*='structureId=']").first();
-    if (await structureLink.isVisible().catch(() => false)) {
-      await structureLink.click();
-      await expect(page).toHaveURL(/structureId=/);
-      await expect(page.getByRole("heading", { name: "Employee salary coverage" })).toBeVisible();
-    } else {
-      await expect(page.getByRole("heading", { name: "No structure selected" })).toBeVisible();
+    await tabs.getByRole("link", { name: /Assignments/ }).click();
+    await expect(page).toHaveURL(/tab=assignments/);
+    await expect(page.getByRole("heading", { name: "Employee salary coverage" })).toBeVisible();
+    for (const header of ["Employee", "Structure", "Effective", "Annual CTC", "Status", "Reason"]) {
+      await expect(page.getByRole("columnheader", { name: header }).first()).toBeVisible();
     }
+
+    await tabs.getByRole("link", { name: /Setup Actions/ }).click();
+    await expect(page).toHaveURL(/tab=actions/);
+    await expect(page.getByRole("heading", { name: "Salary setup controls" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 
   test("salary setup browser CRUD creates and updates components, structures, versions, lines, and assignments", async ({ page }) => {
-    await gotoAuthenticated(page, "/hr-admin/salary-setup");
+    await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions");
     await expectPageReady(page, "Salary Setup");
 
     const componentForm = page.getByTestId("salary-component-form");
@@ -205,6 +262,7 @@ test.describe("HR admin salary setup flows", () => {
     const lineForm = page.getByTestId("salary-line-form");
     const assignmentForm = page.getByTestId("salary-assignment-form");
 
+    await openSalaryActionTab(page, /Components/);
     await expectFields(componentForm, [
       "Code",
       "Name",
@@ -250,6 +308,7 @@ test.describe("HR admin salary setup flows", () => {
     });
     await expect(page.getByText(`Updated ${componentCode}`).first()).toBeVisible();
 
+    await openSalaryActionTab(page, /Structures/);
     await expectFields(structureForm, ["Code", "Name", "Pay group", "Currency code", "Status", "Description", "Config profile reference"]);
     await expectOptions(structureForm, "Status");
     const structureCode = uniqueCode("SAL_STRUCT");
@@ -271,6 +330,7 @@ test.describe("HR admin salary setup flows", () => {
     });
     await expect(field(structureForm, "Description")).toHaveValue("Updated through browser salary setup CRUD.");
 
+    await openSalaryActionTab(page, /Versions/);
     await expectFields(versionForm, ["Structure", "Version", "Effective from", "Effective to", "Annual CTC", "Currency code", "Status", "Config profile reference"]);
     await expectOptions(versionForm, "Structure");
     await expectOptions(versionForm, "Status");
@@ -294,6 +354,7 @@ test.describe("HR admin salary setup flows", () => {
     });
     await expect(page.getByText(/structure version saved/i).first()).toBeVisible();
 
+    await openSalaryActionTab(page, /Lines/);
     await expectFields(lineForm, ["Structure version", "Component", "Display order", "Amount", "Percentage", "Formula reference", "Calculation rule reference", "Config profile reference"]);
     await expect(lineForm.getByRole("checkbox", { name: "Active line" })).toBeVisible();
     await expectOptions(lineForm, "Structure version");
@@ -319,6 +380,7 @@ test.describe("HR admin salary setup flows", () => {
     await expect(field(lineForm, "Amount")).toHaveValue("56000.00");
     await expect(page.getByText(/component line saved/i).first()).toBeVisible();
 
+    await openSalaryActionTab(page, /Assignments/);
     await expectFields(assignmentForm, ["Employee", "Structure version", "Effective from", "Effective to", "Status", "Annual CTC override", "Assignment reason", "Config profile reference"]);
     await expectOptions(assignmentForm, "Employee");
     await expectOptions(assignmentForm, "Structure version");
@@ -347,14 +409,30 @@ test.describe("HR admin salary setup flows", () => {
 
   test("salary setup controls remain usable on mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await gotoAuthenticated(page, "/hr-admin/salary-setup");
+    await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions");
     await expectPageReady(page, "Salary Setup");
 
     await expect(page.getByRole("heading", { name: "Salary setup controls" })).toBeVisible();
-    for (const testId of ["salary-component-form", "salary-structure-form", "salary-version-form", "salary-line-form", "salary-assignment-form"]) {
-      await expect(page.getByTestId(testId)).toBeVisible();
-    }
+    await expect(page.getByRole("navigation", { name: "Salary setup action groups" })).toBeVisible();
+
+    await openSalaryActionTab(page, /Components/);
+    await expect(page.getByTestId("salary-component-form")).toBeVisible();
     await expect(field(page.getByTestId("salary-component-form"), "Component type")).toBeVisible();
+
+    await openSalaryActionTab(page, /Structures/);
+    await expect(page.getByTestId("salary-structure-form")).toBeVisible();
+    await expect(field(page.getByTestId("salary-structure-form"), "Currency code")).toBeVisible();
+
+    await openSalaryActionTab(page, /Versions/);
+    await expect(page.getByTestId("salary-version-form")).toBeVisible();
+    await expect(field(page.getByTestId("salary-version-form"), "Annual CTC")).toBeVisible();
+
+    await openSalaryActionTab(page, /Lines/);
+    await expect(page.getByTestId("salary-line-form")).toBeVisible();
+    await expect(field(page.getByTestId("salary-line-form"), "Component")).toBeVisible();
+
+    await openSalaryActionTab(page, /Assignments/);
+    await expect(page.getByTestId("salary-assignment-form")).toBeVisible();
     await expect(field(page.getByTestId("salary-assignment-form"), "Employee")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

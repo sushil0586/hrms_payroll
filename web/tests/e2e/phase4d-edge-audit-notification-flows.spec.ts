@@ -56,7 +56,7 @@ async function ensureFirstAttendanceRowSelected(page: Page) {
 
 async function clearPendingEmployeeRegularization(page: Page) {
   await switchTo(page, "/hr-admin/attendance-regularizations?status=pending&q=EMP-0042", hrAdmin);
-  await expectPageReady(page, "Attendance regularization queue for HR oversight.");
+  await expectPageReady(page, "Regularizations");
   const pendingCard = page.locator("article.record-card").first();
   if ((await pendingCard.count()) === 0 || !(await pendingCard.getByRole("button", { name: "Reject" }).isEnabled().catch(() => false))) {
     return;
@@ -107,7 +107,7 @@ test.describe("Phase 4D leave and attendance edge, audit, and notification certi
     test.setTimeout(4 * 60 * 1000);
 
     await switchTo(page, "/hr-admin/attendance-records?page_size=10", hrAdmin);
-    await expectPageReady(page, "Attendance records review window.");
+    await expectPageReady(page, "Attendance records");
     const firstRecord = await ensureFirstAttendanceRowSelected(page);
     const employeeCode = (await firstRecord.locator(".section-copy").first().textContent())?.split("•")[0]?.trim() ?? "";
     const editHref = await firstRecord.getByRole("link", { name: "Edit record" }).getAttribute("href");
@@ -136,7 +136,7 @@ test.describe("Phase 4D leave and attendance edge, audit, and notification certi
     }
 
     await switchTo(page, "/hr-admin/attendance-records?page_size=10", hrAdmin);
-    await expectPageReady(page, "Attendance records review window.");
+    await expectPageReady(page, "Attendance records");
     await ensureFirstAttendanceRowSelected(page);
     const unlockResult = await submitAndCapture<{ updated_count: number }>(
       page,

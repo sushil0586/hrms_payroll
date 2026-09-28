@@ -302,84 +302,91 @@ export function NotificationQueue({
             </div>
           </article>
         ) : null}
-        {items.map((item) => (
-          <article className="record-card panel-card-soft" key={item.id}>
-            <div className="record-card__header">
-              <div className="record-card__title-block">
-                <h3>{item.title || item.event_definition_name || "Notification"}</h3>
-                <p>{item.channel} • {item.subject_type} • {item.recipient_membership_name || item.recipient_identifier || "Unknown recipient"}</p>
-              </div>
-              <div className="record-card__actions">
-                <label className="checkbox-row">
+        {items.map((item) => {
+          const latestActivity = formatNotificationDateTime(item.delivery_logs[0]?.created_at || item.read_at || item.delivered_at || item.sent_at || item.created_at);
+          const latestError =
+            item.delivery_logs.find((log) => log.error_message)?.error_message ||
+            "Open review to inspect the latest provider response and recover the delivery path.";
+
+          return (
+            <article className="record-card panel-card-soft notification-queue-card" key={item.id}>
+              <div className="notification-queue-card__summary">
+                <label className="checkbox-row notification-queue-card__select">
                   <input checked={selectedIds.includes(item.id)} disabled={!item.can_retry} onChange={() => toggleOne(item.id)} type="checkbox" />
                   <span>{item.can_retry ? "Select" : "Locked"}</span>
                 </label>
-                <span className="record-chip">{item.status}</span>
-                <span className="record-chip">{item.priority}</span>
-                <span className="record-chip">{`Attempts ${item.attempt_count}/${item.max_attempts}`}</span>
-                {item.retry_limit_reached ? <span className="record-chip">Retry capped</span> : null}
-                {item.subject_type === "employee_document" ? <span className="record-chip record-chip--accent">Document</span> : null}
-                <Link className="button button--secondary" href={`/hr-admin/notifications/${item.id}/review`}>
-                  Review
-                </Link>
+                <div className="notification-queue-card__main">
+                  <h3>{item.title || item.event_definition_name || "Notification"}</h3>
+                  <p>{item.channel} • {item.subject_type} • {item.recipient_membership_name || item.recipient_identifier || "Unknown recipient"}</p>
+                  <div className="notification-queue-card__meta">
+                    <span>{item.event_definition_name || "Direct send"}</span>
+                    <span>{latestActivity}</span>
+                    <span>{item.recipient_address || item.recipient_identifier || "No recipient address"}</span>
+                  </div>
+                </div>
+                <div className="notification-queue-card__status">
+                  <span className={`record-chip${item.status === "failed" ? " record-chip--danger" : ""}`}>{item.status}</span>
+                  <span className="record-chip">{item.priority}</span>
+                  <span className="record-chip">{`Attempts ${item.attempt_count}/${item.max_attempts}`}</span>
+                  {item.retry_limit_reached ? <span className="record-chip record-chip--accent">Retry capped</span> : null}
+                  {item.subject_type === "employee_document" ? <span className="record-chip record-chip--accent">Document</span> : null}
+                </div>
+                <div className="notification-row-actions">
+                  <Link className="button button--secondary" href={`/hr-admin/notifications/${item.id}/review`}>
+                    Review
+                  </Link>
+                </div>
               </div>
-            </div>
 
-            {item.status === "failed" || item.retry_limit_reached ? (
-              <div className="notice">
-                <strong>{item.retry_limit_reached ? "Retry cap reached." : "Delivery failed."}</strong>
-                <span className="muted">
-                  {item.delivery_logs.find((log) => log.error_message)?.error_message || "Open review to inspect the latest provider response and recover the delivery path."}
-                </span>
-              </div>
-            ) : null}
+              {item.status === "failed" || item.retry_limit_reached ? (
+                <div className="notice notification-queue-card__notice">
+                  <strong>{item.retry_limit_reached ? "Retry cap reached." : "Delivery failed."}</strong>
+                  <span className="muted">{latestError}</span>
+                </div>
+              ) : null}
 
-            <div className="record-card__details">
-              <div>
-                <span className="record-card__label">Event</span>
-                <strong>{item.event_definition_name || "Direct send"}</strong>
-              </div>
-              <div>
-                <span className="record-card__label">Scheduled</span>
-                <strong>{item.scheduled_for || "Immediate"}</strong>
-              </div>
-              <div>
-                <span className="record-card__label">Read at</span>
-                <strong>{item.read_at || "Unread"}</strong>
-              </div>
-              <div>
-                <span className="record-card__label">Recipient</span>
-                <strong>{item.recipient_address || item.recipient_identifier || "Not available"}</strong>
-              </div>
-              <div>
-                <span className="record-card__label">Retry policy</span>
-                <strong>
-                  {item.can_retry
-                    ? item.retry_backoff_minutes > 0
-                      ? `Open after ${item.retry_backoff_minutes} min backoff`
-                      : "Retry available now"
-                    : "Retry limit reached"}
-                </strong>
-              </div>
-              <div>
-                <span className="record-card__label">Latest activity</span>
-                <strong>{formatNotificationDateTime(item.delivery_logs[0]?.created_at || item.read_at || item.delivered_at || item.sent_at || item.created_at)}</strong>
-              </div>
-            </div>
+              <details className="notification-details-disclosure">
+                <summary>Details and quick review</summary>
+                <div className="record-card__details">
+                  <div>
+                    <span className="record-card__label">Scheduled</span>
+                    <strong>{item.scheduled_for || "Immediate"}</strong>
+                  </div>
+                  <div>
+                    <span className="record-card__label">Read at</span>
+                    <strong>{item.read_at || "Unread"}</strong>
+                  </div>
+                  <div>
+                    <span className="record-card__label">Retry policy</span>
+                    <strong>
+                      {item.can_retry
+                        ? item.retry_backoff_minutes > 0
+                          ? `Open after ${item.retry_backoff_minutes} min backoff`
+                          : "Retry available now"
+                        : "Retry limit reached"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="record-card__label">Latest activity</span>
+                    <strong>{latestActivity}</strong>
+                  </div>
+                </div>
 
-            {item.subject ? (
-              <div className="record-card__notes">
-                <strong>Subject context</strong>
-                <p>{item.subject}</p>
-              </div>
-            ) : null}
-            <NotificationInlineReview
-              item={item}
-              notificationPriorityOptions={notificationPriorityOptions}
-              notificationStatusOptions={notificationStatusOptions}
-            />
-          </article>
-        ))}
+                {item.subject ? (
+                  <div className="record-card__notes">
+                    <strong>Subject context</strong>
+                    <p>{item.subject}</p>
+                  </div>
+                ) : null}
+                <NotificationInlineReview
+                  item={item}
+                  notificationPriorityOptions={notificationPriorityOptions}
+                  notificationStatusOptions={notificationStatusOptions}
+                />
+              </details>
+            </article>
+          );
+        })}
 
         {items.length === 0 ? (
           <div className="card panel panel-card-soft">

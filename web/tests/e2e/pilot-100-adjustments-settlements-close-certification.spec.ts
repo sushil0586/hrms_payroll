@@ -76,7 +76,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
     await expectPageReady(page, "Payroll Adjustments");
     const run = await locatePilotRun(page);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?runId=${run.id}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?tab=actions&runId=${run.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Adjustments");
     await expect(page.getByRole("heading", { name: `${prefix} Adjustments Settlements Close Gate` })).toBeVisible();
     const adjustmentPanel = page.getByLabel("Adjustment certification actions");
@@ -88,7 +88,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
     await adjustmentPanel.getByLabel("Adjustment amount").fill("13500");
     const createdAdjustment = await submitAndCapture<{ id: string; status: string; source_hash: string }>(
       page,
-      /\/api\/hr-admin\/payroll-adjustments$/,
+      /\/api\/hr-admin\/payroll-adjustments\/?$/,
       "POST",
       async () => {
         await adjustmentPanel.getByRole("button", { name: "Create adjustment" }).click();
@@ -98,14 +98,16 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
     expect(createdAdjustment.payload.status).toBe("draft");
     expect(createdAdjustment.payload.source_hash).toMatch(/^[a-f0-9]{64}$/);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?runId=${run.id}&adjustmentId=${createdAdjustment.payload.id}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?tab=detail&runId=${run.id}&adjustmentId=${createdAdjustment.payload.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Adjustments");
     await expect(page.locator(".payroll-adjustment-table tr.is-selected")).toContainText("Pilot Certification Bonus");
     await expect(page.locator("aside[aria-label*='Pilot Certification Bonus']")).toContainText(adjustmentSourceRef);
 
+    await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?tab=actions&runId=${run.id}&adjustmentId=${createdAdjustment.payload.id}`, hrAdmin);
+    await expectPageReady(page, "Payroll Adjustments");
     const unapprovedApply = await submitAndCapture<{ detail?: string }>(
       page,
-      new RegExp(`/api/hr-admin/payroll-adjustments/${createdAdjustment.payload.id}/apply$`),
+      new RegExp(`/api/hr-admin/payroll-adjustments/${createdAdjustment.payload.id}/apply/?$`),
       "POST",
       async () => {
         await page.getByLabel("Adjustment certification actions").getByRole("button", { name: "Apply selected" }).click();
@@ -117,7 +119,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
 
     const duplicateCreate = await submitAndCapture<{ detail?: string }>(
       page,
-      /\/api\/hr-admin\/payroll-adjustments$/,
+      /\/api\/hr-admin\/payroll-adjustments\/?$/,
       "POST",
       async () => {
         const refreshedPanel = page.getByLabel("Adjustment certification actions");
@@ -135,7 +137,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
     ] as const) {
       const response = await submitAndCapture<{ status: string }>(
         page,
-        new RegExp(`/api/hr-admin/payroll-adjustments/${createdAdjustment.payload.id}/${action.split(" ")[0].toLowerCase()}$`),
+        new RegExp(`/api/hr-admin/payroll-adjustments/${createdAdjustment.payload.id}/${action.split(" ")[0].toLowerCase()}/?$`),
         "POST",
         async () => {
           await page.getByLabel("Adjustment certification actions").getByRole("button", { name: action }).click();
@@ -143,13 +145,15 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
       );
       expect(response.ok).toBeTruthy();
       expect(response.payload.status).toBe(expected);
-      await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?runId=${run.id}&adjustmentId=${createdAdjustment.payload.id}`, hrAdmin);
+      await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?tab=actions&runId=${run.id}&adjustmentId=${createdAdjustment.payload.id}`, hrAdmin);
       await expectPageReady(page, "Payroll Adjustments");
     }
+    await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?tab=detail&runId=${run.id}&adjustmentId=${createdAdjustment.payload.id}`, hrAdmin);
+    await expectPageReady(page, "Payroll Adjustments");
     await expect(page.locator(".payroll-adjustment-table tr.is-selected")).toContainText("Applied");
     await expectNoHorizontalOverflow(page);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-settlements?runId=${run.id}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-settlements?tab=actions&runId=${run.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Settlements");
     const settlementPanel = page.getByLabel("Settlement certification actions");
     await expect(settlementPanel).toBeVisible();
@@ -157,7 +161,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
     await settlementPanel.getByLabel("Settlement source reference").fill(settlementSourceRef);
     const createdSettlement = await submitAndCapture<{ id: string; status: string; source_hash: string }>(
       page,
-      /\/api\/hr-admin\/payroll-settlements$/,
+      /\/api\/hr-admin\/payroll-settlements\/?$/,
       "POST",
       async () => {
         await settlementPanel.getByRole("button", { name: "Create settlement" }).click();
@@ -168,11 +172,13 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
     expect(createdSettlement.payload.source_hash).toMatch(/^[a-f0-9]{64}$/);
     await waitForSettlementLineCount(page, createdSettlement.payload.id, 2);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-settlements?runId=${run.id}&settlementId=${createdSettlement.payload.id}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-settlements?tab=detail&runId=${run.id}&settlementId=${createdSettlement.payload.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Settlements");
     await expect(page.locator(".payroll-settlement-line-table tbody tr")).toHaveCount(2);
     await expect(page.locator("aside[aria-label*='payroll settlement']")).toContainText(settlementSourceRef);
 
+    await gotoAuthenticated(page, `/hr-admin/payroll-settlements?tab=actions&runId=${run.id}&settlementId=${createdSettlement.payload.id}`, hrAdmin);
+    await expectPageReady(page, "Payroll Settlements");
     for (const [action, expected] of [
       ["Submit selected", "submitted"],
       ["Approve selected", "approved"],
@@ -180,7 +186,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
     ] as const) {
       const response = await submitAndCapture<{ status: string }>(
         page,
-        new RegExp(`/api/hr-admin/payroll-settlements/${createdSettlement.payload.id}/${action.split(" ")[0].toLowerCase()}$`),
+        new RegExp(`/api/hr-admin/payroll-settlements/${createdSettlement.payload.id}/${action.split(" ")[0].toLowerCase()}/?$`),
         "POST",
         async () => {
           await page.getByLabel("Settlement certification actions").getByRole("button", { name: action }).click();
@@ -188,9 +194,11 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
       );
       expect(response.ok).toBeTruthy();
       expect(response.payload.status).toBe(expected);
-      await gotoAuthenticated(page, `/hr-admin/payroll-settlements?runId=${run.id}&settlementId=${createdSettlement.payload.id}`, hrAdmin);
+      await gotoAuthenticated(page, `/hr-admin/payroll-settlements?tab=actions&runId=${run.id}&settlementId=${createdSettlement.payload.id}`, hrAdmin);
       await expectPageReady(page, "Payroll Settlements");
     }
+    await gotoAuthenticated(page, `/hr-admin/payroll-settlements?tab=detail&runId=${run.id}&settlementId=${createdSettlement.payload.id}`, hrAdmin);
+    await expectPageReady(page, "Payroll Settlements");
     await expect(page.locator(".payroll-adjustment-table").or(page.locator(".payroll-settlement-line-table")).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 

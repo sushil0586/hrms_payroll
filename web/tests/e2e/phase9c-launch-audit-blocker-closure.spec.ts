@@ -208,7 +208,7 @@ async function createActiveDocumentCategoryAndMandatoryRule(page: Page) {
 }
 
 async function createActiveSalaryConfiguration(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/salary-setup");
+  await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions");
   await expectPageReady(page, "Salary Setup");
 
   const componentForm = page.getByTestId("salary-component-form");
@@ -273,7 +273,7 @@ async function createActiveSalaryConfiguration(page: Page) {
 }
 
 async function createActivePayrollRuleVersion(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-rules");
+  await gotoAuthenticated(page, "/hr-admin/payroll-rules?tab=actions");
   await expectPageReady(page, "Payroll Rules");
 
   const definitionForm = page.getByTestId("payroll-rule-definition-form");

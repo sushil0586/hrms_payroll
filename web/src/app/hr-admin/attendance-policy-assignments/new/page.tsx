@@ -11,10 +11,10 @@ export default async function HrAdminNewAttendancePolicyAssignmentPage() {
   const optionsResult = await getHrAdminPolicyOptions();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
-        title="Create attendance policy assignment."
+        title="Create attendance assignment"
         description="Use assignment priority and scope to control where the attendance policy actually applies."
         actions={<Link className="button button--secondary" href="/hr-admin/attendance-policy-assignments">Back to attendance assignments</Link>}
         pills={["Priority-based resolution", "Scoped rollout", "Employee override capable"]}

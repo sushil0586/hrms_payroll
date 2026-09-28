@@ -84,7 +84,7 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
       "Adjustment created as draft.",
     );
     if (payload?.id && selectedRun) {
-      router.push(`/hr-admin/payroll-adjustments?runId=${selectedRun.id}&adjustmentId=${payload.id}`);
+      router.push(`/hr-admin/payroll-adjustments?tab=detail&runId=${selectedRun.id}&adjustmentId=${payload.id}`);
     }
   }
 

@@ -37,10 +37,10 @@ export default async function HrAdminEmployeeAccessPage({ params }: PageProps) {
     <main className="shell">
       <PageIntro
         eyebrow={state === "live" ? "Live access mode" : "Demo access mode"}
-        title={`Manage system access for ${employeeResult.data.full_name}.`}
-        description="Connect the employee master to a user account, tenant membership, and role mix in a provisioning flow that feels consistent with the rest of the admin suite."
+        title={`Access for ${employeeResult.data.full_name}`}
+        description="Manage login state, tenant membership, and role assignment for this employee."
         actions={<Link className="button button--secondary" href={`/hr-admin/employees?employeeId=${employeeId}`}>Back to employee detail</Link>}
-        pills={["Provisioning and membership", "Role-aware access setup", "Works in live and demo mode"]}
+        pills={["Login", "Membership", "Roles"]}
       />
 
       <section className="section">

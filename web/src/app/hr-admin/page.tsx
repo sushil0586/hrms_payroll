@@ -195,15 +195,15 @@ export default async function HrAdminLandingPage() {
     <main className="shell hr-admin-enterprise-dashboard">
       <PageIntro
         eyebrow="HR Admin"
-        title="People Operations Control Center"
-        description="Prioritize workforce, payroll, attendance, document, and launch-readiness work from one calm operating view."
+        title="HR Control Center"
+        description="Prioritize payroll, workforce, documents, and launch readiness from one operating view."
         actions={
           <>
             <Link className="button button--primary" href="/hr-admin/payroll-readiness">
-              Resolve payroll blockers
+              Payroll blockers
             </Link>
             <Link className="button button--secondary" href="/hr-admin/employees">
-              Open employees
+              Employees
             </Link>
             <Link className="button button--secondary" href="/hr-admin/reports">
               Reports
@@ -228,11 +228,11 @@ export default async function HrAdminLandingPage() {
       </section>
 
       <section className="section hr-admin-control-center" data-testid="hr-admin-control-center">
-        <article className="panel-card-soft hr-admin-control-card hr-admin-control-card--primary">
+        <article className="panel-card-soft hr-admin-control-card hr-admin-control-card--primary" data-testid="hr-admin-action-queue">
           <div className="hr-admin-control-card__header">
             <div>
               <span className="workspace-card__eyebrow">Action queue</span>
-              <h2>Items that need your attention</h2>
+              <h2>Action queue</h2>
             </div>
             <span className="queue-summary-chip"><strong>{openCommandCount}</strong> active signals</span>
           </div>
@@ -251,7 +251,7 @@ export default async function HrAdminLandingPage() {
           </div>
         </article>
 
-        <article className="panel-card-soft hr-admin-control-card">
+        <article className="panel-card-soft hr-admin-control-card" data-testid="hr-admin-operational-readiness">
           <div className="hr-admin-control-card__header">
             <div>
               <span className="workspace-card__eyebrow">Tenant readiness</span>
@@ -293,11 +293,11 @@ export default async function HrAdminLandingPage() {
       </section>
 
       <section className="section hr-admin-secondary-grid">
-        <div className="hr-admin-launch-audit panel-card-soft">
+        <div className="hr-admin-launch-audit panel-card-soft" data-testid="hr-admin-launch-audit">
           <div className="hr-admin-launch-audit__header">
             <div>
               <span className="workspace-card__eyebrow">Launch audit</span>
-              <h2>Launch readiness posture</h2>
+              <h2>Launch audit</h2>
             </div>
             <div className="hr-admin-launch-audit__summary">
               <span className={launchAuditChipClass(launchAudit.status)}>{launchAuditStatusLabel[launchAudit.status]}</span>
@@ -352,11 +352,11 @@ export default async function HrAdminLandingPage() {
           </div>
         </div>
 
-        <div className="launch-config-guard panel-card-soft">
+        <div className="launch-config-guard panel-card-soft" data-testid="hr-admin-launch-guardrails">
           <div className="launch-config-guard__header">
             <div>
               <span className="workspace-card__eyebrow">Launch guardrails</span>
-              <h2>Production-safe settings</h2>
+              <h2>Guardrails</h2>
             </div>
             <div className="hr-admin-launch-audit__summary">
               <span className={launchConfigChipClass(configSummary.status)}>{launchAuditStatusLabel[configSummary.status]}</span>
@@ -381,7 +381,7 @@ export default async function HrAdminLandingPage() {
         <div className="hr-admin-section-heading">
           <div>
             <span className="workspace-card__eyebrow">Focused workspaces</span>
-            <h2>Open the right workspace</h2>
+            <h2>Workspaces</h2>
           </div>
           <Link className="button button--secondary" href="/hr-admin/reports">
             View all reports

@@ -183,7 +183,7 @@ export default async function TenantAdminConsolePage() {
       <PageIntro
         eyebrow="Tenant Admin"
         title="Account Control Center"
-        description="Manage your organization's users, access, setup, security, and subscription in one place."
+        description="Review account posture, open access work, setup progress, and tenant evidence from one control center."
         className="tenant-page-intro"
         actions={
           <>
@@ -263,7 +263,8 @@ export default async function TenantAdminConsolePage() {
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Tenant Readiness</span>
-              <h2>Complete these key items to ensure smooth operation.</h2>
+              <h2>Launch checklist</h2>
+              <p className="tenant-console-empty">Complete the core account, access, setup, security, and audit steps.</p>
             </div>
             <span className={statusBadgeClass(data.summary.commercial_can_launch ? "ready" : data.summary.status)}>
               {setupDoneCount} of {setupSteps.length} ready

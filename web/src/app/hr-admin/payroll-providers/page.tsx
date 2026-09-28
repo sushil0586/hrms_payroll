@@ -50,8 +50,31 @@ type ProviderFailureBucket = {
   action: string;
 };
 
+type ProviderTab = "overview" | "connections" | "mapping" | "delivery" | "registry";
+
+const PROVIDER_TABS: Array<{ id: ProviderTab; label: string; helper: string }> = [
+  { id: "overview", label: "Overview", helper: "Readiness and rehearsal" },
+  { id: "connections", label: "Connections", helper: "Provider detail and certification" },
+  { id: "mapping", label: "Mapping", helper: "Schema packs and simulations" },
+  { id: "delivery", label: "Delivery", helper: "Callbacks, retries, failures" },
+  { id: "registry", label: "Registry", helper: "Adapters, clients, storage" },
+];
+
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeProviderTab(value: SearchParamValue): ProviderTab {
+  const candidate = normalizeParam(value);
+  return PROVIDER_TABS.some((tab) => tab.id === candidate) ? candidate as ProviderTab : "overview";
+}
+
+function providerHref(tab: ProviderTab, connectionId?: string | null) {
+  const params = new URLSearchParams({ tab });
+  if (connectionId) {
+    params.set("connectionId", connectionId);
+  }
+  return `/hr-admin/payroll-providers?${params.toString()}`;
 }
 
 function titleCase(value: string) {
@@ -265,9 +288,11 @@ function selectedProviderEvents({
 function ProviderRail({
   connections,
   selectedConnection,
+  activeTab,
 }: {
   connections: HrAdminPayrollProviderConnection[];
   selectedConnection: HrAdminPayrollProviderConnection | null;
+  activeTab: ProviderTab;
 }) {
   return (
     <aside className="payroll-setup-rail payroll-provider-rail">
@@ -281,7 +306,7 @@ function ProviderRail({
           return (
             <Link
               className={`payroll-setup-mini-card payroll-provider-card ${selectedConnection?.id === connection.id ? "is-selected" : ""}`}
-              href={`/hr-admin/payroll-providers?connectionId=${connection.id}`}
+              href={providerHref(activeTab, connection.id)}
               key={connection.id}
             >
               <div>
@@ -514,6 +539,7 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
   const params = await searchParams;
   const selectedConnectionId = normalizeParam(params?.connectionId);
+  const activeTab = normalizeProviderTab(params?.tab);
   const [result, handoffResult] = await Promise.all([
     getHrAdminPayrollProviderConnectionSetup(),
     getHrAdminPayrollFinanceHandoffSetup(),
@@ -633,8 +659,23 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
       </section>
 
       <section className="section section--tight">
+        <nav className="payroll-setup-tabs" aria-label="Payroll provider sections">
+          {PROVIDER_TABS.map((tab) => (
+            <Link
+              className={`payroll-setup-tab ${activeTab === tab.id ? "payroll-setup-tab--active" : ""}`}
+              href={providerHref(tab.id, selectedConnection?.id)}
+              key={tab.id}
+            >
+              <strong>{tab.label}</strong>
+              <span>{tab.helper}</span>
+            </Link>
+          ))}
+        </nav>
+      </section>
+
+      <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-provider-workspace">
-          <ProviderRail connections={setup.connections} selectedConnection={selectedConnection} />
+          <ProviderRail connections={setup.connections} selectedConnection={selectedConnection} activeTab={activeTab} />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -677,6 +718,8 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
               </article>
             </div>
 
+            {activeTab === "overview" ? (
+              <>
             <section className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
@@ -792,7 +835,10 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 ) : null}
               </div>
             </section>
+              </>
+            ) : null}
 
+            {activeTab === "delivery" ? (
             <section className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
@@ -875,7 +921,10 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </table>
               </div>
             </section>
+            ) : null}
 
+            {activeTab === "registry" ? (
+              <>
             <section className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
@@ -1107,7 +1156,11 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </table>
               </div>
             </section>
+              </>
+            ) : null}
 
+            {activeTab === "mapping" ? (
+              <>
             <section className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
@@ -1213,7 +1266,11 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </table>
               </div>
             </section>
+              </>
+            ) : null}
 
+            {activeTab === "connections" ? (
+              <>
             <section className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
@@ -1274,16 +1331,16 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                       <th>Kind</th>
                       <th>Adapter</th>
                       <th>Credential</th>
-                        <th>Certification</th>
-                        <th>Latest run</th>
-                        <th>Status</th>
+                      <th>Certification</th>
+                      <th>Latest run</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {setup.connections.map((connection) => (
                       <tr className={selectedConnection?.id === connection.id ? "is-selected" : ""} key={connection.id}>
                         <td>
-                          <Link href={`/hr-admin/payroll-providers?connectionId=${connection.id}`}>
+                          <Link href={providerHref("connections", connection.id)}>
                             <strong>{connection.provider_name}</strong>
                             <span>{connection.provider_ref}</span>
                             <span>{connection.channel_ref}</span>
@@ -1315,9 +1372,13 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 </table>
               </div>
             </section>
+              </>
+            ) : null}
           </div>
 
-          <ConnectionDetail connection={selectedConnection} certificationRuns={selectedCertificationRuns} mappingPacks={selectedMappingPacks} simulationRuns={selectedSimulationRuns} />
+          {activeTab === "connections" ? (
+            <ConnectionDetail connection={selectedConnection} certificationRuns={selectedCertificationRuns} mappingPacks={selectedMappingPacks} simulationRuns={selectedSimulationRuns} />
+          ) : null}
         </div>
       </section>
     </main>

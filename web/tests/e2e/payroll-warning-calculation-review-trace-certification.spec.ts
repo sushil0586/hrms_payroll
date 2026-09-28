@@ -104,7 +104,7 @@ async function createWarningLockedRun(page: Page) {
 }
 
 async function createDisposableActiveRule(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-rules", hrAdmin);
+  await gotoAuthenticated(page, "/hr-admin/payroll-rules?tab=actions", hrAdmin);
   await expectPageReady(page, "Payroll Rules");
   const ruleDefinitionForm = form(page, "payroll-rule-definition-form");
   const ruleVersionForm = form(page, "payroll-rule-version-form");

@@ -76,7 +76,7 @@ test.describe("Phase PLF-5C ESIC contribution readiness certification", () => {
     await page.goto("/hr-admin/reports/esic-contribution-readiness", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("esic-contribution-readiness-report")).toHaveCount(0);
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("heading", { name: /Run payroll, compliance, and employee operations/ })).toBeVisible();
+    await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
+    await expect(page.getByRole("heading", { name: /ESIC Contribution Readiness/i })).toHaveCount(0);
   });
 });

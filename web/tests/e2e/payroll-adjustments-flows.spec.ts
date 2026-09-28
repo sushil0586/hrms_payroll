@@ -9,14 +9,21 @@ test.describe("HR admin payroll adjustment flows", () => {
     await expectPageReady(page, "Payroll Adjustments");
 
     await expect(page.getByRole("heading", { name: "Adjustment runs" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Adjustment input controls" })).toBeVisible();
+
+    await page.getByRole("link", { name: /Register/ }).click();
     await expect(page.getByText("One-time payroll inputs").first()).toBeVisible();
 
     const adjustmentLink = page.locator("main a[href*='adjustmentId=']").first();
     if (await adjustmentLink.isVisible().catch(() => false)) {
       await adjustmentLink.click();
       await expect(page).toHaveURL(/adjustmentId=/);
-      await expect(page.getByText("Source hash").or(page.getByText("Approval")).first()).toBeVisible();
+      const detailPanel = page.locator(".payroll-adjustment-detail-panel").first();
+      await expect(detailPanel.getByText("Source hash")).toBeVisible();
     }
+
+    await page.getByRole("link", { name: /Actions/ }).click();
+    await expect(page.getByLabel("Adjustment certification actions")).toBeVisible();
 
     await expectNoHorizontalOverflow(page);
   });

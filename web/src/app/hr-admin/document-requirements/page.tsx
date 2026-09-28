@@ -14,7 +14,7 @@ export default async function HrAdminDocumentRequirementsPage() {
   const result = await getHrAdminDocumentRequirements();
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         actions={
           <>
@@ -22,7 +22,7 @@ export default async function HrAdminDocumentRequirementsPage() {
             <Link className="button button--secondary" href="/hr-admin/documents">Back to documents</Link>
           </>
         }
-        description="Define where documents are mandatory so onboarding and compliance checks stay configurable across clients and org structures."
+        description="Define where documents are mandatory across org structure and employee context."
         eyebrow={result.state === "live" ? "Live document mode" : "Demo document mode"}
         pills={[`${result.data.length} requirement rules`]}
         title="Document requirements"
@@ -37,9 +37,9 @@ export default async function HrAdminDocumentRequirementsPage() {
       </section>
 
       <section className="section">
-        <div className="queue-list">
+        <div className="queue-list document-record-list">
           {result.data.map((item) => (
-            <article className="record-card" key={item.id}>
+            <article className="record-card document-record-card" key={item.id}>
               <div className="record-card__header">
                 <div className="record-card__title-block">
                   <h3>{item.category_name}</h3>
@@ -50,7 +50,7 @@ export default async function HrAdminDocumentRequirementsPage() {
                   {canManageDocuments ? <Link className="button button--secondary" href={`/hr-admin/document-requirements/${item.id}/edit`}>Edit</Link> : null}
                 </div>
               </div>
-              <div className="record-card__details">
+              <div className="record-card__details document-detail-grid">
                 <div><span className="record-card__label">Legal entity</span><strong>{item.legal_entity || "All"}</strong></div>
                 <div><span className="record-card__label">Branch</span><strong>{item.branch || "All"}</strong></div>
                 <div><span className="record-card__label">Department</span><strong>{item.department || "All"}</strong></div>

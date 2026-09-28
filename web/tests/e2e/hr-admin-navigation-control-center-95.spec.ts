@@ -36,18 +36,17 @@ const navGroups: { title: string; items: HrAdminNavItem[] }[] = [
     title: "Payroll",
     items: [
       { href: "/hr-admin/payroll-readiness", label: "Payroll Control" },
-      { href: "/hr-admin/payroll-inputs", label: "Inputs" },
-      { href: "/hr-admin/payroll-calculations", label: "Calculation" },
-      { href: "/hr-admin/payroll-review", label: "Review" },
-      { href: "/hr-admin/payroll-outputs", label: "Outputs" },
-      { href: "/hr-admin/payroll-handoff", label: "Handoff" },
+      { href: "/hr-admin/payroll-setup", label: "Payroll Setup" },
+      { href: "/hr-admin/salary-setup", label: "Salary Setup" },
+      { href: "/hr-admin/payroll-rules", label: "Payroll Rules" },
+      { href: "/hr-admin/payroll-statutory", label: "Statutory" },
+      { href: "/hr-admin/payroll-providers", label: "Providers" },
+      { href: "/hr-admin/payroll-adjustments", label: "Adjustments & Settlements" },
     ],
   },
   {
     title: "Compliance",
     items: [
-      { href: "/hr-admin/payroll-statutory", label: "Statutory" },
-      { href: "/hr-admin/payroll-providers", label: "Providers" },
       { href: "/hr-admin/audit", label: "Audit" },
     ],
   },
@@ -96,11 +95,13 @@ async function expectRouteHealthy(page: Page, item: HrAdminNavItem) {
 }
 
 test.describe("HR Admin navigation and control center 95 certification", () => {
+  test.describe.configure({ timeout: 120_000 });
+
   test("certifies grouped sidebar, topbar, command center, and every menu route on desktop", async ({
     page,
   }) => {
     await gotoAuthenticated(page, "/hr-admin", hrAdmin);
-    await expectPageReady(page, "People Operations Control Center");
+    await expectPageReady(page, "HR Control Center");
     await openHrAdminNavGroups(page);
 
     const nav = page.getByRole("navigation", { name: /hr admin navigation/i });
@@ -121,6 +122,10 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
       }
     }
 
+    for (const oldCycleItem of ["Inputs", "Calculation", "Review", "Outputs", "Handoff"]) {
+      await expect(nav.getByRole("link", { name: new RegExp(`^${oldCycleItem}\\b`) })).toHaveCount(0);
+    }
+
     await expect(page.getByLabel("Search placeholder")).toContainText(
       "Search employees, payroll, leave, attendance, reports...",
     );
@@ -138,7 +143,7 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
       "Open attendance",
       "Open delivery",
       "Resolve launch",
-      "Resolve payroll blockers",
+      "Payroll blockers",
       "Open employees",
       "Open payroll",
       "Open reports",
@@ -153,13 +158,34 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
     }
   });
 
-  test("keeps HR Admin navigation usable without overflow on mobile", async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await gotoAuthenticated(page, "/hr-admin", hrAdmin);
-    await expectPageReady(page, "People Operations Control Center");
+  test("maps payroll cycle pages back to the correct sidebar area", async ({ page }) => {
+    await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
     await openHrAdminNavGroups(page);
 
     const nav = page.getByRole("navigation", { name: /hr admin navigation/i });
+    await expect(nav.getByRole("link", { name: /^Payroll Control\b/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    await gotoAuthenticated(page, "/hr-admin/payroll-settlements", hrAdmin);
+    await openHrAdminNavGroups(page);
+
+    await expect(nav.getByRole("link", { name: /^Adjustments & Settlements\b/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  test("keeps HR Admin navigation usable without overflow on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoAuthenticated(page, "/hr-admin", hrAdmin);
+    await expectPageReady(page, "HR Control Center");
+    await openHrAdminNavGroups(page);
+
+    await page.getByText("Menu", { exact: true }).click();
+
+    const nav = page.getByRole("navigation", { name: /hr admin mobile navigation/i });
     await expect(nav).toBeVisible();
 
     for (const group of navGroups) {

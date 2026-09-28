@@ -31,6 +31,7 @@ export default async function TenantSetupGuidePage() {
   const warnings = data.governance_checks.filter((check) => check.status === "warning");
   const setupAreas = [
     {
+      step: "01",
       title: "Company profile",
       owner: "Tenant Admin",
       status: data.tenant.legal_name && data.tenant.country_code && data.tenant.timezone ? "ready" : "blocked",
@@ -40,6 +41,7 @@ export default async function TenantSetupGuidePage() {
       action: "Review profile",
     },
     {
+      step: "02",
       title: "Organization masters",
       owner: "HR Admin",
       status: data.configuration_health.published_count ? "ready" : "blocked",
@@ -49,6 +51,7 @@ export default async function TenantSetupGuidePage() {
       action: "Open masters",
     },
     {
+      step: "03",
       title: "Users and access",
       owner: "Tenant Admin",
       status: data.summary.active_membership_count > 1 ? "ready" : "warning",
@@ -58,6 +61,7 @@ export default async function TenantSetupGuidePage() {
       action: "Manage access",
     },
     {
+      step: "04",
       title: "Payroll foundation",
       owner: "HR Admin",
       status: data.summary.published_configuration_count ? "ready" : "blocked",
@@ -67,6 +71,7 @@ export default async function TenantSetupGuidePage() {
       action: "Open payroll setup",
     },
     {
+      step: "05",
       title: "Security and audit",
       owner: "Tenant Admin",
       status: blockers.length ? "blocked" : warnings.length ? "warning" : "ready",
@@ -110,12 +115,13 @@ export default async function TenantSetupGuidePage() {
         </div>
       </section>
 
-      <section className="section tenant-setup-workbench" data-testid="tenant-setup-workbench">
+      <section className="section tenant-setup-workbench tenant-setup-workbench--phase3" data-testid="tenant-setup-workbench">
         <div className="panel-card-soft tenant-console-panel tenant-setup-guide">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Launch readiness</span>
               <h2>Setup areas</h2>
+              <p className="tenant-console-empty">Complete each foundation in order, then use the action on the right to continue in the correct workspace.</p>
             </div>
             <span className={badgeClass(blockedAreas ? "blocked" : warningAreas ? "warning" : "ready")}>
               {blockedAreas ? "Action needed" : warningAreas ? "Review" : "Ready"}
@@ -123,12 +129,13 @@ export default async function TenantSetupGuidePage() {
           </div>
           <div className="tenant-setup-area-list">
             {setupAreas.map((area) => (
-              <article className="tenant-setup-area" key={area.title}>
-                <div>
+              <article className="tenant-setup-area tenant-setup-area--phase3" key={area.title}>
+                <span className="tenant-setup-area__index">{area.step}</span>
+                <div className="tenant-setup-area__body">
                   <span className="workspace-card__eyebrow">{area.owner}</span>
                   <h3>{area.title}</h3>
                   <p>{area.detail}</p>
-                  <span>{area.evidence}</span>
+                  <span className="tenant-setup-area__evidence">{area.evidence}</span>
                 </div>
                 <span className={badgeClass(area.status)}>{titleCase(area.status)}</span>
                 <Link className="button button--secondary" href={area.href}>
@@ -139,14 +146,18 @@ export default async function TenantSetupGuidePage() {
           </div>
         </div>
 
-        <aside className="panel-card-soft tenant-console-panel">
+        <aside className="panel-card-soft tenant-console-panel tenant-setup-sidecar">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Dependency guardrails</span>
-              <h2>Before employee import</h2>
+              <h2>Import prerequisites</h2>
             </div>
           </div>
-          <div className="tenant-console-list">
+          <div className="tenant-setup-sidecar__hero">
+            <strong>{blockedAreas ? "Resolve blocked setup areas first" : warningAreas ? "Review warning areas before launch" : "Tenant setup is ready"}</strong>
+            <span>{readyAreas} of {setupAreas.length} areas are currently ready for downstream HR and payroll activity.</span>
+          </div>
+          <div className="tenant-console-list tenant-setup-dependency-list">
             {[
               "Create legal entities before branches and cost centers.",
               "Map each branch to a legal entity and location.",

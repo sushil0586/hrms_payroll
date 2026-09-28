@@ -177,16 +177,16 @@ test.describe("HR Admin leave and attendance RBAC certification", () => {
     });
 
     await gotoAuthenticated(page, "/hr-admin/leave-policies", persona);
-    await expectPageReady(page, /Leave policy admin/i);
+    await expectPageReady(page, /Leave policies/i);
     await expect(page.getByRole("main").getByRole("link", { name: "Create leave policy" })).toHaveCount(0);
     await expect(page.getByRole("main").getByRole("link", { name: "Edit" })).toHaveCount(0);
 
     await page.goto("/hr-admin/leave-policies/new", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/\/hr-admin\/leave-policies$/);
-    await expectPageReady(page, /Leave policy admin/i);
+    await expectPageReady(page, /Leave policies/i);
 
     await gotoAuthenticated(page, "/hr-admin/leave-policy-assignments", persona);
-    await expectPageReady(page, /Leave policy assignments by scope/i);
+    await expectPageReady(page, /Leave assignments/i);
     await expect(page.getByRole("main").getByRole("link", { name: "Create leave assignment" })).toHaveCount(0);
     await expect(page.getByText("Read-only leave assignment view.")).toBeVisible();
 
@@ -239,21 +239,21 @@ test.describe("HR Admin leave and attendance RBAC certification", () => {
     await expect(page.getByRole("button", { name: /Mark selected|Bulk approve|Bulk reject/i })).toHaveCount(0);
 
     await gotoAuthenticated(page, "/hr-admin/attendance-regularizations", persona);
-    await expectPageReady(page, /Attendance regularization queue/i);
+    await expectPageReady(page, /Regularizations/i);
     await expect(page.getByText("Read-only regularization view.").first()).toBeVisible();
     await expect(page.getByRole("main").getByRole("link", { name: "Review request" })).toHaveCount(0);
 
     await gotoAuthenticated(page, "/hr-admin/shifts", persona);
-    await expectPageReady(page, /Shift admin/i);
+    await expectPageReady(page, /Shifts/i);
     await expect(page.getByRole("main").getByRole("link", { name: "Create shift" })).toHaveCount(0);
     await expect(page.getByRole("main").getByRole("link", { name: "Edit" })).toHaveCount(0);
 
     await page.goto("/hr-admin/shifts/new", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/\/hr-admin\/shifts$/);
-    await expectPageReady(page, /Shift admin/i);
+    await expectPageReady(page, /Shifts/i);
 
     await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments", persona);
-    await expectPageReady(page, /Attendance policy assignments by scope/i);
+    await expectPageReady(page, /Attendance assignments/i);
     await expect(page.getByRole("main").getByRole("link", { name: "Create attendance assignment" })).toHaveCount(0);
     await expect(page.getByText("Read-only attendance assignment view.")).toBeVisible();
 

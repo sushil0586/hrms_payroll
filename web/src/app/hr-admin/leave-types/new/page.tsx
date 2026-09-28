@@ -13,10 +13,10 @@ export default async function HrAdminNewLeaveTypePage() {
   const defaultUnit = optionsResult.data.leave_units[0]?.value || "day";
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
-        title="Create leave type."
+        title="Create leave type"
         description="Define the leave bucket first, then attach policies, accrual rules, eligibility, and workflow behavior around it."
         actions={<Link className="button button--secondary" href="/hr-admin/leave-types">Back to leave types</Link>}
         pills={["Behavior building block", "Category and unit setup", "Policy-ready foundation"]}

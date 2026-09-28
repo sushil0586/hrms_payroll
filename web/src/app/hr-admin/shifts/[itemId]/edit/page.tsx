@@ -14,7 +14,7 @@ export default async function HrAdminEditShiftPage({ params }: PageProps) {
   const result = await getHrAdminShift(itemId);
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" ? "Live shift mode" : "Demo shift mode"}
         title="Edit shift"

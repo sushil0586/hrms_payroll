@@ -29,6 +29,10 @@ async function expectOptions(scope: Locator, label: string, minimum = 1) {
   expect(count).toBeGreaterThanOrEqual(minimum);
 }
 
+async function openPayrollActionTab(page: Page, name: RegExp | string) {
+  await page.getByRole("navigation", { name: "Payroll setup action groups" }).getByRole("button", { name }).click();
+}
+
 async function createLegalEntityWithoutBranches(page: Page) {
   const code = uniqueCode("PG_LE");
   await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new");
@@ -61,11 +65,44 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
 }
 
 test.describe("HR admin payroll setup flows", () => {
+  test("setup action tabs keep a consistent form guidance structure", async ({ page }) => {
+    await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions");
+    await expectPageReady(page, "Payroll Setup");
+
+    const actionNav = page.getByRole("navigation", { name: "Payroll setup action groups" });
+    await expect(actionNav).toBeVisible();
+    await expect(page.getByLabel("Calendars workflow")).toBeVisible();
+    await expect(page.locator(".setup-action-sidecar")).toBeVisible();
+
+    const tabs = [
+      { name: /Calendars/, form: "payroll-calendar-form", workflow: "Calendars workflow", fields: ["Code", "Name"] },
+      { name: /Periods/, form: "payroll-period-form", workflow: "Periods workflow", fields: ["Calendar", "Start date"] },
+      { name: /Pay groups/, form: "pay-group-form", workflow: "Pay groups workflow", fields: ["Calendar", "Legal entity"] },
+      { name: /Assignments/, form: "pay-group-assignment-form", workflow: "Assignments workflow", fields: ["Pay group", "Employee"] },
+    ];
+
+    for (const tab of tabs) {
+      await openPayrollActionTab(page, tab.name);
+      await expect(actionNav.getByRole("button", { name: tab.name })).toHaveAttribute("aria-current", "page");
+      await expect(page.getByLabel(tab.workflow)).toBeVisible();
+      await expect(page.locator(".setup-action-sidecar")).toBeVisible();
+
+      const form = page.getByTestId(tab.form);
+      await expect(form).toBeVisible();
+      await expect(form.locator(".salary-crud-record-list")).toBeVisible();
+      await expect(form.locator(".salary-crud-form__actions")).toBeVisible();
+      for (const label of tab.fields) {
+        await expect(field(form, label)).toBeVisible();
+      }
+      await expectNoHorizontalOverflow(page);
+    }
+  });
+
   test("setup workspace exposes every payroll setup section and navigation action", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/payroll-setup");
     await expectPageReady(page, "Payroll Setup");
 
-    for (const link of ["Readiness", "Inputs", "Salary Setup", "Rules", "Calculations", "Organization"]) {
+    for (const link of ["Readiness", "Salary Setup", "Rules", "Add setup"]) {
       await expect(page.getByRole("link", { name: link, exact: true })).toBeVisible();
     }
 
@@ -73,12 +110,21 @@ test.describe("HR admin payroll setup flows", () => {
       await expect(page.locator(".metric-tile-soft").filter({ hasText: metric })).toBeVisible();
     }
 
+    await expect(page.getByRole("link", { name: /Overview/ })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("heading", { name: "Payroll setup summary" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Review assignments" })).toBeVisible();
+
+    await page.getByRole("link", { name: /Calendars & Periods/ }).click();
+    await expect(page).toHaveURL(/tab=calendars/);
     await expect(page.getByRole("heading", { name: "Period control" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Configuration matrix" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Run windows" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Payroll setup controls" })).toBeVisible();
+    await expect(page.getByLabel("calendars pagination").first()).toBeVisible();
+
+    await page.getByRole("link", { name: /Pay Groups/ }).click();
+    await expect(page).toHaveURL(/tab=pay-groups/);
+    await expect(page.getByRole("heading", { name: "Configuration matrix" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Group" }).first()).toBeVisible();
-    for (const header of ["Status", "Scope", "Calendar", "Employees", "Currency", "Employee", "Effective"]) {
+    for (const header of ["Status", "Scope", "Calendar", "Employees", "Currency"]) {
       await expect(page.getByRole("columnheader", { name: header }).first()).toBeVisible();
     }
 
@@ -86,14 +132,23 @@ test.describe("HR admin payroll setup flows", () => {
     if (await payGroupLink.isVisible().catch(() => false)) {
       await payGroupLink.click();
       await expect(page).toHaveURL(/payGroupId=/);
-      await expect(page.getByRole("heading", { name: "Run windows" }).or(page.getByText("Assignments")).first()).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Configuration matrix" })).toBeVisible();
     }
+
+    await page.getByRole("link", { name: /Assignments/ }).click();
+    await expect(page).toHaveURL(/tab=assignments/);
+    await expect(page.getByRole("columnheader", { name: "Employee" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Effective" })).toBeVisible();
+
+    await page.getByRole("link", { name: /Setup Actions/ }).click();
+    await expect(page).toHaveURL(/tab=actions/);
+    await expect(page.getByRole("heading", { name: "Maintain payroll setup" })).toBeVisible();
 
     await expectNoHorizontalOverflow(page);
   });
 
   test("payroll setup browser CRUD creates, updates, and validates setup records", async ({ page }) => {
-    await gotoAuthenticated(page, "/hr-admin/payroll-setup");
+    await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions");
     await expectPageReady(page, "Payroll Setup");
 
     const calendarForm = page.getByTestId("payroll-calendar-form");
@@ -138,6 +193,7 @@ test.describe("HR admin payroll setup flows", () => {
     }).then((result) => expect(result.ok).toBeTruthy());
     await expect(field(calendarForm, "Period start day")).toHaveValue("5");
 
+    await openPayrollActionTab(page, /Periods/);
     await expectFields(periodForm, ["Calendar", "Code", "Name", "Start date", "End date", "Pay date", "Status", "Config profile reference"]);
     await expectOptions(periodForm, "Calendar");
     await expectOptions(periodForm, "Status");
@@ -163,6 +219,7 @@ test.describe("HR admin payroll setup flows", () => {
     }).then((result) => expect(result.ok).toBeTruthy());
     await expect(page.getByText(/payroll period saved/i).first()).toBeVisible();
 
+    await openPayrollActionTab(page, /Pay groups/);
     await expectFields(payGroupForm, [
       "Calendar",
       "Code",
@@ -185,8 +242,9 @@ test.describe("HR admin payroll setup flows", () => {
     await expectOptions(payGroupForm, "Employment type");
 
     const unmappedLegalEntity = await createLegalEntityWithoutBranches(page);
-    await gotoAuthenticated(page, "/hr-admin/payroll-setup");
+    await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions");
     await expectPageReady(page, "Payroll Setup");
+    await openPayrollActionTab(page, /Pay groups/);
     const refreshedPayGroupForm = page.getByTestId("pay-group-form");
     await field(refreshedPayGroupForm, "Legal entity").selectOption({ label: unmappedLegalEntity.name });
     await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
@@ -213,12 +271,13 @@ test.describe("HR admin payroll setup flows", () => {
     await expect(page.getByText(payGroupCode).first()).toBeVisible();
 
     await submitAndCapture(page, `pay-groups/${payGroupResult.payload.id}`, "PATCH", async () => {
-      await field(payGroupForm, "Status").selectOption("active");
-      await field(payGroupForm, "Name").fill(`Updated ${payGroupCode}`);
-      await payGroupForm.getByRole("button", { name: "Save pay group" }).click();
+      await field(refreshedPayGroupForm, "Status").selectOption("active");
+      await field(refreshedPayGroupForm, "Name").fill(`Updated ${payGroupCode}`);
+      await refreshedPayGroupForm.getByRole("button", { name: "Save pay group" }).click();
     }).then((result) => expect(result.ok).toBeTruthy());
     await expect(page.getByText(`Updated ${payGroupCode}`).first()).toBeVisible();
 
+    await openPayrollActionTab(page, /Assignments/);
     await expectFields(assignmentForm, ["Pay group", "Employee", "Effective from", "Effective to", "Status", "Config profile reference"]);
     await expectOptions(assignmentForm, "Pay group");
     await expectOptions(assignmentForm, "Employee");
@@ -245,14 +304,25 @@ test.describe("HR admin payroll setup flows", () => {
 
   test("payroll setup controls remain usable on mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await gotoAuthenticated(page, "/hr-admin/payroll-setup");
+    await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions");
     await expectPageReady(page, "Payroll Setup");
 
-    await expect(page.getByRole("heading", { name: "Payroll setup controls" })).toBeVisible();
-    for (const testId of ["payroll-calendar-form", "payroll-period-form", "pay-group-form", "pay-group-assignment-form"]) {
-      await expect(page.getByTestId(testId)).toBeVisible();
-    }
+    await expect(page.getByRole("heading", { name: "Maintain payroll setup" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Payroll setup action groups" })).toBeVisible();
+
+    await expect(page.getByTestId("payroll-calendar-form")).toBeVisible();
     await expect(field(page.getByTestId("payroll-calendar-form"), "Frequency")).toBeVisible();
+
+    await openPayrollActionTab(page, /Periods/);
+    await expect(page.getByTestId("payroll-period-form")).toBeVisible();
+    await expect(field(page.getByTestId("payroll-period-form"), "Calendar")).toBeVisible();
+
+    await openPayrollActionTab(page, /Pay groups/);
+    await expect(page.getByTestId("pay-group-form")).toBeVisible();
+    await expect(field(page.getByTestId("pay-group-form"), "Legal entity")).toBeVisible();
+
+    await openPayrollActionTab(page, /Assignments/);
+    await expect(page.getByTestId("pay-group-assignment-form")).toBeVisible();
     await expect(field(page.getByTestId("pay-group-assignment-form"), "Employee")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

@@ -302,13 +302,13 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern employee-child-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
             <h2>{mode === "create" ? "Create employee master" : "Edit employee master"}</h2>
             <p className="section-copy">
-              Capture the core employee profile and structural mapping first. We can layer documents, lifecycle, and payroll details afterward.
+              Keep identity, dates, and structure clean before access, lifecycle, and payroll setup.
             </p>
           </div>
           <div className="form-shell-card__meta">

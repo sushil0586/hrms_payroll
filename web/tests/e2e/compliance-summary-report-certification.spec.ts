@@ -74,7 +74,7 @@ test.describe("Phase PLF-5F Compliance summary certification", () => {
     await page.goto("/hr-admin/reports/compliance-summary", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("compliance-summary-report")).toHaveCount(0);
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("heading", { name: /Run payroll, compliance, and employee operations/ })).toBeVisible();
+    await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
+    await expect(page.getByRole("heading", { name: /Compliance Summary/i })).toHaveCount(0);
   });
 });

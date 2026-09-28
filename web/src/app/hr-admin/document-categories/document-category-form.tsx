@@ -62,13 +62,11 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Pr
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern document-child-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>{mode === "create" ? "Create document category" : "Edit document category"}</h2>
-          <p className="section-copy">
-            Control validation, upload behavior, and reuse rules for one shared document type.
-          </p>
+          <p className="section-copy">Control validation, upload behavior, and reuse rules for one document type.</p>
         </div>
 
         <FormSection description="Set the category identity and any visibility rules that control where it appears." title="Category setup">
@@ -110,13 +108,16 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Pr
           </div>
         ) : null}
 
-        <div className="form-shell-card__actions">
-          <button className="button button--primary" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Saving..." : mode === "create" ? "Create category" : "Save changes"}
-          </button>
-          <button className="button button--secondary" onClick={() => router.back()} type="button">
-            Cancel
-          </button>
+        <div className="form-actions-bar">
+          <span className="muted">Category changes apply to future document uploads and requirements.</span>
+          <div className="form-actions-bar__buttons">
+            <button className="button button--secondary" onClick={() => router.back()} type="button">
+              Cancel
+            </button>
+            <button className="button button--primary" disabled={isSubmitting} type="submit">
+              {isSubmitting ? "Saving..." : mode === "create" ? "Create category" : "Save changes"}
+            </button>
+          </div>
         </div>
       </section>
     </form>

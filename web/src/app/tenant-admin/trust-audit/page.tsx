@@ -129,12 +129,13 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
         </div>
       </section>
 
-      <section className="section tenant-audit-filter-workspace">
+      <section className="section tenant-audit-filter-workspace tenant-audit-filter-workspace--phase4">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Event groups</span>
               <h2>Review scope</h2>
+              <p className="tenant-section-copy">Choose the evidence family before drilling into event type or support session.</p>
             </div>
             <span className="record-chip">{data.options.event_groups.length} groups</span>
           </div>
@@ -175,12 +176,13 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
         </div>
       </section>
 
-      <section className="section tenant-audit-filter-workspace">
+      <section className="section tenant-audit-filter-workspace tenant-audit-filter-workspace--phase4">
         <div className="panel-card-soft tenant-console-panel tenant-audit-ledger">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Event types</span>
               <h2>Audit taxonomy</h2>
+              <p className="tenant-section-copy">Use event type links for a focused audit trail instead of scanning every event.</p>
             </div>
             <span className="record-chip">{data.options.event_types.length} types</span>
           </div>
@@ -202,6 +204,7 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
             <div>
               <span className="workspace-card__eyebrow">Support sessions</span>
               <h2>Session evidence</h2>
+              <p className="tenant-section-copy">Filter directly to one assisted-operations session when customer proof is needed.</p>
             </div>
             <span className="record-chip">{data.options.support_session_refs.length} sessions</span>
           </div>
@@ -224,18 +227,19 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
       </section>
 
       <section className="section">
-        <div className="panel-card-soft tenant-console-panel">
+        <div className="panel-card-soft tenant-console-panel tenant-audit-ledger tenant-audit-ledger--phase4">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Audit events</span>
               <h2>Evidence ledger</h2>
+              <p className="tenant-section-copy">Each row shows event, source, actor, time, and source hash for customer review.</p>
             </div>
             <span className="record-chip">Page {data.page}</span>
           </div>
           <div className="tenant-console-list">
             {data.events.map((event) => (
               <div className="tenant-console-row" key={event.id}>
-                <div>
+                <div className="tenant-audit-row__summary">
                   <strong>{titleCase(event.event_type)}</strong>
                   <span>{event.source_ref}</span>
                   <span>{event.support_session_ref ? `Session ${event.support_session_ref}` : event.event_group_refs.map(titleCase).join(" / ")}</span>

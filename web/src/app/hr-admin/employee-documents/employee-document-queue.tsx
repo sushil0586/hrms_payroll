@@ -133,12 +133,12 @@ export function EmployeeDocumentQueue({
   }
 
   return (
-    <section className="section queue-layout">
-      <section className="queue-toolbar panel-card-soft">
+    <section className="section queue-layout document-queue-layout">
+      <section className="queue-toolbar panel-card-soft document-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
-            <h2 className="section-heading-soft">Documents</h2>
-            <p className="section-copy section-copy-soft">Search by employee, category, reviewer, or expiry.</p>
+            <h2 className="section-heading-soft">Review queue</h2>
+            <p className="section-copy section-copy-soft">Filter employee files, select expiry-risk records, and send reminders.</p>
           </div>
           <div className="queue-toolbar__meta">
             <span className="queue-summary-chip"><strong>{pagination.total_count}</strong> total records</span>
@@ -146,7 +146,7 @@ export function EmployeeDocumentQueue({
             <span className="queue-summary-chip"><strong>{categories.length}</strong> categories configured</span>
           </div>
         </div>
-        <div className="queue-toolbar__grid">
+        <div className="queue-toolbar__grid document-filter-grid">
           <label className="form-field">
             <span className="muted">Search</span>
             <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Employee, category, title, number, reviewer" value={search} />
@@ -188,7 +188,7 @@ export function EmployeeDocumentQueue({
             </select>
           </label>
         </div>
-        <div className="queue-toolbar__actions">
+        <div className="queue-toolbar__actions document-toolbar-actions">
           <button className="button button--primary" onClick={() => goToPage(1)} type="button">Apply filters</button>
           <button className="button button--ghost" onClick={() => {
             setSearch("");
@@ -223,9 +223,9 @@ export function EmployeeDocumentQueue({
         {actionError ? <div className="notice"><strong>Reminder action failed.</strong><span className="muted">{actionError}</span></div> : null}
       </section>
 
-      <div className="queue-list">
+      <div className="queue-list document-record-list">
         {items.map((item) => (
-          <article className="record-card panel-card-soft" key={item.id}>
+          <article className="record-card panel-card-soft document-record-card" key={item.id}>
             <div className="record-card__header">
               <div className="record-card__title-wrap">
                 <label className="record-card__title">
@@ -253,7 +253,7 @@ export function EmployeeDocumentQueue({
                 {canVerifyDocuments ? <Link className="button button--secondary" href={`/hr-admin/employee-documents/${item.id}/review`}>Review</Link> : null}
               </div>
             </div>
-            <div className="detail-grid">
+            <div className="detail-grid document-detail-grid">
               <div className="detail-row"><span className="detail-label">Verification</span><span className="detail-value">{item.verification_status}</span></div>
               <div className="detail-row"><span className="detail-label">Record status</span><span className="detail-value">{item.status}</span></div>
               <div className="detail-row"><span className="detail-label">Uploaded by</span><span className="detail-value">{item.uploaded_by_identifier || "Unknown"}</span></div>

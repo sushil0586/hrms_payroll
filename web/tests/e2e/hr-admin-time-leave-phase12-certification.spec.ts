@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, suppressBrowserTestNoise } from "../helpers/assertions";
+import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 type RouteExpectation = {
   path: string;
@@ -18,7 +19,7 @@ const timeLeaveConfigurationRoutes: RouteExpectation[] = [
   },
   {
     path: "/hr-admin/leave-policies",
-    heading: "Leave policy admin for enforceable leave behavior.",
+    heading: "Leave policies",
     stripTitle: "Leave policy configuration",
     visibleText: ["Policies", "Active policies"],
   },
@@ -30,31 +31,31 @@ const timeLeaveConfigurationRoutes: RouteExpectation[] = [
   },
   {
     path: "/hr-admin/leave-types",
-    heading: "Leave type admin for leave behavior building blocks.",
+    heading: "Leave types",
     stripTitle: "Leave type configuration",
     visibleText: ["Leave types", "Active types"],
   },
   {
     path: "/hr-admin/shifts",
-    heading: "Shift admin for working-time setup.",
+    heading: "Shifts",
     stripTitle: "Shift master configuration",
     visibleText: ["Shift masters", "Active shifts"],
   },
   {
     path: "/hr-admin/shift-roster-templates",
-    heading: "Shift roster templates for repeat rollout.",
+    heading: "Roster templates",
     stripTitle: "Roster template rollout",
     visibleText: ["Roster templates", "Published or locked"],
   },
   {
     path: "/hr-admin/leave-policy-assignments",
-    heading: "Leave policy assignments by scope.",
+    heading: "Leave assignments",
     stripTitle: "Leave assignment governance",
     visibleText: ["Assignments", "Active assignments"],
   },
   {
     path: "/hr-admin/attendance-policy-assignments",
-    heading: "Attendance policy assignments by scope.",
+    heading: "Attendance assignments",
     stripTitle: "Attendance assignment governance",
     visibleText: ["Assignments", "Active assignments"],
   },
@@ -67,14 +68,7 @@ const timeLeaveConfigurationRoutes: RouteExpectation[] = [
 ];
 
 async function gotoDemoHrAdmin(page: Page, path: string) {
-  await page.context().addCookies([
-    {
-      name: "hrms_access_token",
-      value: "playwright-demo-token",
-      url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100",
-    },
-  ]);
-  await page.goto(path, { waitUntil: "domcontentloaded" });
+  await gotoAuthenticated(page, path, hrAdmin);
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await suppressBrowserTestNoise(page);
 }
@@ -124,13 +118,13 @@ test.describe("HR Admin time, leave, attendance phase 12 certification", () => {
     await gotoDemoHrAdmin(page, "/hr-admin/attendance-records?page_size=10");
 
     const toolbar = page.getByTestId("attendance-records-toolbar");
-    await expect(page.getByRole("heading", { level: 1, name: "Attendance records review window." })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Attendance records" })).toBeVisible();
     await expect(toolbar).toBeVisible();
     await expect(toolbar.getByRole("textbox", { name: "Search" })).toBeVisible();
-    await expect(toolbar.getByRole("combobox", { name: "Status" })).toBeVisible();
-    await expect(toolbar.getByRole("combobox", { name: "Source" })).toBeVisible();
-    await expect(toolbar.getByRole("combobox", { name: "Lock state" })).toBeVisible();
-    await expect(toolbar.getByRole("combobox", { name: "Regularization state" })).toBeVisible();
+    await expect(toolbar.locator("label.form-field").filter({ hasText: "Status" }).locator("select").first()).toBeVisible();
+    await expect(toolbar.locator("label.form-field").filter({ hasText: "Source" }).locator("select").first()).toBeVisible();
+    await expect(toolbar.locator("label.form-field").filter({ hasText: "Lock state" }).locator("select").first()).toBeVisible();
+    await expect(toolbar.locator("label.form-field").filter({ hasText: "Regularization state" }).locator("select").first()).toBeVisible();
 
     await toolbar.getByPlaceholder("Employee, code, shift, source, date").fill("zz-no-attendance-records-phase12");
     await toolbar.getByRole("button", { name: "Apply filters" }).click();
@@ -153,7 +147,7 @@ test.describe("HR Admin time, leave, attendance phase 12 certification", () => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await gotoDemoHrAdmin(page, "/hr-admin/attendance-regularizations?page_size=10");
 
-    await expect(page.getByRole("heading", { level: 1, name: "Attendance regularization queue for HR oversight." })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Regularizations" })).toBeVisible();
     await expect(page.locator(".time-leave-strip").getByRole("heading", { name: "Attendance correction queue" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Search" })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Request status" })).toBeVisible();

@@ -10,14 +10,21 @@ test.describe("HR admin payroll provider connection flows", () => {
 
     await expect(page.getByRole("heading", { name: "Connections" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Certification checklist" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Run certification" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Scenario evidence" })).toBeVisible();
-    await expect(page.getByText("Adapter contract").or(page.getByText("Provider client readiness")).first()).toBeVisible();
-    await expect(page.getByText("Schema mapping").or(page.getByText("Mapping packs")).first()).toBeVisible();
     await expect(page.getByText("Launch rehearsal").first()).toBeVisible();
     await expect(page.getByText("Live rails off").first()).toBeVisible();
     await expect(page.getByText(/real payout, filing, and journal submission stay disabled/i).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Run rehearsal" })).toBeVisible();
+
+    await page.getByRole("link", { name: /Connections/ }).click();
+    await expect(page.getByRole("button", { name: "Run certification" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Scenario evidence" })).toBeVisible();
+    await expect(page.getByText("Adapter contract").first()).toBeVisible();
+
+    await page.getByRole("link", { name: /Mapping/ }).click();
+    await expect(page.getByText("Schema mapping").or(page.getByRole("heading", { name: "Provider schema coverage" })).first()).toBeVisible();
+
+    await page.getByRole("link", { name: /Registry/ }).click();
+    await expect(page.getByRole("heading", { name: "Provider client readiness" })).toBeVisible();
 
     const connectionLink = page.locator("main a[href*='connectionId=']").first();
     if (await connectionLink.isVisible().catch(() => false)) {

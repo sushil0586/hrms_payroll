@@ -8,8 +8,8 @@ export default function HrAdminImportHistoryPage() {
     <main className="shell">
       <PageIntro
         eyebrow="Bulk import evidence"
-        title="Import History"
-        description="Review browser-driven import batches, source hashes, row outcomes, blocked rows, and rollback readiness."
+        title="Import history"
+        description="Review batch outcomes, source hashes, blocked rows, and rollback readiness."
         className="page-header-surface page-header-surface--compact"
         titleClassName="text-heading-premium page-title-soft"
         descriptionClassName="text-body-premium"
@@ -18,8 +18,8 @@ export default function HrAdminImportHistoryPage() {
       />
       <OperationsGovernanceStrip
         current="imports"
-        title="Bulk import evidence ledger"
-        description="Use this page to inspect HR Admin import batches, source hashes, blocked rows, actor evidence, and rollback readiness after employee or organization uploads."
+        title="Import evidence ledger"
+        description="Inspect employee and organization upload evidence without reopening the import workbench."
         metrics={[
           { label: "scope", value: "HR data", tone: "neutral" },
           { label: "evidence", value: "Hashes", tone: "ready" },

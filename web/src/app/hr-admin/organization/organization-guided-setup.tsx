@@ -249,7 +249,18 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
 
   return (
     <section className="section">
-      <form className="panel-card-soft organization-guided-setup" onSubmit={handleSubmit}>
+      <details className="organization-workflow-disclosure panel-card-soft" data-testid="organization-guided-setup-disclosure">
+        <summary>
+          <span>
+            <strong>Guided setup</strong>
+            <small>Create the minimum active structure needed to clear the organization launch gate.</small>
+          </span>
+          <span className="queue-summary-chip">
+            <strong>{completedCount}/5</strong> ready
+          </span>
+          <span className="button button--secondary button--compact">Open setup</span>
+        </summary>
+      <form className="organization-guided-setup" onSubmit={handleSubmit}>
         <div className="tenant-console-panel__header">
           <div>
             <span className="workspace-card__eyebrow">Guided setup</span>
@@ -405,6 +416,7 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
           </div>
         </div>
       </form>
+      </details>
     </section>
   );
 }

@@ -14,7 +14,7 @@ export default async function HrAdminPolicyAssignmentsPage() {
   const state = leaveResult.state === "live" && attendanceResult.state === "live" ? "live" : "demo";
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={state === "live" ? "Live assignment mode" : "Demo assignment mode"}
         title="Policy assignments"

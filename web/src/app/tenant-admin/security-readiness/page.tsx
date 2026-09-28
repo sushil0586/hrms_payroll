@@ -80,23 +80,30 @@ function GroupPanel({
   const warning = checks.filter((check) => check.status === "warning").length;
   const status = blocked ? "Blocked" : warning ? "Warning" : "Ready";
   return (
-    <div className="panel-card-soft tenant-console-panel">
+    <div className="panel-card-soft tenant-console-panel tenant-governance-card">
       <div className="tenant-console-panel__header">
         <div>
           <span className="workspace-card__eyebrow">{eyebrow}</span>
           <h2>{title}</h2>
+          <p className="tenant-section-copy">Review the active controls and evidence that keep this domain launch-ready.</p>
         </div>
         <span className="record-chip">{status}</span>
       </div>
       {children}
-      <div className="tenant-console-list">
+      <div className="tenant-governance-list">
         {checks.map((check) => (
-          <div className="tenant-console-row" key={check.ref}>
-            <div>
+          <div className="tenant-console-row tenant-governance-row" key={check.ref}>
+            <div className="tenant-governance-row__summary">
               <strong>{check.label}</strong>
-              <span>
-                {check.detail} Evidence: {formatValue(check.value)}. Status: {statusLabel(check.status)} / Owner: {titleCase(check.owner_role_ref)}
-              </span>
+              <span>{check.detail}</span>
+            </div>
+            <div className="tenant-governance-row__evidence">
+              <span>Evidence</span>
+              <strong>{formatValue(check.value)}</strong>
+            </div>
+            <div className="tenant-console-row__meta">
+              <span className="record-chip">{statusLabel(check.status)}</span>
+              <span>{titleCase(check.owner_role_ref)}</span>
             </div>
           </div>
         ))}
@@ -164,7 +171,7 @@ export default async function TenantAdminSecurityReadinessPage() {
         </div>
       </section>
 
-      <section className="section tenant-security-workspace">
+      <section className="section tenant-security-workspace tenant-security-workspace--phase4">
         <GroupPanel eyebrow="Identity assurance" title="MFA and SSO" checks={[...checksByPrefix("mfa."), ...checksByPrefix("sso.")]}>
           <div className="support-session-scopes">
             <span className="record-chip">MFA {data.mfa.enforced ? "enforced" : "not enforced"}</span>
@@ -184,7 +191,7 @@ export default async function TenantAdminSecurityReadinessPage() {
         </GroupPanel>
       </section>
 
-      <section className="section tenant-security-workspace">
+      <section className="section tenant-security-workspace tenant-security-workspace--phase4">
         <GroupPanel eyebrow="Customer evidence" title="Audit and Data Protection" checks={[...checksByPrefix("audit."), ...checksByPrefix("data.")]}>
           <div className="support-session-scopes">
             <span className="record-chip">Retention {data.audit.retention_days}d</span>
@@ -202,11 +209,12 @@ export default async function TenantAdminSecurityReadinessPage() {
             </div>
             <span className="record-chip">{data.summary.blocker_count} blockers</span>
           </div>
-          <div className="tenant-console-list">
+          <p className="tenant-section-copy">Only unresolved launch blockers are shown here so the next action stays obvious.</p>
+          <div className="tenant-governance-list">
             {data.summary.launch_blocker_refs.length ? (
               data.summary.launch_blocker_refs.map((ref) => (
-                <div className="tenant-console-row" key={ref}>
-                  <div>
+                <div className="tenant-console-row tenant-governance-row" key={ref}>
+                  <div className="tenant-governance-row__summary">
                     <strong>{titleCase(ref)}</strong>
                     <span>Resolve this configured enterprise security blocker before launch.</span>
                   </div>

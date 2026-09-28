@@ -52,7 +52,7 @@ async function ensurePayrollPeriodExists(page: Page) {
     return;
   }
 
-  await gotoAuthenticated(page, "/hr-admin/payroll-setup", hrAdmin);
+  await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions", hrAdmin);
   await expectPageReady(page, "Payroll Setup");
 
   const calendarForm = form(page, "payroll-calendar-form");

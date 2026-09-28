@@ -35,11 +35,11 @@ export default async function HrAdminDocumentsPage() {
       : "demo";
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         eyebrow={state === "live" ? "Live document mode" : "Demo document mode"}
         title="Documents control"
-        description="Control categories, requirement rules, and employee review queues from one document workspace."
+        description="Manage document masters, employee verification, generated letters, and compliance coverage."
         actions={
           <>
             {canViewDocuments ? <Link className="button button--primary" href="/hr-admin/document-categories">Open categories</Link> : null}
@@ -60,7 +60,7 @@ export default async function HrAdminDocumentsPage() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section document-control-grid">
         <div className="workspace-grid">
           {canViewDocuments ? (
             <WorkspaceCard

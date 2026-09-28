@@ -20,7 +20,7 @@ export default async function HrAdminEditAttendanceRecordPage({ params }: PagePr
   ]);
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live attendance record mode" : "Demo attendance record mode"}
         title="Edit attendance record"

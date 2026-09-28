@@ -9,6 +9,7 @@ import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-
 import { ComplianceEvidenceStrip } from "../compliance-evidence-strip";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
+import { PayrollWorkflowGuide } from "../payroll-workflow-guide";
 import type {
   HrAdminPayrollFinanceHandoff,
   HrAdminPayrollOutputArtifact,
@@ -40,6 +41,16 @@ function normalizeParam(value: SearchParamValue) {
 function numberParam(value: SearchParamValue, fallback: number) {
   const parsed = Number(normalizeParam(value));
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function pagedItems<T>(items: T[], page: number, pageSize: number) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(Math.max(page, 1), totalPages);
+  return {
+    items: items.slice((safePage - 1) * pageSize, safePage * pageSize),
+    page: safePage,
+    totalPages,
+  };
 }
 
 function buildHref(
@@ -86,25 +97,23 @@ function parseEvidenceParam(value: SearchParamValue): EvidenceSelection | null {
 }
 
 function evidenceHref({
+  currentParams,
   handoffId,
   artifactId,
   kind,
   id,
 }: {
+  currentParams: Record<string, SearchParamValue>;
   handoffId: string | null | undefined;
   artifactId: string | null | undefined;
   kind: EvidenceKind;
   id: string;
 }) {
-  const params = new URLSearchParams();
-  if (handoffId) {
-    params.set("handoffId", handoffId);
-  }
-  if (artifactId) {
-    params.set("artifactId", artifactId);
-  }
-  params.set("evidence", `${kind}:${id}`);
-  return `/hr-admin/payroll-handoff?${params.toString()}`;
+  return buildHref("/hr-admin/payroll-handoff", currentParams, {
+    artifactId: artifactId ?? undefined,
+    evidence: `${kind}:${id}`,
+    handoffId: handoffId ?? undefined,
+  });
 }
 
 function titleCase(value: string) {
@@ -347,7 +356,12 @@ function HandoffRail({
         {handoffs.map((handoff) => (
           <Link
             className={`payroll-setup-mini-card payroll-output-card payroll-handoff-card ${selectedHandoff?.id === handoff.id ? "is-selected" : ""}`}
-            href={`/hr-admin/payroll-handoff?handoffId=${handoff.id}`}
+            href={buildHref("/hr-admin/payroll-handoff", currentParams, {
+              artifactId: undefined,
+              artifactPage: "1",
+              evidence: undefined,
+              handoffId: handoff.id,
+            })}
             key={handoff.id}
           >
             <div>
@@ -360,6 +374,7 @@ function HandoffRail({
               <span>{formatDate(handoff.transmitted_at)}</span>
             </div>
             <code>{handoff.handoff_profile_ref}</code>
+            {selectedHandoff?.id === handoff.id ? <span className="payroll-rule-selected-marker">Selected handoff</span> : null}
           </Link>
         ))}
       </div>
@@ -503,6 +518,7 @@ function ArtifactDetail({
           <span className="workspace-card__eyebrow">Artifact detail</span>
           <h2>{artifact.title}</h2>
           <p className="section-copy section-copy-soft">{artifact.kind_label} / {artifact.mime_type || artifact.content_type}</p>
+          <span className="payroll-rule-selected-marker">Selected artifact</span>
         </div>
         <StatusBadge status={artifact.status} />
       </div>
@@ -736,6 +752,7 @@ function AuditEvidenceDetail({
   callbackEvents,
   providerJobs,
   retryEvents,
+  currentParams,
 }: {
   selection: EvidenceSelection;
   selectedHandoff: HrAdminPayrollFinanceHandoff | null;
@@ -743,8 +760,12 @@ function AuditEvidenceDetail({
   callbackEvents: HrAdminPayrollProviderCallbackEvent[];
   providerJobs: HrAdminPayrollProviderJob[];
   retryEvents: HrAdminPayrollProviderRetryEvent[];
+  currentParams: Record<string, SearchParamValue>;
 }) {
-  const closeHref = selectedHandoff ? `/hr-admin/payroll-handoff?handoffId=${selectedHandoff.id}` : "/hr-admin/payroll-handoff";
+  const closeHref = buildHref("/hr-admin/payroll-handoff", currentParams, {
+    evidence: undefined,
+    handoffId: selectedHandoff?.id,
+  });
 
   if (selection.kind === "delivery") {
     const delivery = deliveries.find((item) => item.id === selection.id);
@@ -1095,6 +1116,7 @@ function DeliveryLedger({
   retryEvents,
   selectedHandoff,
   selectedEvidence,
+  currentParams,
 }: {
   deliveries: HrAdminPayrollProviderDelivery[];
   callbackEvents: HrAdminPayrollProviderCallbackEvent[];
@@ -1102,6 +1124,7 @@ function DeliveryLedger({
   retryEvents: HrAdminPayrollProviderRetryEvent[];
   selectedHandoff: HrAdminPayrollFinanceHandoff | null;
   selectedEvidence: EvidenceSelection | null;
+  currentParams: Record<string, SearchParamValue>;
 }) {
   const visibleDeliveries = selectedHandoff ? deliveries.filter((item) => item.handoff_id === selectedHandoff.id) : deliveries;
   const visibleEvents = selectedHandoff ? callbackEvents.filter((item) => item.handoff_id === selectedHandoff.id) : callbackEvents;
@@ -1109,6 +1132,19 @@ function DeliveryLedger({
   const visibleJobs = selectedHandoff
     ? providerJobs.filter((job) => visibleDeliveries.some((delivery) => delivery.id === job.provider_delivery_id))
     : providerJobs;
+  const deliveryPageSize = Math.min(numberParam(currentParams.deliveryPageSize, 6), 25);
+  const retryPageSize = Math.min(numberParam(currentParams.retryPageSize, 6), 25);
+  const jobPageSize = Math.min(numberParam(currentParams.jobPageSize, 6), 25);
+  const callbackPageSize = Math.min(numberParam(currentParams.callbackPageSize, 6), 25);
+  const pagedDeliveries = pagedItems(visibleDeliveries, numberParam(currentParams.deliveryPage, 1), deliveryPageSize);
+  const pagedRetryEvents = pagedItems(visibleRetryEvents, numberParam(currentParams.retryPage, 1), retryPageSize);
+  const pagedJobs = pagedItems(visibleJobs, numberParam(currentParams.jobPage, 1), jobPageSize);
+  const pagedEvents = pagedItems(visibleEvents, numberParam(currentParams.callbackPage, 1), callbackPageSize);
+  const baseUpdates = {
+    artifactId: undefined,
+    evidence: undefined,
+    handoffId: selectedHandoff?.id,
+  };
   return (
     <>
       <section className="payroll-setup-assignment-panel payroll-handoff-delivery-panel">
@@ -1120,10 +1156,10 @@ function DeliveryLedger({
           <span className="payroll-setup-count">{visibleDeliveries.length} deliveries</span>
         </div>
         <div className="payroll-output-handoff-grid payroll-handoff-delivery-grid">
-          {visibleDeliveries.map((delivery) => (
+          {pagedDeliveries.items.map((delivery) => (
             <Link
               className={`payroll-handoff-evidence-card ${selectedEvidence?.kind === "delivery" && selectedEvidence.id === delivery.id ? "is-selected" : ""}`}
-              href={evidenceHref({ handoffId: selectedHandoff?.id, artifactId: delivery.output_artifact_id, kind: "delivery", id: delivery.id })}
+              href={evidenceHref({ currentParams, handoffId: selectedHandoff?.id, artifactId: delivery.output_artifact_id, kind: "delivery", id: delivery.id })}
               key={delivery.id}
             >
               <div className="payroll-delivery-card-heading">
@@ -1138,7 +1174,19 @@ function DeliveryLedger({
               </div>
             </Link>
           ))}
+          {pagedDeliveries.items.length === 0 ? <div className="empty-state">No provider deliveries are recorded for this handoff yet.</div> : null}
         </div>
+        <PaginationBar
+          firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: "1", deliveryPageSize: String(deliveryPageSize) })}
+          hasNext={pagedDeliveries.page < pagedDeliveries.totalPages}
+          hasPrevious={pagedDeliveries.page > 1}
+          lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: String(pagedDeliveries.totalPages), deliveryPageSize: String(deliveryPageSize) })}
+          nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: String(pagedDeliveries.page + 1), deliveryPageSize: String(deliveryPageSize) })}
+          page={pagedDeliveries.page}
+          pageSize={deliveryPageSize}
+          previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: String(pagedDeliveries.page - 1), deliveryPageSize: String(deliveryPageSize) })}
+          totalCount={visibleDeliveries.length}
+        />
       </section>
 
       <section className="payroll-setup-assignment-panel payroll-handoff-retry-panel">
@@ -1150,10 +1198,10 @@ function DeliveryLedger({
           <span className="payroll-setup-count">{visibleRetryEvents.length} events</span>
         </div>
         <div className="payroll-output-handoff-grid payroll-handoff-delivery-grid">
-          {visibleRetryEvents.map((event) => (
+          {pagedRetryEvents.items.map((event) => (
             <Link
               className={`payroll-handoff-evidence-card ${selectedEvidence?.kind === "retry" && selectedEvidence.id === event.id ? "is-selected" : ""}`}
-              href={evidenceHref({ handoffId: selectedHandoff?.id, artifactId: event.output_artifact_id, kind: "retry", id: event.id })}
+              href={evidenceHref({ currentParams, handoffId: selectedHandoff?.id, artifactId: event.output_artifact_id, kind: "retry", id: event.id })}
               key={event.id}
             >
               <div className="payroll-delivery-card-heading">
@@ -1168,7 +1216,19 @@ function DeliveryLedger({
               </div>
             </Link>
           ))}
+          {pagedRetryEvents.items.length === 0 ? <div className="empty-state">No retry events are currently attached to this handoff.</div> : null}
         </div>
+        <PaginationBar
+          firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: "1", retryPageSize: String(retryPageSize) })}
+          hasNext={pagedRetryEvents.page < pagedRetryEvents.totalPages}
+          hasPrevious={pagedRetryEvents.page > 1}
+          lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: String(pagedRetryEvents.totalPages), retryPageSize: String(retryPageSize) })}
+          nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: String(pagedRetryEvents.page + 1), retryPageSize: String(retryPageSize) })}
+          page={pagedRetryEvents.page}
+          pageSize={retryPageSize}
+          previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: String(pagedRetryEvents.page - 1), retryPageSize: String(retryPageSize) })}
+          totalCount={visibleRetryEvents.length}
+        />
       </section>
 
       <section className="payroll-setup-assignment-panel payroll-handoff-job-panel">
@@ -1180,10 +1240,11 @@ function DeliveryLedger({
           <span className="payroll-setup-count">{visibleJobs.length} jobs</span>
         </div>
         <div className="payroll-output-handoff-grid payroll-handoff-delivery-grid">
-          {visibleJobs.map((job) => (
+          {pagedJobs.items.map((job) => (
             <Link
               className={`payroll-handoff-evidence-card payroll-handoff-job-card ${selectedEvidence?.kind === "job" && selectedEvidence.id === job.id ? "is-selected" : ""}`}
               href={evidenceHref({
+                currentParams,
                 handoffId: selectedHandoff?.id,
                 artifactId: visibleDeliveries.find((delivery) => delivery.id === job.provider_delivery_id)?.output_artifact_id,
                 kind: "job",
@@ -1218,7 +1279,19 @@ function DeliveryLedger({
               <code>{String(snapshotRecord(job.lease_snapshot).heartbeat_profile_ref ?? snapshotRecord(job.response_snapshot).queue_runtime_profile_ref ?? "payroll.provider_queue.runtime.pending")}</code>
             </Link>
           ))}
+          {pagedJobs.items.length === 0 ? <div className="empty-state">No provider queue jobs are recorded for this handoff yet.</div> : null}
         </div>
+        <PaginationBar
+          firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: "1", jobPageSize: String(jobPageSize) })}
+          hasNext={pagedJobs.page < pagedJobs.totalPages}
+          hasPrevious={pagedJobs.page > 1}
+          lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: String(pagedJobs.totalPages), jobPageSize: String(jobPageSize) })}
+          nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: String(pagedJobs.page + 1), jobPageSize: String(jobPageSize) })}
+          page={pagedJobs.page}
+          pageSize={jobPageSize}
+          previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: String(pagedJobs.page - 1), jobPageSize: String(jobPageSize) })}
+          totalCount={visibleJobs.length}
+        />
       </section>
 
       <section className="payroll-setup-assignment-panel payroll-handoff-callback-panel">
@@ -1230,7 +1303,7 @@ function DeliveryLedger({
           <span className="payroll-setup-count">{visibleEvents.length} events</span>
         </div>
         <div className="payroll-output-handoff-grid payroll-handoff-delivery-grid">
-          {visibleEvents.map((event) => {
+          {pagedEvents.items.map((event) => {
             const security = callbackSecuritySnapshot(event);
             const signatureAdapter = callbackSignatureAdapterSnapshot(event);
             const securityGates = snapshotList(security.gates);
@@ -1238,7 +1311,7 @@ function DeliveryLedger({
             return (
               <Link
                 className={`payroll-handoff-evidence-card payroll-handoff-callback-card ${selectedEvidence?.kind === "callback" && selectedEvidence.id === event.id ? "is-selected" : ""}`}
-                href={evidenceHref({ handoffId: selectedHandoff?.id, artifactId: event.output_artifact_id, kind: "callback", id: event.id })}
+                href={evidenceHref({ currentParams, handoffId: selectedHandoff?.id, artifactId: event.output_artifact_id, kind: "callback", id: event.id })}
                 key={event.id}
               >
                 <div className="payroll-delivery-card-heading">
@@ -1272,7 +1345,19 @@ function DeliveryLedger({
               </Link>
             );
           })}
+          {pagedEvents.items.length === 0 ? <div className="empty-state">No callback events are recorded for this handoff yet.</div> : null}
         </div>
+        <PaginationBar
+          firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: "1", callbackPageSize: String(callbackPageSize) })}
+          hasNext={pagedEvents.page < pagedEvents.totalPages}
+          hasPrevious={pagedEvents.page > 1}
+          lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: String(pagedEvents.totalPages), callbackPageSize: String(callbackPageSize) })}
+          nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: String(pagedEvents.page + 1), callbackPageSize: String(callbackPageSize) })}
+          page={pagedEvents.page}
+          pageSize={callbackPageSize}
+          previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: String(pagedEvents.page - 1), callbackPageSize: String(callbackPageSize) })}
+          totalCount={visibleEvents.length}
+        />
       </section>
     </>
   );
@@ -1366,6 +1451,16 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
         primaryMetricValue={visibleArtifacts.length}
         secondaryMetricLabel="deliveries"
         secondaryMetricValue={selectedHandoffDeliveries.length}
+      />
+
+      <PayrollWorkflowGuide
+        title="Finance handoff desk"
+        description="Select a finance package, verify artifacts and provider evidence, then transmit, acknowledge, or lock audit evidence."
+        steps={[
+          { label: "Select handoff", detail: "Scope one finance package and output batch." },
+          { label: "Review evidence", detail: "Check artifacts, deliveries, retries, jobs, and callbacks." },
+          { label: "Close handoff", detail: "Transmit, acknowledge, or generate the audit pack when ready." },
+        ]}
       />
 
       <section className="section section--tight">
@@ -1513,7 +1608,11 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   {auditPackArtifacts.map((artifact) => (
                     <Link
                       className={`payroll-handoff-filing-card payroll-handoff-audit-pack-card ${selectedArtifact?.id === artifact.id ? "is-selected" : ""}`}
-                      href={`/hr-admin/payroll-handoff?handoffId=${selectedHandoff?.id ?? ""}&artifactId=${artifact.id}`}
+                      href={buildHref("/hr-admin/payroll-handoff", currentParams, {
+                        artifactId: artifact.id,
+                        evidence: undefined,
+                        handoffId: selectedHandoff?.id,
+                      })}
                       key={artifact.id}
                     >
                       <div className="payroll-delivery-card-heading">
@@ -1569,7 +1668,11 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                 {statutoryFilingArtifacts.map((artifact) => (
                   <Link
                     className={`payroll-handoff-filing-card ${selectedArtifact?.id === artifact.id ? "is-selected" : ""}`}
-                    href={`/hr-admin/payroll-handoff?handoffId=${selectedHandoff?.id ?? ""}&artifactId=${artifact.id}`}
+                    href={buildHref("/hr-admin/payroll-handoff", currentParams, {
+                      artifactId: artifact.id,
+                      evidence: undefined,
+                      handoffId: selectedHandoff?.id,
+                    })}
                     key={artifact.id}
                   >
                     <div className="payroll-delivery-card-heading">
@@ -1610,7 +1713,14 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                     {pagedArtifacts.map((artifact) => (
                       <tr className={selectedArtifact?.id === artifact.id ? "is-selected" : ""} key={artifact.id}>
                         <td>
-                          <Link href={`/hr-admin/payroll-handoff?handoffId=${selectedHandoff?.id ?? ""}&artifactId=${artifact.id}`}>
+                          <Link
+                            href={buildHref("/hr-admin/payroll-handoff", currentParams, {
+                              artifactId: artifact.id,
+                              artifactPage: String(artifactPage),
+                              evidence: undefined,
+                              handoffId: selectedHandoff?.id,
+                            })}
+                          >
                             <strong>{artifact.title}</strong>
                             <span>{artifact.file_name}</span>
                             <span>{artifact.mime_type || artifact.content_type} / {formatFileSize(artifact.file_size_bytes)}</span>
@@ -1642,6 +1752,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
             <DeliveryLedger
               deliveries={setup.deliveries}
               callbackEvents={setup.callback_events}
+              currentParams={currentParams}
               providerJobs={setup.provider_jobs}
               retryEvents={setup.retry_events}
               selectedHandoff={selectedHandoff}
@@ -1655,6 +1766,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
               selectedHandoff={selectedHandoff}
               deliveries={setup.deliveries}
               callbackEvents={setup.callback_events}
+              currentParams={currentParams}
               providerJobs={setup.provider_jobs}
               retryEvents={setup.retry_events}
             />

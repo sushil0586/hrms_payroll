@@ -14,7 +14,7 @@ export default async function HrAdminAttendanceRegularizationReviewPage({ params
   const item = result.data;
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" ? "Live regularization review mode" : "Demo regularization review mode"}
         title="Review attendance regularization"

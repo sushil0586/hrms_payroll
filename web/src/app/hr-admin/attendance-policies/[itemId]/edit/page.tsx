@@ -18,7 +18,7 @@ export default async function HrAdminEditAttendancePolicyPage({ params }: PagePr
   if (!itemResult.data?.id) notFound();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
         title="Edit attendance policy"

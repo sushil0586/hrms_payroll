@@ -19,9 +19,13 @@ test.describe("Phase PLF-6 Provider certification center", () => {
       await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
     }
 
-    for (const section of ["Connections", "Launch rehearsal", "Certification checklist", "Callback, retry, and revoke certification", "Artifact policy readiness", "Provider package manifests", "Provider client readiness", "Live adapter readiness", "Provider schema coverage", "Active comparison evidence", "Scenario evidence", "Vertical coverage"]) {
+    for (const section of ["Connections", "Launch rehearsal", "Certification checklist"]) {
       await expect(page.getByRole("heading", { name: section })).toBeVisible();
     }
+
+    await page.getByRole("link", { name: /Delivery/ }).click();
+    await expectPageReady(page, "Payroll Providers");
+    await expect(page.getByRole("heading", { name: "Callback, retry, and revoke certification" })).toBeVisible();
 
     for (const bucket of ["Delivery failures", "Callback rejections", "Retry queue", "Worker jobs"]) {
       await expect(page.locator(".payroll-provider-failure-grid").filter({ hasText: bucket })).toBeVisible();
@@ -30,23 +34,40 @@ test.describe("Phase PLF-6 Provider certification center", () => {
     for (const taxonomyRef of ["provider.delivery.failure", "provider.callback.rejected", "provider.retry.queue", "provider.job.worker"]) {
       await expect(page.getByText(taxonomyRef)).toBeVisible();
     }
+    await expect(page.getByText(/Retry\/requeue API guarded|No delivery, callback, retry, or worker-job evidence exists yet/i).first()).toBeVisible();
+
+    await page.getByRole("link", { name: /Registry/ }).click();
+    await expectPageReady(page, "Payroll Providers");
+    for (const section of ["Artifact policy readiness", "Provider package manifests", "Provider client readiness", "Live adapter readiness"]) {
+      await expect(page.getByRole("heading", { name: section })).toBeVisible();
+    }
+
+    await page.getByRole("link", { name: /Mapping/ }).click();
+    await expectPageReady(page, "Payroll Providers");
+    for (const section of ["Provider schema coverage", "Active comparison evidence"]) {
+      await expect(page.getByRole("heading", { name: section })).toBeVisible();
+    }
+
+    await page.getByRole("link", { name: /Connections/ }).click();
+    await expectPageReady(page, "Payroll Providers");
+    for (const section of ["Scenario evidence", "Vertical coverage"]) {
+      await expect(page.getByRole("heading", { name: section })).toBeVisible();
+    }
 
     for (const column of ["Provider", "Kind", "Adapter", "Credential", "Certification", "Latest run", "Status"]) {
       await expect(page.locator("table.payroll-provider-table").getByRole("columnheader", { name: column })).toBeVisible();
     }
 
-    const connectionLinks = page.locator("main a[href*='connectionId=']");
+    const connectionLinks = page.locator("table.payroll-provider-table a[href*='connectionId=']");
     expect(await connectionLinks.count()).toBeGreaterThan(0);
     await connectionLinks.first().click();
     await expect(page).toHaveURL(/connectionId=/);
-    await expect(page.getByRole("heading", { name: "Certification checklist" })).toBeVisible();
+    await expect(page.getByText("Connection detail").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Run certification" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Run rehearsal" })).toBeVisible();
     await expect(page.getByText("Adapter contract").first()).toBeVisible();
     await expect(page.getByText("Credential boundary").first()).toBeVisible();
     await expect(page.getByText("Certification evidence").first()).toBeVisible();
     await expect(page.getByText("Gate detail").first()).toBeVisible();
-    await expect(page.getByText(/Retry\/requeue API guarded|No delivery, callback, retry, or worker-job evidence exists yet/i).first()).toBeVisible();
 
     for (const endpoint of [
       "/api/hr-admin/payroll-provider-deliveries/00000000-0000-4000-8000-000000000000/schedule-retry",
@@ -88,7 +109,7 @@ test.describe("Phase PLF-6 Provider certification center", () => {
     await page.goto("/hr-admin/payroll-providers", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByRole("heading", { name: "Payroll Providers" })).toHaveCount(0);
-    await expect(page).toHaveURL(/\/$/);
+    expect(page.url()).not.toContain("/hr-admin/payroll-providers");
 
     const evidenceResponse = await page.request.get("/api/hr-admin/payroll-provider-certification-evidence");
     expect([401, 403]).toContain(evidenceResponse.status());

@@ -56,8 +56,8 @@ const operationsRoutes: OperationsRoute[] = [
   },
   {
     path: "/hr-admin/import-history",
-    heading: "Import History",
-    stripHeading: "Bulk import evidence ledger",
+    heading: "Import history",
+    stripHeading: "Import evidence ledger",
     activeLabel: "Import history",
     visibleText: ["Import batches", "Committed", "Blocked rows", "Rollback ready"],
   },
@@ -160,8 +160,22 @@ test.describe("HR Admin operations phase 14 certification", () => {
     await expect(workspace.getByPlaceholder("Search type, actor, file, hash")).toBeVisible();
     await expect(workspace.getByRole("combobox", { name: "Import type" })).toBeVisible();
     await expect(workspace.getByRole("combobox", { name: "Import status" })).toBeVisible();
+    await expect(workspace.getByRole("button", { name: "Reset" })).toBeDisabled();
+
+    const firstImportCard = workspace.locator(".import-history-card").first();
+    if (await firstImportCard.isVisible().catch(() => false)) {
+      await expect(firstImportCard.locator(".import-history-card__actions").first()).toBeVisible();
+      const cardBox = await firstImportCard.boundingBox();
+      const actionsBox = await firstImportCard.locator(".import-history-card__actions").first().boundingBox();
+      expect(cardBox, "import card should have a measurable box").not.toBeNull();
+      expect(actionsBox, "import card actions should have a measurable box").not.toBeNull();
+      if (cardBox && actionsBox) {
+        expect(actionsBox.x + actionsBox.width).toBeGreaterThan(cardBox.x + cardBox.width - 220);
+      }
+    }
 
     await workspace.getByPlaceholder("Search type, actor, file, hash").fill("zz-no-import-batch-phase14");
+    await expect(workspace.getByRole("button", { name: "Reset" })).toBeEnabled();
     await expect(workspace.getByText(/No import batches match|Loading import history/)).toBeVisible();
     await expectNoAppError(page);
     await expectNoHorizontalOverflow(page);

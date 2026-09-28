@@ -78,12 +78,13 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
         </div>
       </section>
 
-      <section className="section tenant-commercial-workspace">
+      <section className="section tenant-commercial-workspace tenant-commercial-workspace--phase3">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Commercial profile</span>
               <h2>Current subscription</h2>
+              <p className="tenant-console-empty">Use this panel as the read-only commercial source of truth before requesting plan or billing changes.</p>
             </div>
             <span className="record-chip">{titleCase(commercial.subscription.status)}</span>
           </div>
@@ -111,7 +112,8 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Usage evidence</span>
-              <h2>Recent meter snapshots</h2>
+              <h2>Meter snapshots</h2>
+              <p className="tenant-console-empty">Recent usage samples used for plan-limit and commercial review decisions.</p>
             </div>
             <span className="record-chip">{data.recent_usage_snapshots.length} rows</span>
           </div>

@@ -5,6 +5,7 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReviewSetup } from "@/lib/api";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
+import { PayrollWorkflowGuide } from "../payroll-workflow-guide";
 import { PayrollReviewExceptionActions } from "./payroll-review-exception-actions";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import type {
@@ -19,9 +20,51 @@ type SearchParamValue = string | string[] | undefined;
 type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
 };
+type PageSize = 10 | 25 | 50;
 
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function parsePositiveInteger(value: SearchParamValue, fallback: number) {
+  const parsed = Number.parseInt(normalizeParam(value) ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizePageSize(value: SearchParamValue): PageSize {
+  const parsed = parsePositiveInteger(value, 10);
+  return parsed === 25 || parsed === 50 ? parsed : 10;
+}
+
+function paginate<T>(items: T[], page: number, pageSize: PageSize) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * pageSize;
+  return {
+    items: items.slice(start, start + pageSize),
+    page: safePage,
+    pageSize,
+    totalPages,
+  };
+}
+
+function reviewHref(currentParams: Record<string, SearchParamValue>, overrides: Record<string, string | number | undefined>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(currentParams)) {
+    const normalized = normalizeParam(value);
+    if (normalized) {
+      params.set(key, normalized);
+    }
+  }
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined || value === "") {
+      params.delete(key);
+    } else {
+      params.set(key, String(value));
+    }
+  }
+  const query = params.toString();
+  return `/hr-admin/payroll-review${query ? `?${query}` : ""}`;
 }
 
 function titleCase(value: string) {
@@ -52,28 +95,81 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
 }
 
+function PaginationControls({
+  ariaLabel,
+  currentParams,
+  page,
+  pageParam,
+  pageSize,
+  pageSizeParam,
+  totalPages,
+}: {
+  ariaLabel: string;
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageParam: string;
+  pageSize: PageSize;
+  pageSizeParam: string;
+  totalPages: number;
+}) {
+  return (
+    <nav aria-label={ariaLabel} className="payroll-setup-pagination">
+      <span>{page} of {totalPages}</span>
+      <div className="payroll-setup-pagination__sizes">
+        {[10, 25, 50].map((size) => (
+          <Link
+            aria-current={pageSize === size ? "page" : undefined}
+            className="button button--secondary button--compact"
+            href={reviewHref(currentParams, { [pageSizeParam]: size, [pageParam]: 1 })}
+            key={size}
+          >
+            {size}
+          </Link>
+        ))}
+      </div>
+      <div className="payroll-setup-pagination__actions">
+        <Link aria-disabled={page === 1} className="button button--secondary button--compact" href={reviewHref(currentParams, { [pageParam]: 1 })}>First</Link>
+        <Link aria-disabled={page === 1} className="button button--secondary button--compact" href={reviewHref(currentParams, { [pageParam]: Math.max(1, page - 1) })}>Previous</Link>
+        <Link aria-disabled={page === totalPages} className="button button--secondary button--compact" href={reviewHref(currentParams, { [pageParam]: Math.min(totalPages, page + 1) })}>Next</Link>
+        <Link aria-disabled={page === totalPages} className="button button--secondary button--compact" href={reviewHref(currentParams, { [pageParam]: totalPages })}>Last</Link>
+      </div>
+    </nav>
+  );
+}
+
 function ReviewRail({
+  currentParams,
+  page,
+  pageSize,
   reviews,
   runs,
   selectedReview,
 }: {
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageSize: PageSize;
   reviews: HrAdminPayrollRunReview[];
   runs: HrAdminPayrollRun[];
   selectedReview: HrAdminPayrollRunReview | null;
 }) {
+  const pagedReviews = paginate(reviews, page, pageSize);
+
   return (
     <aside className="payroll-setup-rail payroll-review-rail">
-      <div className="payroll-setup-panel__header">
-        <span className="workspace-card__eyebrow">Review queue</span>
-        <h2>Review queue</h2>
+      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+        <div>
+          <span className="workspace-card__eyebrow">Review queue</span>
+          <h2>Review queue</h2>
+        </div>
+        <span className="payroll-setup-count">{reviews.length}</span>
       </div>
       <div className="payroll-setup-card-list">
-        {reviews.map((review) => {
+        {pagedReviews.items.map((review) => {
           const run = runs.find((item) => item.id === review.payroll_run_id);
           return (
             <Link
               className={`payroll-setup-mini-card payroll-review-card ${selectedReview?.id === review.id ? "is-selected" : ""}`}
-              href={`/hr-admin/payroll-review?reviewId=${review.id}`}
+              href={reviewHref(currentParams, { reviewId: review.id, exceptionId: undefined, exceptionPage: 1, approvalPage: 1, linePage: 1 })}
               key={review.id}
             >
               <div>
@@ -86,10 +182,22 @@ function ReviewRail({
                 <span>{review.approval_count} approvals</span>
               </div>
               <code>{review.review_profile_ref}</code>
+              {selectedReview?.id === review.id ? <span className="payroll-rule-selected-marker">Selected review</span> : null}
             </Link>
           );
         })}
       </div>
+      {reviews.length > pageSize ? (
+        <PaginationControls
+          ariaLabel="payroll review queue pagination"
+          currentParams={currentParams}
+          page={pagedReviews.page}
+          pageParam="reviewPage"
+          pageSize={pagedReviews.pageSize}
+          pageSizeParam="reviewSize"
+          totalPages={pagedReviews.totalPages}
+        />
+      ) : null}
     </aside>
   );
 }
@@ -117,6 +225,7 @@ function ExceptionDetail({ item }: { item: HrAdminPayrollRunException | null }) 
         </div>
         <StatusBadge status={item.status} />
       </div>
+      <span className="payroll-rule-selected-marker">Selected exception</span>
 
       <div className="payroll-review-exception-summary">
         <span className="workspace-card__eyebrow">Severity</span>
@@ -154,7 +263,7 @@ function ExceptionDetail({ item }: { item: HrAdminPayrollRunException | null }) 
   );
 }
 
-function ApprovalTimeline({ approvals }: { approvals: HrAdminPayrollRunApproval[] }) {
+function ApprovalTimeline({ approvals, totalApprovalCount }: { approvals: HrAdminPayrollRunApproval[]; totalApprovalCount: number }) {
   return (
     <section className="payroll-setup-assignment-panel payroll-review-approval-panel">
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -162,7 +271,7 @@ function ApprovalTimeline({ approvals }: { approvals: HrAdminPayrollRunApproval[
           <span className="workspace-card__eyebrow">Approval trail</span>
           <h2>Approval trail</h2>
         </div>
-        <span className="payroll-setup-count">{approvals.length} decisions</span>
+        <span className="payroll-setup-count">{totalApprovalCount} decisions</span>
       </div>
       <div className="payroll-review-timeline">
         {approvals.map((approval) => (
@@ -190,6 +299,14 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
   const currentParams = (await searchParams) ?? {};
   const selectedReviewId = normalizeParam(currentParams.reviewId);
   const selectedExceptionId = normalizeParam(currentParams.exceptionId);
+  const reviewPage = parsePositiveInteger(currentParams.reviewPage, 1);
+  const reviewSize = normalizePageSize(currentParams.reviewSize);
+  const exceptionPage = parsePositiveInteger(currentParams.exceptionPage, 1);
+  const exceptionSize = normalizePageSize(currentParams.exceptionSize);
+  const approvalPage = parsePositiveInteger(currentParams.approvalPage, 1);
+  const approvalSize = normalizePageSize(currentParams.approvalSize);
+  const linePage = parsePositiveInteger(currentParams.linePage, 1);
+  const lineSize = normalizePageSize(currentParams.lineSize);
   const result = await getHrAdminPayrollReviewSetup({
     review_id: selectedReviewId,
   });
@@ -200,11 +317,14 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
     setup.reviews[0] ??
     null;
   const visibleExceptions = selectedReview ? setup.exceptions.filter((item) => item.review_id === selectedReview.id) : setup.exceptions;
+  const pagedExceptions = paginate(visibleExceptions, exceptionPage, exceptionSize);
   const selectedException = visibleExceptions.find((item) => item.id === selectedExceptionId) ?? visibleExceptions[0] ?? null;
   const visibleApprovals = selectedReview ? setup.approvals.filter((item) => item.review_id === selectedReview.id) : setup.approvals;
+  const pagedApprovals = paginate(visibleApprovals, approvalPage, approvalSize);
   const visibleLines: HrAdminPayrollCalculationLine[] = selectedReview
     ? setup.lines.filter((item) => item.calculation_id === selectedReview.calculation_id)
     : setup.lines;
+  const pagedLines = paginate(visibleLines, linePage, lineSize);
   const selectedRun = selectedReview ? setup.runs.find((item) => item.id === selectedReview.payroll_run_id) ?? null : null;
   const totals = selectedReview?.totals_snapshot ?? {};
   const summary = selectedReview?.exception_summary_snapshot ?? {};
@@ -251,6 +371,16 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
         secondaryMetricValue={visibleApprovals.length}
       />
 
+      <PayrollWorkflowGuide
+        title="Payroll review desk"
+        description="Work the exception queue, capture decisions, then approve or final-lock the run with evidence."
+        steps={[
+          { label: "Select review", detail: "Scope one calculation attempt for approval." },
+          { label: "Resolve exceptions", detail: "Inspect each issue and record the decision." },
+          { label: "Approve and lock", detail: "Use guarded actions after evidence is clean." },
+        ]}
+      />
+
       <section className="section section--tight">
         <div className="metric-grid-modern payroll-setup-metrics">
           <MetricTile className="metric-tile-soft" label="Reviews" value={setup.summary.review_count} trend={`${setup.summary.locked_review_count} locked`} />
@@ -262,7 +392,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
 
       <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-review-workspace">
-          <ReviewRail reviews={setup.reviews} runs={setup.runs} selectedReview={selectedReview} />
+          <ReviewRail currentParams={currentParams} page={reviewPage} pageSize={reviewSize} reviews={setup.reviews} runs={setup.runs} selectedReview={selectedReview} />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -374,10 +504,10 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleExceptions.map((item) => (
+                    {pagedExceptions.items.map((item) => (
                       <tr className={selectedException?.id === item.id ? "is-selected" : ""} key={item.id}>
                         <td>
-                          <Link href={`/hr-admin/payroll-review?reviewId=${item.review_id}&exceptionId=${item.id}`}>
+                          <Link href={reviewHref(currentParams, { reviewId: item.review_id, exceptionId: item.id })}>
                             <strong>{item.title}</strong>
                             <span>{titleCase(item.category)}</span>
                           </Link>
@@ -394,6 +524,17 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   </tbody>
                 </table>
               </div>
+              {visibleExceptions.length > exceptionSize ? (
+                <PaginationControls
+                  ariaLabel="payroll review exception pagination"
+                  currentParams={currentParams}
+                  page={pagedExceptions.page}
+                  pageParam="exceptionPage"
+                  pageSize={pagedExceptions.pageSize}
+                  pageSizeParam="exceptionSize"
+                  totalPages={pagedExceptions.totalPages}
+                />
+              ) : null}
             </div>
 
             <PayrollReviewExceptionActions
@@ -404,7 +545,18 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
               canManageExceptions={canReviewPayroll}
             />
 
-            <ApprovalTimeline approvals={visibleApprovals} />
+            <ApprovalTimeline approvals={pagedApprovals.items} totalApprovalCount={visibleApprovals.length} />
+            {visibleApprovals.length > approvalSize ? (
+              <PaginationControls
+                ariaLabel="payroll review approval pagination"
+                currentParams={currentParams}
+                page={pagedApprovals.page}
+                pageParam="approvalPage"
+                pageSize={pagedApprovals.pageSize}
+                pageSizeParam="approvalSize"
+                totalPages={pagedApprovals.totalPages}
+              />
+            ) : null}
 
             <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -426,7 +578,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleLines.slice(0, 8).map((line) => (
+                    {pagedLines.items.map((line) => (
                       <tr key={line.id}>
                         <td>
                           <strong>{line.employee_name}</strong>
@@ -444,6 +596,17 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   </tbody>
                 </table>
               </div>
+              {visibleLines.length > lineSize ? (
+                <PaginationControls
+                  ariaLabel="payroll review line pagination"
+                  currentParams={currentParams}
+                  page={pagedLines.page}
+                  pageParam="linePage"
+                  pageSize={pagedLines.pageSize}
+                  pageSizeParam="lineSize"
+                  totalPages={pagedLines.totalPages}
+                />
+              ) : null}
             </div>
           </div>
 

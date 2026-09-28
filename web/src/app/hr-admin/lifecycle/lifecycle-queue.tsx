@@ -74,6 +74,7 @@ export function LifecycleQueue({
   const pathname = usePathname();
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [search, setSearch] = useState(currentFilters.q);
   const [itemType, setItemType] = useState(currentFilters.item_type || "all");
@@ -151,6 +152,7 @@ export function LifecycleQueue({
     });
 
     setError("");
+    setFeedback("");
     setIsSubmitting(true);
     try {
       for (const recordType of ["onboarding", "probation", "movement"] as const) {
@@ -173,6 +175,7 @@ export function LifecycleQueue({
         }
       }
       setSelectedKeys([]);
+      setFeedback("Owner updated.");
       router.refresh();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to update lifecycle owners.");
@@ -199,6 +202,7 @@ export function LifecycleQueue({
     }
 
     setError("");
+    setFeedback("");
     setIsSubmitting(true);
     const body: HrAdminLifecycleStatusBulkActionInput = {
       record_type: statusBulkType,
@@ -216,6 +220,7 @@ export function LifecycleQueue({
         throw new Error(getErrorMessage(payload));
       }
       setSelectedKeys([]);
+      setFeedback("Status updated.");
       router.refresh();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to update lifecycle statuses.");
@@ -225,8 +230,8 @@ export function LifecycleQueue({
   }
 
   return (
-    <section className="section queue-layout">
-      <section className="queue-toolbar panel-card-soft">
+    <section className="section queue-layout lifecycle-queue-layout">
+      <section className="queue-toolbar panel-card-soft lifecycle-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Lifecycle inbox</h2>
@@ -301,6 +306,7 @@ export function LifecycleQueue({
           <button className="button button--ghost" onClick={() => {
             setSelectedKeys([]);
             setError("");
+            setFeedback("");
             setSearch("");
             setItemType("all");
             setStatus("all");
@@ -317,15 +323,15 @@ export function LifecycleQueue({
             {allAssignableSelected ? "Clear selection" : "Select page"}
           </button>
         </div>
-        <div className="queue-toolbar__grid">
-          <label className="form-field">
-            <span className="muted">Bulk owner</span>
-            <select className="input-control" onChange={(event) => setBulkOwner(event.target.value)} value={bulkOwner}>
-              <option value="">Clear owner assignment</option>
-              {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <div className="form-field" style={{ alignSelf: "end" }}>
+        <div className="queue-toolbar__bulk-grid lifecycle-bulk-grid">
+          <div className="queue-toolbar__bulk-group">
+            <label className="form-field">
+              <span className="muted">Bulk owner</span>
+              <select className="input-control" onChange={(event) => setBulkOwner(event.target.value)} value={bulkOwner}>
+                <option value="">Clear owner assignment</option>
+                {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
             <div className="queue-toolbar__actions">
               <button
                 className="button button--primary"
@@ -345,14 +351,14 @@ export function LifecycleQueue({
               </button>
             </div>
           </div>
-          <label className="form-field">
-            <span className="muted">Bulk status</span>
-            <select className="input-control" disabled={!statusBulkType} onChange={(event) => setBulkStatus(event.target.value)} value={bulkStatus}>
-              <option value="">{statusBulkType ? "Choose a status" : "Choose a single lifecycle type first"}</option>
-              {statusBulkOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <div className="form-field" style={{ alignSelf: "end" }}>
+          <div className="queue-toolbar__bulk-group">
+            <label className="form-field">
+              <span className="muted">Bulk status</span>
+              <select className="input-control" disabled={!statusBulkType} onChange={(event) => setBulkStatus(event.target.value)} value={bulkStatus}>
+                <option value="">{statusBulkType ? "Choose a status" : "Choose a single lifecycle type first"}</option>
+                {statusBulkOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
             <div className="queue-toolbar__actions">
               <button
                 className="button button--secondary"
@@ -389,16 +395,17 @@ export function LifecycleQueue({
           <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> shared state</span>
           <span className="queue-summary-chip"><strong>{selectedKeys.length}</strong> selected</span>
         </div>
+        {feedback ? <div className="notice"><strong>{feedback}</strong><span className="muted">The lifecycle inbox has been refreshed with the latest queue state.</span></div> : null}
         {error ? <div className="notice"><strong>Lifecycle bulk action failed.</strong><span className="muted">{error}</span></div> : null}
       </section>
 
-      <div className="queue-list">
+      <div className="queue-list lifecycle-record-list">
         {items.map((item) => {
           const itemKey = getItemKey(item);
           const isAssignable = BULK_ASSIGNABLE_TYPES.has(item.item_type);
           const isSelected = selectedKeys.includes(itemKey);
           return (
-          <article className="record-card panel-card-soft" key={`${item.item_type}-${item.id}`}>
+          <article className="record-card panel-card-soft lifecycle-record-card" key={`${item.item_type}-${item.id}`}>
             <div className="record-card__header">
               <div className="record-card__title-wrap">
                 <label className="record-card__title">
@@ -425,7 +432,7 @@ export function LifecycleQueue({
                 <Link className="button button--secondary" href={item.detail_href}>Open record</Link>
               </div>
             </div>
-            <div className="detail-grid">
+            <div className="detail-grid lifecycle-detail-grid">
               <div className="detail-row"><span className="detail-label">Type</span><span className="detail-value">{item.item_label}</span></div>
               <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{item.status_label}</span></div>
               <div className="detail-row"><span className="detail-label">{item.primary_date_label}</span><span className="detail-value">{item.primary_date || "Not set"}</span></div>

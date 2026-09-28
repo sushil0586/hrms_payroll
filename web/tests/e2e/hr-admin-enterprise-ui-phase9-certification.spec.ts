@@ -96,9 +96,9 @@ const routeExpectations: RouteExpectation[] = [
   },
   {
     path: "/hr-admin/import-history",
-    heading: /Import History/i,
+    heading: /Import history/i,
     selectors: [".operations-governance-strip", "[data-testid='import-history-workspace']"],
-    visibleText: ["Bulk import evidence ledger", "Import batches"],
+    visibleText: ["Import evidence ledger", "Import batches"],
   },
 ];
 

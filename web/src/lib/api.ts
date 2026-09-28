@@ -295,6 +295,14 @@ export async function getMssApprovalInbox(params?: {
   };
 }
 
+export async function getMssLeaveRequestDetail(requestId: string) {
+  return apiGet<LeaveRequestItem>(`/manager/leave-requests/${requestId}/`);
+}
+
+export async function getMssAttendanceRegularizationDetail(regularizationId: string) {
+  return apiGet<AttendanceRegularizationItem>(`/manager/attendance-regularizations/${regularizationId}/`);
+}
+
 export async function getMssNotifications(params?: {
   page?: number;
   page_size?: number;
@@ -706,6 +714,10 @@ export async function getHrAdminWorkflowTemplate(itemId: string) {
 
 export async function getHrAdminWorkflowTemplateAssignments() {
   return apiGet<HrAdminWorkflowTemplateAssignment[]>("/hr-admin/workflow-template-assignments/");
+}
+
+export async function getHrAdminWorkflowTemplateAssignment(itemId: string) {
+  return apiGet<HrAdminWorkflowTemplateAssignment>(`/hr-admin/workflow-template-assignments/${itemId}/`);
 }
 
 export async function getHrAdminWorkflowTraces(params?: {

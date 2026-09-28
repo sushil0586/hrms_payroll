@@ -142,12 +142,12 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
   }
 
   return (
-    <section className="section overview-split">
-      <form className="form-shell-card overview-split__primary" onSubmit={handleSubmit}>
+    <section className="section overview-split document-letter-workspace">
+      <form className="form-shell-card overview-split__primary document-child-form document-letter-form" onSubmit={handleSubmit}>
         <div className="form-shell-card__header">
           <div>
-            <h2>Generate employee letter</h2>
-            <p className="section-copy">Create a stored employee artifact from a variable-based HR letter draft.</p>
+            <h2>Generate letter</h2>
+            <p className="section-copy">Create a stored employee artifact from a variable-based draft.</p>
           </div>
           <div className="form-shell-card__meta">
             <span className="queue-summary-chip"><strong>{draft.letter_type}</strong> type</span>
@@ -250,21 +250,24 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
           </div>
         ) : null}
 
-        <div className="form-actions">
-          <button className="button button--secondary" disabled={isPreviewing || isGenerating} onClick={handlePreview} type="button">
-            {isPreviewing ? "Previewing..." : "Preview letter"}
-          </button>
-          <button className="button button--primary" disabled={isGenerating || !draft.employee_id} type="submit">
-            {isGenerating ? "Generating..." : "Generate letter"}
-          </button>
+        <div className="form-actions-bar form-actions-bar--static">
+          <span className="muted">Preview before generating so missing variables are visible.</span>
+          <div className="form-actions-bar__buttons">
+            <button className="button button--secondary" disabled={isPreviewing || isGenerating} onClick={handlePreview} type="button">
+              {isPreviewing ? "Previewing..." : "Preview letter"}
+            </button>
+            <button className="button button--primary" disabled={isGenerating || !draft.employee_id} type="submit">
+              {isGenerating ? "Generating..." : "Generate letter"}
+            </button>
+          </div>
         </div>
       </form>
 
-      <aside className="record-card panel-card-soft overview-split__secondary">
+      <aside className="record-card panel-card-soft overview-split__secondary document-record-card document-letter-preview">
         <div className="record-card__header">
           <div>
-            <h2>Rendered preview</h2>
-            <p className="section-copy section-copy-soft">Employee variables and payload values render before storage.</p>
+            <h2>Preview</h2>
+            <p className="section-copy section-copy-soft">Rendered text before storage.</p>
           </div>
         </div>
         {preview ? (
@@ -280,19 +283,19 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
         )}
       </aside>
 
-      <section className="record-card panel-card-soft" style={{ gridColumn: "1 / -1" }}>
+      <section className="record-card panel-card-soft document-record-card document-letter-artifacts">
         <div className="record-card__header">
           <div>
             <h2>Generated artifacts</h2>
-            <p className="section-copy section-copy-soft">Stored HR letters attached to employee records.</p>
+            <p className="section-copy section-copy-soft">Stored letters attached to employee records.</p>
           </div>
           <div className="record-card__eyebrow">
             <span className="record-chip">{initialLetters.length} visible</span>
           </div>
         </div>
-        <div className="queue-list">
+        <div className="queue-list document-record-list">
           {initialLetters.map((item) => (
-            <article className="record-card panel-card-soft" key={item.id}>
+            <article className="record-card panel-card-soft document-record-card" key={item.id}>
               <div className="record-card__header">
                 <div>
                   <h2>{item.title}</h2>
@@ -302,7 +305,7 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
                   {item.artifact_id ? <a className="button button--ghost" href={`/api/hr-admin/generated-letters/${item.id}/download`}>Download</a> : null}
                 </div>
               </div>
-              <div className="detail-grid">
+              <div className="detail-grid document-detail-grid">
                 <div className="detail-row"><span className="detail-label">Type</span><span className="detail-value">{item.letter_type}</span></div>
                 <div className="detail-row"><span className="detail-label">Template</span><span className="detail-value">{item.template_code || "Manual"}</span></div>
                 <div className="detail-row"><span className="detail-label">Issue date</span><span className="detail-value">{item.issue_date || "Not set"}</span></div>

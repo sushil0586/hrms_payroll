@@ -9,7 +9,7 @@ export default async function HrAdminNewNotificationTemplatePage() {
   const optionsResult = await getHrAdminNotificationOptions();
 
   return (
-    <main className="shell">
+    <main className="shell notification-shell">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Create notification template"

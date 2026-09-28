@@ -14,7 +14,7 @@ export default async function HrAdminNotificationDiagnosticsPage() {
   const channelsWithFailures = result.data.channel_diagnostics.filter((item) => item.failed_notification_count > 0).length;
 
   return (
-    <main className="shell">
+    <main className="shell notification-shell">
       <PageIntro
         eyebrow={result.state === "live" ? "Live diagnostics" : "Demo diagnostics"}
         title="Notification diagnostics"
@@ -80,42 +80,60 @@ export default async function HrAdminNotificationDiagnosticsPage() {
       </section>
 
       <section className="section">
-        <article className="record-card">
-          <div className="record-card__header">
-            <div className="record-card__title-wrap">
-              <div className="record-card__title">
-                <h2>Channel diagnostics</h2>
-              </div>
-              <p className="section-copy">Backend-backed delivery health across in-app, email, SMS, push, and WhatsApp routing.</p>
+        <article className="record-card notification-catalog-panel">
+          <div className="section-header-row">
+            <div>
+              <h2 className="section-heading-soft">Channel diagnostics</h2>
+              <p className="section-copy-soft">Compare delivery health across in-app, email, SMS, push, and WhatsApp routing.</p>
             </div>
+            <span className="queue-summary-chip">
+              <strong>{channelsWithFailures}</strong> with failures
+            </span>
           </div>
-          <div className="stack-list">
-            {result.data.channel_diagnostics.map((item) => (
-              <div className="detail-grid" key={item.channel}>
-                <div className="detail-row"><span className="detail-label">Channel</span><span className="detail-value">{item.label}</span></div>
-                <div className="detail-row"><span className="detail-label">Routing</span><span className="detail-value">{item.is_enabled ? `Enabled via ${item.backend_key}` : "Disabled"}</span></div>
-                <div className="detail-row"><span className="detail-label">Tracked notifications</span><span className="detail-value">{item.live_notification_count}</span></div>
-                <div className="detail-row"><span className="detail-label">Pending</span><span className="detail-value">{item.pending_notification_count}</span></div>
-                <div className="detail-row"><span className="detail-label">Failures</span><span className="detail-value">{item.failed_notification_count}</span></div>
-                <div className="detail-row"><span className="detail-label">Retry capped</span><span className="detail-value">{item.retry_capped_count}</span></div>
-                <div className="detail-row"><span className="detail-label">Providers</span><span className="detail-value">{item.provider_names.join(", ") || "No provider attempts yet"}</span></div>
-                <div className="detail-row"><span className="detail-label">Last activity</span><span className="detail-value">{formatNotificationDateTime(item.latest_notification_at)}</span></div>
-                <div className="detail-row"><span className="detail-label">Latest failure</span><span className="detail-value">{item.latest_failure_message || "No failure recorded"}</span></div>
-                <div className="detail-row">
-                  <span className="detail-label">Action</span>
-                  <span className="detail-value">
-                    <span className="record-card__actions">
-                      <Link className="button button--secondary" href={`/hr-admin/notifications?channel=${item.channel}`}>
-                        Open queue
-                      </Link>
-                      <Link className="button button--ghost" href={`/hr-admin/notifications?channel=${item.channel}&retry_state=retry_ready`}>
-                        Retry ready
-                      </Link>
-                    </span>
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="notification-table-scroll">
+            <table className="notification-catalog-table notification-diagnostics-table">
+              <thead>
+                <tr>
+                  <th>Channel</th>
+                  <th>Routing</th>
+                  <th>Tracked</th>
+                  <th>Pending</th>
+                  <th>Failed</th>
+                  <th>Retry capped</th>
+                  <th>Last activity</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.data.channel_diagnostics.map((item) => (
+                  <tr key={item.channel}>
+                    <td data-label="Channel">
+                      <strong>{item.label}</strong>
+                      <span>{item.provider_names.join(", ") || "No provider attempts yet"}</span>
+                      {item.latest_failure_message ? <span className="notification-table-note">{item.latest_failure_message}</span> : null}
+                    </td>
+                    <td data-label="Routing">{item.is_enabled ? `Enabled via ${item.backend_key}` : "Disabled"}</td>
+                    <td data-label="Tracked">{item.live_notification_count}</td>
+                    <td data-label="Pending">{item.pending_notification_count}</td>
+                    <td data-label="Failed">
+                      <span className={`record-chip${item.failed_notification_count ? " record-chip--danger" : ""}`}>{item.failed_notification_count}</span>
+                    </td>
+                    <td data-label="Retry capped">{item.retry_capped_count}</td>
+                    <td data-label="Last activity">{formatNotificationDateTime(item.latest_notification_at)}</td>
+                    <td data-label="Actions">
+                      <div className="notification-row-actions">
+                        <Link className="button button--secondary" href={`/hr-admin/notifications?channel=${item.channel}`}>
+                          Queue
+                        </Link>
+                        <Link className="button button--ghost" href={`/hr-admin/notifications?channel=${item.channel}&retry_state=retry_ready`}>
+                          Retry ready
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </article>
       </section>
@@ -153,27 +171,22 @@ export default async function HrAdminNotificationDiagnosticsPage() {
           </article>
 
           <article className="record-card">
-            <div className="record-card__header">
-              <div className="record-card__title-wrap">
-                <div className="record-card__title">
-                  <h2>Recommendations</h2>
-                </div>
-                <p className="section-copy">Suggested next actions based on current catalog usage and delivery health.</p>
+            <div className="section-header-row">
+              <div>
+                <h2 className="section-heading-soft">Recommendations</h2>
+                <p className="section-copy-soft">Suggested next actions based on current catalog usage and delivery health.</p>
               </div>
             </div>
-            <div className="stack-list">
+            <div className="notification-compact-list">
               {result.data.recommendations.map((item, index) => (
-                <div className="detail-grid" key={`${item.title}-${index}`}>
-                  <div className="detail-row"><span className="detail-label">Category</span><span className="detail-value">{item.category}</span></div>
-                  <div className="detail-row"><span className="detail-label">Recommendation</span><span className="detail-value">{item.title}</span></div>
-                  <div className="detail-row"><span className="detail-label">Reason</span><span className="detail-value">{item.description}</span></div>
-                  <div className="detail-row">
-                    <span className="detail-label">Action</span>
-                    <span className="detail-value">
-                      <Link className="button button--secondary" href={item.href}>Open</Link>
-                    </span>
-                  </div>
-                </div>
+                <Link className="notification-compact-row" href={item.href} key={`${item.title}-${index}`}>
+                  <span className="record-chip record-chip--accent">{item.category}</span>
+                  <span className="notification-compact-row__body">
+                    <strong>{item.title}</strong>
+                    <span>{item.description}</span>
+                  </span>
+                  <span className="button button--secondary">Open</span>
+                </Link>
               ))}
             </div>
           </article>
@@ -183,91 +196,133 @@ export default async function HrAdminNotificationDiagnosticsPage() {
       <section className="section queue-layout">
         <div className="queue-list">
           <article className="record-card">
-            <div className="record-card__header">
-              <div className="record-card__title-wrap">
-                <div className="record-card__title">
-                  <h2>Template diagnostics</h2>
-                </div>
-                <p className="section-copy">Look for templates with no linked events, inactive usage, or repeated delivery failures.</p>
+            <div className="section-header-row">
+              <div>
+                <h2 className="section-heading-soft">Template diagnostics</h2>
+                <p className="section-copy-soft">Look for templates with no linked events, inactive usage, or repeated delivery failures.</p>
               </div>
             </div>
-            <div className="stack-list">
-              {result.data.template_diagnostics.map((item) => (
-                <div className="detail-grid" key={item.template_id}>
-                  <div className="detail-row"><span className="detail-label">Template</span><span className="detail-value">{item.template_name}</span></div>
-                  <div className="detail-row"><span className="detail-label">Channel</span><span className="detail-value">{item.channel}</span></div>
-                  <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{item.status}</span></div>
-                  <div className="detail-row"><span className="detail-label">Linked events</span><span className="detail-value">{item.linked_event_count}</span></div>
-                  <div className="detail-row"><span className="detail-label">Active events</span><span className="detail-value">{item.active_event_count}</span></div>
-                  <div className="detail-row"><span className="detail-label">Live notifications</span><span className="detail-value">{item.live_notification_count}</span></div>
-                  <div className="detail-row"><span className="detail-label">Failures</span><span className="detail-value">{item.failed_notification_count}</span></div>
-                  <div className="detail-row"><span className="detail-label">Last activity</span><span className="detail-value">{item.last_notification_at || "No activity yet"}</span></div>
-                  <div className="detail-row">
-                    <span className="detail-label">Action</span>
-                    <span className="detail-value">
-                      <Link href={`/hr-admin/notification-templates/${item.template_id}/edit`}>Edit template</Link>
-                    </span>
-                  </div>
-                </div>
-              ))}
+            <div className="notification-table-scroll">
+              <table className="notification-catalog-table notification-diagnostics-table">
+                <thead>
+                  <tr>
+                    <th>Template</th>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>Events</th>
+                    <th>Live</th>
+                    <th>Failures</th>
+                    <th>Last activity</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.data.template_diagnostics.map((item) => (
+                    <tr key={item.template_id}>
+                      <td data-label="Template"><strong>{item.template_name}</strong></td>
+                      <td data-label="Channel"><span className="record-chip record-chip--accent">{item.channel}</span></td>
+                      <td data-label="Status"><span className={`record-chip${item.status === "active" ? "" : " record-chip--accent"}`}>{item.status}</span></td>
+                      <td data-label="Events">{item.active_event_count}/{item.linked_event_count}</td>
+                      <td data-label="Live">{item.live_notification_count}</td>
+                      <td data-label="Failures">{item.failed_notification_count}</td>
+                      <td data-label="Last activity">{item.last_notification_at || "No activity yet"}</td>
+                      <td data-label="Action">
+                        <Link className="button button--secondary" href={`/hr-admin/notification-templates/${item.template_id}/edit`}>
+                          Edit
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </article>
 
           <article className="record-card">
-            <div className="record-card__header">
-              <div className="record-card__title-wrap">
-                <div className="record-card__title">
-                  <h2>Event diagnostics</h2>
-                </div>
-                <p className="section-copy">Identify noisy or underused event rules and see where test-send activity is concentrated.</p>
+            <div className="section-header-row">
+              <div>
+                <h2 className="section-heading-soft">Event diagnostics</h2>
+                <p className="section-copy-soft">Identify noisy or underused event rules and see where test-send activity is concentrated.</p>
               </div>
             </div>
-            <div className="stack-list">
-              {result.data.event_diagnostics.map((item) => (
-                <div className="detail-grid" key={item.event_id}>
-                  <div className="detail-row"><span className="detail-label">Event</span><span className="detail-value">{item.event_name}</span></div>
-                  <div className="detail-row"><span className="detail-label">Module</span><span className="detail-value">{item.module}</span></div>
-                  <div className="detail-row"><span className="detail-label">Channel</span><span className="detail-value">{item.channel}</span></div>
-                  <div className="detail-row"><span className="detail-label">Audience</span><span className="detail-value">{item.audience_type}</span></div>
-                  <div className="detail-row"><span className="detail-label">Template</span><span className="detail-value">{item.template_name || "Direct content"}</span></div>
-                  <div className="detail-row"><span className="detail-label">Live notifications</span><span className="detail-value">{item.live_notification_count}</span></div>
-                  <div className="detail-row"><span className="detail-label">Failures</span><span className="detail-value">{item.failed_notification_count}</span></div>
-                  <div className="detail-row"><span className="detail-label">Test sends</span><span className="detail-value">{item.test_notification_count}</span></div>
-                  <div className="detail-row">
-                    <span className="detail-label">Action</span>
-                    <span className="detail-value">
-                      <Link href={`/hr-admin/notification-events/${item.event_id}/edit`}>Edit event</Link>
-                    </span>
-                  </div>
-                </div>
-              ))}
+            <div className="notification-table-scroll">
+              <table className="notification-catalog-table notification-diagnostics-table">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Route</th>
+                    <th>Audience</th>
+                    <th>Template</th>
+                    <th>Live</th>
+                    <th>Failures</th>
+                    <th>Tests</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.data.event_diagnostics.map((item) => (
+                    <tr key={item.event_id}>
+                      <td data-label="Event"><strong>{item.event_name}</strong></td>
+                      <td data-label="Route">
+                        <div className="notification-cell-chips">
+                          <span className="record-chip record-chip--accent">{item.module}</span>
+                          <span className="record-chip">{item.channel}</span>
+                        </div>
+                      </td>
+                      <td data-label="Audience">{item.audience_type}</td>
+                      <td data-label="Template">{item.template_name || "Direct content"}</td>
+                      <td data-label="Live">{item.live_notification_count}</td>
+                      <td data-label="Failures">{item.failed_notification_count}</td>
+                      <td data-label="Tests">{item.test_notification_count}</td>
+                      <td data-label="Action">
+                        <Link className="button button--secondary" href={`/hr-admin/notification-events/${item.event_id}/edit`}>
+                          Edit
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </article>
 
           <article className="record-card">
-            <div className="record-card__header">
-              <div className="record-card__title-wrap">
-                <div className="record-card__title">
-                  <h2>Recent test notifications</h2>
-                </div>
-                <p className="section-copy">Quick access to the latest preview-origin notifications for review and troubleshooting.</p>
+            <div className="section-header-row">
+              <div>
+                <h2 className="section-heading-soft">Recent test notifications</h2>
+                <p className="section-copy-soft">Quick access to the latest preview-origin notifications for review and troubleshooting.</p>
               </div>
             </div>
             {result.data.recent_test_notifications.length ? (
-              <div className="stack-list">
-                {result.data.recent_test_notifications.map((item) => (
-                  <div className="detail-grid" key={item.id}>
-                    <div className="detail-row"><span className="detail-label">Title</span><span className="detail-value">{item.title || item.event_definition_name || "Notification"}</span></div>
-                    <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{item.status}</span></div>
-                    <div className="detail-row"><span className="detail-label">Channel</span><span className="detail-value">{item.channel}</span></div>
-                    <div className="detail-row"><span className="detail-label">Recipient</span><span className="detail-value">{item.recipient_membership_name || item.recipient_identifier || "Unknown"}</span></div>
-                    <div className="detail-row"><span className="detail-label">Created</span><span className="detail-value">{item.created_at}</span></div>
-                    <div className="detail-row">
-                      <span className="detail-label">Review</span>
-                      <span className="detail-value"><Link href={`/hr-admin/notifications/${item.id}/review`}>Open notification</Link></span>
-                    </div>
-                  </div>
-                ))}
+              <div className="notification-table-scroll">
+                <table className="notification-catalog-table notification-diagnostics-table">
+                  <thead>
+                    <tr>
+                      <th>Notification</th>
+                      <th>Status</th>
+                      <th>Channel</th>
+                      <th>Recipient</th>
+                      <th>Created</th>
+                      <th>Review</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.data.recent_test_notifications.map((item) => (
+                      <tr key={item.id}>
+                        <td data-label="Notification"><strong>{item.title || item.event_definition_name || "Notification"}</strong></td>
+                        <td data-label="Status"><span className="record-chip">{item.status}</span></td>
+                        <td data-label="Channel">{item.channel}</td>
+                        <td data-label="Recipient">{item.recipient_membership_name || item.recipient_identifier || "Unknown"}</td>
+                        <td data-label="Created">{item.created_at}</td>
+                        <td data-label="Review">
+                          <Link className="button button--secondary" href={`/hr-admin/notifications/${item.id}/review`}>
+                            Open
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <div className="notice">

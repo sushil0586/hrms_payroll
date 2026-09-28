@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { HrAdminPayrollRuleDefinition, HrAdminPayrollRuleVersion, HrAdminPayrollRulesSetupResponse } from "@/lib/types";
+
+import { SetupRecordList } from "../payroll-shared/setup-record-list";
 
 type Feedback = {
   tone: "success" | "error";
@@ -81,6 +83,46 @@ function JsonField({ label, value, onChange }: { label: string; value: string; o
   );
 }
 
+type PayrollRuleActionTab = "definition" | "version";
+
+const actionTabs: Array<{ key: PayrollRuleActionTab; label: string; detail: string; anchors: string[] }> = [
+  { key: "definition", label: "Definitions", detail: "Create the rule name, type, and tags", anchors: ["payroll-rule-definition-form"] },
+  { key: "version", label: "Versions", detail: "Maintain expressions and effective dates", anchors: ["payroll-rule-version-form"] },
+];
+
+function actionTabFromHash(hash: string): PayrollRuleActionTab {
+  const normalized = hash.replace(/^#/, "");
+  return actionTabs.find((tab) => tab.anchors.includes(normalized))?.key ?? "definition";
+}
+
+function ActionTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: PayrollRuleActionTab;
+  onChange: (tab: PayrollRuleActionTab) => void;
+}) {
+  return (
+    <nav aria-label="Payroll rule action groups" className="setup-action-tabs">
+      {actionTabs.map((tab) => (
+        <button
+          aria-current={activeTab === tab.key ? "page" : undefined}
+          className={`setup-action-tab${activeTab === tab.key ? " setup-action-tab--active" : ""}`}
+          key={tab.key}
+          type="button"
+          onClick={() => {
+            onChange(tab.key);
+            window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${tab.anchors[0]}`);
+          }}
+        >
+          <strong>{tab.label}</strong>
+          <span>{tab.detail}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 function definitionToForm(rule?: HrAdminPayrollRuleDefinition | null, setup?: HrAdminPayrollRulesSetupResponse) {
   return {
     id: rule?.id,
@@ -132,15 +174,33 @@ export function PayrollRuleOperationsPanel({
 }) {
   const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
+  const [activeActionTab, setActiveActionTab] = useState<PayrollRuleActionTab>("definition");
   const [definitionForm, setDefinitionForm] = useState(() => definitionToForm(selectedRule, initialSetup));
   const [versionForm, setVersionForm] = useState(() => versionToForm(selectedVersion, selectedRule?.id ?? initialSetup.rules[0]?.id ?? "", initialSetup));
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [submitting, setSubmitting] = useState<string | null>(null);
+  const [recordPages, setRecordPages] = useState<Record<PayrollRuleActionTab, number>>({
+    definition: 1,
+    version: 1,
+  });
+
+  useEffect(() => {
+    function syncFromHash() {
+      setActiveActionTab(actionTabFromHash(window.location.hash));
+    }
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, []);
 
   const ruleTypeOptions = useMemo(() => setup.options.rule_types.map((item) => ({ value: item.value, label: item.label })), [setup.options.rule_types]);
   const ruleOptions = useMemo(() => setup.rules.map((item) => ({ value: item.id, label: `${item.name} (${item.code})` })), [setup.rules]);
   const statusOptions = useMemo(() => setup.options.rule_version_statuses.map((item) => ({ value: item.value, label: item.label })), [setup.options.rule_version_statuses]);
   const languageOptions = useMemo(() => setup.options.expression_languages.map((item) => ({ value: item.value, label: item.label })), [setup.options.expression_languages]);
+
+  function setRecordPage(tab: PayrollRuleActionTab, page: number) {
+    setRecordPages((current) => ({ ...current, [tab]: Math.max(1, page) }));
+  }
 
   async function saveDefinition() {
     setSubmitting("definition");
@@ -241,8 +301,17 @@ export function PayrollRuleOperationsPanel({
         </div>
       ) : null}
 
-      <div className="salary-crud-grid payroll-rule-operations-grid">
+      <ActionTabs activeTab={activeActionTab} onChange={setActiveActionTab} />
+
+      <div className="setup-action-context">
+        <strong>{actionTabs.find((tab) => tab.key === activeActionTab)?.label}</strong>
+        <span>{actionTabs.find((tab) => tab.key === activeActionTab)?.detail}</span>
+      </div>
+
+      <div className="salary-crud-grid payroll-rule-operations-grid setup-action-panel">
+        {activeActionTab === "definition" ? (
         <form
+          id="payroll-rule-definition-form"
           aria-label="Payroll rule definition form"
           className="salary-crud-form"
           data-testid="payroll-rule-definition-form"
@@ -263,23 +332,31 @@ export function PayrollRuleOperationsPanel({
             <JsonField label="Tags JSON" value={definitionForm.tags} onChange={(value) => setDefinitionForm((current) => ({ ...current, tags: value }))} />
             <TextField label="Config profile reference" value={definitionForm.config_profile_ref} onChange={(value) => setDefinitionForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Payroll rule records">
-            {setup.rules.slice(0, 6).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => {
-                setDefinitionForm(definitionToForm(item, setup));
-                setVersionForm((current) => ({ ...current, rule_id: item.id }));
-              }}>
-                <strong>{item.name}</strong>
-                <span>{item.code}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={definitionForm.id}
+            emptyLabel="No payroll rules yet"
+            items={setup.rules}
+            label="Payroll rule records"
+            page={recordPages.definition}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("definition", page)}
+            onSelect={(item) => {
+              setDefinitionForm(definitionToForm(item, setup));
+              setVersionForm((current) => ({ ...current, rule_id: item.id }));
+            }}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "definition"} type="submit">
+              {submitting === "definition" ? "Saving..." : definitionForm.id ? "Save rule" : "Create rule"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "definition"} type="submit">
-            {submitting === "definition" ? "Saving..." : definitionForm.id ? "Save rule" : "Create rule"}
-          </button>
         </form>
+        ) : null}
 
+        {activeActionTab === "version" ? (
         <form
+          id="payroll-rule-version-form"
           aria-label="Payroll rule version form"
           className="salary-crud-form"
           data-testid="payroll-rule-version-form"
@@ -305,18 +382,24 @@ export function PayrollRuleOperationsPanel({
             <JsonField label="Output schema JSON" value={versionForm.output_schema} onChange={(value) => setVersionForm((current) => ({ ...current, output_schema: value }))} />
             <JsonField label="Config snapshot JSON" value={versionForm.config_snapshot} onChange={(value) => setVersionForm((current) => ({ ...current, config_snapshot: value }))} />
           </div>
-          <div className="salary-crud-list" aria-label="Payroll rule version records">
-            {setup.versions.slice(0, 6).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setVersionForm(versionToForm(item, item.rule_id, setup))}>
-                <strong>{item.rule_name}</strong>
-                <span>v{item.version} / {item.status}</span>
-              </button>
-            ))}
+          <SetupRecordList
+            activeId={versionForm.id}
+            emptyLabel="No payroll rule versions yet"
+            items={setup.versions}
+            label="Payroll rule version records"
+            page={recordPages.version}
+            renderPrimary={(item) => item.rule_name}
+            renderSecondary={(item) => `v${item.version} / ${item.status}`}
+            onPageChange={(page) => setRecordPage("version", page)}
+            onSelect={(item) => setVersionForm(versionToForm(item, item.rule_id, setup))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "version" || !ruleOptions.length} type="submit">
+              {submitting === "version" ? "Saving..." : versionForm.id ? "Save version" : "Create version"}
+            </button>
           </div>
-          <button className="button button--primary" disabled={submitting === "version" || !ruleOptions.length} type="submit">
-            {submitting === "version" ? "Saving..." : versionForm.id ? "Save version" : "Create version"}
-          </button>
         </form>
+        ) : null}
       </div>
     </section>
   );

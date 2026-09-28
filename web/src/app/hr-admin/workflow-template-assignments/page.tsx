@@ -8,7 +8,7 @@ export default async function HrAdminWorkflowTemplateAssignmentsPage() {
   const result = await getHrAdminWorkflowTemplateAssignments();
 
   return (
-    <main className="shell">
+    <main className="shell shell--workspace workflow-workbench">
       <PageIntro
         actions={
           <>
@@ -23,7 +23,7 @@ export default async function HrAdminWorkflowTemplateAssignmentsPage() {
       />
 
       <section className="section">
-        <div className="metrics-grid">
+        <div className="metric-grid-modern workflow-metric-grid">
           <MetricTile label="Assignments" trend="Scoped rollout entries" value={result.data.length} />
           <MetricTile label="Active assignments" trend="Enabled in current catalog" value={result.data.filter((item) => item.is_active).length} />
           <MetricTile label="Unique modules" trend="Represented in visible list" value={new Set(result.data.map((item) => item.module)).size} />
@@ -31,9 +31,9 @@ export default async function HrAdminWorkflowTemplateAssignmentsPage() {
       </section>
 
       <section className="section">
-        <div className="queue-list">
+        <div className="queue-list workflow-catalog-list">
           {result.data.map((item) => (
-            <article className="record-card" key={item.id}>
+            <article className="record-card workflow-catalog-card" key={item.id}>
               <div className="record-card__header">
                 <div className="record-card__title-block">
                   <h3>{item.template_name}</h3>
@@ -54,6 +54,18 @@ export default async function HrAdminWorkflowTemplateAssignmentsPage() {
               </div>
             </article>
           ))}
+          {result.data.length === 0 ? (
+            <section className="card panel panel-card-soft workflow-empty-state">
+              <div>
+                <span className="eyebrow">No workflow assignments</span>
+                <h2 className="section-heading-soft">Assign a template to an org scope.</h2>
+                <p className="section-copy section-copy-soft">
+                  Assignments decide where each approval template applies across legal entities, branches, departments, business units, or grades.
+                </p>
+              </div>
+              <Link className="button button--primary" href="/hr-admin/workflow-template-assignments/new">Create workflow assignment</Link>
+            </section>
+          ) : null}
         </div>
       </section>
     </main>

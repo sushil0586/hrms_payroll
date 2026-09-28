@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { ActionMenu } from "@/components/patterns/action-menu";
 import { MetricTile } from "@/components/patterns/metric-tile";
@@ -235,6 +236,36 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function DetailSection({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details className="employee-detail-section" open={defaultOpen}>
+      <summary>
+        <span>{title}</span>
+      </summary>
+      <div className="employee-detail-section__grid">{children}</div>
+    </details>
+  );
+}
+
+function formatWarningSentence(warnings: string[]) {
+  if (!warnings.length) {
+    return "";
+  }
+  return warnings
+    .slice(0, 3)
+    .map((warning) => warning.charAt(0).toUpperCase() + warning.slice(1))
+    .join(". ")
+    .concat(".");
+}
+
 function EmployeeDetailPanel({ detail }: { detail: HrAdminEmployeeDetail | null }) {
   if (!detail) {
     return (
@@ -284,53 +315,41 @@ function EmployeeDetailPanel({ detail }: { detail: HrAdminEmployeeDetail | null 
       </div>
       {allWarnings.length ? (
         <div className="platform-validation-strip platform-validation-strip--warning">
-          <strong>{allWarnings.length} readiness item{allWarnings.length === 1 ? "" : "s"} need review.</strong>
-          <span>{allWarnings.slice(0, 3).join(", ")}.</span>
+          <strong>{allWarnings.length} readiness item{allWarnings.length === 1 ? "" : "s"} need review</strong>
+          <span>{formatWarningSentence(allWarnings)}</span>
         </div>
       ) : null}
-      {structuralWarnings.length ? (
-        <div className="notice">
-          <strong>Structural review needed.</strong>
-          <span className="muted">{structuralWarnings.join(", ")}.</span>
-        </div>
-      ) : null}
-      {accessWarnings.length ? (
-        <div className="notice">
-          <strong>Access review needed.</strong>
-          <span className="muted">{accessWarnings.join(", ")}.</span>
-        </div>
-      ) : null}
-      {managerWarnings.length ? (
-        <div className="notice">
-          <strong>Manager reassignment review needed.</strong>
-          <span className="muted">{managerWarnings.join(", ")}.</span>
-        </div>
-      ) : null}
-      <div className="detail-grid">
-        <DetailRow label="Employee" value={`${detail.full_name} (${detail.employee_code})`} />
-        <DetailRow label="Preferred Name" value={detail.preferred_name || "Not available"} />
-        <DetailRow label="Employment Status" value={detail.employment_status.replace("_", " ")} />
-        <DetailRow label="Date of Joining" value={formatDate(detail.date_of_joining)} />
-        <DetailRow label="Probation End Date" value={formatDate(detail.probation_end_date)} />
-        <DetailRow label="Confirmation Date" value={formatDate(detail.confirmation_date)} />
-        <DetailRow label="Work Email" value={detail.work_email || "Not available"} />
-        <DetailRow label="Personal Email" value={detail.personal_email || "Not available"} />
-        <DetailRow label="Phone Number" value={detail.phone_number || "Not available"} />
-        <DetailRow label="Legal Entity" value={detail.legal_entity || "Not mapped"} />
-        <DetailRow label="Branch" value={detail.branch || "Not mapped"} />
-        <DetailRow label="Location" value={detail.location || "Not mapped"} />
-        <DetailRow label="Business Unit" value={detail.business_unit || "Not mapped"} />
-        <DetailRow label="Department" value={detail.department || "Not mapped"} />
-        <DetailRow label="Cost Center" value={detail.cost_center || "Not mapped"} />
-        <DetailRow label="Designation" value={detail.designation || "Not mapped"} />
-        <DetailRow label="Grade" value={detail.grade || "Not mapped"} />
-        <DetailRow label="Employment Type" value={detail.employment_type || "Not mapped"} />
-        <DetailRow label="Reporting Manager" value={detail.reporting_manager || "Not assigned"} />
-        <DetailRow label="Direct Reports" value={String(detail.direct_reports_count)} />
-        <DetailRow label="Access Provisioned" value={detail.has_access ? "Yes" : "No"} />
-        <DetailRow label="Membership Status" value={formatMembershipStatus(detail.membership_status)} />
-        <DetailRow label="Assigned Roles" value={String(detail.assigned_role_count)} />
-        <DetailRow label="Last Updated" value={formatDateTime(detail.updated_at)} />
+      <div className="employee-detail-stack">
+        <DetailSection title="Profile" defaultOpen>
+          <DetailRow label="Employee" value={`${detail.full_name} (${detail.employee_code})`} />
+          <DetailRow label="Preferred Name" value={detail.preferred_name || "Not available"} />
+          <DetailRow label="Employment Status" value={detail.employment_status.replace("_", " ")} />
+          <DetailRow label="Work Email" value={detail.work_email || "Not available"} />
+          <DetailRow label="Personal Email" value={detail.personal_email || "Not available"} />
+          <DetailRow label="Phone Number" value={detail.phone_number || "Not available"} />
+        </DetailSection>
+        <DetailSection title="Structure" defaultOpen>
+          <DetailRow label="Legal Entity" value={detail.legal_entity || "Not mapped"} />
+          <DetailRow label="Branch" value={detail.branch || "Not mapped"} />
+          <DetailRow label="Location" value={detail.location || "Not mapped"} />
+          <DetailRow label="Business Unit" value={detail.business_unit || "Not mapped"} />
+          <DetailRow label="Department" value={detail.department || "Not mapped"} />
+          <DetailRow label="Cost Center" value={detail.cost_center || "Not mapped"} />
+          <DetailRow label="Designation" value={detail.designation || "Not mapped"} />
+          <DetailRow label="Grade" value={detail.grade || "Not mapped"} />
+          <DetailRow label="Employment Type" value={detail.employment_type || "Not mapped"} />
+          <DetailRow label="Reporting Manager" value={detail.reporting_manager || "Not assigned"} />
+          <DetailRow label="Direct Reports" value={String(detail.direct_reports_count)} />
+        </DetailSection>
+        <DetailSection title="Access and dates" defaultOpen>
+          <DetailRow label="Access Provisioned" value={detail.has_access ? "Yes" : "No"} />
+          <DetailRow label="Membership Status" value={formatMembershipStatus(detail.membership_status)} />
+          <DetailRow label="Assigned Roles" value={String(detail.assigned_role_count)} />
+          <DetailRow label="Date of Joining" value={formatDate(detail.date_of_joining)} />
+          <DetailRow label="Probation End Date" value={formatDate(detail.probation_end_date)} />
+          <DetailRow label="Confirmation Date" value={formatDate(detail.confirmation_date)} />
+          <DetailRow label="Last Updated" value={formatDateTime(detail.updated_at)} />
+        </DetailSection>
       </div>
     </>
   );
@@ -413,16 +432,11 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
             <span className="eyebrow-soft">Workforce command</span>
             <h2 className="section-heading-soft">Keep employee data ready for access, payroll, and approvals.</h2>
             <p className="section-copy section-copy-soft">
-              Use the directory for daily lookup, the selected profile for correction work, and imports for controlled bulk updates.
+              Use the directory for daily lookup and selected profile corrections.
             </p>
           </div>
           <div className="hr-employee-command-actions">
-            {canImportEmployees ? <a className="button button--secondary" href="#employee-imports">Import updates</a> : null}
-            {canCreateEmployees ? (
-              <Link className="button button--primary" href="/hr-admin/employees/new">
-                New employee
-              </Link>
-            ) : null}
+            {canImportEmployees ? <a className="button button--secondary" href="#employee-imports">Bulk imports</a> : null}
           </div>
         </div>
         <div className="hr-employee-health-panel panel-card-soft">
@@ -599,22 +613,16 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                       </span>
                     </div>
                   </div>
-                  <div className="employee-directory-item__meta">
+                  <div className="employee-directory-item__meta employee-directory-item__meta--compact">
                     <span>{employee.branch || "No branch"}</span>
                     <span>{employee.location || "No location"}</span>
                     <span>{employee.reporting_manager || "No manager"}</span>
-                  </div>
-                  <div className="employee-directory-item__meta">
                     <span>{employee.has_access ? "Access provisioned" : "No access yet"}</span>
-                    <span>{formatMembershipStatus(employee.membership_status)}</span>
                     <span>{employee.assigned_role_count} roles</span>
-                  </div>
-                  <div className="employee-directory-item__meta">
-                    <span>{employee.direct_reports_count} direct reports</span>
-                    <span>{employee.direct_reports_count > 0 ? "Manager chain in use" : "Individual contributor"}</span>
+                    <span>{employee.direct_reports_count} reports</span>
                   </div>
                   {warnings.length ? (
-                    <div className="employee-directory-item__meta">
+                    <div className="employee-directory-warning-line">
                       <span>{warnings.length} review warnings</span>
                       <span>{warnings.slice(0, 2).join(" • ")}</span>
                     </div>
@@ -654,6 +662,23 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
             </div>
             {detail && (canEditEmployees || canManageEmployeeAccess) ? (
               <div className="record-card__actions">
+                <div className="employee-detail-primary-actions">
+                  {canEditEmployees ? (
+                    <Link className="button button--secondary button--compact" href={`/hr-admin/employees/${detail.id}/edit`}>
+                      Edit
+                    </Link>
+                  ) : null}
+                  {canManageEmployeeAccess ? (
+                    <Link className="button button--secondary button--compact" href={`/hr-admin/employees/${detail.id}/access`}>
+                      Access
+                    </Link>
+                  ) : null}
+                  {canEditEmployees ? (
+                    <Link className="button button--ghost button--compact" href={`/hr-admin/employees/${detail.id}/bank-accounts`}>
+                      Bank
+                    </Link>
+                  ) : null}
+                </div>
                 <ActionMenu
                   label="Actions"
                   items={[
@@ -695,10 +720,24 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
         </article>
       </section>
 
-      <div id="employee-imports" />
-      {canImportEmployees && canCreateEmployees ? <EmployeeImportWorkbench employees={employeesResult.data} options={optionsResult.data} /> : null}
-      {canImportEmployees && canEditEmployees ? <EmployeeBankImportWorkbench employees={employeesResult.data} /> : null}
-      {canImportEmployees && canEditEmployees ? <EmployeeManagerImportWorkbench employees={employeesResult.data} options={optionsResult.data} /> : null}
+      {canImportEmployees ? (
+        <section className="section" id="employee-imports">
+          <details className="employee-imports-disclosure panel-card-soft">
+            <summary>
+              <span>
+                <strong>Bulk imports</strong>
+                <small>Open only when loading employees, bank accounts, or manager mappings from CSV.</small>
+              </span>
+              <span className="button button--secondary button--compact">Open tools</span>
+            </summary>
+            <div className="employee-imports-disclosure__body">
+              {canCreateEmployees ? <EmployeeImportWorkbench employees={employeesResult.data} options={optionsResult.data} /> : null}
+              {canEditEmployees ? <EmployeeBankImportWorkbench employees={employeesResult.data} /> : null}
+              {canEditEmployees ? <EmployeeManagerImportWorkbench employees={employeesResult.data} options={optionsResult.data} /> : null}
+            </div>
+          </details>
+        </section>
+      ) : null}
     </main>
   );
 }

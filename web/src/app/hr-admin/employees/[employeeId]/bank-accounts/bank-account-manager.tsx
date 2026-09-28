@@ -154,12 +154,12 @@ export function BankAccountManager({
         </div>
       </article>
 
-      <form className="section form-layout-modern" onSubmit={saveAccount}>
+      <form className="form-layout-modern employee-child-form employee-bank-account-form" onSubmit={saveAccount}>
         <section className="form-shell-card">
           <div className="form-shell-card__header">
             <div>
               <h2>{selected ? "Edit bank account" : "Create bank account"}</h2>
-              <p className="section-copy">Capture payroll payout details without changing the employee master identity.</p>
+              <p className="section-copy">Capture payout details without changing the employee master.</p>
             </div>
             <div className="form-shell-card__meta">
               <span className="queue-summary-chip"><strong>{formValue.is_primary ? "primary" : "secondary"}</strong> payout account</span>

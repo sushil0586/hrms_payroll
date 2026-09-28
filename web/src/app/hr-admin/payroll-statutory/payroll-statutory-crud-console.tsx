@@ -1,7 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type {
@@ -16,7 +15,10 @@ import type {
   HrAdminPayrollStatutorySlab,
 } from "@/lib/types";
 
+import { SetupRecordList } from "../payroll-shared/setup-record-list";
+
 type Family = "pack" | "component" | "slab" | "registration" | "filing" | "profile" | "declaration" | "item";
+type StatutoryActionTab = "import" | "catalog" | "compliance" | "profiles" | "declarations";
 type ApiItem =
   | HrAdminPayrollStatutoryPack
   | HrAdminPayrollStatutoryComponent
@@ -28,6 +30,47 @@ type ApiItem =
   | HrAdminEmployeeStatutoryDeclarationItem;
 
 type Feedback = { tone: "success" | "error"; message: string } | null;
+
+const actionTabs: Array<{ key: StatutoryActionTab; label: string; detail: string; anchors: string[] }> = [
+  { key: "import", label: "Import", detail: "Bulk employee statutory profiles", anchors: ["statutory-profile-import-workbench"] },
+  { key: "catalog", label: "Catalog", detail: "Packs, components, and slabs", anchors: ["statutory-pack-form", "statutory-component-form", "statutory-slab-form"] },
+  { key: "compliance", label: "Compliance", detail: "Employer registrations and filing calendars", anchors: ["statutory-registration-form", "statutory-filing-form"] },
+  { key: "profiles", label: "Profiles", detail: "Employee statutory identity and tax setup", anchors: ["statutory-profile-form"] },
+  { key: "declarations", label: "Declarations", detail: "Declarations and proof items", anchors: ["statutory-declaration-form", "statutory-declaration-item-form"] },
+];
+
+function actionTabFromHash(hash: string): StatutoryActionTab {
+  const normalized = hash.replace(/^#/, "");
+  return actionTabs.find((tab) => tab.anchors.includes(normalized))?.key ?? "import";
+}
+
+function ActionTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: StatutoryActionTab;
+  onChange: (tab: StatutoryActionTab) => void;
+}) {
+  return (
+    <nav aria-label="Statutory setup action groups" className="setup-action-tabs">
+      {actionTabs.map((tab) => (
+        <button
+          aria-current={activeTab === tab.key ? "page" : undefined}
+          className={`setup-action-tab${activeTab === tab.key ? " setup-action-tab--active" : ""}`}
+          key={tab.key}
+          type="button"
+          onClick={() => {
+            onChange(tab.key);
+            window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${tab.anchors[0]}`);
+          }}
+        >
+          <strong>{tab.label}</strong>
+          <span>{tab.detail}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
 
 type ImportStatus = "ready" | "blocked" | "created" | "failed";
 
@@ -804,10 +847,6 @@ function FormHeader({ mode, title, onReset }: { mode: "create" | "edit"; title: 
   );
 }
 
-function RecordList({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="salary-crud-list" aria-label={label}>{children}</div>;
-}
-
 function StatutoryProfileImportWorkbench({ setup }: { setup: HrAdminPayrollStatutorySetupResponse }) {
   const [csvText, setCsvText] = useState(statutoryProfileTemplateCsv());
   const [rows, setRows] = useState<StatutoryProfileImportRow[]>([]);
@@ -869,7 +908,7 @@ function StatutoryProfileImportWorkbench({ setup }: { setup: HrAdminPayrollStatu
   }
 
   return (
-    <section className="section" data-testid="statutory-profile-import-workbench">
+    <section className="section" data-testid="statutory-profile-import-workbench" id="statutory-profile-import-workbench">
       <article className="panel-card-soft organization-import-workbench">
         <div className="queue-toolbar__header">
           <div>
@@ -971,6 +1010,7 @@ export function PayrollStatutoryCrudConsole({
 }) {
   const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
+  const [activeActionTab, setActiveActionTab] = useState<StatutoryActionTab>("import");
   const [packForm, setPackForm] = useState<PackForm>(() => emptyPack(initialSetup));
   const [componentForm, setComponentForm] = useState<ComponentForm>(() => emptyComponent(initialSetup));
   const [slabForm, setSlabForm] = useState<SlabForm>(() => emptySlab(initialSetup));
@@ -981,6 +1021,25 @@ export function PayrollStatutoryCrudConsole({
   const [itemForm, setItemForm] = useState<ItemForm>(() => emptyItem(initialSetup));
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [submitting, setSubmitting] = useState<string | null>(null);
+  const [recordPages, setRecordPages] = useState<Record<Family, number>>({
+    pack: 1,
+    component: 1,
+    slab: 1,
+    registration: 1,
+    filing: 1,
+    profile: 1,
+    declaration: 1,
+    item: 1,
+  });
+
+  useEffect(() => {
+    function syncFromHash() {
+      setActiveActionTab(actionTabFromHash(window.location.hash));
+    }
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, []);
 
   const packOptions = useMemo(() => setup.packs.map((item) => ({ value: item.id, label: `${item.name} (${item.code})` })), [setup.packs]);
   const componentOptions = useMemo(() => setup.statutory_components.map((item) => ({ value: item.id, label: `${item.name} (${item.code})` })), [setup.statutory_components]);
@@ -989,6 +1048,10 @@ export function PayrollStatutoryCrudConsole({
   const profileOptions = useMemo(() => setup.employee_profiles.map((item) => ({ value: item.id, label: `${item.employee_name} (${item.profile_ref})` })), [setup.employee_profiles]);
   const declarationOptions = useMemo(() => setup.declarations.map((item) => ({ value: item.id, label: `${item.employee_name} (${item.financial_year_code})` })), [setup.declarations]);
   const salaryComponentOptions = useMemo(() => setup.options.salary_components.map((item) => ({ value: item.id, label: `${item.name} (${item.code})` })), [setup.options.salary_components]);
+
+  function setRecordPage(tab: Family, page: number) {
+    setRecordPages((current) => ({ ...current, [tab]: Math.max(1, page) }));
+  }
 
   async function save<Item extends ApiItem>(family: Family, path: string, itemId: string | undefined, body: Record<string, unknown>, apply: (item: Item) => void) {
     setSubmitting(family);
@@ -1105,7 +1168,11 @@ export function PayrollStatutoryCrudConsole({
   }
 
   return (
-    <section className="section section--tight salary-crud-console payroll-statutory-crud-console" aria-labelledby="statutory-crud-console-title">
+    <section
+      aria-labelledby="statutory-crud-console-title"
+      className="section section--tight salary-crud-console payroll-statutory-crud-console"
+      data-active-action={activeActionTab}
+    >
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
         <div>
           <span className="workspace-card__eyebrow">Browser CRUD</span>
@@ -1121,10 +1188,21 @@ export function PayrollStatutoryCrudConsole({
         </div>
       ) : null}
 
-      {canManageDeclarations ? <StatutoryProfileImportWorkbench setup={setup} /> : null}
+      <ActionTabs activeTab={activeActionTab} onChange={setActiveActionTab} />
 
-      <div className="salary-crud-grid payroll-statutory-crud-grid">
-        {canManageSetup ? <form aria-label="Statutory pack form" className="salary-crud-form" data-testid="statutory-pack-form" onSubmit={(event) => {
+      <div className="setup-action-context">
+        <strong>{actionTabs.find((tab) => tab.key === activeActionTab)?.label}</strong>
+        <span>{actionTabs.find((tab) => tab.key === activeActionTab)?.detail}</span>
+      </div>
+
+      {canManageDeclarations ? (
+        <div data-action-group="import">
+          <StatutoryProfileImportWorkbench setup={setup} />
+        </div>
+      ) : null}
+
+      <div className="salary-crud-grid payroll-statutory-crud-grid setup-action-panel">
+        {canManageSetup ? <form aria-label="Statutory pack form" className="salary-crud-form" data-action-group="catalog" data-testid="statutory-pack-form" id="statutory-pack-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminPayrollStatutoryPack>("pack", "payroll-statutory-packs", packForm.id, {
             code: packForm.code,
@@ -1154,11 +1232,23 @@ export function PayrollStatutoryCrudConsole({
             <TextField label="Validation profile reference" value={packForm.validation_profile_ref} onChange={(value) => setPackForm((current) => ({ ...current, validation_profile_ref: value }))} />
             <TextField label="Config profile reference" value={packForm.config_profile_ref} onChange={(value) => setPackForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <RecordList label="Statutory pack records">{setup.packs.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setPackForm(packToForm(item))}><strong>{item.name}</strong><span>{item.code}</span></button>)}</RecordList>
-          <button className="button button--primary" disabled={submitting === "pack"} type="submit">{submitting === "pack" ? "Saving..." : packForm.id ? "Save pack" : "Create pack"}</button>
+          <SetupRecordList
+            activeId={packForm.id}
+            emptyLabel="No statutory packs yet"
+            items={setup.packs}
+            label="Statutory pack records"
+            page={recordPages.pack}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("pack", page)}
+            onSelect={(item) => setPackForm(packToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "pack"} type="submit">{submitting === "pack" ? "Saving..." : packForm.id ? "Save pack" : "Create pack"}</button>
+          </div>
         </form> : null}
 
-        {canManageSetup ? <form aria-label="Statutory component form" className="salary-crud-form" data-testid="statutory-component-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Statutory component form" className="salary-crud-form" data-action-group="catalog" data-testid="statutory-component-form" id="statutory-component-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminPayrollStatutoryComponent>("component", "payroll-statutory-components", componentForm.id, {
             statutory_pack_id: componentForm.statutory_pack_id,
@@ -1196,11 +1286,23 @@ export function PayrollStatutoryCrudConsole({
             <SelectField label="Status" value={componentForm.status} options={enumOptions(setup.options.config_statuses)} onChange={(value) => setComponentForm((current) => ({ ...current, status: value }))} />
             <TextField label="Config profile reference" value={componentForm.config_profile_ref} onChange={(value) => setComponentForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <RecordList label="Statutory component records">{setup.statutory_components.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setComponentForm(componentToForm(item))}><strong>{item.name}</strong><span>{item.code}</span></button>)}</RecordList>
-          <button className="button button--primary" disabled={submitting === "component" || !packOptions.length} type="submit">{submitting === "component" ? "Saving..." : componentForm.id ? "Save component" : "Create component"}</button>
+          <SetupRecordList
+            activeId={componentForm.id}
+            emptyLabel="No statutory components yet"
+            items={setup.statutory_components}
+            label="Statutory component records"
+            page={recordPages.component}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("component", page)}
+            onSelect={(item) => setComponentForm(componentToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "component" || !packOptions.length} type="submit">{submitting === "component" ? "Saving..." : componentForm.id ? "Save component" : "Create component"}</button>
+          </div>
         </form> : null}
 
-        {canManageSetup ? <form aria-label="Statutory slab form" className="salary-crud-form" data-testid="statutory-slab-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Statutory slab form" className="salary-crud-form" data-action-group="catalog" data-testid="statutory-slab-form" id="statutory-slab-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminPayrollStatutorySlab>("slab", "payroll-statutory-slabs", slabForm.id, {
             statutory_component_id: slabForm.statutory_component_id,
@@ -1242,11 +1344,23 @@ export function PayrollStatutoryCrudConsole({
             <SelectField label="Status" value={slabForm.status} options={enumOptions(setup.options.config_statuses)} onChange={(value) => setSlabForm((current) => ({ ...current, status: value }))} />
             <TextField label="Config profile reference" value={slabForm.config_profile_ref} onChange={(value) => setSlabForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <RecordList label="Statutory slab records">{setup.slabs.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setSlabForm(slabToForm(item))}><strong>{item.name}</strong><span>{item.code}</span></button>)}</RecordList>
-          <button className="button button--primary" disabled={submitting === "slab" || !componentOptions.length} type="submit">{submitting === "slab" ? "Saving..." : slabForm.id ? "Save slab" : "Create slab"}</button>
+          <SetupRecordList
+            activeId={slabForm.id}
+            emptyLabel="No statutory slabs yet"
+            items={setup.slabs}
+            label="Statutory slab records"
+            page={recordPages.slab}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("slab", page)}
+            onSelect={(item) => setSlabForm(slabToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "slab" || !componentOptions.length} type="submit">{submitting === "slab" ? "Saving..." : slabForm.id ? "Save slab" : "Create slab"}</button>
+          </div>
         </form> : null}
 
-        {canManageSetup ? <form aria-label="Employer statutory registration form" className="salary-crud-form" data-testid="statutory-registration-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Employer statutory registration form" className="salary-crud-form" data-action-group="compliance" data-testid="statutory-registration-form" id="statutory-registration-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminPayrollStatutoryEmployerRegistration>("registration", "payroll-statutory-employer-registrations", registrationForm.id, {
             statutory_pack_id: registrationForm.statutory_pack_id,
@@ -1290,11 +1404,23 @@ export function PayrollStatutoryCrudConsole({
             <TextField label="Source reference" value={registrationForm.source_ref} onChange={(value) => setRegistrationForm((current) => ({ ...current, source_ref: value }))} />
             <TextField label="Config profile reference" value={registrationForm.config_profile_ref} onChange={(value) => setRegistrationForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <RecordList label="Employer statutory registration records">{setup.employer_registrations.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setRegistrationForm(registrationToForm(item))}><strong>{item.name}</strong><span>{item.code}</span></button>)}</RecordList>
-          <button className="button button--primary" disabled={submitting === "registration" || !packOptions.length} type="submit">{submitting === "registration" ? "Saving..." : registrationForm.id ? "Save registration" : "Create registration"}</button>
+          <SetupRecordList
+            activeId={registrationForm.id}
+            emptyLabel="No employer registrations yet"
+            items={setup.employer_registrations}
+            label="Employer statutory registration records"
+            page={recordPages.registration}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("registration", page)}
+            onSelect={(item) => setRegistrationForm(registrationToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "registration" || !packOptions.length} type="submit">{submitting === "registration" ? "Saving..." : registrationForm.id ? "Save registration" : "Create registration"}</button>
+          </div>
         </form> : null}
 
-        {canManageSetup ? <form aria-label="Statutory filing calendar form" className="salary-crud-form" data-testid="statutory-filing-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Statutory filing calendar form" className="salary-crud-form" data-action-group="compliance" data-testid="statutory-filing-form" id="statutory-filing-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminPayrollStatutoryFilingCalendar>("filing", "payroll-statutory-filing-calendars", filingForm.id, {
             statutory_pack_id: filingForm.statutory_pack_id,
@@ -1340,11 +1466,23 @@ export function PayrollStatutoryCrudConsole({
             <TextField label="Source reference" value={filingForm.source_ref} onChange={(value) => setFilingForm((current) => ({ ...current, source_ref: value }))} />
             <TextField label="Config profile reference" value={filingForm.config_profile_ref} onChange={(value) => setFilingForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
-          <RecordList label="Statutory filing calendar records">{setup.filing_calendars.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setFilingForm(filingToForm(item))}><strong>{item.name}</strong><span>{item.code}</span></button>)}</RecordList>
-          <button className="button button--primary" disabled={submitting === "filing" || !packOptions.length} type="submit">{submitting === "filing" ? "Saving..." : filingForm.id ? "Save filing" : "Create filing"}</button>
+          <SetupRecordList
+            activeId={filingForm.id}
+            emptyLabel="No filing calendars yet"
+            items={setup.filing_calendars}
+            label="Statutory filing calendar records"
+            page={recordPages.filing}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.code}
+            onPageChange={(page) => setRecordPage("filing", page)}
+            onSelect={(item) => setFilingForm(filingToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "filing" || !packOptions.length} type="submit">{submitting === "filing" ? "Saving..." : filingForm.id ? "Save filing" : "Create filing"}</button>
+          </div>
         </form> : null}
 
-        {canManageDeclarations ? <form aria-label="Employee statutory profile form" className="salary-crud-form" data-testid="statutory-profile-form" onSubmit={(event) => {
+        {canManageDeclarations ? <form aria-label="Employee statutory profile form" className="salary-crud-form" data-action-group="profiles" data-testid="statutory-profile-form" id="statutory-profile-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminEmployeeStatutoryProfile>("profile", "employee-statutory-profiles", profileForm.id, {
             employee_id: profileForm.employee_id,
@@ -1394,11 +1532,23 @@ export function PayrollStatutoryCrudConsole({
             <BooleanField label="PF applicable" checked={profileForm.pf_applicable} onChange={(checked) => setProfileForm((current) => ({ ...current, pf_applicable: checked }))} />
             <BooleanField label="ESI applicable" checked={profileForm.esi_applicable} onChange={(checked) => setProfileForm((current) => ({ ...current, esi_applicable: checked }))} />
           </div>
-          <RecordList label="Employee statutory profile records">{setup.employee_profiles.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setProfileForm(profileToForm(item))}><strong>{item.employee_name}</strong><span>{item.profile_ref}</span></button>)}</RecordList>
-          <button className="button button--primary" disabled={submitting === "profile" || !employeeOptions.length} type="submit">{submitting === "profile" ? "Saving..." : profileForm.id ? "Save profile" : "Create profile"}</button>
+          <SetupRecordList
+            activeId={profileForm.id}
+            emptyLabel="No employee statutory profiles yet"
+            items={setup.employee_profiles}
+            label="Employee statutory profile records"
+            page={recordPages.profile}
+            renderPrimary={(item) => item.employee_name}
+            renderSecondary={(item) => item.profile_ref}
+            onPageChange={(page) => setRecordPage("profile", page)}
+            onSelect={(item) => setProfileForm(profileToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "profile" || !employeeOptions.length} type="submit">{submitting === "profile" ? "Saving..." : profileForm.id ? "Save profile" : "Create profile"}</button>
+          </div>
         </form> : null}
 
-        {canManageDeclarations ? <form aria-label="Employee statutory declaration form" className="salary-crud-form" data-testid="statutory-declaration-form" onSubmit={(event) => {
+        {canManageDeclarations ? <form aria-label="Employee statutory declaration form" className="salary-crud-form" data-action-group="declarations" data-testid="statutory-declaration-form" id="statutory-declaration-form" onSubmit={(event) => {
           event.preventDefault();
           void save<HrAdminEmployeeStatutoryDeclaration>("declaration", "employee-statutory-declarations", declarationForm.id, {
             employee_id: declarationForm.employee_id,
@@ -1438,11 +1588,23 @@ export function PayrollStatutoryCrudConsole({
             <button className="button button--secondary button--compact" disabled={!declarationForm.id || submitting === "reject declaration"} type="button" onClick={() => declarationForm.id && void postAction<HrAdminEmployeeStatutoryDeclaration>("reject declaration", `employee-statutory-declarations/${declarationForm.id}/reject`, { reason: declarationForm.rejection_reason || "Rejected through browser statutory QA." }, applyDeclaration)}>Reject</button>
             <button className="button button--secondary button--compact" disabled={!declarationForm.id || submitting === "lock declaration"} type="button" onClick={() => declarationForm.id && void postAction<HrAdminEmployeeStatutoryDeclaration>("lock declaration", `employee-statutory-declarations/${declarationForm.id}/lock`, {}, applyDeclaration)}>Lock</button>
           </div>
-          <RecordList label="Employee statutory declaration records">{setup.declarations.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setDeclarationForm(declarationToForm(item))}><strong>{item.employee_name}</strong><span>{item.financial_year_code}</span></button>)}</RecordList>
-          <button className="button button--primary" disabled={submitting === "declaration" || !employeeOptions.length || !profileOptions.length} type="submit">{submitting === "declaration" ? "Saving..." : declarationForm.id ? "Save declaration" : "Create declaration"}</button>
+          <SetupRecordList
+            activeId={declarationForm.id}
+            emptyLabel="No employee statutory declarations yet"
+            items={setup.declarations}
+            label="Employee statutory declaration records"
+            page={recordPages.declaration}
+            renderPrimary={(item) => item.employee_name}
+            renderSecondary={(item) => item.financial_year_code}
+            onPageChange={(page) => setRecordPage("declaration", page)}
+            onSelect={(item) => setDeclarationForm(declarationToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "declaration" || !employeeOptions.length || !profileOptions.length} type="submit">{submitting === "declaration" ? "Saving..." : declarationForm.id ? "Save declaration" : "Create declaration"}</button>
+          </div>
         </form> : null}
 
-        {canManageDeclarations ? <form aria-label="Employee statutory declaration item form" className="salary-crud-form" data-testid="statutory-declaration-item-form" onSubmit={(event) => {
+        {canManageDeclarations ? <form aria-label="Employee statutory declaration item form" className="salary-crud-form" data-action-group="declarations" data-testid="statutory-declaration-item-form" id="statutory-declaration-item-form" onSubmit={(event) => {
           event.preventDefault();
           const path = itemForm.id ? "employee-statutory-declaration-items" : `employee-statutory-declarations/${itemForm.declaration_id}/items`;
           void save<HrAdminEmployeeStatutoryDeclarationItem>("item", path, itemForm.id, {
@@ -1479,8 +1641,20 @@ export function PayrollStatutoryCrudConsole({
             <button className="button button--secondary button--compact" disabled={!itemForm.id || submitting === "verify proof item"} type="button" onClick={() => itemForm.id && void postAction<HrAdminEmployeeStatutoryDeclarationItem>("verify proof item", `employee-statutory-declaration-items/${itemForm.id}/verify`, { verified_amount: decimal(itemForm.verified_amount, itemForm.declared_amount), proof_status: "verified" }, applyItem)}>Verify item</button>
             <button className="button button--secondary button--compact" disabled={!itemForm.id || submitting === "reject proof item"} type="button" onClick={() => itemForm.id && void postAction<HrAdminEmployeeStatutoryDeclarationItem>("reject proof item", `employee-statutory-declaration-items/${itemForm.id}/verify`, { verified_amount: decimal(itemForm.verified_amount), proof_status: "rejected", rejection_reason: itemForm.rejection_reason || "Rejected through browser statutory QA." }, applyItem)}>Reject item</button>
           </div>
-          <RecordList label="Employee statutory declaration item records">{setup.declaration_items.slice(0, 8).map((item) => <button className="salary-crud-record" key={item.id} type="button" onClick={() => setItemForm(itemToForm(item))}><strong>{item.name}</strong><span>{item.section_code}</span></button>)}</RecordList>
-          <button className="button button--primary" disabled={submitting === "item" || !declarationOptions.length} type="submit">{submitting === "item" ? "Saving..." : itemForm.id ? "Save declaration item" : "Create declaration item"}</button>
+          <SetupRecordList
+            activeId={itemForm.id}
+            emptyLabel="No declaration proof items yet"
+            items={setup.declaration_items}
+            label="Employee statutory declaration item records"
+            page={recordPages.item}
+            renderPrimary={(item) => item.name}
+            renderSecondary={(item) => item.section_code}
+            onPageChange={(page) => setRecordPage("item", page)}
+            onSelect={(item) => setItemForm(itemToForm(item))}
+          />
+          <div className="salary-crud-form__actions">
+            <button className="button button--primary" disabled={submitting === "item" || !declarationOptions.length} type="submit">{submitting === "item" ? "Saving..." : itemForm.id ? "Save declaration item" : "Create declaration item"}</button>
+          </div>
         </form> : null}
       </div>
     </section>

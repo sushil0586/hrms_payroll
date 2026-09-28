@@ -54,7 +54,7 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
   const timelineEvents = tracesResult.data.items.reduce((sum, item) => sum + item.timeline_event_count, 0);
 
   return (
-    <main className="shell">
+    <main className="shell shell--workspace workflow-workbench">
       <PageIntro
         actions={
           <>
@@ -71,7 +71,7 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
       />
 
       <section className="section">
-        <div className="metrics-grid">
+        <div className="metric-grid-modern workflow-metric-grid">
           <MetricTile label="Templates" trend="Configured approval blueprints" value={templatesResult.data.length} />
           <MetricTile label="Assignments" trend="Scoped rollout rules" value={assignmentsResult.data.length} />
           <MetricTile label="Approval steps" trend="Across all templates" value={templatesResult.data.reduce((sum, item) => sum + item.steps.length, 0)} />
@@ -82,7 +82,7 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
       </section>
 
       <section className="section">
-        <div className="workspace-grid">
+        <div className="workspace-grid-modern workflow-workspace-grid">
           <WorkspaceCard
             description="Design approval chains with escalation timing, actor rules, and module-specific triggers."
             details={[
@@ -108,8 +108,8 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
         </div>
       </section>
 
-      <section className="section queue-layout">
-        <section className="card panel queue-toolbar panel-card-soft">
+      <section className="section queue-layout workflow-trace-layout">
+        <section className="card panel queue-toolbar panel-card-soft workflow-filter-panel">
           <div className="queue-toolbar__header">
             <div>
               <h2 className="section-heading-soft">Workflow timeline</h2>
@@ -159,9 +159,9 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
           </form>
         </section>
 
-        <div className="queue-list">
+        <div className="queue-list workflow-trace-list">
           {tracesResult.data.items.map((trace) => (
-            <article className="card panel panel-card-soft" key={trace.id}>
+            <article className="card panel panel-card-soft workflow-trace-card" key={trace.id}>
               <div className="record-card__header">
                 <div>
                   <span className="eyebrow">{formatLabel(trace.module)} - {trace.trigger_key}</span>
@@ -173,24 +173,24 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
                 <span className={statusClass(trace.status)}>{formatLabel(trace.status)}</span>
               </div>
 
-              <div className="detail-grid-soft">
+              <div className="detail-grid-soft workflow-detail-grid">
                 <div className="detail-row"><span className="detail-label">Current step</span><span className="detail-value">{trace.current_step_name || "No open step"}</span></div>
                 <div className="detail-row"><span className="detail-label">Current owner</span><span className="detail-value">{trace.current_actor_summary || "Unassigned"}</span></div>
                 <div className="detail-row"><span className="detail-label">Template</span><span className="detail-value">{trace.template_name || "Dynamic workflow"}</span></div>
                 <div className="detail-row"><span className="detail-label">Submitted</span><span className="detail-value">{formatDateTime(trace.submitted_at)}</span></div>
               </div>
 
-              <div className="queue-toolbar__summary">
+              <div className="queue-toolbar__summary workflow-trace-summary">
                 <span className="queue-summary-chip"><strong>{trace.completed_steps}/{trace.total_steps}</strong> steps closed</span>
                 <span className="queue-summary-chip"><strong>{trace.assignment_count}</strong> assignments</span>
                 <span className="queue-summary-chip"><strong>{trace.timeline_event_count}</strong> timeline events</span>
                 <span className="queue-summary-chip"><strong>{trace.overdue_steps}</strong> overdue</span>
               </div>
 
-              <div className="workspace-grid-modern">
-                <section>
+              <div className="workflow-trace-grid">
+                <section className="workflow-trace-section">
                   <h4 className="section-heading-soft">Step trace</h4>
-                  <div className="queue-list">
+                  <div className="workflow-step-list">
                     {trace.steps.map((step) => (
                       <div className="detail-row" key={step.id}>
                         <span className="detail-label">Step {step.step_order} - {formatLabel(step.status)}</span>
@@ -200,9 +200,9 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
                   </div>
                 </section>
 
-                <section>
+                <section className="workflow-trace-section">
                   <h4 className="section-heading-soft">Recent timeline</h4>
-                  <div className="queue-list">
+                  <div className="workflow-step-list">
                     {trace.timeline.slice(0, 4).map((event) => (
                       <div className="detail-row" key={event.id}>
                         <span className="detail-label">{event.title}</span>

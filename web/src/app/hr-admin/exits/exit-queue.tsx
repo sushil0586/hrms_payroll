@@ -59,8 +59,8 @@ export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination
   }
 
   return (
-    <section className="section queue-layout">
-      <section className="card panel queue-toolbar panel-card-soft">
+    <section className="section queue-layout lifecycle-queue-layout">
+      <section className="card panel queue-toolbar panel-card-soft lifecycle-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Exits</h2>
@@ -140,9 +140,9 @@ export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination
         </div>
       </section>
 
-      <div className="queue-list">
+      <div className="queue-list lifecycle-record-list">
         {items.map((item) => (
-          <article className="record-card panel-card-soft" key={item.id}>
+          <article className="record-card panel-card-soft lifecycle-record-card" key={item.id}>
             <div className="record-card__header">
               <div className="record-card__title-block">
                 <h3>{item.employee_name}</h3>
@@ -158,7 +158,7 @@ export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination
               </div>
             </div>
 
-            <div className="record-card__details">
+            <div className="record-card__details lifecycle-detail-grid">
               <div>
                 <span className="record-card__label">Resignation date</span>
                 <strong>{item.resignation_date || "TBD"}</strong>

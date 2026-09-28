@@ -14,7 +14,7 @@ export default async function HrAdminNewDocumentCategoryPage() {
   const optionsResult = await getHrAdminDocumentOptions();
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         actions={<Link className="button button--secondary" href="/hr-admin/document-categories">Back to document categories</Link>}
         description="Set up a reusable document type with upload, verification, and expiry behavior."

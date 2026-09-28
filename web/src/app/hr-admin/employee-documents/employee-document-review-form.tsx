@@ -71,17 +71,15 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern document-child-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>Document review and verification</h2>
-          <p className="section-copy">
-            Update the submission metadata, verify the document, and leave a clear review note for the employee or HR team.
-          </p>
+          <p className="section-copy">Verify the file, update metadata, and capture the review note.</p>
         </div>
 
         <FormSection description="Review the submission context before changing its status or verification state." title="Document context">
-          <article className="record-card">
+          <article className="record-card document-record-card">
             <div className="record-card__header">
               <div className="record-card__title-block">
                 <h3>{document.title}</h3>
@@ -92,7 +90,7 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
                 <span className="record-chip">{document.status}</span>
               </div>
             </div>
-            <div className="record-card__details">
+            <div className="record-card__details document-detail-grid">
               <div><span className="record-card__label">File</span><strong>{document.file_name}</strong></div>
               <div><span className="record-card__label">Stored artifact</span><strong>{document.artifact_id || "Not linked"}</strong></div>
               <div><span className="record-card__label">Version</span><strong>v{document.version_number}</strong></div>
@@ -104,7 +102,7 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
               <div><span className="record-card__label">Re-upload</span><strong>{document.reupload_requested ? "Requested" : "Not requested"}</strong></div>
             </div>
             {document.artifact_id ? (
-              <div className="form-shell-card__actions form-shell-card__actions--start">
+              <div className="form-shell-card__actions form-shell-card__actions--start document-download-action">
                 <a className="button button--ghost" href={`/api/hr-admin/employee-documents/${itemId}/download`}>Download current file</a>
               </div>
             ) : null}
@@ -127,7 +125,7 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
         <FormSection description="Version lineage is preserved when a document is replaced after rejection or re-upload requests." title="Version history">
           <div className="queue-list">
             {document.version_history.map((entry) => (
-              <article className="record-card" key={entry.id}>
+              <article className="record-card document-record-card" key={entry.id}>
                 <div className="record-card__header">
                   <div className="record-card__title-block">
                     <h3>Version {entry.version_number}</h3>
@@ -146,8 +144,8 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
         <FormSection description="Each verification decision stays attached to the document for operational traceability." title="Review history">
           <div className="queue-list">
             {document.review_history.length ? document.review_history.map((entry) => (
-              <article className="record-card" key={entry.id}>
-                <div className="detail-grid">
+              <article className="record-card document-record-card" key={entry.id}>
+                <div className="detail-grid document-detail-grid">
                   <div className="detail-row"><span className="detail-label">Change</span><span className="detail-value">{entry.previous_status || "new"} to {entry.new_status}</span></div>
                   <div className="detail-row"><span className="detail-label">Actor</span><span className="detail-value">{entry.actor_identifier || "Unknown"}</span></div>
                   <div className="detail-row"><span className="detail-label">At</span><span className="detail-value">{entry.created_at}</span></div>
@@ -170,13 +168,16 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
           </div>
         ) : null}
 
-        <div className="form-shell-card__actions">
-          <button className="button button--primary" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Saving..." : "Save review"}
-          </button>
-          <button className="button button--secondary" onClick={() => router.back()} type="button">
-            Cancel
-          </button>
+        <div className="form-actions-bar">
+          <span className="muted">Saving returns you to the employee document queue.</span>
+          <div className="form-actions-bar__buttons">
+            <button className="button button--secondary" onClick={() => router.back()} type="button">
+              Cancel
+            </button>
+            <button className="button button--primary" disabled={isSubmitting} type="submit">
+              {isSubmitting ? "Saving..." : "Save review"}
+            </button>
+          </div>
         </div>
       </section>
     </form>

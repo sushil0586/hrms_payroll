@@ -11,8 +11,36 @@ type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
 };
 
+type AdjustmentTab = "overview" | "register" | "detail" | "actions";
+
+const ADJUSTMENT_TABS: Array<{ id: AdjustmentTab; label: string; helper: string }> = [
+  { id: "overview", label: "Overview", helper: "Run totals and controls" },
+  { id: "register", label: "Register", helper: "One-time payroll inputs" },
+  { id: "detail", label: "Detail", helper: "Approval and source evidence" },
+  { id: "actions", label: "Actions", helper: "Create and lifecycle actions" },
+];
+
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeAdjustmentTab(value: SearchParamValue, selectedAdjustmentId?: string): AdjustmentTab {
+  const candidate = normalizeParam(value);
+  if (ADJUSTMENT_TABS.some((tab) => tab.id === candidate)) {
+    return candidate as AdjustmentTab;
+  }
+  return selectedAdjustmentId ? "detail" : "overview";
+}
+
+function adjustmentHref(tab: AdjustmentTab, runId?: string | null, adjustmentId?: string | null) {
+  const params = new URLSearchParams({ tab });
+  if (runId) {
+    params.set("runId", runId);
+  }
+  if ((tab === "detail" || tab === "actions") && adjustmentId) {
+    params.set("adjustmentId", adjustmentId);
+  }
+  return `/hr-admin/payroll-adjustments?${params.toString()}`;
 }
 
 function titleCase(value: string) {
@@ -43,7 +71,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
 }
 
-function RunRail({ runs, selectedRun }: { runs: HrAdminPayrollRun[]; selectedRun: HrAdminPayrollRun | null }) {
+function RunRail({ runs, selectedRun, activeTab }: { runs: HrAdminPayrollRun[]; selectedRun: HrAdminPayrollRun | null; activeTab: AdjustmentTab }) {
   return (
     <aside className="payroll-setup-rail payroll-adjustment-rail">
       <div className="payroll-setup-panel__header">
@@ -54,7 +82,7 @@ function RunRail({ runs, selectedRun }: { runs: HrAdminPayrollRun[]; selectedRun
         {runs.map((run) => (
           <Link
             className={`payroll-setup-mini-card payroll-adjustment-run-card ${selectedRun?.id === run.id ? "is-selected" : ""}`}
-            href={`/hr-admin/payroll-adjustments?runId=${run.id}`}
+            href={adjustmentHref(activeTab, run.id)}
             key={run.id}
           >
             <div>
@@ -140,6 +168,7 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
   const currentParams = (await searchParams) ?? {};
   const selectedRunId = normalizeParam(currentParams.runId);
   const selectedAdjustmentId = normalizeParam(currentParams.adjustmentId);
+  const activeTab = normalizeAdjustmentTab(currentParams.tab, selectedAdjustmentId);
   const result = await getHrAdminPayrollAdjustmentSetup();
   const setup = result.data;
   const selectedRun = setup.runs.find((item) => item.id === selectedRunId) ?? setup.runs.find((item) => item.status === "inputs_locked") ?? setup.runs[0] ?? null;
@@ -185,8 +214,23 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
       </section>
 
       <section className="section section--tight">
+        <nav className="payroll-setup-tabs" aria-label="Payroll adjustment sections">
+          {ADJUSTMENT_TABS.map((tab) => (
+            <Link
+              className={`payroll-setup-tab ${activeTab === tab.id ? "payroll-setup-tab--active" : ""}`}
+              href={adjustmentHref(tab.id, selectedRun?.id, selectedAdjustment?.id)}
+              key={tab.id}
+            >
+              <strong>{tab.label}</strong>
+              <span>{tab.helper}</span>
+            </Link>
+          ))}
+        </nav>
+      </section>
+
+      <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-adjustment-workspace">
-          <RunRail runs={setup.runs} selectedRun={selectedRun} />
+          <RunRail runs={setup.runs} selectedRun={selectedRun} activeTab={activeTab} />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -216,6 +260,7 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
               </article>
             </div>
 
+            {activeTab === "overview" ? (
             <section className="payroll-setup-assignment-panel payroll-adjustment-profile-panel">
               <div className="payroll-setup-panel__header">
                 <span className="workspace-card__eyebrow">Config scope</span>
@@ -236,9 +281,13 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
                 </article>
               </div>
             </section>
+            ) : null}
 
+            {activeTab === "actions" ? (
             <PayrollAdjustmentActionsPanel setup={setup} selectedRun={selectedRun} selectedAdjustment={selectedAdjustment} />
+            ) : null}
 
+            {activeTab === "register" || activeTab === "detail" ? (
             <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
@@ -264,7 +313,7 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
                     {visibleAdjustments.map((adjustment) => (
                       <tr className={selectedAdjustment?.id === adjustment.id ? "is-selected" : ""} key={adjustment.id}>
                         <td>
-                          <Link href={`/hr-admin/payroll-adjustments?runId=${adjustment.payroll_run_id}&adjustmentId=${adjustment.id}`}>
+                          <Link href={adjustmentHref("detail", adjustment.payroll_run_id, adjustment.id)}>
                             <strong>{adjustment.component_name}</strong>
                             <span>{adjustment.component_code}</span>
                           </Link>
@@ -284,9 +333,12 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
                 </table>
               </div>
             </div>
+            ) : null}
           </div>
 
-          <AdjustmentDetail adjustment={selectedAdjustment} />
+          {activeTab === "detail" ? (
+            <AdjustmentDetail adjustment={selectedAdjustment} />
+          ) : null}
         </div>
       </section>
     </main>

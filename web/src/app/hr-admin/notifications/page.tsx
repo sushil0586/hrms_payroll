@@ -54,7 +54,7 @@ export default async function HrAdminNotificationsPage({ searchParams }: PagePro
   const activeFailureChannels = channelSummaries.filter((item) => item.failed > 0).length;
 
   return (
-    <main className="shell">
+    <main className="shell notification-shell">
       <PageIntro
         actions={<Link className="button button--secondary" href="/hr-admin/notifications-admin">Back to notifications</Link>}
         description="Inspect generated notifications across modules and review their delivery lifecycle."
@@ -66,7 +66,7 @@ export default async function HrAdminNotificationsPage({ searchParams }: PagePro
         title="Notification queue"
       />
       <section className="section">
-        <div className="metrics-grid">
+        <div className="metric-grid-modern">
           <MetricTile label="Queue size" trend="Current filtered result" value={result.data.total_count} />
           <MetricTile label="Visible" trend="This page" value={result.data.items.length} />
           <MetricTile label="Failed on page" trend="Immediate recovery view" value={failedNotifications} />

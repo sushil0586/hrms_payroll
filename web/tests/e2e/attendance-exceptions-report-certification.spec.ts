@@ -99,8 +99,7 @@ test.describe("Phase R4-T attendance exceptions SLA report certification", () =>
     await page.goto("/hr-admin/reports/attendance-exceptions", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("attendance-exceptions-report")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Export filtered CSV" })).toHaveCount(0);
 
     const csvResponse = await page.request.get("/api/hr-admin/reports/attendance-exceptions?sort=aging");
     expect([401, 403]).toContain(csvResponse.status());

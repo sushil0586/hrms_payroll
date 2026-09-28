@@ -8,6 +8,7 @@ import type { HrAdminPayrollOutputArtifact, HrAdminPayrollOutputBatch } from "@/
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
+import { PayrollWorkflowGuide } from "../payroll-workflow-guide";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -121,7 +122,11 @@ function BatchRail({
         {batches.map((batch) => (
           <Link
             className={`payroll-setup-mini-card payroll-output-card ${selectedBatch?.id === batch.id ? "is-selected" : ""}`}
-            href={`/hr-admin/payroll-outputs?batchId=${batch.id}`}
+            href={buildHref("/hr-admin/payroll-outputs", currentParams, {
+              artifactId: undefined,
+              artifactPage: "1",
+              batchId: batch.id,
+            })}
             key={batch.id}
           >
             <div>
@@ -134,6 +139,7 @@ function BatchRail({
               <span>{batch.register_count} register</span>
             </div>
             <code>{batch.output_profile_ref}</code>
+            {selectedBatch?.id === batch.id ? <span className="payroll-rule-selected-marker">Selected batch</span> : null}
           </Link>
         ))}
         {batches.length === 0 ? (
@@ -175,6 +181,7 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
           <span className="workspace-card__eyebrow">Artifact detail</span>
           <h2>{artifact.title}</h2>
           <p className="section-copy section-copy-soft">{artifact.employee_name ?? "Run level"} / {artifact.kind_label}</p>
+          <span className="payroll-rule-selected-marker">Selected artifact</span>
         </div>
         <StatusBadge status={artifact.status} />
       </div>
@@ -319,6 +326,16 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
         secondaryMetricValue={selectedBatch?.published_artifact_count ?? setup.summary.published_artifact_count}
       />
 
+      <PayrollWorkflowGuide
+        title="Output publication desk"
+        description="Select a generated batch, inspect payslip or register artifacts, then publish outputs or create the finance handoff."
+        steps={[
+          { label: "Select batch", detail: "Scope the locked payroll output set." },
+          { label: "Inspect artifact", detail: "Verify file metadata, access governance, and source hash." },
+          { label: "Publish or handoff", detail: "Use guarded actions after artifacts are ready." },
+        ]}
+      />
+
       <section className="section section--tight">
         <div className="metric-grid-modern payroll-setup-metrics">
           <MetricTile className="metric-tile-soft" label="Output batches" value={setup.summary.output_batch_count} trend={`${setup.summary.published_batch_count} published`} />
@@ -433,7 +450,13 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                     {pagedArtifacts.map((artifact) => (
                       <tr className={selectedArtifact?.id === artifact.id ? "is-selected" : ""} key={artifact.id}>
                         <td>
-                          <Link href={`/hr-admin/payroll-outputs?batchId=${artifact.output_batch_id}&artifactId=${artifact.id}`}>
+                          <Link
+                            href={buildHref("/hr-admin/payroll-outputs", currentParams, {
+                              artifactId: artifact.id,
+                              artifactPage: String(artifactPage),
+                              batchId: artifact.output_batch_id,
+                            })}
+                          >
                             <strong>{artifact.title}</strong>
                             <span>{artifact.file_name}</span>
                             <span>{artifact.mime_type || artifact.content_type} / {formatFileSize(artifact.file_size_bytes)}</span>

@@ -11,8 +11,36 @@ type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
 };
 
+type SettlementTab = "overview" | "register" | "detail" | "actions";
+
+const SETTLEMENT_TABS: Array<{ id: SettlementTab; label: string; helper: string }> = [
+  { id: "overview", label: "Overview", helper: "Run totals and F&F posture" },
+  { id: "register", label: "Register", helper: "Settlement packages" },
+  { id: "detail", label: "Detail", helper: "Lines and trace evidence" },
+  { id: "actions", label: "Actions", helper: "Create and lifecycle actions" },
+];
+
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeSettlementTab(value: SearchParamValue, selectedSettlementId?: string): SettlementTab {
+  const candidate = normalizeParam(value);
+  if (SETTLEMENT_TABS.some((tab) => tab.id === candidate)) {
+    return candidate as SettlementTab;
+  }
+  return selectedSettlementId ? "detail" : "overview";
+}
+
+function settlementHref(tab: SettlementTab, runId?: string | null, settlementId?: string | null) {
+  const params = new URLSearchParams({ tab });
+  if (runId) {
+    params.set("runId", runId);
+  }
+  if (settlementId) {
+    params.set("settlementId", settlementId);
+  }
+  return `/hr-admin/payroll-settlements?${params.toString()}`;
 }
 
 function titleCase(value: string) {
@@ -43,7 +71,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
 }
 
-function RunRail({ runs, selectedRun }: { runs: HrAdminPayrollRun[]; selectedRun: HrAdminPayrollRun | null }) {
+function RunRail({ runs, selectedRun, activeTab }: { runs: HrAdminPayrollRun[]; selectedRun: HrAdminPayrollRun | null; activeTab: SettlementTab }) {
   return (
     <aside className="payroll-setup-rail payroll-adjustment-rail">
       <div className="payroll-setup-panel__header">
@@ -54,7 +82,7 @@ function RunRail({ runs, selectedRun }: { runs: HrAdminPayrollRun[]; selectedRun
         {runs.map((run) => (
           <Link
             className={`payroll-setup-mini-card payroll-adjustment-run-card ${selectedRun?.id === run.id ? "is-selected" : ""}`}
-            href={`/hr-admin/payroll-settlements?runId=${run.id}`}
+            href={settlementHref(activeTab, run.id)}
             key={run.id}
           >
             <div>
@@ -154,6 +182,7 @@ export default async function HrAdminPayrollSettlementsPage({ searchParams }: Pa
   const currentParams = (await searchParams) ?? {};
   const selectedRunId = normalizeParam(currentParams.runId);
   const selectedSettlementId = normalizeParam(currentParams.settlementId);
+  const activeTab = normalizeSettlementTab(currentParams.tab, selectedSettlementId);
   const result = await getHrAdminPayrollSettlementSetup();
   const setup = result.data;
   const settlementRunId = setup.settlements[0]?.payroll_run_id;
@@ -198,8 +227,23 @@ export default async function HrAdminPayrollSettlementsPage({ searchParams }: Pa
       </section>
 
       <section className="section section--tight">
+        <nav className="payroll-setup-tabs" aria-label="Payroll settlement sections">
+          {SETTLEMENT_TABS.map((tab) => (
+            <Link
+              className={`payroll-setup-tab ${activeTab === tab.id ? "payroll-setup-tab--active" : ""}`}
+              href={settlementHref(tab.id, selectedRun?.id, selectedSettlement?.id)}
+              key={tab.id}
+            >
+              <strong>{tab.label}</strong>
+              <span>{tab.helper}</span>
+            </Link>
+          ))}
+        </nav>
+      </section>
+
+      <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-adjustment-workspace">
-          <RunRail runs={setup.runs} selectedRun={selectedRun} />
+          <RunRail runs={setup.runs} selectedRun={selectedRun} activeTab={activeTab} />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -229,6 +273,7 @@ export default async function HrAdminPayrollSettlementsPage({ searchParams }: Pa
               </article>
             </div>
 
+            {activeTab === "overview" ? (
             <section className="payroll-setup-assignment-panel payroll-adjustment-profile-panel">
               <div className="payroll-setup-panel__header">
                 <span className="workspace-card__eyebrow">Config scope</span>
@@ -249,9 +294,13 @@ export default async function HrAdminPayrollSettlementsPage({ searchParams }: Pa
                 </article>
               </div>
             </section>
+            ) : null}
 
+            {activeTab === "actions" ? (
             <PayrollSettlementActionsPanel setup={setup} selectedRun={selectedRun} selectedSettlement={selectedSettlement} />
+            ) : null}
 
+            {activeTab === "register" || activeTab === "detail" ? (
             <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
@@ -277,7 +326,7 @@ export default async function HrAdminPayrollSettlementsPage({ searchParams }: Pa
                     {visibleSettlements.map((settlement) => (
                       <tr className={selectedSettlement?.id === settlement.id ? "is-selected" : ""} key={settlement.id}>
                         <td>
-                          <Link href={`/hr-admin/payroll-settlements?runId=${settlement.payroll_run_id}&settlementId=${settlement.id}`}>
+                          <Link href={settlementHref("detail", settlement.payroll_run_id, settlement.id)}>
                             <strong>{settlement.employee_name}</strong>
                             <span>{settlement.employee_code}</span>
                           </Link>
@@ -294,7 +343,9 @@ export default async function HrAdminPayrollSettlementsPage({ searchParams }: Pa
                 </table>
               </div>
             </div>
+            ) : null}
 
+            {activeTab === "detail" ? (
             <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
                 <div>
@@ -329,9 +380,12 @@ export default async function HrAdminPayrollSettlementsPage({ searchParams }: Pa
                 </table>
               </div>
             </div>
+            ) : null}
           </div>
 
-          <SettlementDetail settlement={selectedSettlement} lines={visibleLines} />
+          {activeTab === "detail" ? (
+            <SettlementDetail settlement={selectedSettlement} lines={visibleLines} />
+          ) : null}
         </div>
       </section>
     </main>

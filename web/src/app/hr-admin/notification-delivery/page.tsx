@@ -18,7 +18,7 @@ export default async function HrAdminNotificationDeliveryPage() {
   const retryCapped = channelSummaries.reduce((sum, item) => sum + item.retry_capped_count, 0);
 
   return (
-    <main className="shell">
+    <main className="shell notification-shell">
       <PageIntro
         eyebrow={result.state === "live" ? "Live delivery control" : "Demo delivery control"}
         title="Notification delivery"
@@ -70,11 +70,11 @@ export default async function HrAdminNotificationDeliveryPage() {
             </div>
           </div>
 
-          <div className="stack-list">
+          <div className="stack-list notification-channel-health-list">
             {channelSummaries.map((summary) => (
-              <article className="record-card" key={summary.channel}>
+              <article className="record-card notification-channel-health-card" key={summary.channel}>
                 <div className="record-card__header">
-                  <div className="record-card__title-block">
+                  <div className="notification-channel-health-card__title">
                     <h3>{summary.label}</h3>
                     <p>
                       {summary.is_enabled ? "Enabled" : "Disabled"} • {summary.backend_key || "No backend mapped yet"}
@@ -96,7 +96,7 @@ export default async function HrAdminNotificationDeliveryPage() {
                   </div>
                 </div>
 
-                <div className="record-card__details">
+                <div className="notification-channel-health-card__metrics">
                   <div>
                     <span className="record-card__label">Pending</span>
                     <strong>{summary.pending_notification_count}</strong>

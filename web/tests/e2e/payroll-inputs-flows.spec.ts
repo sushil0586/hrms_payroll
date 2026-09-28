@@ -15,6 +15,10 @@ function field(scope: Locator, label: string) {
   return scope.getByText(label, { exact: true }).locator("xpath=ancestor::label[1]").locator("input, select, textarea").first();
 }
 
+async function openPayrollActionTab(page: Page, name: RegExp | string) {
+  await page.getByRole("navigation", { name: "Payroll setup action groups" }).getByRole("button", { name }).click();
+}
+
 async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: string, action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => routePattern.test(item.url()) && item.request().method() === method, { timeout: 30000 }),
@@ -28,7 +32,7 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
 }
 
 async function createAlternateCalendarPeriodThroughBrowser(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-setup");
+  await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions");
   await expectPageReady(page, "Payroll Setup");
 
   const calendarForm = form(page, "payroll-calendar-form");
@@ -54,6 +58,7 @@ async function createAlternateCalendarPeriodThroughBrowser(page: Page) {
   );
   expect(calendar.ok).toBeTruthy();
 
+  await openPayrollActionTab(page, /Periods/);
   const period = await submitAndCapture<{ id: string; name: string }>(
     page,
     /\/api\/hr-admin\/payroll-periods$/,
@@ -80,7 +85,11 @@ test.describe("HR admin payroll input snapshot flows", () => {
     await expectPageReady(page, "Payroll Inputs");
 
     await expect(page.getByRole("heading", { name: "Input control" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "Hash" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Input snapshot review" })).toBeVisible();
+    await expect(page.getByText("Selected run").first()).toBeVisible();
+    await expect(page.getByText("Employee snapshots", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("payroll input snapshot pagination").or(page.getByText("No input snapshots")).or(page.getByRole("link", { name: "Inspect" })).first()).toBeVisible();
+    await expect(page.getByText("Selected for detail").or(page.getByText("No input snapshots")).first()).toBeVisible();
     await expect(page.getByText("Source hash").or(page.getByText("Input profile")).or(page.getByText("No input snapshots")).first()).toBeVisible();
 
     const snapshotLink = page.locator("main a[href*='snapshotId=']").first();

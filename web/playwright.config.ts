@@ -2,6 +2,18 @@ import { defineConfig, devices } from "@playwright/test";
 
 const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${PORT}`;
+const nextDistDir = process.env.NEXT_DIST_DIR ?? ".next/playwright";
+const webServerEnv: Record<string, string> = {
+  HRMS_ENABLE_DEMO_DATA: process.env.HRMS_ENABLE_DEMO_DATA ?? "true",
+};
+
+if (process.env.HRMS_API_BASE_URL) {
+  webServerEnv.HRMS_API_BASE_URL = process.env.HRMS_API_BASE_URL;
+}
+
+if (process.env.HRMS_API_BEARER_TOKEN) {
+  webServerEnv.HRMS_API_BEARER_TOKEN = process.env.HRMS_API_BEARER_TOKEN;
+}
 
 export default defineConfig({
   testDir: "./tests",
@@ -27,15 +39,11 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: `NEXT_DIST_DIR=.next/playwright pnpm exec next dev --hostname 127.0.0.1 --port ${PORT}`,
+    command: `NEXT_DIST_DIR=${nextDistDir} pnpm exec next dev --hostname 127.0.0.1 --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    env: {
-      HRMS_ENABLE_DEMO_DATA: process.env.HRMS_ENABLE_DEMO_DATA ?? "true",
-      HRMS_API_BASE_URL: process.env.HRMS_API_BASE_URL ?? "",
-      HRMS_API_BEARER_TOKEN: process.env.HRMS_API_BEARER_TOKEN ?? "",
-    },
+    env: webServerEnv,
   },
   projects: [
     {

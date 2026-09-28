@@ -23,8 +23,65 @@ type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
 };
 
+type StatutoryTab = "overview" | "declarations" | "compliance" | "catalog" | "actions";
+type PageSize = 10 | 25 | 50;
+
+const STATUTORY_TABS: Array<{ key: StatutoryTab; label: string; detail: string }> = [
+  { key: "overview", label: "Overview", detail: "Readiness and next steps" },
+  { key: "declarations", label: "Declarations", detail: "Employee proof review" },
+  { key: "compliance", label: "Compliance", detail: "Registrations and filings" },
+  { key: "catalog", label: "Catalog", detail: "Packs and components" },
+  { key: "actions", label: "Setup Actions", detail: "Create, import, and edit" },
+];
+
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeTab(value: SearchParamValue): StatutoryTab {
+  const raw = normalizeParam(value);
+  return STATUTORY_TABS.some((tab) => tab.key === raw) ? (raw as StatutoryTab) : "overview";
+}
+
+function parsePositiveInteger(value: SearchParamValue, fallback: number) {
+  const parsed = Number.parseInt(normalizeParam(value) ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizePageSize(value: SearchParamValue): PageSize {
+  const parsed = parsePositiveInteger(value, 10);
+  return parsed === 25 || parsed === 50 ? parsed : 10;
+}
+
+function paginate<T>(items: T[], page: number, pageSize: PageSize) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * pageSize;
+  return {
+    items: items.slice(start, start + pageSize),
+    page: safePage,
+    pageSize,
+    totalPages,
+  };
+}
+
+function statutoryHref(currentParams: Record<string, SearchParamValue>, overrides: Record<string, string | number | undefined>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(currentParams)) {
+    const normalized = normalizeParam(value);
+    if (normalized) {
+      params.set(key, normalized);
+    }
+  }
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined || value === "") {
+      params.delete(key);
+    } else {
+      params.set(key, String(value));
+    }
+  }
+  const query = params.toString();
+  return `/hr-admin/payroll-statutory${query ? `?${query}` : ""}`;
 }
 
 function titleCase(value: string) {
@@ -68,6 +125,16 @@ function StatusBadge({ status, label }: { status: string; label?: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{label || titleCase(status)}</span>;
 }
 
+function EmptyState({ title, detail, action }: { title: string; detail: string; action?: ReactNode }) {
+  return (
+    <div className="payroll-setup-empty-state">
+      <strong>{title}</strong>
+      <span>{detail}</span>
+      {action}
+    </div>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="detail-row">
@@ -77,10 +144,72 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+function PayrollStatutoryTabs({ activeTab, currentParams }: { activeTab: StatutoryTab; currentParams: Record<string, SearchParamValue> }) {
+  return (
+    <nav aria-label="Payroll statutory sections" className="payroll-setup-tabs">
+      {STATUTORY_TABS.map((tab) => (
+        <Link
+          aria-current={activeTab === tab.key ? "page" : undefined}
+          className={`payroll-setup-tab ${activeTab === tab.key ? "payroll-setup-tab--active" : ""}`}
+          href={statutoryHref(currentParams, { tab: tab.key })}
+          key={tab.key}
+        >
+          <strong>{tab.label}</strong>
+          <span>{tab.detail}</span>
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+function PaginationControls({
+  ariaLabel,
+  currentParams,
+  page,
+  pageParam,
+  pageSize,
+  pageSizeParam,
+  totalPages,
+}: {
+  ariaLabel: string;
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageParam: string;
+  pageSize: PageSize;
+  pageSizeParam: string;
+  totalPages: number;
+}) {
+  return (
+    <nav aria-label={ariaLabel} className="payroll-setup-pagination">
+      <span>{page} of {totalPages}</span>
+      <div className="payroll-setup-page-size">
+        {[10, 25, 50].map((size) => (
+          <Link
+            aria-current={pageSize === size ? "page" : undefined}
+            className={`payroll-setup-size-link ${pageSize === size ? "is-active" : ""}`}
+            href={statutoryHref(currentParams, { [pageSizeParam]: size, [pageParam]: 1 })}
+            key={size}
+          >
+            {size}
+          </Link>
+        ))}
+      </div>
+      <div className="payroll-setup-pagination__nav">
+        <Link className={`button button--secondary button--compact payroll-setup-pagination__button ${page === 1 ? "is-disabled" : ""}`} href={statutoryHref(currentParams, { [pageParam]: 1 })}>First</Link>
+        <Link className={`button button--secondary button--compact payroll-setup-pagination__button ${page === 1 ? "is-disabled" : ""}`} href={statutoryHref(currentParams, { [pageParam]: Math.max(1, page - 1) })}>Previous</Link>
+        <Link className={`button button--secondary button--compact payroll-setup-pagination__button ${page === totalPages ? "is-disabled" : ""}`} href={statutoryHref(currentParams, { [pageParam]: Math.min(totalPages, page + 1) })}>Next</Link>
+        <Link className={`button button--secondary button--compact payroll-setup-pagination__button ${page === totalPages ? "is-disabled" : ""}`} href={statutoryHref(currentParams, { [pageParam]: totalPages })}>Last</Link>
+      </div>
+    </nav>
+  );
+}
+
 function DeclarationRail({
+  currentParams,
   declarations,
   selectedDeclaration,
 }: {
+  currentParams: Record<string, SearchParamValue>;
   declarations: HrAdminEmployeeStatutoryDeclaration[];
   selectedDeclaration: HrAdminEmployeeStatutoryDeclaration | null;
 }) {
@@ -94,7 +223,7 @@ function DeclarationRail({
         {declarations.map((declaration) => (
           <Link
             className={`payroll-setup-mini-card payroll-statutory-declaration-card ${selectedDeclaration?.id === declaration.id ? "is-selected" : ""}`}
-            href={`/hr-admin/payroll-statutory?declarationId=${declaration.id}`}
+            href={statutoryHref(currentParams, { tab: "declarations", declarationId: declaration.id })}
             key={declaration.id}
           >
             <div>
@@ -214,7 +343,19 @@ function DeclarationDetail({
   );
 }
 
-function ComponentRegister({ components }: { components: HrAdminPayrollStatutoryComponent[] }) {
+function ComponentRegister({
+  components,
+  currentParams,
+  page,
+  pageSize,
+}: {
+  components: HrAdminPayrollStatutoryComponent[];
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageSize: PageSize;
+}) {
+  const paged = paginate(components, page, pageSize);
+
   return (
     <section className="payroll-statutory-component-panel">
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -225,7 +366,7 @@ function ComponentRegister({ components }: { components: HrAdminPayrollStatutory
         <span className="payroll-setup-count">{components.length} components</span>
       </div>
       <div className="payroll-statutory-component-grid">
-        {components.map((component) => (
+        {paged.items.map((component) => (
           <article className="payroll-statutory-component-card" key={component.id}>
             <div>
               <strong>{component.name}</strong>
@@ -240,18 +381,37 @@ function ComponentRegister({ components }: { components: HrAdminPayrollStatutory
           </article>
         ))}
         {components.length === 0 ? (
-          <div className="empty-state">No statutory components are configured yet. Add PF, ESI, PT, TDS, or other statutory components before payroll calculation uses this module.</div>
+          <EmptyState title="No statutory components" detail="Add PF, ESI, PT, TDS, or other statutory components before payroll calculation uses this module." />
         ) : null}
       </div>
+      {components.length ? (
+        <PaginationControls
+          ariaLabel="statutory components pagination"
+          currentParams={currentParams}
+          page={paged.page}
+          pageParam="componentPage"
+          pageSize={paged.pageSize}
+          pageSizeParam="componentSize"
+          totalPages={paged.totalPages}
+        />
+      ) : null}
     </section>
   );
 }
 
 function EmployerRegistrationPanel({
+  currentParams,
+  page,
+  pageSize,
   registrations,
 }: {
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageSize: PageSize;
   registrations: HrAdminPayrollStatutoryEmployerRegistration[];
 }) {
+  const paged = paginate(registrations, page, pageSize);
+
   return (
     <section className="payroll-statutory-operations-panel" aria-label="Employer statutory registrations">
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -262,7 +422,7 @@ function EmployerRegistrationPanel({
         <span className="payroll-setup-count">{registrations.length} registrations</span>
       </div>
       <div className="payroll-statutory-operations-grid">
-        {registrations.map((registration) => (
+        {paged.items.map((registration) => (
           <article className="payroll-statutory-registration-card" key={registration.id}>
             <div>
               <strong>{registration.name}</strong>
@@ -277,18 +437,37 @@ function EmployerRegistrationPanel({
           </article>
         ))}
         {registrations.length === 0 ? (
-          <div className="empty-state">No employer statutory registrations are configured yet. Add registrations to enable filing calendars and compliance handoff evidence.</div>
+          <EmptyState title="No registrations" detail="Add registrations to enable filing calendars and compliance handoff evidence." />
         ) : null}
       </div>
+      {registrations.length ? (
+        <PaginationControls
+          ariaLabel="employer statutory registrations pagination"
+          currentParams={currentParams}
+          page={paged.page}
+          pageParam="registrationPage"
+          pageSize={paged.pageSize}
+          pageSizeParam="registrationSize"
+          totalPages={paged.totalPages}
+        />
+      ) : null}
     </section>
   );
 }
 
 function FilingCalendarPanel({
+  currentParams,
   filingCalendars,
+  page,
+  pageSize,
 }: {
+  currentParams: Record<string, SearchParamValue>;
   filingCalendars: HrAdminPayrollStatutoryFilingCalendar[];
+  page: number;
+  pageSize: PageSize;
 }) {
+  const paged = paginate(filingCalendars, page, pageSize);
+
   return (
     <section className="payroll-statutory-operations-panel" aria-label="Statutory filing calendar">
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -299,7 +478,7 @@ function FilingCalendarPanel({
         <span className="payroll-setup-count">{filingCalendars.length} filings</span>
       </div>
       <div className="payroll-statutory-operations-grid">
-        {filingCalendars.map((filing) => (
+        {paged.items.map((filing) => (
           <article className="payroll-statutory-filing-card" key={filing.id}>
             <div>
               <strong>{filing.name}</strong>
@@ -314,9 +493,20 @@ function FilingCalendarPanel({
           </article>
         ))}
         {filingCalendars.length === 0 ? (
-          <div className="empty-state">No statutory filing calendar rows are configured yet. Add due dates before compliance reports can prove filing readiness.</div>
+          <EmptyState title="No filing calendar" detail="Add due dates before compliance reports can prove filing readiness." />
         ) : null}
       </div>
+      {filingCalendars.length ? (
+        <PaginationControls
+          ariaLabel="statutory filing calendar pagination"
+          currentParams={currentParams}
+          page={paged.page}
+          pageParam="filingPage"
+          pageSize={paged.pageSize}
+          pageSizeParam="filingSize"
+          totalPages={paged.totalPages}
+        />
+      ) : null}
     </section>
   );
 }
@@ -447,6 +637,149 @@ function PackSummary({ pack }: { pack: HrAdminPayrollStatutoryPack | null }) {
   );
 }
 
+function DeclarationTable({
+  currentParams,
+  declarations,
+  page,
+  pageSize,
+}: {
+  currentParams: Record<string, SearchParamValue>;
+  declarations: HrAdminEmployeeStatutoryDeclaration[];
+  page: number;
+  pageSize: PageSize;
+}) {
+  const paged = paginate(declarations, page, pageSize);
+
+  return (
+    <section className="payroll-setup-main-panel payroll-statutory-main-panel">
+      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+        <div>
+          <span className="workspace-card__eyebrow">Review register</span>
+          <h2>Declarations and proof evidence</h2>
+          <p className="section-copy section-copy-soft">Check employee tax regime, declared value, verified value, and proof coverage before payroll consumes statutory inputs.</p>
+        </div>
+        <span className="payroll-setup-count">{declarations.length} declarations</span>
+      </div>
+
+      <div className="payroll-table-scroll payroll-table-scroll--compact payroll-statutory-table-shell">
+        <table className="payroll-readiness-table payroll-statutory-table payroll-setup-table">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Year</th>
+              <th>Status</th>
+              <th>Tax Regime</th>
+              <th>Declared</th>
+              <th>Verified</th>
+              <th>Proofs</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paged.items.length ? (
+              paged.items.map((declaration) => (
+                <tr key={declaration.id}>
+                  <td>
+                    <Link href={statutoryHref(currentParams, { tab: "declarations", declarationId: declaration.id })}>
+                      {declaration.employee_name}
+                    </Link>
+                    <span className="table-cell-subtitle">{declaration.employee_code}</span>
+                  </td>
+                  <td>{declaration.financial_year_code}</td>
+                  <td><StatusBadge status={declaration.status} label={declaration.status_label} /></td>
+                  <td>{declaration.tax_regime_label}</td>
+                  <td>{formatMoney(declaration.declared_total_amount)}</td>
+                  <td>{formatMoney(declaration.verified_total_amount)}</td>
+                  <td>{declaration.verified_item_count}/{declaration.item_count}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7}>
+                  <EmptyState title="No declarations yet" detail="Employee statutory declarations will appear here after proof windows and profiles are configured." />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <PaginationControls
+        ariaLabel="statutory declaration pagination"
+        currentParams={currentParams}
+        page={paged.page}
+        pageParam="declarationPage"
+        pageSize={paged.pageSize}
+        pageSizeParam="declarationSize"
+        totalPages={paged.totalPages}
+      />
+    </section>
+  );
+}
+
+function OverviewPanel({
+  activePack,
+  currentParams,
+  setup,
+}: {
+  activePack: HrAdminPayrollStatutoryPack | null;
+  currentParams: Record<string, SearchParamValue>;
+  setup: Awaited<ReturnType<typeof getHrAdminPayrollStatutorySetup>>["data"];
+}) {
+  const hasSetupCoverage = setup.summary.active_pack_count > 0 && setup.summary.active_statutory_component_count > 0 && setup.summary.active_employer_registration_count > 0;
+  const hasProofCoverage = setup.summary.declaration_count === 0 || setup.summary.locked_declaration_count > 0;
+  const hasFilingRisk = setup.summary.due_filing_calendar_count > 0;
+
+  return (
+    <div className="payroll-setup-overview-grid">
+      <section className="payroll-setup-main-panel">
+        <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+          <div>
+            <span className="workspace-card__eyebrow">Current decision</span>
+            <h2>{hasSetupCoverage && hasProofCoverage && !hasFilingRisk ? "Statutory setup is ready" : "Review statutory gaps before payroll close"}</h2>
+            <p className="section-copy section-copy-soft">Start here for statutory health. Open focused tabs only when you need proof review, compliance dates, component catalog, or maintenance forms.</p>
+          </div>
+          <StatusBadge status={hasSetupCoverage && hasProofCoverage && !hasFilingRisk ? "ready" : "warning"} label={hasSetupCoverage && hasProofCoverage && !hasFilingRisk ? "Ready" : "Review"} />
+        </div>
+        <div className="payroll-setup-summary-grid">
+          <article className="payroll-setup-summary-card">
+            <span>Setup coverage</span>
+            <strong>{hasSetupCoverage ? "Ready" : "Needs setup"}</strong>
+            <p>{setup.summary.active_pack_count} packs, {setup.summary.active_statutory_component_count} components, {setup.summary.active_employer_registration_count} registrations.</p>
+          </article>
+          <article className="payroll-setup-summary-card">
+            <span>Proof review</span>
+            <strong>{setup.summary.locked_declaration_count}/{setup.summary.declaration_count}</strong>
+            <p>Locked declarations are safe for calculation and audit evidence.</p>
+          </article>
+          <article className="payroll-setup-summary-card">
+            <span>Filing calendar</span>
+            <strong>{setup.summary.due_filing_calendar_count}</strong>
+            <p>Due filing rows need compliance owner attention.</p>
+          </article>
+        </div>
+        <div className="payroll-setup-action-strip">
+          <Link className="button button--secondary" href={statutoryHref(currentParams, { tab: "declarations" })}>
+            Review declarations
+          </Link>
+          <Link className="button button--secondary" href={statutoryHref(currentParams, { tab: "compliance" })}>
+            Open compliance
+          </Link>
+          <Link className="button button--primary" href={statutoryHref(currentParams, { tab: "actions" })}>
+            Setup actions
+          </Link>
+        </div>
+      </section>
+
+      <PackSummary pack={activePack} />
+      <TdsComplianceReport
+        components={setup.statutory_components}
+        declarations={setup.declarations}
+        employeeProfiles={setup.employee_profiles}
+        filingCalendars={setup.filing_calendars}
+      />
+    </div>
+  );
+}
+
 export default async function HrAdminPayrollStatutoryPage({ searchParams }: PageProps) {
   const sessionUser = await requireSessionPermission({
     permissionKeys: ["statutory.setup.view", "statutory.setup.manage", "statutory.declarations.view", "statutory.declarations.manage"],
@@ -455,6 +788,15 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
   const canManageStatutorySetup = sessionHasPermission(sessionUser, "statutory.setup.manage");
   const canManageStatutoryDeclarations = sessionHasPermission(sessionUser, "statutory.declarations.manage");
   const currentParams = (await searchParams) ?? {};
+  const activeTab = normalizeTab(currentParams.tab);
+  const declarationPage = parsePositiveInteger(currentParams.declarationPage, 1);
+  const declarationSize = normalizePageSize(currentParams.declarationSize);
+  const componentPage = parsePositiveInteger(currentParams.componentPage, 1);
+  const componentSize = normalizePageSize(currentParams.componentSize);
+  const registrationPage = parsePositiveInteger(currentParams.registrationPage, 1);
+  const registrationSize = normalizePageSize(currentParams.registrationSize);
+  const filingPage = parsePositiveInteger(currentParams.filingPage, 1);
+  const filingSize = normalizePageSize(currentParams.filingSize);
   const selectedDeclarationId = normalizeParam(currentParams.declarationId);
   const result = await getHrAdminPayrollStatutorySetup();
   const setup = result.data;
@@ -507,89 +849,80 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
         ]}
       />
 
-      <section className="payroll-setup-metrics" aria-label="Payroll statutory metrics">
-        <MetricTile label="Active Packs" value={setup.summary.active_pack_count} />
-        <MetricTile label="Components" value={setup.summary.active_statutory_component_count} />
-        <MetricTile label="Profiles" value={setup.summary.active_employee_profile_count} />
-        <MetricTile label="Registrations" value={setup.summary.active_employer_registration_count} />
-        <MetricTile label="Due Filings" value={setup.summary.due_filing_calendar_count} />
-        <MetricTile label="Declarations" value={setup.summary.declaration_count} />
-        <MetricTile label="Locked" value={setup.summary.locked_declaration_count} />
-        <MetricTile label="Proofs Verified" value={setup.summary.verified_declaration_item_count} />
+      <section className="section section--tight" aria-label="Payroll statutory metrics">
+        <div className="metric-grid-modern payroll-setup-metrics">
+          <MetricTile className="metric-tile-soft" label="Active Packs" value={setup.summary.active_pack_count} />
+          <MetricTile className="metric-tile-soft" label="Components" value={setup.summary.active_statutory_component_count} />
+          <MetricTile className="metric-tile-soft" label="Profiles" value={setup.summary.active_employee_profile_count} />
+          <MetricTile className="metric-tile-soft" label="Registrations" value={setup.summary.active_employer_registration_count} />
+          <MetricTile className="metric-tile-soft" label="Due Filings" value={setup.summary.due_filing_calendar_count} />
+          <MetricTile className="metric-tile-soft" label="Declarations" value={setup.summary.declaration_count} />
+          <MetricTile className="metric-tile-soft" label="Locked" value={setup.summary.locked_declaration_count} />
+          <MetricTile className="metric-tile-soft" label="Proofs Verified" value={setup.summary.verified_declaration_item_count} />
+        </div>
       </section>
 
-      <section className="payroll-setup-workspace payroll-statutory-workspace">
-        <DeclarationRail declarations={setup.declarations} selectedDeclaration={selectedDeclaration} />
+      <PayrollStatutoryTabs activeTab={activeTab} currentParams={currentParams} />
 
-        <section className="payroll-setup-main-panel payroll-statutory-main-panel">
-          <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
-            <div>
-              <span className="workspace-card__eyebrow">Review register</span>
-              <h2>Declarations and proof evidence</h2>
-            </div>
-            <span className="payroll-setup-count">{setup.summary.declaration_item_count} proof rows</span>
-          </div>
+      {activeTab === "overview" ? (
+        <OverviewPanel activePack={activePack} currentParams={currentParams} setup={setup} />
+      ) : null}
 
-          <PackSummary pack={activePack} />
+      {activeTab === "declarations" ? (
+        <section className="payroll-setup-workspace payroll-statutory-workspace">
+          <DeclarationRail currentParams={currentParams} declarations={setup.declarations} selectedDeclaration={selectedDeclaration} />
+          <DeclarationTable
+            currentParams={currentParams}
+            declarations={setup.declarations}
+            page={declarationPage}
+            pageSize={declarationSize}
+          />
+          <DeclarationDetail declaration={selectedDeclaration} profile={selectedProfile} proofItems={selectedProofItems} />
+        </section>
+      ) : null}
+
+      {activeTab === "compliance" ? (
+        <div className="payroll-setup-grid-two">
           <TdsComplianceReport
             components={setup.statutory_components}
             declarations={setup.declarations}
             employeeProfiles={setup.employee_profiles}
             filingCalendars={setup.filing_calendars}
           />
-          <EmployerRegistrationPanel registrations={setup.employer_registrations} />
-          <FilingCalendarPanel filingCalendars={setup.filing_calendars} />
+          <EmployerRegistrationPanel
+            currentParams={currentParams}
+            page={registrationPage}
+            pageSize={registrationSize}
+            registrations={setup.employer_registrations}
+          />
+          <FilingCalendarPanel
+            currentParams={currentParams}
+            filingCalendars={setup.filing_calendars}
+            page={filingPage}
+            pageSize={filingSize}
+          />
+        </div>
+      ) : null}
 
-          <div className="payroll-table-scroll payroll-table-scroll--compact payroll-statutory-table-shell">
-            <table className="payroll-readiness-table payroll-statutory-table">
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Year</th>
-                  <th>Status</th>
-                  <th>Tax Regime</th>
-                  <th>Declared</th>
-                  <th>Verified</th>
-                  <th>Proofs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {setup.declarations.map((declaration) => (
-                  <tr key={declaration.id}>
-                    <td>
-                      <Link href={`/hr-admin/payroll-statutory?declarationId=${declaration.id}`}>{declaration.employee_name}</Link>
-                      <span className="table-cell-subtitle">{declaration.employee_code}</span>
-                    </td>
-                    <td>{declaration.financial_year_code}</td>
-                    <td><StatusBadge status={declaration.status} label={declaration.status_label} /></td>
-                    <td>{declaration.tax_regime_label}</td>
-                    <td>{formatMoney(declaration.declared_total_amount)}</td>
-                    <td>{formatMoney(declaration.verified_total_amount)}</td>
-                    <td>{declaration.verified_item_count}/{declaration.item_count}</td>
-                  </tr>
-                ))}
-                {setup.declarations.length === 0 ? (
-                  <tr>
-                    <td colSpan={7}>
-                      <div className="empty-state">No statutory declaration rows are available yet.</div>
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+      {activeTab === "catalog" ? (
+        <div className="payroll-setup-grid-two">
+          <PackSummary pack={activePack} />
+          <ComponentRegister
+            components={setup.statutory_components}
+            currentParams={currentParams}
+            page={componentPage}
+            pageSize={componentSize}
+          />
+        </div>
+      ) : null}
 
-          <ComponentRegister components={setup.statutory_components} />
-        </section>
-
-        <DeclarationDetail declaration={selectedDeclaration} profile={selectedProfile} proofItems={selectedProofItems} />
-      </section>
-
-      <PayrollStatutoryCrudConsole
-        canManageDeclarations={canManageStatutoryDeclarations}
-        canManageSetup={canManageStatutorySetup}
-        initialSetup={setup}
-      />
+      {activeTab === "actions" ? (
+        <PayrollStatutoryCrudConsole
+          canManageDeclarations={canManageStatutoryDeclarations}
+          canManageSetup={canManageStatutorySetup}
+          initialSetup={setup}
+        />
+      ) : null}
     </main>
   );
 }

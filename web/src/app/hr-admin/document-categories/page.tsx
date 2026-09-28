@@ -14,7 +14,7 @@ export default async function HrAdminDocumentCategoriesPage() {
   const result = await getHrAdminDocumentCategories();
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         actions={
           <>
@@ -22,7 +22,7 @@ export default async function HrAdminDocumentCategoriesPage() {
             <Link className="button button--secondary" href="/hr-admin/documents">Back to documents</Link>
           </>
         }
-        description="Define the reusable document categories that onboarding, compliance, and employee recordkeeping will depend on."
+        description="Maintain reusable document types, upload behavior, and verification rules."
         eyebrow={result.state === "live" ? "Live document mode" : "Demo document mode"}
         pills={[`${result.data.length} categories`]}
         title="Document categories"
@@ -37,9 +37,9 @@ export default async function HrAdminDocumentCategoriesPage() {
       </section>
 
       <section className="section">
-        <div className="queue-list">
+        <div className="queue-list document-record-list">
           {result.data.map((item) => (
-            <article className="record-card" key={item.id}>
+            <article className="record-card document-record-card" key={item.id}>
               <div className="record-card__header">
                 <div className="record-card__title-block">
                   <h3>{item.name}</h3>
@@ -50,7 +50,7 @@ export default async function HrAdminDocumentCategoriesPage() {
                   {canManageDocuments ? <Link className="button button--secondary" href={`/hr-admin/document-categories/${item.id}/edit`}>Edit</Link> : null}
                 </div>
               </div>
-              <div className="record-card__details">
+              <div className="record-card__details document-detail-grid">
                 <div><span className="record-card__label">Code</span><strong>{item.code}</strong></div>
                 <div><span className="record-card__label">Type</span><strong>{item.category_type}</strong></div>
                 <div><span className="record-card__label">Verification</span><strong>{item.requires_verification ? "Required" : "Not required"}</strong></div>

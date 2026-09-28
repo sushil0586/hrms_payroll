@@ -24,7 +24,7 @@ type ControlIssue = {
 
 const formRoutes: FormRoute[] = [
   {
-    path: "/hr-admin/salary-setup",
+    path: "/hr-admin/salary-setup?tab=actions",
     heading: "Salary Setup",
     consoleHeading: "Salary setup controls",
     expectedForms: [
@@ -36,7 +36,7 @@ const formRoutes: FormRoute[] = [
     ],
   },
   {
-    path: "/hr-admin/payroll-setup",
+    path: "/hr-admin/payroll-setup?tab=actions",
     heading: "Payroll Setup",
     consoleHeading: "Payroll setup controls",
     expectedForms: [
@@ -57,7 +57,7 @@ const formRoutes: FormRoute[] = [
     ],
   },
   {
-    path: "/hr-admin/payroll-statutory",
+    path: "/hr-admin/payroll-statutory?tab=actions",
     heading: "Payroll Statutory",
     consoleHeading: "Statutory setup controls",
     expectedForms: [
@@ -97,7 +97,7 @@ const formRoutes: FormRoute[] = [
   },
   {
     path: "/hr-admin/attendance-records",
-    heading: "Attendance records review window.",
+    heading: "Attendance records",
     consoleHeading: "Attendance records",
     expectedForms: [
       { testId: "attendance-records-toolbar", label: "Attendance records toolbar", minimumControls: 11 },

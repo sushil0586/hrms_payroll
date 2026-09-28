@@ -58,7 +58,7 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
   const templatedInView = filteredEvents.filter((item) => item.template_name).length;
 
   return (
-    <main className="shell">
+    <main className="shell notification-shell">
       <PageIntro
         eyebrow={result.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Notification events"
@@ -159,66 +159,68 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
         </section>
       </section>
 
-      <section className="section queue-layout">
-        <div className="queue-list">
-          {filteredEvents.map((item) => (
-            <article className="record-card" key={item.id}>
-              <div className="record-card__header">
-                <div className="record-card__title-wrap">
-                  <div className="record-card__title">
-                    <h2>{item.name}</h2>
-                  </div>
-                  <div className="record-card__eyebrow">
-                    <span className="record-chip record-chip--accent">{item.module}</span>
-                    <span className="record-chip">{item.channel}</span>
-                    <span className="record-chip">{item.priority}</span>
-                    <span className="record-chip">{item.is_active ? "active" : "inactive"}</span>
-                    {item.trigger_key.includes("document") ? <span className="record-chip record-chip--danger">Document attention</span> : null}
-                  </div>
-                  <p className="section-copy">{item.trigger_key}</p>
-                </div>
-                <div className="record-card__actions">
-                  <Link className="button button--secondary" href={`/hr-admin/notification-events/${item.id}/edit`}>
-                    Edit
-                  </Link>
-                  <Link
-                    className="button button--ghost"
-                    href={`/hr-admin/notifications?module=${encodeURIComponent(item.module)}&channel=${encodeURIComponent(item.channel)}`}
-                  >
-                    Queue
-                  </Link>
-                </div>
-              </div>
-              <div className="detail-grid">
-                <div className="detail-row">
-                  <span className="detail-label">Audience</span>
-                  <span className="detail-value">{item.audience_type}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Channel</span>
-                  <span className="detail-value">{item.channel}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Template</span>
-                  <span className="detail-value">{item.template_name || "Direct content"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Priority</span>
-                  <span className="detail-value">{item.priority}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Delivery delay</span>
-                  <span className="detail-value">{item.delivery_delay_minutes} min</span>
-                </div>
-              </div>
-              {item.trigger_key.includes("document") ? (
-                <div className="notice">
-                  <strong>Document-linked trigger.</strong>
-                  <span className="muted">Use this event to route onboarding blockers, expiry reminders, or upload follow-ups without frontend hardcoding.</span>
-                </div>
-              ) : null}
-            </article>
-          ))}
+      <section className="section">
+        <div className="card panel panel-card-soft notification-catalog-panel">
+          <div className="section-header-row">
+            <div>
+              <h2 className="section-heading-soft">Event catalog</h2>
+              <p className="section-copy-soft">Review active routing, template linkage, audience, and queue activity in one register.</p>
+            </div>
+            <span className="queue-summary-chip">
+              <strong>{filteredEvents.length}</strong> shown
+            </span>
+          </div>
+          {filteredEvents.length ? (
+            <div className="notification-table-scroll">
+              <table className="notification-catalog-table notification-catalog-table--events">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Route</th>
+                    <th>Audience</th>
+                    <th>Template</th>
+                    <th>Delay</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEvents.map((item) => (
+                    <tr key={item.id}>
+                      <td data-label="Event">
+                        <strong>{item.name}</strong>
+                        <span>{item.trigger_key}</span>
+                        {item.trigger_key.includes("document") ? <span className="record-chip record-chip--danger">Document attention</span> : null}
+                      </td>
+                      <td data-label="Route">
+                        <div className="notification-cell-chips">
+                          <span className="record-chip record-chip--accent">{item.module}</span>
+                          <span className="record-chip">{item.channel}</span>
+                          <span className="record-chip">{item.priority}</span>
+                          <span className={`record-chip${item.is_active ? "" : " record-chip--accent"}`}>{item.is_active ? "active" : "inactive"}</span>
+                        </div>
+                      </td>
+                      <td data-label="Audience">{item.audience_type}</td>
+                      <td data-label="Template">{item.template_name || "Direct content"}</td>
+                      <td data-label="Delay">{item.delivery_delay_minutes} min</td>
+                      <td data-label="Actions">
+                        <div className="notification-row-actions">
+                          <Link className="button button--secondary" href={`/hr-admin/notification-events/${item.id}/edit`}>
+                            Edit
+                          </Link>
+                          <Link
+                            className="button button--ghost"
+                            href={`/hr-admin/notifications?module=${encodeURIComponent(item.module)}&channel=${encodeURIComponent(item.channel)}`}
+                          >
+                            Queue
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
           {filteredEvents.length === 0 ? (
             <div className="card panel panel-card-soft">
               <strong>No events match the current filters.</strong>

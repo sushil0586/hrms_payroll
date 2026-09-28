@@ -148,7 +148,7 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern lifecycle-child-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>

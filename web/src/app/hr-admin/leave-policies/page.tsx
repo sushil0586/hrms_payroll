@@ -14,10 +14,10 @@ export default async function HrAdminLeavePoliciesPage() {
   const activeCount = result.data.filter((item) => item.status === "active").length;
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" ? "Live leave policy mode" : "Demo leave policy mode"}
-        title="Leave policy admin for enforceable leave behavior."
+        title="Leave policies"
         description="Define the entitlement, accrual, notice, and eligibility behavior that the system should actually apply beyond simple leave labels."
         actions={
           <>

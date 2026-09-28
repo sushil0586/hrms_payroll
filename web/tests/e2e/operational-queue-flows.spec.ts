@@ -36,7 +36,7 @@ test.describe("HR admin operational queue flows", () => {
 
   test("organization setup switches structural layer and status filters", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/organization");
-    await expectPageReady(page, /Organization setup review/);
+    await expectPageReady(page, /Organization masters/);
 
     await page.getByRole("link", { name: /Legal Entities/ }).click();
     await expect(page).toHaveURL(/section=legal_entities/);

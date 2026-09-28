@@ -7,14 +7,57 @@ import type { HrAdminPayrollCalculationLine, HrAdminPayrollRun, HrAdminPayrollRu
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
+import { PayrollWorkflowGuide } from "../payroll-workflow-guide";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
 };
+type PageSize = 10 | 25 | 50;
 
 function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function parsePositiveInteger(value: SearchParamValue, fallback: number) {
+  const parsed = Number.parseInt(normalizeParam(value) ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizePageSize(value: SearchParamValue): PageSize {
+  const parsed = parsePositiveInteger(value, 10);
+  return parsed === 25 || parsed === 50 ? parsed : 10;
+}
+
+function paginate<T>(items: T[], page: number, pageSize: PageSize) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * pageSize;
+  return {
+    items: items.slice(start, start + pageSize),
+    page: safePage,
+    pageSize,
+    totalPages,
+  };
+}
+
+function calculationHref(currentParams: Record<string, SearchParamValue>, overrides: Record<string, string | number | undefined>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(currentParams)) {
+    const normalized = normalizeParam(value);
+    if (normalized) {
+      params.set(key, normalized);
+    }
+  }
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined || value === "") {
+      params.delete(key);
+    } else {
+      params.set(key, String(value));
+    }
+  }
+  const query = params.toString();
+  return `/hr-admin/payroll-calculations${query ? `?${query}` : ""}`;
 }
 
 function titleCase(value: string) {
@@ -63,6 +106,48 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
 }
 
+function PaginationControls({
+  ariaLabel,
+  currentParams,
+  page,
+  pageParam,
+  pageSize,
+  pageSizeParam,
+  totalPages,
+}: {
+  ariaLabel: string;
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageParam: string;
+  pageSize: PageSize;
+  pageSizeParam: string;
+  totalPages: number;
+}) {
+  return (
+    <nav aria-label={ariaLabel} className="payroll-setup-pagination">
+      <span>{page} of {totalPages}</span>
+      <div className="payroll-setup-pagination__sizes">
+        {[10, 25, 50].map((size) => (
+          <Link
+            aria-current={pageSize === size ? "page" : undefined}
+            className="button button--secondary button--compact"
+            href={calculationHref(currentParams, { [pageSizeParam]: size, [pageParam]: 1 })}
+            key={size}
+          >
+            {size}
+          </Link>
+        ))}
+      </div>
+      <div className="payroll-setup-pagination__actions">
+        <Link aria-disabled={page === 1} className="button button--secondary button--compact" href={calculationHref(currentParams, { [pageParam]: 1 })}>First</Link>
+        <Link aria-disabled={page === 1} className="button button--secondary button--compact" href={calculationHref(currentParams, { [pageParam]: Math.max(1, page - 1) })}>Previous</Link>
+        <Link aria-disabled={page === totalPages} className="button button--secondary button--compact" href={calculationHref(currentParams, { [pageParam]: Math.min(totalPages, page + 1) })}>Next</Link>
+        <Link aria-disabled={page === totalPages} className="button button--secondary button--compact" href={calculationHref(currentParams, { [pageParam]: totalPages })}>Last</Link>
+      </div>
+    </nav>
+  );
+}
+
 function calculationReadiness(run: HrAdminPayrollRun | null) {
   if (!run) {
     return {
@@ -97,6 +182,22 @@ function calculationReadiness(run: HrAdminPayrollRun | null) {
     };
   }
   if (!["inputs_locked", "calculated"].includes(run.status)) {
+    if (["review", "approved", "locked"].includes(run.status)) {
+      return {
+        isReady: false,
+        tone: "blocked",
+        title: "Calculation closed.",
+        detail: `This run is already in ${run.status_label}. Recalculation is not allowed from this step.`,
+      };
+    }
+    if (run.status === "cancelled") {
+      return {
+        isReady: false,
+        tone: "blocked",
+        title: "Calculation unavailable.",
+        detail: "This payroll run is cancelled and cannot be calculated.",
+      };
+    }
     return {
       isReady: false,
       tone: "blocked",
@@ -178,18 +279,35 @@ function sourceBlockLabel(line: HrAdminPayrollCalculationLine) {
   return "Formula used";
 }
 
-function RunRail({ runs, selectedRun }: { runs: HrAdminPayrollRun[]; selectedRun: HrAdminPayrollRun | null }) {
+function RunRail({
+  currentParams,
+  page,
+  pageSize,
+  runs,
+  selectedRun,
+}: {
+  currentParams: Record<string, SearchParamValue>;
+  page: number;
+  pageSize: PageSize;
+  runs: HrAdminPayrollRun[];
+  selectedRun: HrAdminPayrollRun | null;
+}) {
+  const pagedRuns = paginate(runs, page, pageSize);
+
   return (
     <aside className="payroll-setup-rail payroll-calc-run-rail">
-      <div className="payroll-setup-panel__header">
-        <span className="workspace-card__eyebrow">Runs</span>
-        <h2>Calculation queue</h2>
+      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+        <div>
+          <span className="workspace-card__eyebrow">Runs</span>
+          <h2>Calculation queue</h2>
+        </div>
+        <span className="payroll-setup-count">{runs.length}</span>
       </div>
       <div className="payroll-setup-card-list">
-        {runs.map((run) => (
+        {pagedRuns.items.map((run) => (
           <Link
             className={`payroll-setup-mini-card payroll-calc-run-card ${selectedRun?.id === run.id ? "is-selected" : ""}`}
-            href={`/hr-admin/payroll-calculations?runId=${run.id}`}
+            href={calculationHref(currentParams, { runId: run.id, calculationId: undefined, lineId: undefined, calculationPage: 1, linePage: 1 })}
             key={run.id}
           >
             <div>
@@ -203,9 +321,21 @@ function RunRail({ runs, selectedRun }: { runs: HrAdminPayrollRun[]; selectedRun
               <span>{run.blocked_count} blocked</span>
             </div>
             <code>{run.snapshot_schema_ref}</code>
+            {selectedRun?.id === run.id ? <span className="payroll-rule-selected-marker">Selected run</span> : null}
           </Link>
         ))}
       </div>
+      {runs.length > pageSize ? (
+        <PaginationControls
+          ariaLabel="payroll calculation run pagination"
+          currentParams={currentParams}
+          page={pagedRuns.page}
+          pageParam="runPage"
+          pageSize={pagedRuns.pageSize}
+          pageSizeParam="runSize"
+          totalPages={pagedRuns.totalPages}
+        />
+      ) : null}
     </aside>
   );
 }
@@ -243,6 +373,7 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLine | nul
         </div>
         <StatusBadge status={line.status} />
       </div>
+      <span className="payroll-rule-selected-marker">Selected line</span>
 
       <div className="payroll-calc-amount-block">
         <span className="workspace-card__eyebrow">Calculated amount</span>
@@ -315,7 +446,7 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLine | nul
   );
 }
 
-function ValidationIssueRegister({ issues }: { issues: HrAdminPayrollValidationIssue[] }) {
+function ValidationIssueRegister({ issues, totalIssueCount }: { issues: HrAdminPayrollValidationIssue[]; totalIssueCount: number }) {
   const categoryCounts = issues.reduce<Record<string, number>>((counts, issue) => {
     counts[issue.category_label] = (counts[issue.category_label] ?? 0) + 1;
     return counts;
@@ -328,7 +459,7 @@ function ValidationIssueRegister({ issues }: { issues: HrAdminPayrollValidationI
           <span className="workspace-card__eyebrow">Calculation validation</span>
           <h2>Issue register</h2>
         </div>
-        <span className="payroll-setup-count">{issues.length} open checks</span>
+        <span className="payroll-setup-count">{totalIssueCount} open checks</span>
       </div>
 
       {issues.length ? (
@@ -374,6 +505,14 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
   const selectedRunId = normalizeParam(currentParams.runId);
   const selectedCalculationId = normalizeParam(currentParams.calculationId);
   const selectedLineId = normalizeParam(currentParams.lineId);
+  const runPage = parsePositiveInteger(currentParams.runPage, 1);
+  const runSize = normalizePageSize(currentParams.runSize);
+  const calculationPage = parsePositiveInteger(currentParams.calculationPage, 1);
+  const calculationSize = normalizePageSize(currentParams.calculationSize);
+  const linePage = parsePositiveInteger(currentParams.linePage, 1);
+  const lineSize = normalizePageSize(currentParams.lineSize);
+  const issuePage = parsePositiveInteger(currentParams.issuePage, 1);
+  const issueSize = normalizePageSize(currentParams.issueSize);
   const result = await getHrAdminPayrollCalculationSetup({
     run_id: selectedRunId,
     calculation_id: selectedCalculationId,
@@ -383,6 +522,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
   const visibleCalculations = selectedRun
     ? setup.calculations.filter((item) => item.payroll_run_id === selectedRun.id)
     : setup.calculations;
+  const pagedCalculations = paginate(visibleCalculations, calculationPage, calculationSize);
   const selectedCalculation =
     visibleCalculations.find((item) => item.id === selectedCalculationId) ??
     visibleCalculations[0] ??
@@ -390,6 +530,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
   const visibleLines = selectedCalculation
     ? setup.lines.filter((item) => item.calculation_id === selectedCalculation.id)
     : setup.lines;
+  const pagedLines = paginate(visibleLines, linePage, lineSize);
   const selectedLine = visibleLines.find((item) => item.id === selectedLineId) ?? visibleLines.find((item) => item.component_code === "TDS") ?? visibleLines[0] ?? null;
   const totals = selectedCalculation?.totals_snapshot ?? {};
   const visibleValidationIssues = setup.validation_issues.filter((issue) => {
@@ -401,6 +542,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
     }
     return !selectedCalculation || issue.calculation_id === selectedCalculation.id || issue.calculation_id === null;
   });
+  const pagedValidationIssues = paginate(visibleValidationIssues, issuePage, issueSize);
   const readiness = calculationReadiness(selectedRun);
   const openBlockerCount = visibleValidationIssues.filter((issue) => issue.severity === "blocker").length;
 
@@ -452,6 +594,16 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
         secondaryMetricValue={visibleValidationIssues.length}
       />
 
+      <PayrollWorkflowGuide
+        title="Calculation run review"
+        description="Pick the input-locked run, confirm readiness, inspect calculation evidence, then open payroll review."
+        steps={[
+          { label: "Select run", detail: "Start from the run that should be calculated." },
+          { label: "Check readiness", detail: "Confirm blockers, warnings, and validation status." },
+          { label: "Inspect lines", detail: "Review formula, statutory, or adjustment evidence." },
+        ]}
+      />
+
       <section className="section section--tight">
         <div className="metric-grid-modern payroll-setup-metrics">
           <MetricTile className="metric-tile-soft" label="Calculable runs" value={setup.summary.calculable_run_count} trend={`${setup.summary.run_count} total runs`} />
@@ -464,7 +616,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
 
       <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-calc-workspace">
-          <RunRail runs={setup.runs} selectedRun={selectedRun} />
+          <RunRail currentParams={currentParams} page={runPage} pageSize={runSize} runs={setup.runs} selectedRun={selectedRun} />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -494,7 +646,18 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
               </article>
             </div>
 
-            <ValidationIssueRegister issues={visibleValidationIssues} />
+            <ValidationIssueRegister issues={pagedValidationIssues.items} totalIssueCount={visibleValidationIssues.length} />
+            {visibleValidationIssues.length > issueSize ? (
+              <PaginationControls
+                ariaLabel="payroll calculation issue pagination"
+                currentParams={currentParams}
+                page={pagedValidationIssues.page}
+                pageParam="issuePage"
+                pageSize={pagedValidationIssues.pageSize}
+                pageSizeParam="issueSize"
+                totalPages={pagedValidationIssues.totalPages}
+              />
+            ) : null}
 
             <CalculationReadinessPanel run={selectedRun} blockerCount={openBlockerCount} />
 
@@ -539,10 +702,10 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleCalculations.map((calculation) => (
+                  {pagedCalculations.items.map((calculation) => (
                     <tr className={selectedCalculation?.id === calculation.id ? "is-selected" : ""} key={calculation.id}>
                       <td>
-                        <Link href={`/hr-admin/payroll-calculations?runId=${calculation.payroll_run_id}&calculationId=${calculation.id}`}>
+                        <Link href={calculationHref(currentParams, { runId: calculation.payroll_run_id, calculationId: calculation.id, lineId: undefined, linePage: 1 })}>
                           <strong>Attempt {calculation.attempt_number}</strong>
                           <span>{calculation.period_name}</span>
                         </Link>
@@ -557,6 +720,17 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                 </tbody>
               </table>
             </div>
+            {visibleCalculations.length > calculationSize ? (
+              <PaginationControls
+                ariaLabel="payroll calculation attempt pagination"
+                currentParams={currentParams}
+                page={pagedCalculations.page}
+                pageParam="calculationPage"
+                pageSize={pagedCalculations.pageSize}
+                pageSizeParam="calculationSize"
+                totalPages={pagedCalculations.totalPages}
+              />
+            ) : null}
 
             <div className="payroll-setup-assignment-panel">
               <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -579,16 +753,16 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleLines.map((line) => (
+                    {pagedLines.items.map((line) => (
                       <tr className={selectedLine?.id === line.id ? "is-selected" : ""} key={line.id}>
                         <td>
-                          <Link href={`/hr-admin/payroll-calculations?runId=${line.payroll_run_id}&calculationId=${line.calculation_id}&lineId=${line.id}`}>
+                          <Link href={calculationHref(currentParams, { runId: line.payroll_run_id, calculationId: line.calculation_id, lineId: line.id })}>
                             <strong>{line.employee_name}</strong>
                             <span>{line.employee_code}</span>
                           </Link>
                         </td>
                         <td>
-                          <Link href={`/hr-admin/payroll-calculations?runId=${line.payroll_run_id}&calculationId=${line.calculation_id}&lineId=${line.id}`}>
+                          <Link href={calculationHref(currentParams, { runId: line.payroll_run_id, calculationId: line.calculation_id, lineId: line.id })}>
                             <strong>{line.component_name}</strong>
                             <span>{line.component_code}</span>
                           </Link>
@@ -605,6 +779,17 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                   </tbody>
                 </table>
               </div>
+              {visibleLines.length > lineSize ? (
+                <PaginationControls
+                  ariaLabel="payroll calculation line pagination"
+                  currentParams={currentParams}
+                  page={pagedLines.page}
+                  pageParam="linePage"
+                  pageSize={pagedLines.pageSize}
+                  pageSizeParam="lineSize"
+                  totalPages={pagedLines.totalPages}
+                />
+              ) : null}
             </div>
           </div>
 

@@ -119,7 +119,7 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
       { refresh: false },
     );
     router.refresh();
-    router.push(`/hr-admin/payroll-settlements?runId=${selectedRun.id}&settlementId=${settlement.id}`);
+    router.push(`/hr-admin/payroll-settlements?tab=detail&runId=${selectedRun.id}&settlementId=${settlement.id}`);
   }
 
   async function act(action: "submit" | "approve" | "apply") {

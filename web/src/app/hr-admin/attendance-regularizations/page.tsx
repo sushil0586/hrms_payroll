@@ -40,10 +40,10 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
   ]);
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live regularization mode" : "Demo regularization mode"}
-        title="Attendance regularization queue for HR oversight."
+        title="Regularizations"
         description="Review correction requests across the tenant to understand operational bottlenecks, exception quality, and approval pressure."
         actions={<Link className="button button--secondary" href="/hr-admin/attendance-operations">Back to attendance operations</Link>}
         pills={["Server-driven review queue", "Status-focused triage", "In-context approval decisions"]}

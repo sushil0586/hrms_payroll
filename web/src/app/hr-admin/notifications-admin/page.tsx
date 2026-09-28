@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ActionMenu } from "@/components/patterns/action-menu";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { WorkspaceCard } from "@/components/patterns/workspace-card";
 import { getHrAdminNotificationDiagnostics, getHrAdminNotificationEvents, getHrAdminNotifications, getHrAdminNotificationOptions, getHrAdminNotificationTemplates } from "@/lib/api";
 
 import { OperationsGovernanceStrip } from "../operations-governance-strip";
@@ -35,9 +34,89 @@ export default async function HrAdminNotificationsAdminPage() {
   const riskiestChannel =
     channelSummaries.find((item) => item.failed_notification_count > 0 || item.retry_capped_count > 0) ?? channelSummaries[0] ?? null;
   const healthyEnabledChannels = channelSummaries.filter((item) => item.is_enabled && item.failed_notification_count === 0).length;
+  const attentionItems = [
+    {
+      eyebrow: "Queue response",
+      title: "Failed delivery",
+      description: "Retry failed notifications and inspect provider messages.",
+      href: "/hr-admin/notifications?status=failed",
+      cta: "Open failed queue",
+      count: failedNotifications,
+      tone: failedNotifications ? "blocked" : "ready",
+    },
+    {
+      eyebrow: "Channel health",
+      title: riskiestChannel ? `${riskiestChannel.label} watch` : "Channel health",
+      description: "Review channel pressure, retry caps, and routing health.",
+      href: "/hr-admin/notification-delivery",
+      cta: "Open delivery",
+      count: riskiestChannel?.failed_notification_count ?? 0,
+      tone: (riskiestChannel?.failed_notification_count ?? 0) ? "blocked" : "ready",
+    },
+    {
+      eyebrow: "Catalog hygiene",
+      title: "Inactive templates",
+      description: "Clean up templates that cannot be used by active events.",
+      href: "/hr-admin/notification-templates?status=inactive",
+      cta: "Review templates",
+      count: inactiveTemplates,
+      tone: inactiveTemplates ? "warning" : "ready",
+    },
+    {
+      eyebrow: "Verification",
+      title: "Untested active events",
+      description: "Validate live rules with preview and test-send coverage.",
+      href: "/hr-admin/notification-events?active=active",
+      cta: "Review events",
+      count: activeEventsWithoutTests,
+      tone: activeEventsWithoutTests ? "warning" : "ready",
+    },
+  ];
+  const workspaces = [
+    {
+      title: "Delivery",
+      description: "Channel settings, backend providers, sender identity, and failure recovery.",
+      href: "/hr-admin/notification-delivery",
+      cta: "Open delivery",
+      value: `${enabledChannels}/${optionsResult.data.channel_configurations.length}`,
+      label: "enabled",
+    },
+    {
+      title: "Templates",
+      description: "Reusable message content, placeholder readiness, and custom/system mix.",
+      href: "/hr-admin/notification-templates",
+      cta: "Manage templates",
+      value: templatesResult.data.length,
+      label: "templates",
+    },
+    {
+      title: "Events",
+      description: "Trigger routing, audience rules, channel priority, and linked templates.",
+      href: "/hr-admin/notification-events",
+      cta: "Manage events",
+      value: activeEvents,
+      label: "active rules",
+    },
+    {
+      title: "Diagnostics",
+      description: "Catalog weak spots, test-send history, channel failures, and next actions.",
+      href: "/hr-admin/notification-diagnostics",
+      cta: "Open diagnostics",
+      value: diagnosticsResult.data.overview.preview_test_notifications,
+      label: "test sends",
+    },
+    {
+      title: "Queue",
+      description: "Pending, sent, failed, and retry-ready notification activity.",
+      href: "/hr-admin/notifications",
+      cta: "Open queue",
+      value: notificationsResult.data.total_count,
+      label: "tracked",
+    },
+  ];
 
   return (
-    <main className="shell">
+    <main className="shell notification-shell">
       <PageIntro
         eyebrow={state === "live" ? "Live notifications" : "Demo notifications"}
         title="Notifications"
@@ -89,126 +168,57 @@ export default async function HrAdminNotificationsAdminPage() {
       </section>
 
       <section className="section">
-        <div className="workspace-grid-modern" style={{ marginBottom: 16 }}>
-          <WorkspaceCard
-            eyebrow="Queue response"
-            title="Failed delivery"
-            description="Move directly into failed notifications and retry-ready queue review."
-            href="/hr-admin/notifications?status=failed"
-            cta="Open failed queue"
-            className="workspace-card--compact"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Failed notifications", value: failedNotifications },
-              { label: "Current view", value: "Delivery recovery" },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Channel health"
-            title={riskiestChannel ? `${riskiestChannel.label} watch` : "Channel health"}
-            description="Open delivery controls with recent queue pressure and provider recovery context already in view."
-            href="/hr-admin/notification-delivery"
-            cta="Open channel health"
-            className="workspace-card--compact"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Failed tracked", value: riskiestChannel?.failed_notification_count ?? 0 },
-              { label: "Retry capped", value: riskiestChannel?.retry_capped_count ?? 0 },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Catalog hygiene"
-            title="Inactive templates"
-            description="Review dormant content blocks and archive or reactivate them deliberately."
-            href="/hr-admin/notification-templates?status=inactive"
-            cta="Review templates"
-            className="workspace-card--compact"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Inactive templates", value: inactiveTemplates },
-              { label: "Current view", value: "Template cleanup" },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Verification"
-            title="Untested active events"
-            description="Open the live event catalog and verify active routing with preview and test-send flows."
-            href="/hr-admin/notification-events?active=active"
-            cta="Review active events"
-            className="workspace-card--compact"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Untested active rules", value: activeEventsWithoutTests },
-              { label: "Current view", value: "Routing validation" },
-            ]}
-          />
-        </div>
-        <div className="workspace-grid-modern">
-          <WorkspaceCard
-            eyebrow="Delivery"
-            title="Delivery"
-            description="Control enabled channels, backends, and sender defaults without leaving HR admin."
-            href="/hr-admin/notification-delivery"
-            cta="Open delivery"
-            className="workspace-card--compact"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Configured channels", value: optionsResult.data.channel_configurations.length },
-              { label: "Enabled now", value: enabledChannels },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Templates"
-            title="Templates"
-            description="Manage reusable content and placeholders."
-            href="/hr-admin/notification-templates"
-            cta="Manage templates"
-            className="workspace-card--compact"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Templates", value: templatesResult.data.length },
-              { label: "Draft or inactive focus", value: templatesResult.data.filter((item) => item.status !== "active").length },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Events"
-            title="Events"
-            description="Adjust trigger routing and audiences."
-            href="/hr-admin/notification-events"
-            cta="Manage events"
-            className="workspace-card--compact"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Active rules", value: activeEvents },
-              { label: "Total events", value: eventsResult.data.length },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Diagnostics"
-            title="Diagnostics"
-            description="See weak templates, noisy events, and recent test notifications in one control view."
-            href="/hr-admin/notification-diagnostics"
-            cta="Open diagnostics"
-            className="workspace-card--compact"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Failed notifications", value: diagnosticsResult.data.overview.failed_notifications },
-              { label: "Test sends", value: diagnosticsResult.data.overview.preview_test_notifications },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Queue"
-            title="Queue"
-            description="Inspect pending, sent, and failed delivery."
-            href="/hr-admin/notifications"
-            cta="Open queue"
-            className="workspace-card--compact"
-            descriptionClassName="section-copy-soft"
-            details={[
-              { label: "Review window total", value: notificationsResult.data.total_count },
-              { label: "Current page", value: queuedNotifications },
-            ]}
-          />
+        <div className="notification-admin-layout">
+          <article className="card panel panel-card-soft">
+            <div className="section-header-row">
+              <div>
+                <h2 className="section-heading-soft">Needs attention</h2>
+                <p className="section-copy-soft">Start here when delivery health changes or diagnostics flags a weak spot.</p>
+              </div>
+              <span className="queue-summary-chip">
+                <strong>{failedNotifications + activeEventsWithoutTests + inactiveTemplates}</strong> signals
+              </span>
+            </div>
+            <div className="notification-admin-action-list">
+              {attentionItems.map((item) => (
+                <Link className="notification-admin-action-row" href={item.href} key={item.title}>
+                  <span className={`record-chip${item.tone === "blocked" ? " record-chip--danger" : item.tone === "warning" ? " record-chip--accent" : ""}`}>
+                    {item.count}
+                  </span>
+                  <span className="notification-admin-action-row__body">
+                    <span className="detail-label">{item.eyebrow}</span>
+                    <strong>{item.title}</strong>
+                    <span>{item.description}</span>
+                  </span>
+                  <span className="button button--secondary">{item.cta}</span>
+                </Link>
+              ))}
+            </div>
+          </article>
+
+          <article className="card panel panel-card-soft">
+            <div className="section-header-row">
+              <div>
+                <h2 className="section-heading-soft">Workspaces</h2>
+                <p className="section-copy-soft">One purpose per page: configure, author, route, diagnose, or recover delivery.</p>
+              </div>
+            </div>
+            <div className="notification-admin-workspace-list">
+              {workspaces.map((item) => (
+                <Link className="notification-admin-workspace-row" href={item.href} key={item.title}>
+                  <span className="notification-admin-workspace-row__metric">
+                    <strong>{item.value}</strong>
+                    <span>{item.label}</span>
+                  </span>
+                  <span className="notification-admin-workspace-row__body">
+                    <strong>{item.title}</strong>
+                    <span>{item.description}</span>
+                  </span>
+                  <span className="button button--ghost">{item.cta}</span>
+                </Link>
+              ))}
+            </div>
+          </article>
         </div>
         <div className="notice" style={{ marginTop: 16 }}>
           <strong>Document expiry automation.</strong>

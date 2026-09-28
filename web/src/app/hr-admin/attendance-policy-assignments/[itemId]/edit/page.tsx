@@ -17,10 +17,10 @@ export default async function HrAdminEditAttendancePolicyAssignmentPage({ params
   if (!item) notFound();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={itemsResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
-        title="Edit attendance policy assignment."
+        title="Edit attendance assignment"
         description="Fine-tune which organizational slices should inherit this attendance behavior and in what order."
         actions={<Link className="button button--secondary" href="/hr-admin/attendance-policy-assignments">Back to attendance assignments</Link>}
         pills={["Scope refinement", "Priority tuning", "Controlled rollout"]}

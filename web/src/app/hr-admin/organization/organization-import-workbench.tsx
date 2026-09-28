@@ -329,7 +329,19 @@ export function OrganizationImportWorkbench({ snapshot }: { snapshot: HrAdminOrg
 
   return (
     <section className="section" data-testid="organization-import-workbench">
-      <article className="panel-card-soft organization-import-workbench">
+      <details className="organization-workflow-disclosure panel-card-soft" data-testid="organization-import-disclosure">
+        <summary>
+          <span>
+            <strong>CSV import</strong>
+            <small>Open when loading many legal entities, locations, branches, departments, or employment types.</small>
+          </span>
+          <span className="queue-toolbar__meta">
+            <span className="queue-summary-chip"><strong>{readyCount}</strong> ready</span>
+            <span className="queue-summary-chip"><strong>{blockedCount}</strong> blocked</span>
+          </span>
+          <span className="button button--secondary button--compact">Open import</span>
+        </summary>
+      <article className="organization-import-workbench">
         <div className="tenant-console-panel__header">
           <div>
             <span className="workspace-card__eyebrow">Bulk onboarding</span>
@@ -394,10 +406,11 @@ export function OrganizationImportWorkbench({ snapshot }: { snapshot: HrAdminOrg
                   <td>{row.message || "Valid for import"}</td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+          </tbody>
+        </table>
+      </div>
       </article>
+      </details>
     </section>
   );
 }

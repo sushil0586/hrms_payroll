@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
-import { expectNoAppError, expectNoHorizontalOverflow, suppressBrowserTestNoise } from "../helpers/assertions";
+import { expectNoAppError, expectNoHorizontalOverflow } from "../helpers/assertions";
+import { gotoDemoHrAdmin } from "../helpers/hr-admin-ui-audit";
 
 function directoryPanel(page: Page) {
   return page.locator(".queue-toolbar").filter({ has: page.getByRole("heading", { name: "Employee directory" }) }).first();
@@ -20,19 +21,6 @@ function fieldByLabel(scope: Page | Locator, label: string) {
     .filter({ hasText: new RegExp(`^${label}`) })
     .locator("input, select, textarea")
     .first();
-}
-
-async function gotoDemoHrAdmin(page: Page, path: string) {
-  await page.context().addCookies([
-    {
-      name: "hrms_access_token",
-      value: "playwright-demo-token",
-      url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100",
-    },
-  ]);
-  await page.goto(path, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
-  await suppressBrowserTestNoise(page);
 }
 
 async function expectEmployeeWorkbenchReady(page: Page) {
@@ -144,7 +132,27 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
     await gotoDemoHrAdmin(page, "/hr-admin/employees");
     await expectEmployeeWorkbenchReady(page);
 
+    const importsDisclosure = page.locator(".employee-imports-disclosure").first();
     const employeeImport = page.getByTestId("employee-import-workbench");
+    const bankImport = page.getByTestId("employee-bank-import-workbench");
+    const managerImport = page.getByTestId("employee-manager-import-workbench");
+
+    if (await importsDisclosure.isVisible().catch(() => false)) {
+      await expect(importsDisclosure).toContainText("Bulk imports");
+      await expect(importsDisclosure).toContainText("Open only when loading employees, bank accounts, or manager mappings from CSV.");
+      if (await employeeImport.count()) {
+        await expect(employeeImport).toBeHidden();
+      }
+      if (await bankImport.count()) {
+        await expect(bankImport).toBeHidden();
+      }
+      if (await managerImport.count()) {
+        await expect(managerImport).toBeHidden();
+      }
+
+      await importsDisclosure.locator("summary").click();
+    }
+
     if (await employeeImport.isVisible().catch(() => false)) {
       await expect(employeeImport.getByRole("heading", { name: "Employee bulk import" })).toBeVisible();
       await expect(employeeImport.getByRole("link", { name: "Download template" })).toBeVisible();
@@ -154,7 +162,6 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
       await expect(employeeImport).toHaveCount(0);
     }
 
-    const bankImport = page.getByTestId("employee-bank-import-workbench");
     if (await bankImport.isVisible().catch(() => false)) {
       await expect(bankImport.getByRole("heading", { name: "Employee bank import" })).toBeVisible();
       await expect(bankImport.getByRole("button", { name: "Preview bank import" })).toBeVisible();
@@ -163,7 +170,6 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
       await expect(bankImport).toHaveCount(0);
     }
 
-    const managerImport = page.getByTestId("employee-manager-import-workbench");
     if (await managerImport.isVisible().catch(() => false)) {
       await expect(managerImport.getByRole("heading", { name: "Reporting manager import" })).toBeVisible();
       await expect(managerImport.getByRole("button", { name: "Preview manager import" })).toBeVisible();

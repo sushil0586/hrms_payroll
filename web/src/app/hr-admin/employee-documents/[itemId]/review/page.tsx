@@ -17,7 +17,7 @@ export default async function HrAdminEmployeeDocumentReviewPage({ params }: Page
   const [documentResult, optionsResult] = await Promise.all([getHrAdminEmployeeDocument(itemId), getHrAdminDocumentOptions()]);
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         eyebrow={documentResult.state === "live" && optionsResult.state === "live" ? "Live document mode" : "Demo document mode"}
         title="Review employee document"

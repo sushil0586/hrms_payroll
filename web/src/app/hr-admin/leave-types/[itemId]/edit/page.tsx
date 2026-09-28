@@ -18,10 +18,10 @@ export default async function HrAdminEditLeaveTypePage({ params }: PageProps) {
   if (!itemResult.data?.id) notFound();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
-        title="Edit leave type."
+        title="Edit leave type"
         description="Refine leave behavior without touching workflow or payroll code directly."
         actions={<Link className="button button--secondary" href="/hr-admin/leave-types">Back to leave types</Link>}
         pills={["Behavior refinement", "Approval and balance tuning", "Policy-linked building block"]}

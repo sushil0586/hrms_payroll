@@ -123,7 +123,7 @@ async function baselineCounts(page: Page) {
     managers: await optionCount(field(employeeMain, "Reporting manager")),
   };
 
-  await gotoAuthenticated(page, "/hr-admin/payroll-setup", hrAdmin);
+  await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions", hrAdmin);
   await assertPageShell(page, "Payroll Setup");
   const payrollSetup = page.locator("main");
   const payrollCounts = {
@@ -133,7 +133,7 @@ async function baselineCounts(page: Page) {
     assignmentEmployees: await optionCount(field(payrollSetup.getByTestId("pay-group-assignment-form"), "Employee")),
   };
 
-  await gotoAuthenticated(page, "/hr-admin/salary-setup", hrAdmin);
+  await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions", hrAdmin);
   await assertPageShell(page, "Salary Setup");
   const salarySetup = page.locator("main");
   const salaryCounts = {
@@ -282,7 +282,7 @@ async function createOrganizationPrerequisites(page: Page, suffix: string) {
 }
 
 async function createPayrollAndSalaryPrerequisites(page: Page, suffix: string) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-setup", hrAdmin);
+  await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions", hrAdmin);
   await assertPageShell(page, "Payroll Setup");
   const calendarForm = page.getByTestId("payroll-calendar-form");
   const periodForm = page.getByTestId("payroll-period-form");
@@ -343,7 +343,7 @@ async function createPayrollAndSalaryPrerequisites(page: Page, suffix: string) {
   );
   expect(payGroup.ok).toBeTruthy();
 
-  await gotoAuthenticated(page, "/hr-admin/salary-setup", hrAdmin);
+  await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions", hrAdmin);
   await assertPageShell(page, "Salary Setup");
   const structureForm = page.getByTestId("salary-structure-form");
   const versionForm = page.getByTestId("salary-version-form");
@@ -585,7 +585,7 @@ async function assignPayrollAndSalary(
   employee: CreatedEmployee,
   payroll: Awaited<ReturnType<typeof createPayrollAndSalaryPrerequisites>>,
 ) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-setup", hrAdmin);
+  await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions", hrAdmin);
   await assertPageShell(page, "Payroll Setup");
   const payGroupAssignmentForm = page.getByTestId("pay-group-assignment-form");
   const payGroupAssignment = await submitAndCapture<{ id: string }>(
@@ -604,7 +604,7 @@ async function assignPayrollAndSalary(
   );
   expect(payGroupAssignment.ok).toBeTruthy();
 
-  await gotoAuthenticated(page, "/hr-admin/salary-setup", hrAdmin);
+  await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions", hrAdmin);
   await assertPageShell(page, "Salary Setup");
   const salaryAssignmentForm = page.getByTestId("salary-assignment-form");
   const salaryAssignment = await submitAndCapture<{ id: string }>(
@@ -696,7 +696,7 @@ async function createPayrollRuleVersion(
 }
 
 async function createScenarioPayrollRules(page: Page, suffix: string): Promise<PayrollRules> {
-  await gotoAuthenticated(page, "/hr-admin/payroll-rules", hrAdmin);
+  await gotoAuthenticated(page, "/hr-admin/payroll-rules?tab=actions", hrAdmin);
   await assertPageShell(page, "Payroll Rules");
   const definitionForm = page.getByTestId("payroll-rule-definition-form");
   const versionForm = page.getByTestId("payroll-rule-version-form");

@@ -5,7 +5,7 @@ import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { ManagerDecisionPanel } from "@/app/mss/approvals/manager-decision-panel";
-import { getMssApprovalInbox } from "@/lib/api";
+import { getMssApprovalInbox, getMssAttendanceRegularizationDetail, getMssLeaveRequestDetail } from "@/lib/api";
 import { requireWorkspaceAccess, sessionHasPermission } from "@/lib/workspace-access";
 import type {
   AttendanceRegularizationItem,
@@ -83,11 +83,14 @@ function buildHref(
   return queryString ? `${basePath}?${queryString}` : basePath;
 }
 
-function resolveSelectedItem<T extends { id: string }>(items: T[], selectedId?: string) {
+function resolveSelectedItem<T extends { id: string }>(items: T[], selectedId?: string, selectedDetail?: T | null) {
   if (selectedId) {
     const selected = items.find((item) => item.id === selectedId);
     if (selected) {
       return selected;
+    }
+    if (selectedDetail?.id === selectedId) {
+      return selectedDetail;
     }
   }
   return items[0] ?? null;
@@ -107,16 +110,20 @@ function LeaveApprovalSection({
   response,
   state,
   canApproveLeave,
+  selectedDetail,
 }: {
   currentParams: Record<string, SearchParamValue>;
   response: ManagerLeaveApprovalListResponse;
   state: "live" | "demo";
   canApproveLeave: boolean;
+  selectedDetail?: LeaveRequestItem | null;
 }) {
   const items = response.items;
   const page = Math.max(Number(normalizeParam(currentParams.leavePage) || String(response.page)) || response.page, 1);
   const totalPages = Math.max(1, Math.ceil(response.total_count / response.page_size));
-  const selected = resolveSelectedItem(items, normalizeParam(currentParams.leaveId));
+  const selectedId = normalizeParam(currentParams.leaveId);
+  const selected = resolveSelectedItem(items, selectedId, selectedDetail);
+  const selectedOutsidePage = Boolean(selectedId && selectedDetail?.id === selectedId && !items.some((item) => item.id === selectedId));
 
   return (
     <section className="section queue-review-split">
@@ -177,6 +184,12 @@ function LeaveApprovalSection({
         </div>
         {selected ? (
           <>
+            {selectedOutsidePage ? (
+              <div className="notice notice--compact">
+                <strong>Opened from direct link.</strong>
+                <span className="muted">This approval is selected even though it is outside the current queue page.</span>
+              </div>
+            ) : null}
             <div className="detail-grid">
               <DetailRow label="Request Type" value={requestActionLabel(selected.request_action)} />
               <DetailRow label="Employee" value={`${selected.employee_name || "Unknown"} (${selected.employee_code || "N/A"})`} />
@@ -237,16 +250,20 @@ function RegularizationApprovalSection({
   response,
   state,
   canReviewAttendance,
+  selectedDetail,
 }: {
   currentParams: Record<string, SearchParamValue>;
   response: ManagerAttendanceApprovalListResponse;
   state: "live" | "demo";
   canReviewAttendance: boolean;
+  selectedDetail?: AttendanceRegularizationItem | null;
 }) {
   const items = response.items;
   const page = Math.max(Number(normalizeParam(currentParams.regPage) || String(response.page)) || response.page, 1);
   const totalPages = Math.max(1, Math.ceil(response.total_count / response.page_size));
-  const selected = resolveSelectedItem(items, normalizeParam(currentParams.regId));
+  const selectedId = normalizeParam(currentParams.regId);
+  const selected = resolveSelectedItem(items, selectedId, selectedDetail);
+  const selectedOutsidePage = Boolean(selectedId && selectedDetail?.id === selectedId && !items.some((item) => item.id === selectedId));
 
   return (
     <section className="section queue-review-split">
@@ -302,6 +319,12 @@ function RegularizationApprovalSection({
         </div>
         {selected ? (
           <>
+            {selectedOutsidePage ? (
+              <div className="notice notice--compact">
+                <strong>Opened from direct link.</strong>
+                <span className="muted">This regularization is selected even though it is outside the current queue page.</span>
+              </div>
+            ) : null}
             <div className="detail-grid">
               <DetailRow label="Employee" value={`${selected.employee_name || "Unknown"} (${selected.employee_code || "N/A"})`} />
               <DetailRow label="Attendance Date" value={formatDate(selected.attendance_date)} />
@@ -362,6 +385,16 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
     include_leave: canApproveLeave,
     include_regularizations: canReviewAttendance,
   });
+  const selectedLeaveId = normalizeParam(currentParams.leaveId);
+  const selectedRegularizationId = normalizeParam(currentParams.regId);
+  const [selectedLeaveDetail, selectedRegularizationDetail] = await Promise.all([
+    selectedLeaveId && canApproveLeave && !pendingLeave.items.some((item) => item.id === selectedLeaveId)
+      ? getMssLeaveRequestDetail(selectedLeaveId).then((result) => result.data).catch(() => null)
+      : Promise.resolve(null),
+    selectedRegularizationId && canReviewAttendance && !pendingRegularizations.items.some((item) => item.id === selectedRegularizationId)
+      ? getMssAttendanceRegularizationDetail(selectedRegularizationId).then((result) => result.data).catch(() => null)
+      : Promise.resolve(null),
+  ]);
   const inboxState = state === "live" ? "live" : "demo";
 
   return (
@@ -430,9 +463,9 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
       </section>
 
       {queue === "attendance" ? (
-        <RegularizationApprovalSection currentParams={currentParams} response={pendingRegularizations} state={inboxState} canReviewAttendance={canReviewAttendance} />
+        <RegularizationApprovalSection currentParams={currentParams} response={pendingRegularizations} state={inboxState} canReviewAttendance={canReviewAttendance} selectedDetail={selectedRegularizationDetail} />
       ) : (
-        <LeaveApprovalSection currentParams={currentParams} response={pendingLeave} state={inboxState} canApproveLeave={canApproveLeave} />
+        <LeaveApprovalSection currentParams={currentParams} response={pendingLeave} state={inboxState} canApproveLeave={canApproveLeave} selectedDetail={selectedLeaveDetail} />
       )}
 
       {inboxState === "demo" ? (

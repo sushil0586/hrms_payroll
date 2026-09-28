@@ -119,13 +119,11 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern document-child-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>Employee document upload</h2>
-          <p className="section-copy">
-            Add a new employee artifact with structured metadata so review, expiry tracking, and verification start from a clean record.
-          </p>
+          <p className="section-copy">Add an employee file with enough metadata for verification and expiry tracking.</p>
         </div>
 
         <FormSection
@@ -204,13 +202,16 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
           </div>
         ) : null}
 
-        <div className="form-shell-card__actions">
-          <button className="button button--primary" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Uploading..." : "Upload document"}
-          </button>
-          <button className="button button--secondary" onClick={() => router.push("/hr-admin/employee-documents")} type="button">
-            Cancel
-          </button>
+        <div className="form-actions-bar">
+          <span className="muted">This upload returns to the document queue after the record is created.</span>
+          <div className="form-actions-bar__buttons">
+            <button className="button button--secondary" onClick={() => router.push("/hr-admin/employee-documents")} type="button">
+              Cancel
+            </button>
+            <button className="button button--primary" disabled={isSubmitting} type="submit">
+              {isSubmitting ? "Uploading..." : "Upload document"}
+            </button>
+          </div>
         </div>
       </section>
     </form>

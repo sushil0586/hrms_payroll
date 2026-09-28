@@ -47,7 +47,7 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
   const seededInView = filteredTemplates.filter((item) => item.is_system_seeded).length;
 
   return (
-    <main className="shell">
+    <main className="shell notification-shell">
       <PageIntro
         eyebrow={result.state === "live" ? "Live notification mode" : "Demo notification mode"}
         title="Notification templates"
@@ -137,43 +137,59 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
         </section>
       </section>
 
-      <section className="section queue-layout">
-        <div className="queue-list">
-          {filteredTemplates.map((item) => (
-            <article className="record-card" key={item.id}>
-              <div className="record-card__header">
-                <div className="record-card__title-wrap">
-                  <div className="record-card__title">
-                    <h2>{item.name}</h2>
-                  </div>
-                  <div className="record-card__eyebrow">
-                    <span className="record-chip record-chip--accent">{item.channel}</span>
-                    <span className="record-chip">{item.status}</span>
-                    <span className="record-chip">{item.is_system_seeded ? "system seeded" : "custom"}</span>
-                  </div>
-                  <p className="section-copy">{item.code}</p>
-                </div>
-                <div className="record-card__actions">
-                  <Link className="button button--secondary" href={`/hr-admin/notification-templates/${item.id}/edit`}>
-                    Edit
-                  </Link>
-                  <Link className="button button--ghost" href={`/hr-admin/notifications?channel=${encodeURIComponent(item.channel)}`}>
-                    Queue
-                  </Link>
-                </div>
-              </div>
-              <div className="detail-grid">
-                <div className="detail-row">
-                  <span className="detail-label">Status</span>
-                  <span className="detail-value">{item.status}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">System seeded</span>
-                  <span className="detail-value">{item.is_system_seeded ? "Yes" : "No"}</span>
-                </div>
-              </div>
-            </article>
-          ))}
+      <section className="section">
+        <div className="card panel panel-card-soft notification-catalog-panel">
+          <div className="section-header-row">
+            <div>
+              <h2 className="section-heading-soft">Template catalog</h2>
+              <p className="section-copy-soft">Edit content or jump to matching queue activity from one compact register.</p>
+            </div>
+            <span className="queue-summary-chip">
+              <strong>{filteredTemplates.length}</strong> shown
+            </span>
+          </div>
+          {filteredTemplates.length ? (
+            <div className="notification-table-scroll">
+              <table className="notification-catalog-table">
+                <thead>
+                  <tr>
+                    <th>Template</th>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>Source</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTemplates.map((item) => (
+                    <tr key={item.id}>
+                      <td data-label="Template">
+                        <strong>{item.name}</strong>
+                        <span>{item.code}</span>
+                      </td>
+                      <td data-label="Channel">
+                        <span className="record-chip record-chip--accent">{item.channel}</span>
+                      </td>
+                      <td data-label="Status">
+                        <span className={`record-chip${item.status === "active" ? "" : " record-chip--accent"}`}>{item.status}</span>
+                      </td>
+                      <td data-label="Source">{item.is_system_seeded ? "System seeded" : "Custom"}</td>
+                      <td data-label="Actions">
+                        <div className="notification-row-actions">
+                          <Link className="button button--secondary" href={`/hr-admin/notification-templates/${item.id}/edit`}>
+                            Edit
+                          </Link>
+                          <Link className="button button--ghost" href={`/hr-admin/notifications?channel=${encodeURIComponent(item.channel)}`}>
+                            Queue
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
           {filteredTemplates.length === 0 ? (
             <div className="card panel panel-card-soft">
               <strong>No templates match the current filters.</strong>

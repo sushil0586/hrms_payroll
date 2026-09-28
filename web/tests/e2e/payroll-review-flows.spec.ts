@@ -9,9 +9,12 @@ test.describe("HR admin payroll review flows", () => {
     await expectPageReady(page, "Payroll Review");
 
     await expect(page.getByRole("heading", { name: "Review queue" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Payroll review desk" })).toBeVisible();
+    await expect(page.getByText("Selected review").first()).toBeVisible();
     await expect(page.getByText("Exception register").first()).toBeVisible();
     await expect(page.getByText("Approval trail").first()).toBeVisible();
     await expect(page.getByText("Final lock").first()).toBeVisible();
+    await expect(page.getByText("Selected exception").or(page.getByText("No exception selected")).first()).toBeVisible();
 
     const exceptionLink = page.locator("main table a[href*='exceptionId=']").first();
     if (await exceptionLink.isVisible().catch(() => false)) {

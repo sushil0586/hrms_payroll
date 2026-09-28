@@ -1,6 +1,6 @@
 # Payroll Readiness Redesign
 
-Last updated: 2026-09-24
+Last updated: 2026-09-28
 Owner: HRMS product/UX redesign track
 Pilot screen: `/hr-admin/payroll-readiness`
 
@@ -953,7 +953,7 @@ Compatibility updates:
 
 ### Phase 6: Visual And Responsive QA
 
-Status: Pending
+Status: Complete for Phase 6A command-center stabilization, Phase 6B payroll-cycle consistency, Phase 6C.0 payroll navigation split, Phase 6C.1 Payroll Setup, Phase 6C.2 Salary Setup, Phase 6C.3 Payroll Rules, Phase 6C.4 Statutory, Phase 6C.5 Providers, and Phase 6C.6 Adjustments & Settlements
 
 Viewports:
 
@@ -976,7 +976,60 @@ Checks:
 
 Output:
 
-- Visual pass/fail report with screenshots as needed.
+- Payroll Readiness now uses compact command-center typography, right-aligned primary action groups, calmer issue/setup cards, and a reduced payroll cycle journey so Summary owns the primary decision.
+- Browser certification now verifies Summary, Issues, Employees, Setup Health, and Evidence navigation plus right-aligned actions on the main decision card, issue cards, employee filter form, and setup cards.
+- Phase 6B extends the same compact payroll cycle contract to Inputs, Calculation, Review, Outputs, and Handoff so route-to-route movement does not feel like a different product.
+- Phase 6B typography checks protect compact H1 sizing, right-aligned page actions on desktop, hidden duplicate next-action panels, wrapped payroll run names, wrapped cards/chips, and no horizontal overflow.
+- Phase 6C.0 changes the sidebar from payroll cycle steps to seven payroll admin areas: Payroll Control, Payroll Setup, Salary Setup, Payroll Rules, Statutory, Providers, and Adjustments & Settlements.
+- Payroll cycle steps remain reachable inside Payroll Control, while Settlements is treated as a child workflow under Adjustments & Settlements.
+- Payroll Setup, Salary Setup, Payroll Rules, Statutory, Providers, Adjustments, and Settlements now follow focused tabbed workspace patterns so review grids, selected details, and maintenance/action controls no longer compete on the first screen.
+
+Verification:
+
+- `pnpm --dir web typecheck` passed for Phase 6A.
+- `pnpm --dir web lint` passed for Phase 6A.
+- `pnpm --dir web build` passed for Phase 6A.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-cycle-phase11-certification.spec.ts --project=chromium --workers=1` passed for Phase 6A.
+- `pnpm --dir web typecheck` passed for Phase 6B.
+- `pnpm --dir web lint` passed for Phase 6B.
+- `pnpm --dir web build` passed for Phase 6B.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-cycle-phase11-certification.spec.ts --project=chromium --workers=1` passed for Phase 6B.
+- `pnpm --dir web typecheck` passed for Phase 6C.0.
+- `pnpm --dir web lint` passed for Phase 6C.0.
+- `pnpm --dir web build` passed for Phase 6C.0.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-navigation-control-center-95.spec.ts --project=chromium --workers=1` passed for Phase 6C.0.
+- `pnpm --dir web typecheck` passed for Phase 6C.2.
+- `pnpm --dir web lint` passed for Phase 6C.2.
+- `pnpm --dir web build` passed for Phase 6C.2.
+- `pnpm --dir web exec playwright test tests/e2e/salary-setup-flows.spec.ts --project=chromium --workers=1` passed for Phase 6C.2.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium --workers=1` passed for Phase 6C.2.
+- `pnpm --dir web exec playwright test tests/e2e/phase8c-form-keyboard-accessibility.spec.ts --project=chromium --grep "Salary Setup" --workers=1` passed for Phase 6C.2.
+- `pnpm --dir web typecheck` passed for Phase 6C.3.
+- `pnpm --dir web lint` passed for Phase 6C.3.
+- `pnpm --dir web build` passed for Phase 6C.3.
+- `pnpm --dir web exec playwright test tests/e2e/payroll-rules-flows.spec.ts --project=chromium --workers=1` passed for Phase 6C.3.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium --workers=1` passed for Phase 6C.3.
+- `pnpm --dir web typecheck` passed for Phase 6C.4.
+- `pnpm --dir web lint` passed for Phase 6C.4.
+- `pnpm --dir web build` passed for Phase 6C.4.
+- `pnpm --dir web exec playwright test tests/e2e/payroll-statutory-flows.spec.ts --project=chromium` passed for Phase 6C.4.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium --workers=1` passed for Phase 6C.4.
+- `pnpm --dir web exec playwright test tests/e2e/phase8c-form-keyboard-accessibility.spec.ts --project=chromium --grep "Payroll Statutory" --workers=1` passed for Phase 6C.4.
+- `pnpm --dir web typecheck` passed for Phase 6C.5.
+- `pnpm --dir web lint` passed for Phase 6C.5.
+- `pnpm --dir web build` passed for Phase 6C.5.
+- `pnpm --dir web exec playwright test tests/e2e/payroll-providers-flows.spec.ts --project=chromium` passed for Phase 6C.5.
+- `pnpm --dir web exec playwright test tests/e2e/provider-certification-center-certification.spec.ts --project=chromium --workers=1` passed for Phase 6C.5.
+- `pnpm --dir web exec playwright test tests/e2e/phase9e-provider-ready-rehearsal.spec.ts --project=chromium --workers=1` passed for Phase 6C.5.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium --workers=1` passed for Phase 6C.5.
+- `pnpm --dir web typecheck` passed for Phase 6C.6.
+- `pnpm --dir web lint` passed for Phase 6C.6.
+- `pnpm --dir web build` passed for Phase 6C.6.
+- `pnpm --dir web exec playwright test tests/e2e/payroll-adjustments-flows.spec.ts --project=chromium` passed for Phase 6C.6.
+- `pnpm --dir web exec playwright test tests/e2e/payroll-settlements-flows.spec.ts --project=chromium` passed for Phase 6C.6.
+- `pnpm --dir web exec playwright test tests/e2e/pilot-100-adjustments-settlements-close-certification.spec.ts --project=chromium --workers=1` passed for Phase 6C.6.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium --workers=1` passed for Phase 6C.6.
+- `backend/.venv/bin/python backend/manage.py check` passed after the setup payload ordering fix.
 
 ### Phase 7: Manual User Review
 
@@ -1056,6 +1109,311 @@ Payroll Readiness is complete only when:
 | 2026-09-24 | Blocked payroll should not proceed directly; Warning can proceed only with confirmation when feasible. |
 | 2026-09-24 | Historical readiness snapshots and owner assignment are deferred from the first implementation pass. |
 | 2026-09-24 | Summary should show the top three blockers and link to Issues for the full list. |
+| 2026-09-26 | Payroll sidebar should show seven admin areas, not every cycle step; cycle pages should highlight Payroll Control, and settlements should highlight Adjustments & Settlements. |
+| 2026-09-26 | Phase 6C.1 Payroll Setup should open as a review-first workspace with tabs for Overview, Calendars & Periods, Pay Groups, Assignments, and Setup Actions; long grids require pagination and CRUD forms should not crowd the default screen. |
+| 2026-09-26 | Phase 6C.2 Salary Setup should use the same review-first pattern: Overview, Components, Structures, Assignments, and Setup Actions; salary import and CRUD controls belong behind Setup Actions with stable anchors. |
+| 2026-09-26 | Phase 6C.3 Payroll Rules should separate rule definitions, versions, and trace evidence into tabs; rule/version forms should live behind Setup Actions with stable anchors. |
+| 2026-09-26 | Phase 6C.4 Statutory should separate readiness, proof declarations, compliance filings, component catalog, and maintenance controls into tabs; statutory import and CRUD controls belong behind Setup Actions with stable anchors. |
+| 2026-09-27 | Phase 6C.5 Providers should separate provider launch readiness, connection certification, schema mapping, delivery failure evidence, and adapter/client/storage registry into tabs so certification actions remain clear without overcrowding the default page. |
+| 2026-09-27 | Phase 6C.6 Adjustments & Settlements should separate overview, register, selected detail, and lifecycle actions so exception review and F&F certification do not crowd one screen. |
+| 2026-09-27 | Phase 6C.7 Setup Actions hardening should split dense maintenance consoles into second-level action tabs so setup forms are handled one responsibility at a time: calendars, periods, pay groups, salary components, structures, versions, lines, rules, statutory catalog, compliance, profiles, declarations, and imports. |
+| 2026-09-27 | Phase 6C.8 should certify payroll cycle child pages after setup-action hardening: Inputs, Calculations, Review, Outputs, and Handoff must keep links, buttons, run selections, and setup-driven helper flows aligned with the new tabbed setup actions. |
+
+## Phase 6C.1 Payroll Setup Outcome
+
+Status: Passed
+
+What changed:
+
+- Default screen is now a setup overview with clear coverage metrics and right-aligned next actions.
+- Calendars, periods, pay groups, and assignments are separated into focused tabs.
+- Long setup tables include page-size controls and first/previous/next/last pagination.
+- Create/edit forms remain browser-operable under Setup Actions and have stable anchors for direct links.
+- Payroll Setup tests now enter Setup Actions for form workflows instead of expecting every form on the first screen.
+
+Quality checks:
+
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web build` passed.
+- `payroll-setup-flows.spec.ts` passed: 3/3.
+- `hr-admin-payroll-ui-audit.spec.ts` passed: 1/1.
+- `phase8c-form-keyboard-accessibility.spec.ts --grep "Payroll Setup"` passed: 1/1.
+- Full `phase8c-form-keyboard-accessibility.spec.ts` had Payroll Setup pass, but the total suite still has unrelated failures on Attendance records review window and Tenant Admin Console heading expectations.
+
+## Phase 6C.2 Salary Setup Outcome
+
+Status: Passed
+
+What changed:
+
+- Default screen is now a compact salary setup overview with coverage metrics and clear next actions.
+- Components, structures, versions, lines, and employee assignments are separated into focused review tabs.
+- Long salary setup grids have page-size controls and first/previous/next/last pagination.
+- Salary import and all component/structure/version/line/assignment forms live under Setup Actions with stable anchors.
+- Existing salary setup form workflows now open Setup Actions directly, keeping the first screen review-oriented.
+
+Quality checks:
+
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web build` passed.
+- `salary-setup-flows.spec.ts` passed: 4/4.
+- `hr-admin-payroll-ui-audit.spec.ts` passed: 1/1.
+- `phase8c-form-keyboard-accessibility.spec.ts --grep "Salary Setup"` passed: 1/1.
+
+## Phase 6C.3 Payroll Rules Outcome
+
+Status: Passed
+
+What changed:
+
+- Default screen is now a compact rule engine overview with governance metrics and clear next actions.
+- Rule definitions, effective-dated versions, locked input snapshots, and evaluation traces are separated into focused tabs.
+- Rule and version grids include pagination where they can grow.
+- Rule definition and rule version forms live under Setup Actions with stable anchors.
+- Existing payroll rule creation workflows now open Setup Actions directly, keeping the first screen review-oriented.
+
+Quality checks:
+
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web build` passed.
+- `payroll-rules-flows.spec.ts` passed: 2/2.
+- `hr-admin-payroll-ui-audit.spec.ts` passed: 1/1.
+
+## Phase 6C.4 Statutory Outcome
+
+Status: Passed
+
+What changed:
+
+- Default screen is now a compact statutory overview with setup coverage, proof lock, filing risk, and clear next actions.
+- Declarations, compliance filings, component catalog, and maintenance controls are separated into focused tabs.
+- Declaration, component, registration, and filing lists have page-size controls and first/previous/next/last pagination.
+- Statutory profile import and all pack/component/slab/registration/filing/profile/declaration/proof forms live under Setup Actions with stable anchors.
+- Existing statutory browser workflows now open Setup Actions directly, keeping the first screen review-oriented.
+
+Quality checks:
+
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web build` passed.
+- `payroll-statutory-flows.spec.ts` passed: 4/4.
+- `hr-admin-payroll-ui-audit.spec.ts` passed: 1/1.
+- `phase8c-form-keyboard-accessibility.spec.ts --grep "Payroll Statutory"` passed: 1/1.
+
+## Phase 6C.5 Providers Outcome
+
+Status: Passed
+
+What changed:
+
+- Default screen is now a compact provider overview focused on launch rehearsal and certification gates.
+- Connections, Mapping, Delivery, and Registry are separated into focused tabs so provider certification, schema packs, callback/retry failures, and adapter/client/storage readiness do not crowd one page.
+- Provider connection links preserve the selected provider context across tabs.
+- Certification, launch rehearsal, evidence export, guarded recovery endpoints, and unauthorized-access checks remain browser-covered.
+- Existing provider launch rehearsal workflows now open the Connections tab for provider selection before returning to Overview for rehearsal.
+
+Quality checks:
+
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web build` passed.
+- `payroll-providers-flows.spec.ts` passed: 1/1.
+- `provider-certification-center-certification.spec.ts` passed: 2/2.
+- `phase9e-provider-ready-rehearsal.spec.ts` passed: 1/1.
+- `hr-admin-payroll-ui-audit.spec.ts` passed: 1/1.
+
+## Phase 6C.6 Adjustments & Settlements Outcome
+
+Status: Passed
+
+What changed:
+
+- Payroll Adjustments now opens to a compact overview focused on run profile, exception totals, and next actions.
+- Adjustment register, selected adjustment detail, and certification actions are separated into URL-addressable tabs.
+- Payroll Settlements now opens to a compact overview focused on full-and-final orchestration, package totals, and next actions.
+- Settlement register, selected settlement detail/lines, and certification actions are separated into URL-addressable tabs.
+- Create actions now route to the Detail tab for immediate inspection, while submit/approve/apply controls remain in Actions.
+
+Quality checks:
+
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web build` passed.
+- `payroll-adjustments-flows.spec.ts` passed: 1/1.
+- `payroll-settlements-flows.spec.ts` passed: 1/1.
+- `pilot-100-adjustments-settlements-close-certification.spec.ts` passed: 1/1.
+- `hr-admin-payroll-ui-audit.spec.ts` passed: 1/1.
+- `backend/.venv/bin/python backend/manage.py check` passed.
+
+## Phase 6C.7 Setup Actions Hardening Outcome
+
+Status: Passed
+
+What changed:
+
+- Payroll Setup actions now use second-level tabs for Calendars, Periods, Pay Groups, and Assignments.
+- Salary Setup actions now use second-level tabs for Import, Components, Structures, Versions, Lines, and Assignments.
+- Payroll Rules actions now use second-level tabs for Definitions and Versions.
+- Statutory Setup actions now use second-level tabs for Import, Catalog, Compliance, Profiles, and Declarations.
+- Existing form anchors and test IDs remain stable, so direct links and browser automation still work while the UI is less crowded.
+
+Quality checks:
+
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web lint` passed.
+- Focused Playwright setup/action suite passed: 13/13.
+- Covered specs: `payroll-setup-flows.spec.ts`, `salary-setup-flows.spec.ts`, `payroll-rules-flows.spec.ts`, and `payroll-statutory-flows.spec.ts`.
+
+## Phase 6C.8 Payroll Cycle Certification Sweep Outcome
+
+Status: Passed
+
+What changed:
+
+- Payroll core UI audit passed across the payroll route set without requiring cycle-page UI changes.
+- Payroll Inputs browser setup helper now opens the Periods action tab before creating a payroll period, matching the new tabbed setup UX.
+- Inputs, Calculations, Review, Outputs, and Handoff remain browser-covered after setup-action hardening.
+
+Quality checks:
+
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web build` passed.
+- `hr-admin-payroll-ui-audit.spec.ts` passed: 1/1.
+- Payroll cycle flow pack passed: 6/6.
+
+## Phase 6C.9 Salary Setup Action Guidance Outcome
+
+Status: Passed
+
+What changed:
+
+- Salary Setup action tabs now expose the active action in markup and use the shared three-step setup workflow strip.
+- Import, versions, lines, and assignments now show dependency guidance before users hit disabled or confusing form states.
+- Component, structure, version, line, and assignment forms keep the same action-panel rhythm: focused tab, short workflow guidance, form, paginated record list, and right-aligned action area.
+- Salary Setup action tab structure is now protected by a browser test that clicks every action tab and checks fields, sidecar, workflow region, record list, and no horizontal overflow.
+
+Quality checks:
+
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web exec playwright test tests/e2e/salary-setup-flows.spec.ts --project=chromium` passed: 5/5.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium` passed: 1/1.
+
+## Phase 6C.10 Payroll Rules Versions And Trace Outcome
+
+Status: Passed
+
+What changed:
+
+- Payroll Rules Versions now opens with a compact workbench guide that explains the rule rail, version inspection, and edit path.
+- Payroll Rules Trace now opens with a compact workbench guide that explains locked inputs, stored evaluations, and evidence validation.
+- Version and evaluation cards now mark the record currently driving the detail panel, reducing ambiguity in the drilldown flow.
+- The versions and trace tabs keep pagination and selected-detail behavior while using the shared payroll typography and compact card rhythm.
+
+Quality checks:
+
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web exec playwright test tests/e2e/payroll-rules-flows.spec.ts --project=chromium` passed: 2/2.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium` passed: 1/1.
+
+## Phase 6C.11 Payroll Inputs, Calculations, And Review Outcome
+
+Status: Passed
+
+What changed:
+
+- Payroll Inputs now opens with a compact three-step guide for selecting a run, inspecting employee snapshots, and locking inputs.
+- Payroll Calculations now opens with a compact three-step guide for selecting a run, checking readiness, and inspecting calculated lines.
+- Payroll Review now opens with a compact three-step guide for selecting a review, resolving exceptions, and approving or final-locking the run.
+- Selected run, snapshot, calculation line, review, and exception context is now explicitly labeled so the active drilldown is easier to understand.
+- The guide styling reuses the shared payroll workbench typography instead of introducing page-specific font treatment.
+
+Quality checks:
+
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web typecheck` passed.
+- `pnpm --dir web exec playwright test tests/e2e/payroll-inputs-flows.spec.ts --project=chromium` passed: 2/2.
+- `pnpm --dir web exec playwright test tests/e2e/payroll-calculations-flows.spec.ts --project=chromium` passed: 1/1.
+- `pnpm --dir web exec playwright test tests/e2e/payroll-review-flows.spec.ts --project=chromium` passed: 1/1.
+- `pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium` passed: 1/1.
+
+## Phase 6C.12 Payroll Outputs And Handoff Outcome
+
+Status: Passed
+
+What changed:
+
+- Payroll Outputs now opens with a compact workflow guide for selecting batches, inspecting artifacts, and publishing or creating finance handoff.
+- Payroll Handoff now opens with a compact workflow guide for selecting finance packages, reviewing provider evidence, and closing the handoff.
+- Selected batch, handoff, and artifact context is explicitly labeled so the active drilldown is visible in the rail and detail panel.
+- Existing pagination, publish, handoff, provider evidence, and audit-pack controls remain in their current workflow positions.
+
+Quality checks:
+
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web typecheck` passed.
+- `HRMS_API_BASE_URL=http://127.0.0.1:8010/api/v1 pnpm --dir web exec playwright test tests/e2e/payroll-outputs-flows.spec.ts --project=chromium` passed: 1/1.
+- `HRMS_API_BASE_URL=http://127.0.0.1:8010/api/v1 pnpm --dir web exec playwright test tests/e2e/payroll-handoff-flows.spec.ts --project=chromium` passed: 1/1.
+- `HRMS_API_BASE_URL=http://127.0.0.1:8010/api/v1 pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium` passed: 1/1.
+
+## Phase 6C.13 Payroll Smoothness Audit Outcome
+
+Status: Passed
+
+What changed:
+
+- Payroll core UI audit now includes a section smoothness gate across every payroll route.
+- The new audit checks compact heading scale, safe heading line-height, unclipped button/badge/workflow text, wrap-capable action rows, table pagination for long grids, and scroll containment for wide tables.
+- The smoothness check sits alongside existing font-family, tab-structure, link, control-collision, and horizontal-overflow checks so future payroll screens inherit the same quality bar.
+
+Quality checks:
+
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web typecheck` passed.
+- `HRMS_API_BASE_URL=http://127.0.0.1:8010/api/v1 pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium` passed: 1/1.
+
+## Phase 6C.14 Browser Screenshot Payroll Review Outcome
+
+Status: Passed
+
+What changed:
+
+- Captured browser screenshots for the payroll page family at `web/qa-artifacts/payroll-visual-review-20260928/`.
+- Reviewed each payroll page from an HR-admin/finance-manager lens for typography consistency, grid alignment, page density, action placement, selected-state clarity, and drilldown smoothness.
+- Fixed Payroll Statutory metric cards, which were visually rendering as oversized stacked rows instead of the shared compact payroll metric grid.
+- Confirmed Payroll Control, Payroll Setup, Salary Setup, Payroll Rules, Statutory, Providers, Adjustments, Settlements, Inputs, Calculations, Review, Outputs, and Handoff now follow the shared compact payroll typography and section rhythm.
+
+Quality checks:
+
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web typecheck` passed.
+- `HRMS_API_BASE_URL=http://127.0.0.1:8010/api/v1 pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium` passed: 1/1.
+
+## Phase 6C.15 Payroll Workflow Certification Outcome
+
+Status: Passed
+
+What changed:
+
+- Payroll Rules and Payroll Statutory empty states now stay inside their table shells, preserving headers and pagination affordances even when the selected filter has no records.
+- Payroll Adjustment tabs now keep `adjustmentId` only on detail/action routes, so run-level tabs no longer look like record drilldowns.
+- Payroll Adjustment browser coverage now verifies `Source hash` inside the actual detail panel instead of matching hidden navigation copy.
+- Local certification data was prepared with realistic pilot payroll states: setup masters, provider governance, adjustments, settlements, calculation-review, and close-gate runs.
+
+Quality checks:
+
+- Setup masters passed: `payroll-setup-flows`, `salary-setup-flows`, `payroll-rules-flows`, and `payroll-statutory-flows`: 15/15.
+- Provider governance passed: `payroll-providers-flows`, `provider-certification-center-certification`, and provider rehearsal: 4/4.
+- Adjustments, settlements, and close-gate certification passed: 3/3.
+- Payroll cycle child pages passed: inputs, calculations, review, outputs, and handoff: 6/6.
+- Broad payroll UI audit passed: `HRMS_API_BASE_URL=http://127.0.0.1:8010/api/v1 pnpm --dir web exec playwright test tests/e2e/hr-admin-payroll-ui-audit.spec.ts --project=chromium --workers=1`: 1/1.
+- `pnpm --dir web lint` passed.
+- `pnpm --dir web typecheck` passed.
 
 ## Open Questions
 

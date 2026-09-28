@@ -72,7 +72,7 @@ test.describe("Phase PLF-5A TDS e-file readiness certification", () => {
     await page.goto("/hr-admin/reports/tds-efile-readiness", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("tds-efile-readiness-report")).toHaveCount(0);
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("heading", { name: /Run payroll, compliance, and employee operations/ })).toBeVisible();
+    await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
+    await expect(page.getByRole("heading", { name: /TDS E-File Readiness/i })).toHaveCount(0);
   });
 });

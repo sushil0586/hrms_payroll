@@ -36,11 +36,11 @@ export default async function HrAdminMovementsPage({ searchParams }: PageProps) 
   ]);
 
   return (
-    <main className="shell">
+    <main className="shell hr-lifecycle-workbench">
       <PageIntro
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live lifecycle mode" : "Demo lifecycle mode"}
-        title="Movement operations for transfers, promotions, and reporting changes."
-        description="Track structural people changes with clearer status, movement type, destination ownership, and effective-date context."
+        title="Movement operations"
+        description="Track transfers, promotions, reporting changes, and owner follow-up."
         actions={
           <>
             <Link className="button button--primary" href="/hr-admin/movements/new">Create movement</Link>

@@ -13,7 +13,7 @@ export default async function HrAdminNewLeavePolicyPage() {
   const defaultAccrual = optionsResult.data.accrual_frequencies[0]?.value || "none";
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create leave policy"

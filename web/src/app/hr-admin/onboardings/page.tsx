@@ -36,11 +36,11 @@ export default async function HrAdminOnboardingsPage({ searchParams }: PageProps
   const futureDueDocumentCount = result.data.items.reduce((total, item) => total + item.future_due_document_count, 0);
 
   return (
-    <main className="shell">
+    <main className="shell hr-lifecycle-workbench">
       <PageIntro
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live lifecycle mode" : "Demo lifecycle mode"}
-        title="Onboarding operations with readiness, ownership, and checklist visibility."
-        description="Track preboarding, actual joining, checklist completion, and owner load in a queue that is built for fast HR coordination."
+        title="Onboarding operations"
+        description="Track joiners, checklist completion, documents, and owner load."
         actions={
           <>
             <Link className="button button--primary" href="/hr-admin/onboardings/new">Create onboarding</Link>

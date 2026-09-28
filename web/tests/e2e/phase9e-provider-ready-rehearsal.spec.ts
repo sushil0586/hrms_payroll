@@ -21,9 +21,9 @@ test.describe("Phase 9E provider ready rehearsal", () => {
   test("HR admin certifies provider lanes and records a ready launch rehearsal through browser UI", async ({ page }) => {
     test.setTimeout(8 * 60 * 1000);
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-providers");
+    await gotoAuthenticated(page, "/hr-admin/payroll-providers?tab=connections");
     await expectPageReady(page, "Payroll Providers");
-    await expect(page.getByRole("heading", { name: "Launch rehearsal" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Vertical coverage" })).toBeVisible();
 
     const connectionHrefs = await page.locator("table.payroll-provider-table a[href*='connectionId=']").evaluateAll((items) =>
       Array.from(new Set(items.map((item) => (item as HTMLAnchorElement).href))),

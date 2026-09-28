@@ -11,10 +11,10 @@ export default async function HrAdminNewEmployeeShiftAssignmentPage() {
   const optionsResult = await getHrAdminPolicyOptions();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow="Shift assignment setup"
-        title="Create shift assignment."
+        title="Create shift assignment"
         description="Assign an operational shift to an employee over a governed date window."
         actions={<Link className="button button--secondary" href="/hr-admin/employee-shift-assignments">Back to shift assignments</Link>}
       />

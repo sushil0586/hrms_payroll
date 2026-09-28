@@ -67,7 +67,7 @@ async function createEssRegularization(page: Page, reason: string) {
 
 async function clearPendingEmployeeRegularization(page: Page) {
   await switchTo(page, "/hr-admin/attendance-regularizations?status=pending&q=EMP-0042", hrAdmin);
-  await expectPageReady(page, "Attendance regularization queue for HR oversight.");
+  await expectPageReady(page, "Regularizations");
   const pendingCard = page.locator("article.record-card").first();
   if ((await pendingCard.count()) === 0 || !(await pendingCard.getByRole("button", { name: "Reject" }).isEnabled().catch(() => false))) {
     return;
@@ -91,7 +91,7 @@ test.describe("Phase 4C HR-admin operations certification", () => {
     const rejectId = await createEssRegularization(page, rejectReason);
 
     await switchTo(page, `/hr-admin/attendance-regularizations?status=pending&q=${encodeURIComponent(rejectReason)}`, hrAdmin);
-    await expectPageReady(page, "Attendance regularization queue for HR oversight.");
+    await expectPageReady(page, "Regularizations");
     await expect(page.getByRole("heading", { name: "Regularizations" })).toBeVisible();
     await expect(field(page, "Search")).toHaveValue(rejectReason);
     await expect(field(page, "Request status")).toHaveValue("pending");
@@ -140,7 +140,7 @@ test.describe("Phase 4C HR-admin operations certification", () => {
     await expect(page).toHaveURL(/\/hr-admin\/attendance-regularizations$/);
 
     await switchTo(page, `/hr-admin/attendance-regularizations?status=approved&q=${encodeURIComponent(approveReason)}`, hrAdmin);
-    await expectPageReady(page, "Attendance regularization queue for HR oversight.");
+    await expectPageReady(page, "Regularizations");
     await expect(card(page, approveReason)).toContainText("approved");
     await expect(card(page, approveReason).getByRole("button", { name: "Approve" })).toBeDisabled();
     await expect(card(page, approveReason).getByRole("button", { name: "Reject" })).toBeDisabled();

@@ -9,8 +9,11 @@ test.describe("HR admin payroll output flows", () => {
     await expectPageReady(page, "Payroll Outputs");
 
     await expect(page.getByRole("heading", { name: "Output batches" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Output publication desk" })).toBeVisible();
+    await expect(page.getByText("Selected batch").or(page.getByText("No output batches are available yet")).first()).toBeVisible();
     await expect(page.getByText("Artifact register").first()).toBeVisible();
     await expect(page.getByText("Finance handoff readiness").first()).toBeVisible();
+    await expect(page.getByText("Selected artifact").or(page.getByText("No artifact selected")).first()).toBeVisible();
     await expect(page.getByText("Storage").or(page.getByText("Source hash")).or(page.getByText("No output artifacts")).first()).toBeVisible();
 
     const artifactLink = page.locator("main table a[href*='artifactId=']").first();

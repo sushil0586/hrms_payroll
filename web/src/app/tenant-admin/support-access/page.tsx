@@ -53,7 +53,7 @@ export default async function TenantAdminSupportAccessPage() {
         </div>
       </section>
 
-      <section className="section tenant-support-workspace">
+      <section className="section tenant-support-workspace tenant-support-workspace--phase4">
         <div className="panel-card-soft tenant-console-panel">
           <TenantSupportAccessActions
             canApproveSupportAccess={canApproveSupportAccess}
@@ -63,18 +63,19 @@ export default async function TenantAdminSupportAccessPage() {
         </div>
       </section>
 
-      <section className="section tenant-support-scope-workspace">
+      <section className="section tenant-support-scope-workspace tenant-support-scope-workspace--phase4">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Scope guide</span>
               <h2>What support can access</h2>
+              <p className="tenant-section-copy">Use scopes to keep assisted operations narrow, time-bound, and auditable.</p>
             </div>
             <span className="record-chip">{data.support_access_management.scope_options.length} scopes</span>
           </div>
-          <div className="tenant-console-list">
+          <div className="tenant-scope-grid">
             {data.support_access_management.scope_options.map((scope) => (
-              <div className="tenant-console-row" key={scope.value}>
+              <div className="tenant-console-row tenant-scope-card" key={scope.value}>
                 <div>
                   <strong>{scope.label}</strong>
                   <span>{titleCase(scope.value)}</span>

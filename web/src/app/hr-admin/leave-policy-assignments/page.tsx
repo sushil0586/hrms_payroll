@@ -16,10 +16,10 @@ export default async function HrAdminLeavePolicyAssignmentsPage() {
   const blockingCount = result.data.filter((item) => item.has_blocking_conflict).length;
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={result.state === "live" ? "Live leave assignment mode" : "Demo leave assignment mode"}
-        title="Leave policy assignments by scope."
+        title="Leave assignments"
         description="Map leave policies to the actual slices of the organization they should govern, with clear priority behavior when multiple rules could apply."
         actions={
           <>

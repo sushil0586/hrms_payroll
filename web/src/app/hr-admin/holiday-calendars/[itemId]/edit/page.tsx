@@ -17,7 +17,7 @@ export default async function HrAdminEditHolidayCalendarPage({ params }: PagePro
   ]);
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live calendar mode" : "Demo calendar mode"}
         title="Edit holiday calendar"

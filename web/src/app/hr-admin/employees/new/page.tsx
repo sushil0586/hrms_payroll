@@ -19,9 +19,9 @@ export default async function HrAdminNewEmployeePage() {
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create employee"
-        description="Start the employee record with clean structure, access, lifecycle, and payroll-ready data."
+        description="Create the master record that downstream access, lifecycle, and payroll workflows use."
         actions={<Link className="button button--secondary" href="/hr-admin/employees">Back to employee masters</Link>}
-        pills={["Shared admin shell", "Modern form foundation", "Ready for downstream setup"]}
+        pills={["Identity", "Structure", "Payroll ready"]}
       />
 
       <EmployeeForm initialValue={createEmptyEmployeeFormValue(defaultStatus)} mode="create" options={optionsResult.data} />

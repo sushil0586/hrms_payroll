@@ -16,10 +16,10 @@ export default async function HrAdminEditLeavePolicyPage({ params }: PageProps) 
   if (!itemResult.data?.id) notFound();
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
-        title="Edit leave policy."
+        title="Edit leave policy"
         description="Refine enforceable leave rules without changing application logic in code."
         actions={<Link className="button button--secondary" href="/hr-admin/leave-policies">Back to leave policies</Link>}
         pills={["Rule refinement", "Eligibility tuning", "Assignment-linked policy"]}

@@ -10,18 +10,110 @@ const timeLeavePolicyRoutes = [
   "/hr-admin/attendance-regularizations",
   "/hr-admin/leave-balances",
   "/hr-admin/policies",
+  "/hr-admin/policy-assignments",
   "/hr-admin/leave-types",
+  "/hr-admin/leave-types/new",
   "/hr-admin/leave-policies",
+  "/hr-admin/leave-policies/new",
   "/hr-admin/leave-policy-assignments",
+  "/hr-admin/leave-policy-assignments/new",
   "/hr-admin/shifts",
+  "/hr-admin/shifts/new",
   "/hr-admin/holiday-calendars",
+  "/hr-admin/holiday-calendars/new",
   "/hr-admin/attendance-policies",
+  "/hr-admin/attendance-policies/new",
   "/hr-admin/attendance-policy-assignments",
+  "/hr-admin/attendance-policy-assignments/new",
   "/hr-admin/employee-shift-assignments",
+  "/hr-admin/employee-shift-assignments/new",
   "/hr-admin/shift-roster-templates",
+  "/hr-admin/shift-roster-templates/new",
 ];
 
-const timeLeavePolicyPathPatterns = timeLeavePolicyRoutes.map((route) => new RegExp(`^${route.replaceAll("/", "\\/")}$`));
+const timeLeavePolicyPathPatterns = [
+  ...timeLeavePolicyRoutes.map((route) => new RegExp(`^${route.replaceAll("/", "\\/")}$`)),
+  /^\/hr-admin\/attendance-records\/[^/]+\/edit$/,
+  /^\/hr-admin\/attendance-regularizations\/[^/]+\/review$/,
+  /^\/hr-admin\/attendance-policies\/[^/]+\/edit$/,
+  /^\/hr-admin\/attendance-policy-assignments\/[^/]+\/edit$/,
+  /^\/hr-admin\/employee-shift-assignments\/[^/]+\/edit$/,
+  /^\/hr-admin\/holiday-calendars\/[^/]+\/edit$/,
+  /^\/hr-admin\/leave-policies\/[^/]+\/edit$/,
+  /^\/hr-admin\/leave-policy-assignments\/[^/]+\/edit$/,
+  /^\/hr-admin\/leave-types\/[^/]+\/edit$/,
+  /^\/hr-admin\/shift-roster-templates\/[^/]+\/edit$/,
+  /^\/hr-admin\/shifts\/[^/]+\/edit$/,
+];
+
+const dynamicTimeLeavePolicyRoutes = [
+  {
+    name: "attendance record edit",
+    sourceRoute: "/hr-admin/attendance-records",
+    actionName: "Edit record",
+    expectedUrl: /\/hr-admin\/attendance-records\/[^/]+\/edit/,
+  },
+  {
+    name: "attendance regularization review",
+    sourceRoute: "/hr-admin/attendance-regularizations",
+    actionName: "Review request",
+    expectedUrl: /\/hr-admin\/attendance-regularizations\/[^/]+\/review/,
+  },
+  {
+    name: "attendance policy edit",
+    sourceRoute: "/hr-admin/attendance-policies",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/attendance-policies\/[^/]+\/edit/,
+  },
+  {
+    name: "attendance assignment edit",
+    sourceRoute: "/hr-admin/attendance-policy-assignments",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/attendance-policy-assignments\/[^/]+\/edit/,
+  },
+  {
+    name: "employee shift assignment edit",
+    sourceRoute: "/hr-admin/employee-shift-assignments",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/employee-shift-assignments\/[^/]+\/edit/,
+  },
+  {
+    name: "holiday calendar edit",
+    sourceRoute: "/hr-admin/holiday-calendars",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/holiday-calendars\/[^/]+\/edit/,
+  },
+  {
+    name: "leave policy edit",
+    sourceRoute: "/hr-admin/leave-policies",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/leave-policies\/[^/]+\/edit/,
+  },
+  {
+    name: "leave assignment edit",
+    sourceRoute: "/hr-admin/leave-policy-assignments",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/leave-policy-assignments\/[^/]+\/edit/,
+  },
+  {
+    name: "leave type edit",
+    sourceRoute: "/hr-admin/leave-types",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/leave-types\/[^/]+\/edit/,
+  },
+  {
+    name: "roster template edit",
+    sourceRoute: "/hr-admin/shift-roster-templates",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/shift-roster-templates\/[^/]+\/edit/,
+  },
+  {
+    name: "shift edit",
+    sourceRoute: "/hr-admin/shifts",
+    actionName: "Edit",
+    expectedUrl: /\/hr-admin\/shifts\/[^/]+\/edit/,
+  },
+];
 
 function normalizeTimeLeavePolicyHref(rawHref: string, baseUrl: string) {
   const url = new URL(rawHref, baseUrl);
@@ -43,7 +135,8 @@ async function expectVisibleTimeLeavePolicyLinksHealthy(page: Page, route: strin
       .filter((link) => {
         const rect = link.getBoundingClientRect();
         const style = window.getComputedStyle(link);
-        return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+        const hiddenByClosedDisclosure = Boolean(link.closest("details:not([open])") && link.tagName !== "SUMMARY");
+        return !hiddenByClosedDisclosure && rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
       })
       .map((link) => (link as HTMLAnchorElement).href),
   );
@@ -91,6 +184,9 @@ async function expectNoVisibleControlCollisions(page: Page, route: string) {
     }
 
     const boxes = elements.flatMap((element, index) => {
+      if (element.closest("details:not([open])") && element.tagName !== "SUMMARY") {
+        return [];
+      }
       const rect = clippedRect(element);
       const style = window.getComputedStyle(element);
       if (rect.width <= 0 || rect.height <= 0 || style.display === "none" || style.visibility === "hidden") {
@@ -136,8 +232,7 @@ async function expectNoVisibleControlCollisions(page: Page, route: string) {
   expect(collisions, `${route} has clipped or overlapping time/leave/policy controls`).toEqual([]);
 }
 
-async function auditTimeLeavePolicyRoute(page: Page, route: string) {
-  await gotoAuthenticated(page, route);
+async function auditCurrentTimeLeavePolicyPage(page: Page, route: string) {
   await suppressBrowserTestNoise(page);
   await expect(page.locator("main.shell:not(.app-loading-shell)").first()).toBeVisible();
   await expect(page.locator("h1").first()).toBeVisible();
@@ -149,6 +244,30 @@ async function auditTimeLeavePolicyRoute(page: Page, route: string) {
   await expectVisibleTimeLeavePolicyLinksHealthy(page, route);
 }
 
+async function auditTimeLeavePolicyRoute(page: Page, route: string) {
+  await gotoAuthenticated(page, route);
+  await auditCurrentTimeLeavePolicyPage(page, route);
+}
+
+async function auditLinkedTimeLeavePolicyRoute(
+  page: Page,
+  sourceRoute: string,
+  actionName: string,
+  expectedUrl: RegExp,
+  routeName: string,
+) {
+  await gotoAuthenticated(page, sourceRoute);
+  const action = page.getByRole("link", { name: actionName, exact: true }).first();
+  if ((await action.count()) === 0) {
+    await auditCurrentTimeLeavePolicyPage(page, sourceRoute);
+    return;
+  }
+  await expect(action, `${sourceRoute} should expose a ${routeName} link`).toBeVisible();
+  await action.click();
+  await expect(page, `${routeName} should open the intended child page`).toHaveURL(expectedUrl);
+  await auditCurrentTimeLeavePolicyPage(page, routeName);
+}
+
 test.describe("HR Admin time, leave, and policy UI audit", () => {
   test("certifies time/leave/policy page layout, controls, and internal links", async ({ page }) => {
     test.setTimeout(480_000);
@@ -156,6 +275,16 @@ test.describe("HR Admin time, leave, and policy UI audit", () => {
 
     for (const route of timeLeavePolicyRoutes) {
       await auditTimeLeavePolicyRoute(page, route);
+    }
+
+    for (const dynamicRoute of dynamicTimeLeavePolicyRoutes) {
+      await auditLinkedTimeLeavePolicyRoute(
+        page,
+        dynamicRoute.sourceRoute,
+        dynamicRoute.actionName,
+        dynamicRoute.expectedUrl,
+        dynamicRoute.name,
+      );
     }
   });
 });

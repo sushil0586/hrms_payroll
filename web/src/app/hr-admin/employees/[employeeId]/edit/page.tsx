@@ -35,9 +35,9 @@ export default async function HrAdminEditEmployeePage({ params }: PageProps) {
       <PageIntro
         eyebrow={state === "live" ? "Live edit mode" : "Demo edit mode"}
         title={`Edit employee: ${detailResult.data.full_name}`}
-        description="Update the employee profile and structural mappings from one shared admin workspace."
+        description="Update profile, employment status, and structural mappings in one controlled edit flow."
         actions={<Link className="button button--secondary" href={`/hr-admin/employees?employeeId=${detailResult.data.id}`}>Back to employee detail</Link>}
-        pills={["Master data cleanup", "Shared mapping controls", "Queue-linked editing"]}
+        pills={["Profile", "Structure", "Readiness"]}
       />
 
       <EmployeeForm

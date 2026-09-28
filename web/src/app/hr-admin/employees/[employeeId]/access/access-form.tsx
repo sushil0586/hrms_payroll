@@ -125,13 +125,13 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern employee-child-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
             <h2>{existingAccess ? "Update user access" : "Provision user access"}</h2>
             <p className="section-copy">
-              Link this employee to login credentials, tenant membership, and role-based access so they can use ESS or MSS.
+              Link login, membership, and role access for ESS or MSS routing.
             </p>
           </div>
           <div className="form-shell-card__meta">

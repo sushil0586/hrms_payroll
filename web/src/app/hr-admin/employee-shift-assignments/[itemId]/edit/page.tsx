@@ -19,10 +19,10 @@ export default async function HrAdminEditEmployeeShiftAssignmentPage({ params }:
   ]);
 
   return (
-    <main className="shell">
+    <main className="shell shell--time-leave">
       <PageIntro
         eyebrow={itemResult.state === "live" ? "Live shift assignment mode" : "Demo shift assignment mode"}
-        title="Edit shift assignment."
+        title="Edit shift assignment"
         description="Update shift coverage timing or primary coverage precedence for this employee."
         actions={<Link className="button button--secondary" href="/hr-admin/employee-shift-assignments">Back to shift assignments</Link>}
       />

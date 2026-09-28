@@ -17,7 +17,7 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
     .sort((left, right) => right.created_at.localeCompare(left.created_at))[0];
 
   return (
-    <main className="shell">
+    <main className="shell notification-shell">
       <PageIntro
         actions={<Link className="button button--secondary" href="/hr-admin/notifications">Back to queue</Link>}
         description="Inspect one notification payload and its current state."
@@ -27,8 +27,8 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
       />
 
       <section className="section">
-        <article className="record-card">
-          <div className="record-card__header">
+        <article className="record-card notification-review-card">
+          <div className="notification-review-card__header">
             <div className="record-card__title-block">
               <h3>{item.title || "Untitled"}</h3>
               <p>{item.event_definition_name || "Direct notification"} • {item.subject_type}</p>
@@ -39,7 +39,7 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
             </div>
           </div>
 
-          <div className="record-card__details">
+          <div className="notification-review-detail-grid">
             <div>
               <span className="record-card__label">Recipient</span>
               <strong>{item.recipient_membership_name || item.recipient_identifier || item.recipient_address || "Unknown"}</strong>
@@ -58,7 +58,7 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
             </div>
           </div>
 
-          <div className="record-card__notes">
+          <div className="notification-review-message">
             <strong>Body</strong>
             <p>{item.body || "No body content"}</p>
           </div>
@@ -87,7 +87,7 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
 
           <NotificationRetryAction itemId={item.id} canRetry={item.can_retry} retryLimitReached={item.retry_limit_reached} />
 
-          <div className="record-card__details">
+          <div className="notification-review-detail-grid">
             <div>
               <span className="record-card__label">Created</span>
               <strong>{formatNotificationDateTime(item.created_at)}</strong>
@@ -106,12 +106,10 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
             </div>
           </div>
 
-          <div className="notice">
-            <strong>Payload</strong>
-            <span className="muted">
-              <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{JSON.stringify(item.payload, null, 2)}</pre>
-            </span>
-          </div>
+          <details className="notification-json-disclosure" open>
+            <summary>Payload</summary>
+            <pre>{JSON.stringify(item.payload, null, 2)}</pre>
+          </details>
         </article>
       </section>
 
@@ -135,14 +133,14 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
           </div>
 
           {item.delivery_logs.length ? (
-            <div className="stack-list">
+            <div className="notification-delivery-log-list">
               {item.delivery_logs.map((log) => (
-                <article className="record-card" key={log.id}>
-                  <div className="record-card__header">
+                <article className="record-card notification-delivery-log-card" key={log.id}>
+                  <div className="notification-review-card__header">
                     <div className="record-card__title-block">
                       <h3>{log.provider_name || "Delivery backend"}</h3>
                       <p>
-                        {log.channel} • {log.created_at}
+                        {log.channel} • {formatNotificationDateTime(log.created_at)}
                       </p>
                     </div>
                     <div className="record-card__actions">
@@ -150,7 +148,7 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
                     </div>
                   </div>
 
-                  <div className="record-card__details">
+                  <div className="notification-review-detail-grid notification-review-detail-grid--compact">
                     <div>
                       <span className="record-card__label">Provider reference</span>
                       <strong>{log.provider_reference || "Not provided"}</strong>
@@ -172,12 +170,10 @@ export default async function HrAdminNotificationReviewPage({ params }: PageProp
                     </div>
                   ) : null}
 
-                  <div className="notice">
-                    <strong>Provider response</strong>
-                    <span className="muted">
-                      <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{JSON.stringify(log.response_payload, null, 2)}</pre>
-                    </span>
-                  </div>
+                  <details className="notification-json-disclosure">
+                    <summary>Provider response</summary>
+                    <pre>{JSON.stringify(log.response_payload, null, 2)}</pre>
+                  </details>
                 </article>
               ))}
             </div>

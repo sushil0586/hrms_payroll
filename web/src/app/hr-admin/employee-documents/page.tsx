@@ -48,11 +48,11 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
   const expiredOnPage = result.data.items.filter((item) => item.is_expired).length;
 
   return (
-    <main className="shell">
+    <main className="shell hr-document-workbench">
       <PageIntro
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live document mode" : "Demo document mode"}
-        title="Employee document review with faster filtering and cleaner triage."
-        description="Review uploads, verification status, expiry coverage, and reviewer context from a queue that is built for operational throughput."
+        title="Employee document review"
+        description="Triage uploads, verification outcomes, expiry risk, and reminder follow-up."
         actions={
           <>
             {canManageDocuments ? <Link className="button button--primary" href="/hr-admin/employee-documents/new">Upload document</Link> : null}
@@ -61,9 +61,9 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
           </>
         }
         pills={[
-          "Server-side filters and pagination",
-          "URL-driven review state",
-          "Demo and live mode parity",
+          "Filtered queue",
+          "Expiry tracking",
+          "Review actions",
         ]}
       />
       <section className="section">

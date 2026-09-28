@@ -11,6 +11,66 @@ export type HrAdminNavGroup = {
   items: HrAdminNavItem[];
 };
 
+export const payrollCycleOperationalHrefs = [
+  "/hr-admin/payroll-inputs",
+  "/hr-admin/payroll-calculations",
+  "/hr-admin/payroll-review",
+  "/hr-admin/payroll-outputs",
+  "/hr-admin/payroll-handoff",
+] as const;
+
+export const payrollAdminSidebarItems: HrAdminNavItem[] = [
+  {
+    href: "/hr-admin/payroll-readiness",
+    label: "Payroll Control",
+    shortLabel: "PC",
+    blurb: "Readiness and close",
+    permissions: ["payroll.inputs.view", "payroll.review", "payroll.outputs.view"],
+  },
+  {
+    href: "/hr-admin/payroll-setup",
+    label: "Payroll Setup",
+    shortLabel: "PS",
+    blurb: "Periods and pay groups",
+    permissions: ["payroll.setup.view", "payroll.setup.manage"],
+  },
+  {
+    href: "/hr-admin/salary-setup",
+    label: "Salary Setup",
+    shortLabel: "SS",
+    blurb: "Structures and CTC",
+    permissions: ["payroll.setup.view", "payroll.setup.manage"],
+  },
+  {
+    href: "/hr-admin/payroll-rules",
+    label: "Payroll Rules",
+    shortLabel: "PR",
+    blurb: "Formulas and versions",
+    permissions: ["payroll.setup.view", "payroll.setup.manage"],
+  },
+  {
+    href: "/hr-admin/payroll-statutory",
+    label: "Statutory",
+    shortLabel: "ST",
+    blurb: "Compliance setup",
+    permissions: ["statutory.setup.view", "statutory.filing.view"],
+  },
+  {
+    href: "/hr-admin/payroll-providers",
+    label: "Providers",
+    shortLabel: "PV",
+    blurb: "Integrations and delivery",
+    permissions: ["payroll.setup.view", "payroll.setup.manage"],
+  },
+  {
+    href: "/hr-admin/payroll-adjustments",
+    label: "Adjustments & Settlements",
+    shortLabel: "AS",
+    blurb: "Exceptions and F&F",
+    permissions: ["payroll.review"],
+  },
+];
+
 export const hrAdminNavigation: HrAdminNavGroup[] = [
   {
     title: "Command",
@@ -37,20 +97,11 @@ export const hrAdminNavigation: HrAdminNavGroup[] = [
   },
   {
     title: "Payroll",
-    items: [
-      { href: "/hr-admin/payroll-readiness", label: "Payroll Control", shortLabel: "PC", blurb: "Readiness and blockers", permissions: ["payroll.inputs.view", "payroll.review", "payroll.outputs.view"] },
-      { href: "/hr-admin/payroll-inputs", label: "Inputs", shortLabel: "IN", blurb: "Ingestion and validation", permissions: ["payroll.inputs.view"] },
-      { href: "/hr-admin/payroll-calculations", label: "Calculation", shortLabel: "CA", blurb: "Run and close payroll", permissions: ["payroll.review"] },
-      { href: "/hr-admin/payroll-review", label: "Review", shortLabel: "RV", blurb: "Exceptions and approvals", permissions: ["payroll.review"] },
-      { href: "/hr-admin/payroll-outputs", label: "Outputs", shortLabel: "OU", blurb: "Payslips and registers", permissions: ["payroll.outputs.view"] },
-      { href: "/hr-admin/payroll-handoff", label: "Handoff", shortLabel: "HF", blurb: "Finance package", permissions: ["finance.handoff.view", "finance.handoff.create"] },
-    ],
+    items: payrollAdminSidebarItems,
   },
   {
     title: "Compliance",
     items: [
-      { href: "/hr-admin/payroll-statutory", label: "Statutory", shortLabel: "ST", blurb: "Setup and filings", permissions: ["statutory.setup.view", "statutory.filing.view"] },
-      { href: "/hr-admin/payroll-providers", label: "Providers", shortLabel: "PV", blurb: "Payroll integrations", permissions: ["payroll.setup.view", "payroll.setup.manage"] },
       { href: "/hr-admin/audit", label: "Audit", shortLabel: "AU", blurb: "Activity evidence", permissions: ["audit.hr.view"] },
     ],
   },

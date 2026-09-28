@@ -1,12 +1,20 @@
 import { HrAdminChrome } from "@/components/shell/hr-admin-chrome";
 import type { WorkspaceNavGroup } from "@/components/shell/workspace-chrome";
 import { getHrAdminSaasCommercialControl } from "@/lib/api";
-import { getWorkspaceMenuSource } from "@/lib/ui/menu-catalog";
+import { filterNavGroupsByPermission, getWorkspaceMenuSource } from "@/lib/ui/menu-catalog";
 import { hrAdminNavigation } from "@/lib/ui/navigation";
 import { requireSessionPermission } from "@/lib/workspace-access";
 
 const PAYROLL_CORE_NAV_PATHS = new Set([
   "/hr-admin/payroll-readiness",
+  "/hr-admin/payroll-setup",
+  "/hr-admin/salary-setup",
+  "/hr-admin/payroll-rules",
+  "/hr-admin/payroll-adjustments",
+  "/hr-admin/payroll-settlements",
+]);
+
+const PAYROLL_STATUTORY_NAV_PATHS = new Set([
   "/hr-admin/payroll-statutory",
 ]);
 
@@ -59,15 +67,15 @@ async function getCommercialAwareHrAdminNavigation(
       .map((group) => ({
         ...group,
         items: group.items.map((item) => {
-        const disabledReason =
-          PAYROLL_PROVIDER_NAV_PATHS.has(item.href)
-            ? payrollProviderReason
-            : PAYROLL_CORE_NAV_PATHS.has(item.href)
-              ? payrollCoreReason
-              : null;
-        return disabledReason ? { ...item, disabled: true, disabledReason } : item;
-      }),
-    }))
+          const disabledReason =
+            PAYROLL_PROVIDER_NAV_PATHS.has(item.href)
+              ? payrollProviderReason
+              : PAYROLL_CORE_NAV_PATHS.has(item.href) || PAYROLL_STATUTORY_NAV_PATHS.has(item.href)
+                ? payrollCoreReason
+                : null;
+          return disabledReason ? { ...item, disabled: true, disabledReason } : item;
+        }),
+      }))
       .filter((group) => group.items.length > 0);
   } catch {
     return baseGroups;
@@ -110,7 +118,8 @@ export default async function HrAdminLayout({ children }: { children: React.Reac
       { href: "/mss/approvals", label: "MSS" },
     ],
   });
-  const navGroups = await getCommercialAwareHrAdminNavigation(sessionUser, menuSource.navGroups);
+  const canonicalNavGroups = filterNavGroupsByPermission(sessionUser, hrAdminNavigation);
+  const navGroups = await getCommercialAwareHrAdminNavigation(sessionUser, canonicalNavGroups);
 
   return <HrAdminChrome navGroups={navGroups} quickLinks={menuSource.quickLinks} userLabel={userLabel}>{children}</HrAdminChrome>;
 }

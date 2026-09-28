@@ -101,7 +101,7 @@ test.describe("Phase R4-H compliance report hub certification", () => {
     await page.goto("/hr-admin/reports/compliance", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("compliance-report-hub")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
+    await expect(page.getByRole("heading", { name: "Compliance Hub" })).toHaveCount(0);
   });
 });

@@ -118,6 +118,7 @@ test.describe("Phase 3H employee bank account certification", () => {
     await expect(page.getByRole("heading", { name: "Bank accounts", exact: true })).toBeVisible();
     await expect(page.getByText("No bank account configured.")).toBeVisible();
     await expect(page.getByRole("button", { name: "New account" })).toBeVisible();
+    await expect(page.locator("form.employee-child-form")).toBeVisible();
 
     const form = bankForm(page);
     await expect(page.getByRole("heading", { name: "Create bank account" })).toBeVisible();

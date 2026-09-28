@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import type { ImportBatchAudit } from "@/lib/import-batch-audit";
@@ -25,6 +26,14 @@ function statusClass(status: string) {
   if (status === "partial" || status === "rollback_review") return "record-chip record-chip--warning";
   if (status === "failed") return "record-chip record-chip--danger";
   return "record-chip record-chip--accent";
+}
+
+function moduleLink(importType: string) {
+  if (importType.includes("organization")) return { href: "/hr-admin/organization", label: "Open organization" };
+  if (importType.includes("bank") || importType.includes("employee") || importType.includes("manager")) {
+    return { href: "/hr-admin/employees", label: "Open employees" };
+  }
+  return { href: "/hr-admin/import-history", label: "Open imports" };
 }
 
 export function ImportHistoryWorkspace() {
@@ -72,10 +81,20 @@ export function ImportHistoryWorkspace() {
     setLoadState("loading");
   }
 
+  function resetFilters() {
+    setQuery("");
+    setImportType("All");
+    setStatus("All");
+    setPage(1);
+    setLoadState("loading");
+  }
+
+  const hasActiveFilters = Boolean(query.trim()) || importType !== "All" || status !== "All";
+
   return (
     <section className="section section--tight" aria-label="Import batch history">
-      <div className="report-catalog-workspace" data-testid="import-history-workspace">
-        <div className="metric-grid-modern payroll-setup-metrics">
+      <div className="report-catalog-workspace import-history-workspace" data-testid="import-history-workspace">
+        <div className="metric-grid-modern payroll-setup-metrics import-history-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Import batches</span>
             <strong>{items.length}</strong>
@@ -98,7 +117,7 @@ export function ImportHistoryWorkspace() {
           </article>
         </div>
 
-        <div className="report-catalog-toolbar statutory-deductions-toolbar" aria-label="Import history filters">
+        <div className="report-catalog-toolbar import-history-toolbar" aria-label="Import history filters">
           <label>
             <span>Search imports</span>
             <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search type, actor, file, hash" />
@@ -119,80 +138,70 @@ export function ImportHistoryWorkspace() {
               ))}
             </select>
           </label>
+          <div className="import-history-toolbar__actions">
+            <button className="button button--secondary" type="button" disabled={!hasActiveFilters} onClick={resetFilters}>
+              Reset
+            </button>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
+          <span className="queue-summary-chip"><strong>{items.length === 0 ? 0 : firstIndex + 1}-{Math.min(firstIndex + PAGE_SIZE, items.length)}</strong> shown</span>
           <span className="queue-summary-chip"><strong>{loadState === "loading" ? "Loading" : loadState === "error" ? "Blocked" : "Ready"}</strong> status</span>
         </div>
 
-        <div className="report-catalog-table-wrap">
-          <table className="report-catalog-table statutory-deductions-table">
-            <thead>
-              <tr>
-                <th scope="col">Created</th>
-                <th scope="col">Import</th>
-                <th scope="col">Rows</th>
-                <th scope="col">Hashes</th>
-                <th scope="col">Errors</th>
-                <th scope="col">Rollback</th>
-                <th scope="col">Actor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleItems.map((item) => {
-                const rowErrors = item.row_errors ?? [];
+        {visibleItems.length === 0 ? (
+          <div className="empty-state">{loadState === "loading" ? "Loading import history." : "No import batches match the selected filters."}</div>
+        ) : (
+          <div className="import-history-list" aria-label="Import batch results">
+            {visibleItems.map((item) => {
+              const rowErrors = item.row_errors ?? [];
+              const firstError = rowErrors[0]?.message ? String(rowErrors[0].message) : "No row errors";
+              const link = moduleLink(item.import_type);
 
-                return (
-                  <tr key={item.id}>
-                    <td>{formatDate(item.created_at)}</td>
-                    <td>
-                      <strong>{titleCase(item.import_type)}</strong>
+              return (
+                <article className="import-history-card" key={item.id}>
+                  <div className="import-history-card__header">
+                    <div className="import-history-card__identity">
+                      <span className="workspace-card__eyebrow">{formatDate(item.created_at)}</span>
+                      <h2>{titleCase(item.import_type)}</h2>
+                      <p>{item.file_name || "Browser CSV"} · {item.actor_identifier || "System"}</p>
+                    </div>
+                    <div className="import-history-card__actions">
                       <span className={statusClass(item.status)}>{titleCase(item.status)}</span>
-                      <span>{item.file_name || "Browser CSV"}</span>
-                    </td>
-                    <td>
-                      <div className="payroll-register-stack">
-                        <span>{item.row_count ?? 0} total</span>
-                        <span>{item.ready_count ?? 0} ready</span>
-                        <span>{item.created_count ?? 0} created</span>
-                        <span>{item.blocked_count ?? 0} blocked</span>
-                        <span>{item.failed_count ?? 0} failed</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="payroll-register-stack">
-                        <code>{item.source_hash.slice(0, 20)}</code>
-                        <code>{item.batch_hash.slice(0, 20)}</code>
-                        <span>{item.source_ref}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="payroll-register-stack">
-                        <span>{rowErrors.length} row issues</span>
-                        <span>{rowErrors[0]?.message ? String(rowErrors[0].message) : "No row errors"}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="payroll-register-stack">
-                        <span>{item.rollback_supported ? "Supported" : "Manual review"}</span>
-                        <span>{titleCase(item.rollback_status || "not_requested")}</span>
-                      </div>
-                    </td>
-                    <td>{item.actor_identifier}</td>
-                  </tr>
-                );
-              })}
-              {visibleItems.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <div className="empty-state">{loadState === "loading" ? "Loading import history." : "No import batches match the selected filters."}</div>
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+                      <Link className="button button--secondary" href={link.href}>{link.label}</Link>
+                    </div>
+                  </div>
+
+                  <div className="import-history-card__grid">
+                    <div className="import-history-fact">
+                      <span>Rows</span>
+                      <strong>{item.row_count ?? 0} total</strong>
+                      <small>{item.ready_count ?? 0} ready · {item.created_count ?? 0} created · {item.blocked_count ?? 0} blocked · {item.failed_count ?? 0} failed</small>
+                    </div>
+                    <div className="import-history-fact">
+                      <span>Hashes</span>
+                      <code>{item.source_hash.slice(0, 20)}</code>
+                      <code>{item.batch_hash.slice(0, 20)}</code>
+                      <small>{item.source_ref}</small>
+                    </div>
+                    <div className="import-history-fact">
+                      <span>Errors</span>
+                      <strong>{rowErrors.length} row issues</strong>
+                      <small>{firstError}</small>
+                    </div>
+                    <div className="import-history-fact">
+                      <span>Rollback</span>
+                      <strong>{item.rollback_supported ? "Supported" : "Manual review"}</strong>
+                      <small>{titleCase(item.rollback_status || "not_requested")}</small>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
 
         <div className="pagination-bar" aria-label="Import history pagination">
           <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
