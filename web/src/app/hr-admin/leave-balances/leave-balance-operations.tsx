@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
@@ -418,10 +418,10 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
     });
   }, [employeeFilter, policyFilter, query, transactionStatusFilter, transactions]);
 
-  useEffect(() => {
+  function resetFilteredPages() {
     setBalancePage(1);
     setTransactionPage(1);
-  }, [employeeFilter, policyFilter, query, transactionStatusFilter]);
+  }
 
   const balanceTotalPages = Math.max(1, Math.ceil(filteredBalances.length / BALANCE_PAGE_SIZE));
   const transactionTotalPages = Math.max(1, Math.ceil(filteredTransactions.length / TRANSACTION_PAGE_SIZE));
@@ -589,23 +589,52 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
           <div className="queue-toolbar__grid">
             <label className="queue-toolbar__search">
               <span className="muted">Search</span>
-              <input className="input-control" placeholder="Employee, code, policy, leave type" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input
+                className="input-control"
+                placeholder="Employee, code, policy, leave type"
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  resetFilteredPages();
+                }}
+              />
             </label>
             <label className="queue-toolbar__search">
               <span className="muted">Employee filter</span>
-              <select className="input-control" value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)}>
+              <select
+                className="input-control"
+                value={employeeFilter}
+                onChange={(event) => {
+                  setEmployeeFilter(event.target.value);
+                  resetFilteredPages();
+                }}
+              >
                 {selectOptions(options.employees, "All employees")}
               </select>
             </label>
             <label className="queue-toolbar__search">
               <span className="muted">Policy filter</span>
-              <select className="input-control" value={policyFilter} onChange={(event) => setPolicyFilter(event.target.value)}>
+              <select
+                className="input-control"
+                value={policyFilter}
+                onChange={(event) => {
+                  setPolicyFilter(event.target.value);
+                  resetFilteredPages();
+                }}
+              >
                 {selectOptions(options.leave_policies, "All leave policies")}
               </select>
             </label>
             <label className="queue-toolbar__search">
               <span className="muted">Transaction status</span>
-              <select className="input-control" value={transactionStatusFilter} onChange={(event) => setTransactionStatusFilter(event.target.value)}>
+              <select
+                className="input-control"
+                value={transactionStatusFilter}
+                onChange={(event) => {
+                  setTransactionStatusFilter(event.target.value);
+                  resetFilteredPages();
+                }}
+              >
                 <option value="">All statuses</option>
                 <option value="pending">Pending review</option>
                 <option value="applied">Applied</option>
