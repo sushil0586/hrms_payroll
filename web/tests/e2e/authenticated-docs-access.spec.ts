@@ -13,15 +13,21 @@ test.describe("authenticated documentation access", () => {
 
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByText("Accerio HRMS User Guide")).toHaveCount(0);
+
+    const assetResponse = await page.request.get("/docs-assets/screenshots/hr-admin/dashboard-overview.png");
+    expect(assetResponse.status()).toBe(401);
   });
 
   test("renders guide navigation, search, deep links, and protected assets for a signed-in user", async ({ page }) => {
-    suppressBrowserTestNoise(page);
-
     await gotoAuthenticated(page, "/docs", hrAdmin);
+    await suppressBrowserTestNoise(page);
     await expect(page.getByRole("heading", { name: "Accerio HRMS User Guide" }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Statutory Payroll" }).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
+
+    const assetResponse = await page.request.get("/docs-assets/screenshots/hr-admin/dashboard-overview.png");
+    expect(assetResponse.ok()).toBeTruthy();
+    expect(assetResponse.headers()["content-type"]).toContain("image/png");
 
     await page.goto("/docs/hr-admin/payroll/statutory-payroll");
     await expect(page.getByRole("heading", { name: "Statutory Payroll" }).first()).toBeVisible();

@@ -1818,10 +1818,86 @@ def _apply_tenant_admin_membership_roles(membership: TenantMembership, role_ids:
     membership.membership_roles.exclude(role_id=role_ids[0]).update(is_primary=False)
 
 
+EMPLOYEE_CONTEXT_ROLE_CODES = {"hr-admin", "employee", "manager", "payroll-finance-manager"}
+
+
+def _employee_code_prefix_for_roles(role_codes: set[str]) -> str:
+    if "hr-admin" in role_codes:
+        return "ADMIN"
+    if "payroll-finance-manager" in role_codes:
+        return "FIN"
+    if "manager" in role_codes:
+        return "MGR"
+    return "EMP"
+
+
+def _next_workspace_employee_code(tenant, role_codes: set[str]) -> str:
+    prefix = _employee_code_prefix_for_roles(role_codes)
+    existing_count = Employee.objects.filter(tenant=tenant, employee_code__startswith=f"{prefix}-").count()
+    while True:
+        next_code = f"{prefix}-{existing_count + 1:04d}"
+        if not Employee.objects.filter(tenant=tenant, employee_code=next_code).exists():
+            return next_code
+        existing_count += 1
+
+
+def _ensure_workspace_employee_context(membership: TenantMembership, role_codes: set[str]) -> Employee:
+    user = membership.user
+    employee = getattr(membership, "employee", None)
+    if employee:
+        update_fields = []
+        if employee.employment_status != EmploymentStatus.ACTIVE:
+            employee.employment_status = EmploymentStatus.ACTIVE
+            update_fields.append("employment_status")
+        if not employee.work_email and user.email:
+            employee.work_email = user.email
+            update_fields.append("work_email")
+        if update_fields:
+            employee.save(update_fields=[*update_fields, "updated_at"])
+        if membership.employee_code != employee.employee_code:
+            membership.employee_code = employee.employee_code
+            membership.save(update_fields=["employee_code", "updated_at"])
+        return employee
+
+    employee_code = membership.employee_code.strip() if membership.employee_code else ""
+    if not employee_code or Employee.objects.filter(tenant=membership.tenant, employee_code=employee_code).exists():
+        employee_code = _next_workspace_employee_code(membership.tenant, role_codes)
+    if membership.employee_code != employee_code:
+        membership.employee_code = employee_code
+        membership.save(update_fields=["employee_code", "updated_at"])
+
+    display_name = user.display_name or user.get_full_name() or user.username
+    first_name = user.first_name or display_name.split(" ", 1)[0] or user.username
+    last_name = user.last_name or (display_name.split(" ", 1)[1] if " " in display_name else "")
+    employee, created = Employee.objects.get_or_create(
+        tenant=membership.tenant,
+        membership=membership,
+        defaults={
+            "employee_code": employee_code,
+            "first_name": first_name,
+            "last_name": last_name,
+            "preferred_name": first_name,
+            "work_email": user.email,
+            "employment_status": EmploymentStatus.ACTIVE,
+        },
+    )
+    update_fields = []
+    if employee.employment_status != EmploymentStatus.ACTIVE:
+        employee.employment_status = EmploymentStatus.ACTIVE
+        update_fields.append("employment_status")
+    if not employee.work_email and user.email:
+        employee.work_email = user.email
+        update_fields.append("work_email")
+    if update_fields and not created:
+        employee.save(update_fields=[*update_fields, "updated_at"])
+    return employee
+
+
 def invite_tenant_admin_membership(tenant, *, actor_identifier: str, payload: dict) -> dict:
     role_ids = _role_ids_for_tenant(tenant, payload.get("role_ids", []))
     if not role_ids:
         raise ValueError("Select at least one tenant role for the invited member.")
+    role_codes = set(Role.objects.filter(tenant=tenant, id__in=role_ids).values_list("code", flat=True))
     target_status = payload.get("membership_status", MembershipStatus.INVITED)
     if target_status == MembershipStatus.ACTIVE:
         control = _ensure_tenant_admin_seat_capacity(tenant)
@@ -1868,6 +1944,8 @@ def invite_tenant_admin_membership(tenant, *, actor_identifier: str, payload: di
         is_default=payload.get("is_default_membership", False),
     )
     _apply_tenant_admin_membership_roles(membership, role_ids)
+    if target_status == MembershipStatus.ACTIVE and role_codes.intersection(EMPLOYEE_CONTEXT_ROLE_CODES):
+        _ensure_workspace_employee_context(membership, role_codes)
     try:
         from apps.iam.services import queue_invite_email
 

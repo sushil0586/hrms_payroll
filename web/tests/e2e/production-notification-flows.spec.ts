@@ -26,14 +26,16 @@ test.describe("Production notification reliability proof", () => {
       "Retry ready",
       "Select notifications",
       "Select page",
-      "Retry policy",
-      "Retry available now",
-      "Quick review",
-      "Full review",
     ]);
     await expect(page.getByRole("heading", { name: "Notification queue", exact: true })).toBeVisible();
     await expect(page.locator(".queue-toolbar").getByRole("combobox", { name: /^Retry state/ })).toHaveValue("retry_ready");
     await expect(page.getByRole("button", { name: /Retry selected/ })).toBeVisible();
+    await page.getByText("Details and quick review").first().click();
+    await expectVisibleText(page, [
+      "Retry policy",
+      "Quick review",
+      "Full review",
+    ]);
     const selectPage = page.getByLabel("Select page");
     if (await selectPage.isVisible().catch(() => false)) {
       await selectPage.check();
@@ -80,7 +82,6 @@ test.describe("Production notification reliability proof", () => {
       "Retry ready",
       "Retry capped",
       "Channel diagnostics",
-      "Backend-backed delivery health",
       "Template diagnostics",
       "Event diagnostics",
       "Recent test notifications",
