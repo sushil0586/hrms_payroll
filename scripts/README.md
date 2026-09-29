@@ -49,6 +49,14 @@ pnpm qa:post-deploy-smoke
 
 The smoke script checks `/api/v1/health/`, `/`, `/login`, service status when running on the host, the current release commit, and disk usage below the default `85%` threshold. Override targets with `HRMS_SMOKE_BASE_URL`, `HRMS_SMOKE_APP_DIR`, `HRMS_SMOKE_DISK_WARN_PERCENT`, `HRMS_SMOKE_ATTEMPTS`, and `HRMS_SMOKE_SLEEP_SECONDS`.
 
+Run the documentation coverage and strict build gate:
+
+```bash
+pnpm qa:docs
+```
+
+This checks MkDocs navigation, menu-to-guide coverage, child route family coverage, screenshot references, and secret safety before building the documentation site with `mkdocs build --strict`.
+
 Run the public launch gate quick path:
 
 ```bash

@@ -6,7 +6,8 @@ export default async function EssLayout({ children }: { children: React.ReactNod
   const sessionUser = await requireWorkspaceAccess({ workspace: "ess" });
   const userLabel =
     sessionUser?.display_name || sessionUser?.first_name || sessionUser?.username || null;
-  const canAccessHrAdmin = Boolean(sessionUser?.workspace_access?.hr_admin);
+  const roleCodes = sessionUser?.default_membership?.role_codes ?? [];
+  const canAccessHrAdmin = roleCodes.some((roleCode) => roleCode === "hr-admin" || roleCode.startsWith("hr-"));
   const canAccessMss = Boolean(sessionUser?.workspace_access?.mss);
   const fallbackNavItems = [
     { href: "/ess", label: "Overview", shortLabel: "OV", blurb: "Self service" },

@@ -47,11 +47,12 @@ test.describe.serial("live backend auth and role access", () => {
   test("employee can use ESS but is redirected away from HR admin", async ({ page }) => {
     await loginAs(page, "employee");
     await expectLiveWorkspace(page, "Live ESS");
+    await expect(page.getByRole("link", { name: "HR Admin" })).toHaveCount(0);
 
     await page.goto("/hr-admin");
-    await expect(page).toHaveURL(/\/$/);
-    await expectPageReady(page, "Choose your workspace");
-    await expect(page.getByText(/HR admin restricted/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/ess$/);
+    await expectPageReady(page, "Self service");
+    await expectLiveWorkspace(page, "Live ESS");
   });
 
   test("manager can open MSS approvals and persist a live rejection into workflow trace", async ({ page }) => {

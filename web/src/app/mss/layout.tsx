@@ -6,7 +6,8 @@ export default async function MssLayout({ children }: { children: React.ReactNod
   const sessionUser = await requireWorkspaceAccess({ workspace: "mss" });
   const userLabel =
     sessionUser?.display_name || sessionUser?.first_name || sessionUser?.username || null;
-  const canAccessHrAdmin = Boolean(sessionUser?.workspace_access?.hr_admin);
+  const roleCodes = sessionUser?.default_membership?.role_codes ?? [];
+  const canAccessHrAdmin = roleCodes.some((roleCode) => roleCode === "hr-admin" || roleCode.startsWith("hr-"));
   const menuSource = await getWorkspaceMenuSource({
     workspace: "mss",
     sessionUser,

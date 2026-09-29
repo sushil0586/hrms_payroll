@@ -2,7 +2,8 @@ import { expect, request as apiRequest } from "@playwright/test";
 
 import { seededPassword, type SeededPersona } from "./auth";
 
-const backendURL = process.env.PLAYWRIGHT_LIVE_BACKEND_URL ?? "http://127.0.0.1:8010";
+const backendPort = process.env.PLAYWRIGHT_LIVE_BACKEND_PORT ?? "8010";
+const backendURL = process.env.PLAYWRIGHT_LIVE_BACKEND_URL ?? `http://127.0.0.1:${backendPort}`;
 
 const personaIdentifiers: Record<SeededPersona, string> = {
   employee: "riya.sharma",

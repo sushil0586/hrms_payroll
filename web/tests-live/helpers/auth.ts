@@ -27,6 +27,6 @@ export async function loginAs(page: Page, persona: SeededPersona) {
 }
 
 export async function expectLiveWorkspace(page: Page, label: string | RegExp) {
-  await expect(page.getByText(label).first()).toBeVisible();
+  await expect(page.locator("main").getByText(label).first()).toBeVisible();
   await expect(page.getByText(/Demo .*mode|seeded demo data/i)).toHaveCount(0);
 }

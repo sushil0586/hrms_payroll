@@ -1,0 +1,136 @@
+site_name: Accerio HRMS User Guide
+site_description: Searchable user documentation for Accerio HRMS workspaces and workflows.
+site_url: https://docs.accerio.in/
+repo_url: https://github.com/sushil0586/hrms-payroll-saas
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: blue
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Practical Scenario Coverage: scenario-coverage.md
+  - Getting Started:
+      - Workspaces and Roles: getting-started/workspaces-and-roles.md
+      - Glossary and Status Guide: glossary.md
+  - End-to-End Workflows:
+      - Overview: workflows/index.md
+      - Employee to Payroll: workflows/employee-to-payroll.md
+      - Payroll Close to Finance Handoff: workflows/payroll-close-to-finance-handoff.md
+      - Notification Failure to Recovery: workflows/notification-failure-to-recovery.md
+      - Documents to Verification: workflows/documents-to-verification.md
+      - Leave and Attendance to Payroll: workflows/leave-attendance-to-payroll.md
+  - Operating Checklists:
+      - Overview: checklists/index.md
+      - HR Admin Daily Checklist: checklists/hr-admin-daily.md
+      - Payroll Admin Monthly Checklist: checklists/payroll-admin-monthly.md
+      - Finance Manager Payroll Day: checklists/finance-manager-payroll-day.md
+      - Tenant Admin Weekly Checklist: checklists/tenant-admin-weekly.md
+  - Public Launch:
+      - Overview: launch/index.md
+      - Go-Live Checklist: launch/go-live-checklist.md
+      - First Payroll Run Guide: launch/first-payroll-run.md
+      - Admin Handoff Guide: launch/admin-handoff.md
+  - Platform Admin:
+      - Overview: platform-admin/index.md
+      - Task Recipes: platform-admin/task-recipes.md
+      - Dashboard: platform-admin/dashboard.md
+      - Leads: platform-admin/leads.md
+      - Tenants: platform-admin/tenants.md
+      - Launch Readiness: platform-admin/launch-readiness.md
+      - Admin Access: platform-admin/admin-access.md
+      - Setup Templates: platform-admin/setup-templates.md
+      - Permissions: platform-admin/permissions.md
+      - Audit Logs: platform-admin/audit-logs.md
+  - Tenant Admin:
+      - Overview: tenant-admin/index.md
+      - Task Recipes: tenant-admin/task-recipes.md
+      - Users: tenant-admin/users.md
+      - Roles: tenant-admin/roles.md
+      - Plan and Billing: tenant-admin/plan.md
+      - Setup Guide: tenant-admin/setup-guide.md
+      - Support Access: tenant-admin/support-access.md
+      - Trust Audit: tenant-admin/trust-audit.md
+      - Settings: tenant-admin/settings.md
+      - Security Readiness: tenant-admin/security.md
+  - HR Admin:
+      - Overview: hr-admin/index.md
+      - Dashboard: hr-admin/dashboard.md
+      - Task Recipes: hr-admin/task-recipes.md
+      - Launch Readiness: hr-admin/launch-readiness.md
+      - Employees: hr-admin/employees.md
+      - Workforce: hr-admin/workforce.md
+      - Lifecycle: hr-admin/lifecycle.md
+      - Organization: hr-admin/organization.md
+      - Time and Leave: hr-admin/time-leave.md
+      - Attendance: hr-admin/attendance.md
+      - Leave: hr-admin/leave.md
+      - Policies: hr-admin/policies.md
+      - Payroll:
+          - Overview: hr-admin/payroll/index.md
+          - Payroll Control: hr-admin/payroll/payroll-control.md
+          - Payroll Setup: hr-admin/payroll/payroll-setup.md
+          - Salary Setup: hr-admin/payroll/salary-setup.md
+          - Payroll Rules: hr-admin/payroll/payroll-rules.md
+          - Payroll Inputs: hr-admin/payroll/payroll-inputs.md
+          - Payroll Calculations: hr-admin/payroll/payroll-calculations.md
+          - Payroll Review: hr-admin/payroll/payroll-review.md
+          - Payroll Outputs: hr-admin/payroll/payroll-outputs.md
+          - Payroll Handoff: hr-admin/payroll/payroll-handoff.md
+          - Adjustments and Settlements: hr-admin/payroll/adjustments-settlements.md
+          - Statutory Payroll: hr-admin/payroll/statutory-payroll.md
+          - Payroll Providers: hr-admin/payroll/payroll-providers.md
+      - Documents: hr-admin/documents.md
+      - Notifications: hr-admin/notifications.md
+      - Imports: hr-admin/imports.md
+      - Ops Health: hr-admin/ops-health.md
+      - Reports: hr-admin/reports-audit.md
+      - Audit: hr-admin/audit.md
+      - Workflows: hr-admin/workflows.md
+  - Employee Self Service:
+      - Overview: ess/index.md
+      - Task Recipes: ess/task-recipes.md
+      - Payslips: ess/payslips.md
+      - Documents: ess/documents.md
+      - Tax Declarations: ess/statutory-declarations.md
+      - Notifications: ess/notifications.md
+  - Manager Self Service:
+      - Overview: mss/index.md
+      - Task Recipes: mss/task-recipes.md
+      - Approvals: mss/approvals.md
+      - Notifications: mss/notifications.md
+  - Finance Manager:
+      - Overview: finance-manager/index.md
+      - Task Recipes: finance-manager/task-recipes.md
+      - Payment Handoff: finance-manager/payment-handoff.md
+      - Compliance Evidence: finance-manager/compliance-evidence.md
+      - Audit Evidence: finance-manager/audit-evidence.md
+  - Troubleshooting:
+      - Common Issues: troubleshooting/index.md
+      - Payroll Issues: troubleshooting/payroll.md
+      - Access Issues: troubleshooting/access.md
+      - Notification Issues: troubleshooting/notifications.md
+      - Document Issues: troubleshooting/documents.md
+  - Maintaining Docs:
+      - How to Update: how-to-update.md
+      - Coverage Audit: coverage-audit.md
+      - Documentation QA: docs-qa.md

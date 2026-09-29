@@ -9,37 +9,37 @@ const seedPassword = process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123"
 
 export const hrAdmin: Persona = {
   username: process.env.PLAYWRIGHT_LIVE_HR_ADMIN_USERNAME ?? "nisha.rao",
-  password: seedPassword,
+  password: process.env.PLAYWRIGHT_LIVE_HR_ADMIN_PASSWORD ?? seedPassword,
 };
 
 export const manager: Persona = {
   username: process.env.PLAYWRIGHT_LIVE_MANAGER_USERNAME ?? "karan.mehta",
-  password: seedPassword,
+  password: process.env.PLAYWRIGHT_LIVE_MANAGER_PASSWORD ?? seedPassword,
 };
 
 export const employee: Persona = {
   username: process.env.PLAYWRIGHT_LIVE_EMPLOYEE_USERNAME ?? "riya.sharma",
-  password: seedPassword,
+  password: process.env.PLAYWRIGHT_LIVE_EMPLOYEE_PASSWORD ?? seedPassword,
 };
 
 export const platformAdmin: Persona = {
   username: process.env.PLAYWRIGHT_LIVE_PLATFORM_ADMIN_USERNAME ?? "platform.admin",
-  password: seedPassword,
+  password: process.env.PLAYWRIGHT_LIVE_PLATFORM_ADMIN_PASSWORD ?? seedPassword,
 };
 
 export const tenantAdmin: Persona = {
   username: process.env.PLAYWRIGHT_LIVE_TENANT_ADMIN_USERNAME ?? process.env.PLAYWRIGHT_LIVE_HR_ADMIN_USERNAME ?? "nisha.rao",
-  password: seedPassword,
+  password: process.env.PLAYWRIGHT_LIVE_TENANT_ADMIN_PASSWORD ?? process.env.PLAYWRIGHT_LIVE_HR_ADMIN_PASSWORD ?? seedPassword,
 };
 
 export const payrollFinanceManager: Persona = {
   username: process.env.PLAYWRIGHT_LIVE_PAYROLL_FINANCE_USERNAME ?? "payroll.finance",
-  password: seedPassword,
+  password: process.env.PLAYWRIGHT_LIVE_PAYROLL_FINANCE_PASSWORD ?? seedPassword,
 };
 
 export const supportAgent: Persona = {
   username: process.env.PLAYWRIGHT_LIVE_SUPPORT_AGENT_USERNAME ?? "support.agent",
-  password: seedPassword,
+  password: process.env.PLAYWRIGHT_LIVE_SUPPORT_AGENT_PASSWORD ?? seedPassword,
 };
 
 export function personaForRoute(path: string): Persona {

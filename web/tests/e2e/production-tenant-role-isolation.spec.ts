@@ -45,21 +45,17 @@ test.describe("Production tenant and role isolation proof", () => {
     await expect(page.getByText("Live workspace load failed.")).toHaveCount(0);
   });
 
-  test("workspace chooser presents role-scoped entry points before privileged access", async ({ page }, testInfo) => {
+  test("public landing keeps privileged workspaces behind sign-in", async ({ page }, testInfo) => {
     await page.goto("/");
-    await expectPageReady(page, "Choose your workspace");
+    await expectPageReady(page, "Run payroll, compliance, and employee operations from one audit-ready SaaS workspace.");
 
     await expectVisibleText(page, [
-      "Shared sign-in",
-      "Role-based access",
-      "HR admin",
-      "Employee self service",
-      "Manager approvals",
-      "Tenant admin",
-      "Sign in for HR admin",
-      "Sign in for ESS",
-      "Sign in for MSS",
-      "Sign in for tenant admin",
+      "Accerio HRMS",
+      "Customer login",
+      "Public signup",
+      "Request pilot access",
+      "Role-based",
+      "Separate experiences for platform admin, tenant admin, HR admin, finance, manager, support, and employee self-service.",
     ]);
     await expectNoHorizontalOverflow(page);
     await captureIsolationStep(page, testInfo, "01-public-workspace-role-boundary");
@@ -74,9 +70,9 @@ test.describe("Production tenant and role isolation proof", () => {
       "Employee scoped",
       "Storage governed",
       "The API resolves files through the signed-in employee context and tenant boundary.",
-      "Download payslip",
-      "Access trail",
-      "Calculation lines",
+      "Payslip register",
+      /Download via authenticated route|Access trail/,
+      /No payslips found|Calculation lines/,
     ]);
 
     const pageText = await page.locator("body").innerText();
@@ -115,15 +111,14 @@ test.describe("Production tenant and role isolation proof", () => {
 
   test("tenant admin and support workspaces expose scoped access controls", async ({ page }, testInfo) => {
     await loginIfRequired(page, hrAdmin, "/tenant-admin");
-    await expectPageReady(page, "Tenant Admin Console");
+    await expectPageReady(page, "Account Control Center");
     await expectVisibleText(page, [
-      "Role coverage",
-      "User Directory",
-      "Support access",
-      "Scoped support grants",
-      "Request access",
-      "Revoke",
-      "Commercial audit",
+      "Tenant Status",
+      "Action Queue",
+      "Launch checklist",
+      "User Management",
+      "Access design",
+      "Download audit",
     ]);
     await expectNoHorizontalOverflow(page);
     await captureIsolationStep(page, testInfo, "03-tenant-admin-role-controls");
