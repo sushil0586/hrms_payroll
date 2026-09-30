@@ -124,6 +124,29 @@ Some employee fields directly affect payroll readiness. Treat them carefully nea
 | Exit | Begin exit workflow. | Exit status and F&F requirements are visible. |
 | Review warnings | Investigate readiness messages. | Warning is fixed or intentionally accepted with evidence. |
 
+## Employee access and invite email
+
+Use employee access only when the person needs to sign in to ESS, MSS, HR Admin, Finance Manager, or another workspace.
+
+When HR Admin creates access for an employee:
+
+1. The system creates or links the user account.
+2. The system creates the tenant membership and role assignment.
+3. The system queues a secure setup email to the employee email address.
+4. The email contains a password setup/reset link.
+5. The generated temporary password is not included in the email body.
+
+After creating access, confirm:
+
+- The email address is correct.
+- The user status is active when login is required.
+- The membership status is active or invited, depending on the launch decision.
+- At least one role is assigned.
+- The invite/setup email appears in **Notifications** as pending, delivered, or failed.
+- The user can open the setup link, set a password, and land in the correct workspace.
+
+If the employee says the email did not arrive, check **Notifications** for that email address. If no invite notification exists, the access may have been created before invite automation was enabled; resend a setup/reset email or ask an administrator to regenerate the invite.
+
 ## Recommended workflows
 
 ### Create one employee
@@ -141,6 +164,7 @@ Before leaving the employee record, confirm:
 - Legal entity, branch, location, department, designation, and manager are set.
 - Employee status and joining date are correct.
 - Access is created only if the employee needs to log in.
+- If access is created, the setup email is queued and the user can complete password setup.
 - Payroll-related setup continues in Salary Setup and bank/statutory screens.
 
 ### Correct payroll blocker

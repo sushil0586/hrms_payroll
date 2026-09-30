@@ -74,6 +74,8 @@ If the correct department, branch, location, designation, or employee type is no
 2. If access is missing, open the employee actions or Tenant Admin user access flow.
 3. Assign the correct workspace access only if the employee needs to log in.
 4. Confirm the assigned role matches the person’s responsibility.
+5. Confirm the setup email is queued or delivered in **Notifications**.
+6. Ask the user to complete the password setup link and sign in once.
 
 Typical access choices:
 
@@ -90,6 +92,17 @@ Do not proceed if:
 - Active employee requires ESS but shows no access.
 - A manager has direct reports but no manager access.
 - Admin access is assigned without approval.
+- The invite/setup email is failed, retry capped, or missing for a newly created access user.
+
+Access email behavior:
+
+| Situation | Expected behavior |
+| --- | --- |
+| HR Admin creates employee access | A secure setup email is queued for the employee email address. |
+| Tenant Admin invites a user | A secure setup email is queued for the invited user. |
+| User forgets password | Password reset creates a secure setup/reset email. |
+| Email does not arrive | Check Notifications by recipient email, then follow access troubleshooting. |
+| Old access existed before invite automation | Resend setup/reset email rather than recreating the employee. |
 
 ## Step 4: Complete Salary and Payroll Setup
 

@@ -62,6 +62,7 @@ Before signoff, confirm:
 | Password reset queueing | `backend/tests/test_account_email_flows.py` covers reset request, queued email notification, successful reset, and reused token rejection. |
 | Missing reset account privacy | `backend/tests/test_account_email_flows.py` confirms missing accounts return success without creating a notification. |
 | Invite queueing | `backend/tests/test_account_email_flows.py` covers setup link creation and confirms generated password is not exposed. |
+| HR Admin employee access invite queueing | `backend/tests/test_phase0_api_smoke.py::test_hr_admin_can_assign_employee_role_and_auto_generate_password` confirms HR Admin-created employee access queues a secure invite/setup email and does not expose the generated password. |
 | Notification processing | Backend notification services and task/management command exist for queued delivery processing. |
 | Notification UI recovery | `web/tests/e2e/production-notification-flows.spec.ts` covers queue triage, review, diagnostics, delivery health, and retry-oriented screens. |
 
@@ -122,6 +123,20 @@ Notes:
 | Template test-send flow | HR Admin template test-send API returned `200`; notification `830c6f03-7a41-4259-a78f-7b40d8a3d0e8` delivered via `email_smtp`; subject `Accerio template test 2026-09-29T03:36:47Z`. | Passed from app and provider-acceptance side. |
 | Invite/setup email flow | Existing verified membership invite notification `eeaaed8d-e527-440d-adbf-064d897c682c` processed and delivered via `email_smtp`. | Passed from app and provider-acceptance side. |
 | Fresh tenant-admin invite flow | Tenant Admin API created active HR Admin membership `dd8a8cfd-d9b2-4335-a50b-d2f6f2076d26` for `aditi.gupta1789@gmail.com`; notification `5b006dbd-d514-41e4-b252-6e8e76ff19b7` delivered via `email_smtp` with subject `You are invited to Accerio India on Accerio HRMS`. | Passed from app, queue, and provider-acceptance side. |
+
+## HR Admin Employee Access Invite Regression - 2026-09-30
+
+| Check | Evidence | Result |
+| --- | --- | --- |
+| Stage issue reproduced | User `m4407998@gmail.com` existed with active membership and `must_change_password=True`, but had no invite notification or delivery log. | Confirmed root cause was missing invite queue call in the HR Admin employee-access creation path. |
+| Code fix | `save_hr_admin_employee_access` now queues `account_invite` only when new employee access is created. Existing access edits do not resend automatically. | Fixed locally. |
+| Backend regression | Focused tests passed: HR Admin employee access invite, account email flows, and tenant-admin invite flows. | Passed: 8 tests. |
+| Stage remediation | A one-time setup invite was queued and processed for `m4407998@gmail.com`; notification `e9ae79ba-19a9-4ddb-ad15-efe6c8e1fe27` delivered via `email_smtp`. | Passed from app and provider-acceptance side. |
+
+Operational note:
+
+- If a user was created before this fix and no invite notification exists, resend a password setup/reset email instead of recreating the employee.
+- If a notification exists but is failed or retry capped, resolve it through Notification Delivery and queue review.
 
 Stage note:
 

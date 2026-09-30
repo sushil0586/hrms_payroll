@@ -99,6 +99,28 @@ Check:
 
 If email failed, follow [Notification Issues](notifications.md).
 
+### How to interpret the notification result
+
+| What you find | Meaning | Action |
+| --- | --- | --- |
+| Delivered email notification exists | The app sent the message through the configured provider. | Ask the user to check spam/promotions or verify the mailbox address. |
+| Failed email notification exists | The app tried to send but the provider or recipient path failed. | Open the notification review page, fix the cause, then retry. |
+| Retry capped | The system stopped retrying after the configured attempt limit. | Fix the provider/recipient issue, then use controlled retry or create a new reset/setup email. |
+| Pending for too long | Queue processor may not be running or the notification is scheduled for later. | Check notification delivery health and worker/timer status. |
+| No notification exists for a new HR Admin access user | Access was created but the setup email was not queued, or the user was created before invite automation was enabled. | Use password reset/resend setup email and verify the notification appears. |
+
+### HR Admin-created employee access
+
+When HR Admin creates employee access from **Employees > Actions > Access**, the expected behavior is:
+
+- A user account is created or linked.
+- Tenant membership and role assignment are saved.
+- A secure invite/setup email is queued.
+- The email contains a setup/reset link.
+- The generated password is not shown in the email body.
+
+After creating access, verify the employee can set a password and route to the intended workspace. If they land on **Workspace Access**, check role assignment, employee link, membership status, and default workspace.
+
 ## Security Rules
 
 - Assign the least access needed.
@@ -124,4 +146,3 @@ When escalating an access issue, include:
 - [Tenant Admin Roles](../tenant-admin/roles.md)
 - [Workspaces and Roles](../getting-started/workspaces-and-roles.md)
 - [Notification Failure to Recovery](../workflows/notification-failure-to-recovery.md)
-
