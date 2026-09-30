@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { LogoutButton } from "@/app/components/logout-button";
 import { payrollCycleOperationalHrefs } from "@/lib/ui/navigation";
@@ -22,6 +22,13 @@ export type WorkspaceNavGroup = {
   items: WorkspaceNavItem[];
 };
 
+export type WorkspaceSearchDestination = {
+  href: string;
+  label: string;
+  description?: string;
+  section?: string;
+};
+
 type Props = {
   children: React.ReactNode;
   roleLabel: string;
@@ -34,6 +41,7 @@ type Props = {
   navItems: WorkspaceNavItem[];
   navGroups?: WorkspaceNavGroup[];
   quickLinks?: Array<{ href: string; label: string }>;
+  searchDestinations?: WorkspaceSearchDestination[];
   footerTitle?: string;
   footerDescription?: string;
 };
@@ -100,6 +108,147 @@ function NavEntry({
   );
 }
 
+function WorkspaceSearch({
+  groups,
+  quickLinks,
+  searchDestinations,
+  searchHint,
+  router,
+}: {
+  groups: WorkspaceNavGroup[];
+  quickLinks: Array<{ href: string; label: string }>;
+  searchDestinations: WorkspaceSearchDestination[];
+  searchHint: string;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const searchableItems = useMemo(() => {
+    const navResults = groups.flatMap((group) =>
+      group.items
+        .filter((item) => !item.disabled)
+        .map((item) => ({
+          href: item.href,
+          label: item.label,
+          description: item.blurb || group.title,
+          section: group.title,
+        })),
+    );
+    const quickResults = quickLinks.map((item) => ({
+      href: item.href,
+      label: item.label,
+      description: "Shortcut",
+      section: "Quick links",
+    }));
+    const extraResults = searchDestinations.map((item) => ({
+      href: item.href,
+      label: item.label,
+      description: item.description || item.section || "Workspace page",
+      section: item.section || "Pages",
+    }));
+    const seen = new Set<string>();
+    return [...navResults, ...quickResults, ...extraResults].filter((item) => {
+      const key = `${item.href}:${item.label}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }, [groups, quickLinks, searchDestinations]);
+  const results = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return searchableItems.slice(0, 6);
+    }
+    return searchableItems
+      .filter((item) =>
+        [item.label, item.description, item.section, item.href].some((value) => value.toLowerCase().includes(normalizedQuery)),
+      )
+      .slice(0, 8);
+  }, [query, searchableItems]);
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsOpen(true);
+        inputRef.current?.focus();
+      }
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        inputRef.current?.blur();
+      }
+    }
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
+  function openResult(href: string) {
+    setIsOpen(false);
+    setQuery("");
+    router.push(href);
+  }
+
+  return (
+    <div className="workspace-search" onFocus={() => setIsOpen(true)}>
+      <label className="search-chip search-chip--calm" aria-label="Workspace search">
+        <span className="search-chip__icon" aria-hidden="true">⌕</span>
+        <input
+          aria-label="Workspace search"
+          autoComplete="off"
+          className="workspace-search__input"
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && results[0]) {
+              event.preventDefault();
+              openResult(results[0].href);
+            }
+          }}
+          placeholder={searchHint}
+          ref={inputRef}
+          type="search"
+          value={query}
+        />
+        <kbd>Cmd K</kbd>
+      </label>
+      {isOpen ? (
+        <div className="workspace-search__panel" role="region" aria-label="Workspace search results">
+          <div className="workspace-search__summary">
+            <strong>{query.trim() ? "Search results" : "Common destinations"}</strong>
+            <button className="workspace-search__close" onClick={() => setIsOpen(false)} type="button">Close</button>
+          </div>
+          {results.length ? (
+            <div className="workspace-search__results">
+              {results.map((item) => (
+                <button
+                  className="workspace-search__result"
+                  key={`${item.href}:${item.label}`}
+                  onClick={() => openResult(item.href)}
+                  onMouseEnter={() => router.prefetch(item.href)}
+                  type="button"
+                >
+                  <span>
+                    <strong>{item.label}</strong>
+                    <small>{item.description}</small>
+                  </span>
+                  <em>{item.section}</em>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="workspace-search__empty">
+              <strong>No matching page</strong>
+              <span>Try employee, payroll, leave, attendance, reports, or a menu name.</span>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function WorkspaceChrome({
   children,
   roleLabel,
@@ -112,6 +261,7 @@ export function WorkspaceChrome({
   navItems,
   navGroups,
   quickLinks = [],
+  searchDestinations = [],
   footerTitle,
   footerDescription,
 }: Props) {
@@ -179,11 +329,7 @@ export function WorkspaceChrome({
             <strong>{workspaceLabel}</strong>
           </div>
 
-          <div className="search-chip search-chip--calm" aria-label="Search placeholder">
-            <span className="search-chip__icon" aria-hidden="true">⌕</span>
-            <span>{searchHint}</span>
-            <kbd>Cmd K</kbd>
-          </div>
+          <WorkspaceSearch groups={groups} quickLinks={quickLinks} router={router} searchDestinations={searchDestinations} searchHint={searchHint} />
 
           <div className="topbar-actions topbar-actions--workspace">
             <details className="mobile-workspace-nav">

@@ -3,6 +3,7 @@
 from datetime import date, datetime, timedelta
 import csv
 import json
+import logging
 import re
 import secrets
 from decimal import Decimal
@@ -687,6 +688,9 @@ from apps.workflows.models import (
 from apps.workflows.services import create_workflow_instance
 
 
+logger = logging.getLogger(__name__)
+
+
 EMPLOYEE_INACTIVE_STATUSES = {
     EmploymentStatus.INACTIVE,
     EmploymentStatus.EXITED,
@@ -1008,6 +1012,7 @@ def save_hr_admin_employee_access(actor, employee_id, validated_data):
     user.must_change_password = validated_data.get("must_change_password", True)
     user.save()
 
+    created_access = membership is None
     if not membership:
         membership = TenantMembership(
             tenant=actor.tenant,
@@ -1037,6 +1042,14 @@ def save_hr_admin_employee_access(actor, employee_id, validated_data):
         membership.membership_roles.all().delete()
     else:
         membership.membership_roles.exclude(role_id=role_ids[0]).update(is_primary=False)
+
+    if created_access:
+        try:
+            from apps.iam.services import queue_invite_email
+
+            queue_invite_email(membership=membership, generated_password=generated_password or "")
+        except Exception:
+            logger.exception("Failed to queue HR admin employee access invite email for membership %s", membership.id)
 
     payload = get_hr_admin_employee_access_detail(actor, employee.id)
     payload["generated_password"] = generated_password

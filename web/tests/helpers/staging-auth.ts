@@ -91,7 +91,11 @@ async function authenticateWithApiSession(page: Page, persona: Persona) {
       password: persona.password,
     },
   });
-  await expect(response.ok()).toBeTruthy();
+  const payload = await response.json().catch(() => ({}));
+  await expect(
+    response.ok(),
+    `Login failed for ${persona.username} with status ${response.status()}: ${JSON.stringify(payload)}`,
+  ).toBeTruthy();
 }
 
 export async function loginIfRequired(page: Page, persona: Persona, targetPath: string) {

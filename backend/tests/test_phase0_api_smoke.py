@@ -16106,6 +16106,12 @@ def test_hr_admin_can_assign_employee_role_and_auto_generate_password(api_client
     assert payload["password_was_reset"] is True
     assert isinstance(payload["generated_password"], str)
     assert payload["generated_password"]
+    membership = TenantMembership.objects.get(tenant=tenant, user__email="access.provision@northstar.example")
+    notification = Notification.objects.get(recipient_membership=membership, subject_type="account_invite")
+    assert notification.status == NotificationStatus.PENDING
+    assert notification.recipient_address == "access.provision@northstar.example"
+    assert "/reset-password?" in notification.body
+    assert payload["generated_password"] not in notification.body
 
 
 @pytest.mark.django_db

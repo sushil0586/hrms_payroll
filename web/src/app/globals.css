@@ -1105,6 +1105,163 @@ select.input-control {
   justify-content: space-between;
 }
 
+.workspace-search {
+  position: relative;
+  flex: 1 1 320px;
+  min-width: min(320px, 100%);
+  width: 100%;
+  z-index: 45;
+}
+
+.workspace-search .search-chip {
+  width: 100%;
+  cursor: text;
+}
+
+.workspace-search__input {
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #1f2937;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.workspace-search__input::placeholder {
+  color: #7c879b;
+  opacity: 1;
+}
+
+.workspace-search__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 8px;
+  max-height: min(440px, calc(100vh - 120px));
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 60px -36px rgba(15, 23, 42, 0.36);
+}
+
+.workspace-search__panel:focus-within {
+  border-color: #bfdbfe;
+}
+
+.workspace-search__summary,
+.workspace-search__result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-search__summary {
+  padding: 2px 4px 8px;
+  border-bottom: 1px solid #edf1f7;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workspace-search__close {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.workspace-search__results {
+  display: grid;
+  gap: 6px;
+}
+
+.workspace-search__result {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #0f172a;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.workspace-search__result:hover,
+.workspace-search__result:focus-visible {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  outline: 0;
+}
+
+.workspace-search__result span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.workspace-search__result strong,
+.workspace-search__result small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-search__result strong {
+  color: #111827;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.workspace-search__result small {
+  color: #718096;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.workspace-search__result em {
+  flex: 0 0 auto;
+  max-width: 140px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.workspace-search__empty {
+  display: grid;
+  gap: 4px;
+  padding: 14px 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.workspace-search__empty strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
 .search-chip__icon,
 .user-chip__avatar {
   display: inline-flex;
@@ -8274,9 +8431,12 @@ select.input-control {
   font-size: 13px;
 }
 
-.workspace-tone--tenant .search-chip--calm {
+.workspace-tone--tenant .workspace-search {
   order: 1;
   justify-self: stretch;
+}
+
+.workspace-tone--tenant .search-chip--calm {
   height: 38px;
   border: 1px solid #d9e0ea;
   border-radius: 8px;
@@ -8586,9 +8746,12 @@ select.input-control {
   font-size: 13px;
 }
 
-.workspace-tone--hr .search-chip--calm {
+.workspace-tone--hr .workspace-search {
   order: 1;
   justify-self: stretch;
+}
+
+.workspace-tone--hr .search-chip--calm {
   height: 38px;
   border: 1px solid #d9e0ea;
   border-radius: 8px;
@@ -9056,6 +9219,10 @@ select.input-control {
     padding: 18px 14px 36px;
   }
 
+  .workspace-search {
+    min-width: 0;
+  }
+
   .tenant-page-intro .page-intro__headline,
   .tenant-page-intro .page-intro__actions {
     align-items: stretch;
@@ -9063,6 +9230,15 @@ select.input-control {
 
   .tenant-page-intro .page-intro__actions .button {
     flex: 1 1 160px;
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace-search__panel {
+    position: fixed;
+    top: 70px;
+    right: 12px;
+    left: 12px;
   }
 }
 

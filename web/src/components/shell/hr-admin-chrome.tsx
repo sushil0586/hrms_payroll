@@ -1,6 +1,6 @@
 "use client";
 
-import { hrAdminNavigation } from "@/lib/ui/navigation";
+import { hrAdminNavigation, hrAdminSearchDestinations } from "@/lib/ui/navigation";
 import { WorkspaceChrome } from "@/components/shell/workspace-chrome";
 import type { WorkspaceNavGroup, WorkspaceNavItem } from "@/components/shell/workspace-chrome";
 
@@ -25,6 +25,7 @@ export function HrAdminChrome({ children, navGroups, navItems, quickLinks, userL
         { href: "/mss/approvals", label: "MSS" },
       ]}
       roleLabel="HR Admin"
+      searchDestinations={hrAdminSearchDestinations}
       searchHint="Search employees, payroll, leave, attendance, reports..."
       userLabel={userLabel}
       workspaceLabel="People Operations"
