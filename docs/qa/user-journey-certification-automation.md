@@ -189,15 +189,58 @@ Stage notes:
 - Set `PLAYWRIGHT_LIVE_HR_ADMIN_USERNAME` and `PLAYWRIGHT_LIVE_HR_ADMIN_PASSWORD` for the stage HR Admin account.
 - Mutation close tests remain in the dedicated payroll suites and should only be run with disposable records.
 
+## Phase 6: ESS and MSS Practical Workflow
+
+Purpose: verify employees and managers can complete daily self-service work without UI confusion, and optionally run live disposable approval mutations.
+
+Run the safe certification:
+
+```bash
+pnpm --dir web certify:users:phase6
+```
+
+Safe checks:
+
+- Employee opens ESS and understands the action queue, profile, attendance, leave balances, request forms, and history/detail split views.
+- Employee can open Payslips, Documents, Statutory Declarations, and Notifications from the ESS workspace.
+- Manager opens MSS, follows control-center shortcuts, switches Leave and Attendance queues, and opens Notifications.
+- ESS and MSS child pages show meaningful headings, stable controls, real links, and no horizontal overflow.
+- Mobile ESS keeps the request panels and history sections usable.
+
+Run the live disposable mutation path only when stage is ready for test records:
+
+```bash
+PLAYWRIGHT_PHASE6_MUTATE=true pnpm --dir web certify:users:phase6
+```
+
+If the stage employee exists but does not yet have a leave-policy assignment, allow the test to prepare that HR Admin setup first:
+
+```bash
+PLAYWRIGHT_PHASE6_MUTATE=true PLAYWRIGHT_PHASE6_PREPARE=true pnpm --dir web certify:users:phase6
+```
+
+Mutation checks:
+
+- Employee sees leave date validation for an invalid range.
+- Employee submits a disposable leave request with a `PW_PHASE6_` reason.
+- Manager opens the specific leave request from MSS and approves it.
+- Employee sees the approved leave and manager note in ESS.
+- Employee sees attendance regularization validation for invalid check-in/check-out order.
+- Employee submits a disposable attendance regularization.
+- Manager opens the specific regularization from MSS and rejects it.
+- Employee sees the rejected regularization and manager note in ESS.
+
+Stage notes:
+
+- Set `PLAYWRIGHT_LIVE_EMPLOYEE_USERNAME`, `PLAYWRIGHT_LIVE_EMPLOYEE_PASSWORD`, `PLAYWRIGHT_LIVE_MANAGER_USERNAME`, and `PLAYWRIGHT_LIVE_MANAGER_PASSWORD`.
+- Set `PLAYWRIGHT_LIVE_HR_ADMIN_USERNAME` and `PLAYWRIGHT_LIVE_HR_ADMIN_PASSWORD` when using `PLAYWRIGHT_PHASE6_PREPARE=true`.
+- The mutation path expects the employee to have at least one leave type, at least one attendance record, and a reporting manager who can decide the request.
+- `PLAYWRIGHT_PHASE6_PREPARE=true` creates only an active employee-scoped leave-policy assignment for the configured employee when one is missing.
+- If the stage employee has no active leave policy assignment, the leave mutation is skipped with an explicit prerequisite message instead of being reported as a product failure.
+- If the stage employee has no attendance record options, the attendance mutation is skipped with an explicit prerequisite message.
+- Test-created leave and attendance reasons start with `PW_PHASE6_` for audit and cleanup.
+
 ## Next Automation Phases
-
-Phase 6: ESS and MSS practical workflow
-
-- Employee submits leave.
-- Manager approves/rejects leave.
-- Employee submits attendance regularization.
-- Manager approves/rejects attendance.
-- Employee views payslip and document center.
 
 Phase 7: Email and notification verification
 
