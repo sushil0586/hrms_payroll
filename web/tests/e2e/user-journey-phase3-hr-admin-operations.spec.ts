@@ -228,7 +228,7 @@ async function loginAsCreatedEmployee(page: Page, loginName: string) {
   await page.request.post("/api/auth/logout").catch(() => null);
   await page.context().clearCookies();
   await gotoAuthenticated(page, "/ess", { username: loginName, password });
-  await expectPageReady(page, /Self service|Employee/i);
+  await expectPageReady(page, /My workspace|Self service|Employee/i);
   await expectNoHorizontalOverflow(page);
 }
 
