@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PayslipReadReceiptAction } from "@/app/ess/payslips/payslip-read-receipt-action";
 import { getEssPayrollPayslips } from "@/lib/api";
 import type { EssPayrollPayslip } from "@/lib/types";
@@ -105,15 +106,15 @@ function PayslipRail({
   filters: { q: string; year: string; page_size: number };
 }) {
   return (
-    <aside className="payroll-setup-rail payroll-output-rail">
-      <div className="payroll-setup-panel__header">
+    <aside className="ess-payslip-rail">
+      <div className="ess-payslip-panel-header">
         <span className="workspace-card__eyebrow">Published history</span>
-        <h2>My payslips</h2>
+        <h2>Payslip months</h2>
       </div>
-      <div className="payroll-setup-card-list">
+      <div className="ess-payslip-card-list">
         {payslips.map((payslip) => (
           <Link
-            className={`payroll-setup-mini-card payroll-output-card ${selectedPayslip?.id === payslip.id ? "is-selected" : ""}`}
+            className={`ess-payslip-card ${selectedPayslip?.id === payslip.id ? "is-selected" : ""}`}
             href={`/ess/payslips${buildQueryString({
               q: filters.q,
               year: filters.year,
@@ -122,16 +123,21 @@ function PayslipRail({
             })}`}
             key={payslip.id}
           >
-            <div>
-              <strong>{payslip.period_name}</strong>
-              <span>{payslip.payroll_run_name}</span>
+            <div className="ess-payslip-card__top">
+              <div>
+                <strong>{payslip.period_name}</strong>
+                <span>{payslip.payroll_run_name}</span>
+              </div>
+              <StatusBadge status="published" />
             </div>
-            <StatusBadge status="published" />
-            <div className="payroll-input-run-card__counts">
-              <span>{formatMoney(payslip.totals_snapshot.net_pay)}</span>
+            <div className="ess-payslip-card__amount">
+              <span>Net pay</span>
+              <strong>{formatMoney(payslip.totals_snapshot.net_pay)}</strong>
+            </div>
+            <div className="ess-payslip-card__meta">
               <span>{formatDate(payslip.pay_date)}</span>
+              <span>{payslip.access_summary.is_read_acknowledged ? "Read" : "Pending read"}</span>
             </div>
-            <code>{payslip.storage_object_version || payslip.download_strategy_ref}</code>
           </Link>
         ))}
       </div>
@@ -142,8 +148,8 @@ function PayslipRail({
 function PayslipDetail({ payslip }: { payslip: EssPayrollPayslip | null }) {
   if (!payslip) {
     return (
-      <aside className="payroll-setup-detail-panel payroll-output-detail-panel">
-        <div className="payroll-setup-panel__header">
+      <aside className="ess-payslip-detail">
+        <div className="ess-payslip-panel-header">
           <span className="workspace-card__eyebrow">Payslip detail</span>
           <h2>No payslip selected</h2>
         </div>
@@ -153,8 +159,8 @@ function PayslipDetail({ payslip }: { payslip: EssPayrollPayslip | null }) {
   }
 
   return (
-    <aside className="payroll-setup-detail-panel payroll-output-detail-panel" aria-label={`${payslip.title} detail`}>
-      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+    <aside className="ess-payslip-detail" aria-label={`${payslip.title} detail`}>
+      <div className="ess-payslip-panel-header ess-payslip-panel-header--split">
         <div>
           <span className="workspace-card__eyebrow">Payslip detail</span>
           <h2>{payslip.title}</h2>
@@ -163,24 +169,27 @@ function PayslipDetail({ payslip }: { payslip: EssPayrollPayslip | null }) {
         <StatusBadge status="published" />
       </div>
 
-      <div className="payroll-output-net-block">
+      <div className="ess-payslip-net-card">
         <span className="workspace-card__eyebrow">Net pay</span>
         <strong>{formatMoney(payslip.totals_snapshot.net_pay)}</strong>
-        <span>{payslip.file_name || payslip.id}</span>
-        {payslip.download_url ? (
-          <a className="button button--secondary payroll-output-download-link" href={`/api/me/payroll-payslips/${payslip.id}/download`}>
-            Download payslip
-          </a>
-        ) : (
-          <span className="payroll-output-download-state">Download blocked</span>
-        )}
-        <PayslipReadReceiptAction
-          endpoint={`/api/me/payroll-payslips/${payslip.id}/read`}
-          isReadAcknowledged={payslip.access_summary.is_read_acknowledged}
-        />
+        <span>{payslip.period_name} / Paid {formatDate(payslip.pay_date)}</span>
+        <span>{payslip.file_name || "Generated payslip file"}</span>
+        <div className="ess-payslip-action-row">
+          {payslip.download_url ? (
+            <a className="button button--secondary" href={`/api/me/payroll-payslips/${payslip.id}/download`}>
+              Download payslip
+            </a>
+          ) : (
+            <span className="payroll-output-download-state">Download blocked</span>
+          )}
+          <PayslipReadReceiptAction
+            endpoint={`/api/me/payroll-payslips/${payslip.id}/read`}
+            isReadAcknowledged={payslip.access_summary.is_read_acknowledged}
+          />
+        </div>
       </div>
 
-      <section className="payroll-rule-source-card">
+      <section className="ess-payslip-detail-section">
         <span className="workspace-card__eyebrow">Access trail</span>
         <div className="detail-grid">
           <DetailRow label="Notifications" value={String(payslip.access_summary.notification_count)} />
@@ -190,7 +199,7 @@ function PayslipDetail({ payslip }: { payslip: EssPayrollPayslip | null }) {
         </div>
       </section>
 
-      <section className="payroll-rule-source-card">
+      <section className="ess-payslip-detail-section">
         <span className="workspace-card__eyebrow">Payment summary</span>
         <div className="detail-grid">
           <DetailRow label="Gross earnings" value={formatMoney(payslip.totals_snapshot.gross_earnings)} />
@@ -202,7 +211,7 @@ function PayslipDetail({ payslip }: { payslip: EssPayrollPayslip | null }) {
         </div>
       </section>
 
-      <section className="payroll-rule-source-card">
+      <section className="ess-payslip-detail-section">
         <span className="workspace-card__eyebrow">Storage governance</span>
         <div className="detail-grid">
           <DetailRow label="Provider" value={payslip.storage_provider_ref} />
@@ -215,12 +224,12 @@ function PayslipDetail({ payslip }: { payslip: EssPayrollPayslip | null }) {
         </div>
       </section>
 
-      <section className="payroll-rule-source-card">
+      <section className="ess-payslip-detail-section">
         <span className="workspace-card__eyebrow">Source hash</span>
         <code>{payslip.source_hash}</code>
       </section>
 
-      <section className="payroll-rule-source-card">
+      <section className="ess-payslip-detail-section">
         <span className="workspace-card__eyebrow">Recent access events</span>
         <div className="payroll-rule-snapshot-list">
           {payslip.access_events.map((event) => (
@@ -234,7 +243,7 @@ function PayslipDetail({ payslip }: { payslip: EssPayrollPayslip | null }) {
         </div>
       </section>
 
-      <section className="payroll-rule-source-card">
+      <section className="ess-payslip-detail-section">
         <span className="workspace-card__eyebrow">Calculation lines</span>
         <div className="payroll-rule-snapshot-list">
           {payslip.line_snapshot.map((line, index) => (
@@ -267,13 +276,15 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
   });
   const data = result.data;
   const selectedPayslip = data.items.find((item) => item.id === selectedPayslipId) ?? data.items[0] ?? null;
+  const totalPages = Math.max(1, Math.ceil(data.total_count / Math.max(data.page_size, 1)));
+  const sharedParams = { q, year, page_size: data.page_size, payslipId: selectedPayslip?.id };
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-outputs shell--ess-payslips">
+    <main className="shell shell--workspace shell--ess-payslips">
       <PageIntro
         eyebrow={result.state === "live" ? "Live employee payroll" : "Demo employee payroll"}
         title="Payslips"
-        description="Published payroll outputs for the signed-in employee, with download metadata, retention policy, source hash, and calculation line evidence."
+        description="View, download, and acknowledge the payslips released to your employee account."
         className="page-header-surface page-header-surface--compact"
         titleClassName="text-heading-premium page-title-soft"
         descriptionClassName="text-body-premium"
@@ -290,7 +301,7 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
             </Link>
           </>
         }
-        pills={["Published only", "Employee scoped", "Storage governed"]}
+        pills={["Personal view", "Published only", "Audit protected"]}
         showPills
       />
 
@@ -304,11 +315,11 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
       </section>
 
       <section className="section section--tight">
-        <div className="payroll-setup-workspace payroll-output-workspace">
+        <div className="ess-payslip-workspace">
           <PayslipRail payslips={data.items} selectedPayslip={selectedPayslip} filters={{ q, year, page_size: pageSize }} />
 
-          <div className="payroll-setup-main-panel">
-            <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+          <div className="ess-payslip-main">
+            <div className="ess-payslip-panel-header ess-payslip-panel-header--split">
               <div>
                 <span className="workspace-card__eyebrow">Employee register</span>
                 <h2>Payslip register</h2>
@@ -316,15 +327,15 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
               <StatusBadge status={selectedPayslip ? "published" : "draft"} />
             </div>
 
-            <form action="/ess/payslips" className="payroll-filter-form">
-              <input className="input-control" defaultValue={q} name="q" placeholder="Search payslips" />
-              <select className="input-control" defaultValue={year} name="year">
+            <form action="/ess/payslips" className="ess-payslip-filter-form">
+              <input aria-label="Search payslips" className="input-control" defaultValue={q} name="q" placeholder="Search payslips" />
+              <select aria-label="Year" className="input-control" defaultValue={year} name="year">
                 <option value="">All years</option>
                 {data.summary.available_years.map((availableYear) => (
                   <option key={availableYear} value={availableYear}>{availableYear}</option>
                 ))}
               </select>
-              <select className="input-control" defaultValue={String(pageSize)} name="page_size">
+              <select aria-label="Rows per page" className="input-control" defaultValue={String(pageSize)} name="page_size">
                 <option value="5">5 / page</option>
                 <option value="10">10 / page</option>
                 <option value="25">25 / page</option>
@@ -333,7 +344,7 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
               <button className="button button--primary" type="submit">Apply</button>
             </form>
 
-            <div className="payroll-review-lock-strip payroll-output-publish-strip">
+            <div className="ess-payslip-summary-strip">
               <div>
                 <span className="workspace-card__eyebrow">Latest period</span>
                 <strong>{data.summary.latest_period_name || "Pending"}</strong>
@@ -352,14 +363,15 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
             </div>
 
             <div className="payroll-table-scroll">
-              <table className="payroll-readiness-table payroll-setup-table payroll-output-artifact-table">
+              <table className="payroll-readiness-table ess-payslip-table">
                 <thead>
                   <tr>
                     <th>Payslip</th>
                     <th>Pay date</th>
+                    <th>Gross</th>
+                    <th>Deductions</th>
                     <th>Net pay</th>
-                    <th>Storage</th>
-                    <th>Status</th>
+                    <th>Access</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -375,18 +387,18 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
                         })}`}>
                           <strong>{payslip.title}</strong>
                           <span>{payslip.period_name} / {payslip.payroll_run_name}</span>
-                          <span>{payslip.file_name}</span>
-                          <span>hash {payslip.source_hash.slice(0, 12)}</span>
+                          <span>Source hash {payslip.source_hash.slice(0, 12)}</span>
                         </Link>
                       </td>
                       <td>{formatDate(payslip.pay_date)}</td>
+                      <td>{formatMoney(payslip.totals_snapshot.gross_earnings)}</td>
+                      <td>{formatMoney(payslip.totals_snapshot.employee_deductions)}</td>
                       <td>{formatMoney(payslip.totals_snapshot.net_pay)}</td>
                       <td>
-                        <strong>{payslip.storage_object_version || "Pending"}</strong>
-                        <span>{payslip.download_strategy_ref}</span>
+                        <strong>{payslip.access_summary.is_read_acknowledged ? "Read" : "Unread"}</strong>
                         <span>{payslip.access_summary.download_count} downloads</span>
+                        <span>{payslip.access_summary.notification_count} notifications</span>
                       </td>
-                      <td><StatusBadge status="published" /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -400,17 +412,31 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
               </div>
             ) : null}
 
-            <div className="payroll-output-handoff-grid">
+            {data.total_count > data.page_size ? (
+              <PaginationBar
+                firstHref={`/ess/payslips${buildQueryString({ ...sharedParams, page: 1 })}`}
+                hasNext={Boolean(data.has_next)}
+                hasPrevious={Boolean(data.has_previous)}
+                lastHref={`/ess/payslips${buildQueryString({ ...sharedParams, page: totalPages })}`}
+                nextHref={`/ess/payslips${buildQueryString({ ...sharedParams, page: data.page + 1 })}`}
+                page={data.page}
+                pageSize={data.page_size}
+                previousHref={`/ess/payslips${buildQueryString({ ...sharedParams, page: data.page - 1 })}`}
+                totalCount={data.total_count}
+              />
+            ) : null}
+
+            <div className="ess-payslip-evidence-grid">
               <article>
-                <strong>Published gate</strong>
+                <strong>Published only</strong>
                 <span>Draft and generated payroll artifacts stay hidden until the output batch is published.</span>
               </article>
               <article>
-                <strong>Tenant isolation</strong>
+                <strong>Employee scoped</strong>
                 <span>The API resolves files through the signed-in employee context and tenant boundary.</span>
               </article>
               <article>
-                <strong>Storage strategy</strong>
+                <strong>Download tracked</strong>
                 <span>Download behavior is driven by provider and strategy refs, not hardcoded file paths.</span>
               </article>
             </div>

@@ -2657,6 +2657,883 @@ select.input-control {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.ess-home-grid,
+.ess-snapshot-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.ess-home-card {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.ess-home-card--primary {
+  border-color: rgba(37, 99, 235, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+}
+
+.ess-home-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.ess-home-card__header > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ess-home-card__header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.ess-action-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ess-action-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(76px, auto) minmax(0, 1fr) minmax(48px, auto) minmax(88px, auto);
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.ess-action-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.ess-action-row strong,
+.ess-action-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ess-action-row strong {
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.ess-action-row span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ess-action-row > .record-chip {
+  justify-self: center;
+}
+
+.ess-action-row > .button {
+  justify-self: end;
+  min-width: 88px;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.ess-shortcut-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ess-shortcut-grid .button {
+  min-height: 42px;
+  white-space: normal;
+}
+
+.ess-profile-card,
+.ess-today-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.ess-profile-summary {
+  display: grid;
+  gap: 14px;
+}
+
+.ess-profile-summary > div:first-child {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.ess-profile-summary strong {
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.ess-profile-summary span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.ess-today-status {
+  display: grid;
+  gap: 12px;
+}
+
+.ess-today-status > strong {
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.ess-payslip-workspace {
+  display: grid;
+  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr) minmax(280px, 360px);
+  align-items: start;
+  gap: 18px;
+}
+
+.ess-payslip-rail,
+.ess-payslip-main,
+.ess-payslip-detail {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 44px -34px rgba(15, 23, 42, 0.28);
+}
+
+.ess-payslip-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+}
+
+.ess-payslip-panel-header--split > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ess-payslip-panel-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ess-payslip-card-list {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.ess-payslip-card {
+  display: grid;
+  min-width: 0;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: #ffffff;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.ess-payslip-card:hover,
+.ess-payslip-card.is-selected {
+  border-color: rgba(37, 99, 235, 0.34);
+  box-shadow: 0 14px 32px -26px rgba(37, 99, 235, 0.52);
+  transform: translateY(-1px);
+}
+
+.ess-payslip-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ess-payslip-card__top > div,
+.ess-payslip-card__amount {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.ess-payslip-card strong,
+.ess-payslip-card span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ess-payslip-card__top strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.ess-payslip-card__top span,
+.ess-payslip-card__amount span,
+.ess-payslip-card__meta span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ess-payslip-card__amount strong {
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.ess-payslip-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ess-payslip-filter-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(128px, 160px) minmax(128px, 160px) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+}
+
+.ess-payslip-filter-form .input-control,
+.ess-payslip-filter-form .button {
+  width: 100%;
+}
+
+.ess-payslip-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.ess-payslip-summary-strip > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ess-payslip-summary-strip strong,
+.ess-payslip-summary-strip span,
+.ess-payslip-detail strong,
+.ess-payslip-detail span,
+.ess-payslip-detail code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ess-payslip-summary-strip strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.ess-payslip-summary-strip span:last-child {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ess-payslip-table {
+  min-width: 720px;
+  table-layout: fixed;
+}
+
+.ess-payslip-table th,
+.ess-payslip-table td {
+  overflow-wrap: anywhere;
+}
+
+.ess-payslip-table th:first-child,
+.ess-payslip-table td:first-child {
+  width: 34%;
+}
+
+.ess-payslip-table td a {
+  display: grid;
+  gap: 3px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.ess-payslip-table td a span,
+.ess-payslip-table td > span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ess-payslip-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.ess-payslip-evidence-grid article,
+.ess-payslip-detail-section {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ess-payslip-evidence-grid strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.ess-payslip-evidence-grid span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ess-payslip-detail {
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.ess-payslip-net-card {
+  display: grid;
+  gap: 7px;
+  margin: 12px 12px 0;
+  padding: 14px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.ess-payslip-net-card strong {
+  color: #111827;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.ess-payslip-net-card span:not(.workspace-card__eyebrow) {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ess-payslip-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.ess-payslip-action-row .button {
+  min-width: 136px;
+}
+
+.ess-payslip-detail-section {
+  margin: 0 12px;
+}
+
+.ess-payslip-detail-section .detail-grid,
+.ess-payslip-detail-section .payroll-rule-snapshot-list {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  overflow: hidden;
+}
+
+.ess-payslip-detail-section code {
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.shell--ess-payslips .pagination-panel {
+  margin: 14px 16px 0;
+  padding: 10px 12px;
+  box-shadow: none;
+}
+
+.ess-documents-center {
+  gap: 18px;
+}
+
+.ess-documents-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(320px, 1.08fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.ess-documents-upload,
+.ess-documents-requirements,
+.ess-documents-history .queue-toolbar {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ess-documents-upload .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ess-documents-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+}
+
+.ess-documents-panel-header > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.ess-documents-panel-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.ess-documents-requirement-list {
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.ess-documents-requirement-list .record-card,
+.ess-documents-history .record-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ess-documents-requirement-list .record-card__header,
+.ess-documents-history .record-card__header {
+  gap: 14px;
+}
+
+.user-notification-shell {
+  letter-spacing: 0;
+}
+
+.user-notification-center {
+  gap: 18px;
+}
+
+.user-notification-filters {
+  overflow: hidden;
+}
+
+.user-notification-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(320px, 0.75fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.user-notification-list,
+.user-notification-detail {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.user-notification-list .tableish {
+  gap: 8px;
+}
+
+.user-notification-list .tableish__row {
+  border-radius: 8px;
+}
+
+.user-notification-list .tableish__head {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.user-notification-list .tableish__head strong,
+.user-notification-list .tableish__meta span,
+.user-notification-detail .detail-value,
+.user-notification-detail .record-card__notes p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.user-notification-detail .record-card__actions {
+  justify-content: flex-end;
+}
+
+.user-notification-detail .stack-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ess-statutory-workspace {
+  display: grid;
+  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr) minmax(280px, 360px);
+  align-items: start;
+  gap: 18px;
+}
+
+.ess-statutory-rail,
+.ess-statutory-main,
+.ess-statutory-detail {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 44px -34px rgba(15, 23, 42, 0.28);
+}
+
+.ess-statutory-detail {
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.ess-statutory-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+}
+
+.ess-statutory-panel-header--split > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.ess-statutory-panel-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ess-statutory-card-list {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.ess-statutory-year-card {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: #ffffff;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.ess-statutory-year-card:hover,
+.ess-statutory-year-card.is-selected {
+  border-color: rgba(37, 99, 235, 0.34);
+  box-shadow: 0 14px 32px -26px rgba(37, 99, 235, 0.52);
+  transform: translateY(-1px);
+}
+
+.ess-statutory-year-card > div:first-child,
+.ess-statutory-year-card__meta {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.ess-statutory-year-card strong,
+.ess-statutory-year-card span,
+.ess-statutory-proof-card strong,
+.ess-statutory-proof-card span,
+.ess-statutory-proof-card code,
+.ess-statutory-detail strong,
+.ess-statutory-detail span,
+.ess-statutory-detail code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ess-statutory-year-card > div:first-child strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.ess-statutory-year-card span,
+.ess-statutory-proof-card span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ess-statutory-filter-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(128px, 160px) minmax(128px, 160px) minmax(116px, 140px) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+}
+
+.ess-statutory-filter-form .input-control,
+.ess-statutory-filter-form .button {
+  width: 100%;
+}
+
+.ess-statutory-section {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  margin: 12px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ess-statutory-section .ess-statutory-panel-header {
+  margin: -12px -12px 0;
+  border-radius: 8px 8px 0 0;
+}
+
+.ess-statutory-profile-panel {
+  margin-top: 12px;
+}
+
+.ess-statutory-total-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.ess-statutory-total-strip > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.ess-statutory-total-strip strong {
+  display: block;
+  margin-top: 4px;
+  color: #111827;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.ess-statutory-proof-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ess-statutory-proof-list--wide {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.ess-statutory-proof-card {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ess-statutory-proof-card strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.ess-statutory-proof-card code {
+  display: block;
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ess-statutory-proof-amounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ess-statutory-proof-amounts > span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.shell--ess-statutory .payroll-statutory-action-panel {
+  margin: 12px;
+  border-color: rgba(226, 232, 240, 0.88);
+  box-shadow: none;
+}
+
+.shell--ess-statutory .payroll-statutory-action-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.shell--ess-statutory .payroll-statutory-action-grid input,
+.shell--ess-statutory .payroll-statutory-action-grid select {
+  border-radius: 8px;
+}
+
+.shell--ess-statutory .payroll-statutory-action-buttons {
+  justify-content: flex-end;
+}
+
+.shell--ess-statutory .payroll-statutory-action-buttons .button {
+  width: auto;
+  min-width: 128px;
+}
+
+.shell--ess-statutory .pagination-panel {
+  margin: 0 12px 12px;
+  padding: 10px 12px;
+  box-shadow: none;
+}
+
+@media (max-width: 1320px) {
+  .ess-statutory-filter-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ess-statutory-filter-form .button {
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 1180px) {
+  .ess-payslip-workspace {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  }
+
+  .ess-payslip-detail,
+  .ess-statutory-detail {
+    grid-column: 1 / -1;
+  }
+
+  .ess-payslip-summary-strip,
+  .ess-documents-workspace,
+  .user-notification-grid,
+  .ess-statutory-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+}
+
+@media (max-width: 720px) {
+  .ess-payslip-workspace,
+  .ess-payslip-filter-form,
+  .ess-documents-upload .form-grid,
+  .ess-statutory-filter-form,
+  .shell--ess-statutory .payroll-statutory-action-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ess-payslip-rail,
+  .ess-payslip-main,
+  .ess-payslip-detail,
+  .ess-statutory-detail {
+    grid-column: auto;
+  }
+
+  .ess-payslip-panel-header,
+  .ess-payslip-card__top,
+  .ess-statutory-panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ess-payslip-action-row .button,
+  .ess-payslip-filter-form .button,
+  .ess-statutory-filter-form .button,
+  .shell--ess-statutory .payroll-statutory-action-buttons .button {
+    width: 100%;
+  }
+
+  .ess-documents-panel-header,
+  .user-notification-list .tableish__head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .user-notification-detail .record-card__actions {
+    justify-content: stretch;
+  }
+
+  .user-notification-detail .record-card__actions .button {
+    width: 100%;
+  }
+}
+
 .filter-chip-link {
   display: inline-flex;
   align-items: center;
@@ -15833,15 +16710,15 @@ a.payroll-setup-mini-card {
   display: grid;
   min-width: 0;
   grid-template-columns:
-    minmax(150px, 1.05fr)
-    minmax(170px, 1.1fr)
-    minmax(118px, 0.74fr)
-    minmax(82px, 0.44fr)
-    minmax(130px, 0.68fr)
-    minmax(100px, 0.5fr)
-    minmax(300px, 1.3fr);
-  align-items: center;
-  gap: 10px;
+    minmax(132px, 1.04fr)
+    minmax(148px, 1fr)
+    minmax(96px, 0.64fr)
+    minmax(76px, 0.42fr)
+    minmax(116px, 0.64fr)
+    minmax(88px, 0.46fr)
+    minmax(188px, 0.96fr);
+  align-items: start;
+  gap: 8px;
 }
 
 .tenant-directory-header {
@@ -15865,8 +16742,8 @@ a.payroll-setup-mini-card {
 .tenant-directory-row.tenant-membership-row {
   display: grid;
   min-width: 0;
-  align-items: center;
-  gap: 10px;
+  align-items: start;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.84);
   padding: 11px 12px;
   border-width: 0 0 1px;
@@ -15930,15 +16807,16 @@ a.payroll-setup-mini-card {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
 }
 
 .tenant-membership-row__actions .button {
+  flex: 1 1 78px;
   width: auto;
-  min-width: 96px;
+  min-width: 70px;
   min-height: 34px;
-  padding: 9px 10px;
-  white-space: nowrap;
+  padding: 8px 9px;
+  white-space: normal;
 }
 
 .tenant-membership-toolbar {
@@ -17839,6 +18717,16 @@ a.payroll-setup-mini-card {
 
   .overview-split {
     grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+    align-items: stretch;
+  }
+
+  .ess-home-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+    align-items: stretch;
+  }
+
+  .ess-snapshot-grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
     align-items: stretch;
   }
 

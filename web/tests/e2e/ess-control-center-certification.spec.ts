@@ -13,12 +13,12 @@ import {
 test.describe("Employee self service control center certification", () => {
   test("shows personal priorities, shortcuts, and request workspace without layout overflow", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
+    await expectPageReady(page, "My workspace");
 
     const controlCenter = page.getByTestId("ess-control-center");
     await expect(controlCenter).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Today's priorities" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Self-service shortcuts" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Today's actions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What do you want to do?" })).toBeVisible();
 
     for (const signal of [
       "Leave requests",
@@ -30,18 +30,17 @@ test.describe("Employee self service control center certification", () => {
     }
 
     for (const action of [
-      "Review leave",
-      "Review attendance",
-      "Open payslips",
-      "Open tax",
-      "New request",
+      "Apply leave",
+      "Regularize attendance",
+      "Payslips",
       "Documents",
+      "Tax declarations",
       "Notifications",
     ]) {
       await expect(page.getByRole("link", { name: action }).first()).toBeVisible();
     }
 
-    await expect(page.getByRole("heading", { name: "Profile snapshot" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My profile" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Attendance today" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Leave balances" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Submit leave request" })).toBeVisible();
@@ -50,14 +49,14 @@ test.describe("Employee self service control center certification", () => {
     await expect(page.getByRole("heading", { name: "Leave request detail" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Regularization history" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Regularization detail" })).toBeVisible();
-    await expect(page.getByText("Reporting manager:", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("Manager", { exact: true }).first()).toBeVisible();
     await expect(page.locator(".pagination-bar").first()).toBeVisible();
     await expect(page.locator(".pagination-bar").nth(1)).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
+    await expectPageReady(page, "My workspace");
     await expect(page.getByTestId("ess-control-center")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Submit leave request" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
@@ -65,7 +64,7 @@ test.describe("Employee self service control center certification", () => {
 
   test("employee can navigate every ESS workspace from the control center", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
+    await expectPageReady(page, "My workspace");
 
     await page.getByRole("link", { name: "Payslips" }).first().click();
     await expect(page).toHaveURL(/\/ess\/payslips/);
@@ -79,7 +78,7 @@ test.describe("Employee self service control center certification", () => {
     await expect(page.getByRole("heading", { name: /Document center|Required documents|Documents/i }).first()).toBeVisible();
 
     await gotoAuthenticated(page, "/ess", employee);
-    await page.getByRole("link", { name: /Tax declarations|Open tax/ }).first().click();
+    await page.getByRole("link", { name: "Tax declarations" }).first().click();
     await expect(page).toHaveURL(/\/ess\/statutory-declarations/);
     await expectPageReady(page, "Statutory Declarations");
     await expect(page.getByRole("heading", { name: "Start declaration" })).toBeVisible();
@@ -94,7 +93,7 @@ test.describe("Employee self service control center certification", () => {
 
   test("employee request forms expose clear validation before submission", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
+    await expectPageReady(page, "My workspace");
 
     await expect(page.getByLabel("Leave type")).toBeVisible();
     await expect(page.getByLabel("Start date")).toHaveValue(/\d{4}-\d{2}-\d{2}/);

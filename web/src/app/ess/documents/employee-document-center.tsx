@@ -152,13 +152,14 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   }
 
   return (
-    <div className="stack">
-      <section className="section">
-        <section className="form-shell-card">
+    <div className="stack ess-documents-center">
+      <section className="section section--tight">
+        <div className="ess-documents-workspace">
+          <section className="form-shell-card ess-documents-upload">
           <div className="form-shell-card__intro">
             <h2>Upload required document</h2>
             <p className="section-copy">
-              Submit the current file for review. Upload rules, verification needs, and expiry requirements come from the HR document setup.
+              Choose the document type, attach the latest file, and send it to HR for review.
             </p>
           </div>
 
@@ -207,11 +208,17 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               <span className="muted">{error}</span>
             </div>
           ) : null}
-        </section>
-      </section>
+          </section>
 
-      <section className="section">
-        <div className="queue-list">
+          <section className="ess-documents-requirements panel-card-soft">
+            <div className="ess-documents-panel-header">
+              <div>
+                <span className="workspace-card__eyebrow">What HR needs</span>
+                <h2>Required documents</h2>
+              </div>
+              <span className="queue-summary-chip"><strong>{data.requirement_items.length}</strong> items</span>
+            </div>
+            <div className="queue-list ess-documents-requirement-list">
           {reuploadItems.length > 0 ? (
             <div className="notice">
               <strong>Re-upload requested.</strong>
@@ -259,15 +266,17 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               ) : null}
             </article>
           ))}
+            </div>
+          </section>
         </div>
       </section>
 
-      <section className="section queue-layout">
+      <section className="section section--tight queue-layout ess-documents-history">
         <section className="queue-toolbar panel-card-soft">
           <div className="queue-toolbar__header">
             <div>
               <h2 className="section-heading-soft">Document history</h2>
-              <p className="section-copy section-copy-soft">Track review progress, rejections, and previously submitted files.</p>
+              <p className="section-copy section-copy-soft">Search submitted files, download a copy, and review HR comments.</p>
             </div>
             <div className="queue-toolbar__meta">
               <span className="queue-summary-chip"><strong>{data.total_count}</strong> total records</span>

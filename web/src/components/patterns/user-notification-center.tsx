@@ -126,35 +126,39 @@ export function UserNotificationCenter({
   const failedOnPage = data.items.filter((item) => item.status === "failed").length;
 
   return (
-    <main className="shell">
+    <main className={`shell shell--workspace user-notification-shell user-notification-shell--${workspace}`}>
       <PageIntro
         eyebrow={state === "live" ? "Live notifications" : "Demo notifications"}
         title="Notifications"
         description={workspace === "mss" ? "Manager alerts, approval nudges, and queue follow-up." : "Personal alerts, document prompts, and request updates."}
+        className="page-header-surface page-header-surface--compact"
+        titleClassName="text-heading-premium page-title-soft"
+        descriptionClassName="text-body-premium"
         actions={actions}
         pills={[
           `${data.total_count} in view`,
           `${unreadOnPage} unread on page`,
           workspace === "mss" ? "Manager inbox" : "Employee inbox",
         ]}
+        showPills
       />
 
-      <section className="section">
+      <section className="section section--tight">
         <div className="metric-grid-modern">
-          <MetricTile label="Notifications" value={data.total_count} trend="Current filtered view" />
-          <MetricTile label="Unread on page" value={unreadOnPage} trend="Needs review" />
-          <MetricTile label="High priority" value={highPriorityOnPage} trend="Escalated attention" />
-          <MetricTile label="Failed on page" value={failedOnPage} trend="Delivery exceptions" />
+          <MetricTile className="metric-tile-soft" label="Notifications" value={data.total_count} trend="Current filtered view" />
+          <MetricTile className="metric-tile-soft" label="Unread on page" value={unreadOnPage} trend="Needs review" />
+          <MetricTile className="metric-tile-soft" label="High priority" value={highPriorityOnPage} trend="Escalated attention" />
+          <MetricTile className="metric-tile-soft" label="Failed on page" value={failedOnPage} trend="Delivery exceptions" />
         </div>
       </section>
 
-      <section className="section queue-layout">
-        <section className="card panel queue-toolbar panel-card-soft">
+      <section className="section section--tight queue-layout user-notification-center">
+        <section className="card panel queue-toolbar panel-card-soft user-notification-filters">
           <div className="queue-toolbar__header">
             <div>
               <h2 className="section-heading-soft">Inbox filters</h2>
               <p className="section-copy section-copy-soft">
-                Search titles, bodies, and source references, then open one notification at a time with a stable read-state flow.
+                Search your messages, then open one item to review source context and read state.
               </p>
             </div>
             <div className="queue-toolbar__meta">
@@ -236,12 +240,12 @@ export function UserNotificationCenter({
           </div>
         </section>
 
-        <div className="queue-list">
-          <article className="record-card panel-card-soft">
+        <div className="queue-list user-notification-grid">
+          <article className="record-card panel-card-soft user-notification-list">
             <div className="record-card__header">
               <div className="record-card__title-block">
                 <h3>Inbox list</h3>
-                <p>Open one notification at a time, then update read state or jump back to the related workflow.</p>
+                <p>Open one notification at a time and jump to the related workflow when needed.</p>
               </div>
             </div>
             <div className="tableish">
@@ -273,10 +277,10 @@ export function UserNotificationCenter({
             </div>
           </article>
 
-          <article className="record-card panel-card-soft">
+          <article className="record-card panel-card-soft user-notification-detail">
             <div>
               <h2 className="section-heading-soft">Notification detail</h2>
-              <p className="section-copy section-copy-soft">Inspect message body, delivery state, and the linked operational context.</p>
+              <p className="section-copy section-copy-soft">Review the message, delivery state, and source workflow.</p>
             </div>
             {selected ? (
               <div className="stack">

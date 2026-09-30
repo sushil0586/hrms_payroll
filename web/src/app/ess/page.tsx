@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { LogoutButton } from "@/app/components/logout-button";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -367,56 +366,66 @@ export default async function EssPage({ searchParams }: PageProps) {
     {
       label: "Leave requests",
       value: pendingLeaveCount,
-      detail: "Track leave status or create a new leave request.",
+      detail: pendingLeaveCount ? "Requests waiting for approval or follow-up." : "No leave request needs your action.",
       href: "/ess?leaveStatus=pending",
-      action: "Review leave",
+      action: pendingLeaveCount ? "Review" : "History",
       status: essActionStatus(pendingLeaveCount),
     },
     {
       label: "Attendance fixes",
       value: pendingRegularizationCount,
-      detail: "Follow regularizations that can affect payroll inputs.",
+      detail: pendingRegularizationCount ? "Corrections waiting for manager review." : "No attendance correction is pending.",
       href: "/ess?regStatus=pending",
-      action: "Review attendance",
+      action: pendingRegularizationCount ? "Review" : "History",
       status: essActionStatus(pendingRegularizationCount),
     },
     {
       label: "Payslips",
-      value: dashboard.profile.employee_code,
-      detail: "Open published payroll documents and read acknowledgements.",
+      value: "View",
+      detail: "Download released payroll files and acknowledge reads.",
       href: "/ess/payslips",
-      action: "Open payslips",
+      action: "Open",
       status: "ready" as const,
     },
     {
       label: "Tax declarations",
-      value: leaveBalanceCount,
-      detail: "Manage declaration proof and year-end tax readiness.",
+      value: "Proofs",
+      detail: "Review tax regime, declarations, and proof uploads.",
       href: "/ess/statutory-declarations",
-      action: "Open tax",
+      action: "Open",
       status: "ready" as const,
     },
   ];
   const activeSignals = commandActions.filter((item) => item.status !== "ready").length;
+  const quickActions = [
+    { label: "Apply leave", href: "/ess#request-actions", tone: "primary" },
+    { label: "Regularize attendance", href: "/ess#request-actions", tone: "secondary" },
+    { label: "Payslips", href: "/ess/payslips", tone: "secondary" },
+    { label: "Documents", href: "/ess/documents", tone: "secondary" },
+    { label: "Tax declarations", href: "/ess/statutory-declarations", tone: "secondary" },
+    { label: "Notifications", href: "/ess/notifications", tone: "secondary" },
+  ];
 
   return (
     <main className="shell shell--workspace">
       <PageIntro
         eyebrow={state === "live" ? "Live ESS" : "Demo ESS"}
-        title="Self service"
-        description="Attendance, leave, balances, and requests."
+        title="My workspace"
+        description="Your leave, attendance, documents, payslips, and tax actions in one simple view."
         actions={
           <>
-            <Link className="button button--secondary" href="/">
-              Home
+            <Link className="button button--primary" href="/ess#request-actions">
+              New request
             </Link>
-            <Link className="button button--secondary" href="/mss/approvals">
-              Open MSS
+            <Link className="button button--secondary" href="/ess/payslips">
+              Payslips
             </Link>
-            <LogoutButton />
+            <Link className="button button--secondary" href="/ess/documents">
+              Documents
+            </Link>
           </>
         }
-        pills={["Personal view", dashboard.profile.employee_code]}
+        pills={["Personal view", dashboard.profile.employee_code, dashboard.profile.department || "No department"]}
         showPills
       />
 
@@ -429,18 +438,19 @@ export default async function EssPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      <section className="section ess-control-center" data-testid="ess-control-center">
-        <article className="panel-card-soft hr-admin-control-card hr-admin-control-card--primary">
-          <div className="hr-admin-control-card__header">
+      <section className="section ess-home-grid" data-testid="ess-control-center">
+        <article className="panel-card-soft ess-home-card ess-home-card--primary">
+          <div className="ess-home-card__header">
             <div>
-              <span className="workspace-card__eyebrow">My command queue</span>
-              <h2>Today&apos;s priorities</h2>
+              <span className="workspace-card__eyebrow">Needs attention</span>
+              <h2>Today&apos;s actions</h2>
+              <p className="section-copy section-copy-soft">Start with the items that may need your input or review.</p>
             </div>
             <span className="queue-summary-chip"><strong>{activeSignals}</strong> active signals</span>
           </div>
-          <div className="hr-admin-command-list">
+          <div className="ess-action-list">
             {commandActions.map((item) => (
-              <div className="hr-admin-command-row" key={item.label}>
+              <div className="ess-action-row" key={item.label}>
                 <span className={essActionChipClass(item.status)}>{essActionStatusLabel[item.status]}</span>
                 <div>
                   <strong>{item.label}</strong>
@@ -453,74 +463,58 @@ export default async function EssPage({ searchParams }: PageProps) {
           </div>
         </article>
 
-        <article className="panel-card-soft hr-admin-control-card">
-          <div className="hr-admin-control-card__header">
+        <article className="panel-card-soft ess-home-card">
+          <div className="ess-home-card__header">
             <div>
-              <span className="workspace-card__eyebrow">Fast actions</span>
-              <h2>Self-service shortcuts</h2>
+              <span className="workspace-card__eyebrow">Quick actions</span>
+              <h2>What do you want to do?</h2>
+              <p className="section-copy section-copy-soft">Use these shortcuts for the most common employee tasks.</p>
             </div>
             <span className={essActionChipClass(activeSignals ? "warning" : "ready")}>{activeSignals ? "Review" : "Ready"}</span>
           </div>
-          <div className="hr-admin-shortcut-grid">
-            <Link className="button button--primary" href="/ess#request-actions">New request</Link>
-            <Link className="button button--secondary" href="/ess/payslips">Payslips</Link>
-            <Link className="button button--secondary" href="/ess/documents">Documents</Link>
-            <Link className="button button--secondary" href="/ess/statutory-declarations">Tax declarations</Link>
-            <Link className="button button--secondary" href="/ess/notifications">Notifications</Link>
-            <Link className="button button--secondary" href="/mss">Manager view</Link>
-          </div>
-          <div className="detail-grid">
-            <div className="detail-row">
-              <span>Today status</span>
-              <strong>{attendanceTodayStatus}</strong>
-            </div>
-            <div className="detail-row">
-              <span>Shift</span>
-              <strong>{dashboard.attendance.today.shift || "Not assigned"}</strong>
-            </div>
-            <div className="detail-row">
-              <span>Leave balances</span>
-              <strong>{leaveBalanceCount}</strong>
-            </div>
-            <div className="detail-row">
-              <span>Manager</span>
-              <strong>{dashboard.profile.reporting_manager || "Not mapped"}</strong>
-            </div>
+          <div className="ess-shortcut-grid">
+            {quickActions.map((item) => (
+              <Link className={`button button--${item.tone}`} href={item.href} key={item.label}>
+                {item.label}
+              </Link>
+            ))}
           </div>
         </article>
       </section>
 
-      <section className="section overview-split">
-        <article className="record-card panel-card-soft overview-split__primary">
+      <section className="section ess-snapshot-grid">
+        <article className="record-card panel-card-soft ess-profile-card">
           <div className="section-header">
             <div>
-              <h2 className="section-heading-soft">Profile snapshot</h2>
-              <p className="section-copy section-copy-soft">Core employee context for self service.</p>
+              <h2 className="section-heading-soft">My profile</h2>
+              <p className="section-copy section-copy-soft">The employee details used for requests and payroll routing.</p>
             </div>
           </div>
-          <div className="tableish">
-            <div className="tableish__row">
-              <div className="tableish__meta">
-                <span>{dashboard.profile.employee_code}</span>
-                <span>{dashboard.profile.designation}</span>
-                <span>{dashboard.profile.department}</span>
-              </div>
+          <div className="ess-profile-summary">
+            <div>
+              <span className="workspace-card__eyebrow">{dashboard.profile.employee_code}</span>
               <strong>{dashboard.profile.full_name}</strong>
-              <span className="muted">
-                {dashboard.profile.legal_entity} • {dashboard.profile.branch} • {dashboard.profile.location}
-              </span>
-              <span className="muted">Reporting manager: {dashboard.profile.reporting_manager || "Not mapped"}</span>
+              <span>{dashboard.profile.designation || "No designation"} • {dashboard.profile.department || "No department"}</span>
+            </div>
+            <div className="detail-grid">
+              <DetailRow label="Legal entity" value={dashboard.profile.legal_entity || "Not mapped"} />
+              <DetailRow label="Branch" value={dashboard.profile.branch || "Not mapped"} />
+              <DetailRow label="Location" value={dashboard.profile.location || "Not mapped"} />
+              <DetailRow label="Manager" value={dashboard.profile.reporting_manager || "Not mapped"} />
             </div>
           </div>
         </article>
 
-        <article className="record-card panel-card-soft overview-split__secondary">
+        <article className="record-card panel-card-soft ess-today-card">
           <h2 className="section-heading-soft">Attendance today</h2>
-          <div className="stack">
+          <div className="ess-today-status">
             <span className={statusClass(dashboard.attendance.today.status)}>{dashboard.attendance.today.status.replace("_", " ")}</span>
-            <span className="muted">{formatDate(dashboard.attendance.today.date)}</span>
-            <span className="muted">Shift: {dashboard.attendance.today.shift || "Not assigned"}</span>
-            <span className="muted">Check-in: {formatDateTime(dashboard.attendance.today.check_in_at)}</span>
+            <strong>{formatDate(dashboard.attendance.today.date)}</strong>
+            <div className="detail-grid">
+              <DetailRow label="Shift" value={dashboard.attendance.today.shift || "Not assigned"} />
+              <DetailRow label="Check-in" value={formatDateTime(dashboard.attendance.today.check_in_at)} />
+              <DetailRow label="Month hours" value={String(dashboard.attendance.month_to_date.work_duration_hours)} />
+            </div>
           </div>
         </article>
       </section>
@@ -529,8 +523,9 @@ export default async function EssPage({ searchParams }: PageProps) {
         <div className="section-header">
           <div>
             <h2 className="section-heading-soft">Leave balances</h2>
-            <p className="section-copy section-copy-soft">Policy-linked balances.</p>
+            <p className="section-copy section-copy-soft">Available, used, and reserved balances from mapped leave policies.</p>
           </div>
+          <Link className="button button--secondary" href="/ess#request-actions">Apply leave</Link>
         </div>
         <div className="workspace-grid-modern balance-grid">
           {dashboard.leave.balances.map((balance) => (

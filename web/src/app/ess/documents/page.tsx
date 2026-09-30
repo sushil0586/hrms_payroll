@@ -33,21 +33,37 @@ export default async function EssDocumentsPage({ searchParams }: PageProps) {
   });
 
   return (
-    <main className="shell">
+    <main className="shell shell--workspace shell--ess-documents">
       <PageIntro
         eyebrow={result.state === "live" ? "Live document center" : "Demo document center"}
         title="Documents"
-        description="Upload required files, review status, and track re-upload requests without leaving self service."
-        actions={<Link className="button button--secondary" href="/ess">Back to overview</Link>}
-        pills={["Requirement guided", "Self upload enabled", "Review history visible"]}
+        description="Upload the files HR needs, track review status, and replace documents when a fresh copy is requested."
+        className="page-header-surface page-header-surface--compact"
+        titleClassName="text-heading-premium page-title-soft"
+        descriptionClassName="text-body-premium"
+        actions={
+          <>
+            <Link className="button button--secondary" href="/ess">
+              Overview
+            </Link>
+            <Link className="button button--secondary" href="/ess/payslips">
+              Payslips
+            </Link>
+            <Link className="button button--secondary" href="/ess/notifications">
+              Inbox
+            </Link>
+          </>
+        }
+        pills={["Personal documents", "Self upload", "HR review tracked"]}
+        showPills
       />
 
-      <section className="section">
+      <section className="section section--tight">
         <div className="metric-grid-modern">
-          <MetricTile label="Required documents" value={result.data.summary.required_document_count} trend="Mapped to your employee profile" />
-          <MetricTile label="Missing now" value={result.data.summary.missing_required_document_count} trend="Needs action from you" />
-          <MetricTile label="Expiring soon" value={result.data.summary.expiring_documents} trend="Review before the deadline" />
-          <MetricTile label="Expired" value={result.data.summary.expired_documents} trend="Requires immediate attention" />
+          <MetricTile className="metric-tile-soft" label="Required documents" value={result.data.summary.required_document_count} trend="Mapped to your profile" />
+          <MetricTile className="metric-tile-soft" label="Missing now" value={result.data.summary.missing_required_document_count} trend="Needs your upload" />
+          <MetricTile className="metric-tile-soft" label="Expiring soon" value={result.data.summary.expiring_documents} trend="Review before deadline" />
+          <MetricTile className="metric-tile-soft" label="Expired" value={result.data.summary.expired_documents} trend="Replace immediately" />
         </div>
       </section>
 

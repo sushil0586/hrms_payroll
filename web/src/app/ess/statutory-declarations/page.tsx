@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
+import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { getEssStatutoryDeclarations } from "@/lib/api";
 import type { EssStatutoryDeclaration, EssStatutoryDeclarationItem, HrAdminEmployeeStatutoryProfile } from "@/lib/types";
 
@@ -76,15 +77,15 @@ function DeclarationRail({
   filters: { q: string; status: string; financial_year: string; page_size: number };
 }) {
   return (
-    <aside className="payroll-setup-rail payroll-statutory-rail">
-      <div className="payroll-setup-panel__header">
+    <aside className="ess-statutory-rail">
+      <div className="ess-statutory-panel-header">
         <span className="workspace-card__eyebrow">My declarations</span>
         <h2>Tax years</h2>
       </div>
-      <div className="payroll-setup-card-list">
+      <div className="ess-statutory-card-list">
         {declarations.map((declaration) => (
           <Link
-            className={`payroll-setup-mini-card payroll-statutory-declaration-card ${selectedDeclaration?.id === declaration.id ? "is-selected" : ""}`}
+            className={`ess-statutory-year-card ${selectedDeclaration?.id === declaration.id ? "is-selected" : ""}`}
             href={`/ess/statutory-declarations${buildQueryString({
               q: filters.q,
               status: filters.status,
@@ -99,11 +100,10 @@ function DeclarationRail({
               <span>{declaration.tax_regime_label}</span>
             </div>
             <StatusBadge status={declaration.status} label={declaration.status_label} />
-            <div className="payroll-input-run-card__counts">
+            <div className="ess-statutory-year-card__meta">
               <span>{formatMoney(declaration.declared_total_amount)}</span>
               <span>{declaration.verified_item_count}/{declaration.item_count} proofs</span>
             </div>
-            <code>{declaration.proof_window_ref || declaration.source_hash.slice(0, 18)}</code>
           </Link>
         ))}
       </div>
@@ -113,8 +113,8 @@ function DeclarationRail({
 
 function ProfilePanel({ profile }: { profile: HrAdminEmployeeStatutoryProfile | null }) {
   return (
-    <section className="payroll-rule-source-card payroll-statutory-profile-panel">
-      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+    <section className="ess-statutory-section ess-statutory-profile-panel">
+      <div className="ess-statutory-panel-header ess-statutory-panel-header--split">
         <div>
           <span className="workspace-card__eyebrow">Tax profile</span>
           <h2>{profile?.employee_name || "Employee statutory profile"}</h2>
@@ -135,7 +135,7 @@ function ProfilePanel({ profile }: { profile: HrAdminEmployeeStatutoryProfile | 
 
 function ProofItemCard({ item }: { item: EssStatutoryDeclarationItem }) {
   return (
-    <article className="payroll-statutory-proof-card">
+    <article className="ess-statutory-proof-card">
       <div>
         <strong>{item.name}</strong>
         <span>
@@ -143,7 +143,7 @@ function ProofItemCard({ item }: { item: EssStatutoryDeclarationItem }) {
         </span>
       </div>
       <StatusBadge status={item.proof_status} label={item.proof_status_label} />
-      <div className="payroll-statutory-proof-amounts">
+      <div className="ess-statutory-proof-amounts">
         <span>{formatMoney(item.declared_amount)}</span>
         <span>{formatMoney(item.verified_amount)}</span>
       </div>
@@ -155,8 +155,8 @@ function ProofItemCard({ item }: { item: EssStatutoryDeclarationItem }) {
 function DeclarationDetail({ declaration }: { declaration: EssStatutoryDeclaration | null }) {
   if (!declaration) {
     return (
-      <aside className="payroll-setup-detail-panel payroll-statutory-detail-panel">
-        <div className="payroll-setup-panel__header">
+      <aside className="ess-statutory-detail">
+        <div className="ess-statutory-panel-header">
           <span className="workspace-card__eyebrow">Declaration detail</span>
           <h2>No declaration selected</h2>
         </div>
@@ -166,17 +166,17 @@ function DeclarationDetail({ declaration }: { declaration: EssStatutoryDeclarati
   }
 
   return (
-    <aside className="payroll-setup-detail-panel payroll-statutory-detail-panel" aria-label={`${declaration.financial_year_code} statutory declaration`}>
-      <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+    <aside className="ess-statutory-detail" aria-label={`${declaration.financial_year_code} statutory declaration`}>
+      <div className="ess-statutory-panel-header ess-statutory-panel-header--split">
         <div>
           <span className="workspace-card__eyebrow">Declaration detail</span>
           <h2>{declaration.financial_year_code}</h2>
-          <p className="section-copy section-copy-soft">{declaration.declaration_profile_ref}</p>
+          <p className="section-copy section-copy-soft">{declaration.tax_regime_label}</p>
         </div>
         <StatusBadge status={declaration.status} label={declaration.status_label} />
       </div>
 
-      <div className="payroll-statutory-total-strip">
+      <div className="ess-statutory-total-strip">
         <div>
           <span className="workspace-card__eyebrow">Declared</span>
           <strong>{formatMoney(declaration.declared_total_amount)}</strong>
@@ -187,7 +187,7 @@ function DeclarationDetail({ declaration }: { declaration: EssStatutoryDeclarati
         </div>
       </div>
 
-      <section className="payroll-rule-source-card">
+      <section className="ess-statutory-section">
         <span className="workspace-card__eyebrow">Submission state</span>
         <div className="detail-grid">
           <DetailRow label="Tax regime" value={declaration.tax_regime_label} />
@@ -199,14 +199,14 @@ function DeclarationDetail({ declaration }: { declaration: EssStatutoryDeclarati
         </div>
       </section>
 
-      <section className="payroll-rule-source-card">
+      <section className="ess-statutory-section">
         <span className="workspace-card__eyebrow">Proof documents</span>
-        <div className="payroll-statutory-proof-list">
+        <div className="ess-statutory-proof-list">
           {declaration.items.map((item) => <ProofItemCard item={item} key={item.id} />)}
         </div>
       </section>
 
-      <section className="payroll-rule-source-card">
+      <section className="ess-statutory-section">
         <span className="workspace-card__eyebrow">Payroll consumption</span>
         <div className="detail-grid">
           {Object.entries(declaration.config_snapshot).slice(0, 5).map(([key, value]) => (
@@ -235,77 +235,123 @@ export default async function EssStatutoryDeclarationsPage({ searchParams }: Pag
   });
   const data = result.data;
   const selectedDeclaration = data.items.find((item) => item.id === selectedDeclarationId) ?? data.items[0] ?? null;
+  const totalPages = Math.max(1, Math.ceil(data.total_count / Math.max(data.page_size, 1)));
+  const sharedParams = { q, status, financial_year: financialYear, page_size: data.page_size, declarationId: selectedDeclaration?.id };
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-statutory shell--ess-statutory">
+    <main className="shell shell--workspace shell--ess-statutory">
       <PageIntro
-        eyebrow={result.state === "live" ? "Live employee payroll phase 5E" : "Demo employee payroll phase 5E"}
+        eyebrow={result.state === "live" ? "Live employee tax" : "Demo employee tax"}
         title="Statutory Declarations"
-        description="Track your tax regime, investment declarations, proof verification, and payroll-ready statutory source trail."
+        description="Choose your tax regime, declare investments, upload proof, and track what HR has verified for payroll."
         className="page-header-surface page-header-surface--compact"
         titleClassName="text-heading-premium page-title-soft"
         descriptionClassName="text-body-premium"
         actions={
           <>
-            <Link className="button button--secondary" href="/ess/payslips">
-              Payslips
+            <Link className="button button--secondary" href="/ess">
+              Overview
             </Link>
             <Link className="button button--secondary" href="/ess/documents">
               Documents
             </Link>
-            <Link className="button button--primary" href="/ess">
-              Overview
+            <Link className="button button--secondary" href="/ess/payslips">
+              Payslips
             </Link>
           </>
         }
+        pills={["Personal tax", "Proof tracked", "Payroll ready"]}
+        showPills
       />
 
-      <section className="payroll-setup-metrics" aria-label="Statutory declaration metrics">
-        <MetricTile label="Declarations" value={data.summary.declaration_count} />
-        <MetricTile label="Locked" value={data.summary.locked_declaration_count} />
-        <MetricTile label="Proofs" value={data.summary.declaration_item_count} />
-        <MetricTile label="Verified" value={data.summary.verified_item_count} />
-        <MetricTile label="Declared" value={formatMoney(data.summary.declared_total_amount)} />
-        <MetricTile label="Accepted" value={formatMoney(data.summary.verified_total_amount)} />
+      <section className="section section--tight" aria-label="Statutory declaration metrics">
+        <div className="metric-grid-modern">
+          <MetricTile className="metric-tile-soft" label="Declarations" value={data.summary.declaration_count} trend="Tax years in view" />
+          <MetricTile className="metric-tile-soft" label="Locked" value={data.summary.locked_declaration_count} trend="No longer editable" />
+          <MetricTile className="metric-tile-soft" label="Proofs" value={data.summary.declaration_item_count} trend="Declared proof rows" />
+          <MetricTile className="metric-tile-soft" label="Verified" value={data.summary.verified_item_count} trend="Accepted by HR" />
+          <MetricTile className="metric-tile-soft" label="Declared" value={formatMoney(data.summary.declared_total_amount)} trend="Employee total" />
+          <MetricTile className="metric-tile-soft" label="Accepted" value={formatMoney(data.summary.verified_total_amount)} trend="Payroll accepted" />
+        </div>
       </section>
 
-      <section className="payroll-setup-workspace payroll-statutory-workspace">
+      <section className="section section--tight">
+        <div className="ess-statutory-workspace">
         <DeclarationRail
           declarations={data.items}
           selectedDeclaration={selectedDeclaration}
           filters={{ q, status, financial_year: financialYear, page_size: pageSize }}
         />
 
-        <section className="payroll-setup-main-panel payroll-statutory-main-panel">
-          <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+        <section className="ess-statutory-main">
+          <div className="ess-statutory-panel-header ess-statutory-panel-header--split">
             <div>
               <span className="workspace-card__eyebrow">Declaration workspace</span>
-              <h2>Proof status and tax profile</h2>
+              <h2>Tax profile and proofs</h2>
             </div>
             <span className="payroll-setup-count">{data.total_count} tax years</span>
           </div>
+
+          <form action="/ess/statutory-declarations" className="ess-statutory-filter-form">
+            <input aria-label="Search declarations" className="input-control" defaultValue={q} name="q" placeholder="Search year, regime, proof" />
+            <select aria-label="Status" className="input-control" defaultValue={status} name="status">
+              <option value="">All statuses</option>
+              <option value="draft">Draft</option>
+              <option value="submitted">Submitted</option>
+              <option value="verified">Verified</option>
+              <option value="rejected">Rejected</option>
+              <option value="locked">Locked</option>
+            </select>
+            <select aria-label="Financial year" className="input-control" defaultValue={financialYear} name="financial_year">
+              <option value="">All years</option>
+              {data.summary.available_financial_years.map((yearOption) => (
+                <option key={yearOption} value={yearOption}>{yearOption}</option>
+              ))}
+            </select>
+            <select aria-label="Rows per page" className="input-control" defaultValue={String(pageSize)} name="page_size">
+              <option value="5">5 / page</option>
+              <option value="10">10 / page</option>
+              <option value="25">25 / page</option>
+            </select>
+            <button className="button button--primary" type="submit">Apply</button>
+          </form>
 
           <ProfilePanel profile={data.profile} />
 
           <StatutoryDeclarationActions data={data} selectedDeclaration={selectedDeclaration} />
 
-          <section className="payroll-statutory-component-panel">
-            <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+          <section className="ess-statutory-section ess-statutory-proof-register">
+            <div className="ess-statutory-panel-header ess-statutory-panel-header--split">
               <div>
                 <span className="workspace-card__eyebrow">Proof register</span>
                 <h2>Declared items</h2>
               </div>
               <span className="payroll-setup-count">{selectedDeclaration?.items.length ?? 0} rows</span>
             </div>
-            <div className="payroll-statutory-proof-list payroll-statutory-proof-list--wide">
+            <div className="ess-statutory-proof-list ess-statutory-proof-list--wide">
               {selectedDeclaration?.items.map((item) => <ProofItemCard item={item} key={item.id} />) ?? (
                 <p className="section-copy section-copy-soft">No declaration items are available for the selected year.</p>
               )}
             </div>
           </section>
+
+          {data.total_count > data.page_size ? (
+            <PaginationBar
+              firstHref={`/ess/statutory-declarations${buildQueryString({ ...sharedParams, page: 1 })}`}
+              hasNext={Boolean(data.has_next)}
+              hasPrevious={Boolean(data.has_previous)}
+              lastHref={`/ess/statutory-declarations${buildQueryString({ ...sharedParams, page: totalPages })}`}
+              nextHref={`/ess/statutory-declarations${buildQueryString({ ...sharedParams, page: data.page + 1 })}`}
+              page={data.page}
+              pageSize={data.page_size}
+              previousHref={`/ess/statutory-declarations${buildQueryString({ ...sharedParams, page: data.page - 1 })}`}
+              totalCount={data.total_count}
+            />
+          ) : null}
         </section>
 
         <DeclarationDetail declaration={selectedDeclaration} />
+        </div>
       </section>
     </main>
   );

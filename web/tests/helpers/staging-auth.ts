@@ -113,10 +113,8 @@ export async function loginIfRequired(page: Page, persona: Persona, targetPath: 
 }
 
 export async function gotoAuthenticated(page: Page, path: string, persona = personaForRoute(path)) {
-  if (path.startsWith("/ess") || path.startsWith("/mss")) {
-    await page.request.post("/api/auth/logout").catch(() => null);
-    await page.context().clearCookies();
-  }
+  await page.request.post("/api/auth/logout").catch(() => null);
+  await page.context().clearCookies();
   await loginIfRequired(page, persona, path);
 }
 
