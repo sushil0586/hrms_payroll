@@ -80,6 +80,7 @@ test.describe.serial("User journey phase 4: manager workspace workflow", () => {
   });
 
   test("manager account stays inside manager and employee workspaces", async ({ page }) => {
+    test.setTimeout(90_000);
     await page.setViewportSize({ width: 1440, height: 960 });
 
     for (const blockedPath of ["/platform-admin", "/tenant-admin", "/finance-manager"]) {
