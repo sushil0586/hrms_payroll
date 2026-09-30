@@ -160,18 +160,36 @@ Stage notes:
 - This phase is read-only and does not approve or reject live leave or attendance items.
 - Set `PLAYWRIGHT_LIVE_MANAGER_USERNAME` and `PLAYWRIGHT_LIVE_MANAGER_PASSWORD` when the default seeded manager is not present on stage.
 
+## Phase 5: Payroll Close Workflow
+
+Purpose: verify an HR/finance user can understand and follow payroll close from source readiness through finance handoff without UI confusion.
+
+Run:
+
+```bash
+pnpm --dir web certify:users:phase5
+```
+
+Checks:
+
+- Payroll Readiness answers whether payroll inputs can be opened safely.
+- Payroll Inputs shows run selection, locked-input context, employee snapshots, guardrails, and snapshot trace.
+- Payroll Calculations shows calculation queue, attempts, validation, line trace, and latest net pay context.
+- Payroll Review shows review queue, exception register, approval trail, final lock, and trace links.
+- Payroll Outputs shows output batches, artifact register, publish state, and handoff readiness.
+- Payroll Handoff shows finance artifacts, delivery acknowledgements, provider jobs, and audit evidence.
+- The payroll cycle journey links all six close phases and marks the current step.
+- Drilldowns preserve context for readiness filters, calculation lines, review exceptions, and output artifacts.
+- Visible links are real routes, not placeholder, `undefined`, `null`, or template URLs.
+- Headings, chips, table cells, and action buttons do not clip text or create horizontal overflow.
+
+Stage notes:
+
+- This phase is read-only by default and does not approve, publish, transmit, or otherwise mutate stage payroll records.
+- Set `PLAYWRIGHT_LIVE_HR_ADMIN_USERNAME` and `PLAYWRIGHT_LIVE_HR_ADMIN_PASSWORD` for the stage HR Admin account.
+- Mutation close tests remain in the dedicated payroll suites and should only be run with disposable records.
+
 ## Next Automation Phases
-
-Phase 5: Payroll close workflow
-
-- Setup readiness.
-- Lock payroll inputs.
-- Calculate draft.
-- Review exceptions.
-- Approve and lock review.
-- Generate outputs.
-- Publish payslips.
-- Generate finance handoff.
 
 Phase 6: ESS and MSS practical workflow
 

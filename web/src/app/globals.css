@@ -14801,7 +14801,7 @@ a.payroll-setup-mini-card {
 }
 
 .payroll-output-artifact-table {
-  min-width: 640px;
+  min-width: 760px;
   table-layout: fixed;
 }
 
@@ -14812,7 +14812,29 @@ a.payroll-setup-mini-card {
 
 .payroll-output-artifact-table th:first-child,
 .payroll-output-artifact-table td:first-child {
-  width: 34%;
+  width: 38%;
+}
+
+.payroll-output-artifact-table th:nth-child(2),
+.payroll-output-artifact-table td:nth-child(2) {
+  width: 150px;
+}
+
+.payroll-output-artifact-table th:nth-child(4),
+.payroll-output-artifact-table td:nth-child(4) {
+  width: 110px;
+}
+
+.payroll-output-artifact-table th:nth-child(5),
+.payroll-output-artifact-table td:nth-child(5) {
+  width: 116px;
+}
+
+.payroll-output-artifact-table .readiness-badge {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
 }
 
 .payroll-output-artifact-table td a {
