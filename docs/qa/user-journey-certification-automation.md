@@ -135,9 +135,34 @@ Stage data convention:
 - Username starts with `pw.aadish.stage`.
 - Use a disposable email via `PLAYWRIGHT_PHASE3_EMPLOYEE_EMAIL`.
 
+## Phase 4: Manager Self-Service Workflow
+
+Purpose: verify a manager can operate MSS from the browser without HR Admin escalation, while keeping stage data read-only.
+
+Run:
+
+```bash
+pnpm --dir web certify:users:phase4
+```
+
+Checks:
+
+- Manager opens `/mss` and sees the control center with team priorities, pending decisions, and work queue shortcuts.
+- Control center links route to approvals, notifications, and ESS.
+- Manager opens `/mss/approvals` and can switch between Leave and Attendance queues.
+- Leave and Attendance queue detail panels render a selected item or a clear empty state.
+- Manager opens `/mss/notifications`, applies inbox filters, and can return to approvals.
+- Visible buttons, tabs, and links do not clip text or create horizontal overflow.
+- Manager cannot browse Platform Admin, Tenant Admin, or Finance Manager workspaces.
+
+Stage notes:
+
+- This phase is read-only and does not approve or reject live leave or attendance items.
+- Set `PLAYWRIGHT_LIVE_MANAGER_USERNAME` and `PLAYWRIGHT_LIVE_MANAGER_PASSWORD` when the default seeded manager is not present on stage.
+
 ## Next Automation Phases
 
-Phase 4: Payroll close workflow
+Phase 5: Payroll close workflow
 
 - Setup readiness.
 - Lock payroll inputs.
@@ -148,7 +173,7 @@ Phase 4: Payroll close workflow
 - Publish payslips.
 - Generate finance handoff.
 
-Phase 5: ESS and MSS practical workflow
+Phase 6: ESS and MSS practical workflow
 
 - Employee submits leave.
 - Manager approves/rejects leave.
@@ -156,7 +181,7 @@ Phase 5: ESS and MSS practical workflow
 - Manager approves/rejects attendance.
 - Employee views payslip and document center.
 
-Phase 6: Email and notification verification
+Phase 7: Email and notification verification
 
 - Invite.
 - Password reset.
