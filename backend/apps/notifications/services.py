@@ -323,6 +323,27 @@ def _render_template_value(template_value: str, payload: dict[str, Any]) -> str:
         return template_value
 
 
+def _resolve_role_email_memberships(*, tenant, role):
+    """Returns active memberships that should receive a role-targeted email."""
+
+    if role is None:
+        return []
+
+    from apps.iam.models import MembershipStatus, TenantMembership
+
+    return list(
+        TenantMembership.objects.filter(
+            tenant=tenant,
+            status=MembershipStatus.ACTIVE,
+            membership_roles__role=role,
+            user__is_active=True,
+        )
+        .select_related("user", "employee")
+        .distinct()
+        .order_by("user__username")
+    )
+
+
 def create_in_app_notification(
     *,
     tenant,
@@ -413,17 +434,33 @@ def trigger_notification_event(
             **base_payload,
             "event_code": definition.code,
         }
-        created.append(
-            Notification.objects.create(
+        resolved_membership = definition.membership or recipient_membership
+        resolved_role = definition.role or recipient_role
+        role_email_memberships = (
+            _resolve_role_email_memberships(tenant=tenant, role=resolved_role)
+            if definition.channel == NotificationChannel.EMAIL and not resolved_membership and resolved_role
+            else []
+        )
+        notification_targets = role_email_memberships or [resolved_membership]
+        if definition.channel == NotificationChannel.EMAIL and resolved_role and not resolved_membership and not role_email_memberships:
+            continue
+
+        for target_membership in notification_targets:
+            target_identifier = (
+                target_membership.user.username
+                if target_membership and target_membership.user_id
+                else recipient_identifier
+            )
+            created.append(Notification.objects.create(
                 tenant=tenant,
                 event_definition=definition,
                 channel=definition.channel,
                 audience_type=definition.audience_type,
                 subject_type=subject_type,
                 subject_identifier=subject_identifier,
-                recipient_membership=definition.membership or recipient_membership,
-                recipient_role=definition.role or recipient_role,
-                recipient_identifier=recipient_identifier,
+                recipient_membership=target_membership,
+                recipient_role=resolved_role,
+                recipient_identifier=target_identifier,
                 recipient_address=recipient_address,
                 title=_render_template_value(template.title_template if template and template.title_template else fallback_title, payload_snapshot),
                 subject=_render_template_value(template.subject_template if template and template.subject_template else fallback_subject, payload_snapshot),
@@ -432,8 +469,7 @@ def trigger_notification_event(
                 priority=definition.priority,
                 scheduled_for=scheduled_for,
                 payload=payload_snapshot,
-            )
-        )
+            ))
 
     return created
 

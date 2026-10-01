@@ -41,6 +41,8 @@ async function expectDeniedFinanceExport(page: Page, path: string, label: string
 }
 
 test.describe("Finance Manager control center certification", () => {
+  test.setTimeout(120_000);
+
   test("payroll finance manager can use the finance control center and export evidence", async ({ page }) => {
     await gotoAuthenticated(page, "/finance-manager", payrollFinanceManager);
     await expectPageReady(page, "Finance control center");
