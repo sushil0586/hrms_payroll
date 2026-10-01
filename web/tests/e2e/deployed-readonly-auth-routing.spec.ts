@@ -26,13 +26,13 @@ test.describe.serial("deployed read-only auth routing proof", () => {
 
   test("employee opens ESS and is redirected away from HR admin", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
-    await expectWorkspaceLoaded(page, /Self service|Employee/i);
+    await expectPageReady(page, /My workspace|Self service/i);
+    await expectWorkspaceLoaded(page, /My workspace|Self service|Employee/i);
     await expect(page.getByRole("link", { name: "HR Admin" })).toHaveCount(0);
 
     await page.goto("/hr-admin");
     await expect(page).toHaveURL(/\/ess$/);
-    await expectPageReady(page, "Self service");
+    await expectPageReady(page, /My workspace|Self service/i);
   });
 
   test("manager opens MSS without HR admin escalation", async ({ page }) => {
