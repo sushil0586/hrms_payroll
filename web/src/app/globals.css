@@ -10277,15 +10277,28 @@ select.input-control {
     min-width: 0;
     padding: 0;
     border-bottom: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .notification-catalog-table td > *,
+  .notification-catalog-table td strong,
+  .notification-catalog-table td span,
+  .notification-catalog-table td a {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .notification-catalog-table td::before {
     content: attr(data-label);
+    min-width: 0;
     color: var(--notification-faint);
     font-size: var(--type-size-xs);
     font-weight: var(--type-weight-semibold);
     letter-spacing: var(--type-tracking-label);
     line-height: 1.3;
+    overflow-wrap: anywhere;
     text-transform: uppercase;
   }
 

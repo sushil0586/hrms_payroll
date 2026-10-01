@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import { expect, test, type APIResponse, type Page } from "@playwright/test";
+import { expect, test, type APIResponse, type Page, type Response } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
@@ -89,7 +89,7 @@ async function apiJson<T>(page: Page, path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function expectResponseOk(response: APIResponse, label: string) {
+async function expectResponseOk(response: APIResponse | Response, label: string) {
   const payload = await response.json().catch(() => ({}));
   expect(response.ok(), `${label} failed with ${response.status()}: ${JSON.stringify(payload)}`).toBeTruthy();
 }
@@ -153,7 +153,7 @@ async function uploadEmployeeDocumentFromEss(page: Page, category: DocumentCateg
   await expect(uploadPanel).toBeVisible();
 
   let uploadAttempted = false;
-  const uploadWatcher = (response: APIResponse) => {
+  const uploadWatcher = (response: Response) => {
     if (response.url().includes("/api/me/employee-documents") && response.request().method() === "POST") {
       uploadAttempted = true;
     }
