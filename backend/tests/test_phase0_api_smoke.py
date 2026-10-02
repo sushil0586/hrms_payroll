@@ -56,7 +56,7 @@ from apps.documents.models import DocumentArtifact, DocumentCategory, DocumentCa
 from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
 from apps.employee_lifecycle.models import EmployeeExit, EmployeeLifecycleEvent, ExitStatus, LifecycleEventStatus, LifecycleEventType, OnboardingStatus, ProbationDecision
 from apps.iam.models import MembershipStatus, Role, TenantMembership, User
-from apps.leave_management.models import LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveRequest, LeaveRequestStatus, LeaveType
+from apps.leave_management.models import LeaveBalance, LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveRequest, LeaveRequestStatus, LeaveType
 from apps.notifications.models import (
     Notification,
     NotificationChannelConfiguration,
@@ -12261,6 +12261,60 @@ def test_employee_can_submit_leave_request(api_client: APIClient, bootstrapped_w
     payload = response.json()
     assert payload["status"] == LeaveRequestStatus.PENDING
     assert LeaveRequest.objects.filter(employee__employee_code="EMP-0042").count() == before_count + 1
+
+
+@pytest.mark.django_db
+def test_employee_can_submit_leave_request_when_balance_policy_exists_without_assignment(api_client: APIClient, bootstrapped_workspace):
+    token = login(api_client, "riya.sharma")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    employee = Employee.objects.get(employee_code="EMP-0042")
+    leave_type = LeaveType.objects.create(
+        tenant=employee.tenant,
+        code=f"balance-fallback-{uuid4().hex[:8]}",
+        name="Balance Fallback Leave",
+        category="paid",
+        unit="day",
+        is_active=True,
+    )
+    leave_policy = LeavePolicy.objects.create(
+        tenant=employee.tenant,
+        leave_type=leave_type,
+        code=f"balance-fallback-policy-{uuid4().hex[:8]}",
+        name="Balance Fallback Policy",
+        status=LeavePolicyStatus.ACTIVE,
+        annual_entitlement=Decimal("12.00"),
+        min_days_per_request=Decimal("0.50"),
+        allow_half_day=True,
+        allow_backdated_application=False,
+        is_probation_eligible=True,
+    )
+    LeaveBalance.objects.create(
+        tenant=employee.tenant,
+        employee=employee,
+        leave_policy=leave_policy,
+        period_year=timezone.localdate().year,
+        accrued_amount=Decimal("12.00"),
+        closing_balance=Decimal("12.00"),
+    )
+
+    start_date = timezone.localdate() + timedelta(days=30)
+    response = api_client.post(
+        "/api/v1/me/leave-requests/",
+        {
+            "leave_type_id": str(leave_type.id),
+            "start_date": start_date.isoformat(),
+            "end_date": start_date.isoformat(),
+            "start_day_portion": "full_day",
+            "end_day_portion": "full_day",
+            "reason": "Balance-backed leave policy should resolve.",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201, response.json()
+    leave_request = LeaveRequest.objects.get(id=response.json()["id"])
+    assert leave_request.leave_policy_id == leave_policy.id
 
 
 @pytest.mark.django_db

@@ -634,6 +634,21 @@ def preview_leave_policy_assignment_conflicts(
 def preview_leave_policy_assignment_resolution(*, employee, leave_type) -> dict:
     assignment = _find_matching_leave_policy_assignment(employee, leave_type)
     if not assignment:
+        balance_policy = _find_leave_policy_from_employee_balance(employee, leave_type)
+        if balance_policy:
+            return {
+                "has_resolution": True,
+                "employee_id": str(employee.id),
+                "employee_name": f"{employee.first_name} {employee.last_name}".strip(),
+                "leave_type_id": str(leave_type.id),
+                "leave_type_name": leave_type.name,
+                "policy_id": str(balance_policy.id),
+                "policy_name": balance_policy.name,
+                "assignment_id": None,
+                "priority": None,
+                "scope_labels": ["Employee leave balance"],
+                "summary": f"{balance_policy.name} resolves from this employee's active leave balance.",
+            }
         return {
             "has_resolution": False,
             "employee_id": str(employee.id),
@@ -934,11 +949,31 @@ def _find_matching_leave_policy_assignment(employee, leave_type) -> LeavePolicyA
     )
 
 
-def _resolve_leave_policy(employee, leave_type) -> LeavePolicy | None:
+def _resolve_leave_policy(employee, leave_type, *, as_of: date | None = None) -> LeavePolicy | None:
     assignment = _find_matching_leave_policy_assignment(employee, leave_type)
     if assignment:
         return assignment.leave_policy
-    return None
+    return _find_leave_policy_from_employee_balance(employee, leave_type, as_of=as_of)
+
+
+def _find_leave_policy_from_employee_balance(employee, leave_type, *, as_of: date | None = None) -> LeavePolicy | None:
+    as_of = as_of or timezone.localdate()
+    balances = (
+        LeaveBalance.objects.filter(
+            employee=employee,
+            tenant=employee.tenant,
+            leave_policy__tenant=employee.tenant,
+            leave_policy__leave_type=leave_type,
+            leave_policy__status="active",
+        )
+        .select_related("leave_policy")
+        .order_by("-period_year", "-updated_at", "-created_at")
+    )
+    for balance in balances:
+        if balance.period_year == get_leave_policy_period_year(leave_policy=balance.leave_policy, as_of=as_of):
+            return balance.leave_policy
+    balance = balances.first()
+    return balance.leave_policy if balance else None
 
 
 def _calculate_requested_units(start_date, end_date, start_day_portion, end_day_portion) -> Decimal:
@@ -1766,7 +1801,7 @@ def submit_leave_request(
 ) -> LeaveRequest:
     """Creates and submits a leave request."""
 
-    leave_policy = _resolve_leave_policy(employee, leave_type)
+    leave_policy = _resolve_leave_policy(employee, leave_type, as_of=start_date)
     requested_units = _calculate_requested_units(start_date, end_date, start_day_portion, end_day_portion)
     policy_runtime = _validate_leave_request(
         employee=employee,
