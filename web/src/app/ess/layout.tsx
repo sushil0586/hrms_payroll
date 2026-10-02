@@ -10,16 +10,19 @@ export default async function EssLayout({ children }: { children: React.ReactNod
   const canAccessHrAdmin = roleCodes.some((roleCode) => roleCode === "hr-admin" || roleCode.startsWith("hr-"));
   const canAccessMss = Boolean(sessionUser?.workspace_access?.mss);
   const fallbackNavItems = [
-    { href: "/ess", label: "Overview", shortLabel: "OV", blurb: "Self service" },
-    { href: "/ess/payslips", label: "Payslips", shortLabel: "PS", blurb: "Payroll files" },
-    { href: "/ess/statutory-declarations", label: "Tax Declarations", shortLabel: "TD", blurb: "Proof status" },
-    { href: "/ess/notifications", label: "Notifications", shortLabel: "NT", blurb: "Alerts and updates" },
+    { href: "/ess", label: "Overview", shortLabel: "OV", blurb: "Daily actions" },
+    { href: "/ess/leave", label: "Leave", shortLabel: "LV", blurb: "Requests and balance" },
+    { href: "/ess/attendance", label: "Attendance", shortLabel: "AT", blurb: "Daily and fixes" },
     { href: "/ess/documents", label: "Documents", shortLabel: "DO", blurb: "Required uploads" },
+    { href: "/ess/payslips", label: "Payslips", shortLabel: "PS", blurb: "Payroll files" },
+    { href: "/ess/statutory-declarations", label: "Statutory", shortLabel: "ST", blurb: "Tax declarations" },
+    { href: "/ess/notifications", label: "Inbox", shortLabel: "IN", blurb: "Alerts and updates" },
     ...(canAccessMss ? [{ href: "/mss/approvals", label: "Approvals", shortLabel: "AP", blurb: "Manager queue" }] : []),
   ];
   const fallbackQuickLinks = [
+    { href: "/ess/leave", label: "Leave" },
+    { href: "/ess/attendance", label: "Attendance" },
     { href: "/ess/payslips", label: "Payslips" },
-    { href: "/ess/statutory-declarations", label: "Tax" },
     { href: "/ess/notifications", label: "Inbox" },
   ];
   const menuSource = await getWorkspaceMenuSource({

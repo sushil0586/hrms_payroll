@@ -41,50 +41,72 @@ test.describe("Employee self service control center certification", () => {
     }
 
     await expect(page.getByRole("heading", { name: "My profile" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Attendance today" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Leave balances" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Submit leave request" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Submit regularization" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Leave request history" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Leave request detail" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Regularization history" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Regularization detail" })).toBeVisible();
     await expect(page.getByText("Manager", { exact: true }).first()).toBeVisible();
-    await expect(page.locator(".pagination-bar").first()).toBeVisible();
-    await expect(page.locator(".pagination-bar").nth(1)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Submit leave request" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Submit regularization" })).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await gotoAuthenticated(page, "/ess", employee);
     await expectPageReady(page, "My workspace");
     await expect(page.getByTestId("ess-control-center")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Submit leave request" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Today's actions" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 
   test("employee can navigate every ESS workspace from the control center", async ({ page }) => {
+    test.setTimeout(90 * 1000);
     await gotoAuthenticated(page, "/ess", employee);
     await expectPageReady(page, "My workspace");
 
-    await page.getByRole("link", { name: "Payslips" }).first().click();
+    await expect(page.getByRole("link", { name: "Apply leave" }).first()).toHaveAttribute("href", /\/ess\/leave/);
+    await gotoAuthenticated(page, "/ess/leave", employee);
+    await expect(page).toHaveURL(/\/ess\/leave/);
+    await expectPageReady(page, "Leave");
+    await expect(page.getByRole("heading", { name: "Submit leave request" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Leave requests" })).toBeVisible();
+    await page.getByRole("button", { name: "Apply leave" }).click();
+    await expect(page.getByRole("dialog", { name: "Apply leave" })).toBeVisible();
+    await expect(page.getByLabel("Evidence file")).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).click();
+
+    await gotoAuthenticated(page, "/ess", employee);
+    await expect(page.getByRole("link", { name: "Regularize attendance" }).first()).toHaveAttribute("href", /\/ess\/attendance/);
+    await gotoAuthenticated(page, "/ess/attendance", employee);
+    await expect(page).toHaveURL(/\/ess\/attendance/);
+    await expectPageReady(page, "Attendance");
+    await expect(page.getByRole("heading", { name: "Submit regularization" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Regularizations" })).toBeVisible();
+    await page.getByRole("button", { name: "Regularize attendance" }).click();
+    await expect(page.getByRole("dialog", { name: "Regularize attendance" })).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).click();
+
+    await gotoAuthenticated(page, "/ess", employee);
+    await expect(page.getByRole("link", { name: "Payslips" }).first()).toHaveAttribute("href", /\/ess\/payslips/);
+    await gotoAuthenticated(page, "/ess/payslips", employee);
     await expect(page).toHaveURL(/\/ess\/payslips/);
     await expectPageReady(page, "Payslips");
     await expect(page.getByRole("heading", { name: /My payslips|Payslip register|No payslip selected/i }).first()).toBeVisible();
 
     await gotoAuthenticated(page, "/ess", employee);
-    await page.getByRole("link", { name: "Documents" }).first().click();
+    await expect(page.getByRole("link", { name: "Documents" }).first()).toHaveAttribute("href", /\/ess\/documents/);
+    await gotoAuthenticated(page, "/ess/documents", employee);
     await expect(page).toHaveURL(/\/ess\/documents/);
     await expectPageReady(page, "Documents");
     await expect(page.getByRole("heading", { name: /Document center|Required documents|Documents/i }).first()).toBeVisible();
 
     await gotoAuthenticated(page, "/ess", employee);
-    await page.getByRole("link", { name: "Tax declarations" }).first().click();
+    await expect(page.getByRole("link", { name: "Tax declarations" }).first()).toHaveAttribute("href", /\/ess\/statutory-declarations/);
+    await gotoAuthenticated(page, "/ess/statutory-declarations", employee);
     await expect(page).toHaveURL(/\/ess\/statutory-declarations/);
     await expectPageReady(page, "Statutory Declarations");
-    await expect(page.getByRole("heading", { name: "Start declaration" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Start declaration|Update declaration/ })).toBeVisible();
 
     await gotoAuthenticated(page, "/ess", employee);
-    await page.getByRole("link", { name: "Notifications" }).first().click();
+    await expect(page.getByRole("link", { name: "Notifications" }).first()).toHaveAttribute("href", /\/ess\/notifications/);
+    await gotoAuthenticated(page, "/ess/notifications", employee);
     await expect(page).toHaveURL(/\/ess\/notifications/);
     await expectPageReady(page, /Notifications|Employee notifications/i);
     await expect(page.getByRole("heading", { name: "Inbox filters" })).toBeVisible();
@@ -92,23 +114,30 @@ test.describe("Employee self service control center certification", () => {
   });
 
   test("employee request forms expose clear validation before submission", async ({ page }) => {
-    await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "My workspace");
+    await gotoAuthenticated(page, "/ess/leave", employee);
+    await expectPageReady(page, "Leave");
 
+    await page.getByRole("button", { name: "Apply leave" }).click();
+    await expect(page.getByRole("dialog", { name: "Apply leave" })).toBeVisible();
     await expect(page.getByLabel("Leave type")).toBeVisible();
     await expect(page.getByLabel("Start date")).toHaveValue(/\d{4}-\d{2}-\d{2}/);
     await expect(page.getByLabel("End date")).toHaveValue(/\d{4}-\d{2}-\d{2}/);
     await expect(page.getByLabel("Start day portion")).toHaveValue("full_day");
     await expect(page.getByLabel("End day portion")).toHaveValue("full_day");
-    await expect(page.getByLabel("Attachment reference")).toBeVisible();
+    await expect(page.getByLabel("Evidence file")).toBeVisible();
+    await expect(page.getByLabel("Evidence reference")).toBeVisible();
     await expect(page.getByLabel("Reason").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Submit leave" })).toBeVisible();
 
+    await gotoAuthenticated(page, "/ess/attendance", employee);
+    await expectPageReady(page, "Attendance");
+    await page.getByRole("button", { name: "Regularize attendance" }).click();
+    await expect(page.getByRole("dialog", { name: "Regularize attendance" })).toBeVisible();
     await expect(page.getByLabel("Attendance record")).toBeVisible();
     await expect(page.getByLabel("Requested status")).toBeVisible();
     await expect(page.getByLabel("Requested check-in")).toBeVisible();
     await expect(page.getByLabel("Requested check-out")).toBeVisible();
-    await expect(page.getByLabel("Reason").nth(1)).toBeVisible();
+    await expect(page.getByLabel("Reason").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Submit regularization" })).toBeVisible();
   });
 

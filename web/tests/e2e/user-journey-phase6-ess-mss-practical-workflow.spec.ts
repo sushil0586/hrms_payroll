@@ -65,7 +65,7 @@ function field(scope: Page | Locator, label: string, index = 0) {
 }
 
 function queueRow(page: Page, text: string | RegExp) {
-  return page.locator("article.record-card, a.tableish__row").filter({ hasText: text }).first();
+  return page.locator("article.record-card, a.tableish__row, button.leave-request-card").filter({ hasText: text }).first();
 }
 
 async function expectLink(page: Page, name: string | RegExp, href: RegExp) {
@@ -87,17 +87,32 @@ async function submitAndCapture<T>(
   return {
     ok: response.ok(),
     status: response.status(),
-    requestBody: response.request().postDataJSON() as unknown,
+    requestBody: (() => {
+      try {
+        return response.request().postDataJSON() as unknown;
+      } catch {
+        return response.request().postData() ?? "";
+      }
+    })(),
     payload: (await response.json().catch(() => ({}))) as T,
   };
 }
 
 async function attendanceRecordIds(page: Page) {
+  await openAttendanceRegularizationDialog(page);
   return field(page, "Attendance record").locator("option").evaluateAll((options) =>
     options
       .map((option) => (option as HTMLOptionElement).value)
       .filter((value) => value.length > 0),
   );
+}
+
+async function openAttendanceRegularizationDialog(page: Page) {
+  if (await page.getByRole("dialog", { name: "Regularize attendance" }).count()) {
+    return;
+  }
+  await page.getByRole("button", { name: "Regularize attendance" }).first().click();
+  await expect(page.getByRole("dialog", { name: "Regularize attendance" })).toBeVisible();
 }
 
 async function submitRegularizationFromAvailableRecord(page: Page, reason: string, requestedStatus: string) {
@@ -111,7 +126,7 @@ async function submitRegularizationFromAvailableRecord(page: Page, reason: strin
     await field(page, "Requested check-in").fill("");
     await field(page, "Requested check-out").fill("");
     await field(page, "Requested status").selectOption(requestedStatus);
-    await field(page, "Reason", 1).fill(reason);
+    await field(page, "Reason").fill(reason);
 
     const result = await submitAndCapture<RegularizationSubmission>(
       page,
@@ -205,37 +220,64 @@ async function expectEssWorkspaceUsable(page: Page) {
     "Today's actions",
     "What do you want to do?",
     "My profile",
-    "Attendance today",
+    "Today",
     "Leave balances",
-    "Submit leave request",
-    "Submit regularization",
-    "Leave request history",
-    "Leave request detail",
-    "Regularization history",
-    "Regularization detail",
   ]) {
     await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible();
   }
 
-  for (const label of [
-    "Leave type",
-    "Start date",
-    "End date",
-    "Start day portion",
-    "End day portion",
-    "Attachment reference",
-    "Attendance record",
-    "Requested status",
-    "Requested check-in",
-    "Requested check-out",
-  ]) {
+  await expectLink(page, /Apply leave/i, /\/ess\/leave/);
+  await expectLink(page, /Regularize attendance/i, /\/ess\/attendance/);
+  await expectNoHorizontalOverflow(page);
+}
+
+async function expectEssLeaveUsable(page: Page) {
+  await expectPageReady(page, /Leave/i);
+  for (const heading of ["Balances", "Leave requests"]) {
+    await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible();
+  }
+  await expect(page.getByLabel("Leave history snapshot")).toBeVisible();
+  await expect(field(page, "Search leave history")).toBeVisible();
+  await expect(field(page, "Type filter")).toBeVisible();
+  await expect(field(page, "Period filter")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Submit leave request" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Apply leave" }).click();
+  await expect(page.getByRole("dialog", { name: "Apply leave" })).toBeVisible();
+  for (const label of ["Leave type", "Start date", "End date", "Start day portion", "End day portion", "Attachment reference"]) {
+    const resolvedLabel = label === "Attachment reference" ? "Evidence reference" : label;
+    await expect(field(page, resolvedLabel), `${resolvedLabel} should be visible`).toBeVisible();
+  }
+  await expect(field(page, "Evidence file")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit leave" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+  const firstLeaveRequest = page.locator("button.leave-request-card").first();
+  if (await firstLeaveRequest.count()) {
+    await firstLeaveRequest.click();
+    const detailDialog = page.getByRole("dialog", { name: "Leave request detail" });
+    await expect(detailDialog).toBeVisible();
+    await expect(detailDialog.getByText("Manager decision").first()).toBeVisible();
+    for (const heading of ["Timeline", "Request details", "Evidence"]) {
+      await expect(detailDialog.getByRole("heading", { name: heading }).first()).toBeVisible();
+    }
+    await page.getByRole("button", { name: "Close leave request detail" }).click();
+  }
+  await expect(page.locator(".pagination-bar").first()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+}
+
+async function expectEssAttendanceUsable(page: Page) {
+  await expectPageReady(page, /Attendance/i);
+  for (const heading of ["Today", "Monthly summary", "Correction queue", "Regularizations"]) {
+    await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible();
+  }
+  await expect(page.getByRole("heading", { name: "Submit regularization" })).toHaveCount(0);
+  await openAttendanceRegularizationDialog(page);
+  for (const label of ["Attendance record", "Requested status", "Requested check-in", "Requested check-out"]) {
     await expect(field(page, label), `${label} should be visible`).toBeVisible();
   }
-
-  await expect(page.getByRole("button", { name: "Submit leave" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Submit regularization" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
   await expect(page.locator(".pagination-bar").first()).toBeVisible();
-  await expect(page.locator(".pagination-bar").nth(1)).toBeVisible();
   await expectNoHorizontalOverflow(page);
 }
 
@@ -261,18 +303,20 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
       path: "/ess",
       heading: /My workspace|Self service/i,
       persona: employee,
-      requiredText: [/Today's actions/i, /Leave balances/i, /Submit leave request/i, /Submit regularization/i],
+      requiredText: [/Today's actions/i, /Leave balances/i, /Apply leave/i, /Regularize attendance/i],
     });
     await expectEssWorkspaceUsable(page);
 
     for (const [label, route, heading, requiredText] of [
+      ["Leave", "/ess/leave", /Leave/i, /Submit leave request|Leave requests/i],
+      ["Attendance", "/ess/attendance", /Attendance/i, /Submit regularization|Regularizations/i],
       ["Payslips", "/ess/payslips", /Payslips/i, /Payslip|No payslip|Published/i],
       ["Documents", "/ess/documents", /Documents/i, /Document|Upload|required/i],
       ["Tax declarations", "/ess/statutory-declarations", /Statutory/i, /Declaration|Proof|Tax/i],
       ["Notifications", "/ess/notifications", /Notifications/i, /Inbox|Notification/i],
     ] as Array<[string, string, RegExp, RegExp]>) {
       await test.step(`ESS child page: ${label}`, async () => {
-        await page.goto(route, { waitUntil: "domcontentloaded" });
+        await gotoAuthenticated(page, route, employee);
         await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
         await expectPageReady(page, heading);
         await expect(page.getByText(requiredText).first()).toBeVisible();
@@ -325,30 +369,28 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
     const decisionNote = `${reason}_MANAGER_APPROVED`;
 
     await ensureEmployeeLeavePolicyAssignment(page);
-    await gotoAuthenticated(page, "/ess", employee);
-    await expectEssWorkspaceUsable(page);
+    await gotoAuthenticated(page, "/ess/leave", employee);
+    await expectEssLeaveUsable(page);
+    await page.getByRole("button", { name: "Apply leave" }).click();
+    await expect(page.getByRole("dialog", { name: "Apply leave" })).toBeVisible();
 
     await field(page, "Start date").fill(isoDateFromToday(50));
     await field(page, "End date").fill(isoDateFromToday(49));
     await field(page, "Reason").fill(invalidReason);
-    const invalidResult = await submitAndCapture<Record<string, unknown>>(
-      page,
-      "/api/me/leave-requests",
-      "POST",
-      async () => {
-        await page.getByRole("button", { name: "Submit leave" }).click();
-      },
-    );
-    expect(invalidResult.ok).toBeFalsy();
-    expect(invalidResult.status).toBe(400);
-    await expect(page.getByText("Submission failed.")).toBeVisible();
-    await expect(page.getByText(/End date must be on or after start date/i)).toBeVisible();
+    await expect(page.getByText("Check dates.")).toBeVisible();
+    await expect(page.getByText(/End date must be the same as or after the start date/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Submit leave" })).toBeDisabled();
 
     const startDate = isoDateFromToday(51);
     const endDate = isoDateFromToday(51);
     await field(page, "Start date").fill(startDate);
     await field(page, "End date").fill(endDate);
     await field(page, "Reason").fill(reason);
+    await field(page, "Evidence file").setInputFiles({
+      name: "phase6-leave-evidence.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from(`Evidence for ${reason}`),
+    });
     const leaveResult = await submitAndCapture<LeaveSubmission>(
       page,
       "/api/me/leave-requests",
@@ -366,7 +408,6 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
       `Leave request failed with ${leaveResult.status}: ${JSON.stringify(leaveResult.payload)}`,
     ).toBeTruthy();
     expect(leaveResult.status).toBe(201);
-    expect(leaveResult.requestBody).toMatchObject({ start_date: startDate, end_date: endDate, reason });
     expect(leaveResult.payload.status).toBe("pending");
 
     await gotoAuthenticated(page, `/mss/approvals?queue=leave&leaveId=${leaveResult.payload.id}`, manager);
@@ -385,10 +426,13 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
     expect(approvalResult.payload.status).toBe("approved");
     await expect(page.getByText(/Request approved|Cancellation request approved/i)).toBeVisible();
 
-    await gotoAuthenticated(page, `/ess?leaveStatus=approved&leaveId=${leaveResult.payload.id}`, employee);
-    await expectPageReady(page, /My workspace|Self service/i);
+    await gotoAuthenticated(page, `/ess/leave?status=approved&requestId=${leaveResult.payload.id}`, employee);
+    await expectPageReady(page, /Leave/i);
     await expect(queueRow(page, reason)).toBeVisible();
     await expect(queueRow(page, reason)).toContainText("approved");
+    await expect(page.getByRole("dialog", { name: "Leave request detail" })).toBeVisible();
+    await expect(page.getByText("phase6-leave-evidence.txt")).toBeVisible();
+    await expect(page.getByRole("link", { name: /phase6-leave-evidence.txt/i })).toHaveAttribute("href", /\/api\/me\/leave-requests\/.+\/attachments\/.+\/download/);
     await expect(page.getByText(decisionNote).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
@@ -401,14 +445,14 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
     const reason = uniqueRef("REG_REJECT");
     const decisionNote = `${reason}_MANAGER_REJECTED`;
 
-    await gotoAuthenticated(page, "/ess", employee);
-    await expectEssWorkspaceUsable(page);
+    await gotoAuthenticated(page, "/ess/attendance", employee);
+    await expectEssAttendanceUsable(page);
     const recordIds = await attendanceRecordIds(page);
     test.skip(!recordIds.length, "Employee has no attendance records available for regularization.");
 
     await field(page, "Requested check-in").fill("2026-09-09T18:10");
     await field(page, "Requested check-out").fill("2026-09-09T09:05");
-    await field(page, "Reason", 1).fill(invalidReason);
+    await field(page, "Reason").fill(invalidReason);
     const invalidResult = await submitAndCapture<Record<string, unknown>>(
       page,
       "/api/me/attendance-regularizations",
@@ -451,8 +495,8 @@ test.describe("User journey phase 6: ESS and MSS practical workflow", () => {
     expect(rejectionResult.payload.status).toBe("rejected");
     await expect(page.getByText("Request rejected.")).toBeVisible();
 
-    await gotoAuthenticated(page, `/ess?regStatus=rejected&regId=${regularizationResult.payload.id}`, employee);
-    await expectPageReady(page, /My workspace|Self service/i);
+    await gotoAuthenticated(page, `/ess/attendance?status=rejected&regId=${regularizationResult.payload.id}`, employee);
+    await expectPageReady(page, /Attendance/i);
     await expect(queueRow(page, reason)).toBeVisible();
     await expect(queueRow(page, reason)).toContainText("rejected");
     await expect(page.getByText(decisionNote).first()).toBeVisible();

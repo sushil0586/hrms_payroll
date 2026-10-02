@@ -51,7 +51,7 @@ function field(scope: Page | Locator, label: string, index = 0) {
 }
 
 function card(page: Page, text: string | RegExp) {
-  return page.locator("article.record-card, a.tableish__row").filter({ hasText: text }).first();
+  return page.locator("article.record-card, a.tableish__row, button.leave-request-card").filter({ hasText: text }).first();
 }
 
 async function authenticateForSetup(page: Page, persona: Persona) {
@@ -88,7 +88,13 @@ async function submitAndCapture<T>(
   return {
     ok: response.ok(),
     status: response.status(),
-    requestBody: response.request().postDataJSON() as unknown,
+    requestBody: (() => {
+      try {
+        return response.request().postDataJSON() as unknown;
+      } catch {
+        return response.request().postData() ?? "";
+      }
+    })(),
     payload: (await response.json().catch(() => ({}))) as T,
   };
 }
@@ -109,7 +115,7 @@ async function submitRegularizationFromAvailableRecord(page: Page, reason: strin
     await field(page, "Requested check-in").fill("");
     await field(page, "Requested check-out").fill("");
     await field(page, "Requested status").selectOption(requestedStatus);
-    await field(page, "Reason", 1).fill(reason);
+    await field(page, "Reason").fill(reason);
 
     const result = await submitAndCapture<RegularizationSubmission>(
       page,
@@ -207,15 +213,18 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     const startDate = isoDateFromToday(65);
     const endDate = isoDateFromToday(65);
 
-    await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
-    await expect(page.getByRole("heading", { name: "Submit leave request" })).toBeVisible();
+    await gotoAuthenticated(page, "/ess/leave", employee);
+    await expectPageReady(page, "Leave");
+    await expect(page.getByRole("heading", { name: "Submit leave request" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Apply leave" }).click();
+    await expect(page.getByRole("dialog", { name: "Apply leave" })).toBeVisible();
     await expect(field(page, "Leave type")).toBeVisible();
     await expect(field(page, "Start date")).toHaveValue(/\d{4}-\d{2}-\d{2}/);
     await expect(field(page, "End date")).toHaveValue(/\d{4}-\d{2}-\d{2}/);
     await expect(field(page, "Start day portion")).toHaveValue("full_day");
     await expect(field(page, "End day portion")).toHaveValue("full_day");
-    await expect(field(page, "Attachment reference")).toBeVisible();
+    await expect(field(page, "Evidence file")).toBeVisible();
+    await expect(field(page, "Evidence reference")).toBeVisible();
     await expect(field(page, "Reason")).toBeVisible();
 
     await field(page, "Start date").fill(startDate);
@@ -231,14 +240,12 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     );
     expect(leaveResult.ok).toBeTruthy();
     expect(leaveResult.status).toBe(201);
-    expect(leaveResult.requestBody).toMatchObject({
-      start_date: startDate,
-      end_date: endDate,
-      reason,
-    });
+    expect(String(leaveResult.requestBody)).toContain(startDate);
+    expect(String(leaveResult.requestBody)).toContain(endDate);
+    expect(String(leaveResult.requestBody)).toContain(reason);
     expect(leaveResult.payload.status).toBe("pending");
-    await page.goto(`/ess?leaveStatus=pending&leaveId=${leaveResult.payload.id}`);
-    await expectPageReady(page, "Self service");
+    await page.goto(`/ess/leave?status=pending&requestId=${leaveResult.payload.id}`);
+    await expectPageReady(page, "Leave");
     await expect(card(page, reason)).toBeVisible();
     await expect(card(page, reason)).toContainText("pending");
     await expectNoHorizontalOverflow(page);
@@ -265,10 +272,12 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     await expect(page.getByText("Request approved.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    await gotoAuthenticated(page, `/ess?leaveStatus=approved&leaveId=${leaveResult.payload.id}`, employee);
-    await expectPageReady(page, "Self service");
+    await gotoAuthenticated(page, `/ess/leave?status=approved&requestId=${leaveResult.payload.id}`, employee);
+    await expectPageReady(page, "Leave");
     await expect(card(page, reason)).toBeVisible();
     await expect(card(page, reason)).toContainText("approved");
+    await card(page, reason).click();
+    await expect(page.getByRole("dialog", { name: "Leave request detail" })).toBeVisible();
     await expect(page.getByText(decisionNote).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
@@ -281,8 +290,10 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     const startDate = isoDateFromToday(70);
     const endDate = isoDateFromToday(69);
 
-    await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
+    await gotoAuthenticated(page, "/ess/leave", employee);
+    await expectPageReady(page, "Leave");
+    await page.getByRole("button", { name: "Apply leave" }).click();
+    await expect(page.getByRole("dialog", { name: "Apply leave" })).toBeVisible();
     await field(page, "Start date").fill(startDate);
     await field(page, "End date").fill(endDate);
     await field(page, "Reason").fill(invalidReason);
@@ -330,10 +341,12 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     expect(rejectionResult.payload.status).toBe("rejected");
     await expect(page.getByText("Request rejected.")).toBeVisible();
 
-    await gotoAuthenticated(page, `/ess?leaveStatus=rejected&leaveId=${leaveResult.payload.id}`, employee);
-    await expectPageReady(page, "Self service");
+    await gotoAuthenticated(page, `/ess/leave?status=rejected&requestId=${leaveResult.payload.id}`, employee);
+    await expectPageReady(page, "Leave");
     await expect(card(page, rejectReason)).toBeVisible();
     await expect(card(page, rejectReason)).toContainText("rejected");
+    await card(page, rejectReason).click();
+    await expect(page.getByRole("dialog", { name: "Leave request detail" })).toBeVisible();
     await expect(page.getByText(decisionNote).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
@@ -343,14 +356,14 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     const reason = uniqueRef("REG_APPROVAL");
     const decisionNote = `${reason}_APPROVED`;
 
-    await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
+    await gotoAuthenticated(page, "/ess/attendance", employee);
+    await expectPageReady(page, "Attendance");
     await expect(page.getByRole("heading", { name: "Submit regularization" })).toBeVisible();
     await expect(field(page, "Attendance record")).toBeVisible();
     await expect(field(page, "Requested status")).toBeVisible();
     await expect(field(page, "Requested check-in")).toBeVisible();
     await expect(field(page, "Requested check-out")).toBeVisible();
-    await expect(field(page, "Reason", 1)).toBeVisible();
+    await expect(field(page, "Reason")).toBeVisible();
 
     const { result: regularizationResult } = await submitRegularizationFromAvailableRecord(page, reason, "remote");
     expect(regularizationResult, "regularization submission should produce a response").not.toBeNull();
@@ -365,8 +378,8 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     });
     expect(regularizationResult.payload.status).toBe("pending");
 
-    await page.goto(`/ess?regStatus=pending&regId=${regularizationResult.payload.id}`);
-    await expectPageReady(page, "Self service");
+    await page.goto(`/ess/attendance?status=pending&regId=${regularizationResult.payload.id}`);
+    await expectPageReady(page, "Attendance");
     await expect(card(page, reason)).toBeVisible();
     await expect(card(page, reason)).toContainText("pending");
     await expectNoHorizontalOverflow(page);
@@ -393,8 +406,8 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     await expect(page.getByText("Request approved.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    await gotoAuthenticated(page, `/ess?regStatus=approved&regId=${regularizationResult.payload.id}`, employee);
-    await expectPageReady(page, "Self service");
+    await gotoAuthenticated(page, `/ess/attendance?status=approved&regId=${regularizationResult.payload.id}`, employee);
+    await expectPageReady(page, "Attendance");
     await expect(card(page, reason)).toBeVisible();
     await expect(card(page, reason)).toContainText("approved");
     await expect(page.getByText(decisionNote).first()).toBeVisible();
@@ -408,11 +421,11 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     const rejectReason = uniqueRef("REG_REJECT");
     const decisionNote = `${rejectReason}_MANAGER_REJECTED`;
 
-    await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
+    await gotoAuthenticated(page, "/ess/attendance", employee);
+    await expectPageReady(page, "Attendance");
     await field(page, "Requested check-in").fill("2026-09-09T18:10");
     await field(page, "Requested check-out").fill("2026-09-09T09:05");
-    await field(page, "Reason", 1).fill(invalidReason);
+    await field(page, "Reason").fill(invalidReason);
     const invalidResult = await submitAndCapture<Record<string, unknown>>(
       page,
       "/api/me/attendance-regularizations",
@@ -438,11 +451,11 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     expect(firstPending.ok).toBeTruthy();
     expect(firstPending.payload.status).toBe("pending");
 
-    await page.goto("/ess");
-    await expectPageReady(page, "Self service");
+    await page.goto("/ess/attendance");
+    await expectPageReady(page, "Attendance");
     await field(page, "Attendance record").selectOption(attendanceRecordId);
     await field(page, "Requested status").selectOption("remote");
-    await field(page, "Reason", 1).fill(`${duplicateReason}_SECOND`);
+    await field(page, "Reason").fill(`${duplicateReason}_SECOND`);
     const duplicateResult = await submitAndCapture<Record<string, unknown>>(
       page,
       "/api/me/attendance-regularizations",
@@ -472,8 +485,8 @@ test.describe("Phase 4A ESS to MSS leave certification", () => {
     expect(rejectionResult.payload.status).toBe("rejected");
     await expect(page.getByText("Request rejected.")).toBeVisible();
 
-    await gotoAuthenticated(page, `/ess?regStatus=rejected&regId=${firstPending.payload.id}`, employee);
-    await expectPageReady(page, "Self service");
+    await gotoAuthenticated(page, `/ess/attendance?status=rejected&regId=${firstPending.payload.id}`, employee);
+    await expectPageReady(page, "Attendance");
     await expect(card(page, duplicateReason)).toBeVisible();
     await expect(card(page, duplicateReason)).toContainText("rejected");
     await expect(page.getByText(decisionNote).first()).toBeVisible();

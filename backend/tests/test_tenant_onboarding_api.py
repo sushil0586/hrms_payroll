@@ -236,6 +236,49 @@ def test_authenticated_menu_catalog_prefers_synced_db_rows(api_client: APIClient
 
 
 @pytest.mark.django_db
+def test_authenticated_menu_catalog_merges_new_code_rows_with_stale_db_rows(api_client: APIClient, platform_staff_user: User):
+    MenuCatalogEntry.objects.create(
+        workspace="ess",
+        kind="sidebar",
+        href="/ess",
+        group="Workspace",
+        label="My old ESS home",
+        short_label="OV",
+        blurb="Legacy overview",
+        permission_keys=["ess.view"],
+        sort_order=10,
+        is_active=True,
+    )
+    MenuCatalogEntry.objects.create(
+        workspace="ess",
+        kind="sidebar",
+        href="/ess/attendance",
+        group="Workspace",
+        label="Hidden attendance",
+        short_label="AT",
+        blurb="Inactive override",
+        permission_keys=["ess.attendance.view"],
+        sort_order=30,
+        is_active=False,
+    )
+
+    api_client.force_authenticate(user=platform_staff_user)
+    response = api_client.get("/api/v1/auth/menu-catalog/?workspace=ess")
+
+    assert response.status_code == 200, response.json()
+    payload = response.json()
+    hrefs = {item["href"] for item in payload}
+    overview_item = next(item for item in payload if item["href"] == "/ess")
+    leave_item = next(item for item in payload if item["href"] == "/ess/leave")
+    assert overview_item["label"] == "My old ESS home"
+    assert overview_item["catalog_source"] == "database"
+    assert leave_item["catalog_source"] == "code"
+    assert not any(item["href"] == "/ess/attendance" and item["kind"] == "sidebar" for item in payload)
+    assert {"/ess/leave", "/ess/documents", "/ess/payslips", "/ess/statutory-declarations", "/ess/notifications"}.issubset(hrefs)
+    assert all(item["workspace"] == "ess" for item in payload)
+
+
+@pytest.mark.django_db
 def test_platform_staff_can_create_tenant_and_seed_onboarding(api_client: APIClient, platform_staff_user: User):
     api_client.force_authenticate(user=platform_staff_user)
 

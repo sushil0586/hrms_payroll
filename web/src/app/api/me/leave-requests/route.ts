@@ -10,15 +10,17 @@ export async function POST(request: NextRequest) {
   if (!token) {
     return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
   }
-  const body = await request.json().catch(() => ({}));
+  const contentType = request.headers.get("content-type") ?? "";
+  const isMultipart = contentType.includes("multipart/form-data");
+  const body = isMultipart ? await request.formData() : JSON.stringify(await request.json().catch(() => ({})));
   const upstream = await fetch(`${API_BASE_URL}/me/leave-requests/`, {
     method: "POST",
     headers: {
       Authorization: `Token ${token}`,
-      "Content-Type": "application/json",
+      ...(isMultipart ? {} : { "Content-Type": "application/json" }),
       "X-Request-ID": request.headers.get("x-request-id") ?? "",
     },
-    body: JSON.stringify(body),
+    body,
     cache: "no-store",
   });
   const payload = await upstream.json().catch(() => ({}));

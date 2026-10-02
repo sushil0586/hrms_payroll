@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.text import slugify
 from rest_framework import exceptions, permissions, response, serializers, status
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.views import APIView
 
 from apps.common.models import HrmsImportBatchAudit, HrmsImportBatchStatus, HrmsLaunchRemediationAssignment
@@ -18094,6 +18094,8 @@ class ManagerNotificationDetailView(EmployeeContextMixin, APIView):
 
 
 class MeLeaveRequestListCreateView(EmployeeContextMixin, APIView):
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
     def get(self, request):
         employee = self.get_employee()
         if not employee:
@@ -18120,17 +18122,32 @@ class MeLeaveRequestListCreateView(EmployeeContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = LeaveRequestCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        payload_data, uploaded_file = _extract_leave_payload(request)
+        artifact = _store_leave_attachment_for_employee(employee=employee, uploaded_file=uploaded_file, action="leave_request") if uploaded_file else None
+        if artifact and not str(payload_data.get("attachment_reference", "") or "").strip():
+            payload_data["attachment_reference"] = artifact.original_filename
+        serializer = LeaveRequestCreateSerializer(data=payload_data)
+        if not serializer.is_valid():
+            _delete_document_artifact_quietly(artifact)
+            raise serializers.ValidationError(serializer.errors)
         payload = dict(serializer.validated_data)
         leave_type = LeaveType.objects.filter(id=payload.pop("leave_type_id"), tenant=employee.tenant).first()
         if not leave_type:
+            _delete_document_artifact_quietly(artifact)
             return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
         try:
             leave_request = submit_leave_request(employee=employee, leave_type=leave_type, **payload)
         except DjangoValidationError as exc:
+            _delete_document_artifact_quietly(artifact)
             error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave request."}
             return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
+        if artifact:
+            _append_leave_attachment_metadata(
+                leave_request=leave_request,
+                artifact=artifact,
+                action="leave_request",
+                label=str(payload.get("attachment_reference", "") or artifact.original_filename),
+            )
         payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
         return response.Response(MutationResultSerializer(payload).data, status=status.HTTP_201_CREATED)
 
@@ -18147,6 +18164,8 @@ class MeLeaveRequestDetailView(EmployeeContextMixin, APIView):
 
 
 class MeLeaveRequestWithdrawView(EmployeeContextMixin, APIView):
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
     def post(self, request, request_id):
         employee = self.get_employee()
         if not employee:
@@ -18154,8 +18173,14 @@ class MeLeaveRequestWithdrawView(EmployeeContextMixin, APIView):
         leave_request = LeaveRequest.objects.filter(id=request_id, employee=employee).select_related("leave_policy", "leave_type").first()
         if not leave_request:
             return response.Response({"detail": "Leave request not found."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = LeaveRequestLifecycleActionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        payload_data, uploaded_file = _extract_leave_payload(request)
+        artifact = _store_leave_attachment_for_employee(employee=employee, uploaded_file=uploaded_file, action="withdrawal") if uploaded_file else None
+        if artifact and not str(payload_data.get("attachment_reference", "") or "").strip():
+            payload_data["attachment_reference"] = artifact.original_filename
+        serializer = LeaveRequestLifecycleActionSerializer(data=payload_data)
+        if not serializer.is_valid():
+            _delete_document_artifact_quietly(artifact)
+            raise serializers.ValidationError(serializer.errors)
         try:
             leave_request = withdraw_leave_request(
                 leave_request=leave_request,
@@ -18164,13 +18189,23 @@ class MeLeaveRequestWithdrawView(EmployeeContextMixin, APIView):
                 attachment_reference=serializer.validated_data.get("attachment_reference", ""),
             )
         except DjangoValidationError as exc:
+            _delete_document_artifact_quietly(artifact)
             error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave lifecycle action."}
             return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
+        if artifact:
+            _append_leave_attachment_metadata(
+                leave_request=leave_request,
+                artifact=artifact,
+                action="withdrawal",
+                label=str(serializer.validated_data.get("attachment_reference", "") or artifact.original_filename),
+            )
         payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
         return response.Response(MutationResultSerializer(payload).data)
 
 
 class MeLeaveRequestCancelView(EmployeeContextMixin, APIView):
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
     def post(self, request, request_id):
         employee = self.get_employee()
         if not employee:
@@ -18178,8 +18213,14 @@ class MeLeaveRequestCancelView(EmployeeContextMixin, APIView):
         leave_request = LeaveRequest.objects.filter(id=request_id, employee=employee).select_related("leave_policy", "leave_type").first()
         if not leave_request:
             return response.Response({"detail": "Leave request not found."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = LeaveRequestLifecycleActionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        payload_data, uploaded_file = _extract_leave_payload(request)
+        artifact = _store_leave_attachment_for_employee(employee=employee, uploaded_file=uploaded_file, action="cancellation") if uploaded_file else None
+        if artifact and not str(payload_data.get("attachment_reference", "") or "").strip():
+            payload_data["attachment_reference"] = artifact.original_filename
+        serializer = LeaveRequestLifecycleActionSerializer(data=payload_data)
+        if not serializer.is_valid():
+            _delete_document_artifact_quietly(artifact)
+            raise serializers.ValidationError(serializer.errors)
         try:
             leave_request = cancel_leave_request(
                 leave_request=leave_request,
@@ -18188,10 +18229,116 @@ class MeLeaveRequestCancelView(EmployeeContextMixin, APIView):
                 attachment_reference=serializer.validated_data.get("attachment_reference", ""),
             )
         except DjangoValidationError as exc:
+            _delete_document_artifact_quietly(artifact)
             error_payload = getattr(exc, "message_dict", None) or {"detail": exc.messages[0] if exc.messages else "Invalid leave lifecycle action."}
             return response.Response(error_payload, status=status.HTTP_400_BAD_REQUEST)
+        if artifact:
+            _append_leave_attachment_metadata(
+                leave_request=leave_request,
+                artifact=artifact,
+                action="cancellation",
+                label=str(serializer.validated_data.get("attachment_reference", "") or artifact.original_filename),
+            )
         payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
         return response.Response(MutationResultSerializer(payload).data)
+
+
+def _extract_leave_payload(request) -> tuple[dict, object | None]:
+    payload = request.data.copy()
+    uploaded_file = request.FILES.get("attachment_file")
+    if hasattr(payload, "pop"):
+        popped = payload.pop("attachment_file", None)
+        if uploaded_file is None and isinstance(popped, list) and popped:
+            uploaded_file = popped[0]
+    if hasattr(payload, "dict"):
+        payload = payload.dict()
+    return dict(payload), uploaded_file
+
+
+def _leave_actor_identifier(employee) -> str:
+    membership = getattr(employee, "membership", None)
+    if membership and membership.user_id:
+        return str(membership.user_id)
+    return str(employee.id)
+
+
+def _store_leave_attachment_for_employee(*, employee, uploaded_file, action: str) -> DocumentArtifact:
+    try:
+        validate_uploaded_document_file(uploaded_file)
+    except ValueError as exc:
+        raise serializers.ValidationError({"attachment_file": str(exc)}) from exc
+    return store_document_artifact(
+        tenant=employee.tenant,
+        employee=employee,
+        uploaded_file=uploaded_file,
+        actor_identifier=_leave_actor_identifier(employee),
+        source_kind=DocumentArtifactSourceKind.UPLOADED,
+        metadata={
+            "module": "leave",
+            "action": action,
+            "employee_id": str(employee.id),
+        },
+    )
+
+
+def _delete_document_artifact_quietly(artifact: DocumentArtifact | None) -> None:
+    if not artifact:
+        return
+    try:
+        if artifact.stored_file:
+            artifact.stored_file.delete(save=False)
+        artifact.delete()
+    except Exception:
+        logger.warning("Unable to delete unused leave attachment artifact %s", artifact.id, exc_info=True)
+
+
+def _append_leave_attachment_metadata(*, leave_request: LeaveRequest, artifact: DocumentArtifact, action: str, label: str = "") -> None:
+    metadata = dict(leave_request.metadata or {})
+    attachments = list(metadata.get("attachments") or [])
+    payload = {
+        "id": str(artifact.id),
+        "file_name": artifact.original_filename,
+        "mime_type": artifact.mime_type,
+        "file_size_bytes": artifact.file_size_bytes,
+        "checksum_sha256": artifact.checksum_sha256,
+        "uploaded_at": artifact.created_at.isoformat() if artifact.created_at else "",
+        "action": action,
+        "label": label or artifact.original_filename,
+    }
+    attachments = [item for item in attachments if str(item.get("id")) != str(artifact.id)]
+    attachments.append(payload)
+    metadata["attachments"] = attachments
+    if action in {"withdrawal", "cancellation", "cancellation_request"}:
+        action_metadata = dict(metadata.get(action) or {})
+        action_metadata["attachments"] = [*list(action_metadata.get("attachments") or []), payload]
+        metadata[action] = action_metadata
+    leave_request.metadata = metadata
+    leave_request.save(update_fields=["metadata", "updated_at"])
+
+
+def _leave_request_has_attachment(leave_request: LeaveRequest, artifact_id) -> bool:
+    target = str(artifact_id)
+    for item in list((leave_request.metadata or {}).get("attachments") or []):
+        if str(item.get("id")) == target:
+            return True
+    return False
+
+
+class MeLeaveRequestAttachmentDownloadView(EmployeeContextMixin, APIView):
+    def get(self, request, request_id, artifact_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        leave_request = LeaveRequest.objects.filter(id=request_id, employee=employee).first()
+        if not leave_request or not _leave_request_has_attachment(leave_request, artifact_id):
+            return response.Response({"detail": "Leave attachment not found."}, status=status.HTTP_404_NOT_FOUND)
+        artifact = DocumentArtifact.objects.filter(id=artifact_id, tenant=employee.tenant, employee=employee).first()
+        if not artifact or not artifact.stored_file:
+            return response.Response({"detail": "Leave attachment file not found."}, status=status.HTTP_404_NOT_FOUND)
+        response_file = FileResponse(artifact.stored_file.open("rb"), as_attachment=True, filename=artifact.original_filename or "leave-attachment.bin")
+        if artifact.mime_type:
+            response_file["Content-Type"] = artifact.mime_type
+        return response_file
 
 
 class MeAttendanceRegularizationListCreateView(EmployeeContextMixin, APIView):
@@ -18307,6 +18454,28 @@ class ManagerLeaveRequestDetailView(EmployeeContextMixin, APIView):
         if not payload:
             return response.Response({"detail": "Leave request not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
         return response.Response(ManagerLeaveApprovalItemSerializer(payload).data)
+
+
+class ManagerLeaveRequestAttachmentDownloadView(ManagerDecisionMixin, APIView):
+    def get(self, request, request_id, artifact_id):
+        actor = self.get_employee()
+        if not actor:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(actor.tenant, "leave.view")
+        leave_request = (
+            LeaveRequest.objects.select_related("employee__reporting_manager", "employee__membership")
+            .filter(id=request_id, tenant=actor.tenant)
+            .first()
+        )
+        if not leave_request or not self.ensure_leave_request_scope(leave_request) or not _leave_request_has_attachment(leave_request, artifact_id):
+            return response.Response({"detail": "Leave attachment not found for manager scope."}, status=status.HTTP_404_NOT_FOUND)
+        artifact = DocumentArtifact.objects.filter(id=artifact_id, tenant=actor.tenant, employee=leave_request.employee).first()
+        if not artifact or not artifact.stored_file:
+            return response.Response({"detail": "Leave attachment file not found."}, status=status.HTTP_404_NOT_FOUND)
+        response_file = FileResponse(artifact.stored_file.open("rb"), as_attachment=True, filename=artifact.original_filename or "leave-attachment.bin")
+        if artifact.mime_type:
+            response_file["Content-Type"] = artifact.mime_type
+        return response_file
 
 
 class ManagerLeaveRequestApproveView(ManagerDecisionMixin, APIView):

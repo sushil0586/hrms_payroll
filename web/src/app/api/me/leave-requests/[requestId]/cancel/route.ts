@@ -11,11 +11,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
     return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
   }
   const { requestId } = await context.params;
-  const body = await request.json();
+  const contentType = request.headers.get("content-type") ?? "";
+  const isMultipart = contentType.includes("multipart/form-data");
+  const body = isMultipart ? await request.formData() : JSON.stringify(await request.json().catch(() => ({})));
   const upstreamResponse = await fetch(`${API_BASE_URL}/me/leave-requests/${requestId}/cancel/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
-    body: JSON.stringify(body),
+    headers: { ...(isMultipart ? {} : { "Content-Type": "application/json" }), Authorization: `Token ${token}` },
+    body,
     cache: "no-store",
   });
   const payload = await upstreamResponse.json().catch(() => ({}));

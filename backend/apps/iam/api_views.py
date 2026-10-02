@@ -87,15 +87,28 @@ class MenuCatalogView(APIView):
 
     def get(self, request):
         workspace = request.query_params.get("workspace") or ""
-        entries = list(MenuCatalogEntry.objects.filter(is_active=True).order_by("workspace", "kind", "group", "sort_order", "label"))
-        payload = [entry.as_catalog_dict() for entry in entries]
-        if not payload:
-            payload = [
-                {**item, "is_active": True, "catalog_source": "code"}
-                for item in get_menu_catalog()
-            ]
+        payload_by_identity = {
+            (item["workspace"], item["kind"], item["href"]): {
+                **item,
+                "is_active": True,
+                "catalog_source": "code",
+            }
+            for item in get_menu_catalog()
+        }
+        entries = list(MenuCatalogEntry.objects.all().order_by("workspace", "kind", "group", "sort_order", "label"))
+        for entry in entries:
+            payload_by_identity[(entry.workspace, entry.kind, entry.href)] = entry.as_catalog_dict()
+        payload = [
+            item
+            for item in payload_by_identity.values()
+            if item.get("is_active", True)
+        ]
         if workspace:
             payload = [item for item in payload if item["workspace"] == workspace]
+        payload = sorted(
+            payload,
+            key=lambda item: (item["workspace"], item["kind"], item["group"], item["sort_order"], item["label"]),
+        )
         return response.Response(MenuCatalogEntrySerializer(payload, many=True).data)
 
 

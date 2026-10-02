@@ -5219,6 +5219,15 @@ export type LeaveRequestItem = {
   approved_units: string;
   reason: string;
   attachment_reference?: string;
+  attachments?: Array<{
+    id: string;
+    file_name: string;
+    mime_type: string;
+    file_size_bytes: number;
+    uploaded_at: string;
+    action: string;
+    label: string;
+  }>;
   approval_route?: string;
   required_attachment_label?: string | null;
   manager_comment?: string;

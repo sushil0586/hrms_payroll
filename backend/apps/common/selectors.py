@@ -5762,6 +5762,26 @@ def get_hr_admin_lifecycle_queue_export(employee: Employee) -> list[dict]:
     return rows
 
 
+def _leave_request_attachment_payloads(request: LeaveRequest) -> list[dict]:
+    attachments = (request.metadata or {}).get("attachments") or []
+    rows = []
+    for item in attachments:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        rows.append(
+            {
+                "id": str(item.get("id")),
+                "file_name": str(item.get("file_name") or item.get("label") or "Leave attachment"),
+                "mime_type": str(item.get("mime_type") or ""),
+                "file_size_bytes": int(item.get("file_size_bytes") or 0),
+                "uploaded_at": str(item.get("uploaded_at") or ""),
+                "action": str(item.get("action") or "leave_request"),
+                "label": str(item.get("label") or item.get("file_name") or "Leave attachment"),
+            }
+        )
+    return rows
+
+
 def get_employee_leave_requests(employee: Employee, *, limit: int | None = None) -> list[dict]:
     """Returns employee leave request history for ESS screens."""
 
@@ -5789,6 +5809,7 @@ def get_employee_leave_requests(employee: Employee, *, limit: int | None = None)
             "approved_units": request.approved_units,
             "reason": request.reason,
             "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
+            "attachments": _leave_request_attachment_payloads(request),
             "approval_route": str(request.metadata.get("policy_rules", {}).get("approval_route", "") or ""),
             "required_attachment_label": request.metadata.get("policy_rules", {}).get("required_attachment_label"),
             "manager_comment": request.manager_comment,
@@ -5840,6 +5861,7 @@ def get_employee_leave_request_detail(employee: Employee, request_id) -> dict | 
         "approved_units": request.approved_units,
         "reason": request.reason,
         "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
+        "attachments": _leave_request_attachment_payloads(request),
         "approval_route": str(request.metadata.get("policy_rules", {}).get("approval_route", "") or ""),
         "required_attachment_label": request.metadata.get("policy_rules", {}).get("required_attachment_label"),
         "manager_comment": request.manager_comment,
@@ -5972,6 +5994,7 @@ def get_manager_pending_leave_requests(manager: Employee, *, limit: int | None =
             "approved_units": request.approved_units,
             "reason": request.reason,
             "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
+            "attachments": _leave_request_attachment_payloads(request),
             "approval_route": str(request.metadata.get("policy_rules", {}).get("approval_route", "") or ""),
             "required_attachment_label": request.metadata.get("policy_rules", {}).get("required_attachment_label"),
             "workflow_reference": request.workflow_reference,
@@ -6031,6 +6054,7 @@ def get_manager_leave_request_detail(manager: Employee, request_id) -> dict | No
         "approved_units": request.approved_units,
         "reason": request.reason,
         "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
+        "attachments": _leave_request_attachment_payloads(request),
         "approval_route": str(request.metadata.get("policy_rules", {}).get("approval_route", "") or ""),
         "required_attachment_label": request.metadata.get("policy_rules", {}).get("required_attachment_label"),
         "manager_comment": request.manager_comment,

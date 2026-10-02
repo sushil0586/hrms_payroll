@@ -4,44 +4,39 @@ import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertio
 import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("Employee statutory declaration flows", () => {
-  test("employee declaration workspace exposes tax profile, proof status, and payroll source trail", async ({ page }) => {
+  test("employee declaration workspace exposes cockpit, focused dialogs, and proof drilldown", async ({ page }) => {
     await gotoAuthenticated(page, "/ess/statutory-declarations");
     await expectPageReady(page, "Statutory Declarations");
 
-    await expect(page.getByRole("heading", { name: "Tax years" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Proof status and tax profile" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Start declaration" })).toBeVisible();
-    const financialYear = page.getByLabel("Financial year");
-    const taxRegime = page.getByLabel("Tax regime");
-    const createButton = page.getByRole("button", { name: "Create" });
-    const submitButton = page.getByRole("button", { name: "Submit" });
-    const itemName = page.getByLabel("Item name");
-    const uploadCategory = page.getByLabel("Upload category");
-    const proofFile = page.getByLabel("Proof file");
-
-    await expect(financialYear).toBeVisible();
-    await financialYear.fill(`FY${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(2)}`);
-    await expect(taxRegime).toBeVisible();
-    await taxRegime.selectOption({ index: 0 });
-    await expect(createButton).toBeVisible();
-    await expect(submitButton).toBeVisible();
-    await expect(itemName).toBeVisible();
-    await expect(uploadCategory).toBeVisible();
-    await expect(proofFile).toBeVisible();
-
-    if (await createButton.isEnabled()) {
-      await createButton.click();
-      await expect(page.getByRole("status")).toContainText(/saved|could not be saved/i);
-    } else {
-      await expect(submitButton).toBeDisabled();
-      await expect(itemName).toBeDisabled();
-      await expect(uploadCategory).toBeDisabled();
-      await expect(proofFile).toBeDisabled();
-    }
-
+    await expect(page.getByText("Tax years", { exact: true })).toBeVisible();
+    await expect(page.getByText("Current declaration", { exact: true })).toBeVisible();
+    await expect(page.getByText("Tax profile", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Proof coverage" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Start declaration|Update declaration/ }).first()).toBeVisible();
     await expect(page.getByText("Proof register", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Declared items" })).toBeVisible();
-    await expect(page.getByText("Create or select a draft declaration to add proof rows.").or(page.getByText("Proof uploads")).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Tax declaration checklist" })).toBeVisible();
+
+    await page.getByRole("button", { name: /Start declaration|Update declaration/ }).first().click();
+    const declarationDialog = page.getByRole("dialog", { name: /Start declaration|Update declaration/ });
+    await expect(declarationDialog).toBeVisible();
+    await expect(declarationDialog.getByLabel("Financial year")).toBeVisible();
+    await expect(declarationDialog.getByLabel("Tax regime")).toBeVisible();
+    await expect(declarationDialog.getByText(/India statutory guidance|New regime selected/)).toBeVisible();
+    await declarationDialog.getByRole("button", { name: "Close" }).click();
+
+    const addProof = page.getByRole("button", { name: "Add proof" }).first();
+    await expect(addProof).toBeVisible();
+    if (await addProof.isEnabled()) {
+      await addProof.click();
+      const proofDialog = page.getByRole("dialog", { name: "Add proof" });
+      await expect(proofDialog).toBeVisible();
+      for (const label of ["Section", "Kind", "Component", "Item name", "Amount", "Proof reference", "Upload category", "Proof file"]) {
+        await expect(proofDialog.getByLabel(label)).toBeVisible();
+      }
+      await expect(proofDialog.getByText("Proof quality check")).toBeVisible();
+      await proofDialog.getByRole("button", { name: "Close" }).click();
+    }
 
     await expectNoHorizontalOverflow(page);
   });

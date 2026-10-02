@@ -22,6 +22,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo }: Props) {
   const router = useRouter();
   const [reason, setReason] = useState("");
   const [attachmentReference, setAttachmentReference] = useState("");
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState<"withdraw" | "cancel" | null>(null);
 
@@ -32,13 +33,15 @@ export function LeaveRequestLifecycleActions({ item, isDemo }: Props) {
       return;
     }
     setIsSubmitting(action);
+    const body = new FormData();
+    body.set("reason", reason);
+    body.set("attachment_reference", attachmentReference);
+    if (attachmentFile) {
+      body.set("attachment_file", attachmentFile);
+    }
     const response = await fetch(`/api/me/leave-requests/${item.id}/${action}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        reason,
-        attachment_reference: attachmentReference,
-      }),
+      body,
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -60,47 +63,58 @@ export function LeaveRequestLifecycleActions({ item, isDemo }: Props) {
   }
 
   return (
-    <div className="stack">
+    <section className="ess-modal-section leave-lifecycle-panel">
       <h3 className="section-heading-soft">Lifecycle actions</h3>
       <p className="section-copy section-copy-soft">Use the policy-governed lifecycle actions below when this request needs to be pulled back or cancelled.</p>
 
-      <label className="form-field">
-        <span className="muted">Reason</span>
-        <input className="input-control" value={reason} onChange={(event) => setReason(event.target.value)} />
-      </label>
-
-      {needsAttachment ? (
+      <div className="leave-lifecycle-panel__form">
         <label className="form-field">
-          <span className="muted">
-            Attachment reference
-            {item.can_withdraw && item.withdraw_requires_attachment ? ` (${item.withdraw_attachment_label})` : ""}
-            {item.can_cancel && item.cancel_requires_attachment ? ` (${item.cancel_attachment_label})` : ""}
-          </span>
-          <input className="input-control" value={attachmentReference} onChange={(event) => setAttachmentReference(event.target.value)} />
+          <span className="muted">Reason</span>
+          <input className="input-control" value={reason} onChange={(event) => setReason(event.target.value)} />
         </label>
-      ) : null}
 
-      {item.can_withdraw ? (
-        <button className="button button--secondary" disabled={Boolean(isSubmitting)} onClick={() => runAction("withdraw")} type="button">
-          {isSubmitting === "withdraw" ? "Withdrawing..." : "Withdraw request"}
-        </button>
-      ) : item.withdraw_block_reason ? (
-        <div className="notice">
-          <strong>Withdraw unavailable.</strong>
-          <span className="muted">{item.withdraw_block_reason}</span>
-        </div>
-      ) : null}
+        {needsAttachment ? (
+          <label className="form-field">
+            <span className="muted">
+              Attachment reference
+              {item.can_withdraw && item.withdraw_requires_attachment ? ` (${item.withdraw_attachment_label})` : ""}
+              {item.can_cancel && item.cancel_requires_attachment ? ` (${item.cancel_attachment_label})` : ""}
+            </span>
+            <input className="input-control" value={attachmentReference} onChange={(event) => setAttachmentReference(event.target.value)} />
+          </label>
+        ) : null}
 
-      {item.can_cancel ? (
-        <button className="button button--secondary" disabled={Boolean(isSubmitting)} onClick={() => runAction("cancel")} type="button">
-          {isSubmitting === "cancel" ? "Saving..." : cancelLabel}
-        </button>
-      ) : item.cancel_block_reason ? (
-        <div className="notice">
-          <strong>Cancel unavailable.</strong>
-          <span className="muted">{item.cancel_block_reason}</span>
-        </div>
-      ) : null}
+        {needsAttachment ? (
+          <label className="form-field">
+            <span className="muted">Evidence file</span>
+            <input className="input-control" onChange={(event) => setAttachmentFile(event.target.files?.[0] ?? null)} type="file" />
+          </label>
+        ) : null}
+      </div>
+
+      <div className="leave-lifecycle-panel__actions">
+        {item.can_withdraw ? (
+          <button className="button button--secondary" disabled={Boolean(isSubmitting)} onClick={() => runAction("withdraw")} type="button">
+            {isSubmitting === "withdraw" ? "Withdrawing..." : "Withdraw request"}
+          </button>
+        ) : item.withdraw_block_reason ? (
+          <div className="notice">
+            <strong>Withdraw unavailable.</strong>
+            <span className="muted">{item.withdraw_block_reason}</span>
+          </div>
+        ) : null}
+
+        {item.can_cancel ? (
+          <button className="button button--secondary" disabled={Boolean(isSubmitting)} onClick={() => runAction("cancel")} type="button">
+            {isSubmitting === "cancel" ? "Saving..." : cancelLabel}
+          </button>
+        ) : item.cancel_block_reason ? (
+          <div className="notice">
+            <strong>Cancel unavailable.</strong>
+            <span className="muted">{item.cancel_block_reason}</span>
+          </div>
+        ) : null}
+      </div>
 
       {error ? (
         <div className="notice">
@@ -108,6 +122,6 @@ export function LeaveRequestLifecycleActions({ item, isDemo }: Props) {
           <span className="muted">{error}</span>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }

@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ESS and MSS Launch Grade Prototype</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --panel: #ffffff;
+      --panel-soft: #f8faff;
+      --border: #dce5f2;
+      --text: #111827;
+      --muted: #66728a;
+      --soft: #8a95aa;
+      --blue: #2563eb;
+      --blue-soft: #eaf1ff;
+      --green: #138a4f;
+      --green-soft: #dcfce7;
+      --amber: #b7791f;
+      --amber-soft: #fef3c7;
+      --red: #dc2626;
+      --red-soft: #fee2e2;
+      --shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .prototype-page {
+      padding: 32px;
+    }
+
+    .prototype-label {
+      max-width: 1380px;
+      margin: 0 auto 14px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .screen {
+      width: 1380px;
+      min-height: 920px;
+      margin: 0 auto 44px;
+      display: grid;
+      grid-template-columns: 248px 1fr;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .sidebar {
+      background: #0f172a;
+      color: #e5edff;
+      padding: 28px 18px;
+    }
+
+    .brand {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding-bottom: 24px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: var(--blue);
+      color: #fff;
+      font-weight: 900;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 18px;
+      line-height: 1.15;
+    }
+
+    .brand span {
+      display: block;
+      margin-top: 3px;
+      color: #a8b5cc;
+      font-size: 13px;
+    }
+
+    .nav-section {
+      margin-top: 28px;
+    }
+
+    .nav-title {
+      margin: 0 0 10px;
+      color: #94a3b8;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .nav-link {
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 10px;
+      align-items: center;
+      min-height: 52px;
+      margin: 6px 0;
+      padding: 8px 10px;
+      border-radius: 12px;
+      color: #d7e1f3;
+    }
+
+    .nav-link.active {
+      background: rgba(37, 99, 235, 0.32);
+      box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.26);
+    }
+
+    .nav-icon {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .nav-link strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.15;
+    }
+
+    .nav-link span {
+      display: block;
+      margin-top: 3px;
+      color: #9aa8bd;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .sidebar-note {
+      margin-top: 34px;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #cad6ea;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .main {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+    }
+
+    .topbar {
+      height: 72px;
+      display: grid;
+      grid-template-columns: minmax(320px, 540px) 1fr auto;
+      gap: 20px;
+      align-items: center;
+      padding: 0 28px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .search {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      background: var(--panel-soft);
+      color: var(--soft);
+      font-size: 13px;
+    }
+
+    .workspace-name {
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .user {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
+      font-size: 13px;
+    }
+
+    .avatar {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-weight: 900;
+    }
+
+    .content {
+      padding: 34px 36px 40px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: start;
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 7px 0 8px;
+      font-size: 30px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 720px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .button {
+      min-height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 16px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: #fff;
+      color: #1f2937;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .button.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 22px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    .tab {
+      min-height: 54px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 9px 12px;
+      border-radius: 12px;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .tab span {
+      margin-top: 4px;
+      color: #8090a8;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .tab.active {
+      background: var(--blue-soft);
+      color: var(--blue);
+      box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.18);
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.04);
+    }
+
+    .panel-header {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding: 20px 20px 14px;
+      border-bottom: 1px solid #edf2f8;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .panel-header p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .pill.green {
+      background: var(--green-soft);
+      color: var(--green);
+    }
+
+    .pill.amber {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .pill.red {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .action-list {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+    }
+
+    .action-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 74px;
+      padding: 12px;
+      border: 1px solid #e8eef7;
+      border-radius: 14px;
+      background: var(--panel-soft);
+    }
+
+    .action-icon {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: #fff;
+      color: var(--blue);
+      font-weight: 900;
+      box-shadow: inset 0 0 0 1px #e4ebf7;
+    }
+
+    .action-row strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .action-row p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .quick-card {
+      min-height: 144px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    .quick-card strong {
+      display: block;
+      margin-top: 12px;
+      font-size: 16px;
+    }
+
+    .quick-card p {
+      min-height: 36px;
+      margin: 6px 0 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .quick-icon {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-weight: 900;
+    }
+
+    .side-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid #edf2f8;
+    }
+
+    .stat-row:last-child {
+      border-bottom: 0;
+    }
+
+    .stat-row span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .stat-row strong {
+      font-size: 18px;
+    }
+
+    .activity {
+      display: grid;
+      gap: 9px;
+      padding: 14px;
+    }
+
+    .activity-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      padding: 12px;
+      border: 1px solid #e8eef7;
+      border-radius: 13px;
+      background: #fff;
+    }
+
+    .activity-row strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .activity-row span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .team-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .team-card {
+      min-height: 128px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    .team-card span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .team-card strong {
+      display: block;
+      margin-top: 10px;
+      font-size: 30px;
+      line-height: 1;
+    }
+
+    .team-card p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .drawer-preview {
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px dashed #bfd0e6;
+      border-radius: 16px;
+      background: #f8fbff;
+    }
+
+    .drawer-preview h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+
+    .drawer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .field-preview {
+      padding: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .field-preview span {
+      display: block;
+      color: #7b879c;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .field-preview strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="prototype-page">
+    <div class="prototype-label">Prototype 01 - Employee Self Service</div>
+    <section id="ess-screen" class="screen" aria-label="ESS overview prototype">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">HR</div>
+          <div>
+            <strong>HRMS</strong>
+            <span>Employee Self Service</span>
+          </div>
+        </div>
+        <div class="nav-section">
+          <p class="nav-title">My workspace</p>
+          <a class="nav-link active" href="#"><span class="nav-icon">OV</span><span><strong>Overview</strong><span>Daily actions</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">LV</span><span><strong>Leave</strong><span>Requests and balance</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">AT</span><span><strong>Attendance</strong><span>Daily and fixes</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">DO</span><span><strong>Documents</strong><span>Uploads and proof</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">PY</span><span><strong>Payslips</strong><span>Salary records</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">ST</span><span><strong>Statutory</strong><span>Declarations</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">IN</span><span><strong>Inbox</strong><span>Alerts and updates</span></span></a>
+        </div>
+        <div class="sidebar-note">
+          Employee pages should stay personal, short, and action-led. Heavy history stays behind focused tabs.
+        </div>
+      </aside>
+      <main class="main">
+        <header class="topbar">
+          <div class="search">Search leave, attendance, documents, payslips...</div>
+          <div class="workspace-name">Self Service</div>
+          <div class="user"><div class="avatar">A</div><div><strong>Aditi Gupta</strong><br><span>Employee</span></div></div>
+        </header>
+        <div class="content">
+          <section class="hero">
+            <div>
+              <div class="eyebrow">Employee workspace</div>
+              <h1>My Workspace</h1>
+              <p>Handle daily HR actions, track personal requests, and open the next item that needs attention.</p>
+            </div>
+            <div class="hero-actions">
+              <a class="button" href="#">Open inbox</a>
+              <a class="button primary" href="#">Apply leave</a>
+            </div>
+          </section>
+          <nav class="tabs" aria-label="ESS sections">
+            <a class="tab active" href="#">Overview<span>Next actions</span></a>
+            <a class="tab" href="#">Leave<span>Apply and track</span></a>
+            <a class="tab" href="#">Attendance<span>Fix exceptions</span></a>
+            <a class="tab" href="#">Documents<span>Upload proof</span></a>
+            <a class="tab" href="#">Payslips<span>Download</span></a>
+            <a class="tab" href="#">Statutory<span>Declarations</span></a>
+            <a class="tab" href="#">Inbox<span>Alerts</span></a>
+          </nav>
+          <div class="dashboard-grid">
+            <div>
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>Needs your action</h2>
+                    <p>Only items that require an employee decision or submission appear here.</p>
+                  </div>
+                  <span class="pill amber">3 pending</span>
+                </div>
+                <div class="action-list">
+                  <div class="action-row">
+                    <div class="action-icon">DO</div>
+                    <div><strong>Upload address proof</strong><p>Your document was rejected. Upload a clear replacement copy.</p></div>
+                    <a class="button" href="#">Upload</a>
+                  </div>
+                  <div class="action-row">
+                    <div class="action-icon">PY</div>
+                    <div><strong>Acknowledge September payslip</strong><p>Review net pay and confirm receipt for payroll evidence.</p></div>
+                    <a class="button" href="#">Review</a>
+                  </div>
+                  <div class="action-row">
+                    <div class="action-icon">AT</div>
+                    <div><strong>Regularize missing punch</strong><p>Yesterday has a missing checkout entry. Submit correction details.</p></div>
+                    <a class="button" href="#">Fix</a>
+                  </div>
+                </div>
+              </section>
+              <div class="quick-grid">
+                <article class="quick-card"><div class="quick-icon">LV</div><strong>Leave</strong><p>Apply leave, view balance, and track approvals.</p><a class="button" href="#">Open</a></article>
+                <article class="quick-card"><div class="quick-icon">AT</div><strong>Attendance</strong><p>Review daily status and regularize exceptions.</p><a class="button" href="#">Open</a></article>
+                <article class="quick-card"><div class="quick-icon">DO</div><strong>Documents</strong><p>Upload documents and see verification status.</p><a class="button" href="#">Open</a></article>
+                <article class="quick-card"><div class="quick-icon">PY</div><strong>Payslips</strong><p>Download payslips and acknowledge publication.</p><a class="button" href="#">Open</a></article>
+              </div>
+            </div>
+            <aside class="side-stack">
+              <section class="panel">
+                <div class="panel-header">
+                  <div><h2>Today</h2><p>Personal status snapshot.</p></div>
+                  <span class="pill green">Ready</span>
+                </div>
+                <div>
+                  <div class="stat-row"><span>Attendance</span><strong>Missing punch</strong></div>
+                  <div class="stat-row"><span>Leave balance</span><strong>12 days</strong></div>
+                  <div class="stat-row"><span>Latest payslip</span><strong>Sep 2026</strong></div>
+                  <div class="stat-row"><span>Unread alerts</span><strong>3</strong></div>
+                </div>
+              </section>
+              <section class="panel">
+                <div class="panel-header">
+                  <div><h2>Recent activity</h2><p>Personal request trail.</p></div>
+                </div>
+                <div class="activity">
+                  <div class="activity-row"><div><strong>Leave request submitted</strong><span>Pending manager approval</span></div><span class="pill amber">Pending</span></div>
+                  <div class="activity-row"><div><strong>Payslip published</strong><span>Receipt pending</span></div><span class="pill amber">Action</span></div>
+                  <div class="activity-row"><div><strong>Document rejected</strong><span>Re-upload required</span></div><span class="pill red">Fix</span></div>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <div class="prototype-label">Prototype 02 - Manager Self Service</div>
+    <section id="mss-screen" class="screen" aria-label="MSS overview prototype">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">HR</div>
+          <div>
+            <strong>HRMS</strong>
+            <span>Manager Self Service</span>
+          </div>
+        </div>
+        <div class="nav-section">
+          <p class="nav-title">Manager workspace</p>
+          <a class="nav-link active" href="#"><span class="nav-icon">OV</span><span><strong>Overview</strong><span>Team actions</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">AP</span><span><strong>Approvals</strong><span>Decisions queue</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">TM</span><span><strong>Team</strong><span>People and roles</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">LV</span><span><strong>Leave</strong><span>Calendar and approval</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">AT</span><span><strong>Attendance</strong><span>Exceptions</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">DO</span><span><strong>Documents</strong><span>Team verification</span></span></a>
+          <a class="nav-link" href="#"><span class="nav-icon">IN</span><span><strong>Inbox</strong><span>Escalations</span></span></a>
+        </div>
+        <div class="sidebar-note">
+          Manager pages should prioritize decisions, team risk, and clear drilldowns. Approval comments belong in focused drawers.
+        </div>
+      </aside>
+      <main class="main">
+        <header class="topbar">
+          <div class="search">Search team member, approval, attendance, document...</div>
+          <div class="workspace-name">Manager Workspace</div>
+          <div class="user"><div class="avatar">R</div><div><strong>Renu Bansal</strong><br><span>Manager</span></div></div>
+        </header>
+        <div class="content">
+          <section class="hero">
+            <div>
+              <div class="eyebrow">Manager workspace</div>
+              <h1>Manager Control Center</h1>
+              <p>Review team actions, approve requests, and resolve exceptions without hunting across admin screens.</p>
+            </div>
+            <div class="hero-actions">
+              <a class="button" href="#">Open team</a>
+              <a class="button primary" href="#">Review approvals</a>
+            </div>
+          </section>
+          <nav class="tabs" aria-label="MSS sections">
+            <a class="tab active" href="#">Overview<span>Team actions</span></a>
+            <a class="tab" href="#">Approvals<span>Decisions</span></a>
+            <a class="tab" href="#">Team<span>Directory</span></a>
+            <a class="tab" href="#">Leave<span>Calendar</span></a>
+            <a class="tab" href="#">Attendance<span>Exceptions</span></a>
+            <a class="tab" href="#">Documents<span>Verification</span></a>
+            <a class="tab" href="#">Inbox<span>Escalations</span></a>
+          </nav>
+          <div class="dashboard-grid">
+            <div>
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h2>Approval queue</h2>
+                    <p>Manager decisions grouped by business action, with one clear next step.</p>
+                  </div>
+                  <span class="pill amber">6 pending</span>
+                </div>
+                <div class="action-list">
+                  <div class="action-row">
+                    <div class="action-icon">LV</div>
+                    <div><strong>2 leave requests</strong><p>Check balance, overlap, and team coverage before approving.</p></div>
+                    <a class="button" href="#">Review</a>
+                  </div>
+                  <div class="action-row">
+                    <div class="action-icon">AT</div>
+                    <div><strong>3 attendance regularizations</strong><p>Verify reason, date, and punch correction evidence.</p></div>
+                    <a class="button" href="#">Review</a>
+                  </div>
+                  <div class="action-row">
+                    <div class="action-icon">DO</div>
+                    <div><strong>1 document follow-up</strong><p>Employee document needs manager acknowledgement.</p></div>
+                    <a class="button" href="#">Review</a>
+                  </div>
+                </div>
+              </section>
+              <div class="team-grid">
+                <article class="team-card"><span>Team members</span><strong>18</strong><p>4 direct reports need profile review.</p></article>
+                <article class="team-card"><span>Attendance exceptions</span><strong>3</strong><p>2 are older than two days.</p></article>
+                <article class="team-card"><span>Leave overlap</span><strong>1</strong><p>One request conflicts with team coverage.</p></article>
+              </div>
+              <div class="drawer-preview">
+                <h3>Review drawer pattern</h3>
+                <div class="drawer-grid">
+                  <div class="field-preview"><span>Employee</span><strong>Aditi Gupta</strong></div>
+                  <div class="field-preview"><span>Request</span><strong>Casual leave - 3 days</strong></div>
+                  <div class="field-preview"><span>Policy context</span><strong>12 days available</strong></div>
+                  <div class="field-preview"><span>Decision</span><strong>Approve / Reject with comment</strong></div>
+                </div>
+              </div>
+            </div>
+            <aside class="side-stack">
+              <section class="panel">
+                <div class="panel-header">
+                  <div><h2>Team health</h2><p>Signals that need manager attention.</p></div>
+                  <span class="pill amber">Watch</span>
+                </div>
+                <div>
+                  <div class="stat-row"><span>Pending approvals</span><strong>6</strong></div>
+                  <div class="stat-row"><span>Attendance exceptions</span><strong>3</strong></div>
+                  <div class="stat-row"><span>Document follow-ups</span><strong>1</strong></div>
+                  <div class="stat-row"><span>Critical blockers</span><strong>0</strong></div>
+                </div>
+              </section>
+              <section class="panel">
+                <div class="panel-header">
+                  <div><h2>Recent manager activity</h2><p>Decision trail.</p></div>
+                </div>
+                <div class="activity">
+                  <div class="activity-row"><div><strong>Leave approved</strong><span>Rahul Mehta - 1 day</span></div><span class="pill green">Done</span></div>
+                  <div class="activity-row"><div><strong>Attendance rejected</strong><span>Comment required by employee</span></div><span class="pill red">Returned</span></div>
+                  <div class="activity-row"><div><strong>Document reviewed</strong><span>Proof accepted</span></div><span class="pill green">Done</span></div>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </div>
+      </main>
+    </section>
+  </div>
+</body>
+</html>
