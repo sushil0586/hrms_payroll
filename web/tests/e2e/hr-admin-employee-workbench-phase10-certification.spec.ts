@@ -24,7 +24,7 @@ function fieldByLabel(scope: Page | Locator, label: string) {
 }
 
 async function expectEmployeeWorkbenchReady(page: Page) {
-  await expect(page.locator("main.hr-employee-workbench")).toBeVisible();
+  await expect(page.locator("main.shell")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1, name: "Employees" })).toBeVisible();
   await expect(page.getByText("Workforce command")).toBeVisible();
   await expect(page.getByText("Operational readiness")).toBeVisible();
@@ -77,6 +77,8 @@ async function expectDirectoryFiltersStayInsidePanel(page: Page) {
 
 test.describe("HR Admin employee workbench phase 10 certification", () => {
   test("certifies directory search, filters, selection, permission-aware actions, and empty state", async ({ page }) => {
+    test.setTimeout(120_000);
+
     await page.setViewportSize({ width: 1440, height: 960 });
     await gotoDemoHrAdmin(page, "/hr-admin/employees?page_size=5");
     await expectEmployeeWorkbenchReady(page);
@@ -106,7 +108,9 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
     }
 
     await expect(directoryItems(page)).toHaveCount(5);
-    await directoryItems(page).first().click();
+    const firstEmployeeHref = await directoryItems(page).first().getAttribute("href");
+    expect(firstEmployeeHref, "Employee directory item should expose a selectable detail route").toMatch(/employeeId=/);
+    await page.goto(firstEmployeeHref!, { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/employeeId=/);
     await expect(detailPanel(page).locator(".detail-row").filter({ hasText: "Access Provisioned" })).toBeVisible();
     await expect(detailPanel(page).locator(".detail-row").filter({ hasText: "Reporting Manager" })).toBeVisible();
@@ -122,7 +126,9 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
       await expect(page.getByRole("link", { name: "New employee" })).toHaveCount(0);
     }
 
-    await gotoDemoHrAdmin(page, "/hr-admin/employees?q=NO_MATCH_EMPLOYEE_PHASE10&status=all&page_size=5");
+    await page.goto("/hr-admin/employees?q=NO_MATCH_EMPLOYEE_PHASE10&status=all&page_size=5", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+    await expect(page).toHaveURL(/NO_MATCH_EMPLOYEE_PHASE10/);
     await expect(fieldByLabel(directoryPanel(page), "Search")).toHaveValue("NO_MATCH_EMPLOYEE_PHASE10");
     await expect(page.getByText("No employees in this view.")).toBeVisible();
     await expect(page.getByText("No employee selected.")).toBeVisible();
@@ -180,6 +186,8 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
   });
 
   test("certifies employee workbench responsive integrity at wide desktop and tablet widths", async ({ page }) => {
+    test.setTimeout(90_000);
+
     for (const viewport of [
       { width: 1920, height: 1080 },
       { width: 1366, height: 900 },

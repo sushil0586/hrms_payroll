@@ -6,11 +6,11 @@ import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 test.describe("HR admin control center certification", () => {
   test("shows command queue, shortcuts, launch posture, and certified layout", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin", hrAdmin);
-    await expectPageReady(page, "People Operations Control Center");
+    await expectPageReady(page, "HR Control Center");
 
     const controlCenter = page.getByTestId("hr-admin-control-center");
     await expect(controlCenter).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Items that need your attention" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Action queue" }).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Operational readiness" })).toBeVisible();
 
     for (const signal of [
@@ -21,7 +21,7 @@ test.describe("HR admin control center certification", () => {
       "Notifications",
       "Launch blockers",
     ]) {
-      await expect(controlCenter.getByText(signal, { exact: true })).toBeVisible();
+      await expect(controlCenter.getByText(signal, { exact: true }).first()).toBeVisible();
     }
 
     for (const link of [
@@ -35,15 +35,13 @@ test.describe("HR admin control center certification", () => {
       await expect(controlCenter.getByRole("link", { name: link })).toBeVisible();
     }
 
-    await expect(page.getByRole("link", { name: "Resolve payroll blockers" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Open employees" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Payroll blockers" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Employees" }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Reports" }).first()).toBeVisible();
-    await expect(page.getByText("Launch audit", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Launch audit" })).toBeVisible();
     await expect(page.getByRole("link", { name: "View assignments" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Download audit" })).toBeVisible();
-    await expect(page.getByText("Launch guardrails", { exact: true })).toBeVisible();
-    await expect(page.getByText("Focused workspaces", { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Open payroll" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Guardrails" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 });

@@ -18,7 +18,7 @@ const routes = [
   {
     path: "/tenant-admin/plan",
     heading: "Plan & Billing",
-    requiredText: ["Commercial profile", "Current subscription", "Recent meter snapshots"],
+    requiredText: ["Commercial profile", "Current subscription", "Meter snapshots"],
   },
   {
     path: "/tenant-admin/setup",
@@ -87,8 +87,9 @@ test.describe("Tenant admin visual accessibility certification", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await gotoAuthenticated(page, "/tenant-admin", tenantAdmin);
     await expectPageReady(page, "Account Control Center");
-    await expect(page.getByRole("banner").getByText("Search users, setup, audit...")).toBeVisible();
-    await expect(page.getByRole("banner").getByText("Nisha Rao")).toBeVisible();
+    const banner = page.getByRole("banner");
+    await expect(banner).toBeVisible();
+    await expect(banner.getByRole("button", { name: "Sign out" })).toBeVisible();
     await expect(page.getByTestId("tenant-next-action")).toBeVisible();
     await expect(page.getByTestId("tenant-setup-guide")).toBeVisible();
     await expect(page.getByRole("main").getByRole("link").first()).toBeVisible();

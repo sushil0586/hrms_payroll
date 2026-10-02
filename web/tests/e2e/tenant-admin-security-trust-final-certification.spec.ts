@@ -16,9 +16,8 @@ test.describe("Tenant admin security and trust final certification", () => {
       await expect(page.getByRole("heading", { name: heading })).toBeVisible();
     }
 
-    await expect(page.getByText(/Evidence:/).first()).toBeVisible();
-    await expect(page.getByText(/Status:/).first()).toBeVisible();
-    await expect(page.getByText(/Owner:/).first()).toBeVisible();
+    await expect(page.getByRole("main").getByText(/Ready|Attention/).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Launch posture" })).toBeVisible();
     await expect(page.getByRole("main").getByRole("link", { name: "Trust audit" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
 

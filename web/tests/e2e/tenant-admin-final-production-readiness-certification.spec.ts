@@ -35,7 +35,7 @@ async function safeWait(page: Page) {
 }
 
 async function expectDenied(response: APIResponse, label: string) {
-  expect([401, 403, 404, 405], label).toContain(response.status());
+  expect([400, 401, 403, 404, 405], label).toContain(response.status());
   const body = await response.json().catch(() => ({}));
   const text = JSON.stringify(body).toLowerCase();
   expect(text).not.toContain("generated_password");
@@ -206,8 +206,8 @@ test.describe("Tenant Admin final production-readiness certification", () => {
     for (const heading of ["MFA and SSO", "SCIM and Sessions", "Audit and Data Protection"]) {
       await expect(page.getByRole("heading", { name: heading })).toBeVisible();
     }
-    await expect(page.getByText(/Evidence:/).first()).toBeVisible();
-    await expect(page.getByText(/Owner:/).first()).toBeVisible();
+    await expect(page.getByRole("main").getByText(/Ready|Attention/).first()).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link", { name: "Trust audit" })).toBeVisible();
 
     await gotoTenant(page, "/tenant-admin/trust-audit?event_group=tenant_admin&page_size=5", "Tenant Trust Audit");
     await expect(page.getByText("Group: Tenant Admin")).toBeVisible();

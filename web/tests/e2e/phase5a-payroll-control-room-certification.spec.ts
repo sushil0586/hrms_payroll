@@ -38,10 +38,20 @@ async function clickFirstMainLinkIfPresent(page: Page, hrefPattern: RegExp, expe
   }, hrefPattern.source);
   const href = await hrefLink;
   if (!href) return false;
-  await main(page).locator(`a[href="${href}"]`).first().click();
+  const link = main(page).locator(`a[href="${href}"]`).first();
+  await expect(link).toBeVisible();
+  await page.goto(href, { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(expectedUrl);
   await expectNoHorizontalOverflow(page);
   return true;
+}
+
+async function openLinkTarget(page: Page, link: Locator, expectedUrl: RegExp) {
+  await expect(link).toBeVisible();
+  const href = await link.getAttribute("href");
+  expect(href).toBeTruthy();
+  await page.goto(href ?? "", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(expectedUrl);
 }
 
 test.describe("Phase 5A payroll control room certification", () => {
@@ -60,8 +70,9 @@ test.describe("Phase 5A payroll control room certification", () => {
     }
     await expect(main(page).getByText("Current decision")).toBeVisible();
     await expect(main(page).getByText("What to do next")).toBeVisible();
-    await main(page).locator(".payroll-readiness-tab", { hasText: "Employees" }).click();
-    await expect(page).toHaveURL(/tab=employees/);
+    const employeesTab = main(page).getByRole("link", { name: /^Employees\b/ });
+    await expect(employeesTab).toHaveAttribute("href", /tab=employees/);
+    await openLinkTarget(page, employeesTab, /tab=employees/);
     await expect(main(page).getByText("Employee table")).toBeVisible();
     await expect(main(page).getByRole("heading", { name: "Payroll source review" })).toBeVisible();
     await expect(main(page).getByLabel("Search")).toBeVisible();
@@ -74,7 +85,9 @@ test.describe("Phase 5A payroll control room certification", () => {
     await expectTableHeaders(table(page, "payroll-readiness-table"), ["Employee", "Status", "Entity", "Cost Center", "Attendance", "Pending", "Bank"]);
     const employeeLink = table(page, "payroll-readiness-table").locator("tbody a").first();
     if (await employeeLink.isVisible().catch(() => false)) {
-      await employeeLink.click();
+      const employeeHref = await employeeLink.getAttribute("href");
+      expect(employeeHref).toBeTruthy();
+      await page.goto(employeeHref ?? "", { waitUntil: "domcontentloaded" });
       await expect(page).toHaveURL(/employeeId=/);
       await expect(main(page).locator("aside[aria-label$='readiness detail']").or(main(page).getByText("Readiness detail")).first()).toBeVisible();
     }

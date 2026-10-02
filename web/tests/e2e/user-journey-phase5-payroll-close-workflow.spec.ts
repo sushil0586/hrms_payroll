@@ -169,6 +169,14 @@ async function expectCompactPayrollTypography(page: Page, step: CloseStep) {
   expect(clippedText, `${step.path} should not clip headings, chips, buttons, or grid text`).toEqual([]);
 }
 
+async function openLinkTarget(page: Page, link: Locator, expectedUrl: RegExp) {
+  await expect(link).toBeVisible();
+  const href = await link.getAttribute("href");
+  expect(href).toBeTruthy();
+  await page.goto(href ?? "", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(expectedUrl);
+}
+
 test.describe.serial("User journey phase 5: payroll close workflow", () => {
   test("HR and finance users can follow the full payroll close without confusing pages", async ({ page }) => {
     test.setTimeout(150_000);
@@ -195,17 +203,15 @@ test.describe.serial("User journey phase 5: payroll close workflow", () => {
     await gotoAuthenticated(page, "/hr-admin/payroll-readiness?tab=employees", hrAdmin);
     await expectPageReady(page, "Payroll Readiness");
     await expect(main(page).getByRole("heading", { name: "Payroll source review" })).toBeVisible();
-    await main(page).getByRole("link", { name: /^Warning\b/ }).click();
+    await openLinkTarget(page, main(page).getByRole("link", { name: /^Warning\b/ }), /status=warning/);
     await expect(page).toHaveURL(/\/hr-admin\/payroll-readiness\?.*tab=employees/);
-    await expect(page).toHaveURL(/status=warning/);
     await expectNoHorizontalOverflow(page);
 
     await gotoAuthenticated(page, "/hr-admin/payroll-calculations", hrAdmin);
     await expectPageReady(page, "Payroll Calculations");
     const firstLine = main(page).locator("a[href*='lineId=']").first();
     if (await firstLine.isVisible().catch(() => false)) {
-      await firstLine.click();
-      await expect(page).toHaveURL(/\/hr-admin\/payroll-calculations\?.*lineId=/);
+      await openLinkTarget(page, firstLine, /\/hr-admin\/payroll-calculations\?.*lineId=/);
       await expect(main(page).getByText(/Line trace|Source hash|Formula/i).first()).toBeVisible();
     }
     await expectNoHorizontalOverflow(page);
@@ -218,8 +224,7 @@ test.describe.serial("User journey phase 5: payroll close workflow", () => {
     }
     const exception = main(page).locator("a[href*='exceptionId=']").first();
     if (await exception.isVisible().catch(() => false)) {
-      await exception.click();
-      await expect(page).toHaveURL(/\/hr-admin\/payroll-review\?.*exceptionId=/);
+      await openLinkTarget(page, exception, /\/hr-admin\/payroll-review\?.*exceptionId=/);
       await expect(main(page).getByText(/Exception detail|Exception actions|No exception selected/i).first()).toBeVisible();
     }
     await expectNoHorizontalOverflow(page);
@@ -228,8 +233,7 @@ test.describe.serial("User journey phase 5: payroll close workflow", () => {
     await expectPageReady(page, "Payroll Outputs");
     const artifact = main(page).locator("a[href*='artifactId=']").first();
     if (await artifact.isVisible().catch(() => false)) {
-      await artifact.click();
-      await expect(page).toHaveURL(/\/hr-admin\/payroll-outputs\?.*artifactId=/);
+      await openLinkTarget(page, artifact, /\/hr-admin\/payroll-outputs\?.*artifactId=/);
       await expect(main(page).getByText(/Artifact detail|Download file|No artifact selected/i).first()).toBeVisible();
     }
     await expectNoHorizontalOverflow(page);

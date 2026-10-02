@@ -224,7 +224,9 @@ async function auditTenantRoute(page: Page, route: TenantRoute) {
     expect(activeLinks, `${route.path} should mark exactly one active side-nav item`).toHaveLength(1);
     expect(activeLinks[0], `${route.path} should mark the current side-nav item`).toContain(expectedNavLabel(route.path));
   } else {
-    await expect(page.getByRole("banner").getByText("Search users, setup, audit...")).toBeVisible();
+    const banner = page.getByRole("banner");
+    await expect(banner).toBeVisible();
+    await expect(banner.getByRole("button", { name: "Sign out" })).toBeVisible();
   }
   for (const text of route.requiredText) {
     await expect(page.getByRole("main").getByText(text, { exact: true }).first(), `${route.path} should include ${text}`).toBeVisible();

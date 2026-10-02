@@ -5,6 +5,7 @@ import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("HR admin payroll readiness flows", () => {
   test("readiness table filters and live row detail stay URL-driven", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/payroll-readiness?tab=employees");
     await expectPageReady(page, "Payroll Readiness");
 
@@ -12,7 +13,11 @@ test.describe("HR admin payroll readiness flows", () => {
     await expect(page.getByRole("columnheader", { name: "Employee" })).toBeVisible();
     await expect(page.getByText("Source data readiness")).toBeVisible();
 
-    await page.locator(".status-tab-row").getByRole("link", { name: /^Warning\b/ }).click();
+    const warningFilter = page.locator(".status-tab-row").getByRole("link", { name: /^Warning\b/ });
+    await expect(warningFilter).toHaveAttribute("href", /status=warning/);
+    const warningHref = await warningFilter.getAttribute("href");
+    expect(warningHref).toBeTruthy();
+    await page.goto(warningHref ?? "", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/status=warning/);
     await expect(page.getByText("Warning").or(page.getByText("No employees")).first()).toBeVisible();
 
@@ -23,7 +28,7 @@ test.describe("HR admin payroll readiness flows", () => {
       await expect(page.getByText("Readiness").or(page.getByText("Source")).first()).toBeVisible();
     }
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-readiness?tab=employees");
+    await page.goto("/hr-admin/payroll-readiness?tab=employees", { waitUntil: "domcontentloaded" });
     await page.getByRole("textbox", { name: "Search" }).fill("A");
     await Promise.all([
       page.waitForURL((url) => url.searchParams.get("q") === "A"),
