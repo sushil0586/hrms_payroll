@@ -4,7 +4,7 @@ import { LogoutButton } from "@/app/components/logout-button";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { ManagerDecisionPanel } from "@/app/mss/approvals/manager-decision-panel";
+import { ManagerApprovalReviewAction } from "@/app/mss/approvals/manager-approval-review-action";
 import { getMssApprovalInbox, getMssAttendanceRegularizationDetail, getMssLeaveRequestDetail } from "@/lib/api";
 import { requireWorkspaceAccess, sessionHasPermission } from "@/lib/workspace-access";
 import type {
@@ -18,6 +18,7 @@ type SearchParamValue = string | string[] | undefined;
 type PageProps = {
   searchParams?: Promise<Record<string, SearchParamValue>>;
 };
+type ApprovalQueue = "leave" | "attendance" | "history";
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -105,6 +106,23 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function QueueAccessNotice({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <section className="section">
+      <div className="notice">
+        <strong>{title}</strong>
+        <span className="muted">{description}</span>
+      </div>
+    </section>
+  );
+}
+
 function LeaveApprovalSection({
   currentParams,
   response,
@@ -125,25 +143,29 @@ function LeaveApprovalSection({
   const selected = resolveSelectedItem(items, selectedId, selectedDetail);
   const selectedOutsidePage = Boolean(selectedId && selectedDetail?.id === selectedId && !items.some((item) => item.id === selectedId));
 
+  if (!canApproveLeave) {
+    return (
+      <QueueAccessNotice
+        title="Leave approvals are not enabled for your role."
+        description="Ask HR to add leave approval access if you should decide leave requests for this team."
+      />
+    );
+  }
+
   return (
     <section className="section queue-review-split">
       <article className="record-card panel-card-soft">
         <div className="section-header">
           <div>
-            <h2 className="section-heading-soft">Leave approvals</h2>
+            <h2 className="section-heading-soft">Pending leave requests</h2>
             <p className="section-copy section-copy-soft">Pending queue for manager decisions.</p>
           </div>
         </div>
         <div className="tableish">
           {items.length ? (
             items.map((request) => (
-              <Link
+              <article
                 className={`tableish__row ${selected?.id === request.id ? "tableish__row--active" : ""}`}
-                href={buildHref("/mss/approvals", currentParams, {
-                  queue: "leave",
-                  leaveId: request.id,
-                  regId: undefined,
-                })}
                 key={request.id}
               >
                 <div className="tableish__head">
@@ -166,7 +188,20 @@ function LeaveApprovalSection({
                     ? `Cancel reason: ${request.reason || "No reason provided."}`
                     : request.reason || "No reason provided."}
                 </span>
-              </Link>
+                <div className="table-actions">
+                  <Link
+                    className="button button--ghost"
+                    href={buildHref("/mss/approvals", currentParams, {
+                      queue: "leave",
+                      leaveId: request.id,
+                      regId: undefined,
+                    })}
+                  >
+                    Select
+                  </Link>
+                  <ManagerApprovalReviewAction canDecide={canApproveLeave} item={request} kind="leave" state={state} />
+                </div>
+              </article>
             ))
           ) : (
             <div className="notice">
@@ -179,7 +214,7 @@ function LeaveApprovalSection({
 
       <article className="record-card panel-card-soft">
         <div>
-          <h2 className="section-heading-soft">Leave approval detail</h2>
+          <h2 className="section-heading-soft">Selected leave request</h2>
           <p className="section-copy section-copy-soft">Detail for the selected leave or cancellation request.</p>
         </div>
         {selected ? (
@@ -210,17 +245,20 @@ function LeaveApprovalSection({
                 />
               ) : null}
             </div>
-            <ManagerDecisionPanel
-              description="Capture the manager decision without leaving the selected request."
-              canDecide={canApproveLeave}
-              employeeReason={selected.reason}
-              itemId={selected.id}
-              kind="leave"
-              requestAction={selected.request_action}
-              state={state}
-              status={selected.status}
-              title={selected.request_action === "cancellation_request" ? "Cancellation decision" : "Leave decision"}
-            />
+            <div className="mss-selected-review-band">
+              <div>
+                <span className="eyebrow">Focused review</span>
+                <strong>Open the full decision dialog</strong>
+                <p>Review the employee context, then approve or reject with a manager note.</p>
+              </div>
+              <ManagerApprovalReviewAction
+                canDecide={canApproveLeave}
+                item={selected}
+                kind="leave"
+                state={state}
+                variant="primary"
+              />
+            </div>
           </>
         ) : (
           <div className="notice">
@@ -265,25 +303,29 @@ function RegularizationApprovalSection({
   const selected = resolveSelectedItem(items, selectedId, selectedDetail);
   const selectedOutsidePage = Boolean(selectedId && selectedDetail?.id === selectedId && !items.some((item) => item.id === selectedId));
 
+  if (!canReviewAttendance) {
+    return (
+      <QueueAccessNotice
+        title="Attendance approvals are not enabled for your role."
+        description="Ask HR to add attendance regularization review access if you should clear attendance fixes."
+      />
+    );
+  }
+
   return (
     <section className="section queue-review-split">
       <article className="record-card panel-card-soft">
         <div className="section-header">
           <div>
-            <h2 className="section-heading-soft">Attendance regularizations</h2>
+            <h2 className="section-heading-soft">Pending attendance fixes</h2>
             <p className="section-copy section-copy-soft">Attendance exception queue.</p>
           </div>
         </div>
         <div className="tableish">
           {items.length ? (
             items.map((item) => (
-              <Link
+              <article
                 className={`tableish__row ${selected?.id === item.id ? "tableish__row--active" : ""}`}
-                href={buildHref("/mss/approvals", currentParams, {
-                  queue: "attendance",
-                  regId: item.id,
-                  leaveId: undefined,
-                })}
                 key={item.id}
               >
                 <div className="tableish__head">
@@ -301,7 +343,20 @@ function RegularizationApprovalSection({
                   <span>Requested: {item.requested_status.replace("_", " ")}</span>
                 </div>
                 <span className="muted">{item.reason || "No reason provided."}</span>
-              </Link>
+                <div className="table-actions">
+                  <Link
+                    className="button button--ghost"
+                    href={buildHref("/mss/approvals", currentParams, {
+                      queue: "attendance",
+                      regId: item.id,
+                      leaveId: undefined,
+                    })}
+                  >
+                    Select
+                  </Link>
+                  <ManagerApprovalReviewAction canDecide={canReviewAttendance} item={item} kind="attendance" state={state} />
+                </div>
+              </article>
             ))
           ) : (
             <div className="notice">
@@ -314,7 +369,7 @@ function RegularizationApprovalSection({
 
       <article className="record-card panel-card-soft">
         <div>
-          <h2 className="section-heading-soft">Regularization detail</h2>
+          <h2 className="section-heading-soft">Selected attendance request</h2>
           <p className="section-copy section-copy-soft">Detail for the selected item.</p>
         </div>
         {selected ? (
@@ -335,16 +390,20 @@ function RegularizationApprovalSection({
               <DetailRow label="Applied At" value={formatDateTime(selected.applied_at)} />
               <DetailRow label="Reason" value={selected.reason || "No reason provided."} />
             </div>
-            <ManagerDecisionPanel
-              description="Approve or reject the selected attendance exception with a manager note."
-              canDecide={canReviewAttendance}
-              employeeReason={selected.reason}
-              itemId={selected.id}
-              kind="attendance"
-              state={state}
-              status={selected.status}
-              title="Regularization decision"
-            />
+            <div className="mss-selected-review-band">
+              <div>
+                <span className="eyebrow">Focused review</span>
+                <strong>Open the full decision dialog</strong>
+                <p>Verify the correction and payroll impact, then approve or reject with a manager note.</p>
+              </div>
+              <ManagerApprovalReviewAction
+                canDecide={canReviewAttendance}
+                item={selected}
+                kind="attendance"
+                state={state}
+                variant="primary"
+              />
+            </div>
           </>
         ) : (
           <div className="notice">
@@ -369,12 +428,76 @@ function RegularizationApprovalSection({
   );
 }
 
+function DecisionHistorySection({
+  currentParams,
+  canApproveLeave,
+  canReviewAttendance,
+}: {
+  currentParams: Record<string, SearchParamValue>;
+  canApproveLeave: boolean;
+  canReviewAttendance: boolean;
+}) {
+  return (
+    <section className="section">
+      <div className="mss-history-panel panel-card-soft">
+        <div className="mss-history-panel__header">
+          <div>
+            <span className="eyebrow">Read-only queue</span>
+            <h2 className="section-heading-soft">Completed decisions</h2>
+            <p className="section-copy section-copy-soft">
+              Approved and rejected manager decisions will appear here after the history endpoint is available.
+            </p>
+          </div>
+          <div className="mss-history-panel__actions">
+            {canApproveLeave ? (
+              <Link
+                className="button button--secondary"
+                href={buildHref("/mss/approvals", currentParams, {
+                  queue: "leave",
+                  leavePage: "1",
+                  regId: undefined,
+                })}
+              >
+                Leave queue
+              </Link>
+            ) : null}
+            {canReviewAttendance ? (
+              <Link
+                className="button button--secondary"
+                href={buildHref("/mss/approvals", currentParams, {
+                  queue: "attendance",
+                  regPage: "1",
+                  leaveId: undefined,
+                })}
+              >
+                Attendance queue
+              </Link>
+            ) : null}
+          </div>
+        </div>
+        <div className="mss-history-panel__empty">
+          <strong>No completed manager decisions are available yet.</strong>
+          <span>
+            Pending work remains in the Leave and Attendance queues. Once a completed-decision feed is wired,
+            this view will show employee, request type, decision, decision date, and comment in a paginated list.
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default async function MssApprovalsPage({ searchParams }: PageProps) {
   const sessionUser = await requireWorkspaceAccess({ workspace: "mss" });
   const canApproveLeave = sessionHasPermission(sessionUser, "leave.requests.approve");
   const canReviewAttendance = sessionHasPermission(sessionUser, "attendance.regularization.review");
   const currentParams = (await searchParams) ?? {};
-  const queue = normalizeParam(currentParams.queue) ?? "leave";
+  const requestedQueue = normalizeParam(currentParams.queue);
+  let queue: ApprovalQueue =
+    requestedQueue === "attendance" || requestedQueue === "history" ? requestedQueue : "leave";
+  if (queue === "leave" && !canApproveLeave && canReviewAttendance) {
+    queue = "attendance";
+  }
   const leavePage = Math.max(Number(normalizeParam(currentParams.leavePage) || "1") || 1, 1);
   const regPage = Math.max(Number(normalizeParam(currentParams.regPage) || "1") || 1, 1);
   const { summary, pendingLeave, pendingRegularizations, state } = await getMssApprovalInbox({
@@ -396,13 +519,33 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
       : Promise.resolve(null),
   ]);
   const inboxState = state === "live" ? "live" : "demo";
+  const queueMeta = {
+    leave: {
+      eyebrow: "Leave decisions",
+      title: "Leave approvals",
+      description: "Review leave dates, employee reason, policy context, and manager decision notes.",
+      nextAction: "Select a pending leave request, confirm context, then approve or reject with a useful comment.",
+    },
+    attendance: {
+      eyebrow: "Attendance decisions",
+      title: "Attendance approvals",
+      description: "Review attendance correction requests separately from leave so payroll-impact fixes stay clear.",
+      nextAction: "Open one regularization, verify the requested correction, then decide with a manager note.",
+    },
+    history: {
+      eyebrow: "Manager audit",
+      title: "Decision history",
+      description: "Review completed manager decisions separately from pending queues.",
+      nextAction: "Use this read-only view after pending work has been decided.",
+    },
+  }[queue];
 
   return (
     <main className="shell shell--workspace">
       <PageIntro
         eyebrow={state === "live" ? "Live MSS" : "Demo MSS"}
-        title="Manager inbox"
-        description="Leave and attendance decisions in one compact queue."
+        title="Manager approvals"
+        description="Choose one queue at a time: leave decisions, attendance decisions, or completed decision history."
         actions={
           <>
             <Link className="button button--secondary" href="/">
@@ -428,11 +571,25 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
       </section>
 
       <section className="section">
+        <div className="mss-approval-focus panel-card-soft">
+          <div>
+            <span className="eyebrow">{queueMeta.eyebrow}</span>
+            <h2>{queueMeta.title}</h2>
+            <p>{queueMeta.description}</p>
+          </div>
+          <div className="mss-approval-focus__next">
+            <span>Next step</span>
+            <strong>{queueMeta.nextAction}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="section">
         <div className="queue-toolbar panel-card-soft">
           <div className="toolbar">
             <div>
-              <h2 className="section-heading-soft">Approval queues</h2>
-              <p className="section-copy section-copy-soft">Switch queues without losing context.</p>
+              <h2 className="section-heading-soft">Approval views</h2>
+              <p className="section-copy section-copy-soft">Keep each manager task separate and easy to scan.</p>
             </div>
             <div className="tabbar">
               <Link
@@ -457,12 +614,25 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
                 <span>Attendance</span>
                 <span>{summary.pending_attendance_regularizations_count}</span>
               </Link>
+              <Link
+                className={`tab ${queue === "history" ? "tab--active" : ""}`}
+                href={buildHref("/mss/approvals", currentParams, {
+                  queue: "history",
+                  leaveId: undefined,
+                  regId: undefined,
+                })}
+              >
+                <span>History</span>
+                <span>Audit</span>
+              </Link>
             </div>
           </div>
         </div>
       </section>
 
-      {queue === "attendance" ? (
+      {queue === "history" ? (
+        <DecisionHistorySection currentParams={currentParams} canApproveLeave={canApproveLeave} canReviewAttendance={canReviewAttendance} />
+      ) : queue === "attendance" ? (
         <RegularizationApprovalSection currentParams={currentParams} response={pendingRegularizations} state={inboxState} canReviewAttendance={canReviewAttendance} selectedDetail={selectedRegularizationDetail} />
       ) : (
         <LeaveApprovalSection currentParams={currentParams} response={pendingLeave} state={inboxState} canApproveLeave={canApproveLeave} selectedDetail={selectedLeaveDetail} />
@@ -471,7 +641,7 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
       {inboxState === "demo" ? (
         <section className="section">
           <div className="notice">
-            <strong>Manager inbox is currently using seeded demo data.</strong>
+            <strong>Manager approvals are currently using seeded demo data.</strong>
             <span className="muted">
               This page can switch to live pending approval endpoints once auth wiring is complete.
             </span>

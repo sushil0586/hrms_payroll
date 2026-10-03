@@ -2,20 +2,20 @@
 
 Manager Self Service is the manager workspace for team approvals, team alerts, and manager-specific notification review.
 
-![Manager control center](../assets/screenshots/mss/control-center.png)
+![Manager dashboard](../assets/screenshots/mss/control-center.png)
 
 ## What Managers Can Do
 
 | Area | Purpose | Best next action |
 | --- | --- | --- |
-| Control Center | See team action queues and pending decisions. | Start here to decide what needs review first. |
+| Dashboard | See team action queues and pending decisions. | Start here to decide what needs review first. |
 | Approvals | Review leave and attendance regularization requests. | Open when a team member is waiting for approval. |
 | Notifications | Review manager-facing alerts and source workflow messages. | Use when a notification mentions team action or approval risk. |
 | Self Service | Open your own employee workspace. | Use for your own payslips, documents, leave, and notifications. |
 
-## How To Use The Control Center
+## How To Use The Dashboard
 
-The control center is designed for a manager’s daily check-in.
+The dashboard is designed for a manager’s daily check-in.
 
 - Review the top priority cards first.
 - Open approval queues for leave and attendance decisions.

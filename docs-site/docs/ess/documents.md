@@ -47,6 +47,17 @@ This page prevents document follow-up from happening over email. Employees can s
 - Re-upload only after reading the rejection reason.
 - Avoid uploading unrelated documents under the wrong category.
 
+## What HR Controls Upstream
+
+| Setup item | Why it matters in ESS |
+| --- | --- |
+| Document categories | Determines which upload categories employees can choose. |
+| Required document rules | Determines which documents appear as required for the employee. |
+| Employee-upload permission | Controls whether employees can upload a category themselves. |
+| Expiry tracking | Controls whether expiry date is required and whether expiring documents are highlighted. |
+| Verification workflow | Routes uploaded files to HR review and stores accepted/rejected status. |
+| File access rules | Controls whether employees can download previously uploaded files. |
+
 ## Example: upload PAN proof
 
 1. Open **ESS > Documents**.
@@ -92,6 +103,17 @@ Expected result: the latest version is available for HR review while previous ve
 | Expiry date missing for a tracked document | HR may reject or ask for correction depending on policy. |
 | File rejected by HR | Requirement card shows action needed and the upload dialog can replace the document. |
 | Download unavailable | The employee should contact HR if the file is expected but no download link is available. |
+
+## Browser certification coverage
+
+The ESS Documents launch certification covers:
+
+- Summary metrics and document readiness band.
+- Required document cards and upload/replacement actions.
+- Upload modal validation for category, title, and file.
+- Document history search, filters, pagination, and detail modal.
+- Accepted, pending, rejected, expiring, and missing-upload states.
+- No horizontal overflow and no inline form crowding.
 
 ## Common rejection reasons
 

@@ -298,7 +298,17 @@ const essCaptures = [
   {
     route: "/ess",
     file: `${screenshotRoot}/ess/overview.png`,
-    heading: /Self service/i,
+    heading: /My workspace/i,
+  },
+  {
+    route: "/ess/leave",
+    file: `${screenshotRoot}/ess/leave.png`,
+    heading: /Leave/i,
+  },
+  {
+    route: "/ess/attendance",
+    file: `${screenshotRoot}/ess/attendance.png`,
+    heading: /Attendance/i,
   },
   {
     route: "/ess/payslips",
@@ -345,12 +355,12 @@ const mssCaptures = [
   {
     route: "/mss",
     file: `${screenshotRoot}/mss/control-center.png`,
-    heading: /Manager control center/i,
+    heading: /Manager dashboard/i,
   },
   {
     route: "/mss/approvals",
     file: `${screenshotRoot}/mss/approvals.png`,
-    heading: /Manager inbox/i,
+    heading: /Manager approvals/i,
   },
   {
     route: "/mss/notifications",

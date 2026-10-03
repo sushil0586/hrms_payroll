@@ -18,6 +18,18 @@ type Props = {
   data: HrAdminNotificationListResponse;
   state: "live" | "demo";
   workspace: "ess" | "mss";
+  title?: string;
+  description?: string;
+  workspacePill?: string;
+  filterTitle?: string;
+  filterDescription?: string;
+  actionEyebrow?: string;
+  actionTitle?: string;
+  actionDescription?: string;
+  listTitle?: string;
+  listDescription?: string;
+  detailTitle?: string;
+  detailDescription?: string;
 };
 
 function normalizeParam(value: SearchParamValue) {
@@ -119,6 +131,18 @@ export function UserNotificationCenter({
   data,
   state,
   workspace,
+  title,
+  description,
+  workspacePill,
+  filterTitle = "Inbox filters",
+  filterDescription = "Search your messages, then open one item to review source context and read state.",
+  actionEyebrow = "What to do next",
+  actionTitle = "Review messages that need action",
+  actionDescription = "Keep this page focused on finding alerts. Open a notification only when you need the full message, delivery trail, or source workflow.",
+  listTitle = "Inbox list",
+  listDescription = "Open one notification at a time and jump to the related workflow when needed.",
+  detailTitle = "Notification detail",
+  detailDescription = "Selected alert summary. Open review for the full delivery trail.",
 }: Props) {
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
@@ -137,8 +161,8 @@ export function UserNotificationCenter({
     <main className={`shell shell--workspace user-notification-shell user-notification-shell--${workspace}`}>
       <PageIntro
         eyebrow={state === "live" ? "Live notifications" : "Demo notifications"}
-        title="Notifications"
-        description={workspace === "mss" ? "Manager alerts, approval nudges, and queue follow-up." : "Personal alerts, document prompts, and request updates."}
+        title={title ?? "Notifications"}
+        description={description ?? (workspace === "mss" ? "Manager alerts, approval nudges, and queue follow-up." : "Personal alerts, document prompts, and request updates.")}
         className="page-header-surface page-header-surface--compact"
         titleClassName="text-heading-premium page-title-soft"
         descriptionClassName="text-body-premium"
@@ -146,7 +170,7 @@ export function UserNotificationCenter({
         pills={[
           `${data.total_count} in view`,
           `${unreadOnPage} unread on page`,
-          workspace === "mss" ? "Manager inbox" : "Employee inbox",
+          workspacePill ?? (workspace === "mss" ? "Manager inbox" : "Employee inbox"),
         ]}
         showPills
       />
@@ -164,9 +188,9 @@ export function UserNotificationCenter({
         <section className="card panel queue-toolbar panel-card-soft user-notification-filters">
           <div className="queue-toolbar__header">
             <div>
-              <h2 className="section-heading-soft">Inbox filters</h2>
+              <h2 className="section-heading-soft">{filterTitle}</h2>
               <p className="section-copy section-copy-soft">
-                Search your messages, then open one item to review source context and read state.
+                {filterDescription}
               </p>
             </div>
             <div className="queue-toolbar__meta">
@@ -250,10 +274,10 @@ export function UserNotificationCenter({
 
         <div className="user-notification-action-band">
           <div>
-            <span className="workspace-card__eyebrow">What to do next</span>
-            <h2>Review messages that need action</h2>
+            <span className="workspace-card__eyebrow">{actionEyebrow}</span>
+            <h2>{actionTitle}</h2>
             <p className="section-copy section-copy-soft">
-              Keep this page focused on finding alerts. Open a notification only when you need the full message, delivery trail, or source workflow.
+              {actionDescription}
             </p>
           </div>
           {selected ? (
@@ -272,8 +296,8 @@ export function UserNotificationCenter({
           <article className="record-card panel-card-soft user-notification-list">
             <div className="record-card__header">
               <div className="record-card__title-block">
-                <h3>Inbox list</h3>
-                <p>Open one notification at a time and jump to the related workflow when needed.</p>
+                <h3>{listTitle}</h3>
+                <p>{listDescription}</p>
               </div>
             </div>
             <div className="tableish">
@@ -312,8 +336,8 @@ export function UserNotificationCenter({
 
           <aside className="record-card panel-card-soft user-notification-detail">
             <div>
-              <h2 className="section-heading-soft">Notification detail</h2>
-              <p className="section-copy section-copy-soft">Selected alert summary. Open review for the full delivery trail.</p>
+              <h2 className="section-heading-soft">{detailTitle}</h2>
+              <p className="section-copy section-copy-soft">{detailDescription}</p>
             </div>
             {selected ? (
               <div className="stack user-notification-guidance">

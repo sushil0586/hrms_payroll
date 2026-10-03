@@ -2,6 +2,8 @@
 
 Use ESS Attendance to review daily attendance, understand exceptions, and request corrections when attendance is missing or incorrect.
 
+![ESS attendance](../assets/screenshots/ess/attendance.png)
+
 ## Purpose
 
 Employees use this page to confirm that attendance records are accurate before payroll cutoff.
@@ -68,6 +70,17 @@ Attendance actions should stay lightweight:
 - The background page remains readable but inactive while a modal is open.
 
 This keeps ESS Attendance easy for employees: the page is for review, and the modal is for one focused correction.
+
+## What HR Controls Upstream
+
+| Setup item | Why it matters in ESS |
+| --- | --- |
+| Shift / roster assignment | Determines expected working hours and late/early exceptions. |
+| Attendance capture/import | Creates the source records employees can review or regularize. |
+| Regularization window | Controls how many days employees can correct. |
+| Lock and payroll cutoff | Blocks corrections after attendance is finalized for payroll. |
+| Approval workflow | Routes regularization to manager, HR, or auto-approval. |
+| Attendance policy | Determines present, absent, half-day, late, and exception interpretation. |
 
 ## Validation behavior
 

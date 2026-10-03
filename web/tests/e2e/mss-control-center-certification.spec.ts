@@ -9,15 +9,17 @@ async function expectManagerActionControls(page: Page) {
   await expect(page.getByRole("button", { name: /Reject request|Reject cancellation/ }).first()).toBeVisible();
 }
 
-test.describe("Manager self service control center certification", () => {
+test.describe("Manager self service dashboard certification", () => {
   test("shows team queues, decision shortcuts, and payroll-impact signals without layout overflow", async ({ page }) => {
     await gotoAuthenticated(page, "/mss", manager);
-    await expectPageReady(page, "Manager control center");
+    await expectPageReady(page, "Manager dashboard");
 
     const controlCenter = page.getByTestId("mss-control-center");
     await expect(controlCenter).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Team priorities" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Work queue" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /No manager decisions pending|Decisions need review|Team signals need a quick look/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What to review next" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Coverage context" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your ESS" })).toBeVisible();
 
     for (const signal of [
       "Leave approvals",
@@ -29,19 +31,15 @@ test.describe("Manager self service control center certification", () => {
     }
 
     for (const action of [
-      "Open approvals",
-      "Notifications",
-      "Self service",
+      "Inbox",
       "Review leave",
       "Review attendance",
       "Open exceptions",
       "View leave context",
-      "Leave queue",
-      "Attendance queue",
-      "Alerts",
-      "My payslips",
-      "My documents",
-      "Tax declarations",
+      "Open ESS",
+      "Payslips",
+      "Documents",
+      "Tax",
     ]) {
       await expect(page.getByRole("link", { name: action }).first()).toBeVisible();
     }
@@ -51,51 +49,78 @@ test.describe("Manager self service control center certification", () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await gotoAuthenticated(page, "/mss", manager);
-    await expectPageReady(page, "Manager control center");
+    await expectPageReady(page, "Manager dashboard");
     await expect(page.getByTestId("mss-control-center")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 
-  test("manager can use leave and attendance approval queues with decision panels", async ({ page }) => {
+  test("manager can use leave and attendance approval queues with focused review modals", async ({ page }) => {
     await gotoAuthenticated(page, "/mss/approvals", manager);
-    await expectPageReady(page, "Manager inbox");
+    await expectPageReady(page, "Manager approvals");
 
     for (const metric of ["Team members", "Leave approvals", "Regularizations", "Exceptions today"]) {
       await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
     }
 
-    await expect(page.getByRole("heading", { name: "Approval queues" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Approval views" })).toBeVisible();
     const queueTabs = page.locator(".tabbar");
     await expect(queueTabs.getByRole("link", { name: /Leave/ })).toBeVisible();
     await expect(queueTabs.getByRole("link", { name: /Attendance/ })).toBeVisible();
+    await expect(queueTabs.getByRole("link", { name: /History/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Leave approvals" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Leave approval detail" })).toBeVisible();
-    await expect(page.getByText(/Decision note|No leave approval selected/).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pending leave requests" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Selected leave request" })).toBeVisible();
+    await expect(page.getByText(/Open the full decision dialog|No leave approval selected/).first()).toBeVisible();
     await expect(page.locator(".pagination-bar").first()).toBeVisible();
-    if (await page.getByText("Decision note").first().isVisible().catch(() => false)) {
+    const leaveReview = page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).first();
+    if (await leaveReview.isVisible().catch(() => false)) {
+      await leaveReview.click();
+      await expect(page.getByRole("dialog", { name: "Leave approval review" })).toBeVisible();
       await expectManagerActionControls(page);
+      await page.getByRole("button", { name: "Close leave approval review" }).click();
     }
 
     await queueTabs.getByRole("link", { name: /Attendance/ }).click();
     await expect(page).toHaveURL(/\/mss\/approvals\?.*queue=attendance/);
-    await expectPageReady(page, "Manager inbox");
-    await expect(page.getByRole("heading", { name: "Attendance regularizations" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Regularization detail" })).toBeVisible();
-    await expect(page.getByText(/Decision note|No regularization selected/).first()).toBeVisible();
+    await expectPageReady(page, "Manager approvals");
+    await expect(page.getByRole("heading", { name: "Attendance approvals" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pending attendance fixes" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Selected attendance request" })).toBeVisible();
+    await expect(page.getByText(/Open the full decision dialog|No regularization selected/).first()).toBeVisible();
     await expect(page.locator(".pagination-bar").first()).toBeVisible();
-    if (await page.getByText("Decision note").first().isVisible().catch(() => false)) {
+    const attendanceReview = page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).first();
+    if (await attendanceReview.isVisible().catch(() => false)) {
+      await attendanceReview.click();
+      await expect(page.getByRole("dialog", { name: "Attendance approval review" })).toBeVisible();
       await expectManagerActionControls(page);
+      await page.getByRole("button", { name: "Close attendance approval review" }).click();
     }
+
+    await queueTabs.getByRole("link", { name: /History/ }).click();
+    await expect(page).toHaveURL(/\/mss\/approvals\?.*queue=history/);
+    await expectPageReady(page, "Manager approvals");
+    await expect(page.getByRole("heading", { name: "Decision history" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Completed decisions" })).toBeVisible();
+    await expect(page.getByText("No completed manager decisions are available yet.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 
   test("manager decision panel handles success and validation errors without mutating staging rows", async ({ page }) => {
     await gotoAuthenticated(page, "/mss/approvals?queue=leave", manager);
-    await expectPageReady(page, "Manager inbox");
+    await expectPageReady(page, "Manager approvals");
 
-    const approveButton = page.getByRole("button", { name: /Approve request|Approve cancellation/ }).first();
+    const reviewButton = page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).first();
+    if (!(await reviewButton.isVisible().catch(() => false))) {
+      await expect(page.getByText(/No pending leave approvals|No leave approval selected/).first()).toBeVisible();
+      return;
+    }
+    await reviewButton.click();
+    const dialog = page.getByRole("dialog", { name: "Leave approval review" });
+    await expect(dialog).toBeVisible();
+
+    const approveButton = dialog.getByRole("button", { name: /Approve request|Approve cancellation/ }).first();
     if (!(await approveButton.isEnabled().catch(() => false))) {
-      await expect(page.getByText(/No pending leave approvals|This request is already resolved/).first()).toBeVisible();
+      await expect(dialog.getByText(/This request is already resolved|Decision is disabled/).first()).toBeVisible();
       return;
     }
 
@@ -106,10 +131,10 @@ test.describe("Manager self service control center certification", () => {
         body: JSON.stringify({ status: "approved", source: "playwright-intercepted" }),
       });
     });
-    await page.getByLabel("Decision note").fill("MGR-95 intercepted approval proof.");
+    await dialog.getByLabel("Decision note").fill("MGR-95 intercepted approval proof.");
     await approveButton.click();
-    await expect(page.getByText("Action saved.").first()).toBeVisible();
-    await expect(page.getByText(/Request approved|Cancellation request approved/).first()).toBeVisible();
+    await expect(dialog.getByText("Action saved.").first()).toBeVisible();
+    await expect(dialog.getByText(/Request approved|Cancellation request approved/).first()).toBeVisible();
     await page.unroute("**/api/manager/leave-requests/*/approve");
 
     await page.route("**/api/manager/leave-requests/*/reject", async (route) => {
@@ -119,22 +144,23 @@ test.describe("Manager self service control center certification", () => {
         body: JSON.stringify({ comment: ["Decision note is required for rejection."] }),
       });
     });
-    await page.getByRole("button", { name: /Reject request|Reject cancellation/ }).first().click();
-    await expect(page.getByText("Action failed.").first()).toBeVisible();
-    await expect(page.getByText("Decision note is required for rejection.").first()).toBeVisible();
+    await dialog.getByRole("button", { name: /Reject request|Reject cancellation/ }).first().click();
+    await expect(dialog.getByText("Action failed.").first()).toBeVisible();
+    await expect(dialog.getByText("Decision note is required for rejection.").first()).toBeVisible();
     await page.unroute("**/api/manager/leave-requests/*/reject");
   });
 
   test("manager can open notification center and cross-link back to approvals", async ({ page }) => {
     await gotoAuthenticated(page, "/mss/notifications", manager);
-    await expectPageReady(page, /Notifications|Manager notifications/i);
+    await expectPageReady(page, "Manager notifications");
 
     for (const metric of ["Notifications", "Unread on page", "High priority", "Failed on page"]) {
       await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
     }
     const main = page.getByRole("main");
     const filterSearch = main.getByRole("textbox", { name: "Search" });
-    await expect(page.getByRole("heading", { name: "Inbox filters" })).toBeVisible();
+    await expect(main.getByText("Manager alerts", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Alert filters" })).toBeVisible();
     await expect(filterSearch).toBeVisible();
     await expect(main.getByLabel("Status")).toBeVisible();
     await expect(main.getByLabel("Channel")).toBeVisible();
@@ -143,9 +169,10 @@ test.describe("Manager self service control center certification", () => {
     await expect(main.getByLabel("Rows per page")).toBeVisible();
     await expect(main.getByRole("button", { name: "Apply filters" })).toBeVisible();
     await expect(main.getByRole("link", { name: "Clear filters" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Inbox list" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Notification detail" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Team alert list" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Selected alert" })).toBeVisible();
     await expect(page.getByRole("main").getByRole("link", { name: "Approvals", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Decision history" })).toBeVisible();
     await expect(page.getByRole("link", { name: "ESS inbox" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: /Search|search/i }).first()).toBeVisible();
     await expect(page.getByText(/Notifications|notification/i).first()).toBeVisible();
@@ -158,8 +185,8 @@ test.describe("Manager self service control center certification", () => {
     await expect(page.getByText("No notifications match the current filters.")).toBeVisible();
     await page.getByRole("link", { name: "Clear filters" }).click();
     await expect(page).toHaveURL(/\/mss\/notifications\/?$/);
-    await expect(page.getByRole("heading", { name: /Notifications|Manager notifications/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Inbox list" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Manager notifications" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Team alert list" })).toBeVisible();
 
     const readToggle = page.getByRole("button", { name: /Mark read|Mark unread/ }).first();
     if (await readToggle.isVisible().catch(() => false)) {
@@ -172,16 +199,25 @@ test.describe("Manager self service control center certification", () => {
 
     await page.getByRole("main").getByRole("link", { name: "Approvals", exact: true }).click();
     await expect(page).toHaveURL(/\/mss\/approvals/);
-    await expectPageReady(page, "Manager inbox");
+    await expectPageReady(page, "Manager approvals");
   });
 
   test("manager notification read endpoint is scoped and handles intercepted success", async ({ page }) => {
     await gotoAuthenticated(page, "/mss/notifications", manager);
-    await expectPageReady(page, /Notifications|Manager notifications/i);
+    await expectPageReady(page, "Manager notifications");
+
+    const reviewButton = page.getByRole("button", { name: "Review notification" }).first();
+    if (!(await reviewButton.isVisible().catch(() => false))) {
+      await expect(page.getByText(/No notifications match|No notification selected/).first()).toBeVisible();
+      return;
+    }
+
+    await reviewButton.click();
+    await expect(page.getByRole("dialog", { name: /Notification detail/ })).toBeVisible();
 
     const readToggle = page.getByRole("button", { name: /Mark read|Mark unread/ }).first();
     if (!(await readToggle.isVisible().catch(() => false))) {
-      await expect(page.getByText(/No notifications match|No notification selected/).first()).toBeVisible();
+      await expect(page.getByRole("dialog", { name: /Notification detail/ })).toBeVisible();
       return;
     }
 
@@ -205,7 +241,7 @@ test.describe("Manager self service control center certification", () => {
     await gotoAuthenticated(page, "/ess", employee);
     await page.goto("/mss", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
-    await expect(page.getByRole("heading", { name: "Manager control center" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Manager dashboard" })).toHaveCount(0);
 
     for (const [label, persona] of [
       ["employee", employee],

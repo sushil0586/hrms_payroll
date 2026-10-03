@@ -1,29 +1,35 @@
-# Notifications
+# Manager Notifications
 
-Use Manager Notifications to review manager-facing alerts, delivery status, and linked team workflow events.
+Use Manager Notifications to triage manager-facing alerts, delivery status, and linked team workflow events without mixing them with your personal ESS inbox.
 
 ![MSS notifications](../assets/screenshots/mss/notifications.png)
 
 ## Page Purpose
 
-The manager notification inbox keeps team-related alerts separate from personal employee notifications.
+The manager notification page is an alert triage workspace. It tells you what happened, whether delivery succeeded, and which source workflow should be opened before you act.
 
 ## Main Sections
 
 | Section | What it shows | How to use it |
 | --- | --- | --- |
-| Notification list | Messages sent to the manager role. | Filter unread, failed, or important messages. |
-| Notification detail | Message body, status, delivery channel, source context, and timeline. | Read and open the related workflow. |
-| Status chips | Priority, read state, failed state, and retry information. | Triage urgent or failed delivery items first. |
+| Alert filters | Search, status, channel, priority, source type, and page size. | Narrow the view before opening a message. |
+| Team alert list | Manager alerts for leave, attendance, documents, payroll, or delivery failures. | Select one alert at a time. |
+| Selected alert | Message summary, delivery channel, priority, source reference, and read state. | Confirm context, then open review or source workflow. |
+| Review notification modal | Full message and delivery/read controls. | Mark read/unread or open the linked approval/source page. |
 
 ## Controls
 
 | Control | Purpose |
 | --- | --- |
-| Review | Open the selected notification detail. |
-| Mark read | Clear unread state after review. |
-| Source link | Open the related approval or workflow. |
-| Status filter | Narrow the queue by delivery or read status. |
+| Approvals | Open the manager approval workspace. |
+| Decision history | Review completed decision context when available. |
+| ESS inbox | Switch to your personal employee notifications. |
+| Apply filters | Refresh the alert list using selected filters. |
+| Clear filters | Return to the full manager alert list. |
+| Select | Make one alert active in the detail panel. |
+| Review notification | Open the focused detail modal. |
+| Open source | Open the related approval or workflow. |
+| Mark read / Mark unread | Update the alert's read state. |
 
 ## Manager notification priorities
 
@@ -43,6 +49,24 @@ Examples:
 - Leave approval notification: open **Approvals** and decide there.
 - Attendance exception notification: open the linked regularization request.
 - Failed delivery notice: open detail, confirm whether action is still required, then escalate if needed.
+
+## Practical examples
+
+### Leave approval alert
+
+1. Open **Manager Notifications**.
+2. Filter **Subject type** to `Leave request`.
+3. Select the alert.
+4. Open **Review notification** if you need the delivery trail.
+5. Click **Open source** and approve or reject from **Manager approvals**.
+
+### Failed delivery alert
+
+1. Filter **Status** to `Failed`.
+2. Select the failed alert.
+3. Review the latest delivery state.
+4. Open the source workflow and confirm whether the item still needs action.
+5. Tell HR if external delivery must be retried outside the in-app workflow.
 
 ## Good Practice
 

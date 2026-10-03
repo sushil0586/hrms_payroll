@@ -30,8 +30,11 @@ export default async function MssNotificationsPage({ searchParams }: PageProps) 
     <UserNotificationCenter
       actions={
         <>
-          <Link className="button button--secondary" href="/mss/approvals">
+          <Link className="button button--primary" href="/mss/approvals">
             Approvals
+          </Link>
+          <Link className="button button--secondary" href="/mss/approvals?queue=history">
+            Decision history
           </Link>
           <Link className="button button--ghost" href="/ess/notifications">
             ESS inbox
@@ -44,8 +47,20 @@ export default async function MssNotificationsPage({ searchParams }: PageProps) 
       crossWorkspaceLabel="Approvals"
       currentParams={currentParams}
       data={result.data}
+      actionDescription="Use notifications as signals. Open the source approval or delivery detail before taking a decision."
+      actionEyebrow="Manager triage"
+      actionTitle="Open the source workflow before deciding"
+      description="Triage team alerts, failed delivery, and approval follow-up without mixing personal ESS messages."
+      detailDescription="Summary only. Use review for delivery state, read state, and source context."
+      detailTitle="Selected alert"
+      filterDescription="Find team alerts by status, channel, priority, or source workflow."
+      filterTitle="Alert filters"
+      listDescription="Select one manager alert, then review delivery and source workflow."
+      listTitle="Team alert list"
       state={result.state}
+      title="Manager notifications"
       workspace="mss"
+      workspacePill="Manager alerts"
     />
   );
 }

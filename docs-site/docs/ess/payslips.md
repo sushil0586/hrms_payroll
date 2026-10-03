@@ -40,6 +40,17 @@ Check:
 - Employee name and code are yours.
 - You are comfortable sharing the file wherever you plan to use it.
 
+## What Payroll Controls Upstream
+
+| Setup item | Why it matters in ESS |
+| --- | --- |
+| Payroll run status | Payslips should appear only after payroll output is published. |
+| Payslip file generation | Controls whether a downloadable file exists. |
+| Employee pay result | Drives gross earnings, deductions, net pay, and payment summary. |
+| Access/read governance | Controls read receipts, download trail, and audit evidence. |
+| Storage policy | Controls file availability and retention. |
+| Employee scope | Ensures employees can see only their own payslips. |
+
 ## Example: download the latest payslip
 
 1. Open **ESS > Payslips**.
@@ -82,6 +93,17 @@ Expected result: only your own published payslips are visible. Draft payroll out
 | Employee filters by an empty year/search | The list shows a clear no-results message. |
 | File is not downloadable | Download action is hidden or blocked; employee should contact HR/payroll. |
 | Employee tries another employee's payslip URL | Access must be denied by the authenticated employee boundary. |
+
+## Browser certification coverage
+
+The ESS Payslips launch certification covers:
+
+- Latest payslip band and published payslip list.
+- Search, year filter, page size, and pagination.
+- Review dialog with totals, payment summary, access trail, storage governance, calculation lines, and source hash.
+- Read receipt action.
+- Download action visibility and authenticated route behavior.
+- Empty filtered state and no horizontal overflow.
 
 ## Good Practice
 

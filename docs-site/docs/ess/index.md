@@ -16,6 +16,19 @@ Employee Self Service is the employee workspace for personal HR, payroll, docume
 | Tax Declarations | Submit tax declarations, proof items, and statutory information. | Use before payroll proof cutoff or year-end proof collection. |
 | Notifications | Review employee alerts and open the source workflow. | Use when an email, in-app alert, or HR action needs follow-up. |
 
+## Latest Page Pattern
+
+ESS pages follow one common pattern so employees do not need to learn a new screen style for every task.
+
+| Pattern | Meaning | Example |
+| --- | --- | --- |
+| One page, one responsibility | Each page starts with the thing employees came to do. | Leave focuses on balances and requests; Payslips focuses on published payroll files. |
+| Summary first | The top area explains status before showing detailed rows. | Documents shows missing, returned, expiring, and HR review counts before upload history. |
+| Focused modals | Create, update, upload, submit, and review actions open dialogs instead of crowding the page. | Apply leave, add tax proof, upload document, and review payslip open modals. |
+| Checklist before action | Employees see what could block submission before they submit. | Tax declaration checklist shows PAN readiness, rejected proof, and declaration state. |
+| Detail without losing context | Review dialogs can be closed to return to the same list, filter, and scroll context. | Attendance and notifications detail reviews do not navigate away unnecessarily. |
+| Employee boundary | Employees should see only their own records. | Payslips, documents, tax proof, notifications, leave, and attendance are employee-scoped. |
+
 ## How To Use The Overview
 
 The overview is meant to answer one question: “What do I need to do today?”
@@ -37,6 +50,17 @@ Before payroll cutoff:
 - Check tax declaration status if your organization uses declarations.
 - Open notifications and close anything marked failed, unread, or action required.
 
+## First Week Setup Checklist
+
+When a new employee first enters ESS:
+
+1. Open **Overview** and check whether employee profile, manager, department, and contact details look correct.
+2. Open **Documents** and upload required joining documents.
+3. Open **Leave** and verify the available leave types and balances.
+4. Open **Attendance** after the first working day and confirm attendance is flowing correctly.
+5. Open **Tax Declarations** and check PAN, tax regime, PF/UAN, and active financial year.
+6. Open **Notifications** and review any unread onboarding or setup alerts.
+
 ## Daily use guide
 
 | If you need to | Start here | What to check |
@@ -48,6 +72,21 @@ Before payroll cutoff:
 | Submit ID, bank, address, or employment proof | Documents | Requirement name, accepted file type, and latest status. |
 | Update tax declarations | Tax Declarations | Active tax year, declaration totals, proof requirement, and cutoff. |
 | Understand an alert | Notifications | Message, source link, read state, and delivery status. |
+
+## What HR Controls Upstream
+
+ESS is employee-facing, but many fields come from HR Admin setup.
+
+| ESS area | Upstream HR/Admin dependency |
+| --- | --- |
+| Leave types and balance | Leave policies, employee policy assignment, opening balance, accrual, and approval workflow. |
+| Attendance records | Shift setup, attendance import/capture, regularization window, and manager workflow. |
+| Payslips | Payroll output publication, storage access, and read/download governance. |
+| Documents | Document categories, required document rules, accepted file types, and HR review queue. |
+| Tax Declarations | Financial year, declaration profile, proof window, statutory profile, and payroll consumption rules. |
+| Notifications | Notification templates, delivery channels, source workflow, and recipient eligibility. |
+
+If a field is missing or disabled in ESS, check the related HR Admin setup before treating it as an employee error.
 
 ## Common statuses
 
@@ -69,6 +108,18 @@ Contact HR only after checking the relevant page and status. Include:
 - Period/month/tax year.
 - Screenshot or exact status text.
 - What you already tried.
+
+## Browser Certification Coverage
+
+The ESS launch certification checks these employee flows from the browser:
+
+- Overview navigation and quick links.
+- Leave balance review, apply modal, validation, evidence behavior, and detail modal.
+- Attendance review, regularization modal, invalid-time validation, and detail modal.
+- Payslip list, review modal, read receipt, and download availability.
+- Document readiness band, upload modal, detail modal, filters, and pagination.
+- Tax declaration tax-year selection, checklist, update declaration modal, add proof modal, submit modal, and proof detail.
+- Notifications inbox, filters, review modal, read state, failed-delivery handling, and source workflow links.
 
 ## Related Pages
 

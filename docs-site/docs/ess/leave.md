@@ -2,6 +2,8 @@
 
 Use ESS Leave to check leave balances, apply for leave, attach evidence when required, and track approval status.
 
+![ESS leave](../assets/screenshots/ess/leave.png)
+
 ## Purpose
 
 Employees use this page when they need time off or want to understand available leave balance before applying.
@@ -82,6 +84,17 @@ Evidence depends on the HR policy:
 | Evidence optional | The modal shows `Attachment: Optional`; the employee can submit without a file if all other fields are valid. |
 | Evidence required | The modal shows `Evidence required`; submit remains disabled until a file or evidence reference is provided. |
 | No policy assigned | Submission fails with a clear policy message instead of silently creating an invalid request. |
+
+## What HR Controls Upstream
+
+| Setup item | Why it matters in ESS |
+| --- | --- |
+| Leave type catalog | Determines whether employees see Earned Leave, Casual Leave, Sick Leave, or tenant-specific leave types. |
+| Leave policy assignment | Controls whether the employee can submit for the selected leave type and date. |
+| Balance and accrual setup | Drives available, used, reserved, and after-request balance. |
+| Evidence rule | Decides whether attachment is optional, mandatory, or required only above a threshold. |
+| Approval workflow | Routes the request to manager, HR, or auto-approval. |
+| Holiday and weekend calendar | Affects estimated leave units and weekend/holiday exclusion. |
 
 ## Negative validation examples
 

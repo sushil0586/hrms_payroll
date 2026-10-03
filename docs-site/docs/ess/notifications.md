@@ -46,6 +46,17 @@ Notifications are the employee inbox for HRMS events. They help employees unders
 3. Payroll, document, tax, leave, and attendance messages.
 4. General information messages.
 
+## What HR / System Controls Upstream
+
+| Setup item | Why it matters in ESS |
+| --- | --- |
+| Notification template | Controls message subject, body, and source context. |
+| Recipient selection | Determines whether the employee receives the event. |
+| Delivery channel | Controls in-app, email, SMS, WhatsApp, or push attempts where configured. |
+| Source workflow | Provides the route back to leave, attendance, documents, payroll, tax, or another task. |
+| Retry policy | Determines how many times failed delivery is retried. |
+| Read-state tracking | Controls whether opened/read state is recorded. |
+
 ## Example: review a leave update
 
 1. Open **ESS > Inbox**.
@@ -79,6 +90,17 @@ Expected result: you can still see the HRMS alert inside ESS even if email, SMS,
 | Filter has no matches | The page shows a clear no-results state and lets you clear filters. |
 | External delivery failed | The in-app notification remains visible, and provider logs explain the failure where available. |
 | Employee tries another user's notification | Access must be denied by the authenticated employee boundary. |
+
+## Browser certification coverage
+
+The ESS Notifications launch certification covers:
+
+- Inbox metrics and filters.
+- Status, channel, priority, source type, and search behavior.
+- Review dialog with message, delivery state, provider context, and source workflow.
+- Mark-read behavior.
+- Failed and retry-capped notification handling.
+- Empty result state, pagination, and no horizontal overflow.
 
 ## Good Practice
 

@@ -83,7 +83,7 @@ MENU_DEFINITIONS: tuple[MenuDefinition, ...] = (
     MenuDefinition("ess", "Quick Links", "quick_link", "/ess/payslips", "Payslips", "", "", tuple(), 30),
     MenuDefinition("ess", "Quick Links", "quick_link", "/ess/notifications", "Inbox", "", "", ("notifications.view",), 40),
 
-    MenuDefinition("mss", "Workspace", "sidebar", "/mss", "Control Center", "CC", "Team action snapshot", ("leave.requests.approve", "attendance.regularization.review"), 10),
+    MenuDefinition("mss", "Workspace", "sidebar", "/mss", "Dashboard", "DB", "Daily manager view", ("leave.requests.approve", "attendance.regularization.review"), 10),
     MenuDefinition("mss", "Workspace", "sidebar", "/mss/approvals", "Approvals", "AP", "Pending decisions", ("leave.requests.approve", "attendance.regularization.review"), 20),
     MenuDefinition("mss", "Workspace", "sidebar", "/mss/notifications", "Notifications", "NT", "Manager alerts", ("notifications.view",), 30),
     MenuDefinition("mss", "Workspace", "sidebar", "/ess", "Self service", "SS", "Personal view", tuple(), 40),
