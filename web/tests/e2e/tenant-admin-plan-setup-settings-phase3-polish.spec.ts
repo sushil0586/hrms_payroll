@@ -72,6 +72,8 @@ test.describe("Tenant Admin Phase 3 plan setup settings polish", () => {
     await expect(page.locator(".tenant-setup-area--phase3")).toHaveCount(5);
     await expect(page.locator(".tenant-setup-area__index").first()).toContainText("01");
     await expect(page.locator(".tenant-setup-sidecar__hero")).toBeVisible();
+    await expect(page.locator(".tenant-setup-command-band--phase6")).toBeVisible();
+    await expect(page.locator(".tenant-setup-area__meta")).toHaveCount(5);
     const setupRowsFit = await page.locator(".tenant-setup-area--phase3").evaluateAll((rows) =>
       rows.every((row) => row.scrollWidth <= row.clientWidth + 1),
     );

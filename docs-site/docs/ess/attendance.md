@@ -4,6 +4,33 @@ Use ESS Attendance to review daily attendance, understand exceptions, and reques
 
 ![ESS attendance](../assets/screenshots/ess/attendance.png)
 
+## On This Page
+
+- [Attendance Quick Navigation](#attendance-quick-navigation)
+- [Purpose](#purpose)
+- [Use this page when](#use-this-page-when)
+- [Main sections](#main-sections)
+- [Screen Labels To Recognize](#screen-labels-to-recognize)
+- [Example: request missed punch correction](#example-request-missed-punch-correction)
+- [Example: review late-coming exception](#example-review-late-coming-exception)
+- [Modal behavior](#modal-behavior)
+- [What HR Controls Upstream](#what-hr-controls-upstream)
+- [Validation behavior](#validation-behavior)
+- [Common errors](#common-errors)
+- [Payroll impact](#payroll-impact)
+- [Related pages](#related-pages)
+
+## Attendance Quick Navigation
+
+| I need to | Start here | Verify before finishing |
+| --- | --- | --- |
+| Check today's attendance | Today card | Shift, check-in, check-out, status, and exception message. |
+| Review month health | Monthly summary | Present, absent, late, worked hours, and unresolved exceptions. |
+| Correct a missing punch | **Regularize attendance** modal | Date, requested status, corrected time, reason, and lock state. |
+| Review a submitted correction | Regularizations > detail modal | Approval status, manager decision, timeline, and corrected values. |
+| Understand why submit is blocked | Validation message | Reason, time order, locked period, attendance record availability, and API state. |
+| Understand payroll impact | [Payroll impact](#payroll-impact) | Pending regularizations and locked records before payroll cutoff. |
+
 ## Purpose
 
 Employees use this page to confirm that attendance records are accurate before payroll cutoff.
@@ -28,6 +55,17 @@ Employees use this page to confirm that attendance records are accurate before p
 | Request summary | Shows the selected date, current status, requested status, shift, and lock state before submission. |
 
 The page should stay single-purpose: review attendance first, then open a focused modal only when the employee needs to correct a record.
+
+## Screen Labels To Recognize
+
+| Screen label | What it means |
+| --- | --- |
+| Today | Current day shift, status, check-in, and check-out context. |
+| Monthly summary | Month-level attendance health and exception summary. |
+| Correction queue | Open correction count and the primary correction action. |
+| Regularizations | Submitted correction history with filters and pagination. |
+| Regularize attendance | Focused modal for one attendance correction. |
+| Attendance regularization summary | Selected date, current state, requested state, and lock context. |
 
 ## Example: request missed punch correction
 

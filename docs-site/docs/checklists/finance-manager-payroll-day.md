@@ -8,6 +8,20 @@ Confirm finance can safely use the final payroll files and evidence.
 
 ![Finance Manager control center](../assets/screenshots/finance-manager/control-center.png)
 
+## On This Page
+
+- [Goal](#goal)
+- [Start Here](#start-here)
+- [Step 1: Confirm Run and Totals](#step-1-confirm-run-and-totals)
+- [Step 2: Review Bank Advice](#step-2-review-bank-advice)
+- [Step 3: Review Statutory and Compliance Evidence](#step-3-review-statutory-and-compliance-evidence)
+- [Step 4: Review Provider Exceptions](#step-4-review-provider-exceptions)
+- [Step 5: Store Audit Evidence](#step-5-store-audit-evidence)
+- [Finance Sign-Off Checklist](#finance-sign-off-checklist)
+- [Pass/fail rules](#passfail-rules)
+- [Communication template](#communication-template)
+- [Related Guides](#related-guides)
+
 ## Start Here
 
 Open **Finance Manager > Control Center**.

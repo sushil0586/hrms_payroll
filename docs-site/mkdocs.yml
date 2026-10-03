@@ -67,6 +67,7 @@ nav:
   - Tenant Admin:
       - Overview: tenant-admin/index.md
       - Start Here:
+          - Dashboard: tenant-admin/dashboard.md
           - Setup Guide: tenant-admin/setup-guide.md
           - Task Recipes: tenant-admin/task-recipes.md
       - Access Management:
@@ -84,7 +85,6 @@ nav:
           - Dashboard: hr-admin/dashboard.md
           - Task Recipes: hr-admin/task-recipes.md
           - Onboarding Prerequisites: hr-admin/onboarding-prerequisites.md
-          - Detailed Documentation Roadmap: hr-admin/detailed-documentation-roadmap.md
       - Command:
           - Launch Readiness: hr-admin/launch-readiness.md
       - Workforce:
@@ -156,3 +156,4 @@ nav:
       - How to Update: how-to-update.md
       - Coverage Audit: coverage-audit.md
       - Documentation QA: docs-qa.md
+      - HR Admin Documentation Roadmap: hr-admin/detailed-documentation-roadmap.md

@@ -2,6 +2,32 @@
 
 Payroll Outputs manages generated payroll files, payslips, reports, and access governance.
 
+## On This Page
+
+- [Outputs Quick Navigation](#outputs-quick-navigation)
+- [Purpose](#purpose)
+- [Who uses this page](#who-uses-this-page)
+- [Publishing rule](#publishing-rule)
+- [Output types](#output-types)
+- [Output ownership](#output-ownership)
+- [Page sections](#page-sections)
+- [Buttons and actions](#buttons-and-actions)
+- [Workflow](#workflow)
+- [Output verification checklist](#output-verification-checklist)
+- [Important checks](#important-checks)
+- [Evidence to keep](#evidence-to-keep)
+- [Outputs signoff checklist](#outputs-signoff-checklist)
+
+## Outputs Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Generate payroll outputs | [Workflow](#workflow) | [Example: Generate September payroll outputs](#example-generate-september-payroll-outputs) |
+| Publish payslips to ESS | [Example: Publish payslips to ESS](#example-publish-payslips-to-ess) | [Publishing rule](#publishing-rule) |
+| Export payroll register for finance | [Example: Export payroll register for finance](#example-export-payroll-register-for-finance) | [Output types](#output-types) |
+| Fix payslip count mismatch | [Negative scenario: payslip count does not match employee count](#negative-scenario-payslip-count-does-not-match-employee-count) | [Output verification checklist](#output-verification-checklist) |
+| Confirm outputs are ready for handoff | [Outputs signoff checklist](#outputs-signoff-checklist) | [Evidence to keep](#evidence-to-keep) |
+
 ## Purpose
 
 Use this page after payroll review is approved and outputs are ready to generate or publish.
@@ -271,6 +297,16 @@ You can use a copy for finance analysis, but it should not become the official p
 ### Should bank advice be shared by email?
 
 Only if company policy allows it and the channel is secure. Bank advice contains sensitive salary and bank data.
+
+## Outputs signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Review is approved. | Outputs are generated from approved payroll. |
+| Payslips are generated. | Employee payslip artifacts exist for eligible employees. |
+| Registers are generated. | Payroll, bank, statutory, and audit registers are available. |
+| Failed artifacts are reviewed. | Generation failures are resolved before publication. |
+| Publication is controlled. | Employees see payslips only after final release. |
 
 ## Related guides
 

@@ -4,6 +4,38 @@ Lifecycle manages employee events that need process control: joining, onboarding
 
 Use Lifecycle when a change should not be a silent Employee Master edit. Lifecycle gives the change an owner, status, due date, effective date, evidence, and approval path.
 
+## On This Page
+
+- [Lifecycle Quick Navigation](#lifecycle-quick-navigation)
+- [What Lifecycle Covers](#what-lifecycle-covers)
+- [Use This Page When](#use-this-page-when)
+- [Lifecycle Queues](#lifecycle-queues)
+- [Status Model](#status-model)
+- [Key Fields](#key-fields)
+- [Buttons And Actions](#buttons-and-actions)
+- [Joiner Workflow](#joiner-workflow)
+- [Movement Workflow](#movement-workflow)
+- [Probation Workflow](#probation-workflow)
+- [Exit Workflow](#exit-workflow)
+- [Bulk Owner And Status Actions](#bulk-owner-and-status-actions)
+- [Payroll Impact](#payroll-impact)
+- [Negative Scenarios And Fixes](#negative-scenarios-and-fixes)
+- [Lifecycle signoff path](#quality-checklist)
+
+## Lifecycle Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Decide if a change belongs in Employees or Lifecycle | [What Lifecycle Covers](#what-lifecycle-covers) | [Use This Page When](#use-this-page-when) |
+| Track a new joiner after employee creation | [Joiner Workflow](#joiner-workflow) | [Joiner Checklist](#joiner-checklist) |
+| Transfer employee to another branch or department | [Movement Workflow](#movement-workflow) | [Example: Transfer From Bengaluru To Mumbai](#example-transfer-from-bengaluru-to-mumbai) |
+| Promote an employee | [Example: Promotion With Salary Impact](#example-promotion-with-salary-impact) | [Payroll Impact](#payroll-impact) |
+| Change reporting manager | [Example: Manager Change](#example-manager-change) | [Payroll Impact](#payroll-impact) |
+| Confirm or extend probation | [Probation Workflow](#probation-workflow) | [Probation Decisions](#probation-decisions) |
+| Manage resignation, termination, or F&F readiness | [Exit Workflow](#exit-workflow) | [Exit Checklist](#exit-checklist) |
+| Assign owners or close many lifecycle items | [Bulk Owner And Status Actions](#bulk-owner-and-status-actions) | [Status Model](#status-model) |
+| Clear lifecycle payroll blockers | [Payroll Impact](#payroll-impact) | [Negative Scenarios And Fixes](#negative-scenarios-and-fixes) |
+
 ## What Lifecycle Covers
 
 | Area | What it controls | Why it matters |

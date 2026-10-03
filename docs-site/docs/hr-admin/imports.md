@@ -2,6 +2,30 @@
 
 Imports gives HR Admin users an evidence ledger for employee and organization batch uploads.
 
+## On This Page
+
+- [Imports Quick Navigation](#imports-quick-navigation)
+- [Purpose](#purpose)
+- [Use this page when](#use-this-page-when)
+- [Page sections](#page-sections)
+- [What to check first](#what-to-check-first)
+- [Good practice](#good-practice)
+- [Example: Review an Employee Import Before Payroll Setup](#example-review-an-employee-import-before-payroll-setup)
+- [Example: Fix Missing Organization Code In Import](#example-fix-missing-organization-code-in-import)
+- [Example: Detect Duplicate Upload](#example-detect-duplicate-upload)
+- [Negative Scenario: Import Says Completed But Employee Is Missing](#negative-scenario-import-says-completed-but-employee-is-missing)
+- [Import signoff checklist](#import-signoff-checklist)
+
+## Imports Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Review a new import before trusting it | [What to check first](#what-to-check-first) | [Example: Review an Employee Import Before Payroll Setup](#example-review-an-employee-import-before-payroll-setup) |
+| Fix rejected rows | [Example: Fix Missing Organization Code In Import](#example-fix-missing-organization-code-in-import) | [Negative Scenario: Import Creates Bad Data](#negative-scenario-import-creates-bad-data) |
+| Detect duplicate uploads | [Example: Detect Duplicate Upload](#example-detect-duplicate-upload) | [Good practice](#good-practice) |
+| Investigate missing employee after completed import | [Negative Scenario: Import Says Completed But Employee Is Missing](#negative-scenario-import-says-completed-but-employee-is-missing) | [FAQ](#faq) |
+| Prepare import signoff | [Import signoff checklist](#import-signoff-checklist) | [Related guides](#related-guides) |
+
 ## Purpose
 
 Use Imports to review batch outcomes, source hashes, blocked rows, created rows, and rollback readiness after bulk uploads.
@@ -144,6 +168,16 @@ No. Imports commit data. Employee Master review confirms the data is usable for 
 ### What evidence should I keep?
 
 Keep batch ID, source hash, uploaded file reference if allowed, row counts, blocked-row reasons, and the correction batch if one was needed.
+
+## Import signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Template matches the target import. | Columns and codes match the selected import type. |
+| Preview is clean. | Ready rows and blocked rows are understood before commit. |
+| Blocked rows are corrected. | Missing masters, duplicate codes, and invalid dates are fixed. |
+| Commit is intentional. | Only verified ready rows are committed. |
+| Import evidence is retained. | Batch counts, failure reasons, and correction notes are available. |
 
 ## Related guides
 

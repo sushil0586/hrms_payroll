@@ -2,6 +2,36 @@
 
 Use this checklist before creating or importing employees. It prevents the common situation where employees are created successfully but later show missing structure, access, leave, attendance, payroll, or document blockers.
 
+## On This Page
+
+- [Onboarding Prerequisites Quick Navigation](#onboarding-prerequisites-quick-navigation)
+- [Purpose](#purpose)
+- [Recommended Sequence](#recommended-sequence)
+- [1. Organization Masters](#1-organization-masters)
+- [2. Users, Roles, and Workspace Access](#2-users-roles-and-workspace-access)
+- [3. Manager Structure](#3-manager-structure)
+- [4. Leave Setup](#4-leave-setup)
+- [5. Attendance Setup](#5-attendance-setup)
+- [6. Document Requirements](#6-document-requirements)
+- [7. Policies and Workflows](#7-policies-and-workflows)
+- [8. Payroll Setup](#8-payroll-setup)
+- [9. Salary Setup](#9-salary-setup)
+- [10. Statutory Setup](#10-statutory-setup)
+- [11. Notifications](#11-notifications)
+- [Pilot Employee Test](#pilot-employee-test)
+- [Onboarding signoff checklist](#onboarding-signoff-checklist)
+
+## Onboarding Prerequisites Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Prepare a tenant before first employees | [Recommended Sequence](#recommended-sequence) | [Pilot Employee Test](#pilot-employee-test) |
+| Fix missing dropdowns during onboarding | [1. Organization Masters](#1-organization-masters) | [3. Manager Structure](#3-manager-structure) |
+| Ensure users can access correct workspace | [2. Users, Roles, and Workspace Access](#2-users-roles-and-workspace-access) | [11. Notifications](#11-notifications) |
+| Prepare leave and attendance before invite | [4. Leave Setup](#4-leave-setup) | [5. Attendance Setup](#5-attendance-setup) |
+| Prepare payroll onboarding readiness | [8. Payroll Setup](#8-payroll-setup) | [9. Salary Setup](#9-salary-setup) |
+| Decide whether bulk onboarding can start | [Do Not Start Bulk Onboarding If](#do-not-start-bulk-onboarding-if) | [Onboarding signoff checklist](#onboarding-signoff-checklist) |
+
 ## Purpose
 
 Before employee onboarding, HRMS should already know:
@@ -461,6 +491,17 @@ Minimum pilot workflow:
 | Salary Setup | Launch-grade India CTC guide with components, structures, assignments, effective dates, and negative scenarios. | Complete. |
 | Statutory Payroll | Launch-grade India statutory guide with PF, ESIC, PT, LWF, TDS, declarations, proof, and negative scenarios. | Complete. |
 | Notifications | Launch-grade trigger matrix, recovery flow, email examples, and negative scenarios complete. | Keep updated after adding new workflow events. |
+
+## Onboarding signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Organization masters exist. | Employees can be mapped without placeholder values. |
+| Employee template is agreed. | Required fields are known before bulk onboarding. |
+| Access roles are planned. | ESS, MSS, HR Admin, payroll, and tenant admin access are intentional. |
+| Policies and workflows are ready. | Leave, attendance, documents, and approvals can route immediately. |
+| Payroll foundations exist. | Pay groups, salary setup, statutory setup, and bank requirements are defined. |
+| Notifications are ready. | Invites, resets, approvals, and alerts can be delivered. |
 
 ## Related Pages
 

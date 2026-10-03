@@ -4,6 +4,8 @@ import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertio
 import { gotoAuthenticated, tenantAdmin } from "../helpers/staging-auth";
 
 test.describe("Tenant admin users dialog certification", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("certifies invite dialog validation, focus, Escape, and role requirement", async ({ page }) => {
     await gotoAuthenticated(page, "/tenant-admin/users", tenantAdmin);
     await expectPageReady(page, "Tenant User Management");

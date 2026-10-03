@@ -4,6 +4,39 @@ Use Tax Declarations to choose the active tax year, maintain Indian income tax d
 
 ![ESS statutory declarations](../assets/screenshots/ess/statutory-declarations.png)
 
+## On This Page
+
+- [Tax Quick Navigation](#tax-quick-navigation)
+- [Purpose](#purpose)
+- [Who Uses It](#who-uses-it)
+- [Use This Page When](#use-this-page-when)
+- [Page Map](#page-map)
+- [Screen Labels To Recognize](#screen-labels-to-recognize)
+- [Controls](#controls)
+- [India Field Guide](#india-field-guide)
+- [Example: Start Old Regime Declaration](#example-start-old-regime-declaration)
+- [Example: Add 80C Proof](#example-add-80c-proof)
+- [Example: Correct Rejected HRA Proof](#example-correct-rejected-hra-proof)
+- [Submission Rules](#submission-rules)
+- [Positive and Negative Scenarios](#positive-and-negative-scenarios)
+- [Payroll Impact](#payroll-impact)
+- [Browser Certification Coverage](#browser-certification-coverage)
+- [Common Issues](#common-issues)
+- [FAQ](#faq)
+- [Related Pages](#related-pages)
+
+## Tax Quick Navigation
+
+| I need to | Start here | Verify before finishing |
+| --- | --- | --- |
+| Select the correct financial year | Tax years group | Active year, draft/locked state, declared total, and proof acceptance. |
+| Know what action is pending | Tax declaration checklist | PAN readiness, declaration opened, rejected proof, proof count, and submit readiness. |
+| Start or update declaration values | **Update declaration** modal | Regime, declaration profile, proof window, 80C/80D/HRA/previous-employment values. |
+| Upload proof | **Add proof** modal | Section, component, amount, proof reference, upload category, and file attachment. |
+| Correct rejected proof | Proof register > proof detail modal | Rejection reason, corrected file, corrected amount/reference, and cutoff state. |
+| Submit for payroll review | **Submit declaration** modal | No known wrong proof, selected year is editable, and final confirmation is correct. |
+| Understand payroll TDS impact | [Payroll Impact](#payroll-impact) | Draft/submitted/accepted/locked/consumed state and payroll-accepted value. |
+
 ## Purpose
 
 This page gives employees one controlled place to maintain tax declarations instead of sending values and proof over email. It is designed for India payroll, but it stays tenant-configurable so every organization can decide the active financial year, proof window, tax regime rules, document categories, and payroll cutoff behavior.
@@ -38,6 +71,17 @@ This page gives employees one controlled place to maintain tax declarations inst
 | Add proof modal | Focused proof upload form with section, component, amount, reference, category, and file. | Use after selecting the correct declaration year. |
 | Submit declaration modal | Final confirmation before sending declaration to HR/payroll. | Use only after checking values and proof. |
 | Proof detail modal | Proof status, amount, document reference, review note, and audit details. | Use when HR rejected proof or you need evidence detail. |
+
+## Screen Labels To Recognize
+
+| Screen label | What it means |
+| --- | --- |
+| Tax years | Full-width financial-year selector. |
+| Tax declaration checklist | Top action band for PAN, declaration, proof, and submit readiness. |
+| Current declaration | Selected year's declaration status and totals. |
+| Tax profile | PAN, PF/UAN, regime, and statutory payroll context. |
+| Proof register | Proof rows for the selected year. |
+| Update declaration / Add proof / Submit declaration | Modal actions for editing, proof upload, and final submission. |
 
 ## Controls
 

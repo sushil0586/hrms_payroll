@@ -12,6 +12,36 @@ Workflows answer a different question:
 
 Keep those two responsibilities separate. A policy should not hide approval confusion, and a workflow should not decide entitlement or eligibility.
 
+## On This Page
+
+- [Policy Quick Navigation](#policy-quick-navigation)
+- [What Policies Owns](#what-policies-owns)
+- [Use This Page When](#use-this-page-when)
+- [Policy Versus Workflow](#policy-versus-workflow)
+- [Policy Setup Order](#policy-setup-order)
+- [Policy Areas](#policy-areas)
+- [Field Guidance](#field-guidance)
+- [Policy Priority](#policy-priority)
+- [Effective Dating Rules](#effective-dating-rules)
+- [Conflict Handling](#conflict-handling)
+- [Rollout Checklist](#rollout-checklist)
+- [Buttons And Actions](#buttons-and-actions)
+- [Troubleshooting](#troubleshooting)
+- [Policy signoff checklist](#policy-signoff-checklist)
+
+## Policy Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Understand whether to change policy or workflow | [Policy Versus Workflow](#policy-versus-workflow) | [Policy Areas](#policy-areas) |
+| Set up leave policies from scratch | [Policy Setup Order](#policy-setup-order) | [Example: Company-Wide Earned Leave Policy](#example-company-wide-earned-leave-policy) |
+| Configure Sick Leave attachment rules | [Example: Sick Leave With Attachment Rule](#example-sick-leave-with-attachment-rule) | [Field Guidance](#field-guidance) |
+| Create department-specific rules | [Example: Department-Specific Leave Override](#example-department-specific-leave-override) | [Policy Priority](#policy-priority) |
+| Make a future policy change safely | [Example: Future-Dated Policy Change](#example-future-dated-policy-change) | [Effective Dating Rules](#effective-dating-rules) |
+| Configure attendance regularization policy | [Example: Attendance Regularization Policy](#example-attendance-regularization-policy) | [Rollout Checklist](#rollout-checklist) |
+| Fix “No active leave policy assigned” | [Negative Scenario: No Active Leave Policy Assigned](#negative-scenario-no-active-leave-policy-assigned) | [Conflict Handling](#conflict-handling) |
+| Diagnose payroll blockers caused by policy changes | [Negative Scenario: Policy Change Breaks Payroll](#negative-scenario-policy-change-breaks-payroll) | [Policy signoff checklist](#policy-signoff-checklist) |
+
 ## What Policies Owns
 
 | Area | What it controls | Example |
@@ -413,6 +443,16 @@ Test at least one employee who should receive the policy and one employee who sh
 ### Should I edit an existing policy or create a new version?
 
 Create a new version when the change is business-effective from a new date. Edit only when correcting a setup mistake and after checking payroll/audit impact.
+
+## Policy signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Policy scope is clear. | Target employee group is explicit and testable. |
+| Effective dates are correct. | Current and future payroll periods use intended rules. |
+| Assignment priority is understood. | Overlapping policies have a predictable winner. |
+| ESS/MSS flow is tested. | Employee request and manager decision work for sample users. |
+| Payroll impact is checked. | Payroll Control reflects the intended policy result. |
 
 ## Related Guides
 

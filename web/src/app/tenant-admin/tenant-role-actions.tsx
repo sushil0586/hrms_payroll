@@ -111,6 +111,14 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
       return groups;
     }, []);
   }, [permissionCatalog]);
+  const criticalPermissionCount = useMemo(
+    () => permissionCatalog.filter((permission) => permission.risk_level === "critical").length,
+    [permissionCatalog]
+  );
+  const unavailablePermissionCount = useMemo(
+    () => permissionCatalog.filter((permission) => !permission.is_available).length,
+    [permissionCatalog]
+  );
 
   function togglePermissionKey(permissionKey: string) {
     const permission = permissionByKey.get(permissionKey);
@@ -263,6 +271,23 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
       <p className="tenant-console-empty">System roles stay protected. Custom roles can be created, edited, activated, deactivated, and assigned from the Users page.</p>
       {!canManageRoles ? <span className="tenant-inline-notice tenant-inline-notice--muted" role="status">You can view tenant roles. Role changes require tenant.roles.manage.</span> : null}
       {notice ? <span className="tenant-inline-notice" role="status">{notice}</span> : null}
+      <section className="tenant-role-design-guide" aria-label="Role design workflow">
+        <div>
+          <span className="record-chip">1</span>
+          <strong>Define the job</strong>
+          <p>Create a custom role only when a team needs a repeatable responsibility.</p>
+        </div>
+        <div>
+          <span className="record-chip">2</span>
+          <strong>Select minimum access</strong>
+          <p>Use the Add/Edit role modal to choose only the permissions needed for that job.</p>
+        </div>
+        <div>
+          <span className="record-chip">3</span>
+          <strong>Assign from Users</strong>
+          <p>Keep people assignment on the Users page so role design stays clean.</p>
+        </div>
+      </section>
       <div className="tenant-membership-toolbar">
         <label>
           <span>Search roles</span>
@@ -313,8 +338,9 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
                 <div className="tenant-role-row__permissions">
                   <span>
                     {role.permission_keys.length
-                      ? role.permission_keys.map((key) => permissionLabelByKey.get(key) ?? key).join(", ")
+                      ? role.permission_keys.slice(0, 4).map((key) => permissionLabelByKey.get(key) ?? key).join(", ")
                       : "No permission keys yet"}
+                    {role.permission_keys.length > 4 ? `, +${role.permission_keys.length - 4} more` : ""}
                   </span>
                   {disableReason ? <small>{disableReason}</small> : null}
                 </div>
@@ -335,7 +361,21 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
             </div>
             <span className="record-chip">{permissionCatalog.length} permissions</span>
           </div>
-          <p className="tenant-console-empty">Use Edit on a role to change its exact permission set. Risk badges help keep access intentional.</p>
+          <p className="tenant-console-empty">Use this as a quick reference. Detailed selection happens inside Add role or Edit.</p>
+          <div className="tenant-permission-overview__stats">
+            <span>
+              <strong>{permissionOverviewGroups.length}</strong>
+              Modules
+            </span>
+            <span>
+              <strong>{criticalPermissionCount}</strong>
+              Critical
+            </span>
+            <span>
+              <strong>{unavailablePermissionCount}</strong>
+              Plan locked
+            </span>
+          </div>
           <div className="tenant-permission-overview__groups">
             {permissionOverviewGroups.map((group) => (
               <section className="tenant-permission-overview__group" key={group.module}>

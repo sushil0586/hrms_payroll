@@ -4,6 +4,35 @@ Use Notifications to review employee alerts, source workflow messages, delivery 
 
 ![ESS notifications](../assets/screenshots/ess/notifications.png)
 
+## On This Page
+
+- [Notification Quick Navigation](#notification-quick-navigation)
+- [Page Purpose](#page-purpose)
+- [Main Sections](#main-sections)
+- [Screen Labels To Recognize](#screen-labels-to-recognize)
+- [Controls](#controls)
+- [Notification states](#notification-states)
+- [Triage order](#triage-order)
+- [What HR / System Controls Upstream](#what-hr-system-controls-upstream)
+- [Example: review a leave update](#example-review-a-leave-update)
+- [Example: check a failed email notification](#example-check-a-failed-email-notification)
+- [Positive and negative scenarios](#positive-and-negative-scenarios)
+- [Browser certification coverage](#browser-certification-coverage)
+- [Good Practice](#good-practice)
+- [FAQ](#faq)
+- [Related Pages](#related-pages)
+
+## Notification Quick Navigation
+
+| I need to | Start here | Verify before finishing |
+| --- | --- | --- |
+| Review new alerts | Inbox metrics and unread filter | Message subject, priority, source type, and read state. |
+| Open the related workflow | Review dialog > source link | Source route opens the correct ESS page and remains employee-scoped. |
+| Check a failed email/SMS/in-app event | Status filter > failed | In-app message, provider log, retry state, and whether HR follow-up is needed. |
+| Clear completed alerts | Review dialog > **Mark read** | Read state changes and unread count updates. |
+| Find an old notification | Search and filters | Subject, channel, priority, source type, date, and pagination. |
+| Understand delivery setup | [What HR / System Controls Upstream](#what-hr-system-controls-upstream) | Template, recipient, channel, retry policy, source workflow, and read tracking. |
+
 ## Page Purpose
 
 Notifications are the employee inbox for HRMS events. They help employees understand what changed, what needs attention, and where to continue the work. The page is intentionally split into a searchable inbox and a focused review dialog so employees do not have to scan technical delivery detail unless they need it.
@@ -17,6 +46,17 @@ Notifications are the employee inbox for HRMS events. They help employees unders
 | Inbox list | Employee-scoped notifications with message summary and review action. | Select a row, open the review dialog, or follow the source workflow. |
 | Notification detail panel | Short summary for the selected notification. | Use it to confirm status and quickly open the source workflow. |
 | Review dialog | Full message, read/unread action, delivery timestamps, source workflow, and provider logs. | Open when the alert needs proof, troubleshooting, or follow-up. |
+
+## Screen Labels To Recognize
+
+| Screen label | What it means |
+| --- | --- |
+| Inbox filters | Filter controls for finding the right notification. |
+| Inbox list | Employee-scoped notification rows. |
+| Notification detail | Selected notification summary. |
+| Review notification | Focused modal with full message and delivery state. |
+| Mark read / Mark unread | Read-state action for the selected notification. |
+| Open source | Route to the linked ESS workflow when available. |
 
 ## Controls
 
@@ -118,3 +158,9 @@ No. Some are informational. Act when the notification says action is required or
 ### What if I did not receive the email?
 
 Check the in-app notification first. If email delivery matters, contact HR and mention the notification subject and date.
+
+## Related Pages
+
+- [ESS Overview](index.md)
+- [ESS Task Recipes](task-recipes.md)
+- [HR Admin Notifications](../hr-admin/notifications.md)

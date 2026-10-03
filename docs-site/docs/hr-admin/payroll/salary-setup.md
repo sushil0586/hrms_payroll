@@ -2,6 +2,37 @@
 
 Salary Setup defines salary components, salary structures, structure versions, and employee salary assignments.
 
+## On This Page
+
+- [Salary Setup Quick Navigation](#salary-setup-quick-navigation)
+- [Purpose](#purpose)
+- [Main concepts](#main-concepts)
+- [Who owns salary setup?](#who-owns-salary-setup)
+- [Decide where the change belongs](#decide-where-the-change-belongs)
+- [Tabs](#tabs)
+- [Component fields](#component-fields)
+- [Component Design Standard](#component-design-standard)
+- [HRA Setup For Indian Payroll](#hra-setup-for-indian-payroll)
+- [Bonus Frequency Setup](#bonus-frequency-setup)
+- [Structure Fields](#structure-fields)
+- [Version Fields](#version-fields)
+- [Assignment Fields](#assignment-fields)
+- [Safe Change Workflow](#safe-change-workflow)
+- [Salary setup signoff checklist](#salary-setup-signoff-checklist)
+
+## Salary Setup Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Understand salary setup objects | [Main concepts](#main-concepts) | [Tabs](#tabs) |
+| Create salary components | [Example: Create Basic and HRA Components](#example-create-basic-and-hra-components) | [Component Design Standard](#component-design-standard) |
+| Configure HRA for India payroll | [HRA Setup For Indian Payroll](#hra-setup-for-indian-payroll) | [Payroll Rules](payroll-rules.md) |
+| Configure monthly, quarterly, or yearly bonus | [Bonus Frequency Setup](#bonus-frequency-setup) | [Real-world salary examples](#real-world-salary-examples) |
+| Create salary structure and version | [Example: Create Staff Salary Structure](#example-create-staff-salary-structure) | [Example: Create Version Effective 01 Sep 2026](#example-create-version-effective-01-sep-2026) |
+| Assign salary to employee | [Example: Assign Salary To A New Employee](#example-assign-salary-to-a-new-employee) | [Assignment Fields](#assignment-fields) |
+| Process salary revision | [Example: Salary Revision After Promotion](#example-salary-revision-after-promotion) | [Safe Change Workflow](#safe-change-workflow) |
+| Diagnose salary payroll blocker | [Negative Scenario: Salary Effective Date Is After Payroll Period](#negative-scenario-salary-effective-date-is-after-payroll-period) | [Pre-Calculation Checklist](#pre-calculation-checklist) |
+
 ## Purpose
 
 Use Salary Setup to decide what an employee is paid and how that amount is split into components.
@@ -460,6 +491,16 @@ Not directly for that run. Locked inputs use a snapshot. Use the approved rerun,
 ### Why is salary still blocked after assignment?
 
 Check effective date, active structure version, employee pay group, employee status, and whether the selected payroll period is correct.
+
+## Salary setup signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Components are defined. | Earnings, deductions, employer costs, and reimbursements have clear meaning. |
+| Structure version is active. | Employees use the correct version from the correct date. |
+| CTC assignment exists. | Payable employees have salary coverage for the payroll period. |
+| Variable/one-time items are separated. | Bonus, arrears, recovery, and F&F are handled through adjustments when appropriate. |
+| Payroll Control is clear. | Salary blockers are resolved or documented. |
 
 ## Related guides
 

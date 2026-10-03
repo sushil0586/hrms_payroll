@@ -78,6 +78,7 @@ function GroupPanel({
 }) {
   const blocked = checks.filter((check) => check.status === "blocked").length;
   const warning = checks.filter((check) => check.status === "warning").length;
+  const ready = checks.length - blocked - warning;
   const status = blocked ? "Blocked" : warning ? "Warning" : "Ready";
   return (
     <div className="panel-card-soft tenant-console-panel tenant-governance-card">
@@ -90,6 +91,24 @@ function GroupPanel({
         <span className="record-chip">{status}</span>
       </div>
       {children}
+      <div className="tenant-security-domain-summary">
+        <span>
+          <strong>{checks.length}</strong>
+          controls
+        </span>
+        <span>
+          <strong>{ready}</strong>
+          ready
+        </span>
+        <span>
+          <strong>{warning}</strong>
+          warnings
+        </span>
+        <span>
+          <strong>{blocked}</strong>
+          blockers
+        </span>
+      </div>
       <div className="tenant-governance-list">
         {checks.map((check) => (
           <div className="tenant-console-row tenant-governance-row" key={check.ref}>
@@ -148,6 +167,30 @@ export default async function TenantAdminSecurityReadinessPage() {
           <MetricTile label="Blockers" value={data.summary.blocker_count} trend={`${data.summary.launch_blocker_refs.length} launch refs`} />
           <MetricTile label="Warnings" value={data.summary.warning_count} trend={data.security_profile_ref} />
           <MetricTile label="Tenant" value={data.tenant.subscription_plan} trend={data.tenant.timezone} />
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="tenant-plan-command-band tenant-security-command-band--phase6">
+          <div>
+            <span className="workspace-card__eyebrow">Security workflow</span>
+            <h2>Review, prove, resolve</h2>
+            <p className="tenant-section-copy">Keep this page focused on launch posture. Use the linked owner pages for changes and the audit ledger for evidence.</p>
+          </div>
+          <ol aria-label="Tenant security workflow">
+            <li>
+              <strong>1</strong>
+              <span>Review posture by domain</span>
+            </li>
+            <li>
+              <strong>2</strong>
+              <span>Inspect evidence and owner</span>
+            </li>
+            <li>
+              <strong>3</strong>
+              <span>Fix blockers from the source page</span>
+            </li>
+          </ol>
         </div>
       </section>
 
@@ -217,6 +260,16 @@ export default async function TenantAdminSecurityReadinessPage() {
                   <div className="tenant-governance-row__summary">
                     <strong>{titleCase(ref)}</strong>
                     <span>Resolve this configured enterprise security blocker before launch.</span>
+                  </div>
+                  <div className="tenant-launch-blocker-detail">
+                    <span>
+                      <strong>Impact</strong>
+                      Production access remains blocked until this control is ready.
+                    </span>
+                    <span>
+                      <strong>Fix path</strong>
+                      Open the matching security domain, then confirm evidence in Trust audit.
+                    </span>
                   </div>
                   <div className="tenant-console-row__meta">
                     <span>Blocked</span>

@@ -4,6 +4,33 @@ Use ESS Leave to check leave balances, apply for leave, attach evidence when req
 
 ![ESS leave](../assets/screenshots/ess/leave.png)
 
+## On This Page
+
+- [Leave Quick Navigation](#leave-quick-navigation)
+- [Purpose](#purpose)
+- [Use this page when](#use-this-page-when)
+- [Main sections](#main-sections)
+- [Screen Labels To Recognize](#screen-labels-to-recognize)
+- [Example: apply one day Earned Leave](#example-apply-one-day-earned-leave)
+- [Example: apply Sick Leave with attachment](#example-apply-sick-leave-with-attachment)
+- [Modal behavior](#modal-behavior)
+- [Evidence behavior](#evidence-behavior)
+- [What HR Controls Upstream](#what-hr-controls-upstream)
+- [Negative validation examples](#negative-validation-examples)
+- [Common errors](#common-errors)
+- [Related pages](#related-pages)
+
+## Leave Quick Navigation
+
+| I need to | Start here | Verify before finishing |
+| --- | --- | --- |
+| Check whether I can take leave | Balance summary | Available balance, pending/reserved balance, and leave type eligibility. |
+| Apply for leave | **Apply leave** modal | Leave type, date range, day portions, reason, evidence rule, and request summary. |
+| Upload proof for sick/medical leave | **Apply leave** modal | Attachment requirement, file chosen, evidence reference, and final validation. |
+| Review an existing request | Request history > detail modal | Status, approval timeline, balance impact, evidence, and manager decision. |
+| Fix a failed submission | Error message in modal | Active policy, balance, evidence, date order, and approval route setup. |
+| Know what HR must configure | [What HR Controls Upstream](#what-hr-controls-upstream) | Leave type, policy assignment, balance/accrual, workflow, calendar, and evidence rule. |
+
 ## Purpose
 
 Employees use this page when they need time off or want to understand available leave balance before applying.
@@ -26,6 +53,17 @@ Employees use this page when they need time off or want to understand available 
 | Request summary | Shows estimated leave units, available balance, weekend days, and attachment requirement before submission. |
 | Policy guidance | Explains the selected leave type, unit, and whether evidence is optional or required. |
 | Final validation | Explains that policy, balance, holiday, and approval routing are checked again during submission. |
+
+## Screen Labels To Recognize
+
+| Screen label | What it means |
+| --- | --- |
+| Balances | Available, used, pending, and reserved leave by type. |
+| Leave requests | Request history with status tabs and pagination. |
+| Apply leave | Focused modal for creating a new leave request. |
+| Leave request summary | Estimated units, available balance, weekend days, and attachment rule. |
+| Policy guidance | Policy-level guidance for the selected leave type. |
+| Final validation | Final server-side checks before the request is accepted. |
 
 ## Example: apply one day Earned Leave
 

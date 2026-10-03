@@ -23,6 +23,23 @@ export default async function TenantAdminSupportAccessPage() {
   const activeGrants = data.support_access_management.recent_grants.filter((grant) =>
     ["requested", "approved", "active"].includes(grant.status),
   );
+  const supportGuardrails = [
+    {
+      label: "Time-bound",
+      value: `${data.support_access_management.max_duration_minutes} min max`,
+      detail: "Every session needs a duration and should be closed after work is complete.",
+    },
+    {
+      label: "Scope-bound",
+      value: `${data.support_access_management.scope_options.length} scopes`,
+      detail: "Only the selected product areas are available to the support operator.",
+    },
+    {
+      label: "Audit-bound",
+      value: "Full trail",
+      detail: "Request, approval, start, end, reject, and revoke decisions remain reviewable.",
+    },
+  ];
 
   return (
     <main className="shell shell--workspace">
@@ -53,6 +70,32 @@ export default async function TenantAdminSupportAccessPage() {
         </div>
       </section>
 
+      <section className="section">
+        <div className="tenant-plan-command-band tenant-support-command-band--phase7">
+          <div>
+            <span className="workspace-card__eyebrow">Support workflow</span>
+            <h2>Controlled assistance</h2>
+            <p className="tenant-section-copy">
+              Request only the help needed, approve it with a time limit, and keep the evidence available for customer review.
+            </p>
+          </div>
+          <ol aria-label="Support access workflow">
+            <li>
+              <strong>1</strong>
+              <span>Request scoped support</span>
+            </li>
+            <li>
+              <strong>2</strong>
+              <span>Approve, start, or reject</span>
+            </li>
+            <li>
+              <strong>3</strong>
+              <span>End, revoke, and audit</span>
+            </li>
+          </ol>
+        </div>
+      </section>
+
       <section className="section tenant-support-workspace tenant-support-workspace--phase4">
         <div className="panel-card-soft tenant-console-panel">
           <TenantSupportAccessActions
@@ -72,6 +115,15 @@ export default async function TenantAdminSupportAccessPage() {
               <p className="tenant-section-copy">Use scopes to keep assisted operations narrow, time-bound, and auditable.</p>
             </div>
             <span className="record-chip">{data.support_access_management.scope_options.length} scopes</span>
+          </div>
+          <div className="tenant-support-guardrail-grid">
+            {supportGuardrails.map((guardrail) => (
+              <div className="tenant-support-guardrail-card" key={guardrail.label}>
+                <span>{guardrail.label}</span>
+                <strong>{guardrail.value}</strong>
+                <p>{guardrail.detail}</p>
+              </div>
+            ))}
           </div>
           <div className="tenant-scope-grid">
             {data.support_access_management.scope_options.map((scope) => (

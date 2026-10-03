@@ -2,6 +2,32 @@
 
 Payroll Calculations generates draft payroll and shows calculation evidence.
 
+## On This Page
+
+- [Calculation Quick Navigation](#calculation-quick-navigation)
+- [Purpose](#purpose)
+- [What this page should answer](#what-this-page-should-answer)
+- [Who uses this page](#who-uses-this-page)
+- [Page layout](#page-layout)
+- [Summary values](#summary-values)
+- [Buttons and actions](#buttons-and-actions)
+- [Calculation states](#calculation-states)
+- [Workflow](#workflow)
+- [Amount investigation path](#amount-investigation-path)
+- [Rerun rules](#rerun-rules)
+- [Pre-review checklist](#pre-review-checklist)
+- [Evidence to keep](#evidence-to-keep)
+
+## Calculation Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Calculate payroll for the period | [Workflow](#workflow) | [Example: Calculate September 2026 payroll](#example-calculate-september-2026-payroll) |
+| Understand gross, deductions, or net pay | [Summary values](#summary-values) | [Amount investigation path](#amount-investigation-path) |
+| Investigate one employee amount | [Example: Investigate HRA for one employee](#example-investigate-hra-for-one-employee) | [How To Read Trace](payroll-rules.md#how-to-read-trace) |
+| Fix calculation blocked state | [Negative scenario: calculation blocked because inputs are not locked](#negative-scenario-calculation-blocked-because-inputs-are-not-locked) | [Calculation states](#calculation-states) |
+| Decide if rerun is allowed | [Rerun rules](#rerun-rules) | [Evidence to keep](#evidence-to-keep) |
+
 ## Purpose
 
 Use this page to calculate payroll and inspect the result before review.

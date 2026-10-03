@@ -2,6 +2,36 @@
 
 Reports and audit pages help HR, payroll, and compliance teams prove what happened and export operational evidence.
 
+## On This Page
+
+- [Reports And Audit Quick Navigation](#reports-and-audit-quick-navigation)
+- [Purpose](#purpose)
+- [Use these pages when](#use-these-pages-when)
+- [Reports](#reports)
+- [Which report should I use?](#which-report-should-i-use)
+- [Report drilldown pattern](#report-drilldown-pattern)
+- [Evidence quality checklist](#evidence-quality-checklist)
+- [Pre-Payroll Evidence Pack](#pre-payroll-evidence-pack)
+- [Payroll Close Evidence Pack](#payroll-close-evidence-pack)
+- [Audit](#audit)
+- [Audit investigation pattern](#audit-investigation-pattern)
+- [Reports vs Audit](#reports-vs-audit)
+- [Launch readiness](#launch-readiness)
+- [FAQ](#faq)
+
+## Reports And Audit Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Choose the right report | [Which report should I use?](#which-report-should-i-use) | [Reports](#reports) |
+| Run and export a report safely | [Report drilldown pattern](#report-drilldown-pattern) | [Evidence quality checklist](#evidence-quality-checklist) |
+| Prepare payroll evidence before inputs | [Pre-Payroll Evidence Pack](#pre-payroll-evidence-pack) | [Example: Workforce Readiness Before Payroll](#example-workforce-readiness-before-payroll) |
+| Prepare payroll close evidence | [Payroll Close Evidence Pack](#payroll-close-evidence-pack) | [Example: Export Payroll Register After Close](#example-export-payroll-register-after-close) |
+| Attach evidence to signoff | [Example: Attach Audit Evidence To Payroll Signoff](#example-attach-audit-evidence-to-payroll-signoff) | [Evidence quality checklist](#evidence-quality-checklist) |
+| Investigate who changed a record | [Audit investigation pattern](#audit-investigation-pattern) | [Example: Investigate Who Changed an Employee Record](#example-investigate-who-changed-an-employee-record) |
+| Fix report total mismatch | [Negative Scenario: Report Total Differs From Source Page](#negative-scenario-report-total-differs-from-source-page) | [Reports vs Audit](#reports-vs-audit) |
+| Prepare launch evidence | [Launch readiness](#launch-readiness) | [Common blockers](#common-blockers) |
+
 ## Purpose
 
 Use Reports and Audit to inspect operational information, export evidence, and answer who changed what, when, and why.

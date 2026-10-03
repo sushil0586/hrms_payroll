@@ -52,7 +52,7 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
       <PageIntro
         eyebrow={result.state === "live" ? "Live plan control" : "Demo plan control"}
         title="Plan & Billing"
-        description="Review subscription, seat usage, billing provider status, invoices evidence, and governed commercial change requests."
+        description="Review the active subscription, usage position, and governed commercial requests before plan or billing changes are made."
         actions={
           <>
             <Link className="button button--primary" href="/tenant-admin">
@@ -78,13 +78,36 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
         </div>
       </section>
 
-      <section className="section tenant-commercial-workspace tenant-commercial-workspace--phase3">
+      <section className="section">
+        <div className="tenant-plan-command-band tenant-plan-command-band--phase5">
+          <div>
+            <span className="workspace-card__eyebrow">Commercial workflow</span>
+            <h2>Make plan changes through evidence-backed requests.</h2>
+          </div>
+          <ol>
+            <li>
+              <strong>1</strong>
+              <span>Check the current subscription.</span>
+            </li>
+            <li>
+              <strong>2</strong>
+              <span>Review seat and usage evidence.</span>
+            </li>
+            <li>
+              <strong>3</strong>
+              <span>Submit a governed change request.</span>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section className="section tenant-commercial-workspace tenant-commercial-workspace--phase3 tenant-commercial-workspace--phase5">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Commercial profile</span>
               <h2>Current subscription</h2>
-              <p className="tenant-console-empty">Use this panel as the read-only commercial source of truth before requesting plan or billing changes.</p>
+              <p className="tenant-console-empty">Read-only source of truth for subscription, billing provider, and plan identity.</p>
             </div>
             <span className="record-chip">{titleCase(commercial.subscription.status)}</span>
           </div>
@@ -113,7 +136,7 @@ export default async function TenantAdminPlanPage({ searchParams }: Props) {
             <div>
               <span className="workspace-card__eyebrow">Usage evidence</span>
               <h2>Meter snapshots</h2>
-              <p className="tenant-console-empty">Recent usage samples used for plan-limit and commercial review decisions.</p>
+              <p className="tenant-console-empty">Recent usage samples used for seat-limit and commercial review decisions.</p>
             </div>
             <span className="record-chip">{data.recent_usage_snapshots.length} rows</span>
           </div>

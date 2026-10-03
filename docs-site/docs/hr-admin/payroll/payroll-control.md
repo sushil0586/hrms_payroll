@@ -2,6 +2,35 @@
 
 Payroll Control is the first page to open before starting or closing payroll. It tells you whether source data is ready and what must be fixed.
 
+## On This Page
+
+- [Payroll Control Quick Navigation](#payroll-control-quick-navigation)
+- [Purpose](#purpose)
+- [Page layout](#page-layout)
+- [Who should use this page?](#who-should-use-this-page)
+- [Tabs](#tabs)
+- [How to read this page](#how-to-read-this-page)
+- [Decision Rules](#decision-rules)
+- [Buttons and actions](#buttons-and-actions)
+- [Field and Count Guide](#field-and-count-guide)
+- [Common blockers](#common-blockers)
+- [Who should fix what?](#who-should-fix-what)
+- [Step-by-step workflow](#step-by-step-workflow)
+- [Pre-Input Lock Checklist](#pre-input-lock-checklist)
+- [Evidence To Keep](#evidence-to-keep)
+- [FAQ](#faq)
+
+## Payroll Control Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Decide if payroll can move forward | [How to read this page](#how-to-read-this-page) | [Decision Rules](#decision-rules) |
+| Understand readiness, blocked, warning, or approval counts | [Field and Count Guide](#field-and-count-guide) | [Common blockers](#common-blockers) |
+| Fix the highest priority blockers | [Top action list](#page-layout) | [Who should fix what?](#who-should-fix-what) |
+| Prepare for input lock | [Pre-Input Lock Checklist](#pre-input-lock-checklist) | [Evidence To Keep](#evidence-to-keep) |
+| Know which payroll phase comes next | [Step-by-step workflow](#step-by-step-workflow) | [Related guides](#related-guides) |
+| Explain why payroll is blocked | [Common blockers](#common-blockers) | [FAQ](#faq) |
+
 ## Purpose
 
 Use Payroll Control to answer:

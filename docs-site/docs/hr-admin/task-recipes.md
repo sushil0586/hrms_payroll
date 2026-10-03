@@ -2,6 +2,33 @@
 
 Task recipes are short, practical workflows for common HR Admin work. Use these when you know what you need to do but are not sure which page owns the action.
 
+## On This Page
+
+- [Task Recipe Quick Navigation](#task-recipe-quick-navigation)
+- [Fix a payroll blocker](#fix-a-payroll-blocker)
+- [Create an employee](#create-an-employee)
+- [Make a new employee payroll-ready](#make-a-new-employee-payroll-ready)
+- [Set up organization masters for a new tenant](#set-up-organization-masters-for-a-new-tenant)
+- [Verify an employee document](#verify-an-employee-document)
+- [Create a manager-first leave approval workflow](#create-a-manager-first-leave-approval-workflow)
+- [Resolve a failed notification](#resolve-a-failed-notification)
+- [Set Up Earned Leave End To End](#set-up-earned-leave-end-to-end)
+- [Prepare payroll for calculation](#prepare-payroll-for-calculation)
+- [End-to-End Recipe: New Employee To First Payroll](#end-to-end-recipe-new-employee-to-first-payroll)
+- [Recipe signoff checklist](#recipe-signoff-checklist)
+
+## Task Recipe Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Fix payroll readiness blocker | [Fix a payroll blocker](#fix-a-payroll-blocker) | [Prepare payroll for calculation](#prepare-payroll-for-calculation) |
+| Create and prepare employee | [Create an employee](#create-an-employee) | [Make a new employee payroll-ready](#make-a-new-employee-payroll-ready) |
+| Fix structure/import problems | [Correct employee structure](#correct-employee-structure) | [Resolve employee import rejection](#resolve-employee-import-rejection) |
+| Configure leave end to end | [Set Up Earned Leave End To End](#set-up-earned-leave-end-to-end) | [End-to-End Recipe: Earned Leave Setup To Approval](#end-to-end-recipe-earned-leave-setup-to-approval) |
+| Configure approval and policy behavior | [Create a manager-first leave approval workflow](#create-a-manager-first-leave-approval-workflow) | [Future-date a policy change safely](#future-date-a-policy-change-safely) |
+| Troubleshoot email/notifications | [Resolve a failed notification](#resolve-a-failed-notification) | [Verify password reset email delivery](#verify-password-reset-email-delivery) |
+| Run complete employee-to-payroll test | [End-to-End Recipe: New Employee To First Payroll](#end-to-end-recipe-new-employee-to-first-payroll) | [Recipe signoff checklist](#recipe-signoff-checklist) |
+
 ## Fix a payroll blocker
 
 1. Open **Dashboard** or **Payroll Control**.
@@ -715,6 +742,16 @@ Expected result:
 - Employee exit is controlled by lifecycle evidence.
 - Payroll knows whether to pay regular salary, final settlement, hold payment, or exclude the employee.
 - Finance receives final settlement evidence with clear approval trail.
+
+## Recipe signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Source owner is clear. | The correction is made from the page that owns the data. |
+| Payroll impact is checked. | Payroll Control or Payroll Calculations confirms the result. |
+| Evidence is retained. | Notes, documents, approval, or audit entries explain the action. |
+| Downstream queue is clean. | ESS, MSS, documents, notifications, and payroll blockers are not left stale. |
+| User communication is complete. | Employee, manager, payroll, or finance is informed where needed. |
 
 ## Rule of thumb
 

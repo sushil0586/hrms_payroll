@@ -2,6 +2,35 @@
 
 Payroll Rules define formulas and calculation logic used during payroll calculation.
 
+## On This Page
+
+- [Rules Quick Navigation](#rules-quick-navigation)
+- [Purpose](#purpose)
+- [Main concepts](#main-concepts)
+- [Rule Ownership](#rule-ownership)
+- [When to create a rule](#when-to-create-a-rule)
+- [Tabs](#tabs)
+- [Rule fields](#rule-fields)
+- [Rule Design Standard](#rule-design-standard)
+- [Common Rule Families](#common-rule-families)
+- [Versioning Workflow](#versioning-workflow)
+- [Dependencies](#dependencies)
+- [Safe rule change workflow](#safe-rule-change-workflow)
+- [Trace review checklist](#trace-review-checklist)
+- [Rules signoff checklist](#rules-signoff-checklist)
+
+## Rules Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Decide whether a formula rule is needed | [When to create a rule](#when-to-create-a-rule) | [Rule Design Standard](#rule-design-standard) |
+| Create HRA by city logic | [Example: HRA Rule By City](#example-hra-rule-by-city) | [Dependencies](#dependencies) |
+| Prorate salary by payable days | [Example: Prorate Salary By Payable Days](#example-prorate-salary-by-payable-days) | [Common Rule Families](#common-rule-families) |
+| Configure monthly, quarterly, or yearly bonus | [Example: Quarterly Bonus Rule](#example-quarterly-bonus-rule) | [Versioning Workflow](#versioning-workflow) |
+| Change formula from next month | [Example: Change HRA From Next Month](#example-change-hra-from-next-month) | [Safe rule change workflow](#safe-rule-change-workflow) |
+| Read calculation trace | [How To Read Trace](#how-to-read-trace) | [Trace review checklist](#trace-review-checklist) |
+| Fix rule conflict or missing dependency | [Negative Scenario: Missing Dependency Produces Wrong Amount](#negative-scenario-missing-dependency-produces-wrong-amount) | [Negative Scenario: Two Rules Affect Same Component](#negative-scenario-two-rules-affect-same-component) |
+
 ## Purpose
 
 Use Payroll Rules to explain and control how payroll values are calculated.
@@ -399,6 +428,16 @@ Avoid this. If a rule change is required after inputs or calculations, follow re
 ### Why does trace show an old rule version?
 
 Check payroll period, rule effective date, active status, and whether the payroll run used a locked snapshot from before the rule was changed.
+
+## Rules signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Active rule versions are intentional. | Current payroll period uses approved formulas. |
+| Effective dates are correct. | Old payroll remains explainable and new payroll uses intended version. |
+| Conditions are tested. | Role, city, legal entity, grade, and pay group rules apply only where expected. |
+| Trace is readable. | HR/payroll can explain each calculated component. |
+| Change evidence is recorded. | Rule changes have owner, reason, and approval. |
 
 ## Related guides
 

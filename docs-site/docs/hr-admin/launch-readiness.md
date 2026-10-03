@@ -2,6 +2,30 @@
 
 Launch Readiness helps HR Admin users clear operational blockers before production use, first payroll, or customer go-live.
 
+## On This Page
+
+- [Launch Readiness Quick Navigation](#launch-readiness-quick-navigation)
+- [Purpose](#purpose)
+- [Use this page when](#use-this-page-when)
+- [Page sections](#page-sections)
+- [Common blockers](#common-blockers)
+- [Workflow](#workflow)
+- [Example: Clear a Missing Employee Role Blocker](#example-clear-a-missing-employee-role-blocker)
+- [Example: Clear an Organization Master Blocker](#example-clear-an-organization-master-blocker)
+- [Example: Assign Owner and Due Date](#example-assign-owner-and-due-date)
+- [Example: Complete Go-Live Handoff Evidence](#example-complete-go-live-handoff-evidence)
+- [Do not close a blocker if](#do-not-close-a-blocker-if)
+
+## Launch Readiness Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Understand go-live status | [Page sections](#page-sections) | [Common blockers](#common-blockers) |
+| Clear employee access blocker | [Example: Clear a Missing Employee Role Blocker](#example-clear-a-missing-employee-role-blocker) | [Workflow](#workflow) |
+| Clear organization setup blocker | [Example: Clear an Organization Master Blocker](#example-clear-an-organization-master-blocker) | [Common blockers](#common-blockers) |
+| Assign owner and due date | [Example: Assign Owner and Due Date](#example-assign-owner-and-due-date) | [Workflow](#workflow) |
+| Complete go-live handoff evidence | [Example: Complete Go-Live Handoff Evidence](#example-complete-go-live-handoff-evidence) | [Do not close a blocker if](#do-not-close-a-blocker-if) |
+
 ## Purpose
 
 Use this page to route launch blockers, assign owners, record risk decisions, and keep evidence current.

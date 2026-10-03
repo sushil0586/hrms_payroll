@@ -4,6 +4,28 @@ Finance Manager is the workspace for payroll payout review, bank advice export, 
 
 ![Finance control center](../assets/screenshots/finance-manager/control-center.png)
 
+## On This Page
+
+- [Finance Quick Navigation](#finance-quick-navigation)
+- [What Finance Can Do](#what-finance-can-do)
+- [How To Read The Page](#how-to-read-the-page)
+- [Common Actions](#common-actions)
+- [Finance Signoff Checklist](#finance-signoff-checklist)
+- [Finance decision rules](#finance-decision-rules)
+- [Evidence finance should keep](#evidence-finance-should-keep)
+- [Related Pages](#related-pages)
+
+## Finance Quick Navigation
+
+| I need to | Start here | Verify before finishing |
+| --- | --- | --- |
+| Decide whether payroll can move to payout | Control Center | Latest run, latest net pay, open action count, provider exceptions, and handoff status. |
+| Export payout file | [Payment Handoff](payment-handoff.md) | Bank advice, payroll register, row count, net pay total, bank profile, and artifact count. |
+| Review statutory filing evidence | [Compliance Evidence](compliance-evidence.md) | Filing rows, statutory deductions, challan proof, provider receipts, and period/legal entity. |
+| Investigate delivery risk | Close and payout priorities > Provider exceptions | Failed, rejected, dead-lettered, retry-capped, or stale provider events. |
+| Build audit close pack | [Audit Evidence](audit-evidence.md) | Export manifests, provider callbacks, retries, completed jobs, receipts, and exception notes. |
+| Follow payroll-day checklist | [Finance Manager Payroll Day](../checklists/finance-manager-payroll-day.md) | Proceed/hold/escalate decision recorded with evidence references. |
+
 ## What Finance Can Do
 
 | Area | Purpose | Best next action |

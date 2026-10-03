@@ -8,6 +8,36 @@ Workflows answer this question:
 
 Policies decide eligibility and business rules. Workflows decide routing and governance.
 
+## On This Page
+
+- [Workflow Quick Navigation](#workflow-quick-navigation)
+- [What Workflows Owns](#what-workflows-owns)
+- [Use This Page When](#use-this-page-when)
+- [Workflow Versus Policy](#workflow-versus-policy)
+- [Workflow Concepts](#workflow-concepts)
+- [Recommended Workflow Design](#recommended-workflow-design)
+- [Core Workflow Templates](#core-workflow-templates)
+- [Field Guidance](#field-guidance)
+- [Approval Route Patterns](#approval-route-patterns)
+- [Effective Dating Workflow Versions](#effective-dating-workflow-versions)
+- [Escalation Rules](#escalation-rules)
+- [Buttons And Actions](#buttons-and-actions)
+- [Troubleshooting](#troubleshooting)
+- [Workflow setup checklist](#workflow-setup-checklist)
+
+## Workflow Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Understand policy vs workflow responsibility | [Workflow Versus Policy](#workflow-versus-policy) | [Workflow Concepts](#workflow-concepts) |
+| Create leave approval route | [Example: Leave Approval Manager First, HR Fallback](#example-leave-approval-manager-first-hr-fallback) | [Core Workflow Templates](#core-workflow-templates) |
+| Create attendance regularization route | [Example: Attendance Regularization Approval](#example-attendance-regularization-approval) | [Escalation Rules](#escalation-rules) |
+| Create transfer, promotion, or lifecycle approval | [Example: Lifecycle Movement Approval](#example-lifecycle-movement-approval) | [Effective Dating Workflow Versions](#effective-dating-workflow-versions) |
+| Create payroll review approval | [Example: Payroll Review Approval](#example-payroll-review-approval) | [Approval Route Patterns](#approval-route-patterns) |
+| Fix approval stuck with manager | [Negative Scenario: Approval Stuck With Manager](#negative-scenario-approval-stuck-with-manager) | [Escalation Rules](#escalation-rules) |
+| Fix missing workflow template blocker | [Negative Scenario: Workflow Template Missing](#negative-scenario-workflow-template-missing) | [Workflow setup checklist](#workflow-setup-checklist) |
+| Decide role vs named user approver | [FAQ](#faq) | [Field Guidance](#field-guidance) |
+
 ## What Workflows Owns
 
 | Area | What it controls | Example |
@@ -418,6 +448,16 @@ Use delegation, alternate approver, or HR fallback depending on tenant policy. T
 ### Can workflow changes affect existing requests?
 
 They can, depending on implementation. Safer practice is to version the workflow and apply new route to new requests from a chosen date.
+
+## Workflow setup checklist
+
+| Check | Expected result |
+| --- | --- |
+| Workflow purpose is named. | Users know whether it controls leave, attendance, documents, lifecycle, payroll, or launch. |
+| Approver logic is clear. | Manager, HR, payroll, finance, or fallback owner is predictable. |
+| Escalation is configured. | Pending requests do not stay stuck indefinitely. |
+| Negative path is tested. | Reject, cancel, and fallback behavior works. |
+| Audit evidence is captured. | Approval decisions are visible for compliance and payroll review. |
 
 ## Related Guides
 

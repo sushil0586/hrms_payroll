@@ -6,6 +6,34 @@ Use this guide when you are setting up leave for the first time, correcting empl
 
 ![Leave balance operations](../assets/screenshots/hr-admin/leave-balances.png)
 
+## On This Page
+
+- [Leave Quick Navigation](#leave-quick-navigation)
+- [Who Uses Leave Management](#who-uses-leave-management)
+- [Leave Management Map](#leave-management-map)
+- [Recommended Setup Order](#recommended-setup-order)
+- [Leave Type Setup](#leave-type-setup)
+- [Leave Policy Setup](#leave-policy-setup)
+- [Leave Policy Assignment](#leave-policy-assignment)
+- [Leave Balances and Opening Balances](#leave-balances-and-opening-balances)
+- [ESS Leave Request](#ess-leave-request)
+- [MSS Leave Approval](#mss-leave-approval)
+- [Payroll Impact](#payroll-impact)
+- [Troubleshooting](#troubleshooting)
+- [Leave signoff checklist](#leave-signoff-checklist)
+
+## Leave Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Set up leave from zero | [Recommended Setup Order](#recommended-setup-order) | [Example: Earned Leave Policy for India Office](#example-earned-leave-policy-for-india-office) |
+| Create the visible leave bucket | [Leave Type Setup](#leave-type-setup) | [Leave Policy Setup](#leave-policy-setup) |
+| Configure entitlement, accrual, attachments, or carry-forward | [Leave Policy Setup](#leave-policy-setup) | [Leave Policy Assignment](#leave-policy-assignment) |
+| Assign leave policy to employees | [Leave Policy Assignment](#leave-policy-assignment) | [Leave Balances and Opening Balances](#leave-balances-and-opening-balances) |
+| Fix employee balance or opening balance | [Leave Balances and Opening Balances](#leave-balances-and-opening-balances) | [Payroll Impact](#payroll-impact) |
+| Help an employee apply leave | [ESS Leave Request](#ess-leave-request) | [MSS Leave Approval](#mss-leave-approval) |
+| Understand payroll blockers | [Payroll Impact](#payroll-impact) | [Month-End Leave Checklist](#month-end-leave-checklist) |
+
 ## Who Uses Leave Management
 
 | User | What they do |
@@ -780,6 +808,17 @@ Use opening balance for migrated or starting balances. Use adjustment for a corr
 ### Does approved leave always affect the current payroll?
 
 Only if the payroll period is still open and inputs are refreshed before lock. Late approvals may need rerun, adjustment, or next-period correction depending on payroll policy.
+
+## Leave signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Leave types exist. | Employees see only valid leave choices. |
+| Policies are active and assigned. | Eligible employees can apply leave for the correct dates. |
+| Opening balances are loaded. | Migrated balances match HR records. |
+| Approval route works. | Manager/HR decisions reach the right queue. |
+| Payroll-period leave is closed. | Pending approvals do not block payroll inputs. |
+| Manual adjustments have reason. | Corrections are auditable and explainable. |
 
 ## Related Pages
 

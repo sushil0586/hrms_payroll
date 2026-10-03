@@ -21,7 +21,7 @@ const tenantRoutes: TenantRoute[] = [
     path: "/tenant-admin",
     heading: "Account Control Center",
     navLabel: "Dashboard",
-    requiredText: ["Tenant Status", "Items that need your attention", "User Management", "Access design"],
+    requiredText: ["Tenant Status", "Items that need your attention", "Launch checklist", "Open the right workspace"],
   },
   {
     path: "/tenant-admin/users",
@@ -91,6 +91,9 @@ function normalizeInternalHref(rawHref: string, baseUrl: string) {
   const url = new URL(rawHref, baseUrl);
   const base = new URL(baseUrl);
   if (url.origin !== base.origin) {
+    return null;
+  }
+  if (url.pathname.startsWith("/api/")) {
     return null;
   }
   if (url.pathname.includes("[") || url.pathname.includes("]") || url.pathname.includes("undefined") || url.pathname.includes("null")) {
@@ -193,6 +196,8 @@ async function expectDialogOpensAndCloses(page: Page, buttonName: string | RegEx
 }
 
 test.describe("Tenant Admin final release gate", () => {
+  test.describe.configure({ mode: "serial" });
+
   for (const viewport of viewports) {
     test(`all tenant-admin pages are release-ready at ${viewport.label}`, async ({ page }) => {
       test.setTimeout(420_000);

@@ -4,6 +4,35 @@ Use Documents to upload employee documents, review required document status, and
 
 ![ESS documents](../assets/screenshots/ess/documents.png)
 
+## On This Page
+
+- [Document Quick Navigation](#document-quick-navigation)
+- [Page Purpose](#page-purpose)
+- [Main Sections](#main-sections)
+- [Screen Labels To Recognize](#screen-labels-to-recognize)
+- [Controls](#controls)
+- [Upload Checklist](#upload-checklist)
+- [What HR Controls Upstream](#what-hr-controls-upstream)
+- [Example: upload PAN proof](#example-upload-pan-proof)
+- [Example: replace a rejected bank proof](#example-replace-a-rejected-bank-proof)
+- [Document statuses](#document-statuses)
+- [Positive and negative scenarios](#positive-and-negative-scenarios)
+- [Browser certification coverage](#browser-certification-coverage)
+- [Common rejection reasons](#common-rejection-reasons)
+- [FAQ](#faq)
+- [Related Pages](#related-pages)
+
+## Document Quick Navigation
+
+| I need to | Start here | Verify before finishing |
+| --- | --- | --- |
+| See what HR still needs | Document readiness band | Missing uploads, returned files, expiry focus, and HR review count. |
+| Upload a required document | Required documents > **Upload** | Correct category, clear title, document number, expiry date, and file selected. |
+| Replace a rejected file | Required documents or history > **Replace** | Rejection note, corrected file, same category, and latest pending status. |
+| Find an old upload | Document history | Search/filter value, verification status, category, and pagination. |
+| Review document evidence | History > **Review** dialog | File metadata, status, review note, audit trail, and download availability. |
+| Understand why upload is blocked | [What HR Controls Upstream](#what-hr-controls-upstream) | Category permission, required rule, expiry setting, verification workflow, and file access. |
+
 ## Page Purpose
 
 This page prevents document follow-up from happening over email. Employees can see exactly what is pending, accepted, rejected, expiring, or needs re-upload. The page is intentionally split into status, guidance, history, and focused dialogs so the employee does not have to understand every control at once.
@@ -19,6 +48,17 @@ This page prevents document follow-up from happening over email. Employees can s
 | Document history | Past uploads and current status. | Search, filter, download, or open the detail drilldown. |
 | Upload dialog | Focused upload/replace form. | Opens only when you choose **Upload document**, **Upload**, or **Replace**. |
 | Document detail dialog | File metadata, HR review status, and audit trail. | Open from **Review** in history. |
+
+## Screen Labels To Recognize
+
+| Screen label | What it means |
+| --- | --- |
+| Required documents | Documents HR expects from the employee. |
+| Before sending a file | Upload quality checklist. |
+| Document history | Searchable upload and review history. |
+| Upload document | Focused upload/replace modal. |
+| Submit for review | Sends the selected file to HR review. |
+| Document detail | Focused evidence and review-status modal. |
 
 ## Controls
 
@@ -134,3 +174,9 @@ Usually employees cannot delete audit history. Upload a corrected version or ask
 ### What should I do if the rejection reason is unclear?
 
 Contact HR with the document type, status, and rejection text. Do not keep re-uploading the same file.
+
+## Related Pages
+
+- [ESS Overview](index.md)
+- [ESS Task Recipes](task-recipes.md)
+- [HR Admin Documents](../hr-admin/documents.md)

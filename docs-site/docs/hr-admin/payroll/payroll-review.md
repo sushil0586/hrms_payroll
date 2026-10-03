@@ -2,6 +2,32 @@
 
 Payroll Review is where exceptions are reviewed and payroll is approved before outputs are generated.
 
+## On This Page
+
+- [Review Quick Navigation](#review-quick-navigation)
+- [Purpose](#purpose)
+- [Who uses this page](#who-uses-this-page)
+- [Review decision principle](#review-decision-principle)
+- [What should be reviewed](#what-should-be-reviewed)
+- [Page layout](#page-layout)
+- [Exception decision options](#exception-decision-options)
+- [Severity guide](#severity-guide)
+- [Buttons and actions](#buttons-and-actions)
+- [Workflow](#workflow)
+- [Approval evidence to keep](#approval-evidence-to-keep)
+- [Pre-output checklist](#pre-output-checklist)
+- [Review signoff checklist](#review-signoff-checklist)
+
+## Review Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Decide if payroll can be approved | [Review decision principle](#review-decision-principle) | [What should be reviewed](#what-should-be-reviewed) |
+| Approve payroll review | [Example: Approve September payroll review](#example-approve-september-payroll-review) | [Pre-output checklist](#pre-output-checklist) |
+| Accept a warning with evidence | [Example: Accept a warning with evidence](#example-accept-a-warning-with-evidence) | [Exception decision options](#exception-decision-options) |
+| Reject payroll for correction | [Example: Reject payroll for correction](#example-reject-payroll-for-correction) | [Severity guide](#severity-guide) |
+| Fix approval or lock issues | [Negative scenario: payroll approved with open blockers](#negative-scenario-payroll-approved-with-open-blockers) | [Negative scenario: final lock applied too early](#negative-scenario-final-lock-applied-too-early) |
+
 ## Purpose
 
 Use this page to make the final HR/payroll decision before publishing outputs.
@@ -278,6 +304,16 @@ Only if the tenant's approval policy allows it. For production payroll, finance 
 ### What if only one low-risk warning remains?
 
 It can be accepted only with a clear note, owner, and reason explaining why pay and statutory output are not affected.
+
+## Review signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Gross/net totals are reviewed. | Payroll totals match expected population and trend. |
+| Exceptions are resolved. | Blockers are fixed; accepted warnings have reason and owner. |
+| Sample employee traces are checked. | Representative employees explain earnings, deductions, and net pay. |
+| Approval note is captured. | Final approval or hold decision has evidence. |
+| Output gate is ready. | Payroll can move to outputs only after approval. |
 
 ## Related guides
 

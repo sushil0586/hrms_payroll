@@ -4,6 +4,28 @@ Use Payment Handoff to review payout-ready payroll files and bank advice evidenc
 
 ![Finance payment handoff](../assets/screenshots/finance-manager/control-center.png)
 
+## On This Page
+
+- [Payment Quick Navigation](#payment-quick-navigation)
+- [Page Purpose](#page-purpose)
+- [Main Sections](#main-sections)
+- [Controls](#controls)
+- [Review Checklist](#review-checklist)
+- [Reconciliation checklist](#reconciliation-checklist)
+- [When not to export or upload bank advice](#when-not-to-export-or-upload-bank-advice)
+- [Positive and negative scenarios](#positive-and-negative-scenarios)
+- [FAQ](#faq)
+
+## Payment Quick Navigation
+
+| I need to | Start here | Verify before finishing |
+| --- | --- | --- |
+| Confirm finance has the right payroll run | Latest handoff snapshot | Run name, period, bank profile, accounting profile, artifact count, and status. |
+| Export bank advice | **Export bank advice** or **Bank advice** | File belongs to final run, row count is expected, bank format is correct, and total reconciles. |
+| Reconcile against payroll | **Payroll register** + **Bank advice** | Same run, same employee population, same payable net total, and holds explained. |
+| Check blockers before upload | **Exceptions** | Provider/payout exceptions are zero, resolved, or formally accepted. |
+| Decide hold/proceed | [Reconciliation checklist](#reconciliation-checklist) | Decision note explains any difference, hold, exception, or manual process. |
+
 ## Page Purpose
 
 Payment Handoff helps finance confirm that payroll output is ready to move into the payment process.
@@ -54,6 +76,17 @@ Payment Handoff helps finance confirm that payroll output is ready to move into 
 - Employee row count is unexpectedly different.
 - Provider exception affects payout data.
 - You are looking at a test or disposable run.
+
+## Positive and negative scenarios
+
+| Scenario | Expected result |
+| --- | --- |
+| Final run, bank profile, artifacts, and totals match | Finance can export bank advice and proceed with payment process. |
+| Bank advice total differs from payroll register | Hold payout until payroll explains, regenerates, or documents an approved hold. |
+| Employee count differs | Hold payout unless the difference is an approved hold or excluded employee population. |
+| Bank profile is missing or wrong | Do not upload; ask payroll operations to regenerate the handoff with the correct profile. |
+| Provider exception affects payout data | Hold payout or escalate before bank upload. |
+| Old/test/disposable run is selected | Do not use exported files for live payment. |
 
 ## FAQ
 

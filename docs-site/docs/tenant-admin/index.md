@@ -1,80 +1,123 @@
 # Tenant Admin
 
-Tenant Admin manages the customer account, account users, roles, subscription, support access, and security readiness.
-
-## Main purpose
-
-Use Tenant Admin to control who can access the tenant and how the account is governed.
+Tenant Admin is the customer account control center. It is used to manage tenant users, roles, plan limits, setup readiness, governed settings, support access, security posture, and audit evidence.
 
 ![Tenant Admin dashboard](../assets/screenshots/tenant-admin/dashboard.png)
 
-## Menu guide
+## On This Page
 
-| Menu | Purpose | Common actions |
+- [Who uses Tenant Admin](#who-uses-tenant-admin)
+- [Menu structure](#menu-structure)
+- [Single responsibility map](#single-responsibility-map)
+- [Recommended operating order](#recommended-operating-order)
+- [Common examples](#common-examples)
+- [Launch signoff checklist](#launch-signoff-checklist)
+
+## Who Uses Tenant Admin
+
+| User type | Typical responsibility |
+| --- | --- |
+| Customer account owner | Owns account access, plan, support approval, and audit evidence. |
+| Tenant admin | Maintains users, roles, settings, and security readiness. |
+| Implementation lead | Uses setup guide and support access during rollout. |
+| Security or compliance reviewer | Reviews support grants, trust audit, and security posture. |
+
+Tenant Admin should not be treated as a daily employee operations workspace. Daily HR, payroll, ESS, and MSS work belongs in their own workspaces.
+
+## Menu Structure
+
+| Parent area | Page | Primary responsibility |
 | --- | --- | --- |
-| Dashboard | Account posture summary. | Check users, roles, setup, security, and trust signals. |
-| Users | Tenant user management. | Invite users, activate or suspend access, update roles. |
-| Roles | Access model. | Review roles, permissions, assigned seats, risk badges. |
-| Plan | Subscription view. | Review plan, usage, limits, and subscription status. |
-| Setup Guide | Account launch checklist. | Track setup steps before active use. |
-| Support Access | Assisted support operations. | Request, approve, start, end, or revoke scoped support access. |
-| Trust Audit | Evidence review. | Review audit evidence and export support/commercial packs. |
-| Settings | Account controls. | Review tenant settings and governed account changes. |
-| Security | Enterprise readiness. | Review security controls and readiness posture. |
+| Start Here | Dashboard | Account posture, action queue, and route map. |
+| Start Here | Setup Guide | Launch checklist and account setup readiness. |
+| Start Here | Task Recipes | Step-by-step admin recipes for common jobs. |
+| Access Management | Users | Invite, activate, suspend, and role-map users. |
+| Access Management | Roles | Review role design, permissions, risk, and seat ownership. |
+| Access Management | Support Access | Request, approve, start, end, revoke, and audit support access. |
+| Account and Security | Plan and Billing | Review subscription, limits, usage, and commercial changes. |
+| Account and Security | Settings | Review governed tenant settings and request profile changes. |
+| Account and Security | Security Readiness | Review enterprise readiness across MFA, SSO, SCIM, sessions, audit, and data protection. |
+| Account and Security | Trust Audit | Search, review, and export tenant evidence. |
 
-## Detailed guides
+## Single Responsibility Map
 
-| Guide | Use it for |
-| --- | --- |
-| Task Recipes | Step-by-step instructions for common account administration jobs. |
-| Users | Invite users, update roles, suspend/reactivate access. |
-| Roles | Review access model, custom roles, permissions, and risk. |
-| Plan and Billing | Review subscription, usage, limits, and commercial evidence. |
-| Setup Guide | Track first-time setup and launch checklist. |
-| Support Access | Grant, approve, revoke, or audit support access. |
-| Trust Audit | Review and export account audit evidence. |
-| Settings | Review governed tenant account settings. |
-| Security | Review enterprise security readiness. |
+| Job | Use this page | Do not use |
+| --- | --- | --- |
+| Add a new admin user | Users | Roles, unless the role itself must be created first. |
+| Change what a user can do | Users | Settings. |
+| Change what a role contains | Roles | Users. |
+| Request support help | Support Access | Trust Audit, which is evidence-only. |
+| Prove what happened | Trust Audit | Support Access, which controls access. |
+| Check tenant setup health | Setup Guide | Dashboard alone. |
+| Change plan or limits | Plan and Billing | Settings. |
+| Review account profile values | Settings | Plan and Billing. |
+| Resolve SSO or security blocker | Security Readiness | Roles. |
 
-## User management workflow
+## Recommended Operating Order
 
-1. Open **Users**.
-2. Search for the person.
-3. If the user does not exist, create or invite the user.
-4. Assign the correct role.
-5. Confirm the user is active.
-6. Ask the user to login and verify the right workspace opens.
+1. Open **Dashboard** and check account posture.
+2. Open **Setup Guide** and confirm launch prerequisites.
+3. Open **Roles** and understand available roles before inviting users.
+4. Open **Users** and create or update user access.
+5. Open **Security Readiness** and resolve blocked controls.
+6. Open **Support Access** only when assisted operations are needed.
+7. Open **Trust Audit** to confirm evidence after sensitive changes.
+8. Open **Plan and Billing** when limits or commercial settings block work.
 
-## Role management workflow
+## Common Examples
 
-1. Open **Roles**.
-2. Review existing system roles before creating a custom role.
-3. Check permission risk badges.
-4. Assign high-risk permissions only when required.
-5. Review seat ownership after role changes.
+### Example: A new HR admin needs access
 
-## Important checks
+1. Open **Roles** and confirm the HR admin role has the correct permissions.
+2. Open **Users**.
+3. Search the email to avoid duplicates.
+4. Invite or update the user.
+5. Assign the HR admin role.
+6. Ask the user to sign in.
+7. If they land on Workspace Access, verify active membership and role assignment.
 
-- Do not give tenant-admin access casually. It controls users and account settings.
-- Prefer standard roles before creating custom roles.
-- Review support access carefully before approving it.
-- If a user lands on Workspace Access, check their active role assignment.
+### Example: Support needs to investigate a payroll setup issue
 
-## Tenant Admin operating principles
+1. Open **Support Access**.
+2. Create a scoped support grant for payroll setup only.
+3. Add the business reason and time limit.
+4. Approve and start the grant only after reviewing scope.
+5. End or revoke access when the issue is complete.
+6. Open **Trust Audit** and review support activity.
 
-| Principle | Meaning |
-| --- | --- |
-| Minimum access | Give each person only the role needed for their work. |
-| Clear ownership | Every admin role should have a business owner. |
-| Temporary support | Support access should be scoped, time-bound, and auditable. |
-| Review before scale | Test custom roles and settings with one user before broad rollout. |
-| Evidence first | Use Trust Audit for sensitive access, support, plan, and security questions. |
+### Example: A launch review is blocked by security
 
-## First-day checklist
+1. Open **Security Readiness**.
+2. Review the blocked domain, such as MFA, SSO, sessions, or audit.
+3. Follow the linked action.
+4. Record or verify evidence.
+5. Return to Dashboard and confirm readiness has changed.
 
-1. Confirm at least one tenant admin is active.
-2. Confirm HR, payroll, and finance owners have the right roles.
-3. Review system roles before creating custom roles.
-4. Check Setup Guide for unfinished launch steps.
-5. Review Security Readiness for blocked controls.
-6. Confirm Support Access is closed unless actively needed.
+## Negative Cases To Know
+
+| Issue | Likely reason | Fix |
+| --- | --- | --- |
+| Logged-in user sees Workspace Access | User is authenticated but has no active route. | Check Users, role assignment, and employee profile mapping. |
+| Add user action is disabled | Plan, permission, or state restriction. | Check Plan limits and current user's tenant-admin permission. |
+| System role cannot be edited | System roles are protected. | Create a custom role only if the standard role does not fit. |
+| Support approval is unavailable | Grant is not in the right state or user lacks approval permission. | Review grant status and current role. |
+| Audit export hidden | User lacks export permission. | Ask an authorized tenant admin to export evidence. |
+
+## Launch Signoff Checklist
+
+- At least two trusted tenant admins exist.
+- No active support grant remains open without a reason.
+- Users have only the roles they need.
+- High-risk role permissions have a business owner.
+- Plan limits do not block expected usage.
+- Setup Guide does not show launch-critical blockers.
+- Security Readiness blockers are resolved or formally accepted.
+- Trust Audit shows evidence for recent user, role, support, and setting changes.
+
+## Related Guides
+
+- [Tenant Dashboard](dashboard.md)
+- [Tenant Users](users.md)
+- [Roles](roles.md)
+- [Support Access](support-access.md)
+- [Trust Audit](trust-audit.md)

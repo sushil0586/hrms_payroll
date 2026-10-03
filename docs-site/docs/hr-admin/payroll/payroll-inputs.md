@@ -2,6 +2,32 @@
 
 Payroll Inputs are locked snapshots of source data used for payroll calculation.
 
+## On This Page
+
+- [Inputs Quick Navigation](#inputs-quick-navigation)
+- [Purpose](#purpose)
+- [Who uses this page](#who-uses-this-page)
+- [Why inputs are locked](#why-inputs-are-locked)
+- [What gets snapshotted](#what-gets-snapshotted)
+- [Source ownership](#source-ownership)
+- [Page layout](#page-layout)
+- [Important fields](#important-fields)
+- [Buttons and actions](#buttons-and-actions)
+- [Input states](#input-states)
+- [Workflow](#workflow)
+- [Before locking inputs](#before-locking-inputs)
+- [Inputs signoff checklist](#inputs-signoff-checklist)
+
+## Inputs Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Understand what payroll will freeze | [What gets snapshotted](#what-gets-snapshotted) | [Source ownership](#source-ownership) |
+| Create input snapshot | [Example: Create September payroll input snapshot](#example-create-september-payroll-input-snapshot) | [Input states](#input-states) |
+| Review one employee before lock | [Example: Review one employee before lock](#example-review-one-employee-before-lock) | [Before locking inputs](#before-locking-inputs) |
+| Lock payroll inputs | [Example: Lock September payroll inputs](#example-lock-september-payroll-inputs) | [Pre-lock checklist](#pre-lock-checklist) |
+| Diagnose lock blocked or source changed | [Negative scenario: lock is blocked](#negative-scenario-lock-is-blocked) | [Negative scenario: source changed after inputs were locked](#negative-scenario-source-changed-after-inputs-were-locked) |
+
 ## Purpose
 
 Use Payroll Inputs to freeze employee, salary, attendance, leave, lifecycle, document, and banking data for a payroll run.
@@ -310,6 +336,16 @@ Usually because the selected run, pay group, effective dates, or employee status
 ### What should I do if the snapshot trace is missing?
 
 Do not proceed to calculation. Recheck the selected run, backend availability, source setup, and whether snapshot collection completed successfully.
+
+## Inputs signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Payroll period is correct. | Snapshot belongs to the intended month/pay group. |
+| Readiness blockers are cleared. | Employee, bank, salary, statutory, attendance, and leave blockers are resolved or documented. |
+| Snapshot collection completed. | Employee count and source families are visible. |
+| Inputs are locked intentionally. | Locked snapshot is used for calculation. |
+| Trace is available. | Payroll can explain what source data was captured. |
 
 ## Related guides
 

@@ -4,6 +4,35 @@ Employees is the master workspace for employee identity, organization placement,
 
 This guide explains what Employee Master must cover, how HR should use it, what each important field means, and how to fix common issues before they become payroll, ESS, MSS, leave, attendance, or document blockers.
 
+## On This Page
+
+- [Employee Quick Navigation](#employee-quick-navigation)
+- [What Employee Master Covers](#what-employee-master-covers)
+- [Use This Page When](#use-this-page-when)
+- [Page Sections](#page-sections)
+- [Safe Ownership Rules](#safe-ownership-rules)
+- [Field-By-Field Guidance](#field-by-field-guidance)
+- [Directory Filters](#directory-filters)
+- [Readiness Badges](#readiness-badges)
+- [Buttons and Actions](#buttons-and-actions)
+- [Bulk Import And Correction](#bulk-import-and-correction)
+- [Positive End-To-End Scenario](#positive-end-to-end-scenario)
+- [Negative Scenarios And Fixes](#negative-scenarios-and-fixes)
+- [Troubleshooting](#troubleshooting)
+- [Employee Master signoff checklist](#employee-master-signoff-checklist)
+
+## Employee Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Create one employee | [Example: Create A Bengaluru Employee](#example-create-a-bengaluru-employee) | [Field-By-Field Guidance](#field-by-field-guidance) |
+| Fix employee name, email, status, branch, or manager | [Employee master detail](#page-sections) | [Safe Ownership Rules](#safe-ownership-rules) |
+| Understand why ESS access is blocked | [Example: Give Employee ESS Access](#example-give-employee-ess-access) | [Readiness Badges](#readiness-badges) |
+| Make a manager visible in MSS | [Example: Make A Manager Ready For MSS](#example-make-a-manager-ready-for-mss) | [Manager Fields](#manager-fields) |
+| Resolve payroll employee blockers | [Payroll Readiness Fields](#payroll-readiness-fields) | [Payroll Close Review](#payroll-close-review) |
+| Upload or correct many employees | [Bulk Import And Correction](#bulk-import-and-correction) | [Negative Scenarios And Fixes](#negative-scenarios-and-fixes) |
+| Decide whether to use Employees or another module | [Safe Ownership Rules](#safe-ownership-rules) | [Related Guides](#related-guides) |
+
 ## What Employee Master Covers
 
 Employee Master owns the facts that identify a person and place that person inside the company structure.
@@ -493,6 +522,16 @@ Yes, but only if the business intentionally excludes that employee from payroll.
 ### Why is manager chain readiness important?
 
 Manager chain readiness controls approvals, MSS visibility, escalation, organization reporting, and workflow routing. A missing or incorrect manager can block processes even when the employee profile looks complete.
+
+## Employee Master signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Identity fields are complete. | Name, employee code, email, phone, status, and joining data are usable. |
+| Organization mapping is complete. | Legal entity, location, branch, department, grade, designation, and manager are set. |
+| Access is intentional. | ESS/MSS/HR/Admin access matches the employee role. |
+| Payroll fields are ready. | Pay group, salary, bank, statutory, and documents are complete where applicable. |
+| Readiness badges are understood. | Structure, access, manager chain, and payroll warnings are resolved or documented. |
 
 ## Related Guides
 

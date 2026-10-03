@@ -2,6 +2,34 @@
 
 Statutory Payroll covers compliance setup and readiness for PF, ESIC, professional tax, LWF, TDS, declarations, proofs, reports, and filing evidence.
 
+## On This Page
+
+- [Statutory Quick Navigation](#statutory-quick-navigation)
+- [Purpose](#purpose)
+- [Who uses this page](#who-uses-this-page)
+- [Statutory setup principle](#statutory-setup-principle)
+- [Common statutory areas for India](#common-statutory-areas-for-india)
+- [Setup items](#setup-items)
+- [Recommended setup workflow](#recommended-setup-workflow)
+- [Statutory ownership map](#statutory-ownership-map)
+- [Declaration and proof states](#declaration-and-proof-states)
+- [Readiness checklist](#readiness-checklist)
+- [Payroll calculation checks](#payroll-calculation-checks)
+- [Statutory reports after payroll](#statutory-reports-after-payroll)
+- [Statutory signoff checklist](#statutory-signoff-checklist)
+
+## Statutory Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Set up India statutory payroll | [Recommended setup workflow](#recommended-setup-workflow) | [Example: Configure statutory pack for Accerio India](#example-configure-statutory-pack-for-accerio-india) |
+| Configure employer registrations | [Example: Configure employer registrations](#example-configure-employer-registrations) | [Statutory ownership map](#statutory-ownership-map) |
+| Configure PF, ESIC, PT, or TDS | [Example: PF setup](#example-pf-setup) | [Common statutory areas for India](#common-statutory-areas-for-india) |
+| Handle employee tax declaration/proof | [Example: TDS using employee tax declaration](#example-tds-using-employee-tax-declaration) | [Declaration and proof states](#declaration-and-proof-states) |
+| Reject tax proof and notify employee | [Example: Reject tax proof and notify employee](#example-reject-tax-proof-and-notify-employee) | [Evidence to keep](#evidence-to-keep) |
+| Fix statutory payroll blocker | [Negative scenario: PAN missing before TDS calculation](#negative-scenario-pan-missing-before-tds-calculation) | [Readiness checklist](#readiness-checklist) |
+| Verify outputs after payroll | [Statutory reports after payroll](#statutory-reports-after-payroll) | [Statutory signoff checklist](#statutory-signoff-checklist) |
+
 ## Purpose
 
 Use this page to maintain statutory packs, components, slabs, employer registrations, filing calendars, employee statutory profiles, and readiness evidence.
@@ -455,6 +483,16 @@ Both are usually involved. Salary components define how amounts appear in payrol
 ### What if law or slab values change mid-year?
 
 Create a new effective-dated version. Do not edit old versions used by closed payroll.
+
+## Statutory signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Statutory profiles are mapped. | Employees have PF/ESIC/PT/LWF/TDS setup where applicable. |
+| Declarations are tracked. | Employee submissions, proofs, accepted/rejected amounts, and cutoff status are visible. |
+| Rules use correct slabs. | Current effective-dated statutory rules are active. |
+| Reports are generated. | Compliance outputs match approved payroll. |
+| Exceptions are documented. | Missing declarations, late proofs, or special cases have approval notes. |
 
 ## Related guides
 

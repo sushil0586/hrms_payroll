@@ -82,6 +82,8 @@ test.describe("Tenant Admin Phase 4 governance polish", () => {
     await expectPhase4RouteHealthy(page, phase4Routes[0], "desktop");
 
     await expect(page.locator(".tenant-security-workspace--phase4")).toHaveCount(2);
+    await expect(page.locator(".tenant-security-command-band--phase6")).toBeVisible();
+    await expect(page.locator(".tenant-security-domain-summary")).toHaveCount(3);
     await expect(page.locator(".tenant-governance-row").first()).toBeVisible();
     const rowsFit = await page.locator(".tenant-governance-row").evaluateAll((rows) =>
       rows.every((row) => row.scrollWidth <= row.clientWidth + 1),
@@ -96,6 +98,8 @@ test.describe("Tenant Admin Phase 4 governance polish", () => {
     await expectPhase4RouteHealthy(page, phase4Routes[1], "desktop");
 
     await expect(page.locator(".tenant-support-access-form--phase4")).toBeVisible();
+    await expect(page.locator(".tenant-support-command-band--phase7")).toBeVisible();
+    await expect(page.locator(".tenant-support-guardrail-grid")).toBeVisible();
     await expect(page.getByRole("button", { name: /request access/i })).toBeVisible();
     await expect(page.locator(".tenant-support-access-list--phase4")).toBeVisible();
     if (await page.locator(".tenant-support-access-row").count()) {
@@ -110,6 +114,8 @@ test.describe("Tenant Admin Phase 4 governance polish", () => {
     await expectPhase4RouteHealthy(page, phase4Routes[2], "desktop");
 
     await expect(page.locator(".tenant-audit-filter-workspace--phase4")).toHaveCount(2);
+    await expect(page.locator(".tenant-audit-command-band--phase7")).toBeVisible();
+    await expect(page.locator(".tenant-audit-evidence-summary")).toBeVisible();
     await expect(page.locator(".tenant-audit-ledger--phase4")).toBeVisible();
     await expect(page.getByLabel("Trust audit pagination")).toBeVisible();
     await capture(page, "trust-audit-desktop");

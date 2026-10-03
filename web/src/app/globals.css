@@ -9397,6 +9397,39 @@ select.input-control {
   margin-top: 2px;
 }
 
+.tenant-setup-area__meta {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tenant-setup-area__meta span,
+.tenant-launch-blocker-detail span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.82);
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 8px 9px;
+  overflow-wrap: anywhere;
+}
+
+.tenant-setup-area__meta strong,
+.tenant-launch-blocker-detail strong {
+  color: #334155;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
 .tenant-setup-area--phase3 > .readiness-badge {
   justify-self: end;
 }
@@ -10272,6 +10305,78 @@ select.input-control {
   gap: 14px;
 }
 
+.tenant-dashboard-workspaces {
+  gap: 16px;
+}
+
+.tenant-dashboard-route-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tenant-dashboard-route-card {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  align-content: start;
+  min-height: 170px;
+  padding: 16px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  text-decoration: none;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.tenant-dashboard-route-card:hover,
+.tenant-dashboard-route-card:focus-visible {
+  border-color: #aebdfd;
+  box-shadow: 0 18px 42px rgba(37, 99, 235, 0.12);
+  transform: translateY(-1px);
+}
+
+.tenant-dashboard-route-card:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 2px;
+}
+
+.tenant-dashboard-route-card > div {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tenant-dashboard-route-card strong {
+  color: #111827;
+  font-size: 15px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.tenant-dashboard-route-card p {
+  margin: 0;
+  color: #52627a;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.tenant-dashboard-route-card small {
+  align-self: end;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
 .tenant-dashboard-table {
   overflow-x: auto;
 }
@@ -10392,6 +10497,7 @@ select.input-control {
 @media (max-width: 1180px) {
   .tenant-enterprise-kpis,
   .tenant-control-center--dashboard,
+  .tenant-dashboard-route-grid,
   .tenant-role-preview,
   .tenant-role-workspace,
   .tenant-commercial-workspace,
@@ -10519,6 +10625,10 @@ select.input-control {
     border: 1px solid #d9e0ea;
     border-radius: 8px;
     margin-bottom: 10px;
+  }
+
+  .tenant-dashboard-route-grid {
+    grid-template-columns: 1fr;
   }
 
   .tenant-permission-mini-grid {
@@ -17745,6 +17855,63 @@ a.payroll-setup-mini-card {
   text-align: right;
 }
 
+.tenant-user-access-guide {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 440px);
+  gap: 14px;
+  align-items: stretch;
+  border: 1px solid rgba(203, 213, 225, 0.78);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.88));
+  padding: 14px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.04);
+}
+
+.tenant-user-access-guide__copy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.tenant-user-access-guide__copy h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+
+.tenant-user-access-guide__copy p {
+  margin: 0;
+  max-width: 720px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tenant-user-access-guide__steps {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.tenant-user-access-guide__steps span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+  padding: 10px 11px;
+}
+
 .tenant-membership-actions,
 .tenant-membership-actions__invite,
 .tenant-membership-actions__members {
@@ -17760,10 +17927,52 @@ a.payroll-setup-mini-card {
   gap: 14px;
 }
 
+.tenant-role-design-guide {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.92), rgba(255, 255, 255, 0.96));
+  padding: 12px;
+}
+
+.tenant-role-design-guide > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 9px;
+  align-items: start;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 10px;
+}
+
+.tenant-role-design-guide .record-chip {
+  grid-row: span 2;
+  align-self: start;
+}
+
+.tenant-role-design-guide strong {
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.tenant-role-design-guide p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .tenant-role-workspace {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
   gap: 16px;
   align-items: start;
 }
@@ -18131,6 +18340,36 @@ a.payroll-setup-mini-card {
   gap: 8px;
 }
 
+.tenant-directory-guidance {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tenant-directory-guidance div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.74);
+  padding: 10px 11px;
+}
+
+.tenant-directory-guidance strong {
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.tenant-directory-guidance span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .tenant-inline-notice {
   display: inline-flex;
   width: fit-content;
@@ -18170,7 +18409,7 @@ a.payroll-setup-mini-card {
     minmax(76px, 0.42fr)
     minmax(116px, 0.64fr)
     minmax(88px, 0.46fr)
-    minmax(188px, 0.96fr);
+    minmax(164px, 0.84fr);
   align-items: start;
   gap: 8px;
 }
@@ -18255,6 +18494,13 @@ a.payroll-setup-mini-card {
   line-height: 1.35;
 }
 
+.tenant-directory-role-list {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .tenant-membership-row__actions {
   display: flex;
   min-width: 0;
@@ -18265,11 +18511,11 @@ a.payroll-setup-mini-card {
 }
 
 .tenant-membership-row__actions .button {
-  flex: 1 1 78px;
+  flex: 1 1 72px;
   width: auto;
-  min-width: 70px;
-  min-height: 34px;
-  padding: 8px 9px;
+  min-width: 68px;
+  min-height: 32px;
+  padding: 7px 8px;
   white-space: normal;
 }
 
@@ -18323,6 +18569,53 @@ a.payroll-setup-mini-card {
   white-space: nowrap;
 }
 
+.tenant-seat-ownership-panel {
+  gap: 14px;
+}
+
+.tenant-seat-ownership-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tenant-role-coverage-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 12px;
+}
+
+.tenant-role-coverage-card--muted {
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.tenant-role-coverage-card div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.tenant-role-coverage-card strong {
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.tenant-role-coverage-card span:not(.record-chip) {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .tenant-permission-overview {
   display: grid;
   min-width: 0;
@@ -18355,6 +18648,33 @@ a.payroll-setup-mini-card {
   max-height: 620px;
   overflow: auto;
   padding-right: 2px;
+}
+
+.tenant-permission-overview__stats {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tenant-permission-overview__stats span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.78);
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 9px;
+}
+
+.tenant-permission-overview__stats strong {
+  color: #111827;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .tenant-permission-overview__group {
@@ -18611,11 +18931,46 @@ a.payroll-setup-mini-card {
   gap: 10px;
 }
 
+.tenant-security-domain-summary {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tenant-security-domain-summary span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.82);
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  padding: 9px;
+  text-transform: uppercase;
+}
+
+.tenant-security-domain-summary strong {
+  color: #111827;
+  font-size: 18px;
+  line-height: 1;
+}
+
 .tenant-governance-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(190px, 0.46fr) minmax(112px, auto);
   align-items: start;
   gap: 12px;
+}
+
+.tenant-launch-blocker-detail {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
 }
 
 .tenant-governance-row__summary,
@@ -18692,6 +19047,54 @@ a.payroll-setup-mini-card {
   min-height: 92px;
 }
 
+.tenant-support-guardrail-grid,
+.tenant-audit-evidence-summary {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tenant-support-guardrail-card,
+.tenant-audit-evidence-summary span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.82);
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 12px;
+}
+
+.tenant-support-guardrail-card > span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.tenant-support-guardrail-card strong,
+.tenant-audit-evidence-summary strong {
+  color: #111827;
+  font-size: 16px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.tenant-support-guardrail-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.tenant-audit-evidence-summary {
+  margin-top: 12px;
+}
+
 .tenant-audit-ledger--phase4 .tenant-console-row {
   grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
 }
@@ -18708,9 +19111,93 @@ a.payroll-setup-mini-card {
   height: 100%;
 }
 
+.tenant-plan-command-band {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(0, 1.3fr);
+  gap: 18px;
+  align-items: center;
+  border: 1px solid rgba(203, 213, 225, 0.82);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
+  padding: 18px;
+}
+
+.tenant-plan-command-band h2 {
+  margin: 4px 0 0;
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.tenant-plan-command-band ol {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tenant-plan-command-band li {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 12px;
+}
+
+.tenant-plan-command-band li strong {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  font-size: 13px;
+}
+
+.tenant-plan-command-band li span {
+  min-width: 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
 .tenant-settings-workspace .tenant-console-detail-grid,
 .tenant-commercial-workspace .tenant-console-detail-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tenant-settings-action-strip {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.86);
+  padding: 12px;
+}
+
+.tenant-settings-action-strip p {
+  min-width: 0;
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .tenant-modal-shell {
@@ -18872,6 +19359,39 @@ a.payroll-setup-mini-card {
   gap: 14px;
 }
 
+.tenant-change-request-section {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.62);
+  padding: 14px;
+}
+
+.tenant-change-request-section--queue {
+  background: #ffffff;
+}
+
+.tenant-change-request-section__header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tenant-change-request-section__header h3 {
+  margin: 2px 0 0;
+  color: #111827;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.tenant-change-request-section__header > div:first-child {
+  min-width: 0;
+}
+
 .tenant-change-request-form {
   display: grid;
   min-width: 0;
@@ -18985,6 +19505,10 @@ a.payroll-setup-mini-card {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.tenant-change-request-section .tenant-membership-actions__footer {
+  justify-content: flex-end;
 }
 
 .tenant-field-error {
@@ -20610,6 +21134,16 @@ a.payroll-setup-mini-card {
   .saas-history-grid,
   .tenant-console-grid,
   .tenant-console-detail-grid,
+  .tenant-role-design-guide,
+  .tenant-user-access-guide,
+  .tenant-plan-command-band,
+  .tenant-plan-command-band ol,
+  .tenant-setup-area__meta,
+  .tenant-security-domain-summary,
+  .tenant-support-guardrail-grid,
+  .tenant-audit-evidence-summary,
+  .tenant-directory-guidance,
+  .tenant-seat-ownership-grid,
   .tenant-setup-guide__body,
   .organization-import-grid,
   .support-session-grid,
@@ -20647,6 +21181,19 @@ a.payroll-setup-mini-card {
   }
 
   .tenant-setup-area--phase3 > .button {
+    width: 100%;
+  }
+
+  .tenant-user-access-guide__steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tenant-settings-action-strip {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tenant-settings-action-strip .button {
     width: 100%;
   }
 
@@ -20844,6 +21391,15 @@ a.payroll-setup-mini-card {
 
   .tenant-modal__actions .button,
   .tenant-membership-actions__header-actions .button {
+    width: 100%;
+  }
+
+  .tenant-seat-ownership-panel .tenant-console-panel__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tenant-seat-ownership-panel .tenant-membership-actions__header-actions {
     width: 100%;
   }
 
@@ -21100,6 +21656,17 @@ a.payroll-setup-mini-card {
   .saas-history-row,
   .tenant-console-grid,
   .tenant-console-detail-grid,
+  .tenant-role-design-guide,
+  .tenant-user-access-guide,
+  .tenant-plan-command-band,
+  .tenant-plan-command-band ol,
+  .tenant-setup-area__meta,
+  .tenant-security-domain-summary,
+  .tenant-support-guardrail-grid,
+  .tenant-audit-evidence-summary,
+  .tenant-directory-guidance,
+  .tenant-user-access-guide__steps,
+  .tenant-seat-ownership-grid,
   .support-session-grid,
   .tenant-membership-form-grid,
   .tenant-membership-row,
@@ -21127,6 +21694,16 @@ a.payroll-setup-mini-card {
   .tenant-support-access-row__actions,
   .platform-permission-filters__actions {
     justify-content: stretch;
+  }
+
+  .tenant-change-request-section__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tenant-change-request-section__header .tenant-membership-pager {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .tenant-membership-row__actions .button,

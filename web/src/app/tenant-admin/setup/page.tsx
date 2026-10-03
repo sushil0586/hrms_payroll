@@ -37,6 +37,8 @@ export default async function TenantSetupGuidePage() {
       status: data.tenant.legal_name && data.tenant.country_code && data.tenant.timezone ? "ready" : "blocked",
       detail: "Legal name, country, timezone, plan, and account posture.",
       evidence: `${data.tenant.legal_name || data.tenant.name} · ${data.tenant.country_code} · ${data.tenant.timezone}`,
+      dependency: "Tenant account exists and subscription is active.",
+      outcome: "Customer identity is ready for contracts, payroll, and support evidence.",
       href: "/tenant-admin",
       action: "Review profile",
     },
@@ -47,6 +49,8 @@ export default async function TenantSetupGuidePage() {
       status: data.configuration_health.published_count ? "ready" : "blocked",
       detail: "Legal entities, branches, locations, departments, grades, designations, and cost centers.",
       evidence: `${data.configuration_health.published_count} published configs, ${data.configuration_health.draft_count} drafts`,
+      dependency: "Company profile and legal entity scope are confirmed.",
+      outcome: "Employee onboarding can map every worker to a valid organization path.",
       href: "/hr-admin/organization",
       action: "Open masters",
     },
@@ -57,6 +61,8 @@ export default async function TenantSetupGuidePage() {
       status: data.summary.active_membership_count > 1 ? "ready" : "warning",
       detail: "Invite admins, assign roles, and keep seat usage within plan limits.",
       evidence: `${data.summary.active_membership_count} active members, ${data.role_coverage.length} role groups`,
+      dependency: "Tenant roles are available and owner/admin users are known.",
+      outcome: "Admins can operate HR, payroll, security, and support workflows safely.",
       href: "/tenant-admin/users",
       action: "Manage access",
     },
@@ -67,6 +73,8 @@ export default async function TenantSetupGuidePage() {
       status: data.summary.published_configuration_count ? "ready" : "blocked",
       detail: "Pay calendars, pay groups, salary components, policies, and provider-ready payroll setup.",
       evidence: `${data.summary.published_configuration_count} published setup records`,
+      dependency: "Organization masters and payroll ownership are in place.",
+      outcome: "Payroll inputs can be collected without missing master-data references.",
       href: "/hr-admin/payroll-setup",
       action: "Open payroll setup",
     },
@@ -77,6 +85,8 @@ export default async function TenantSetupGuidePage() {
       status: blockers.length ? "blocked" : warnings.length ? "warning" : "ready",
       detail: "Security readiness, trust audit evidence, support grants, and launch blockers.",
       evidence: `${blockers.length} blockers, ${warnings.length} warnings`,
+      dependency: "Users, roles, support-access scope, and audit posture are reviewed.",
+      outcome: "Tenant is ready for controlled production access and audit signoff.",
       href: "/tenant-admin/security-readiness",
       action: "Review gates",
     },
@@ -115,6 +125,30 @@ export default async function TenantSetupGuidePage() {
         </div>
       </section>
 
+      <section className="section">
+        <div className="tenant-plan-command-band tenant-setup-command-band--phase6">
+          <div>
+            <span className="workspace-card__eyebrow">Setup workflow</span>
+            <h2>Launch map</h2>
+            <p className="tenant-section-copy">Use this page to route each setup area to its owner. Actual editing stays on the focused owner page.</p>
+          </div>
+          <ol aria-label="Tenant setup workflow">
+            <li>
+              <strong>1</strong>
+              <span>Confirm account baseline</span>
+            </li>
+            <li>
+              <strong>2</strong>
+              <span>Complete HR and payroll foundations</span>
+            </li>
+            <li>
+              <strong>3</strong>
+              <span>Clear security and launch gates</span>
+            </li>
+          </ol>
+        </div>
+      </section>
+
       <section className="section tenant-setup-workbench tenant-setup-workbench--phase3" data-testid="tenant-setup-workbench">
         <div className="panel-card-soft tenant-console-panel tenant-setup-guide">
           <div className="tenant-console-panel__header">
@@ -136,6 +170,16 @@ export default async function TenantSetupGuidePage() {
                   <h3>{area.title}</h3>
                   <p>{area.detail}</p>
                   <span className="tenant-setup-area__evidence">{area.evidence}</span>
+                  <div className="tenant-setup-area__meta">
+                    <span>
+                      <strong>Depends on</strong>
+                      {area.dependency}
+                    </span>
+                    <span>
+                      <strong>Outcome</strong>
+                      {area.outcome}
+                    </span>
+                  </div>
                 </div>
                 <span className={badgeClass(area.status)}>{titleCase(area.status)}</span>
                 <Link className="button button--secondary" href={area.href}>

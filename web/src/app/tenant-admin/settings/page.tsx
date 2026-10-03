@@ -35,7 +35,7 @@ export default async function TenantAdminSettingsPage() {
       <PageIntro
         eyebrow={result.state === "live" ? "Live account settings" : "Demo account settings"}
         title="Tenant Settings"
-        description="Review tenant-owned account profile, platform-owned identifiers, and configuration posture."
+        description="Review tenant identity, platform-owned identifiers, and the governed path for account profile changes."
         actions={
           <>
             <Link className="button button--primary" href="/tenant-admin">
@@ -44,14 +44,6 @@ export default async function TenantAdminSettingsPage() {
             <Link className="button button--secondary" href="/tenant-admin/setup">
               Setup guide
             </Link>
-            {canManageChangeRequests ? (
-              <Link
-                className="button button--secondary"
-                href="/tenant-admin/plan?request_type=configuration_change&target_ref=tenant.account.profile&title=Update%20tenant%20account%20profile&description=Request%20a%20platform-reviewed%20tenant%20profile%20change."
-              >
-                Request account change
-              </Link>
-            ) : null}
           </>
         }
         pills={[data.tenant.code, data.tenant.country_code, data.tenant.timezone]}
@@ -67,13 +59,36 @@ export default async function TenantAdminSettingsPage() {
         </div>
       </section>
 
-      <section className="section tenant-settings-workspace tenant-settings-workspace--phase3">
+      <section className="section">
+        <div className="tenant-plan-command-band tenant-settings-command-band--phase5">
+          <div>
+            <span className="workspace-card__eyebrow">Settings workflow</span>
+            <h2>Keep account settings readable, controlled, and auditable.</h2>
+          </div>
+          <ol>
+            <li>
+              <strong>1</strong>
+              <span>Confirm tenant identity.</span>
+            </li>
+            <li>
+              <strong>2</strong>
+              <span>Check readiness and configuration posture.</span>
+            </li>
+            <li>
+              <strong>3</strong>
+              <span>Request governed profile changes.</span>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section className="section tenant-settings-workspace tenant-settings-workspace--phase3 tenant-settings-workspace--phase5">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
             <div>
               <span className="workspace-card__eyebrow">Tenant account</span>
               <h2>{data.tenant.name}</h2>
-              <p className="tenant-console-empty">Core identity values are visible here; governed changes should be raised through a change request.</p>
+              <p className="tenant-console-empty">Core identity values are visible here; governed updates should start from a change request.</p>
             </div>
             <span className={statusBadgeClass(data.tenant.status)}>{titleCase(data.tenant.status)}</span>
           </div>
@@ -95,7 +110,17 @@ export default async function TenantAdminSettingsPage() {
               <strong>{data.tenant.timezone}</strong>
             </div>
           </div>
-          <p className="tenant-console-empty">Tenant identifiers are platform-governed. Use Request account change for legal-name, code, timezone, or activation updates.</p>
+          <div className="tenant-settings-action-strip">
+            <p>Tenant identifiers are platform-governed. Use Request account change for legal-name, code, timezone, or activation updates.</p>
+            {canManageChangeRequests ? (
+              <Link
+                className="button button--secondary"
+                href="/tenant-admin/plan?request_type=configuration_change&target_ref=tenant.account.profile&title=Update%20tenant%20account%20profile&description=Request%20a%20platform-reviewed%20tenant%20profile%20change."
+              >
+                Request account change
+              </Link>
+            ) : null}
+          </div>
         </div>
 
         <div className="panel-card-soft tenant-console-panel">
@@ -103,7 +128,7 @@ export default async function TenantAdminSettingsPage() {
             <div>
               <span className="workspace-card__eyebrow">Governance checks</span>
               <h2>Readiness checks</h2>
-              <p className="tenant-console-empty">Resolve blockers before enabling production account operations.</p>
+              <p className="tenant-console-empty">Compact account posture review before production operations are enabled.</p>
             </div>
             <span className={statusBadgeClass(data.summary.status)}>{titleCase(data.summary.status)}</span>
           </div>

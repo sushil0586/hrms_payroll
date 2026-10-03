@@ -5,6 +5,7 @@ This document tracks Tenant Admin typography and usability rollout. It mirrors t
 References:
 
 - `docs/ux/typography-system.md`
+- `docs/ux/tenant-admin-single-responsibility-redesign.md`
 - `web/tests/e2e/tenant-admin-dashboard-phase2-polish.spec.ts`
 - `web/tests/e2e/tenant-admin-final-release-gate.spec.ts`
 - `web/tests/e2e/tenant-admin-governance-phase4-polish.spec.ts`
@@ -19,6 +20,8 @@ References:
 - `Passed`: route has passed focused browser, typography, link, and responsive checks.
 
 ## Main Menu
+
+Note: the original typography and usability rollout below remains valid. A newer single-responsibility redesign track is now documented in `docs/ux/tenant-admin-single-responsibility-redesign.md` because the next concern is page ownership and cognitive load, not only visual polish.
 
 | Group | Menu | Route | Intended Purpose | Rollout Phase | QA Status |
 | --- | --- | --- | --- | --- | --- |

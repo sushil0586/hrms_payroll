@@ -4,6 +4,8 @@ import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertio
 import { employee, gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("Tenant admin console", () => {
+  test.describe.configure({ mode: "serial" });
+
   async function captureTenantAdminStep(page: Page, testInfo: TestInfo, name: string) {
     await testInfo.attach(name, {
       body: await page.screenshot({ fullPage: true }),
@@ -14,13 +16,11 @@ test.describe("Tenant admin console", () => {
   async function expectDashboardPreviewCertified(page: Page) {
     const dashboardPreview = page.getByTestId("tenant-setup-guide");
     await expect(dashboardPreview).toBeVisible();
-    await expect(dashboardPreview.getByText("Recently Added Users", { exact: true })).toBeVisible();
-    await expect(dashboardPreview.getByRole("heading", { name: "User Management" })).toBeVisible();
-    await expect(dashboardPreview.getByRole("link", { name: "View all users" })).toBeVisible();
-    await expect(dashboardPreview.getByText("Roles & Permissions", { exact: true })).toBeVisible();
-    await expect(dashboardPreview.getByRole("heading", { name: "Access design" })).toBeVisible();
-    await expect(dashboardPreview.getByRole("link", { name: "Manage all roles" })).toBeVisible();
-    await expect(dashboardPreview.getByText("Permission Matrix", { exact: true })).toBeVisible();
+    await expect(dashboardPreview.getByText("Focused Workspaces", { exact: true })).toBeVisible();
+    await expect(dashboardPreview.getByRole("heading", { name: "Open the right workspace" })).toBeVisible();
+    await expect(dashboardPreview.locator('a[href="/tenant-admin/users"]')).toBeVisible();
+    await expect(dashboardPreview.locator('a[href="/tenant-admin/roles"]')).toBeVisible();
+    await expect(dashboardPreview.locator('a[href="/tenant-admin/trust-audit"]')).toBeVisible();
   }
 
   test("shows account, seats, configuration, and commercial evidence", async ({ page }) => {
@@ -34,10 +34,7 @@ test.describe("Tenant admin console", () => {
     await expect(page.getByRole("heading", { name: "Items that need your attention" })).toBeVisible();
     await expect(page.getByTestId("tenant-next-action")).toBeVisible();
     await expect(page.getByTestId("tenant-next-action").getByText("Priority", { exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Complete these key items to ensure smooth operation." })).toBeVisible();
-    await expect(
-      page.getByTestId("tenant-next-action").getByText("Confirm company profile", { exact: true }).first()
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Launch checklist" })).toBeVisible();
     await expect(page.getByTestId("tenant-next-action").getByRole("link").first()).toBeVisible();
     await expectDashboardPreviewCertified(page);
     await expectNoHorizontalOverflow(page);

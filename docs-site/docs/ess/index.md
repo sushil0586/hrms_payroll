@@ -4,6 +4,33 @@ Employee Self Service is the employee workspace for personal HR, payroll, docume
 
 ![Employee self service overview](../assets/screenshots/ess/overview.png)
 
+## On This Page
+
+- [ESS Quick Navigation](#ess-quick-navigation)
+- [What Employees Can Do](#what-employees-can-do)
+- [Screen Labels To Recognize](#screen-labels-to-recognize)
+- [Latest Page Pattern](#latest-page-pattern)
+- [How To Use The Overview](#how-to-use-the-overview)
+- [Employee Checklist](#employee-checklist)
+- [First Week Setup Checklist](#first-week-setup-checklist)
+- [Daily use guide](#daily-use-guide)
+- [What HR Controls Upstream](#what-hr-controls-upstream)
+- [Common statuses](#common-statuses)
+- [Browser Certification Coverage](#browser-certification-coverage)
+
+## ESS Quick Navigation
+
+| I need to | Open | Verify before finishing |
+| --- | --- | --- |
+| Know what needs my attention today | Overview | Priority cards, unread alerts, leave/attendance exceptions, and document blockers. |
+| Apply leave or check balance | [Leave](leave.md) | Leave type, available balance, evidence rule, date range, and approval status. |
+| Correct attendance | [Attendance](attendance.md) | Attendance date, lock state, corrected time, reason, and manager approval state. |
+| Download salary proof | [Payslips](payslips.md) | Correct payroll month, employee name/code, net pay, and published/download status. |
+| Upload joining or identity proof | [Documents](documents.md) | Required category, file clarity, document number, expiry date, and HR review status. |
+| Update investment/tax proof | [Tax Declarations](statutory-declarations.md) | Active tax year, PAN, regime, rejected proof count, proof window, and submit readiness. |
+| Understand an alert | [Notifications](notifications.md) | Message, source workflow, read state, and failed delivery reason if any. |
+| Follow a step-by-step task | [ESS Task Recipes](task-recipes.md) | Use the matching recipe, then verify the expected result. |
+
 ## What Employees Can Do
 
 | Area | Purpose | Best next action |
@@ -15,6 +42,18 @@ Employee Self Service is the employee workspace for personal HR, payroll, docume
 | Documents | Upload required employee documents and review document status. | Use when HR asks for ID, address, bank, qualification, or employment proof. |
 | Tax Declarations | Submit tax declarations, proof items, and statutory information. | Use before payroll proof cutoff or year-end proof collection. |
 | Notifications | Review employee alerts and open the source workflow. | Use when an email, in-app alert, or HR action needs follow-up. |
+
+## Screen Labels To Recognize
+
+Employees should be able to recognize these areas immediately on the ESS overview:
+
+| Screen label | What it means |
+| --- | --- |
+| Today's actions | The priority list of employee tasks that may need attention today. |
+| What do you want to do? | Quick action shortcuts for common self-service work. |
+| My profile | Employee identity and profile context pulled from HR Admin. |
+| Today | Current attendance snapshot. |
+| Leave balances | Available leave snapshot before applying. |
 
 ## Latest Page Pattern
 

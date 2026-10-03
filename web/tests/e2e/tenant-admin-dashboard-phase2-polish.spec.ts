@@ -50,8 +50,11 @@ async function expectDashboardHealthy(page: Page, label: string) {
   await expect(page.getByTestId("tenant-admin-control-center")).toBeVisible();
   await expect(page.getByText("Items that need your attention")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Launch checklist" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "User Management" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Access design" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Open the right workspace" })).toBeVisible();
+  await expect(page.getByText("Detailed users, roles, support grants, and audit records stay on their own pages.")).toBeVisible();
+  const routeCards = page.locator(".tenant-dashboard-route-grid");
+  await expect(routeCards.getByRole("link", { name: /User access/i })).toBeVisible();
+  await expect(routeCards.getByRole("link", { name: /Access design Roles/i })).toBeVisible();
   await expectNoAppError(page);
   await expectNoHorizontalOverflow(page);
   await expectVisibleLinksAreReal(page, `/tenant-admin ${label}`);
@@ -60,6 +63,8 @@ async function expectDashboardHealthy(page: Page, label: string) {
 }
 
 test.describe("Tenant Admin Phase 2 dashboard polish", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("dashboard reads like a control center on desktop", async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1440, height: 960 });
@@ -72,6 +77,9 @@ test.describe("Tenant Admin Phase 2 dashboard polish", () => {
 
     const actionTableFits = await page.locator(".tenant-action-table").evaluate((table) => table.scrollWidth <= table.clientWidth + 1);
     expect(actionTableFits, "Dashboard action queue should not need horizontal scrolling on desktop").toBe(true);
+
+    const routeGridFits = await page.locator(".tenant-dashboard-route-grid").evaluate((grid) => grid.scrollWidth <= grid.clientWidth + 1);
+    expect(routeGridFits, "Dashboard workspace route cards should not need horizontal scrolling on desktop").toBe(true);
 
     const primaryActions = page.locator(".tenant-page-intro .page-intro__actions");
     await expect(primaryActions).toBeVisible();
@@ -91,6 +99,7 @@ test.describe("Tenant Admin Phase 2 dashboard polish", () => {
     await expect(page.locator(".tenant-action-table__head")).toBeHidden();
     await expect(page.locator(".tenant-action-table__row").first().getByRole("link").first()).toBeVisible();
     await expect(page.locator(".tenant-readiness-item").first()).toBeVisible();
+    await expect(page.locator(".tenant-dashboard-route-card").first()).toBeVisible();
     await capture(page, "dashboard-mobile");
   });
 });

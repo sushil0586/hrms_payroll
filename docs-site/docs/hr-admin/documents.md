@@ -4,6 +4,38 @@ Use **Documents** to decide what employees must submit, review the files they up
 
 This guide is written for HR Admin users who need a practical operating playbook, not only a page description.
 
+## On This Page
+
+- [Document Quick Navigation](#document-quick-navigation)
+- [What Documents Owns](#what-documents-owns)
+- [Use This Page When](#use-this-page-when)
+- [Before Employee Onboarding](#before-employee-onboarding)
+- [Page Sections](#page-sections)
+- [Document Lifecycle](#document-lifecycle)
+- [Recommended Operating Flow](#recommended-operating-flow)
+- [Document Categories](#document-categories)
+- [Requirement Design](#requirement-design)
+- [Employee Upload From ESS](#employee-upload-from-ess)
+- [HR Review Checklist](#hr-review-checklist)
+- [Verification Decision Table](#verification-decision-table)
+- [Payroll And Launch Impact](#payroll-and-launch-impact)
+- [Daily Review Routine](#daily-review-routine)
+- [Troubleshooting](#troubleshooting)
+- [Document signoff checklist](#document-signoff-checklist)
+
+## Document Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Configure documents before onboarding | [Before Employee Onboarding](#before-employee-onboarding) | [Requirement Design](#requirement-design) |
+| Create PAN, bank, passport, or employment proof requirement | [Document Categories](#document-categories) | [Requirement Fields](#requirement-fields) |
+| Test employee upload from ESS | [Employee Upload From ESS](#employee-upload-from-ess) | [Recommended Operating Flow](#recommended-operating-flow) |
+| Review uploaded proof | [HR Review Checklist](#hr-review-checklist) | [Verification Decision Table](#verification-decision-table) |
+| Write a clear rejection note | [Rejection Notes](#rejection-notes) | [Negative Scenario: Wrong Category Or Wrong File](#negative-scenario-wrong-category-or-wrong-file) |
+| Fix employee cannot see document request | [Negative Scenario: Employee Cannot See Document Request](#negative-scenario-employee-cannot-see-document-request) | [Requirement Design](#requirement-design) |
+| Clear document payroll or launch blockers | [Payroll And Launch Impact](#payroll-and-launch-impact) | [Document signoff checklist](#document-signoff-checklist) |
+| Run daily HR document review | [Daily Review Routine](#daily-review-routine) | [Before Marking Document Work Complete](#before-marking-document-work-complete) |
+
 ## What Documents Owns
 
 Documents owns the proof lifecycle:
@@ -490,6 +522,16 @@ Check expiry date, requirement scope, duplicate requirements, payroll period, lo
 ### Can HR accept a document with a small mismatch?
 
 Only if tenant policy allows it. Add a reviewer note explaining the decision.
+
+## Document signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Required document categories exist. | Employee uploads route to the correct category. |
+| Pending documents are reviewed. | Accept/reject decisions include reviewer and reason. |
+| Rejections are actionable. | Employee can understand what to upload next. |
+| Expiry-sensitive documents are tracked. | Expiring or expired documents show in HR queues. |
+| Payroll-critical documents are clear. | PAN, bank, identity, and statutory proof blockers are resolved before payroll. |
 
 ## Related Guides
 

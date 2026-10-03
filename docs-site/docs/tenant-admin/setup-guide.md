@@ -1,68 +1,98 @@
 # Tenant Setup Guide
 
-Tenant Setup Guide tracks the account launch checklist across organization, users, roles, security, and support readiness.
-
-## Purpose
-
-Use Setup Guide during onboarding or after major account changes to confirm the tenant is ready for everyday use.
+The Tenant Setup Guide tracks whether the account has the minimum configuration needed before live HR, payroll, ESS, MSS, and governance workflows are used.
 
 ![Tenant setup guide](../assets/screenshots/tenant-admin/setup-guide.png)
 
-## Use this page when
+## On This Page
 
-- A new tenant is being configured.
-- Setup status is incomplete.
-- A launch or readiness gate is blocked.
-- You need to know which setup area to open next.
+- [When to use this page](#when-to-use-this-page)
+- [Setup areas](#setup-areas)
+- [Screen labels to recognize](#screen-labels-to-recognize)
+- [Controls and actions](#controls-and-actions)
+- [Recommended setup order](#recommended-setup-order)
+- [Example: prepare a new tenant for launch](#example-prepare-a-new-tenant-for-launch)
+- [Validation and negative cases](#validation-and-negative-cases)
+- [Signoff checklist](#signoff-checklist)
 
-## Setup areas
+## When To Use This Page
 
-| Area | Meaning |
+- A tenant is newly created and needs first-time setup.
+- Launch readiness is blocked by incomplete account setup.
+- A tenant owner wants to know which setup areas are still pending.
+- Implementation needs a safe handoff checklist.
+
+## Setup Areas
+
+| Area | Purpose | Typical owner |
+| --- | --- | --- |
+| Account foundation | Tenant identity, domain, timezone, and baseline profile. | Tenant admin or implementation lead. |
+| Users and roles | Admin users and access model. | Tenant admin. |
+| HR setup | Organization, employees, documents, policies, and workflows. | HR admin. |
+| Payroll setup | Payroll calendar, pay groups, salary, rules, and statutory setup. | Payroll admin. |
+| Security setup | MFA, SSO, sessions, support access, and audit controls. | Tenant admin or security owner. |
+| Evidence | Audit-ready records for setup completion. | Tenant admin and implementation lead. |
+
+## Screen Labels To Recognize
+
+| Screen label | Meaning |
 | --- | --- |
-| Organization setup | Legal entities, locations, departments, and other masters. |
-| Users and access | Tenant users, assigned roles, and seat coverage. |
-| HR workspace setup | HR admin data required for operations. |
-| Payroll setup | Payroll configuration and source readiness. |
-| Security and audit | Security readiness, trust evidence, and support access. |
+| Setup areas | Setup domains that must be completed before launch. |
+| Start master setup | Entry point for the first guided setup activity. |
+| Dependency guardrails | Checks that explain which prerequisite blocks the next setup step. |
 
-## Workflow
+## Controls And Actions
 
-1. Open **Setup Guide**.
-2. Review incomplete or action-required areas.
-3. Open the linked setup area.
-4. Complete the missing setup.
-5. Return to Setup Guide.
-6. Confirm the status improved.
+| Control | Meaning | Expected result |
+| --- | --- | --- |
+| Start master setup | Opens the guided setup entry point. | Tenant admin can start or resume first-run setup. |
+| Back to console | Returns to Tenant Dashboard. | Tenant admin can re-check account posture. |
+| Review profile | Opens the company profile setup area. | Missing tenant profile data can be completed in the correct page. |
+| Setup status | Shows complete, warning, or blocked state. | Status improves after the underlying setup is done. |
 
-## Recommended completion order
+## Recommended Setup Order
 
-1. Organization setup.
-2. Users and access.
-3. HR workspace setup.
-4. Payroll setup.
-5. Security and audit.
-6. Final launch readiness.
+1. Confirm account profile in **Settings**.
+2. Confirm plan limits in **Plan and Billing**.
+3. Review **Roles** before inviting users.
+4. Add tenant admins and HR owners in **Users**.
+5. Complete HR Admin organization and employee setup.
+6. Complete payroll setup if payroll is in scope.
+7. Review **Security Readiness**.
+8. Confirm **Trust Audit** has setup evidence.
 
-## What to do when a step is blocked
+## Example: Prepare A New Tenant For Launch
 
-- Open the linked setup area.
-- Read the blocker message.
-- Fix the source data or ownership issue.
-- Return to Setup Guide and refresh/recheck the state.
-- If the blocker remains, use Trust Audit or Support Access evidence before escalating.
+1. Open **Tenant Admin > Setup Guide**.
+2. Review all setup areas.
+3. Open blocked areas first.
+4. If account profile is incomplete, go to **Settings**.
+5. If users or roles are incomplete, go to **Users** or **Roles**.
+6. If HR or payroll setup is incomplete, open the HR Admin workspace.
+7. Return to Setup Guide and confirm statuses improved.
+8. Use **Security Readiness** before production handoff.
 
-## Good practice
+## Validation And Negative Cases
 
-- Complete organization masters before employee imports.
-- Complete users and roles before handoff to customer admins.
-- Resolve security and audit items before production launch.
+| Case | Expected behavior | What to do |
+| --- | --- | --- |
+| Setup item links to HR Admin but user cannot open it | User lacks HR Admin role. | Assign correct role from Users. |
+| Setup item remains blocked after update | Evidence may not be generated yet or another dependency is missing. | Open the linked detail page and review the exact blocker. |
+| Plan limit blocks setup | Setup cannot complete until commercial limit is changed. | Use Plan and Billing change request. |
+| Security blocker remains | Setup and security are separate. | Resolve Security Readiness item. |
 
-## FAQ
+## Signoff Checklist
 
-### Why does setup order matter?
+- Account profile is complete.
+- At least two tenant admins are active.
+- HR owner has HR Admin access.
+- Payroll owner has payroll access if payroll is in scope.
+- No launch-critical setup area is blocked.
+- Security Readiness is reviewed.
+- Trust Audit contains setup and access evidence.
 
-Later workflows depend on earlier setup. For example, employees need organization masters, payroll needs employee and bank data, and launch needs users and security evidence.
+## Related Guides
 
-### Should I use Setup Guide after launch?
-
-Yes, after major account changes, new modules, or readiness concerns.
+- [Tenant Dashboard](dashboard.md)
+- [Settings](settings.md)
+- [Security Readiness](security.md)

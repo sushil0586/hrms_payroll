@@ -2,6 +2,29 @@
 
 Use this roadmap to build practical, example-led HR Admin documentation. Each phase must explain the real workflow, exact user action, expected result, negative cases, and downstream impact.
 
+## On This Page
+
+- [Roadmap Quick Navigation](#roadmap-quick-navigation)
+- [Status flags](#status-flags)
+- [Documentation standard](#documentation-standard)
+- [Phase plan](#phase-plan)
+- [Completed HR Admin Documentation Audit](#completed-hr-admin-documentation-audit)
+- [Phase 9-15: Payroll](#phase-9-15-payroll)
+- [Phase 16: Reports and Audit](#phase-16-reports-and-audit)
+- [Phase 17: Launch Readiness and Ops Health](#phase-17-launch-readiness-and-ops-health)
+- [Phase 18: End-to-End Recipes](#phase-18-end-to-end-recipes)
+- [Update protocol](#update-protocol)
+
+## Roadmap Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Understand documentation quality bar | [Documentation standard](#documentation-standard) | [Status flags](#status-flags) |
+| See current phase status | [Phase plan](#phase-plan) | [Completed HR Admin Documentation Audit](#completed-hr-admin-documentation-audit) |
+| Review payroll documentation scope | [Phase 9-15: Payroll](#phase-9-15-payroll) | [Phase 13: Payroll Inputs and Calculations](#phase-13-payroll-inputs-and-calculations) |
+| Review evidence and launch docs scope | [Phase 16: Reports and Audit](#phase-16-reports-and-audit) | [Phase 17: Launch Readiness and Ops Health](#phase-17-launch-readiness-and-ops-health) |
+| Update docs after product changes | [Update protocol](#update-protocol) | [Documentation standard](#documentation-standard) |
+
 ## Status flags
 
 | Flag | Meaning |

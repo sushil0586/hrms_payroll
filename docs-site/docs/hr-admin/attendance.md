@@ -10,6 +10,35 @@ Use this guide when you need to answer:
 - How does a manager approve or reject attendance regularization from MSS?
 - Why is payroll blocked by attendance?
 
+## On This Page
+
+- [Attendance Quick Navigation](#attendance-quick-navigation)
+- [Who Uses Attendance Management](#who-uses-attendance-management)
+- [Attendance Management Map](#attendance-management-map)
+- [Recommended Setup Order](#recommended-setup-order)
+- [Main HR Admin Attendance Page](#main-hr-admin-attendance-page)
+- [Attendance Statuses](#attendance-statuses)
+- [Daily HR Review Workflow](#daily-hr-review-workflow)
+- [Payroll Period Review Workflow](#payroll-period-review-workflow)
+- [Regularization Request Fields](#regularization-request-fields)
+- [Buttons and Actions](#buttons-and-actions)
+- [Manager Approval From MSS](#manager-approval-from-mss)
+- [ESS Attendance Request Flow](#ess-attendance-request-flow)
+- [Payroll Impact](#payroll-impact)
+- [Troubleshooting](#troubleshooting)
+- [Attendance signoff checklist](#attendance-signoff-checklist)
+
+## Attendance Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Set up attendance for a new tenant | [Recommended Setup Order](#recommended-setup-order) | [Attendance Policy Setup Guidance](#attendance-policy-setup-guidance) |
+| Review daily attendance exceptions | [Daily HR Review Workflow](#daily-hr-review-workflow) | [Attendance Statuses](#attendance-statuses) |
+| Prepare attendance before payroll | [Payroll Period Review Workflow](#payroll-period-review-workflow) | [Payroll Impact](#payroll-impact) |
+| Help employee submit correction | [ESS Attendance Request Flow](#ess-attendance-request-flow) | [Regularization Request Fields](#regularization-request-fields) |
+| Help manager approve/reject | [Manager Approval From MSS](#manager-approval-from-mss) | [Buttons and Actions](#buttons-and-actions) |
+| Diagnose absent, late, missing punch, or shift errors | [Troubleshooting](#troubleshooting) | [Decision Quality Checklist](#decision-quality-checklist) |
+
 ## Who Uses Attendance Management
 
 | User | Responsibility |
@@ -580,6 +609,16 @@ Payroll Admin opens **Payroll Control** and confirms attendance blocker count is
 - Do not approve requests only because the employee asks; validate policy and evidence.
 - Track repeated exceptions by employee, manager, branch, and shift.
 - Avoid changing attendance rules during payroll close unless it fixes a blocker.
+
+## Attendance signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Shift/calendar setup is active. | Attendance records calculate against the right working pattern. |
+| Exceptions are reviewed. | Missing punch, late mark, overtime, and regularization items have clear status. |
+| Manager approvals are closed. | Payroll-period attendance requests are approved, rejected, or escalated. |
+| Manual corrections have notes. | HR corrections include reason and evidence. |
+| Payroll blocker count is clean. | Payroll Control no longer shows unresolved attendance blockers. |
 
 ## Related Pages
 

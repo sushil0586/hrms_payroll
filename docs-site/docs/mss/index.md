@@ -4,6 +4,28 @@ Manager Self Service is the manager workspace for team approvals, team alerts, a
 
 ![Manager dashboard](../assets/screenshots/mss/control-center.png)
 
+## On This Page
+
+- [MSS Quick Navigation](#mss-quick-navigation)
+- [What Managers Can Do](#what-managers-can-do)
+- [Screen Labels To Recognize](#screen-labels-to-recognize)
+- [How To Use The Dashboard](#how-to-use-the-dashboard)
+- [Manager Checklist](#manager-checklist)
+- [Manager decision principles](#manager-decision-principles)
+- [What managers should not do](#what-managers-should-not-do)
+- [Related Pages](#related-pages)
+
+## MSS Quick Navigation
+
+| I need to | Open | Verify before finishing |
+| --- | --- | --- |
+| See what my team needs today | Dashboard | Pending decisions, active signals, leave coverage, and attendance fixes. |
+| Approve or reject leave | [Approvals](approvals.md) > Leave | Employee, dates, leave type, units, reason, team coverage, and manager note. |
+| Approve or reject attendance correction | [Approvals](approvals.md) > Attendance | Attendance date, current status, requested status, punch times, reason, and payroll impact. |
+| Review completed manager decisions | [Approvals](approvals.md) > History | Use read-only history when available; pending items stay in leave/attendance queues. |
+| Triage manager alerts | [Notifications](notifications.md) | Priority, delivery state, source workflow, and read/unread state. |
+| Open my own employee workspace | ESS link from dashboard | Use ESS for personal payslips, documents, tax declarations, leave, and attendance. |
+
 ## What Managers Can Do
 
 | Area | Purpose | Best next action |
@@ -12,6 +34,17 @@ Manager Self Service is the manager workspace for team approvals, team alerts, a
 | Approvals | Review leave and attendance regularization requests. | Open when a team member is waiting for approval. |
 | Notifications | Review manager-facing alerts and source workflow messages. | Use when a notification mentions team action or approval risk. |
 | Self Service | Open your own employee workspace. | Use for your own payslips, documents, leave, and notifications. |
+
+## Screen Labels To Recognize
+
+| Screen label | What it means |
+| --- | --- |
+| What to review next | Manager priority queue for pending team actions. |
+| Coverage context | Team coverage signals before approving leave. |
+| Your ESS | Manager's own employee self-service shortcuts. |
+| Review leave | Opens leave approvals. |
+| Review attendance | Opens attendance regularization approvals. |
+| Team notifications | Opens manager-scoped notification triage. |
 
 ## How To Use The Dashboard
 

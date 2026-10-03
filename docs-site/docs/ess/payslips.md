@@ -4,6 +4,35 @@ Use Payslips to view payslips published by payroll, inspect salary totals in a f
 
 ![ESS payslips](../assets/screenshots/ess/payslips.png)
 
+## On This Page
+
+- [Payslip Quick Navigation](#payslip-quick-navigation)
+- [Page Purpose](#page-purpose)
+- [Main Sections](#main-sections)
+- [Screen Labels To Recognize](#screen-labels-to-recognize)
+- [Controls](#controls)
+- [Before downloading](#before-downloading)
+- [What Payroll Controls Upstream](#what-payroll-controls-upstream)
+- [Example: download the latest payslip](#example-download-the-latest-payslip)
+- [Example: find an older payslip](#example-find-an-older-payslip)
+- [If a payslip is missing](#if-a-payslip-is-missing)
+- [Positive and negative scenarios](#positive-and-negative-scenarios)
+- [Browser certification coverage](#browser-certification-coverage)
+- [Good Practice](#good-practice)
+- [FAQ](#faq)
+- [Related Pages](#related-pages)
+
+## Payslip Quick Navigation
+
+| I need to | Start here | Verify before finishing |
+| --- | --- | --- |
+| Download current month payslip | Latest payslip band | Period, employee name/code, net pay, published status, and file availability. |
+| Check salary detail | **Review payslip** dialog | Gross earnings, deductions, net pay, pay date, calculation lines, and source hash. |
+| Find an older payslip | Published payslips list | Year filter, search value, period, and pagination. |
+| Record that I reviewed it | **Mark as read** | Read receipt saved and list/detail refreshed. |
+| Troubleshoot missing payslip | [If a payslip is missing](#if-a-payslip-is-missing) | Payroll publish status, filters, employee eligibility, and download governance. |
+| Understand payroll dependency | [What Payroll Controls Upstream](#what-payroll-controls-upstream) | Payroll output, generated file, employee scope, storage policy, and access trail. |
+
 ## Page Purpose
 
 The page keeps salary history in one place so employees do not need to ask HR for previously published payslips. The visible page is intentionally simple: first find the month, then open the review dialog only when you need salary detail, access history, or line-level calculation evidence.
@@ -16,6 +45,17 @@ The page keeps salary history in one place so employees do not need to ask HR fo
 | Published payslips | Searchable list of all visible payslips. | Filter by year or search value, then choose **Review payslip** or **Download**. |
 | Payslip checklist | Employee reminders before downloading or sharing salary proof. | Use it to avoid checking the wrong month or sharing an unverified file. |
 | Review dialog | Gross pay, deductions, net pay, payment summary, access trail, storage governance, calculation lines, and source hash. | Open only when you need detailed evidence. |
+
+## Screen Labels To Recognize
+
+| Screen label | What it means |
+| --- | --- |
+| Published payslips | List of payslips visible to the signed-in employee. |
+| Latest payslip | Current or latest published payroll file when one is available. |
+| Payslip checklist | Employee reminders before download or sharing. |
+| Review payslip | Focused detail dialog for salary totals and evidence. |
+| Mark as read | Read receipt action for the selected payslip. |
+| Download payslip | Authenticated download action for the published file. |
 
 ## Controls
 
@@ -124,3 +164,10 @@ Check the deduction summary and period first. If it still looks wrong, contact H
 ### Why is there a read receipt?
 
 Some organizations require evidence that employees opened important payroll documents. The read receipt records that you reviewed the payslip; it does not change payroll numbers.
+
+## Related Pages
+
+- [ESS Overview](index.md)
+- [ESS Task Recipes](task-recipes.md)
+- [Notifications](notifications.md)
+- [HR Admin Payroll](../hr-admin/payroll/index.md)

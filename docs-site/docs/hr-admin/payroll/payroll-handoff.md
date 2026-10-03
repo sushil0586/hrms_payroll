@@ -2,6 +2,32 @@
 
 Payroll Handoff manages finance delivery, provider files, acknowledgements, retries, and evidence.
 
+## On This Page
+
+- [Handoff Quick Navigation](#handoff-quick-navigation)
+- [Purpose](#purpose)
+- [Who uses this page](#who-uses-this-page)
+- [Handoff decision](#handoff-decision)
+- [Page sections](#page-sections)
+- [Buttons and actions](#buttons-and-actions)
+- [Handoff package contents](#handoff-package-contents)
+- [Workflow](#workflow)
+- [What finance should verify](#what-finance-should-verify)
+- [Close checklist](#close-checklist)
+- [Common delivery problems](#common-delivery-problems)
+- [Evidence to keep](#evidence-to-keep)
+- [Handoff signoff checklist](#handoff-signoff-checklist)
+
+## Handoff Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Complete finance handoff | [Workflow](#workflow) | [Example: Complete September finance handoff](#example-complete-september-finance-handoff) |
+| Know what to send finance | [Handoff package contents](#handoff-package-contents) | [What finance should verify](#what-finance-should-verify) |
+| Handle provider delivery | [Example: Provider delivery succeeds](#example-provider-delivery-succeeds) | [Common delivery problems](#common-delivery-problems) |
+| Handle manual finance acceptance | [Example: Manual handoff accepted](#example-manual-handoff-accepted) | [Evidence to keep](#evidence-to-keep) |
+| Fix rejected bank advice or retry cap | [Common delivery problems](#common-delivery-problems) | [Handoff signoff checklist](#handoff-signoff-checklist) |
+
 ## Purpose
 
 Use this page after payroll outputs are approved and finance/provider delivery is required.
@@ -260,6 +286,16 @@ Follow the tenant's fallback policy. Usually this means finance-approved manual 
 ### Can I retransmit the same bank advice?
 
 Only if the previous transmission did not succeed or the provider supports idempotent retries. Confirm duplicate payment risk before retransmitting.
+
+## Handoff signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Payroll review is approved. | Handoff uses final approved totals. |
+| Required artifacts exist. | Bank advice, registers, statutory outputs, and provider files are available. |
+| Delivery channel is confirmed. | Finance/provider knows where and how files were delivered. |
+| Acknowledgement is recorded. | Receipt or acceptance evidence is attached or logged. |
+| Duplicate payout risk is checked. | Retries or retransmissions cannot trigger duplicate payment. |
 
 ## Related guides
 

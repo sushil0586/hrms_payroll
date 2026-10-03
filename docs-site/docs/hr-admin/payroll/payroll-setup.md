@@ -2,6 +2,35 @@
 
 Payroll Setup defines the calendar, periods, pay groups, and employee assignments used by payroll.
 
+## On This Page
+
+- [Payroll Setup Quick Navigation](#payroll-setup-quick-navigation)
+- [Purpose](#purpose)
+- [Setup concepts](#setup-concepts)
+- [Who owns each setup?](#who-owns-each-setup)
+- [Recommended screen design pattern](#recommended-screen-design-pattern)
+- [Tabs](#tabs)
+- [Calendar fields](#calendar-fields)
+- [Period fields](#period-fields)
+- [Pay group fields](#pay-group-fields)
+- [Assignment Fields](#assignment-fields)
+- [Recommended setup workflow](#recommended-setup-workflow)
+- [Monthly Operating Workflow](#monthly-operating-workflow)
+- [Pagination and Search Standard](#pagination-and-search-standard)
+- [Payroll setup signoff checklist](#payroll-setup-signoff-checklist)
+
+## Payroll Setup Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Understand setup objects | [Setup concepts](#setup-concepts) | [Tabs](#tabs) |
+| Create payroll calendar | [Example: Create India Monthly Payroll Calendar](#example-create-india-monthly-payroll-calendar) | [Before creating a calendar](#before-creating-a-calendar) |
+| Create payroll period | [Example: Create September 2026 Payroll Period](#example-create-september-2026-payroll-period) | [Period fields](#period-fields) |
+| Create pay groups | [Example: Create Pay Groups For India Employees](#example-create-pay-groups-for-india-employees) | [Pay group fields](#pay-group-fields) |
+| Assign employees to pay group | [Example: Assign Employees To Monthly Staff Pay Group](#example-assign-employees-to-monthly-staff-pay-group) | [Assignment Fields](#assignment-fields) |
+| Fix missing/incorrect payroll scope | [Negative Scenario: Employee Assigned To Wrong Pay Group](#negative-scenario-employee-assigned-to-wrong-pay-group) | [Negative Scenario: Employee Missing From Payroll Because Assignment Starts Late](#negative-scenario-employee-missing-from-payroll-because-assignment-starts-late) |
+| Prepare setup signoff | [Pre-Payroll Setup Checklist](#pre-payroll-setup-checklist) | [Payroll setup signoff checklist](#payroll-setup-signoff-checklist) |
+
 ## Purpose
 
 Use this page before running payroll for a tenant, or when payroll structure changes.
@@ -403,6 +432,16 @@ Check assignment effective date, employee status, legal entity/branch filters, p
 ### Can I delete old periods?
 
 No, not if they were used for payroll or evidence. Close or archive historical periods according to policy instead of deleting them.
+
+## Payroll setup signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Calendar is active. | Payroll periods can be created consistently. |
+| Period is open and correct. | Start/end dates match business payroll month. |
+| Pay groups are defined. | Employees are grouped by payroll timing and rules. |
+| Assignments are effective-dated. | Employees are in the correct pay group for the period. |
+| Setup changes are auditable. | Changes to periods or groups have reason and owner. |
 
 ## Related guides
 

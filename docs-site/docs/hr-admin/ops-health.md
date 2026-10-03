@@ -2,6 +2,33 @@
 
 Ops Health shows HR-facing service health, queues, support sessions, delivery posture, provider queues, and launch risks.
 
+## On This Page
+
+- [Ops Health Quick Navigation](#ops-health-quick-navigation)
+- [Purpose](#purpose)
+- [Use this page when](#use-this-page-when)
+- [Page sections](#page-sections)
+- [Main actions](#main-actions)
+- [What to check first](#what-to-check-first)
+- [Example: Notification Failures Before Go-Live](#example-notification-failures-before-go-live)
+- [Example: Support Access Review](#example-support-access-review)
+- [Example: API and Public App URL Health](#example-api-and-public-app-url-health)
+- [Example: Pre-Activation Ops Health Review](#example-pre-activation-ops-health-review)
+- [Pre-Activation Health Checklist](#pre-activation-health-checklist)
+- [Escalate if](#escalate-if)
+- [Ops Health signoff checklist](#ops-health-signoff-checklist)
+
+## Ops Health Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Understand if the tenant is operationally healthy | [What to check first](#what-to-check-first) | [Page sections](#page-sections) |
+| Investigate notification failures | [Example: Notification Failures Before Go-Live](#example-notification-failures-before-go-live) | [Related guides](#related-guides) |
+| Review temporary support access | [Example: Support Access Review](#example-support-access-review) | [Negative Scenario: Active Support Access Without a Ticket](#negative-scenario-active-support-access-without-a-ticket) |
+| Diagnose workspace load or API failures | [Example: API and Public App URL Health](#example-api-and-public-app-url-health) | [Escalate if](#escalate-if) |
+| Perform pre-activation readiness review | [Example: Pre-Activation Ops Health Review](#example-pre-activation-ops-health-review) | [Pre-Activation Health Checklist](#pre-activation-health-checklist) |
+| Decide whether HR can fix or must escalate | [Escalate if](#escalate-if) | [FAQ](#faq) |
+
 ## Purpose
 
 Use Ops Health when you need to understand whether the tenant is operationally healthy beyond normal HR data checks.
@@ -207,6 +234,16 @@ Capture tenant, module, failing action, affected user, timestamp, error message,
 ### Should Ops Health be checked before payroll?
 
 Yes. At minimum, check notification health, provider queue health, support access, API readiness, and launch blockers before opening payroll inputs.
+
+## Ops Health signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| API health is green. | HR Admin pages can load live data. |
+| Notification queues are stable. | Failed, pending, and retry-capped messages are understood. |
+| Provider jobs are healthy. | Payroll/document/provider integrations are not silently failing. |
+| Support access is controlled. | Temporary access has owner, reason, and expiry. |
+| Launch blockers are routed. | Operational blockers have owner and next action. |
 
 ## Related guides
 

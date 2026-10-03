@@ -204,135 +204,152 @@ export function TenantChangeRequestActions({
         <div>
           <span className="workspace-card__eyebrow">Change requests</span>
           <h2>Billing and configuration queue</h2>
+          <p className="tenant-console-empty">Create auditable requests for plan, billing, or tenant profile changes, then review recent decisions in the queue.</p>
         </div>
         <span className="record-chip">{requests.length} requests</span>
       </div>
 
-      <div className="tenant-change-request-form">
-        <label>
-          <span>Type</span>
-          <select value={requestType} onChange={(event) => updateType(event.target.value)}>
-            {requestTypes.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Title</span>
-          <input aria-describedby="change-request-title-error" aria-invalid={Boolean(titleError)} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={selectedType?.label ?? "Change request"} />
-          {titleError ? (
-            <small className="tenant-field-error" id="change-request-title-error" role="alert">
-              {titleError}
-            </small>
-          ) : null}
-        </label>
-        <label>
-          <span>Target ref</span>
-          <input aria-describedby="change-request-target-error" aria-invalid={Boolean(targetError)} value={targetRef} onChange={(event) => setTargetRef(event.target.value)} placeholder={selectedType?.target_ref_required ? "Required" : "Optional"} />
-          {targetError ? (
-            <small className="tenant-field-error" id="change-request-target-error" role="alert">
-              {targetError}
-            </small>
-          ) : null}
-        </label>
-        <label>
-          <span>Description</span>
-          <input value={description} onChange={(event) => setDescription(event.target.value)} />
-        </label>
-        <label className="tenant-change-request-form__payload">
-          <span>Payload</span>
-          <textarea
-            aria-invalid={Boolean(payloadError || currentPayloadValidation.error)}
-            aria-describedby="change-request-payload-error"
-            value={payloadText}
-            onChange={(event) => {
-              setPayloadText(event.target.value);
-              setPayloadError("");
-            }}
-            onBlur={() => setPayloadError(currentPayloadValidation.error)}
-            rows={5}
-          />
-          {payloadError || currentPayloadValidation.error ? (
-            <small className="tenant-field-error" id="change-request-payload-error" role="alert">
-              {payloadError || currentPayloadValidation.error}
-            </small>
-          ) : null}
-        </label>
-      </div>
-      <div className="tenant-change-request-hint">
-        <span>{selectedType?.description}</span>
-        <strong>{selectedType?.allowed_payload_fields.join(", ")}</strong>
-      </div>
-      {!canManageChangeRequests ? (
-        <div className="tenant-inline-notice tenant-inline-notice--muted" role="note">
-          Your role can review this page, but change request creation and approvals are disabled.
+      <section className="tenant-change-request-section tenant-change-request-section--create" aria-labelledby="tenant-change-request-create-heading">
+        <div className="tenant-change-request-section__header">
+          <div>
+            <span className="workspace-card__eyebrow">Create request</span>
+            <h3 id="tenant-change-request-create-heading">Capture the proposed change</h3>
+          </div>
+          <span className="record-chip">{selectedType?.label ?? titleCase(requestType)}</span>
         </div>
-      ) : null}
-      <div className="tenant-membership-actions__footer">
-        <button className="button button--primary" disabled={!canSubmit} onClick={submitChangeRequest} type="button">
-          {busyRef === "create" ? "Submitting" : "Submit request"}
-        </button>
-        {notice ? <span role="status">{notice}</span> : null}
-      </div>
 
-      <div className="tenant-membership-toolbar tenant-membership-toolbar--compact">
-        <div aria-label="Change request pagination" className="tenant-membership-pager">
-          <span>
-            {firstVisibleRequest}-{lastVisibleRequest} of {requests.length}
-          </span>
-          <button className="button button--secondary button--compact" disabled={boundedRequestPageIndex === 0} onClick={() => setRequestPageIndex((current) => Math.max(0, current - 1))} type="button">
-            Previous
-          </button>
-          <button className="button button--secondary button--compact" disabled={boundedRequestPageIndex >= requestPageCount - 1} onClick={() => setRequestPageIndex((current) => Math.min(requestPageCount - 1, current + 1))} type="button">
-            Next
-          </button>
+        <div className="tenant-change-request-form">
+          <label>
+            <span>Type</span>
+            <select value={requestType} onChange={(event) => updateType(event.target.value)}>
+              {requestTypes.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Title</span>
+            <input aria-describedby="change-request-title-error" aria-invalid={Boolean(titleError)} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={selectedType?.label ?? "Change request"} />
+            {titleError ? (
+              <small className="tenant-field-error" id="change-request-title-error" role="alert">
+                {titleError}
+              </small>
+            ) : null}
+          </label>
+          <label>
+            <span>Target ref</span>
+            <input aria-describedby="change-request-target-error" aria-invalid={Boolean(targetError)} value={targetRef} onChange={(event) => setTargetRef(event.target.value)} placeholder={selectedType?.target_ref_required ? "Required" : "Optional"} />
+            {targetError ? (
+              <small className="tenant-field-error" id="change-request-target-error" role="alert">
+                {targetError}
+              </small>
+            ) : null}
+          </label>
+          <label>
+            <span>Description</span>
+            <input value={description} onChange={(event) => setDescription(event.target.value)} />
+          </label>
+          <label className="tenant-change-request-form__payload">
+            <span>Payload</span>
+            <textarea
+              aria-invalid={Boolean(payloadError || currentPayloadValidation.error)}
+              aria-describedby="change-request-payload-error"
+              value={payloadText}
+              onChange={(event) => {
+                setPayloadText(event.target.value);
+                setPayloadError("");
+              }}
+              onBlur={() => setPayloadError(currentPayloadValidation.error)}
+              rows={5}
+            />
+            {payloadError || currentPayloadValidation.error ? (
+              <small className="tenant-field-error" id="change-request-payload-error" role="alert">
+                {payloadError || currentPayloadValidation.error}
+              </small>
+            ) : null}
+          </label>
         </div>
-      </div>
+        <div className="tenant-change-request-hint">
+          <span>{selectedType?.description}</span>
+          <strong>{selectedType?.allowed_payload_fields.join(", ")}</strong>
+        </div>
+        {!canManageChangeRequests ? (
+          <div className="tenant-inline-notice tenant-inline-notice--muted" role="note">
+            Your role can review this page, but change request creation and approvals are disabled.
+          </div>
+        ) : null}
+        <div className="tenant-membership-actions__footer">
+          <button className="button button--primary" disabled={!canSubmit} onClick={submitChangeRequest} type="button">
+            {busyRef === "create" ? "Submitting" : "Submit request"}
+          </button>
+          {notice ? <span role="status">{notice}</span> : null}
+        </div>
+      </section>
 
-      <div className="tenant-change-request-list">
-        {!pagedRequests.length ? <p className="tenant-console-empty">No change requests recorded yet.</p> : null}
-        {pagedRequests.map((request) => {
-          const rowBusy = busyRef.startsWith(`${request.id}:`);
-          const canApprove = canManageChangeRequests && request.status === "submitted";
-          const canCancel = canManageChangeRequests && request.status === "submitted";
-          const canApply = canManageChangeRequests && request.status === "approved";
-          const decisionNote = (decisionNotes[request.id] ?? "").trim();
-          return (
-            <div className="tenant-change-request-row" key={request.id}>
-              <div>
-                <strong>{request.title}</strong>
-                <span>{titleCase(request.request_type)} by {request.requested_by_identifier}</span>
-                <code>{formatJson(request.requested_payload)}</code>
+      <section className="tenant-change-request-section tenant-change-request-section--queue" aria-labelledby="tenant-change-request-queue-heading">
+        <div className="tenant-change-request-section__header">
+          <div>
+            <span className="workspace-card__eyebrow">Request queue</span>
+            <h3 id="tenant-change-request-queue-heading">Recent decisions</h3>
+          </div>
+          <div aria-label="Change request pagination" className="tenant-membership-pager">
+            <span>
+              {firstVisibleRequest}-{lastVisibleRequest} of {requests.length}
+            </span>
+            <button className="button button--secondary button--compact" disabled={boundedRequestPageIndex === 0} onClick={() => setRequestPageIndex((current) => Math.max(0, current - 1))} type="button">
+              Previous
+            </button>
+            <button className="button button--secondary button--compact" disabled={boundedRequestPageIndex >= requestPageCount - 1} onClick={() => setRequestPageIndex((current) => Math.min(requestPageCount - 1, current + 1))} type="button">
+              Next
+            </button>
+          </div>
+        </div>
+
+        <div className="tenant-change-request-list">
+          {!pagedRequests.length ? <p className="tenant-console-empty">No change requests recorded yet.</p> : null}
+          {pagedRequests.map((request) => {
+            const rowBusy = busyRef.startsWith(`${request.id}:`);
+            const canApprove = canManageChangeRequests && request.status === "submitted";
+            const canCancel = canManageChangeRequests && request.status === "submitted";
+            const canApply = canManageChangeRequests && request.status === "approved";
+            const decisionNote = (decisionNotes[request.id] ?? "").trim();
+            return (
+              <div className="tenant-change-request-row" key={request.id}>
+                <div>
+                  <strong>{request.title}</strong>
+                  <span>{titleCase(request.request_type)} by {request.requested_by_identifier}</span>
+                  <code>{formatJson(request.requested_payload)}</code>
+                </div>
+                <span className="record-chip">{titleCase(request.status)}</span>
+                <label>
+                  <span>Decision note</span>
+                  <input value={decisionNotes[request.id] ?? ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [request.id]: event.target.value }))} />
+                  {canApprove || canApply ? <small className="tenant-field-error tenant-field-error--muted">Required for approve, reject, or apply.</small> : null}
+                </label>
+                <div className="tenant-change-request-row__actions">
+                  {!canManageChangeRequests ? (
+                    <span className="tenant-field-error tenant-field-error--muted">Actions need change request management permission.</span>
+                  ) : null}
+                  <button className="button button--secondary" disabled={rowBusy || !canApprove || !decisionNote} onClick={() => runRequestAction(request.id, "approve")} type="button">
+                    {actionLabels.approve ?? "Approve"}
+                  </button>
+                  <button className="button button--secondary" disabled={rowBusy || !canApply || !decisionNote} onClick={() => runRequestAction(request.id, "apply")} type="button">
+                    {actionLabels.apply ?? "Mark applied"}
+                  </button>
+                  <button className="button button--ghost" disabled={rowBusy || !canApprove || !decisionNote} onClick={() => runRequestAction(request.id, "reject")} type="button">
+                    {actionLabels.reject ?? "Reject"}
+                  </button>
+                  <button className="button button--ghost" disabled={rowBusy || !canCancel} onClick={() => runRequestAction(request.id, "cancel")} type="button">
+                    {actionLabels.cancel ?? "Cancel"}
+                  </button>
+                </div>
               </div>
-              <span className="record-chip">{titleCase(request.status)}</span>
-              <label>
-                <span>Decision note</span>
-                <input value={decisionNotes[request.id] ?? ""} onChange={(event) => setDecisionNotes((current) => ({ ...current, [request.id]: event.target.value }))} />
-                {canApprove || canApply ? <small className="tenant-field-error tenant-field-error--muted">Required for approve, reject, or apply.</small> : null}
-              </label>
-              <div className="tenant-change-request-row__actions">
-                {!canManageChangeRequests ? (
-                  <span className="tenant-field-error tenant-field-error--muted">Actions need change request management permission.</span>
-                ) : null}
-                <button className="button button--secondary" disabled={rowBusy || !canApprove || !decisionNote} onClick={() => runRequestAction(request.id, "approve")} type="button">
-                  {actionLabels.approve ?? "Approve"}
-                </button>
-                <button className="button button--secondary" disabled={rowBusy || !canApply || !decisionNote} onClick={() => runRequestAction(request.id, "apply")} type="button">
-                  {actionLabels.apply ?? "Mark applied"}
-                </button>
-                <button className="button button--ghost" disabled={rowBusy || !canApprove || !decisionNote} onClick={() => runRequestAction(request.id, "reject")} type="button">
-                  {actionLabels.reject ?? "Reject"}
-                </button>
-                <button className="button button--ghost" disabled={rowBusy || !canCancel} onClick={() => runRequestAction(request.id, "cancel")} type="button">
-                  {actionLabels.cancel ?? "Cancel"}
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

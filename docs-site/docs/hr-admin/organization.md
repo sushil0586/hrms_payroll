@@ -4,6 +4,36 @@ Organization is the structural master workspace for legal entities, locations, b
 
 Use this guide to set up the structure before employee onboarding, payroll setup, leave, attendance, documents, statutory reporting, and finance handoff. A clean Organization setup prevents many employee import, ESS, MSS, and payroll blockers.
 
+## On This Page
+
+- [Organization Quick Navigation](#organization-quick-navigation)
+- [What Organization Covers](#what-organization-covers)
+- [Why This Matters](#why-this-matters)
+- [Recommended Setup Order](#recommended-setup-order)
+- [Dependency Rules](#dependency-rules)
+- [Page Sections](#page-sections)
+- [Browser Form Or CSV Import?](#browser-form-or-csv-import)
+- [Buttons And Actions](#buttons-and-actions)
+- [Field-By-Field Guidance](#field-by-field-guidance)
+- [Example: Create Accerio India Structure](#example-create-accerio-india-structure)
+- [CSV Import Guidance](#csv-import-guidance)
+- [Safe Edit Rules](#safe-edit-rules)
+- [What Each Master Affects](#what-each-master-affects)
+- [Negative Scenarios And Fixes](#negative-scenarios-and-fixes)
+- [Organization signoff checklist](#organization-signoff-checklist)
+
+## Organization Quick Navigation
+
+| I need to... | Start here | Then check |
+| --- | --- | --- |
+| Set up a new tenant structure | [Recommended Setup Order](#recommended-setup-order) | [Example: Create Accerio India Structure](#example-create-accerio-india-structure) |
+| Decide parent-child order | [Dependency Rules](#dependency-rules) | [Recommended Setup Order](#recommended-setup-order) |
+| Add one department, branch, grade, or designation | [Browser Form Or CSV Import?](#browser-form-or-csv-import) | [Field-By-Field Guidance](#field-by-field-guidance) |
+| Import many organization masters | [CSV Import Guidance](#csv-import-guidance) | [Common CSV Rejections](#common-csv-rejections) |
+| Fix employee import rejection | [Example: Fix Employee Import Missing Department](#example-fix-employee-import-missing-department) | [What Each Master Affects](#what-each-master-affects) |
+| Know whether a master is safe to rename or deactivate | [Safe Edit Rules](#safe-edit-rules) | [Troubleshooting](#troubleshooting) |
+| Clear payroll organization blockers | [What Each Master Affects](#what-each-master-affects) | [Organization signoff checklist](#organization-signoff-checklist) |
+
 ## What Organization Covers
 
 | Master | What it represents | Used by |
@@ -475,6 +505,16 @@ The import may require the code, not the display name. Use the exact code from O
 ### How does Organization affect payroll?
 
 Payroll uses organization mappings to determine employer, branch, statutory context, employee scope, cost allocation, reports, and finance handoff. Missing or inconsistent masters can block payroll even when salary is configured.
+
+## Organization signoff checklist
+
+| Check | Expected result |
+| --- | --- |
+| Legal entity is created. | Employees can be mapped to the correct employer. |
+| Locations and branches are active. | Attendance, PT, reports, and payroll scope can use workplace data. |
+| Departments and designations exist. | Employee master and reporting views are meaningful. |
+| Grades and employee types are configured. | Policies, salary, and approvals can target correct groups. |
+| Codes are stable. | Imports and integrations can use consistent master codes. |
 
 ## Related Guides
 

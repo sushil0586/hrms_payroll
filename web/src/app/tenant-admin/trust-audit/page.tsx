@@ -129,6 +129,32 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
         </div>
       </section>
 
+      <section className="section">
+        <div className="tenant-plan-command-band tenant-audit-command-band--phase7">
+          <div>
+            <span className="workspace-card__eyebrow">Audit workflow</span>
+            <h2>Find evidence fast</h2>
+            <p className="tenant-section-copy">
+              Start with the evidence family, narrow by event type or support session, then export the record when proof is needed.
+            </p>
+          </div>
+          <ol aria-label="Trust audit workflow">
+            <li>
+              <strong>1</strong>
+              <span>Choose evidence scope</span>
+            </li>
+            <li>
+              <strong>2</strong>
+              <span>Filter to the exact event</span>
+            </li>
+            <li>
+              <strong>3</strong>
+              <span>Review or export proof</span>
+            </li>
+          </ol>
+        </div>
+      </section>
+
       <section className="section tenant-audit-filter-workspace tenant-audit-filter-workspace--phase4">
         <div className="panel-card-soft tenant-console-panel">
           <div className="tenant-console-panel__header">
@@ -172,6 +198,20 @@ export default async function TenantAdminTrustAuditPage({ searchParams }: PagePr
             ) : (
               <span className="record-chip">No filters</span>
             )}
+          </div>
+          <div className="tenant-audit-evidence-summary">
+            <span>
+              <strong>{data.summary.visible_event_count}</strong>
+              rows in view
+            </span>
+            <span>
+              <strong>{data.summary.event_type_count}</strong>
+              event types
+            </span>
+            <span>
+              <strong>{data.summary.source_ref_count}</strong>
+              source refs
+            </span>
           </div>
         </div>
       </section>

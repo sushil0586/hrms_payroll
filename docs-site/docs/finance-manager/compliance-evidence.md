@@ -4,6 +4,29 @@ Use Compliance Evidence to review statutory liability and filing proof generated
 
 ![Finance compliance evidence](../assets/screenshots/finance-manager/control-center.png)
 
+## On This Page
+
+- [Compliance Quick Navigation](#compliance-quick-navigation)
+- [Page Purpose](#page-purpose)
+- [Main Sections](#main-sections)
+- [Controls](#controls)
+- [Review Checklist](#review-checklist)
+- [Compliance review flow](#compliance-review-flow)
+- [Common issues](#common-issues)
+- [Positive and negative scenarios](#positive-and-negative-scenarios)
+- [FAQ](#faq)
+
+## Compliance Quick Navigation
+
+| I need to | Start here | Verify before finishing |
+| --- | --- | --- |
+| Confirm statutory output exists | Statutory liability | Filing rows, statutory packs, period, legal entity, and deduction totals. |
+| Download filing evidence | **Export filings** | Correct payroll run, statutory period, and filing status rows. |
+| Verify challan/payment proof | **Challan proof** | Challan/payment reference, amount, legal entity, and period. |
+| Compare deduction totals | **Statutory deductions** | PF/ESI/PT/TDS or tenant components match payroll register totals. |
+| Confirm provider delivery | **Review receipts** | Submitted/reconciled state, failed/rejected records, and receipt evidence. |
+| Decide manual filing path | Common issues / provider delivery | Manual proof and owner approval are recorded before close. |
+
 ## Page Purpose
 
 Compliance Evidence gives finance a structured way to verify statutory files before filing, payment, or audit review.
@@ -51,6 +74,17 @@ Compliance Evidence gives finance a structured way to verify statutory files bef
 | Provider delivery failed | Inspect provider receipt, retry status, or manual filing path. |
 | Challan proof missing | Do not mark statutory evidence complete until proof or exception is recorded. |
 | Wrong period | Re-export from the correct payroll run and period. |
+
+## Positive and negative scenarios
+
+| Scenario | Expected result |
+| --- | --- |
+| Filing rows and deduction totals match payroll output | Finance can keep statutory evidence with the close pack. |
+| Filing rows are missing | Hold statutory signoff and ask payroll/compliance owner to generate output. |
+| Deduction total mismatch exists | Hold filing until component-level difference is explained. |
+| Provider delivery failed but manual filing is approved | Store manual proof and exception note with finance close evidence. |
+| Challan/payment proof is missing | Do not mark compliance complete unless a formal exception is recorded. |
+| Wrong legal entity or period is shown | Re-export from the correct run before filing. |
 
 ## FAQ
 

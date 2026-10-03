@@ -2,6 +2,23 @@
 
 Use these recipes when you know the task but not the exact screen. Each recipe follows the latest ESS pattern: open the page, review the summary, use a focused modal for the action, then verify the result.
 
+## On This Page
+
+- [Recipe Index](#recipe-index)
+- [Apply Leave](#apply-leave)
+- [Regularize Attendance](#regularize-attendance)
+- [Download A Payslip](#download-a-payslip)
+- [Upload A Required Document](#upload-a-required-document)
+- [Re-Upload A Rejected Document](#re-upload-a-rejected-document)
+- [Start Or Update A Tax Declaration](#start-or-update-a-tax-declaration)
+- [Add Tax Proof](#add-tax-proof)
+- [Submit A Tax Declaration](#submit-a-tax-declaration)
+- [Correct A Tax Declaration](#correct-a-tax-declaration)
+- [Review A Notification](#review-a-notification)
+- [Prepare Before Payroll Cutoff](#prepare-before-payroll-cutoff)
+- [Negative Scenarios To Recognize](#negative-scenarios-to-recognize)
+- [When To Contact HR](#when-to-contact-hr)
+
 ## Recipe Index
 
 | Need | Start here |
