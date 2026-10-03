@@ -9,6 +9,8 @@ Employee Self Service is the employee workspace for personal HR, payroll, docume
 | Area | Purpose | Best next action |
 | --- | --- | --- |
 | Overview | See personal profile status, today’s attendance, leave balances, pending requests, and quick links. | Start here when you are unsure what needs action. |
+| Leave | Check balances, apply leave, attach evidence, and track approvals. | Open when planning time off or fixing a leave request issue. |
+| Attendance | Review daily attendance, exceptions, and regularization requests. | Open when a punch, absence, or work-hour record looks wrong. |
 | Payslips | View published payslips, payment summaries, read receipts, and download files. | Open after payroll is published or when salary proof is needed. |
 | Documents | Upload required employee documents and review document status. | Use when HR asks for ID, address, bank, qualification, or employment proof. |
 | Tax Declarations | Submit tax declarations, proof items, and statutory information. | Use before payroll proof cutoff or year-end proof collection. |
@@ -40,6 +42,8 @@ Before payroll cutoff:
 | If you need to | Start here | What to check |
 | --- | --- | --- |
 | See whether anything needs action | Overview | Today’s priorities and notifications. |
+| Apply for leave or check balance | Leave | Leave type, available balance, attachment rule, and approval status. |
+| Correct a missing punch or exception | Attendance | Date, exception reason, correction window, and approval status. |
 | Download salary proof | Payslips | Correct month, net pay, and published status. |
 | Submit ID, bank, address, or employment proof | Documents | Requirement name, accepted file type, and latest status. |
 | Update tax declarations | Tax Declarations | Active tax year, declaration totals, proof requirement, and cutoff. |
@@ -69,6 +73,8 @@ Contact HR only after checking the relevant page and status. Include:
 ## Related Pages
 
 - [Payslips](payslips.md)
+- [Leave](leave.md)
+- [Attendance](attendance.md)
 - [Documents](documents.md)
 - [Tax Declarations](statutory-declarations.md)
 - [Notifications](notifications.md)

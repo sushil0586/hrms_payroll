@@ -64,7 +64,13 @@ test.describe("Production storage governance proof", () => {
     await expectVisibleText(page, [
       "Published only",
       "Employee scoped",
-      "Storage governed",
+      "Download tracked",
+      "Published",
+    ]);
+
+    await page.getByRole("button", { name: "Review payslip" }).first().click();
+    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
+    await expectVisibleText(page, [
       "Download payslip",
       "Access trail",
       "Read receipt",
@@ -74,8 +80,6 @@ test.describe("Production storage governance proof", () => {
       /payroll\.download\.[\w.-]+\.v1/,
       /payroll\.retention\.[\w.-]+\.v1/,
       "Checksum",
-      "Recent access events",
-      "Published",
       "Calculation lines",
     ]);
 

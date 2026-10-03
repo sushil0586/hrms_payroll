@@ -2974,14 +2974,50 @@ select.input-control {
 
 .ess-payslip-workspace {
   display: grid;
-  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
   align-items: start;
   gap: 18px;
 }
 
+.ess-payslip-action-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 44px -34px rgba(15, 23, 42, 0.28);
+}
+
+.ess-payslip-action-band > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.ess-payslip-action-band h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.ess-payslip-action-band__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
 .ess-payslip-rail,
 .ess-payslip-main,
-.ess-payslip-detail {
+.ess-payslip-detail,
+.ess-payslip-guidance {
   display: grid;
   align-content: start;
   min-width: 0;
@@ -3144,7 +3180,7 @@ select.input-control {
 }
 
 .ess-payslip-table {
-  min-width: 720px;
+  min-width: 920px;
   table-layout: fixed;
 }
 
@@ -3155,7 +3191,12 @@ select.input-control {
 
 .ess-payslip-table th:first-child,
 .ess-payslip-table td:first-child {
-  width: 34%;
+  width: 28%;
+}
+
+.ess-payslip-table th:last-child,
+.ess-payslip-table td:last-child {
+  width: 190px;
 }
 
 .ess-payslip-table td a {
@@ -3197,6 +3238,38 @@ select.input-control {
 }
 
 .ess-payslip-evidence-grid span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ess-payslip-guidance {
+  gap: 0;
+}
+
+.ess-payslip-checklist {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.ess-payslip-checklist article {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.76);
+}
+
+.ess-payslip-checklist strong {
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.ess-payslip-checklist span {
   color: #64748b;
   font-size: 12px;
   line-height: 1.45;
@@ -3244,6 +3317,65 @@ select.input-control {
   margin: 0 12px;
 }
 
+.ess-payslip-modal {
+  width: min(1040px, 100%);
+}
+
+.ess-payslip-modal-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ess-payslip-modal-summary article {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 13px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.ess-payslip-modal-summary span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ess-payslip-modal-summary strong {
+  color: #111827;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.ess-payslip-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ess-payslip-modal-actions .record-card__actions {
+  padding: 0;
+}
+
+.ess-payslip-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ess-payslip-modal-grid .ess-payslip-detail-section {
+  margin: 0;
+}
+
+.ess-payslip-detail-section--wide {
+  grid-column: 1 / -1;
+}
+
 .ess-payslip-detail-section .detail-grid,
 .ess-payslip-detail-section .payroll-rule-snapshot-list {
   grid-template-columns: minmax(0, 1fr);
@@ -3263,26 +3395,113 @@ select.input-control {
   box-shadow: none;
 }
 
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.table-actions .button {
+  min-height: 34px;
+  padding: 8px 12px;
+}
+
 .ess-documents-center {
   gap: 18px;
 }
 
+.ess-documents-action-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.ess-documents-action-band > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.ess-documents-action-band h2,
+.ess-documents-guidance h2,
+.ess-documents-detail-header h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.24;
+}
+
+.ess-documents-readiness-band {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.ess-documents-readiness-band article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.ess-documents-readiness-band article.is-complete {
+  border-color: rgba(187, 247, 208, 0.92);
+  background: rgba(240, 253, 244, 0.72);
+}
+
+.ess-documents-readiness-band article.is-warning {
+  border-color: rgba(254, 240, 138, 0.92);
+  background: rgba(254, 252, 232, 0.75);
+}
+
+.ess-documents-readiness-band article.is-attention {
+  border-color: rgba(254, 202, 202, 0.92);
+  background: rgba(254, 242, 242, 0.72);
+}
+
+.ess-documents-readiness-band span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.ess-documents-readiness-band strong {
+  color: #0f172a;
+  font-size: 24px;
+  line-height: 1.08;
+}
+
+.ess-documents-readiness-band p {
+  min-width: 0;
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.42;
+}
+
 .ess-documents-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 0.92fr) minmax(320px, 1.08fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
   align-items: start;
   gap: 18px;
 }
 
-.ess-documents-upload,
 .ess-documents-requirements,
+.ess-documents-guidance,
 .ess-documents-history .queue-toolbar {
   min-width: 0;
   overflow: hidden;
-}
-
-.ess-documents-upload .form-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .ess-documents-panel-header {
@@ -3324,6 +3543,87 @@ select.input-control {
   gap: 14px;
 }
 
+.ess-documents-requirement-summary {
+  margin: 8px 0 12px;
+}
+
+.ess-documents-guidance {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.ess-documents-checklist {
+  display: grid;
+  gap: 10px;
+}
+
+.ess-documents-checklist > div {
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.ess-documents-checklist strong {
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.ess-documents-checklist span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ess-document-modal {
+  width: min(760px, 100%);
+}
+
+.ess-document-modal--wide {
+  width: min(960px, 100%);
+}
+
+.ess-document-modal-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ess-document-modal-form .notice {
+  grid-column: 1 / -1;
+}
+
+.ess-document-modal-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.ess-documents-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ess-documents-audit-list {
+  gap: 8px;
+}
+
+.notice--quiet {
+  border-color: rgba(226, 232, 240, 0.82);
+  background: rgba(248, 250, 252, 0.8);
+}
+
 .user-notification-shell {
   letter-spacing: 0;
 }
@@ -3332,13 +3632,39 @@ select.input-control {
   gap: 18px;
 }
 
+.user-notification-action-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(203, 213, 225, 0.72);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+}
+
+.user-notification-action-band h2 {
+  margin: 4px 0 4px;
+  font-size: 1.08rem;
+  line-height: 1.22;
+  letter-spacing: 0;
+}
+
+.user-notification-action-band__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .user-notification-filters {
   overflow: hidden;
 }
 
 .user-notification-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(320px, 0.75fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   align-items: start;
   gap: 18px;
 }
@@ -3355,6 +3681,11 @@ select.input-control {
 
 .user-notification-list .tableish__row {
   border-radius: 8px;
+}
+
+.user-notification-row {
+  display: grid;
+  gap: 10px;
 }
 
 .user-notification-list .tableish__head {
@@ -3374,9 +3705,90 @@ select.input-control {
   justify-content: flex-end;
 }
 
+.user-notification-guidance {
+  gap: 14px;
+}
+
+.user-notification-selected {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.84);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.user-notification-selected strong {
+  color: var(--ink);
+  font-size: 0.98rem;
+  line-height: 1.25;
+}
+
+.user-notification-selected span {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
 .user-notification-detail .stack-list {
   display: grid;
   gap: 8px;
+}
+
+.user-notification-modal {
+  max-width: 980px;
+}
+
+.user-notification-modal-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.user-notification-modal-summary article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.84);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.user-notification-modal-summary span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.user-notification-modal-summary strong {
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.user-notification-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.user-notification-modal-actions .record-card__actions {
+  margin: 0;
+}
+
+.user-notification-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.user-notification-modal-grid .ess-modal-section {
+  min-width: 0;
 }
 
 .ess-statutory-workspace {
@@ -4037,16 +4449,19 @@ select.input-control {
 
 @media (max-width: 1180px) {
   .ess-payslip-workspace {
-    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .ess-payslip-detail,
+  .ess-payslip-guidance,
   .ess-statutory-detail {
     grid-column: 1 / -1;
   }
 
   .ess-payslip-summary-strip,
+  .ess-documents-readiness-band,
   .ess-documents-workspace,
+  .user-notification-action-band,
   .user-notification-grid,
   .ess-statutory-workspace,
   .ess-tax-workspace,
@@ -4061,7 +4476,10 @@ select.input-control {
 @media (max-width: 720px) {
   .ess-payslip-workspace,
   .ess-payslip-filter-form,
-  .ess-documents-upload .form-grid,
+  .ess-payslip-modal-summary,
+  .ess-payslip-modal-grid,
+  .ess-documents-readiness-band,
+  .ess-document-modal-form,
   .ess-statutory-filter-form,
   .shell--ess-statutory .payroll-statutory-action-grid,
   .ess-tax-filter-form,
@@ -4076,12 +4494,16 @@ select.input-control {
   .ess-payslip-rail,
   .ess-payslip-main,
   .ess-payslip-detail,
+  .ess-payslip-guidance,
   .ess-statutory-detail {
     grid-column: auto;
   }
 
   .ess-payslip-panel-header,
   .ess-payslip-card__top,
+  .ess-payslip-action-band,
+  .ess-documents-action-band,
+  .ess-documents-detail-header,
   .ess-statutory-panel-header,
   .ess-tax-panel-header,
   .ess-tax-primary-action,
@@ -4093,12 +4515,31 @@ select.input-control {
 
   .ess-payslip-action-row .button,
   .ess-payslip-filter-form .button,
+  .ess-payslip-action-band .button,
+  .ess-payslip-modal-actions .button,
+  .ess-documents-action-band .button,
+  .ess-document-modal-actions .button,
   .ess-statutory-filter-form .button,
   .shell--ess-statutory .payroll-statutory-action-buttons .button,
   .ess-tax-filter-form .button,
   .ess-tax-primary-action__buttons .button,
   .ess-tax-next-actions .button,
   .ess-tax-modal-actions .button {
+    width: 100%;
+  }
+
+  .ess-payslip-action-band__actions,
+  .ess-payslip-modal-actions,
+  .user-notification-action-band__actions,
+  .user-notification-modal-actions,
+  .table-actions {
+    justify-content: stretch;
+  }
+
+  .table-actions .button,
+  .table-actions a,
+  .user-notification-action-band__actions .button,
+  .user-notification-modal-actions .button {
     width: 100%;
   }
 
@@ -4111,6 +4552,7 @@ select.input-control {
   }
 
   .ess-documents-panel-header,
+  .ess-document-modal-actions,
   .user-notification-list .tableish__head {
     align-items: stretch;
     flex-direction: column;
@@ -4122,6 +4564,11 @@ select.input-control {
 
   .user-notification-detail .record-card__actions .button {
     width: 100%;
+  }
+
+  .user-notification-modal-summary,
+  .user-notification-modal-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

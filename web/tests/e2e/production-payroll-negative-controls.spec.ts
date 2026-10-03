@@ -60,9 +60,14 @@ test.describe("Production payroll negative controls", () => {
       "Published payslips",
       "Published only",
       "Employee scoped",
-      "Storage governed",
+      "Audit protected",
+      "Download tracked",
       "Draft and generated payroll artifacts stay hidden until the output batch is published.",
       "The API resolves files through the signed-in employee context and tenant boundary.",
+    ]);
+    await page.getByRole("button", { name: "Review payslip" }).first().click();
+    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
+    await expectVisibleText(page, [
       "Download payslip",
       "Access trail",
       "Read receipt",

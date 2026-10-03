@@ -6,33 +6,69 @@ Use Documents to upload employee documents, review required document status, and
 
 ## Page Purpose
 
-This page prevents document follow-up from happening over email. Employees can see exactly what is pending, accepted, rejected, or needs re-upload.
+This page prevents document follow-up from happening over email. Employees can see exactly what is pending, accepted, rejected, expiring, or needs re-upload. The page is intentionally split into status, guidance, history, and focused dialogs so the employee does not have to understand every control at once.
 
 ## Main Sections
 
 | Section | What it shows | How to use it |
 | --- | --- | --- |
-| Required documents | Documents HR expects from you. | Start here for pending or rejected items. |
-| Upload panel | File upload fields for the selected requirement. | Upload the correct file and submit it for review. |
-| Document history | Past uploads and current status. | Confirm the latest version is visible. |
-| Rejection details | Reason why a document was rejected. | Correct the file before uploading again. |
+| Summary metrics | Required, missing, expiring, and expired document counts. | Start here to understand whether action is needed. |
+| Document readiness band | Missing uploads, returned files, expiry focus, and HR review counts. | Use this as the first action checklist before opening upload or detail dialogs. |
+| Required documents | Documents HR expects from you. | Upload or replace from the specific requirement card. |
+| Upload checklist | Quality checks before sending a file. | Use this to avoid common rejections. |
+| Document history | Past uploads and current status. | Search, filter, download, or open the detail drilldown. |
+| Upload dialog | Focused upload/replace form. | Opens only when you choose **Upload document**, **Upload**, or **Replace**. |
+| Document detail dialog | File metadata, HR review status, and audit trail. | Open from **Review** in history. |
 
 ## Controls
 
 | Control | Purpose |
 | --- | --- |
-| Search | Find a document by name, category, or status. |
-| Status filter | Show pending, approved, rejected, or all records. |
-| Upload document | Submit a file for the selected document requirement. |
-| Download | Download the selected accepted document if access is enabled. |
+| Upload document | Opens the upload dialog for any self-upload category. |
+| Upload / Replace on a requirement | Opens the upload dialog with the category preselected. |
+| Search | Finds a document by title, category, file name, or review note. |
+| Verification filter | Shows pending, approved, rejected, or all records. |
+| Category filter | Narrows history to one document category. |
+| Expiry focus | Finds expiring, expired, or missing-expiry documents. |
+| Review | Opens document metadata, review status, and audit trail. |
+| Download | Downloads the selected uploaded file when access is enabled. |
+| Pagination | Moves through document history without making the page too long. |
 
 ## Upload Checklist
 
+- Start from the top readiness band. If **Missing uploads** is zero, do not upload a random extra file.
+- If **Returned by HR** is non-zero, replace those files first because payroll, onboarding, or compliance may be blocked.
+- If **Expiry focus** is non-zero, upload renewed proof before the document expires.
+- If **HR review** is non-zero, wait for HR unless the file is clearly wrong.
 - Use a clear scan or photo.
 - Make sure the full document is visible.
-- Use the requested file type.
+- Use the requested file type and upload it under the correct category.
+- Add document number and expiry date when the document has them.
 - Re-upload only after reading the rejection reason.
 - Avoid uploading unrelated documents under the wrong category.
+
+## Example: upload PAN proof
+
+1. Open **ESS > Documents**.
+2. Check **Required documents** for **PAN**.
+3. Select **Upload** on that requirement, or select **Upload document** from the top action band.
+4. Confirm **Category** is PAN.
+5. Enter a clear title such as `PAN card - Riya Sharma`.
+6. Enter the PAN number in **Document number** if your company expects it.
+7. Attach the PDF or image.
+8. Select **Submit for review**.
+
+Expected result: the document is submitted to HR, appears in **Document history**, and stays pending until HR verifies it.
+
+## Example: replace a rejected bank proof
+
+1. Open the requirement card that shows **Re-upload** or **Action needed**.
+2. Read the latest review note.
+3. Select **Replace**.
+4. Upload the corrected bank proof.
+5. Use **Review** in Document history to confirm the new version and status.
+
+Expected result: the latest version is available for HR review while previous versions remain in audit history.
 
 ## Document statuses
 
@@ -44,6 +80,18 @@ This page prevents document follow-up from happening over email. Employees can s
 | Accepted | Document is approved. | No action. |
 | Rejected | Document did not meet the requirement. | Read the reason and upload a corrected file. |
 | Expiring | Accepted document has an upcoming expiry. | Upload renewed proof before the due date. |
+| Expired | Accepted document is no longer valid. | Replace it immediately. |
+
+## Positive and negative scenarios
+
+| Scenario | What should happen |
+| --- | --- |
+| Upload without title or file | The submit button stays disabled. |
+| Upload under wrong category | HR can reject it with a note; employee should re-upload under the correct category. |
+| Upload for a category that does not allow employee upload | The employee cannot submit that category from ESS. HR must manage it. |
+| Expiry date missing for a tracked document | HR may reject or ask for correction depending on policy. |
+| File rejected by HR | Requirement card shows action needed and the upload dialog can replace the document. |
+| Download unavailable | The employee should contact HR if the file is expected but no download link is available. |
 
 ## Common rejection reasons
 

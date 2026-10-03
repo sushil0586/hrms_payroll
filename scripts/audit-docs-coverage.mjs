@@ -97,6 +97,8 @@ const routeToDoc = new Map([
   ["/hr-admin/import-history", "hr-admin/imports.md"],
   ["/hr-admin/saas-operations", "hr-admin/ops-health.md"],
   ["/ess", "ess/index.md"],
+  ["/ess/leave", "ess/leave.md"],
+  ["/ess/attendance", "ess/attendance.md"],
   ["/ess/payslips", "ess/payslips.md"],
   ["/ess/statutory-declarations", "ess/statutory-declarations.md"],
   ["/ess/notifications", "ess/notifications.md"],

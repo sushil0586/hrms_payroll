@@ -114,6 +114,6 @@ Include these details when escalating:
 ## Related Pages
 
 - [Notifications](../hr-admin/notifications.md)
-- [Notification Delivery](../hr-admin/notifications.md#notification-delivery)
+- [Notification Delivery](../hr-admin/notifications.md#notification-delivery-channel-health)
 - [Tenant Admin Users](../tenant-admin/users.md)
 - [Troubleshooting](../troubleshooting/index.md)

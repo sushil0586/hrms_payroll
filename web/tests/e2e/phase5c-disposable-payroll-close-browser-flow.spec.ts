@@ -658,8 +658,10 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
 
     await gotoAuthenticated(page, `/ess/payslips?q=${runCode}`, employee);
     await expectPageReady(page, "Payslips");
-    await expect(page.getByRole("heading", { name: "Payslip register" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Published payslips" })).toBeVisible();
     await expect(page.getByText(runCode).first()).toBeVisible();
+    await page.getByRole("button", { name: "Review payslip" }).first().click();
+    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "Download payslip" }).first()).toHaveAttribute("href", /\/api\/me\/payroll-payslips\/.+\/download/);
     await expect(page.getByText("Source hash").first()).toBeVisible();
     await expectNoHorizontalOverflow(page);

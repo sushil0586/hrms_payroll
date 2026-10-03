@@ -147,6 +147,24 @@ The generated static site is created under `docs-site/site/`.
 - The page can be found through search using common user words.
 - Screenshot placeholders are filled only with sanitized screenshots.
 
+## Detailed module documentation standard
+
+Use the detailed standard when documenting HR Admin, payroll, ESS, MSS, tenant admin, or platform admin functionality that has forms, approvals, exceptions, or downstream impact.
+
+Each detailed module guide must include:
+
+- Purpose: who uses the feature and when.
+- Real example: use realistic values, such as Earned Leave with 18 days/year or an employee in a Bengaluru branch.
+- Exact navigation: name the workspace, menu, tab, modal, and button.
+- Field guide: explain important fields, recommended values, validations, and downstream impact.
+- Positive workflow: show the normal successful path and expected result.
+- Negative workflow: show at least one blocked or failed case and how to fix it.
+- Cross-module impact: explain ESS, MSS, payroll, notifications, documents, reports, and audit impact where applicable.
+- Troubleshooting: include the error message, likely reason, and correction steps.
+- Quality gate: run docs QA before marking the guide complete.
+
+For HR Admin detailed documentation, track progress in [HR Admin Detailed Documentation Roadmap](hr-admin/detailed-documentation-roadmap.md).
+
 ## Final QA command
 
 Before closing documentation work, run:

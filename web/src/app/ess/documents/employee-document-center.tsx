@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import type { EssDocumentCenterResponse } from "@/lib/types";
+import type { EssDocumentCenterResponse, EssDocumentRequirementItem, HrAdminEmployeeDocument } from "@/lib/types";
 
 type Props = {
   data: EssDocumentCenterResponse;
@@ -26,6 +26,11 @@ type UploadFormValue = {
   issued_on: string;
   expires_on: string;
   file: File | null;
+};
+
+type UploadFeedback = {
+  tone: "success" | "error";
+  message: string;
 };
 
 const INITIAL_UPLOAD_VALUE: UploadFormValue = {
@@ -85,6 +90,245 @@ function extractError(payload: unknown) {
   return "Unable to upload employee document.";
 }
 
+function useEscapeClose(onClose: () => void) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="detail-row">
+      <span className="detail-label">{label}</span>
+      <span className="detail-value">{value}</span>
+    </div>
+  );
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function getRequirementStatus(item: EssDocumentRequirementItem) {
+  if (item.current_rejection_reason) {
+    return "Returned by HR";
+  }
+  if (item.current_is_expired) {
+    return "Expired";
+  }
+  if (item.current_is_expiring_soon) {
+    return "Expiring soon";
+  }
+  if (!item.current_document_id) {
+    return item.is_future_due ? "Future due" : "Missing";
+  }
+  if (item.is_compliant) {
+    return "Complete";
+  }
+  return "Pending review";
+}
+
+function getRequirementSummary(item: EssDocumentRequirementItem) {
+  if (item.current_rejection_reason) {
+    return item.current_rejection_reason;
+  }
+  if (!item.current_document_id) {
+    return item.due_on ? `Due ${item.due_on}` : "Upload this document when HR asks for it.";
+  }
+  if (item.current_is_expired) {
+    return "Upload a renewed copy so HR can verify it again.";
+  }
+  if (item.current_is_expiring_soon) {
+    return "Renew this document before it expires.";
+  }
+  if (item.is_compliant) {
+    return "No action needed right now.";
+  }
+  return "HR review is pending.";
+}
+
+function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument; onClose: () => void }) {
+  useEscapeClose(onClose);
+
+  return (
+    <div className="modal-shell" role="presentation">
+      <div aria-label="Document detail" aria-modal="true" className="modal ess-document-modal ess-document-modal--wide" role="dialog">
+        <div className="modal__header">
+          <div>
+            <h2>{item.title}</h2>
+            <p>{item.category_name} • Uploaded {formatDate(item.created_at)}</p>
+          </div>
+          <button aria-label="Close document detail" className="button button--secondary" onClick={onClose} type="button">Close</button>
+        </div>
+
+        <section className="ess-modal-section">
+          <div className="ess-documents-detail-header">
+            <div>
+              <span className="workspace-card__eyebrow">Review status</span>
+              <h3>{item.verification_status}</h3>
+            </div>
+            <div className="record-card__actions">
+              {item.artifact_id ? <Link className="button button--secondary" href={`/api/me/employee-documents/${item.id}/download`}>Download file</Link> : null}
+            </div>
+          </div>
+          <div className="detail-grid">
+            <DetailRow label="Version" value={`v${item.version_number}`} />
+            <DetailRow label="Document number" value={item.document_number || "Not set"} />
+            <DetailRow label="File name" value={item.file_name || "Not available"} />
+            <DetailRow label="File size" value={formatFileSize(item.file_size_bytes)} />
+            <DetailRow label="Issued on" value={formatDate(item.issued_on)} />
+            <DetailRow label="Expires on" value={item.expires_on || "No expiry"} />
+            <DetailRow label="Expiry state" value={item.expiry_label} />
+            <DetailRow label="Reviewer" value={item.verified_by_identifier || "Pending review"} />
+          </div>
+        </section>
+
+        {item.rejection_reason ? (
+          <section className="ess-modal-section">
+            <div className="notice">
+              <strong>Re-upload requested.</strong>
+              <span className="muted">{item.rejection_reason}</span>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="ess-modal-section">
+          <div className="ess-documents-detail-header">
+            <div>
+              <span className="workspace-card__eyebrow">Audit trail</span>
+              <h3>Review history</h3>
+            </div>
+            <span className="queue-summary-chip"><strong>{item.review_history.length}</strong> steps</span>
+          </div>
+          {item.review_history.length ? (
+            <div className="queue-list ess-documents-audit-list">
+              {item.review_history.map((review) => (
+                <div className="detail-row" key={review.id}>
+                  <span className="detail-label">{formatDate(review.created_at)}</span>
+                  <span className="detail-value">{review.previous_status} → {review.new_status} by {review.actor_identifier || "System"}{review.comment ? ` • ${review.comment}` : ""}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="notice">
+              <strong>No HR review yet.</strong>
+              <span className="muted">This file has not received a verification decision.</span>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function UploadDocumentModal({
+  data,
+  feedback,
+  formValue,
+  isSubmitting,
+  onClose,
+  onFieldChange,
+  onSubmit,
+  selectedRequirement,
+}: {
+  data: EssDocumentCenterResponse;
+  feedback: UploadFeedback | null;
+  formValue: UploadFormValue;
+  isSubmitting: boolean;
+  onClose: () => void;
+  onFieldChange: <Key extends keyof UploadFormValue>(key: Key, value: UploadFormValue[Key]) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  selectedRequirement: EssDocumentRequirementItem | undefined;
+}) {
+  useEscapeClose(onClose);
+  const canSubmit = Boolean(formValue.category_id && formValue.title.trim() && formValue.file && !isSubmitting);
+
+  return (
+    <div className="modal-shell" role="presentation">
+      <div aria-label="Upload document" aria-modal="true" className="modal ess-document-modal" role="dialog">
+        <div className="modal__header">
+          <div>
+            <h2>{selectedRequirement?.current_document_id && !selectedRequirement.is_compliant ? "Replace document" : "Upload document"}</h2>
+            <p>Choose the document type, attach the latest file, and send it to HR for review.</p>
+          </div>
+          <button aria-label="Close upload document dialog" className="button button--secondary" onClick={onClose} type="button">Close</button>
+        </div>
+
+        {selectedRequirement ? (
+          <div className="notice notice--quiet">
+            <strong>{selectedRequirement.category_name}</strong>
+            <span className="muted">
+              {selectedRequirement.requires_expiry_date ? "Expiry date is expected for this document. " : ""}
+              {selectedRequirement.requires_verification ? "HR verification is required after upload." : "This document can be accepted automatically."}
+            </span>
+          </div>
+        ) : null}
+
+        <form className="ess-document-modal-form" onSubmit={onSubmit}>
+          <label className="form-field">
+            <span className="muted">Category</span>
+            <select className="input-control" disabled={data.uploadable_categories.length === 0 || isSubmitting} required value={formValue.category_id} onChange={(event) => onFieldChange("category_id", event.target.value)}>
+              <option value="">Select category</option>
+              {data.uploadable_categories.map((category) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="form-field">
+            <span className="muted">Title</span>
+            <input className="input-control" disabled={isSubmitting} placeholder="Aadhaar card, PAN card, bank proof..." required value={formValue.title} onChange={(event) => onFieldChange("title", event.target.value)} />
+          </label>
+          <label className="form-field">
+            <span className="muted">Document number</span>
+            <input className="input-control" disabled={isSubmitting} value={formValue.document_number} onChange={(event) => onFieldChange("document_number", event.target.value)} />
+          </label>
+          <label className="form-field">
+            <span className="muted">Issued on</span>
+            <input className="input-control" disabled={isSubmitting} type="date" value={formValue.issued_on} onChange={(event) => onFieldChange("issued_on", event.target.value)} />
+          </label>
+          <label className="form-field">
+            <span className="muted">Expires on</span>
+            <input className="input-control" disabled={isSubmitting} type="date" value={formValue.expires_on} onChange={(event) => onFieldChange("expires_on", event.target.value)} />
+          </label>
+          <label className="form-field form-field--full">
+            <span className="muted">File</span>
+            <input className="input-control" disabled={isSubmitting || data.uploadable_categories.length === 0} required type="file" onChange={(event) => onFieldChange("file", event.target.files?.[0] ?? null)} />
+            <span className="muted">Maximum upload size: {formatFileSize(data.max_upload_size_bytes)}.</span>
+          </label>
+
+          {feedback ? (
+            <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""}`}>
+              <strong>{feedback.tone === "success" ? "Upload submitted." : "Upload failed."}</strong>
+              <span className="muted">{feedback.message}</span>
+            </div>
+          ) : null}
+
+          {!canSubmit && data.uploadable_categories.length > 0 ? (
+            <div className="notice notice--quiet">
+              <strong>Before submitting</strong>
+              <span className="muted">Select a category, enter a title, and attach the file HR needs.</span>
+            </div>
+          ) : null}
+
+          <div className="ess-document-modal-actions">
+            {data.uploadable_categories.length === 0 ? <span className="muted">No self-upload categories are available right now.</span> : null}
+            <button className="button button--primary" disabled={!canSubmit || data.uploadable_categories.length === 0} type="submit">
+              {isSubmitting ? "Uploading..." : "Submit for review"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -98,9 +342,25 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
     category_id: data.uploadable_categories[0]?.id ?? "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState<UploadFeedback | null>(null);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<HrAdminEmployeeDocument | null>(null);
   const selectedRequirement = data.requirement_items.find((item) => item.category_id === formValue.category_id);
   const reuploadItems = data.items.filter((item) => item.reupload_requested);
+  const missingRequirements = data.requirement_items.filter((item) => !item.current_document_id && !item.is_future_due);
+  const expiringRequirements = data.requirement_items.filter((item) => item.current_is_expired || item.current_is_expiring_soon);
+  const pendingReviewItems = data.items.filter((item) => item.verification_status === "pending");
+  const completedRequirements = data.requirement_items.filter((item) => item.is_compliant);
+
+  function openUpload(requirement?: EssDocumentRequirementItem) {
+    setFeedback(null);
+    setFormValue({
+      ...INITIAL_UPLOAD_VALUE,
+      category_id: requirement?.category_id ?? data.uploadable_categories[0]?.id ?? "",
+      title: requirement?.current_document_title || requirement?.category_name || "",
+    });
+    setIsUploadOpen(true);
+  }
 
   function goToPage(page: number) {
     router.push(`${pathname}${buildQueryString({
@@ -117,9 +377,9 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
     setFormValue((current) => ({ ...current, [key]: value }));
   }
 
-  async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
+  async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
+    setFeedback(null);
     setIsSubmitting(true);
 
     const body = new FormData();
@@ -139,7 +399,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(extractError(payload));
+      setFeedback({ tone: "error", message: extractError(payload) });
       setIsSubmitting(false);
       return;
     }
@@ -148,68 +408,53 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
       ...INITIAL_UPLOAD_VALUE,
       category_id: data.uploadable_categories[0]?.id ?? "",
     });
+    setFeedback({ tone: "success", message: "Your document has been sent to HR for verification." });
+    setIsSubmitting(false);
     router.refresh();
   }
 
   return (
     <div className="stack ess-documents-center">
       <section className="section section--tight">
-        <div className="ess-documents-workspace">
-          <section className="form-shell-card ess-documents-upload">
-          <div className="form-shell-card__intro">
-            <h2>Upload required document</h2>
-            <p className="section-copy">
-              Choose the document type, attach the latest file, and send it to HR for review.
+        <div className="ess-documents-action-band panel-card-soft">
+          <div>
+            <span className="workspace-card__eyebrow">Next document task</span>
+            <h2>{reuploadItems.length ? "Replace the documents HR returned" : "Upload only when a requirement needs action"}</h2>
+            <p className="section-copy section-copy-soft">
+              Keep the workspace simple: review what HR needs here, then use a focused upload dialog for the actual file.
             </p>
           </div>
+          <button className="button button--primary" disabled={data.uploadable_categories.length === 0} onClick={() => openUpload()} type="button">Upload document</button>
+        </div>
+      </section>
 
-          <form className="form-grid" onSubmit={handleUpload}>
-            <label className="form-field">
-              <span className="muted">Category</span>
-              <select className="input-control" disabled={data.uploadable_categories.length === 0 || isSubmitting} required value={formValue.category_id} onChange={(event) => updateUploadField("category_id", event.target.value)}>
-                <option value="">Select category</option>
-                {data.uploadable_categories.map((category) => (
-                  <option key={category.id} value={category.id}>{category.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Title</span>
-              <input className="input-control" disabled={isSubmitting} required value={formValue.title} onChange={(event) => updateUploadField("title", event.target.value)} />
-            </label>
-            <label className="form-field">
-              <span className="muted">Document number</span>
-              <input className="input-control" disabled={isSubmitting} value={formValue.document_number} onChange={(event) => updateUploadField("document_number", event.target.value)} />
-            </label>
-            <label className="form-field">
-              <span className="muted">Issued on</span>
-              <input className="input-control" disabled={isSubmitting} type="date" value={formValue.issued_on} onChange={(event) => updateUploadField("issued_on", event.target.value)} />
-            </label>
-            <label className="form-field">
-              <span className="muted">Expires on</span>
-              <input className="input-control" disabled={isSubmitting} type="date" value={formValue.expires_on} onChange={(event) => updateUploadField("expires_on", event.target.value)} />
-            </label>
-            <label className="form-field form-field--full">
-              <span className="muted">File</span>
-              <input className="input-control" disabled={isSubmitting || data.uploadable_categories.length === 0} required type="file" onChange={(event) => updateUploadField("file", event.target.files?.[0] ?? null)} />
-              <span className="muted">Maximum upload size: {formatFileSize(data.max_upload_size_bytes)}.</span>
-            </label>
-            <div className="form-shell-card__actions form-shell-card__actions--start form-shell-card__actions--flush">
-              <button className="button button--primary" disabled={isSubmitting || data.uploadable_categories.length === 0} type="submit">
-                {isSubmitting ? "Uploading..." : "Upload document"}
-              </button>
-              {data.uploadable_categories.length === 0 ? <span className="muted">No self-upload categories are available right now.</span> : null}
-            </div>
-          </form>
+      <section className="section section--tight">
+        <div className="ess-documents-readiness-band panel-card-soft">
+          <article className={missingRequirements.length ? "is-attention" : "is-complete"}>
+            <span>Missing uploads</span>
+            <strong>{missingRequirements.length}</strong>
+            <p>{missingRequirements.length ? missingRequirements.map((item) => item.category_name).slice(0, 2).join(", ") : "All required uploads exist."}</p>
+          </article>
+          <article className={reuploadItems.length ? "is-attention" : "is-complete"}>
+            <span>Returned by HR</span>
+            <strong>{reuploadItems.length}</strong>
+            <p>{reuploadItems.length ? "Read the note before replacing." : "No corrections requested."}</p>
+          </article>
+          <article className={expiringRequirements.length ? "is-warning" : "is-complete"}>
+            <span>Expiry focus</span>
+            <strong>{expiringRequirements.length}</strong>
+            <p>{expiringRequirements.length ? "Renew before compliance is blocked." : "No urgent renewals."}</p>
+          </article>
+          <article>
+            <span>HR review</span>
+            <strong>{pendingReviewItems.length}</strong>
+            <p>{pendingReviewItems.length ? "Files are waiting for HR." : `${pluralize(completedRequirements.length, "requirement")} complete.`}</p>
+          </article>
+        </div>
+      </section>
 
-          {error ? (
-            <div className="notice">
-              <strong>Upload failed.</strong>
-              <span className="muted">{error}</span>
-            </div>
-          ) : null}
-          </section>
-
+      <section className="section section--tight">
+        <div className="ess-documents-workspace">
           <section className="ess-documents-requirements panel-card-soft">
             <div className="ess-documents-panel-header">
               <div>
@@ -237,7 +482,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                     <h2>{item.category_name}</h2>
                   </div>
                   <div className="record-card__eyebrow">
-                    <span className={`record-chip ${item.is_compliant ? "record-chip--accent" : ""}`}>{item.is_compliant ? "Compliant" : "Action needed"}</span>
+                    <span className={`record-chip ${item.is_compliant ? "record-chip--accent" : ""}`}>{getRequirementStatus(item)}</span>
                     <span className="record-chip">{item.requires_verification ? "Review required" : "Auto accepted"}</span>
                     {item.is_future_due ? <span className="record-chip">Future due</span> : null}
                     {item.current_document_id ? <span className="record-chip">v{data.items.find((entry) => entry.id === item.current_document_id)?.version_number || 1}</span> : null}
@@ -247,9 +492,15 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                   </div>
                 </div>
                 <div className="record-card__actions">
+                  {item.allow_employee_upload ? (
+                    <button className="button button--primary" onClick={() => openUpload(item)} type="button">
+                      {item.current_document_id && !item.is_compliant ? "Replace" : "Upload"}
+                    </button>
+                  ) : null}
                   {item.current_document_id ? <Link className="button button--ghost" href={`/api/me/employee-documents/${item.current_document_id}/download`}>Download</Link> : null}
                 </div>
               </div>
+              <p className="section-copy section-copy-soft ess-documents-requirement-summary">{getRequirementSummary(item)}</p>
               <div className="detail-grid">
                 <div className="detail-row"><span className="detail-label">Current file</span><span className="detail-value">{item.current_document_title || "Not uploaded"}</span></div>
                 <div className="detail-row"><span className="detail-label">Verification</span><span className="detail-value">{item.current_verification_status || "Pending upload"}</span></div>
@@ -268,6 +519,17 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
           ))}
             </div>
           </section>
+
+          <aside className="ess-documents-guidance panel-card-soft">
+            <span className="workspace-card__eyebrow">Upload checklist</span>
+            <h2>Before sending a file</h2>
+            <div className="ess-documents-checklist">
+              <div><strong>Clear file</strong><span>All corners, names, dates, and numbers should be readable.</span></div>
+              <div><strong>Correct category</strong><span>Upload PAN under PAN, bank proof under bank proof, and so on.</span></div>
+              <div><strong>Expiry date</strong><span>Add expiry when HR tracks renewal dates for the document.</span></div>
+              <div><strong>Re-upload note</strong><span>If HR rejected a file, read the review note before replacing it.</span></div>
+            </div>
+          </aside>
         </div>
       </section>
 
@@ -363,18 +625,9 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                   <p className="section-copy section-copy-soft">{item.file_name} • Uploaded {formatDate(item.created_at)}</p>
                 </div>
                 <div className="record-card__actions">
+                  <button className="button button--secondary" onClick={() => setSelectedDocument(item)} type="button">Review</button>
                   {item.artifact_id ? <Link className="button button--ghost" href={`/api/me/employee-documents/${item.id}/download`}>Download</Link> : null}
                 </div>
-              </div>
-              <div className="detail-grid">
-                <div className="detail-row"><span className="detail-label">Document number</span><span className="detail-value">{item.document_number || "Not set"}</span></div>
-                <div className="detail-row"><span className="detail-label">File size</span><span className="detail-value">{formatFileSize(item.file_size_bytes)}</span></div>
-                <div className="detail-row"><span className="detail-label">Expires on</span><span className="detail-value">{item.expires_on || "No expiry"}</span></div>
-                <div className="detail-row"><span className="detail-label">Expiry state</span><span className="detail-value">{item.expiry_label}</span></div>
-                <div className="detail-row"><span className="detail-label">Reviewer</span><span className="detail-value">{item.verified_by_identifier || "Pending review"}</span></div>
-                <div className="detail-row"><span className="detail-label">Days to expiry</span><span className="detail-value">{item.days_until_expiry ?? "Not tracked"}</span></div>
-                <div className="detail-row"><span className="detail-label">Review steps</span><span className="detail-value">{item.review_history.length}</span></div>
-                <div className="detail-row"><span className="detail-label">Prior versions</span><span className="detail-value">{Math.max(0, item.version_history.length - 1)}</span></div>
               </div>
               {item.rejection_reason ? (
                 <div className="notice">
@@ -404,6 +657,23 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
           totalCount={data.total_count}
         />
       </section>
+
+      {isUploadOpen ? (
+        <UploadDocumentModal
+          data={data}
+          feedback={feedback}
+          formValue={formValue}
+          isSubmitting={isSubmitting}
+          onClose={() => setIsUploadOpen(false)}
+          onFieldChange={updateUploadField}
+          onSubmit={handleUpload}
+          selectedRequirement={selectedRequirement}
+        />
+      ) : null}
+
+      {selectedDocument ? (
+        <DocumentDetailModal item={selectedDocument} onClose={() => setSelectedDocument(null)} />
+      ) : null}
     </div>
   );
 }

@@ -6,6 +6,15 @@ Payroll Setup defines the calendar, periods, pay groups, and employee assignment
 
 Use this page before running payroll for a tenant, or when payroll structure changes.
 
+Payroll Setup answers four questions:
+
+- Which payroll calendar controls cutoffs and frequency?
+- Which payroll period is currently being processed?
+- Which pay group owns a cohort of employees?
+- Which employees are assigned to which pay group for the period?
+
+Do not start Payroll Inputs until calendar, period, pay group, and assignments are correct.
+
 ## Setup concepts
 
 | Concept | Meaning |
@@ -14,6 +23,16 @@ Use this page before running payroll for a tenant, or when payroll structure cha
 | Period | A payroll window such as 01 Sep to 30 Sep. |
 | Pay group | A group of employees paid together. |
 | Assignment | Mapping of employees to pay groups. |
+
+## Who owns each setup?
+
+| Setup area | Primary owner | Review partner |
+| --- | --- | --- |
+| Calendar | Payroll Admin | Finance Manager |
+| Period | Payroll Admin | HR Admin |
+| Pay group | Payroll Admin | HR Admin / Finance Manager |
+| Assignment | HR Admin / Payroll Admin | Manager or department owner when needed |
+| Changes after payroll starts | Payroll Admin | Finance Manager / HR Admin |
 
 ## Recommended screen design pattern
 
@@ -64,6 +83,54 @@ Confirm:
 - Whether the same calendar can serve all employees.
 - Whether a separate calendar is needed for contractors, weekly workers, or another country.
 
+## Example: Create India Monthly Payroll Calendar
+
+### Scenario
+
+Accerio India pays employees monthly in INR from the first day to the last day of each month.
+
+### Recommended values
+
+| Field | Example value |
+| --- | --- |
+| Code | `IN-MONTHLY` |
+| Name | `India Monthly Payroll` |
+| Frequency | `Monthly` |
+| Timezone | `Asia/Kolkata` |
+| Currency code | `INR` |
+| Period start day | `1` |
+| Config profile reference | Blank unless implementation has an approved profile |
+| Active calendar | Enabled |
+
+### Steps
+
+1. Open **HR Admin > Payroll Setup**.
+2. Open **Calendars**.
+3. Click **New**.
+4. Enter the calendar values.
+5. Save with **Create calendar**.
+6. Confirm the new calendar appears in the list.
+
+### Expected result
+
+- Calendar is available for periods and pay groups.
+- The calendar has clear code and name.
+- Payroll Control setup health can validate calendar coverage.
+
+## Negative Scenario: Duplicate Active Calendars
+
+### Symptom
+
+Two calendars have similar names such as `India Payroll`, `India Monthly`, and `IN Payroll`.
+
+### Risk
+
+Periods and pay groups may be created under different calendars. Payroll users may process the wrong period.
+
+### Correct action
+
+Keep one approved active calendar. Rename or deactivate confusing calendars if they are not used by active payroll periods.
+
 ## Period fields
 
 | Field | Meaning |
@@ -74,6 +141,52 @@ Confirm:
 | Status | Draft, active, locked, closed, or similar period state. |
 | Calendar | Calendar that owns this period. |
 
+## Example: Create September 2026 Payroll Period
+
+### Scenario
+
+The tenant is preparing salary for September 2026.
+
+### Recommended values
+
+| Field | Example value |
+| --- | --- |
+| Period name | `September 2026` |
+| Calendar | `India Monthly Payroll` |
+| Start date | `01 Sep 2026` |
+| End date | `30 Sep 2026` |
+| Status | `Draft` before payroll starts, then active/open according to workflow |
+
+### Steps
+
+1. Open **Periods**.
+2. Search for `September 2026`.
+3. If missing, click **New**.
+4. Select `India Monthly Payroll`.
+5. Enter start and end date.
+6. Save.
+7. Confirm no overlapping period exists for the same calendar.
+
+### Expected result
+
+- Payroll Control can select or detect September 2026.
+- Payroll Inputs can later create a snapshot for the correct dates.
+- Reports can use the same period.
+
+## Negative Scenario: Period Dates Overlap
+
+### Symptom
+
+September period is `01 Sep - 30 Sep`, but another active period also covers `15 Sep - 30 Sep`.
+
+### Risk
+
+Attendance, leave, salary revisions, and payroll inputs can be counted in the wrong run.
+
+### Correct action
+
+Do not continue payroll setup. Correct or close the wrong period before creating pay groups or locking inputs.
+
 ## Pay group fields
 
 | Field | Meaning |
@@ -83,6 +196,98 @@ Confirm:
 | Calendar | Payroll calendar used by the group. |
 | Legal entity / branch / department filters | Optional filters for employee grouping. |
 | Active | Whether new assignments can use this group. |
+
+## Example: Create Pay Groups For India Employees
+
+### Scenario
+
+Accerio India pays regular employees monthly, but keeps consultants out of the normal employee payroll run.
+
+### Suggested pay groups
+
+| Pay group | Use for | Example code |
+| --- | --- | --- |
+| Monthly Staff | Full-time Indian employees paid monthly. | `IN-MONTHLY-STAFF` |
+| Contract Staff | Consultants or fixed-term staff processed separately. | `IN-CONTRACT` |
+| Hold Payroll | Employees temporarily excluded pending HR or finance decision. | `IN-HOLD` |
+
+### Steps
+
+1. Open **Pay groups**.
+2. Click **New**.
+3. Select the payroll calendar.
+4. Enter code and name.
+5. Add legal entity, branch, or department filters only when they are intentional.
+6. Mark active.
+7. Save.
+
+### Expected result
+
+- Employees can be assigned to an appropriate payroll cohort.
+- Payroll Control can identify missing or wrong pay group assignments.
+
+## Negative Scenario: Employee Assigned To Wrong Pay Group
+
+### Example
+
+An employee in Bengaluru regular staff is assigned to `IN-CONTRACT`.
+
+### Impact
+
+- Employee may be excluded from the main payroll run.
+- Salary, statutory, provider, or finance handoff may use wrong rules.
+
+### Correct action
+
+Open **Assignments**, search the employee, change pay group with correct effective date, then refresh Payroll Control.
+
+## Assignment Fields
+
+| Field | Meaning |
+| --- | --- |
+| Employee | Employee being mapped to payroll. |
+| Pay group | Payroll cohort used for the employee. |
+| Effective from | Date from which the assignment applies. |
+| Effective to | Optional end date for temporary assignment. |
+| Status | Active, future, ended, or inactive assignment state. |
+| Reason | Business reason for assignment or change. |
+
+## Example: Assign Employees To Monthly Staff Pay Group
+
+### Scenario
+
+HR created five pilot employees and wants them included in September payroll.
+
+### Steps
+
+1. Open **Assignments**.
+2. Search by employee name, employee code, department, or legal entity.
+3. Select employee.
+4. Choose `IN-MONTHLY-STAFF`.
+5. Set effective from date on or before `01 Sep 2026`.
+6. Save assignment.
+7. Repeat or use bulk assignment where available.
+8. Open Payroll Control and confirm the employee appears in scope.
+
+### Expected result
+
+- Employee is included in the selected payroll cycle.
+- Missing pay group blocker clears.
+- Employee appears in Payroll Inputs after source readiness is clear.
+
+## Negative Scenario: Employee Missing From Payroll Because Assignment Starts Late
+
+### Symptom
+
+Employee joined on `15 Sep 2026`, but does not appear in September payroll.
+
+### Possible reason
+
+Pay group assignment starts `01 Oct 2026`, so September payroll does not include the employee.
+
+### Correct action
+
+Check joining date, assignment effective date, salary effective date, and pay group. Correct the assignment only if the employee should be paid in September.
 
 ## Buttons and actions
 
@@ -103,6 +308,19 @@ Confirm:
 4. Assign employees to pay groups.
 5. Open Payroll Control and check setup health.
 
+## Monthly Operating Workflow
+
+Use this before each new payroll cycle:
+
+1. Confirm next payroll period exists.
+2. Confirm period dates match finance calendar.
+3. Confirm pay groups are active.
+4. Review employees with missing pay group.
+5. Review joiners, exits, transfers, and department moves.
+6. Confirm assignments are effective for the payroll period.
+7. Open Payroll Control > Setup Health.
+8. Fix setup blockers before locking inputs.
+
 ## Long-list handling
 
 Use pagination and filters when records grow:
@@ -116,6 +334,19 @@ Use pagination and filters when records grow:
 
 Avoid showing every historical period or assignment in one long page. Users should be able to find the current payroll period without scrolling through old records.
 
+## Pagination and Search Standard
+
+Long setup lists should be reviewed with filters, not scrolling.
+
+| List | Minimum review pattern |
+| --- | --- |
+| Calendars | Filter active calendars first. Keep historical calendars searchable. |
+| Periods | Filter by calendar and year. Sort newest period first. |
+| Pay groups | Filter active pay groups first. Search by code and legal entity. |
+| Assignments | Search employee code/name and filter by pay group/status. |
+
+For customer tenants with hundreds of employees, assignments must be handled with search, filters, pagination, and bulk action. Do not rely on a single unpaginated list.
+
 ## Common mistakes
 
 - Creating multiple active calendars with similar names.
@@ -123,6 +354,29 @@ Avoid showing every historical period or assignment in one long page. Users shou
 - Employees missing pay group assignment.
 - Assigning employees to the wrong pay group.
 - Using unclear codes that are hard to audit later.
+
+## Pre-Payroll Setup Checklist
+
+| Check | Expected result |
+| --- | --- |
+| Calendar | One approved active calendar for the payroll population. |
+| Period | Correct date range, no overlap, correct status. |
+| Pay group | Every payroll population has a clear active pay group. |
+| Assignments | Every payable employee has active assignment for the period. |
+| Joiners | Joiners have assignment effective from joining or payroll eligibility date. |
+| Exits | Exited employees are assigned or excluded according to final settlement process. |
+| Transfers | Branch/pay group changes are effective-dated correctly. |
+| Payroll Control | Setup Health has no unresolved setup blockers. |
+
+## Evidence To Keep
+
+| Evidence | Why |
+| --- | --- |
+| Calendar setup | Proves payroll frequency, timezone, and currency. |
+| Period list | Proves monthly payroll window. |
+| Pay group setup | Proves payroll population design. |
+| Assignment export | Proves who is included in each pay group. |
+| Audit trail | Proves who changed setup before payroll. |
 
 ## FAQ
 
@@ -137,3 +391,25 @@ Create a separate pay group when employees follow different payroll timing, rule
 ### Should payroll setup be changed during an active run?
 
 Avoid it unless the change is required to fix a blocker. If a payroll run is already locked or calculated, check whether a rerun is required.
+
+### Should contractors and employees be in the same pay group?
+
+Only if they follow the same payroll calendar, review process, statutory setup, provider handoff, and finance approval. Otherwise create a separate pay group.
+
+### Why does Payroll Control still show missing pay group?
+
+Check assignment effective date, employee status, legal entity/branch filters, pay group active status, and selected payroll period.
+
+### Can I delete old periods?
+
+No, not if they were used for payroll or evidence. Close or archive historical periods according to policy instead of deleting them.
+
+## Related guides
+
+- [Payroll Overview](index.md)
+- [Payroll Control](payroll-control.md)
+- [Payroll Inputs](payroll-inputs.md)
+- [Employee Master](../employees.md)
+- [Organization](../organization.md)
+- [Lifecycle](../lifecycle.md)
+- [Payroll Issues](../../troubleshooting/payroll.md)

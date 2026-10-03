@@ -88,7 +88,7 @@ test.describe("Employee self service control center certification", () => {
     await gotoAuthenticated(page, "/ess/payslips", employee);
     await expect(page).toHaveURL(/\/ess\/payslips/);
     await expectPageReady(page, "Payslips");
-    await expect(page.getByRole("heading", { name: /My payslips|Payslip register|No payslip selected/i }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Published payslips|No payslip published/i }).first()).toBeVisible();
 
     await gotoAuthenticated(page, "/ess", employee);
     await expect(page.getByRole("link", { name: "Documents" }).first()).toHaveAttribute("href", /\/ess\/documents/);
@@ -149,11 +149,21 @@ test.describe("Employee self service control center certification", () => {
       await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
     }
 
-    await expect(page.getByRole("heading", { name: "Upload required document" })).toBeVisible();
-    for (const label of ["Category", "Title", "Document number", "Issued on", "Expires on", "File"]) {
-      await expect(page.getByLabel(label).first(), `${label} should be available in ESS documents`).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Required documents" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Before sending a file" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Upload required document" })).toHaveCount(0);
+    const uploadButton = page.getByRole("button", { name: "Upload document" }).first();
+    if (await uploadButton.isEnabled().catch(() => false)) {
+      await uploadButton.click();
+      const uploadDialog = page.getByRole("dialog", { name: "Upload document" });
+      await expect(uploadDialog).toBeVisible();
+      for (const label of ["Category", "Title", "Document number", "Issued on", "Expires on", "File"]) {
+        await expect(uploadDialog.getByLabel(label).first(), `${label} should be available in the upload dialog`).toBeVisible();
+      }
+      await uploadDialog.getByRole("button", { name: "Close" }).click();
+    } else {
+      await expect(uploadButton).toBeDisabled();
     }
-    await expect(page.getByRole("button", { name: "Upload document" })).toBeVisible();
 
     await expect(page.getByRole("heading", { name: "Document history" })).toBeVisible();
     for (const label of ["Search", "Verification", "Category", "Expiry focus", "Rows per page"]) {

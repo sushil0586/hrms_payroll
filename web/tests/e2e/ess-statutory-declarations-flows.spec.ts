@@ -5,6 +5,7 @@ import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("Employee statutory declaration flows", () => {
   test("employee declaration workspace exposes cockpit, focused dialogs, and proof drilldown", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await gotoAuthenticated(page, "/ess/statutory-declarations");
     await expectPageReady(page, "Statutory Declarations");
 
@@ -16,6 +17,26 @@ test.describe("Employee statutory declaration flows", () => {
     await expect(page.getByText("Proof register", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Declared items" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Tax declaration checklist" })).toBeVisible();
+
+    const taxYears = page.getByLabel("Tax year selector");
+    const checklist = page.getByLabel("Tax declaration checklist");
+    const workspace = page.getByLabel("Tax declaration workspace");
+    await expect(taxYears).toBeVisible();
+    await expect(checklist).toBeVisible();
+    await expect(workspace).toBeVisible();
+    const [taxYearsBox, checklistBox, workspaceBox] = await Promise.all([
+      taxYears.boundingBox(),
+      checklist.boundingBox(),
+      workspace.boundingBox(),
+    ]);
+    expect(taxYearsBox, "Tax year selector should render as a real full-width row.").not.toBeNull();
+    expect(checklistBox, "Checklist should render as a real top action band.").not.toBeNull();
+    expect(workspaceBox, "Declaration workspace should render as the main full-width detail area.").not.toBeNull();
+    expect(checklistBox!.y).toBeGreaterThan(taxYearsBox!.y);
+    expect(workspaceBox!.y).toBeGreaterThan(checklistBox!.y);
+    expect(taxYearsBox!.width).toBeGreaterThan(workspaceBox!.width * 0.9);
+    expect(checklistBox!.width).toBeGreaterThan(workspaceBox!.width * 0.9);
+    expect(workspaceBox!.width).toBeGreaterThan(900);
 
     await page.getByRole("button", { name: /Start declaration|Update declaration/ }).first().click();
     const declarationDialog = page.getByRole("dialog", { name: /Start declaration|Update declaration/ });

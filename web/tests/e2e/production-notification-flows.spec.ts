@@ -148,11 +148,19 @@ test.describe("Production notification reliability proof", () => {
     await expectPageReady(page, "Payslips");
     await expectVisibleText(page, [
       "Published payslips",
+      "Published only",
+      "Audit protected",
+    ]);
+
+    await page.getByRole("button", { name: "Review payslip" }).first().click();
+    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
+    await expectVisibleText(page, [
       "Download payslip",
       "Read receipt",
       "Latest notification",
-      "Recent access events",
-      "Notified",
+      "Access trail",
+      "Storage governance",
+      "Calculation lines",
       "payroll.download.stream.local.v1",
       "payroll.retention.7y.v1",
     ]);

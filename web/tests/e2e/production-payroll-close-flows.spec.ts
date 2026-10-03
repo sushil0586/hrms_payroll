@@ -103,7 +103,11 @@ test.describe("Production payroll close proof", () => {
     await expectPageReady(page, "Payslips");
     await expectVisibleText(page, [
       "Published payslips",
-      "Payslip register",
+      "Published only",
+    ]);
+    await page.getByRole("button", { name: "Review payslip" }).first().click();
+    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
+    await expectVisibleText(page, [
       "Access trail",
       "Payment summary",
       "Storage governance",

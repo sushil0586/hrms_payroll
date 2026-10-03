@@ -290,9 +290,11 @@ test.describe.serial("P100-8 output, payslip, and ESS certification", () => {
 
     await gotoAuthenticated(page, `/ess/payslips?q=${encodeURIComponent(runCode)}`, pilotEmployee);
     await expectPageReady(page, "Payslips");
-    await expect(page.getByRole("heading", { name: "Payslip register" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Published payslips" })).toBeVisible();
     await expect(page.getByText(`${prefix} Output Payslip ESS Gate`).first()).toBeVisible();
     await expect(page.getByText(`${prefix}_E001`).first()).toBeVisible();
+    await page.getByRole("button", { name: "Review payslip" }).first().click();
+    await expect(page.getByRole("dialog", { name: /Payslip detail for/ })).toBeVisible();
     await expect(page.getByText("Source hash").first()).toBeVisible();
     await expect(page.getByText("Storage governance").first()).toBeVisible();
     await expect(page.getByText("Calculation lines").first()).toBeVisible();

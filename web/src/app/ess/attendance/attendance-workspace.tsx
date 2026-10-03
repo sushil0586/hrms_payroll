@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -86,6 +86,19 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function useEscapeClose(onClose: () => void) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+}
+
 function AttendanceDecisionCard({ item }: { item: AttendanceRegularizationItem }) {
   const isOpen = item.status === "pending";
   const tone = item.status === "rejected" ? "blocked" : isOpen ? "current" : "complete";
@@ -146,19 +159,33 @@ function AttendanceRegularizationModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  useEscapeClose(onClose);
   const defaultAttendanceRecord = attendanceRecords.find((record) => !record.is_locked)?.id ?? attendanceRecords[0]?.id ?? "";
   const [selectedRecordId, setSelectedRecordId] = useState(defaultAttendanceRecord);
   const [requestedStatus, setRequestedStatus] = useState("present");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
+  const [reason, setReason] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const selectedRecord = attendanceRecords.find((record) => record.id === selectedRecordId) ?? null;
   const hasTimeOrderRisk = Boolean(checkIn && checkOut && new Date(checkOut) < new Date(checkIn));
+  const canSubmit = Boolean(selectedRecord && !selectedRecord.is_locked && !hasTimeOrderRisk && reason.trim());
 
   async function submitRegularization(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback(null);
+    if (!canSubmit) {
+      setFeedback({
+        tone: "error",
+        message: selectedRecord?.is_locked
+          ? "This attendance record is locked. Contact HR before payroll close."
+          : hasTimeOrderRisk
+            ? "Requested check-out cannot be earlier than requested check-in."
+            : "Add a clear reason before submitting the correction.",
+      });
+      return;
+    }
     if (isDemo) {
       setFeedback({ tone: "error", message: "Attendance regularizations are only available in live mode." });
       return;
@@ -203,6 +230,7 @@ function AttendanceRegularizationModal({
             <label className="form-field form-field--full">
               <span className="muted">Attendance record</span>
               <select className="input-control" name="attendance_record_id" onChange={(event) => setSelectedRecordId(event.target.value)} required value={selectedRecordId}>
+                {!attendanceRecords.length ? <option value="">No attendance records available</option> : null}
                 {attendanceRecords.map((record) => (
                   <option disabled={record.is_locked} key={record.id} value={record.id}>{formatRecordLabel(record)}</option>
                 ))}
@@ -228,7 +256,7 @@ function AttendanceRegularizationModal({
             </label>
             <label className="form-field form-field--full">
               <span className="muted">Reason</span>
-              <textarea className="input-control" name="reason" required rows={3} />
+              <textarea className="input-control" name="reason" onChange={(event) => setReason(event.target.value)} required rows={3} value={reason} />
             </label>
             {feedback ? (
               <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""} form-field--full`} role="status">
@@ -236,9 +264,27 @@ function AttendanceRegularizationModal({
                 <span className="muted">{feedback.message}</span>
               </div>
             ) : null}
+            {!attendanceRecords.length ? (
+              <div className="notice form-field--full" role="status">
+                <strong>No attendance record available.</strong>
+                <span className="muted">HR needs to create attendance records before you can request a correction.</span>
+              </div>
+            ) : null}
+            {selectedRecord?.is_locked ? (
+              <div className="notice form-field--full" role="status">
+                <strong>Record locked.</strong>
+                <span className="muted">Payroll or attendance cutoff has locked this day. Contact HR for changes.</span>
+              </div>
+            ) : null}
+            {!reason.trim() ? (
+              <div className="notice form-field--full" role="status">
+                <strong>Reason required.</strong>
+                <span className="muted">Explain the correction clearly so your manager can approve it without follow-up.</span>
+              </div>
+            ) : null}
             <div className="form-actions-bar form-field--full">
               <span className="muted">Regularizations route to the reporting manager inbox.</span>
-              <button className="button button--primary" disabled={submitting || !attendanceRecords.length} type="submit">
+              <button className="button button--primary" disabled={submitting || !canSubmit} type="submit">
                 {submitting ? "Submitting..." : "Submit regularization"}
               </button>
             </div>
@@ -271,6 +317,8 @@ function AttendanceRegularizationModal({
 }
 
 function AttendanceDetailModal({ item, onClose }: { item: AttendanceRegularizationItem; onClose: () => void }) {
+  useEscapeClose(onClose);
+
   return (
     <div className="modal-shell" role="presentation">
       <div aria-label="Regularization detail" aria-modal="true" className="modal ess-attendance-modal ess-attendance-modal--wide" role="dialog">

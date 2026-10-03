@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
-import { NotificationReadToggle } from "@/components/patterns/notification-read-toggle";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { UserNotificationDetailAction } from "@/components/patterns/user-notification-detail-action";
 import type { HrAdminNotification, HrAdminNotificationListResponse } from "@/lib/types";
 
 type SearchParamValue = string | string[] | undefined;
@@ -99,6 +99,14 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <span className="detail-value">{value}</span>
     </div>
   );
+}
+
+function titleCase(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function summarizeMessage(item: HrAdminNotification) {
+  return item.body || item.subject || "No body content.";
 }
 
 export function UserNotificationCenter({
@@ -240,6 +248,26 @@ export function UserNotificationCenter({
           </div>
         </section>
 
+        <div className="user-notification-action-band">
+          <div>
+            <span className="workspace-card__eyebrow">What to do next</span>
+            <h2>Review messages that need action</h2>
+            <p className="section-copy section-copy-soft">
+              Keep this page focused on finding alerts. Open a notification only when you need the full message, delivery trail, or source workflow.
+            </p>
+          </div>
+          {selected ? (
+            <div className="user-notification-action-band__actions">
+              <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${selected.id}`} item={selected} sourceHref={resolveSourceHref(selected, workspace)} variant="primary" />
+              {resolveSourceHref(selected, workspace) ? (
+                <Link className="button button--secondary" href={resolveSourceHref(selected, workspace)}>
+                  Open source
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
         <div className="queue-list user-notification-grid">
           <article className="record-card panel-card-soft user-notification-list">
             <div className="record-card__header">
@@ -251,22 +279,27 @@ export function UserNotificationCenter({
             <div className="tableish">
               {data.items.length ? (
                 data.items.map((item) => (
-                  <Link
-                    className={`tableish__row ${selected?.id === item.id ? "tableish__row--active" : ""}`}
-                    href={buildHref(basePath, currentParams, { itemId: item.id })}
+                  <article
+                    className={`tableish__row user-notification-row ${selected?.id === item.id ? "tableish__row--active" : ""}`}
                     key={item.id}
                   >
                     <div className="tableish__head">
                       <strong>{item.title || item.event_definition_name || "Notification"}</strong>
-                      <span className="record-chip">{item.status}</span>
+                      <span className={`record-chip record-chip--${item.status}`}>{titleCase(item.status)}</span>
                     </div>
                     <div className="tableish__meta">
-                      <span>{item.channel}</span>
-                      <span>{item.priority}</span>
+                      <span>{titleCase(item.channel)}</span>
+                      <span>{titleCase(item.priority)}</span>
                       <span>{item.event_definition_name || item.subject_type}</span>
                     </div>
-                    <span className="muted">{item.body || item.subject || "No body content."}</span>
-                  </Link>
+                    <span className="muted">{summarizeMessage(item)}</span>
+                    <div className="table-actions">
+                      <Link className="button button--ghost" href={buildHref(basePath, currentParams, { itemId: item.id })}>
+                        Select
+                      </Link>
+                      <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${item.id}`} item={item} sourceHref={resolveSourceHref(item, workspace)} />
+                    </div>
+                  </article>
                 ))
               ) : (
                 <div className="notice">
@@ -277,31 +310,30 @@ export function UserNotificationCenter({
             </div>
           </article>
 
-          <article className="record-card panel-card-soft user-notification-detail">
+          <aside className="record-card panel-card-soft user-notification-detail">
             <div>
               <h2 className="section-heading-soft">Notification detail</h2>
-              <p className="section-copy section-copy-soft">Review the message, delivery state, and source workflow.</p>
+              <p className="section-copy section-copy-soft">Selected alert summary. Open review for the full delivery trail.</p>
             </div>
             {selected ? (
-              <div className="stack">
+              <div className="stack user-notification-guidance">
+                <div className="user-notification-selected">
+                  <strong>{selected.title || selected.event_definition_name || "Notification"}</strong>
+                  <span>{summarizeMessage(selected)}</span>
+                </div>
                 <div className="detail-grid">
-                  <DetailRow label="Title" value={selected.title || selected.event_definition_name || "Notification"} />
-                  <DetailRow label="Status" value={selected.status} />
-                  <DetailRow label="Priority" value={selected.priority} />
-                  <DetailRow label="Channel" value={selected.channel} />
-                  <DetailRow label="Event" value={selected.event_definition_name || "Direct delivery"} />
-                  <DetailRow label="Subject type" value={selected.subject_type || "Not tagged"} />
+                  <DetailRow label="Status" value={titleCase(selected.status)} />
+                  <DetailRow label="Priority" value={titleCase(selected.priority)} />
+                  <DetailRow label="Channel" value={titleCase(selected.channel)} />
+                  <DetailRow label="Subject type" value={selected.subject_type || "Not available"} />
+                  <DetailRow label="Reference" value={selected.subject_identifier || "Not available"} />
+                  <DetailRow label="Event" value={selected.event_definition_name || "Not available"} />
                   <DetailRow label="Created" value={formatDateTime(selected.created_at)} />
                   <DetailRow label="Read at" value={formatDateTime(selected.read_at)} />
                 </div>
 
-                <div className="record-card__notes">
-                  <strong>Body</strong>
-                  <p>{selected.body || selected.subject || "No body content was recorded for this notification."}</p>
-                </div>
-
                 <div className="record-card__actions">
-                  <NotificationReadToggle endpoint={`${apiEndpointBase}/${selected.id}`} isRead={Boolean(selected.read_at)} />
+                  <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${selected.id}`} item={selected} sourceHref={resolveSourceHref(selected, workspace)} variant="primary" />
                   {resolveSourceHref(selected, workspace) ? (
                     <Link className="button button--ghost" href={resolveSourceHref(selected, workspace)}>
                       Open source
@@ -311,18 +343,6 @@ export function UserNotificationCenter({
                     Open {crossWorkspaceLabel}
                   </Link>
                 </div>
-
-                {selected.delivery_logs.length ? (
-                  <div className="stack-list">
-                    {selected.delivery_logs.map((log) => (
-                      <div className="detail-grid" key={log.id}>
-                        <div className="detail-row"><span className="detail-label">Provider</span><span className="detail-value">{log.provider_name}</span></div>
-                        <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{log.status}</span></div>
-                        <div className="detail-row"><span className="detail-label">Logged</span><span className="detail-value">{formatDateTime(log.created_at)}</span></div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
               </div>
             ) : (
               <div className="notice">
@@ -330,7 +350,7 @@ export function UserNotificationCenter({
                 <span className="muted">Choose a notification from the inbox list to inspect it in detail.</span>
               </div>
             )}
-          </article>
+          </aside>
         </div>
       </section>
 

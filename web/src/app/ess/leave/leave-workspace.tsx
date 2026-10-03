@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
@@ -161,6 +161,19 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function useEscapeClose(onClose: () => void) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+}
+
 function LeaveEvidence({ item }: { item: LeaveRequestItem }) {
   const attachments = item.attachments ?? [];
   if (!attachments.length && !item.attachment_reference) {
@@ -277,6 +290,7 @@ function LeaveApplyModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  useEscapeClose(onClose);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [leaveTypeId, setLeaveTypeId] = useState(leaveTypes[0]?.id ?? "");
   const [startDate, setStartDate] = useState(today);
@@ -284,6 +298,7 @@ function LeaveApplyModal({
   const [startPortion, setStartPortion] = useState("full_day");
   const [endPortion, setEndPortion] = useState("full_day");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [evidenceReference, setEvidenceReference] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const selectedLeaveType = useMemo(
@@ -312,6 +327,7 @@ function LeaveApplyModal({
     [endDate, leaveRequests, startDate],
   );
   const attachmentRequired = Boolean(selectedLeaveType?.requires_attachment);
+  const evidenceReady = !attachmentRequired || Boolean(selectedFile || evidenceReference.trim());
   const fileSizeLabel = selectedFile ? `${Math.max(1, Math.ceil(selectedFile.size / 1024))} KB` : null;
 
   async function submitLeave(event: FormEvent<HTMLFormElement>) {
@@ -353,7 +369,8 @@ function LeaveApplyModal({
           <div className="form-grid leave-apply-form">
             <label className="form-field">
               <span className="muted">Leave type</span>
-              <select className="input-control" name="leave_type_id" onChange={(event) => setLeaveTypeId(event.target.value)} required value={leaveTypeId}>
+              <select className="input-control" disabled={!leaveTypes.length} name="leave_type_id" onChange={(event) => setLeaveTypeId(event.target.value)} required value={leaveTypeId}>
+                {!leaveTypes.length ? <option value="">No leave types assigned</option> : null}
                 {leaveTypes.map((item) => (
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
@@ -395,7 +412,13 @@ function LeaveApplyModal({
             </label>
             <label className="form-field">
               <span className="muted">Evidence reference</span>
-              <input className="input-control" name="attachment_reference" placeholder="Medical certificate, travel proof, or policy note" />
+              <input
+                className="input-control"
+                name="attachment_reference"
+                onChange={(event) => setEvidenceReference(event.target.value)}
+                placeholder="Medical certificate, travel proof, or policy note"
+                value={evidenceReference}
+              />
             </label>
             <label className="form-field form-field--full">
               <span className="muted">Reason</span>
@@ -416,9 +439,21 @@ function LeaveApplyModal({
                 <span className="muted">{feedback.message}</span>
               </div>
             ) : null}
+            {!leaveTypes.length ? (
+              <div className="notice form-field--full" role="status">
+                <strong>Leave setup is missing.</strong>
+                <span className="muted">HR needs to assign at least one active leave type and policy before you can submit leave.</span>
+              </div>
+            ) : null}
+            {attachmentRequired && !evidenceReady ? (
+              <div className="notice form-field--full" role="status">
+                <strong>Evidence required.</strong>
+                <span className="muted">Attach a file or add a reference before submitting this leave type.</span>
+              </div>
+            ) : null}
             <div className="form-actions-bar form-field--full">
               <span className="muted">Manager approval opens automatically when this policy needs it.</span>
-              <button className="button button--primary" disabled={submitting || !leaveTypes.length || !requestEstimate.valid} type="submit">
+              <button className="button button--primary" disabled={submitting || !leaveTypes.length || !requestEstimate.valid || !evidenceReady} type="submit">
                 {submitting ? "Submitting..." : "Submit leave"}
               </button>
             </div>
@@ -471,6 +506,8 @@ function LeaveApplyModal({
 }
 
 function LeaveDetailModal({ isDemo, item, onClose }: { isDemo: boolean; item: LeaveRequestItem; onClose: () => void }) {
+  useEscapeClose(onClose);
+
   return (
     <div className="modal-shell" role="presentation">
       <div aria-label="Leave request detail" aria-modal="true" className="modal ess-leave-modal ess-leave-modal--wide" role="dialog">

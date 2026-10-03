@@ -8,9 +8,15 @@ test.describe("Employee self-service payslip flows", () => {
     await gotoAuthenticated(page, "/ess/payslips");
     await expectPageReady(page, "Payslips");
 
-    await expect(page.getByRole("heading", { name: "Payslip register" })).toBeVisible();
-    await expect(page.getByText("Source hash").or(page.getByText("No published payslips")).first()).toBeVisible();
-    await expect(page.getByText("Access trail").or(page.getByText("Recent access events")).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Published payslips" })).toBeVisible();
+    await expect(page.getByText("Published only").or(page.getByText("No payslips found")).first()).toBeVisible();
+
+    const reviewPayslip = page.getByRole("button", { name: "Review payslip" }).first();
+    if (await reviewPayslip.isVisible().catch(() => false)) {
+      await reviewPayslip.click();
+      await expect(page.getByText("Source hash").first()).toBeVisible();
+      await expect(page.getByText("Access trail").first()).toBeVisible();
+    }
 
     const download = page.getByRole("link", { name: "Download payslip" }).first();
     if (await download.isVisible().catch(() => false)) {

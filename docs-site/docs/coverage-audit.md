@@ -6,11 +6,11 @@ This audit proves that the user guide covers each workspace menu, child screen f
 
 Status: **Covered**
 
-- Menu catalog checked: 69 links.
-- Sidebar pages checked: 52 links.
-- Quick links checked: 17 links.
+- Menu catalog checked: 72 links.
+- Sidebar pages checked: 54 links.
+- Quick links checked: 18 links.
 - Screenshot references checked: 52 screenshots.
-- App route pages inventoried: 169.
+- App route pages inventoried: 172.
 - Child and utility route candidates checked: 83.
 - Dynamic child route families checked: 0 uncovered.
 - Build gate: `mkdocs build --strict`.
@@ -32,7 +32,7 @@ Status: **Covered**
 | Tenant Admin | Dashboard, users, roles, plan, setup guide, support access, trust audit, settings, security | Tenant Admin pages, weekly checklist, access troubleshooting |
 | HR Admin | Dashboard, launch readiness, employees, lifecycle, documents, attendance, leave, policies, reports, audit, workflows | HR Admin pages, daily checklist, workflow guides |
 | Payroll | Payroll Control, Setup, Salary Setup, Rules, Inputs, Calculations, Review, Outputs, Handoff, Adjustments, Statutory, Providers | Payroll pages, monthly checklist, first payroll run, close-to-finance workflow |
-| ESS | Overview, payslips, documents, tax declarations, notifications | ESS pages and task recipes |
+| ESS | Overview, leave, attendance, payslips, documents, tax declarations, notifications | ESS pages and task recipes |
 | MSS | Control center, approvals, notifications, self service | MSS pages and task recipes |
 | Finance Manager | Control center, payments, compliance, audit | Finance Manager pages and payroll-day checklist |
 

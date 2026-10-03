@@ -3,9 +3,8 @@ import Link from "next/link";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import { PayslipReadReceiptAction } from "@/app/ess/payslips/payslip-read-receipt-action";
+import { PayslipDetailAction } from "@/app/ess/payslips/payslip-detail-action";
 import { getEssPayrollPayslips } from "@/lib/api";
-import type { EssPayrollPayslip } from "@/lib/types";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -32,11 +31,6 @@ function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
-function getLineValue(line: Record<string, unknown>, key: string) {
-  const value = line[key];
-  return value === null || value === undefined || value === "" ? "Not available" : String(value);
-}
-
 function formatDate(value: string | null) {
   if (!value) {
     return "Pending";
@@ -45,19 +39,6 @@ function formatDate(value: string | null) {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }).format(new Date(value));
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Pending";
-  }
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   }).format(new Date(value));
 }
 
@@ -70,194 +51,8 @@ function formatMoney(value: unknown, currency = "INR") {
   }).format(Number.isFinite(numericValue) ? numericValue : 0);
 }
 
-function formatFileSize(value: number) {
-  if (!value) {
-    return "Pending";
-  }
-  if (value < 1024) {
-    return `${value} B`;
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`;
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
-}
-
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="detail-row">
-      <span className="detail-label">{label}</span>
-      <span className="detail-value">{value}</span>
-    </div>
-  );
-}
-
-function PayslipRail({
-  payslips,
-  selectedPayslip,
-  filters,
-}: {
-  payslips: EssPayrollPayslip[];
-  selectedPayslip: EssPayrollPayslip | null;
-  filters: { q: string; year: string; page_size: number };
-}) {
-  return (
-    <aside className="ess-payslip-rail">
-      <div className="ess-payslip-panel-header">
-        <span className="workspace-card__eyebrow">Published history</span>
-        <h2>Payslip months</h2>
-      </div>
-      <div className="ess-payslip-card-list">
-        {payslips.map((payslip) => (
-          <Link
-            className={`ess-payslip-card ${selectedPayslip?.id === payslip.id ? "is-selected" : ""}`}
-            href={`/ess/payslips${buildQueryString({
-              q: filters.q,
-              year: filters.year,
-              page_size: filters.page_size,
-              payslipId: payslip.id,
-            })}`}
-            key={payslip.id}
-          >
-            <div className="ess-payslip-card__top">
-              <div>
-                <strong>{payslip.period_name}</strong>
-                <span>{payslip.payroll_run_name}</span>
-              </div>
-              <StatusBadge status="published" />
-            </div>
-            <div className="ess-payslip-card__amount">
-              <span>Net pay</span>
-              <strong>{formatMoney(payslip.totals_snapshot.net_pay)}</strong>
-            </div>
-            <div className="ess-payslip-card__meta">
-              <span>{formatDate(payslip.pay_date)}</span>
-              <span>{payslip.access_summary.is_read_acknowledged ? "Read" : "Pending read"}</span>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </aside>
-  );
-}
-
-function PayslipDetail({ payslip }: { payslip: EssPayrollPayslip | null }) {
-  if (!payslip) {
-    return (
-      <aside className="ess-payslip-detail">
-        <div className="ess-payslip-panel-header">
-          <span className="workspace-card__eyebrow">Payslip detail</span>
-          <h2>No payslip selected</h2>
-        </div>
-        <p className="section-copy section-copy-soft">Published employee payslips will appear here after payroll outputs are released.</p>
-      </aside>
-    );
-  }
-
-  return (
-    <aside className="ess-payslip-detail" aria-label={`${payslip.title} detail`}>
-      <div className="ess-payslip-panel-header ess-payslip-panel-header--split">
-        <div>
-          <span className="workspace-card__eyebrow">Payslip detail</span>
-          <h2>{payslip.title}</h2>
-          <p className="section-copy section-copy-soft">{payslip.period_name} / Paid {formatDate(payslip.pay_date)}</p>
-        </div>
-        <StatusBadge status="published" />
-      </div>
-
-      <div className="ess-payslip-net-card">
-        <span className="workspace-card__eyebrow">Net pay</span>
-        <strong>{formatMoney(payslip.totals_snapshot.net_pay)}</strong>
-        <span>{payslip.period_name} / Paid {formatDate(payslip.pay_date)}</span>
-        <span>{payslip.file_name || "Generated payslip file"}</span>
-        <div className="ess-payslip-action-row">
-          {payslip.download_url ? (
-            <a className="button button--secondary" href={`/api/me/payroll-payslips/${payslip.id}/download`}>
-              Download payslip
-            </a>
-          ) : (
-            <span className="payroll-output-download-state">Download blocked</span>
-          )}
-          <PayslipReadReceiptAction
-            endpoint={`/api/me/payroll-payslips/${payslip.id}/read`}
-            isReadAcknowledged={payslip.access_summary.is_read_acknowledged}
-          />
-        </div>
-      </div>
-
-      <section className="ess-payslip-detail-section">
-        <span className="workspace-card__eyebrow">Access trail</span>
-        <div className="detail-grid">
-          <DetailRow label="Notifications" value={String(payslip.access_summary.notification_count)} />
-          <DetailRow label="Downloads" value={String(payslip.access_summary.download_count)} />
-          <DetailRow label="Read receipt" value={payslip.access_summary.is_read_acknowledged ? formatDateTime(payslip.access_summary.first_read_at) : "Pending"} />
-          <DetailRow label="Latest notification" value={formatDateTime(payslip.access_summary.latest_notification_at)} />
-        </div>
-      </section>
-
-      <section className="ess-payslip-detail-section">
-        <span className="workspace-card__eyebrow">Payment summary</span>
-        <div className="detail-grid">
-          <DetailRow label="Gross earnings" value={formatMoney(payslip.totals_snapshot.gross_earnings)} />
-          <DetailRow label="Deductions" value={formatMoney(payslip.totals_snapshot.employee_deductions)} />
-          <DetailRow label="Net pay" value={formatMoney(payslip.totals_snapshot.net_pay)} />
-          <DetailRow label="Period start" value={formatDate(payslip.period_start_date)} />
-          <DetailRow label="Period end" value={formatDate(payslip.period_end_date)} />
-          <DetailRow label="Published by" value={payslip.published_by_name ?? "Payroll team"} />
-        </div>
-      </section>
-
-      <section className="ess-payslip-detail-section">
-        <span className="workspace-card__eyebrow">Storage governance</span>
-        <div className="detail-grid">
-          <DetailRow label="Provider" value={payslip.storage_provider_ref} />
-          <DetailRow label="Object version" value={payslip.storage_object_version || "Pending"} />
-          <DetailRow label="Strategy" value={payslip.download_strategy_ref} />
-          <DetailRow label="Signed URL" value={payslip.supports_signed_url ? `${payslip.signed_url_expires_in_seconds}s` : "Streamed"} />
-          <DetailRow label="Retention" value={payslip.retention_policy_ref} />
-          <DetailRow label="Checksum" value={payslip.checksum_sha256 ? `${payslip.checksum_sha256.slice(0, 18)}...` : "Pending"} />
-          <DetailRow label="Size" value={formatFileSize(payslip.file_size_bytes)} />
-        </div>
-      </section>
-
-      <section className="ess-payslip-detail-section">
-        <span className="workspace-card__eyebrow">Source hash</span>
-        <code>{payslip.source_hash}</code>
-      </section>
-
-      <section className="ess-payslip-detail-section">
-        <span className="workspace-card__eyebrow">Recent access events</span>
-        <div className="payroll-rule-snapshot-list">
-          {payslip.access_events.map((event) => (
-            <div className="detail-row" key={event.id}>
-              <span className="detail-label">{titleCase(event.event_type)}</span>
-              <span className="detail-value">
-                {event.source_channel_ref} / {formatDateTime(event.created_at)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="ess-payslip-detail-section">
-        <span className="workspace-card__eyebrow">Calculation lines</span>
-        <div className="payroll-rule-snapshot-list">
-          {payslip.line_snapshot.map((line, index) => (
-            <div className="detail-row" key={`${getLineValue(line, "component_code")}-${index}`}>
-              <span className="detail-label">{getLineValue(line, "component_name")}</span>
-              <span className="detail-value">
-                {formatMoney(line.amount)} / {titleCase(getLineValue(line, "line_type"))}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-    </aside>
-  );
 }
 
 export default async function EssPayslipsPage({ searchParams }: PageProps) {
@@ -315,14 +110,34 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
       </section>
 
       <section className="section section--tight">
-        <div className="ess-payslip-workspace">
-          <PayslipRail payslips={data.items} selectedPayslip={selectedPayslip} filters={{ q, year, page_size: pageSize }} />
+        <div className="ess-payslip-action-band">
+          <div>
+            <span className="workspace-card__eyebrow">Latest payslip</span>
+            <h2>{selectedPayslip ? selectedPayslip.period_name : "No payslip published"}</h2>
+            <p className="section-copy section-copy-soft">
+              {selectedPayslip
+                ? `${formatMoney(selectedPayslip.totals_snapshot.net_pay)} net pay / paid ${formatDate(selectedPayslip.pay_date)}`
+                : "Published payslips will appear here after payroll outputs are released."}
+            </p>
+          </div>
+          {selectedPayslip ? (
+            <div className="ess-payslip-action-band__actions">
+              <PayslipDetailAction payslip={selectedPayslip} variant="primary" />
+              {selectedPayslip.download_url ? (
+                <a className="button button--secondary" href={`/api/me/payroll-payslips/${selectedPayslip.id}/download`}>
+                  Download latest
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
+        <div className="ess-payslip-workspace">
           <div className="ess-payslip-main">
             <div className="ess-payslip-panel-header ess-payslip-panel-header--split">
               <div>
                 <span className="workspace-card__eyebrow">Employee register</span>
-                <h2>Payslip register</h2>
+                <h2>Published payslips</h2>
               </div>
               <StatusBadge status={selectedPayslip ? "published" : "draft"} />
             </div>
@@ -372,6 +187,7 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
                     <th>Deductions</th>
                     <th>Net pay</th>
                     <th>Access</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -398,6 +214,16 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
                         <strong>{payslip.access_summary.is_read_acknowledged ? "Read" : "Unread"}</strong>
                         <span>{payslip.access_summary.download_count} downloads</span>
                         <span>{payslip.access_summary.notification_count} notifications</span>
+                      </td>
+                      <td>
+                        <div className="table-actions">
+                          <PayslipDetailAction payslip={payslip} />
+                          {payslip.download_url ? (
+                            <a className="button button--secondary" href={`/api/me/payroll-payslips/${payslip.id}/download`}>
+                              Download
+                            </a>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -442,7 +268,32 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
             </div>
           </div>
 
-          <PayslipDetail payslip={selectedPayslip} />
+          <aside className="ess-payslip-guidance">
+            <div className="ess-payslip-panel-header">
+              <div>
+                <span className="workspace-card__eyebrow">Before downloading</span>
+                <h2>Payslip checklist</h2>
+              </div>
+            </div>
+            <div className="ess-payslip-checklist">
+              <article>
+                <strong>Correct period</strong>
+                <span>Confirm the month and pay date before sharing the file.</span>
+              </article>
+              <article>
+                <strong>Salary totals</strong>
+                <span>Check gross earnings, deductions, and net pay in the review dialog.</span>
+              </article>
+              <article>
+                <strong>Secure download</strong>
+                <span>Use only the app download link. Do not rely on forwarded files.</span>
+              </article>
+              <article>
+                <strong>Read receipt</strong>
+                <span>Mark as read when you have reviewed the payslip and totals.</span>
+              </article>
+            </div>
+          </aside>
         </div>
       </section>
     </main>

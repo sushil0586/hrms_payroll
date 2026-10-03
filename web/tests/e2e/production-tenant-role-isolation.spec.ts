@@ -68,12 +68,17 @@ test.describe("Production tenant and role isolation proof", () => {
     await expectVisibleText(page, [
       "Published only",
       "Employee scoped",
-      "Storage governed",
+      "Audit protected",
+      "Download tracked",
       "The API resolves files through the signed-in employee context and tenant boundary.",
-      "Payslip register",
-      /Download via authenticated route|Access trail/,
-      /No payslips found|Calculation lines/,
+      "Published payslips",
+      /Download via authenticated route|Download tracked/,
     ]);
+    const reviewPayslip = page.getByRole("button", { name: "Review payslip" }).first();
+    if (await reviewPayslip.isVisible().catch(() => false)) {
+      await reviewPayslip.click();
+      await expectVisibleText(page, ["Access trail", "Calculation lines"]);
+    }
 
     const pageText = await page.locator("body").innerText();
     expect(pageText).not.toContain("Payslip - Nisha Rao");
