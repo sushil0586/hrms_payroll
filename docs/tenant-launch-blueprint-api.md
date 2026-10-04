@@ -91,6 +91,8 @@ By default, apply runs only certified safe modules from the latest apply-ready p
 - `org_masters`
 - `documents`
 - `leave_attendance`
+- `shift_attendance` for Growth/Enterprise shift/factory templates; this uses the same certified
+  leave/attendance baseline seeder and leaves detailed roster patterns for HR Admin review.
 - `workflows`
 - `notifications`
 - `payroll_defaults` for Growth and Enterprise tenants only
@@ -105,7 +107,7 @@ Optional request:
 }
 ```
 
-If `requested_modules` includes uncertified modules such as `shift_attendance`, the API returns
+If `requested_modules` includes a module that is still uncertified for safe apply, the API returns
 `409 Conflict`.
 
 Safe apply creates an `apply` launch run and item-level evidence. It does not create employees,

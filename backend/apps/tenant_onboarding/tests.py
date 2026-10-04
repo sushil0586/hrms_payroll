@@ -111,6 +111,32 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         }
         return payload
 
+    def _enterprise_factory_preview_payload(self):
+        return {
+            "blueprint_ref": "india-manufacturing-factory",
+            "blueprint_version": "v1",
+            "input_payload": {
+                "legal_name": "Acme Manufacturing Limited",
+                "registered_address": "Mumbai, Maharashtra",
+                "primary_contact": "admin@example.com",
+                "tenant_admin_contact": "admin@example.com",
+                "legal_entity": "Acme Manufacturing Limited",
+                "default_branch": "Mumbai Plant",
+                "default_department": "Operations",
+                "factory_location": "Mumbai, Maharashtra",
+                "statutory_registration_strategy": "collect_before_launch",
+                "shift_patterns": "general_and_rotational",
+                "weekly_off_policy": "fixed",
+                "work_week": "mon_sat",
+                "holiday_region": "MH",
+                "pay_frequency": "monthly",
+                "salary_structure_style": "simple_ctc",
+                "financial_year": "2026-2027",
+                "provider_strategy": "none",
+            },
+            "idempotency_key": "preview-acme-enterprise-factory",
+        }
+
     def test_platform_admin_can_list_india_launch_blueprints(self):
         self.client.force_authenticate(self.platform_admin)
 
@@ -700,6 +726,42 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         self.assertEqual(AttendancePolicy.objects.filter(tenant=self.tenant).count(), 1)
         self.assertEqual(DocumentCategory.objects.filter(tenant=self.tenant).count(), 7)
         self.assertEqual(WorkflowTemplate.objects.filter(tenant=self.tenant).count(), 5)
+
+    def test_enterprise_factory_launch_seeds_shift_attendance_policy_baseline(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.tenant.subscription_plan = SubscriptionPlan.ENTERPRISE
+        self.tenant.save(update_fields=["subscription_plan", "updated_at"])
+
+        preview_response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._enterprise_factory_preview_payload(),
+            format="json",
+        )
+
+        self.assertEqual(preview_response.status_code, 201)
+        preview_body = preview_response.json()
+        self.assertIn("shift_attendance", preview_body["preview"]["safe_apply_modules"])
+        self.assertNotIn("shift_attendance", preview_body["preview"]["uncertified_modules"])
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-enterprise-factory"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertIn("shift_attendance", body["result_payload"]["applied_modules"])
+        item_statuses = {item["item_key"]: item["status"] for item in body["seeded_items"]}
+        self.assertEqual(item_statuses["shift_attendance"], TenantLaunchItemStatus.SUCCEEDED)
+        self.assertEqual(LeaveType.objects.filter(tenant=self.tenant).count(), 4)
+        self.assertEqual(LeavePolicy.objects.filter(tenant=self.tenant).count(), 4)
+        self.assertEqual(LeavePolicyAssignment.objects.filter(tenant=self.tenant).count(), 4)
+        self.assertEqual(AttendancePolicy.objects.filter(tenant=self.tenant).count(), 1)
+        self.assertEqual(AttendancePolicyAssignment.objects.filter(tenant=self.tenant).count(), 1)
+        self.assertTrue(Shift.objects.filter(tenant=self.tenant, code="general-shift").exists())
+        self.assertEqual(HolidayCalendar.objects.filter(tenant=self.tenant, code="in-mh-holidays").count(), 2)
+        self.assertGreater(Holiday.objects.filter(calendar__tenant=self.tenant).count(), 0)
 
     def test_launch_apply_can_request_certified_org_masters_only(self):
         self.client.force_authenticate(self.platform_admin)

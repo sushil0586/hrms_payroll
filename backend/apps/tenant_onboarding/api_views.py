@@ -956,7 +956,7 @@ def _launch_field_drifts(*, tenant: Tenant, module_ref: str, input_payload: dict
         return _org_master_field_drifts(tenant=tenant, input_payload=input_payload)
     if module_ref == "documents":
         return _document_field_drifts(tenant=tenant)
-    if module_ref == "leave_attendance":
+    if module_ref in {"leave_attendance", "shift_attendance"}:
         return _leave_attendance_field_drifts(tenant=tenant, input_payload=input_payload)
     if module_ref == "workflows":
         return _workflow_field_drifts(tenant=tenant)

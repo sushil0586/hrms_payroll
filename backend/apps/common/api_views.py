@@ -14261,6 +14261,37 @@ class HrAdminOrganizationSectionDetailView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminOrganizationItemSerializer(payload).data)
 
 
+def _hr_admin_branch_option_payload(item: Branch) -> dict:
+    return {
+        "id": item.id,
+        "name": item.name,
+        "legal_entity_id": item.legal_entity_id,
+        "location_id": item.location_id,
+    }
+
+
+def _hr_admin_department_option_payload(item: Department) -> dict:
+    return {
+        "id": item.id,
+        "name": item.name,
+        "business_unit_id": item.business_unit_id,
+    }
+
+
+def _hr_admin_location_option_payload(item: Location) -> dict:
+    return {
+        "id": item.id,
+        "name": item.name,
+    }
+
+
+def _hr_admin_legal_entity_option_payload(item: LegalEntity) -> dict:
+    return {
+        "id": item.id,
+        "name": item.name,
+    }
+
+
 class HrAdminPolicyOptionsView(HrAdminContextMixin, APIView):
     def get(self, request):
         employee = self.get_employee()
@@ -14277,10 +14308,10 @@ class HrAdminPolicyOptionsView(HrAdminContextMixin, APIView):
             "leave_types": [{"id": item.id, "name": item.name} for item in LeaveType.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
             "leave_policies": [{"id": item.id, "name": item.name} for item in LeavePolicy.objects.filter(tenant=employee.tenant).order_by("name")],
             "attendance_policies": [{"id": item.id, "name": item.name} for item in AttendancePolicy.objects.filter(tenant=employee.tenant).order_by("name")],
-            "legal_entities": [{"id": item.id, "name": item.name} for item in LegalEntity.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
-            "branches": [{"id": item.id, "name": item.name} for item in Branch.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
-            "locations": [{"id": item.id, "name": item.name} for item in Location.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
-            "departments": [{"id": item.id, "name": item.name} for item in Department.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
+            "legal_entities": [_hr_admin_legal_entity_option_payload(item) for item in LegalEntity.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
+            "branches": [_hr_admin_branch_option_payload(item) for item in Branch.objects.filter(tenant=employee.tenant, is_active=True).select_related("legal_entity", "location").order_by("name")],
+            "locations": [_hr_admin_location_option_payload(item) for item in Location.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
+            "departments": [_hr_admin_department_option_payload(item) for item in Department.objects.filter(tenant=employee.tenant, is_active=True).select_related("business_unit").order_by("name")],
             "grades": [{"id": item.id, "name": item.name} for item in Grade.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
             "employment_types": [{"id": item.id, "name": item.name} for item in EmploymentType.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
             "employees": [{"id": item.id, "name": f"{item.first_name} {item.last_name}".strip() or item.employee_code} for item in Employee.objects.filter(tenant=employee.tenant).order_by("employee_code")],
@@ -14300,9 +14331,9 @@ class HrAdminAttendanceOperationOptionsView(HrAdminContextMixin, APIView):
             "attendance_statuses": [{"value": value, "label": label} for value, label in AttendanceStatus.choices],
             "attendance_sources": [{"value": value, "label": label} for value, label in AttendanceSource.choices],
             "regularization_statuses": [{"value": value, "label": label} for value, label in AttendanceRegularization._meta.get_field("status").choices],
-            "legal_entities": [{"id": item.id, "name": item.name} for item in LegalEntity.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
-            "branches": [{"id": item.id, "name": item.name} for item in Branch.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
-            "locations": [{"id": item.id, "name": item.name} for item in Location.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
+            "legal_entities": [_hr_admin_legal_entity_option_payload(item) for item in LegalEntity.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
+            "branches": [_hr_admin_branch_option_payload(item) for item in Branch.objects.filter(tenant=employee.tenant, is_active=True).select_related("legal_entity", "location").order_by("name")],
+            "locations": [_hr_admin_location_option_payload(item) for item in Location.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")],
             "employees": [{"id": item.id, "name": f"{item.first_name} {item.last_name}".strip() or item.employee_code} for item in Employee.objects.filter(tenant=employee.tenant).order_by("employee_code")],
             "shifts": [{"id": item.id, "name": item.name} for item in Shift.objects.filter(tenant=employee.tenant).order_by("name")],
             "holiday_calendars": [{"id": item.id, "name": f"{item.name} ({item.year})"} for item in HolidayCalendar.objects.filter(tenant=employee.tenant).order_by("name", "year")],
@@ -15822,9 +15853,9 @@ class HrAdminWorkflowOptionsView(HrAdminContextMixin, APIView):
                 }
                 for item in TenantMembership.objects.filter(tenant=tenant).select_related("user").order_by("user__username")
             ],
-            "legal_entities": [{"id": item.id, "name": item.name} for item in LegalEntity.objects.filter(tenant=tenant, is_active=True).order_by("name")],
-            "branches": [{"id": item.id, "name": item.name} for item in Branch.objects.filter(tenant=tenant, is_active=True).order_by("name")],
-            "departments": [{"id": item.id, "name": item.name} for item in Department.objects.filter(tenant=tenant, is_active=True).order_by("name")],
+            "legal_entities": [_hr_admin_legal_entity_option_payload(item) for item in LegalEntity.objects.filter(tenant=tenant, is_active=True).order_by("name")],
+            "branches": [_hr_admin_branch_option_payload(item) for item in Branch.objects.filter(tenant=tenant, is_active=True).select_related("legal_entity", "location").order_by("name")],
+            "departments": [_hr_admin_department_option_payload(item) for item in Department.objects.filter(tenant=tenant, is_active=True).select_related("business_unit").order_by("name")],
             "business_units": [{"id": item.id, "name": item.name} for item in BusinessUnit.objects.filter(tenant=tenant, is_active=True).order_by("name")],
             "grades": [{"id": item.id, "name": item.name} for item in Grade.objects.filter(tenant=tenant, is_active=True).order_by("name")],
             "templates": [{"id": item.id, "name": item.name} for item in WorkflowTemplate.objects.filter(tenant=tenant).order_by("name")],
@@ -16010,9 +16041,9 @@ class HrAdminDocumentOptionsView(HrAdminContextMixin, APIView):
             "letter_types": [{"value": value, "label": label} for value, label in LetterType.choices],
             "max_upload_size_bytes": get_document_upload_max_bytes(),
             "categories": [{"id": item.id, "name": item.name} for item in DocumentCategory.objects.filter(tenant=tenant).order_by("name")],
-            "legal_entities": [{"id": item.id, "name": item.name} for item in LegalEntity.objects.filter(tenant=tenant, is_active=True).order_by("name")],
-            "branches": [{"id": item.id, "name": item.name} for item in Branch.objects.filter(tenant=tenant, is_active=True).order_by("name")],
-            "departments": [{"id": item.id, "name": item.name} for item in Department.objects.filter(tenant=tenant, is_active=True).order_by("name")],
+            "legal_entities": [_hr_admin_legal_entity_option_payload(item) for item in LegalEntity.objects.filter(tenant=tenant, is_active=True).order_by("name")],
+            "branches": [_hr_admin_branch_option_payload(item) for item in Branch.objects.filter(tenant=tenant, is_active=True).select_related("legal_entity", "location").order_by("name")],
+            "departments": [_hr_admin_department_option_payload(item) for item in Department.objects.filter(tenant=tenant, is_active=True).select_related("business_unit").order_by("name")],
             "grades": [{"id": item.id, "name": item.name} for item in Grade.objects.filter(tenant=tenant, is_active=True).order_by("name")],
             "employment_types": [{"id": item.id, "name": item.name} for item in EmploymentType.objects.filter(tenant=tenant, is_active=True).order_by("name")],
         }
