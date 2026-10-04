@@ -1751,6 +1751,13 @@ def save_hr_admin_leave_policy_assignment(actor, validated_data, *, item=None):
         if field in validated_data:
             setattr(item, field, validated_data[field])
 
+    if item.employee_id:
+        item.legal_entity = None
+        item.branch = None
+        item.department = None
+        item.grade = None
+        item.employment_type = None
+
     if item.leave_policy_id is None:
         raise serializers.ValidationError({"leave_policy_id": "This field is required."})
     conflict_check = preview_leave_policy_assignment_conflicts(
@@ -1889,6 +1896,14 @@ def save_hr_admin_attendance_policy_assignment(actor, validated_data, *, item=No
     for field in ["priority", "is_active"]:
         if field in validated_data:
             setattr(item, field, validated_data[field])
+
+    if item.employee_id:
+        item.legal_entity = None
+        item.branch = None
+        item.location = None
+        item.department = None
+        item.grade = None
+        item.employment_type = None
 
     if item.attendance_policy_id is None:
         raise serializers.ValidationError({"attendance_policy_id": "This field is required."})

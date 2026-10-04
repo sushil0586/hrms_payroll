@@ -429,7 +429,7 @@ def _build_leave_request_policy_runtime(*, leave_type, leave_policy: LeavePolicy
 def _assignment_scope_labels(assignment: LeavePolicyAssignment) -> list[str]:
     labels: list[str] = []
     if assignment.employee_id and assignment.employee:
-        labels.append(f"Employee: {assignment.employee.employee_code}")
+        return [f"Employee: {assignment.employee.employee_code}"]
     if assignment.legal_entity_id and assignment.legal_entity:
         labels.append(f"Legal entity: {assignment.legal_entity.name}")
     if assignment.branch_id and assignment.branch:
@@ -455,8 +455,8 @@ def _assignment_scope_is_exact_match(left, right) -> bool:
 
 def _employee_matches_assignment_scope(employee, assignment_scope) -> bool:
     assignment_employee_id = _assignment_scope_value(assignment_scope, "employee_id")
-    if assignment_employee_id and str(assignment_employee_id) != str(employee.id):
-        return False
+    if assignment_employee_id:
+        return str(assignment_employee_id) == str(employee.id)
     if _assignment_scope_value(assignment_scope, "legal_entity_id") and _assignment_scope_value(assignment_scope, "legal_entity_id") != employee.legal_entity_id:
         return False
     if _assignment_scope_value(assignment_scope, "branch_id") and _assignment_scope_value(assignment_scope, "branch_id") != employee.branch_id:
@@ -529,7 +529,7 @@ def _build_assignment_scope_labels_from_scope(scope_data, *, tenant=None) -> lis
             .first()
         )
         if employee:
-            labels.append(f"Employee: {employee.employee_code}")
+            return [f"Employee: {employee.employee_code}"]
 
     relation_specs = (
         ("legal_entity_id", LeavePolicyAssignment.legal_entity.field.related_model, "Legal entity"),
@@ -925,7 +925,10 @@ def _find_matching_leave_policy_assignment(employee, leave_type) -> LeavePolicyA
     )
     matching_assignments: list[LeavePolicyAssignment] = []
     for assignment in assignments:
-        if assignment.employee_id and assignment.employee_id != employee.id:
+        if assignment.employee_id:
+            if assignment.employee_id != employee.id:
+                continue
+            matching_assignments.append(assignment)
             continue
         if assignment.legal_entity_id and assignment.legal_entity_id != employee.legal_entity_id:
             continue

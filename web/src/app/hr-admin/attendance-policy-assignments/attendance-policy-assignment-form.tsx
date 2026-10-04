@@ -56,6 +56,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminAttendancePolicyAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
+  const hasEmployeeOverride = Boolean(formValue.employee_id);
   const selectedBranch = options.branches.find((item) => item.id === formValue.branch_id);
   const filteredBranches = filteredByLegalEntity(options.branches, formValue.legal_entity_id);
   const filteredLocations = options.locations.filter((item) => {
@@ -78,6 +79,14 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
     setIsCheckingConflicts(false);
     setFormValue((current) => {
       const nextValue = { ...current, [key]: value };
+      if (key === "employee_id" && value) {
+        nextValue.legal_entity_id = null;
+        nextValue.branch_id = null;
+        nextValue.location_id = null;
+        nextValue.department_id = null;
+        nextValue.grade_id = null;
+        nextValue.employment_type_id = null;
+      }
       if (
         key === "legal_entity_id" &&
         nextValue.branch_id &&
@@ -173,12 +182,12 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
           <FormSection title="Policy and scope" description="Choose the policy first, then narrow where it should apply.">
             <div className="form-grid">
               <label className="form-field"><span className="muted">Attendance policy</span><select className="input-control" value={formValue.attendance_policy_id ?? ""} onChange={(e) => update("attendance_policy_id", e.target.value || null)}>{selectOptions(options.attendance_policies ?? [])}</select></label>
-              <label className="form-field"><span className="muted">Legal entity</span><select className="input-control" value={formValue.legal_entity_id ?? ""} onChange={(e) => update("legal_entity_id", e.target.value || null)}>{selectOptions(options.legal_entities)}</select><FieldHint>Branch options narrow to the selected legal entity.</FieldHint></label>
-              <label className="form-field"><span className="muted">Branch</span><select className="input-control" disabled={Boolean(branchWarning)} value={formValue.branch_id ?? ""} onChange={(e) => update("branch_id", e.target.value || null)}>{selectOptions(filteredBranches)}</select><FieldHint tone={branchWarning ? "warning" : "default"}>{branchWarning ?? "Branch scope is optional unless the policy should apply only to a branch."}</FieldHint></label>
-              <label className="form-field"><span className="muted">Location</span><select className="input-control" value={formValue.location_id ?? ""} onChange={(e) => update("location_id", e.target.value || null)}>{selectOptions(filteredLocations)}</select><FieldHint tone={locationWarning ? "warning" : "default"}>{locationWarning ?? "Location follows the selected branch when a branch location exists."}</FieldHint></label>
-              <label className="form-field"><span className="muted">Department</span><select className="input-control" value={formValue.department_id ?? ""} onChange={(e) => update("department_id", e.target.value || null)}>{selectOptions(options.departments)}</select></label>
-              <label className="form-field"><span className="muted">Grade</span><select className="input-control" value={formValue.grade_id ?? ""} onChange={(e) => update("grade_id", e.target.value || null)}>{selectOptions(options.grades)}</select></label>
-              <label className="form-field"><span className="muted">Employment type</span><select className="input-control" value={formValue.employment_type_id ?? ""} onChange={(e) => update("employment_type_id", e.target.value || null)}>{selectOptions(options.employment_types)}</select></label>
+              <label className="form-field"><span className="muted">Legal entity</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.legal_entity_id ?? ""} onChange={(e) => update("legal_entity_id", e.target.value || null)}>{selectOptions(options.legal_entities)}</select><FieldHint>{hasEmployeeOverride ? "Employee override ignores organization filters." : "Branch options narrow to the selected legal entity."}</FieldHint></label>
+              <label className="form-field"><span className="muted">Branch</span><select className="input-control" disabled={hasEmployeeOverride || Boolean(branchWarning)} value={hasEmployeeOverride ? "" : formValue.branch_id ?? ""} onChange={(e) => update("branch_id", e.target.value || null)}>{selectOptions(filteredBranches)}</select><FieldHint tone={branchWarning ? "warning" : "default"}>{hasEmployeeOverride ? "Employee override ignores branch scope." : branchWarning ?? "Branch scope is optional unless the policy should apply only to a branch."}</FieldHint></label>
+              <label className="form-field"><span className="muted">Location</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.location_id ?? ""} onChange={(e) => update("location_id", e.target.value || null)}>{selectOptions(filteredLocations)}</select><FieldHint tone={locationWarning ? "warning" : "default"}>{hasEmployeeOverride ? "Employee override ignores location scope." : locationWarning ?? "Location follows the selected branch when a branch location exists."}</FieldHint></label>
+              <label className="form-field"><span className="muted">Department</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.department_id ?? ""} onChange={(e) => update("department_id", e.target.value || null)}>{selectOptions(options.departments)}</select></label>
+              <label className="form-field"><span className="muted">Grade</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.grade_id ?? ""} onChange={(e) => update("grade_id", e.target.value || null)}>{selectOptions(options.grades)}</select></label>
+              <label className="form-field"><span className="muted">Employment type</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.employment_type_id ?? ""} onChange={(e) => update("employment_type_id", e.target.value || null)}>{selectOptions(options.employment_types)}</select></label>
               <label className="form-field"><span className="muted">Employee override</span><select className="input-control" value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
               <label className="form-field"><span className="muted">Priority</span><input className="input-control" type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value))} /></label>
             </div>

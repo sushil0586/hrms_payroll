@@ -169,7 +169,10 @@ def _find_matching_attendance_policy_assignment(employee, *, as_of=None) -> Atte
     )
     matching_assignments: list[AttendancePolicyAssignment] = []
     for assignment in assignments:
-        if assignment.employee_id and assignment.employee_id != employee.id:
+        if assignment.employee_id:
+            if assignment.employee_id != employee.id:
+                continue
+            matching_assignments.append(assignment)
             continue
         if assignment.legal_entity_id and assignment.legal_entity_id != employee.legal_entity_id:
             continue
@@ -199,7 +202,7 @@ def _find_matching_attendance_policy_assignment(employee, *, as_of=None) -> Atte
 def _attendance_assignment_scope_labels(assignment: AttendancePolicyAssignment) -> list[str]:
     labels: list[str] = []
     if assignment.employee:
-        labels.append(f"Employee: {assignment.employee.employee_code}")
+        return [f"Employee: {assignment.employee.employee_code}"]
     if assignment.legal_entity:
         labels.append(f"Legal entity: {assignment.legal_entity.name}")
     if assignment.branch:
@@ -221,7 +224,7 @@ def _build_attendance_assignment_scope_labels_from_scope(scope_data: dict, *, te
     if employee_id:
         employee = AttendancePolicyAssignment.employee.field.related_model.objects.filter(tenant=tenant, id=employee_id).first()
         if employee:
-            labels.append(f"Employee: {employee.employee_code}")
+            return [f"Employee: {employee.employee_code}"]
     relation_map = [
         ("legal_entity_id", AttendancePolicyAssignment.legal_entity.field.related_model, "Legal entity"),
         ("branch_id", AttendancePolicyAssignment.branch.field.related_model, "Branch"),
@@ -240,7 +243,31 @@ def _build_attendance_assignment_scope_labels_from_scope(scope_data: dict, *, te
     return labels or ["Tenant default scope"]
 
 
+def _attendance_employee_matches_assignment_scope(employee, assignment_scope) -> bool:
+    assignment_employee_id = assignment_scope.get("employee_id") if isinstance(assignment_scope, dict) else getattr(assignment_scope, "employee_id", None)
+    if assignment_employee_id:
+        return str(assignment_employee_id) == str(employee.id)
+    for field_name in ["legal_entity_id", "branch_id", "location_id", "department_id", "grade_id", "employment_type_id"]:
+        scope_value = assignment_scope.get(field_name) if isinstance(assignment_scope, dict) else getattr(assignment_scope, field_name, None)
+        if scope_value and str(scope_value) != str(getattr(employee, field_name)):
+            return False
+    return True
+
+
 def _attendance_assignment_scopes_overlap(candidate_scope: dict, existing_assignment: AttendancePolicyAssignment) -> bool:
+    candidate_employee_id = candidate_scope.get("employee_id")
+    existing_employee_id = existing_assignment.employee_id
+    if candidate_employee_id and existing_employee_id:
+        return str(candidate_employee_id) == str(existing_employee_id)
+    if candidate_employee_id:
+        candidate_employee = Employee.objects.filter(
+            tenant=existing_assignment.tenant,
+            id=candidate_employee_id,
+        ).first()
+        return bool(candidate_employee and _attendance_employee_matches_assignment_scope(candidate_employee, existing_assignment))
+    if existing_employee_id and existing_assignment.employee:
+        return _attendance_employee_matches_assignment_scope(existing_assignment.employee, candidate_scope)
+
     comparable_fields = [
         "employee_id",
         "legal_entity_id",
