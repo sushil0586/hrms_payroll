@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import date, time
+from decimal import Decimal
+
+from django.apps import apps
 from django.db import transaction
 from django.db.models import Count
 from django.db.utils import OperationalError, ProgrammingError
@@ -11,7 +15,18 @@ from rest_framework.views import APIView
 
 from apps.common.tenant_launch.preview import build_launch_preview
 from apps.common.tenant_launch.registry import get_blueprint, list_blueprints, serialize_blueprint
-from apps.common.tenant_launch.seeders import SAFE_APPLY_MODULES, SEEDER_BY_MODULE
+from apps.common.tenant_launch.seeders import (
+    DESIGNATION_DEFINITIONS,
+    DOCUMENT_CATEGORY_DEFINITIONS,
+    EMPLOYMENT_TYPE_DEFINITIONS,
+    FIXED_IN_HOLIDAYS,
+    GRADE_DEFINITIONS,
+    LEAVE_TYPE_DEFINITIONS,
+    REGIONAL_FIXED_HOLIDAYS,
+    SAFE_APPLY_MODULES,
+    SEEDER_BY_MODULE,
+    WORKFLOW_TEMPLATE_DEFINITIONS,
+)
 from apps.iam.models import MembershipStatus, PermissionCatalogEntry
 from apps.iam.permission_catalog import get_permission_catalog
 from apps.tenant_onboarding.api_serializers import (
@@ -25,8 +40,11 @@ from apps.tenant_onboarding.api_serializers import (
     PlatformProvisionAdminSerializer,
     PlatformTenantListItemSerializer,
     PlatformTenantLaunchApplyRequestSerializer,
+    PlatformTenantLaunchDriftRequestSerializer,
     PlatformTenantLaunchHandoffRequestSerializer,
     PlatformTenantLaunchPreviewRequestSerializer,
+    PlatformTenantLaunchRepairRequestSerializer,
+    PlatformTenantLaunchUpgradeRequestSerializer,
     PlatformTenantLaunchPreviewSerializer,
     PlatformTenantLaunchRunSerializer,
     PlatformTenantOnboardingSerializer,
@@ -50,6 +68,7 @@ from apps.tenant_onboarding.models import (
     TenantLaunchItemStatus,
     TenantLaunchSeededItem,
     TenantOnboarding,
+    TenantOnboardingChecklistItem,
     TenantOnboardingAdminContact,
 )
 from apps.tenant_onboarding.services import (
@@ -288,6 +307,7 @@ def _create_preview_seeded_items(*, run: TenantLaunchRun, preview_payload: dict)
     evidence = {
         "source": "platform_launch_preview",
         "launch_run_id": str(run.id),
+        "governance_summary": preview_payload.get("governance_summary", {}),
     }
     items = []
     for module in preview_payload.get("planned_modules", []):
@@ -363,6 +383,776 @@ def _latest_successful_apply_run(tenant: Tenant) -> TenantLaunchRun | None:
     )
 
 
+def _latest_successful_baseline_run(tenant: Tenant) -> TenantLaunchRun | None:
+    runs = (
+        TenantLaunchRun.objects.filter(
+            tenant=tenant,
+            run_type__in=[TenantLaunchRunType.APPLY, TenantLaunchRunType.UPGRADE],
+            status=TenantLaunchRunStatus.SUCCEEDED,
+        )
+        .order_by("-created_at")
+    )
+    for run in runs:
+        if run.run_type == TenantLaunchRunType.APPLY or run.result_payload.get("mode") == "apply":
+            return run
+    return None
+
+
+def _latest_launch_run(
+    *,
+    tenant: Tenant,
+    run_type: str,
+    mode: str | None = None,
+    status_value: str = TenantLaunchRunStatus.SUCCEEDED,
+) -> TenantLaunchRun | None:
+    runs = TenantLaunchRun.objects.filter(
+        tenant=tenant,
+        run_type=run_type,
+        status=status_value,
+    ).order_by("-created_at")
+    for run in runs:
+        if mode is None or run.result_payload.get("mode") == mode:
+            return run
+    return None
+
+
+def _version_sort_key(version: str) -> tuple[int, str]:
+    digits = "".join(character for character in version if character.isdigit())
+    return (int(digits) if digits else 0, version)
+
+
+def _module_governance_evidence(module_payload: dict) -> dict:
+    return {
+        "post_onboarding_owner": module_payload.get("post_onboarding_owner", ""),
+        "editable_by_roles": module_payload.get("editable_by_roles", []),
+        "customer_editable_after_handoff": module_payload.get("customer_editable_after_handoff", False),
+        "post_apply_action": module_payload.get("post_apply_action", ""),
+    }
+
+
+def _model_has_tenant_code(app_label: str, model_name: str, tenant: Tenant, code: str) -> bool:
+    model = apps.get_model(app_label, model_name)
+    return model.objects.filter(tenant=tenant, code=code).exists()
+
+
+def _launch_ref_exists(*, tenant: Tenant, onboarding: TenantOnboarding, input_payload: dict, module_ref: str, ref: str) -> tuple[bool, bool]:
+    if module_ref == "roles_users" and ":" not in ref:
+        return apps.get_model("iam", "Role").objects.filter(tenant=tenant, code=ref).exists(), True
+    if module_ref == "launch_checklist" and ":" not in ref:
+        return (
+            TenantOnboardingChecklistItem.objects.filter(onboarding=onboarding, code=ref).exists(),
+            True,
+        )
+    if module_ref == "notifications" and ":" not in ref:
+        template_exists = apps.get_model("notifications", "NotificationTemplate").objects.filter(
+            tenant=tenant,
+            code=ref,
+        ).exists()
+        return template_exists, True
+    if ":" not in ref:
+        return False, False
+
+    prefix, value = ref.split(":", 1)
+    simple_code_models = {
+        "legal_entity": ("organizations", "LegalEntity"),
+        "location": ("organizations", "Location"),
+        "branch": ("organizations", "Branch"),
+        "business_unit": ("organizations", "BusinessUnit"),
+        "department": ("organizations", "Department"),
+        "cost_center": ("organizations", "CostCenter"),
+        "grade": ("organizations", "Grade"),
+        "designation": ("organizations", "Designation"),
+        "employment_type": ("organizations", "EmploymentType"),
+        "leave_type": ("leave_management", "LeaveType"),
+        "leave_policy": ("leave_management", "LeavePolicy"),
+        "shift": ("attendance", "Shift"),
+        "attendance_policy": ("attendance", "AttendancePolicy"),
+        "document_category": ("documents", "DocumentCategory"),
+        "workflow_template": ("workflows", "WorkflowTemplate"),
+        "payroll_calendar": ("payroll", "PayrollCalendar"),
+        "pay_group": ("payroll", "PayGroup"),
+        "salary_component": ("payroll", "SalaryComponent"),
+        "salary_structure": ("payroll", "SalaryStructure"),
+        "statutory_pack": ("payroll", "PayrollStatutoryPack"),
+        "statutory_component": ("payroll", "PayrollStatutoryComponent"),
+    }
+    if prefix in simple_code_models:
+        app_label, model_name = simple_code_models[prefix]
+        return _model_has_tenant_code(app_label, model_name, tenant, value), True
+
+    related_lookups = {
+        "leave_assignment": ("leave_management", "LeavePolicyAssignment", {"leave_policy__code": value}),
+        "attendance_assignment": ("attendance", "AttendancePolicyAssignment", {"attendance_policy__code": value}),
+        "document_rule": ("documents", "DocumentRequirementRule", {"category__code": value}),
+        "workflow_assignment": ("workflows", "WorkflowTemplateAssignment", {"template__code": value}),
+        "salary_structure_component": ("payroll", "SalaryStructureComponent", {"component__code": value}),
+    }
+    if prefix in related_lookups:
+        app_label, model_name, lookup = related_lookups[prefix]
+        model = apps.get_model(app_label, model_name)
+        return model.objects.filter(tenant=tenant, **lookup).exists(), True
+
+    if prefix == "workflow_step":
+        parts = value.split(":")
+        if len(parts) != 2 or not parts[1].isdigit():
+            return False, False
+        model = apps.get_model("workflows", "WorkflowStep")
+        return model.objects.filter(template__tenant=tenant, template__code=parts[0], step_order=int(parts[1])).exists(), True
+
+    if prefix == "salary_structure_version":
+        parts = value.split(":")
+        if len(parts) != 2:
+            return False, False
+        version_text = parts[1].removeprefix("v")
+        if not version_text.isdigit():
+            return False, False
+        model = apps.get_model("payroll", "SalaryStructureVersion")
+        return model.objects.filter(tenant=tenant, structure__code=parts[0], version=int(version_text)).exists(), True
+
+    if prefix == "holiday_calendar":
+        region = str(input_payload.get("holiday_region") or "IN").lower()
+        if not value.isdigit():
+            return False, False
+        model = apps.get_model("attendance", "HolidayCalendar")
+        return model.objects.filter(tenant=tenant, code=f"in-{region}-holidays", year=int(value)).exists(), True
+
+    return False, False
+
+
+def _launch_repair_plan(*, tenant: Tenant, onboarding: TenantOnboarding, apply_run: TenantLaunchRun) -> dict:
+    module_payloads = _module_payloads_by_ref(apply_run.plan_snapshot)
+    modules = []
+    repairable_modules = []
+    total_missing = 0
+    total_unchecked = 0
+    item_by_module = {item.module_ref or item.item_key: item for item in apply_run.seeded_items.all()}
+    for module_ref, module_payload in sorted(module_payloads.items()):
+        item = item_by_module.get(module_ref)
+        result = item.payload.get("result", {}) if item and isinstance(item.payload, dict) else {}
+        baseline_refs = []
+        if isinstance(result, dict):
+            baseline_refs = [
+                ref
+                for ref in [*(result.get("created") or []), *(result.get("existing") or [])]
+                if isinstance(ref, str)
+            ]
+        present_refs = []
+        missing_refs = []
+        unchecked_refs = []
+        for ref in sorted(dict.fromkeys(baseline_refs)):
+            exists, checked = _launch_ref_exists(
+                tenant=tenant,
+                onboarding=onboarding,
+                input_payload=apply_run.input_payload,
+                module_ref=module_ref,
+                ref=ref,
+            )
+            if not checked:
+                unchecked_refs.append(ref)
+            elif exists:
+                present_refs.append(ref)
+            else:
+                missing_refs.append(ref)
+        if missing_refs:
+            repairable_modules.append(module_ref)
+        total_missing += len(missing_refs)
+        total_unchecked += len(unchecked_refs)
+        modules.append(
+            {
+                **module_payload,
+                "baseline_ref_count": len(baseline_refs),
+                "present_refs": present_refs,
+                "missing_refs": missing_refs,
+                "unchecked_refs": unchecked_refs,
+                "repair_status": "repair_needed" if missing_refs else "unchecked_refs" if unchecked_refs else "healthy",
+                "repair_allowed": bool(missing_refs and module_ref in SAFE_APPLY_MODULES),
+                "governance": _module_governance_evidence(module_payload),
+            }
+        )
+    return {
+        "can_repair": bool(repairable_modules),
+        "repairable_modules": sorted(repairable_modules),
+        "missing_ref_count": total_missing,
+        "unchecked_ref_count": total_unchecked,
+        "modules": modules,
+        "latest_apply_run_id": str(apply_run.id),
+        "governance_summary": apply_run.plan_snapshot.get("governance_summary", {}),
+        "repair_policy": (
+            "Repair recreates missing baseline records from the last successful safe apply. "
+            "Existing customer-owned records are not overwritten silently."
+        ),
+    }
+
+
+def _launch_input_value(input_payload: dict, key: str, fallback: str = "") -> str:
+    value = input_payload.get(key)
+    if value is None:
+        return fallback
+    cleaned = str(value).strip()
+    return cleaned or fallback
+
+
+def _field_drift(record_ref: str, field: str, expected, actual) -> dict | None:
+    if actual == expected:
+        return None
+    return {
+        "record_ref": record_ref,
+        "field": field,
+        "expected": _json_safe_drift_value(expected),
+        "actual": _json_safe_drift_value(actual),
+    }
+
+
+def _json_safe_drift_value(value):
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    if isinstance(value, (date, time)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _json_safe_drift_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe_drift_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe_drift_value(item) for item in value]
+    return value
+
+
+def _append_field_drift(drifts: list[dict], record_ref: str, field: str, expected, actual) -> None:
+    drift = _field_drift(record_ref, field, expected, actual)
+    if drift:
+        drifts.append(drift)
+
+
+def _org_master_field_drifts(*, tenant: Tenant, input_payload: dict) -> list[dict]:
+    drifts: list[dict] = []
+    legal_entity_name = _launch_input_value(input_payload, "legal_entity", tenant.legal_name or tenant.name)
+    branch_name = _launch_input_value(input_payload, "default_branch", "Head Office")
+    department_name = _launch_input_value(input_payload, "default_department", "Operations")
+    registered_address = _launch_input_value(input_payload, "registered_address")
+
+    LegalEntity = apps.get_model("organizations", "LegalEntity")
+    Location = apps.get_model("organizations", "Location")
+    Branch = apps.get_model("organizations", "Branch")
+    BusinessUnit = apps.get_model("organizations", "BusinessUnit")
+    Department = apps.get_model("organizations", "Department")
+    CostCenter = apps.get_model("organizations", "CostCenter")
+    Grade = apps.get_model("organizations", "Grade")
+    Designation = apps.get_model("organizations", "Designation")
+    EmploymentType = apps.get_model("organizations", "EmploymentType")
+
+    legal_entity = LegalEntity.objects.filter(tenant=tenant, code="default-legal-entity").first()
+    if legal_entity:
+        _append_field_drift(drifts, "legal_entity:default-legal-entity", "name", legal_entity_name, legal_entity.name)
+        _append_field_drift(
+            drifts,
+            "legal_entity:default-legal-entity",
+            "registered_name",
+            legal_entity_name,
+            legal_entity.registered_name,
+        )
+        _append_field_drift(
+            drifts,
+            "legal_entity:default-legal-entity",
+            "country_code",
+            tenant.country_code or "IN",
+            legal_entity.country_code,
+        )
+        _append_field_drift(
+            drifts,
+            "legal_entity:default-legal-entity",
+            "timezone",
+            tenant.timezone or "Asia/Kolkata",
+            legal_entity.timezone,
+        )
+
+    location = Location.objects.filter(tenant=tenant, code="head-office").first()
+    if location:
+        _append_field_drift(drifts, "location:head-office", "name", branch_name, location.name)
+        _append_field_drift(drifts, "location:head-office", "address_line_1", registered_address[:255], location.address_line_1)
+        _append_field_drift(drifts, "location:head-office", "city", branch_name[:120], location.city)
+        _append_field_drift(drifts, "location:head-office", "country_code", tenant.country_code or "IN", location.country_code)
+
+    branch = Branch.objects.filter(tenant=tenant, code="default-branch").first()
+    if branch:
+        _append_field_drift(drifts, "branch:default-branch", "name", branch_name, branch.name)
+        _append_field_drift(drifts, "branch:default-branch", "branch_type", "head_office", branch.branch_type)
+
+    business_unit = BusinessUnit.objects.filter(tenant=tenant, code="corporate").first()
+    if business_unit:
+        _append_field_drift(drifts, "business_unit:corporate", "name", "Corporate", business_unit.name)
+
+    department_code = _stable_launch_code(department_name, "operations")
+    department = Department.objects.filter(tenant=tenant, code=department_code).first()
+    if department:
+        _append_field_drift(drifts, f"department:{department_code}", "name", department_name, department.name)
+
+    cost_center = CostCenter.objects.filter(tenant=tenant, code="default-cost-center").first()
+    if cost_center:
+        expected_name = f"{department.name if department else department_name} Cost Center"
+        _append_field_drift(drifts, "cost_center:default-cost-center", "name", expected_name, cost_center.name)
+
+    for code, name, level in GRADE_DEFINITIONS:
+        grade = Grade.objects.filter(tenant=tenant, code=code).first()
+        if grade:
+            _append_field_drift(drifts, f"grade:{code}", "name", name, grade.name)
+            _append_field_drift(drifts, f"grade:{code}", "level", level, grade.level)
+
+    for code, name, grade_code in DESIGNATION_DEFINITIONS:
+        designation = Designation.objects.filter(tenant=tenant, code=code).select_related("grade").first()
+        if designation:
+            _append_field_drift(drifts, f"designation:{code}", "name", name, designation.name)
+            _append_field_drift(
+                drifts,
+                f"designation:{code}",
+                "grade_code",
+                grade_code,
+                designation.grade.code if designation.grade_id else "",
+            )
+
+    for code, name, description, payroll_eligible in EMPLOYMENT_TYPE_DEFINITIONS:
+        employment_type = EmploymentType.objects.filter(tenant=tenant, code=code).first()
+        if employment_type:
+            _append_field_drift(drifts, f"employment_type:{code}", "name", name, employment_type.name)
+            _append_field_drift(
+                drifts,
+                f"employment_type:{code}",
+                "description",
+                description,
+                employment_type.description,
+            )
+            _append_field_drift(
+                drifts,
+                f"employment_type:{code}",
+                "is_payroll_eligible",
+                payroll_eligible,
+                employment_type.is_payroll_eligible,
+            )
+    return drifts
+
+
+def _document_field_drifts(*, tenant: Tenant) -> list[dict]:
+    drifts: list[dict] = []
+    DocumentCategory = apps.get_model("documents", "DocumentCategory")
+    DocumentRequirementRule = apps.get_model("documents", "DocumentRequirementRule")
+    for definition in DOCUMENT_CATEGORY_DEFINITIONS:
+        if not _plan_allows_launch_module(tenant.subscription_plan, definition.get("minimum_plan", "starter")):
+            continue
+        code = definition["code"]
+        category = DocumentCategory.objects.filter(tenant=tenant, code=code).first()
+        if category:
+            record_ref = f"document_category:{code}"
+            _append_field_drift(drifts, record_ref, "name", definition["name"], category.name)
+            _append_field_drift(drifts, record_ref, "category_type", definition["category_type"], category.category_type)
+            _append_field_drift(drifts, record_ref, "description", definition["description"], category.description)
+            _append_field_drift(drifts, record_ref, "is_active", True, category.is_active)
+            _append_field_drift(drifts, record_ref, "is_system_seeded", True, category.is_system_seeded)
+            _append_field_drift(
+                drifts,
+                record_ref,
+                "requires_expiry_date",
+                definition["requires_expiry_date"],
+                category.requires_expiry_date,
+            )
+            _append_field_drift(drifts, record_ref, "requires_verification", True, category.requires_verification)
+            _append_field_drift(drifts, record_ref, "allow_employee_upload", True, category.allow_employee_upload)
+            _append_field_drift(drifts, record_ref, "allow_multiple_files", False, category.allow_multiple_files)
+        rule = DocumentRequirementRule.objects.filter(tenant=tenant, category__code=code).first()
+        if rule:
+            record_ref = f"document_rule:{code}"
+            _append_field_drift(drifts, record_ref, "is_mandatory", True, rule.is_mandatory)
+            _append_field_drift(
+                drifts,
+                record_ref,
+                "required_within_days_of_joining",
+                definition["required_within_days"],
+                rule.required_within_days_of_joining,
+            )
+            _append_field_drift(drifts, record_ref, "priority", definition["priority"], rule.priority)
+            _append_field_drift(drifts, record_ref, "is_active", True, rule.is_active)
+    return drifts
+
+
+def _leave_attendance_field_drifts(*, tenant: Tenant, input_payload: dict) -> list[dict]:
+    drifts: list[dict] = []
+    current_year = timezone.now().date().year
+    work_week = _launch_input_value(input_payload, "work_week", "mon_fri")
+    region = _launch_input_value(input_payload, "holiday_region", "IN").upper()[:10] or "IN"
+
+    LeaveType = apps.get_model("leave_management", "LeaveType")
+    LeavePolicy = apps.get_model("leave_management", "LeavePolicy")
+    LeavePolicyAssignment = apps.get_model("leave_management", "LeavePolicyAssignment")
+    Shift = apps.get_model("attendance", "Shift")
+    HolidayCalendar = apps.get_model("attendance", "HolidayCalendar")
+    Holiday = apps.get_model("attendance", "Holiday")
+    AttendancePolicy = apps.get_model("attendance", "AttendancePolicy")
+    AttendancePolicyAssignment = apps.get_model("attendance", "AttendancePolicyAssignment")
+
+    for definition in LEAVE_TYPE_DEFINITIONS:
+        leave_type = LeaveType.objects.filter(tenant=tenant, code=definition["code"]).first()
+        if leave_type:
+            record_ref = f"leave_type:{definition['code']}"
+            _append_field_drift(drifts, record_ref, "name", definition["name"], leave_type.name)
+            _append_field_drift(drifts, record_ref, "short_code", definition["short_code"], leave_type.short_code)
+            _append_field_drift(drifts, record_ref, "category", definition["category"], leave_type.category)
+            _append_field_drift(drifts, record_ref, "unit", "day", leave_type.unit)
+            _append_field_drift(drifts, record_ref, "description", definition["description"], leave_type.description)
+            _append_field_drift(drifts, record_ref, "is_system_seeded", True, leave_type.is_system_seeded)
+            _append_field_drift(drifts, record_ref, "is_approval_required", True, leave_type.is_approval_required)
+
+        policy = LeavePolicy.objects.filter(tenant=tenant, code=definition["policy_code"]).first()
+        if policy:
+            record_ref = f"leave_policy:{definition['policy_code']}"
+            _append_field_drift(drifts, record_ref, "leave_type_code", definition["code"], policy.leave_type.code)
+            _append_field_drift(drifts, record_ref, "name", f"{definition['name']} Policy", policy.name)
+            _append_field_drift(drifts, record_ref, "status", "active", policy.status)
+            _append_field_drift(drifts, record_ref, "effective_from", date(current_year, 1, 1), policy.effective_from)
+            _append_field_drift(drifts, record_ref, "accrual_frequency", definition["accrual_frequency"], policy.accrual_frequency)
+            _append_field_drift(drifts, record_ref, "annual_entitlement", definition["annual_entitlement"], policy.annual_entitlement)
+            _append_field_drift(drifts, record_ref, "max_carry_forward", definition["max_carry_forward"], policy.max_carry_forward)
+            _append_field_drift(drifts, record_ref, "min_days_per_request", Decimal("0.50"), policy.min_days_per_request)
+            _append_field_drift(drifts, record_ref, "notice_days_required", definition["notice_days_required"], policy.notice_days_required)
+            _append_field_drift(drifts, record_ref, "allow_half_day", definition["allow_half_day"], policy.allow_half_day)
+            _append_field_drift(drifts, record_ref, "allow_backdated_application", True, policy.allow_backdated_application)
+            _append_field_drift(drifts, record_ref, "is_probation_eligible", True, policy.is_probation_eligible)
+
+        assignment = LeavePolicyAssignment.objects.filter(tenant=tenant, leave_policy__code=definition["policy_code"]).first()
+        if assignment:
+            record_ref = f"leave_assignment:{definition['policy_code']}"
+            _append_field_drift(drifts, record_ref, "priority", 100, assignment.priority)
+            _append_field_drift(drifts, record_ref, "is_active", True, assignment.is_active)
+
+    shift = Shift.objects.filter(tenant=tenant, code="general-shift").first()
+    if shift:
+        _append_field_drift(drifts, "shift:general-shift", "name", "General Shift", shift.name)
+        _append_field_drift(drifts, "shift:general-shift", "start_time", time(9, 30), shift.start_time)
+        _append_field_drift(drifts, "shift:general-shift", "end_time", time(18, 30), shift.end_time)
+        _append_field_drift(drifts, "shift:general-shift", "working_hours", Decimal("8.00"), shift.working_hours)
+        _append_field_drift(drifts, "shift:general-shift", "break_minutes", 60, shift.break_minutes)
+        _append_field_drift(drifts, "shift:general-shift", "grace_in_minutes", 10, shift.grace_in_minutes)
+        _append_field_drift(drifts, "shift:general-shift", "grace_out_minutes", 10, shift.grace_out_minutes)
+        _append_field_drift(drifts, "shift:general-shift", "weekly_off_days", _weekly_off_days_for_launch(work_week), shift.weekly_off_days)
+
+    holiday_definitions = FIXED_IN_HOLIDAYS + REGIONAL_FIXED_HOLIDAYS.get(region, ())
+    for year in (current_year, current_year + 1):
+        calendar = HolidayCalendar.objects.filter(tenant=tenant, code=f"in-{region.lower()}-holidays", year=year).first()
+        if calendar:
+            record_ref = f"holiday_calendar:{year}"
+            _append_field_drift(drifts, record_ref, "name", f"India {region} Holidays", calendar.name)
+            _append_field_drift(drifts, record_ref, "is_active", True, calendar.is_active)
+            for month, day, name, holiday_type, is_optional in holiday_definitions:
+                holiday = Holiday.objects.filter(calendar=calendar, date=date(year, month, day), name=name).first()
+                if holiday:
+                    holiday_ref = f"holiday:{year}:{_stable_launch_code(name, 'holiday')}"
+                    _append_field_drift(drifts, holiday_ref, "holiday_type", holiday_type, holiday.holiday_type)
+                    _append_field_drift(drifts, holiday_ref, "is_optional", is_optional, holiday.is_optional)
+
+    attendance_policy = AttendancePolicy.objects.filter(tenant=tenant, code="standard-attendance-policy").first()
+    if attendance_policy:
+        record_ref = "attendance_policy:standard-attendance-policy"
+        _append_field_drift(drifts, record_ref, "name", "Standard Attendance Policy", attendance_policy.name)
+        _append_field_drift(drifts, record_ref, "status", "active", attendance_policy.status)
+        _append_field_drift(drifts, record_ref, "attendance_unit", "day", attendance_policy.attendance_unit)
+        _append_field_drift(
+            drifts,
+            record_ref,
+            "default_shift_code",
+            "general-shift",
+            attendance_policy.default_shift.code if attendance_policy.default_shift_id else "",
+        )
+        _append_field_drift(drifts, record_ref, "full_day_min_hours", Decimal("8.00"), attendance_policy.full_day_min_hours)
+        _append_field_drift(drifts, record_ref, "half_day_min_hours", Decimal("4.00"), attendance_policy.half_day_min_hours)
+        _append_field_drift(drifts, record_ref, "late_mark_after_minutes", 15, attendance_policy.late_mark_after_minutes)
+        _append_field_drift(drifts, record_ref, "max_late_marks_in_period", 3, attendance_policy.max_late_marks_in_period)
+        _append_field_drift(drifts, record_ref, "overtime_threshold_minutes", 0, attendance_policy.overtime_threshold_minutes)
+        _append_field_drift(drifts, record_ref, "allow_manual_entry", True, attendance_policy.allow_manual_entry)
+        _append_field_drift(drifts, record_ref, "allow_web_checkin", True, attendance_policy.allow_web_checkin)
+        _append_field_drift(drifts, record_ref, "allow_mobile_checkin", True, attendance_policy.allow_mobile_checkin)
+        _append_field_drift(drifts, record_ref, "allow_geofenced_checkin", False, attendance_policy.allow_geofenced_checkin)
+        _append_field_drift(drifts, record_ref, "allow_regularization", True, attendance_policy.allow_regularization)
+        _append_field_drift(drifts, record_ref, "require_regularization_reason", True, attendance_policy.require_regularization_reason)
+
+    assignment = AttendancePolicyAssignment.objects.filter(
+        tenant=tenant,
+        attendance_policy__code="standard-attendance-policy",
+    ).first()
+    if assignment:
+        _append_field_drift(drifts, "attendance_assignment:standard-attendance-policy", "priority", 100, assignment.priority)
+        _append_field_drift(drifts, "attendance_assignment:standard-attendance-policy", "is_active", True, assignment.is_active)
+    return drifts
+
+
+def _workflow_field_drifts(*, tenant: Tenant) -> list[dict]:
+    drifts: list[dict] = []
+    current_year = timezone.now().date().year
+    WorkflowTemplate = apps.get_model("workflows", "WorkflowTemplate")
+    WorkflowStep = apps.get_model("workflows", "WorkflowStep")
+    WorkflowTemplateAssignment = apps.get_model("workflows", "WorkflowTemplateAssignment")
+    for definition in WORKFLOW_TEMPLATE_DEFINITIONS:
+        if not _plan_allows_launch_module(tenant.subscription_plan, definition.get("minimum_plan", "starter")):
+            continue
+        template = WorkflowTemplate.objects.filter(tenant=tenant, code=definition["code"], version=1).first()
+        if not template:
+            continue
+        record_ref = f"workflow_template:{definition['code']}"
+        _append_field_drift(drifts, record_ref, "name", definition["name"], template.name)
+        _append_field_drift(drifts, record_ref, "module", definition["module"], template.module)
+        _append_field_drift(drifts, record_ref, "trigger_key", definition["trigger_key"], template.trigger_key)
+        _append_field_drift(drifts, record_ref, "description", definition["description"], template.description)
+        _append_field_drift(drifts, record_ref, "status", "active", template.status)
+        _append_field_drift(drifts, record_ref, "is_system_seeded", True, template.is_system_seeded)
+        _append_field_drift(drifts, record_ref, "effective_from", date(current_year, 1, 1), template.effective_from)
+
+        for index, step_definition in enumerate(definition["steps"], start=1):
+            step = WorkflowStep.objects.filter(template=template, step_order=index).select_related("role").first()
+            if not step:
+                continue
+            step_ref = f"workflow_step:{definition['code']}:{index}"
+            _append_field_drift(drifts, step_ref, "name", step_definition["name"], step.name)
+            _append_field_drift(drifts, step_ref, "mode", "sequential", step.mode)
+            _append_field_drift(drifts, step_ref, "actor_type", step_definition["actor_type"], step.actor_type)
+            _append_field_drift(drifts, step_ref, "role_code", step_definition.get("role_code", ""), step.role.code if step.role_id else "")
+            _append_field_drift(drifts, step_ref, "permission_key", step_definition["permission_key"], step.permission_key)
+            _append_field_drift(drifts, step_ref, "scope_type", step_definition["scope_type"], step.scope_type)
+            _append_field_drift(drifts, step_ref, "auto_approve_after_hours", 0, step.auto_approve_after_hours)
+            _append_field_drift(drifts, step_ref, "escalate_after_hours", step_definition["escalate_after_hours"], step.escalate_after_hours)
+            _append_field_drift(drifts, step_ref, "allow_delegate", True, step.allow_delegate)
+            _append_field_drift(drifts, step_ref, "allow_send_back", True, step.allow_send_back)
+            _append_field_drift(drifts, step_ref, "allow_comment", True, step.allow_comment)
+            _append_field_drift(drifts, step_ref, "rule_snapshot", step_definition["rule_snapshot"], step.rule_snapshot)
+
+        assignment = WorkflowTemplateAssignment.objects.filter(tenant=tenant, template=template).first()
+        if assignment:
+            assignment_ref = f"workflow_assignment:{definition['code']}"
+            _append_field_drift(drifts, assignment_ref, "priority", 100, assignment.priority)
+            _append_field_drift(drifts, assignment_ref, "is_active", True, assignment.is_active)
+    return drifts
+
+
+def _weekly_off_days_for_launch(work_week: str) -> list[str]:
+    if work_week == "mon_fri":
+        return ["saturday", "sunday"]
+    if work_week == "mon_sat":
+        return ["sunday"]
+    return ["sunday"]
+
+
+def _stable_launch_code(value: str, fallback: str) -> str:
+    from django.utils.text import slugify
+
+    code = slugify(value)[:60]
+    return code or fallback
+
+
+def _plan_allows_launch_module(tenant_plan: str, minimum_plan: str) -> bool:
+    return {"starter": 1, "growth": 2, "enterprise": 3}.get(tenant_plan, 0) >= {
+        "starter": 1,
+        "growth": 2,
+        "enterprise": 3,
+    }.get(minimum_plan, 0)
+
+
+def _launch_field_drifts(*, tenant: Tenant, module_ref: str, input_payload: dict) -> list[dict]:
+    if module_ref == "org_masters":
+        return _org_master_field_drifts(tenant=tenant, input_payload=input_payload)
+    if module_ref == "documents":
+        return _document_field_drifts(tenant=tenant)
+    if module_ref == "leave_attendance":
+        return _leave_attendance_field_drifts(tenant=tenant, input_payload=input_payload)
+    if module_ref == "workflows":
+        return _workflow_field_drifts(tenant=tenant)
+    return []
+
+
+def _launch_drift_plan(*, tenant: Tenant, onboarding: TenantOnboarding, baseline_run: TenantLaunchRun) -> dict:
+    repair_plan = _launch_repair_plan(tenant=tenant, onboarding=onboarding, apply_run=baseline_run)
+    modules = []
+    for module in repair_plan["modules"]:
+        missing_count = len(module.get("missing_refs") or [])
+        unchecked_count = len(module.get("unchecked_refs") or [])
+        present_count = len(module.get("present_refs") or [])
+        field_drifts = _launch_field_drifts(
+            tenant=tenant,
+            module_ref=module["ref"],
+            input_payload=baseline_run.input_payload,
+        )
+        field_drift_count = len(field_drifts)
+        customer_editable = bool(module.get("customer_editable_after_handoff"))
+        drift_status = (
+            "missing_baseline"
+            if missing_count
+            else "field_drift"
+            if field_drift_count
+            else "needs_manual_review"
+            if unchecked_count
+            else "in_sync"
+        )
+        modules.append(
+            {
+                **module,
+                "drift_status": drift_status,
+                "missing_count": missing_count,
+                "unchecked_count": unchecked_count,
+                "field_drift_count": field_drift_count,
+                "field_drifts": field_drifts,
+                "present_count": present_count,
+                "customer_owned_present_count": present_count if customer_editable else 0,
+                "drift_action": (
+                    "repair"
+                    if missing_count
+                    else "manual_review"
+                    if field_drift_count
+                    else "manual_review"
+                    if unchecked_count
+                    else "leave_as_is"
+                ),
+            }
+        )
+    counts = {
+        "modules_total": len(modules),
+        "modules_in_sync": sum(1 for module in modules if module["drift_status"] == "in_sync"),
+        "modules_missing_baseline": sum(1 for module in modules if module["drift_status"] == "missing_baseline"),
+        "modules_with_field_drift": sum(1 for module in modules if module["drift_status"] == "field_drift"),
+        "modules_needing_manual_review": sum(1 for module in modules if module["drift_status"] == "needs_manual_review"),
+        "missing_ref_count": repair_plan["missing_ref_count"],
+        "unchecked_ref_count": repair_plan["unchecked_ref_count"],
+        "field_drift_count": sum(module["field_drift_count"] for module in modules),
+        "customer_owned_present_ref_count": sum(module["customer_owned_present_count"] for module in modules),
+    }
+    return {
+        "mode": "drift_check",
+        "can_repair": repair_plan["can_repair"],
+        "repairable_modules": repair_plan["repairable_modules"],
+        "counts": counts,
+        "modules": modules,
+        "latest_baseline_run_id": str(baseline_run.id),
+        "current_blueprint_ref": baseline_run.blueprint_ref,
+        "current_blueprint_version": baseline_run.blueprint_version,
+        "governance_summary": repair_plan.get("governance_summary", {}),
+        "drift_policy": (
+            "Drift check verifies baseline refs and selected seeded fields from launch evidence. Missing refs can be "
+            "repaired; field drift and unchecked refs need manual evidence review; present customer-owned refs are left untouched."
+        ),
+    }
+
+
+def _module_changed_fields(current_module: dict, target_module: dict) -> list[str]:
+    fields = (
+        "label",
+        "minimum_plan",
+        "ownership_mode",
+        "post_onboarding_owner",
+        "editable_by_roles",
+        "customer_editable_after_handoff",
+        "required_inputs",
+        "description",
+        "post_apply_action",
+        "child_seeder",
+    )
+    return [field for field in fields if current_module.get(field) != target_module.get(field)]
+
+
+def _launch_upgrade_plan(
+    *,
+    tenant: Tenant,
+    onboarding: TenantOnboarding,
+    baseline_run: TenantLaunchRun,
+    target_preview_payload: dict,
+) -> dict:
+    current_modules = _module_payloads_by_ref(baseline_run.plan_snapshot)
+    target_modules = _module_payloads_by_ref(target_preview_payload)
+    repair_plan = _launch_repair_plan(tenant=tenant, onboarding=onboarding, apply_run=baseline_run)
+    missing_baseline_modules = set(repair_plan["repairable_modules"])
+    module_refs = sorted(set(current_modules) | set(target_modules))
+    items = []
+    for module_ref in module_refs:
+        current_module = current_modules.get(module_ref)
+        target_module = target_modules.get(module_ref)
+        if target_module and not current_module:
+            action = "add"
+            severity = "success"
+            changed_fields = []
+            message = "New module exists in the target launch blueprint version."
+        elif current_module and not target_module:
+            action = "remove"
+            severity = "warning"
+            changed_fields = []
+            message = "Current baseline module is not present in the target launch blueprint version."
+        elif current_module and target_module:
+            changed_fields = _module_changed_fields(current_module, target_module)
+            action = "change" if changed_fields else "unchanged"
+            severity = "warning" if changed_fields else "info"
+            message = f"Target version changes: {', '.join(changed_fields)}." if changed_fields else "No module change detected."
+        else:
+            continue
+
+        governance_source = target_module or current_module or {}
+        customer_owned_change = bool(
+            action in {"change", "remove"}
+            and (current_module or {}).get("customer_editable_after_handoff") is True
+        )
+        baseline_missing = module_ref in missing_baseline_modules
+        safe_apply_enabled = bool((target_module or current_module or {}).get("safe_apply_enabled"))
+        items.append(
+            {
+                "module_ref": module_ref,
+                "label": governance_source.get("label", module_ref),
+                "action": action,
+                "severity": "warning" if baseline_missing else severity,
+                "message": "Current baseline is missing records; repair before upgrade." if baseline_missing else message,
+                "changed_fields": changed_fields,
+                "current_version": baseline_run.blueprint_version,
+                "target_version": target_preview_payload.get("blueprint_version", ""),
+                "customer_owned_change": customer_owned_change,
+                "baseline_missing": baseline_missing,
+                "safe_apply_enabled": safe_apply_enabled,
+                "plan_allowed": (target_module or current_module or {}).get("plan_allowed", True),
+                "governance": _module_governance_evidence(governance_source),
+            }
+        )
+
+    counts = {
+        "total": len(items),
+        "add": sum(1 for item in items if item["action"] == "add"),
+        "change": sum(1 for item in items if item["action"] == "change"),
+        "remove": sum(1 for item in items if item["action"] == "remove"),
+        "unchanged": sum(1 for item in items if item["action"] == "unchanged"),
+        "baseline_missing": sum(1 for item in items if item["baseline_missing"]),
+        "customer_owned_change": sum(1 for item in items if item["customer_owned_change"]),
+    }
+    actionable_modules = [
+        item["module_ref"]
+        for item in items
+        if item["action"] in {"add", "change"} and item["safe_apply_enabled"] and item["plan_allowed"] is not False
+    ]
+    is_same_version = (
+        baseline_run.blueprint_ref == target_preview_payload.get("blueprint_ref")
+        and baseline_run.blueprint_version == target_preview_payload.get("blueprint_version")
+    )
+    blockers = []
+    if is_same_version:
+        blockers.append("Tenant is already on the target launch blueprint version.")
+    if counts["remove"]:
+        blockers.append("Target blueprint removes modules; manual migration review is required.")
+    if counts["baseline_missing"]:
+        blockers.append("Repair missing launch baseline records before upgrade.")
+    if not actionable_modules and not blockers:
+        blockers.append("No safe launch blueprint upgrade actions are available.")
+    return {
+        "can_upgrade": not blockers,
+        "requires_change_reason": counts["customer_owned_change"] > 0,
+        "blockers": blockers,
+        "counts": counts,
+        "items": items,
+        "actionable_modules": sorted(actionable_modules),
+        "current_blueprint_ref": baseline_run.blueprint_ref,
+        "current_blueprint_version": baseline_run.blueprint_version,
+        "target_blueprint_ref": target_preview_payload.get("blueprint_ref", ""),
+        "target_blueprint_version": target_preview_payload.get("blueprint_version", ""),
+        "latest_baseline_run_id": str(baseline_run.id),
+        "governance_summary": target_preview_payload.get("governance_summary", {}),
+    }
+
+
 def _launch_change_reasons(*, onboarding: TenantOnboarding, tenant: Tenant, preview_payload: dict, input_payload: dict) -> list[str]:
     if not onboarding.launch_applied_at:
         return []
@@ -381,6 +1171,316 @@ def _launch_change_reasons(*, onboarding: TenantOnboarding, tenant: Tenant, prev
     if onboarding.launch_subscription_plan_snapshot and tenant.subscription_plan != onboarding.launch_subscription_plan_snapshot:
         reasons.append("tenant subscription plan changed after safe apply")
     return reasons
+
+
+def _certification_check(
+    *,
+    ref: str,
+    label: str,
+    status_value: str,
+    message: str,
+    evidence_run_id: str = "",
+    next_action: str = "",
+) -> dict:
+    return {
+        "ref": ref,
+        "label": label,
+        "status": status_value,
+        "message": message,
+        "evidence_run_id": evidence_run_id,
+        "next_action": next_action,
+    }
+
+
+def _launch_certification_report(*, tenant: Tenant, onboarding: TenantOnboarding) -> dict:
+    checks: list[dict] = []
+    blockers: list[str] = []
+    warnings: list[str] = []
+    info: list[str] = []
+    preview_payload = onboarding.launch_preview_payload if isinstance(onboarding.launch_preview_payload, dict) else {}
+
+    if onboarding.launch_blueprint_ref and onboarding.launch_blueprint_version:
+        checks.append(
+            _certification_check(
+                ref="blueprint_selected",
+                label="Blueprint selected",
+                status_value="passed",
+                message=f"{onboarding.launch_blueprint_ref} {onboarding.launch_blueprint_version} selected.",
+            )
+        )
+    else:
+        blockers.append("No launch blueprint has been selected.")
+        checks.append(
+            _certification_check(
+                ref="blueprint_selected",
+                label="Blueprint selected",
+                status_value="blocked",
+                message="No launch blueprint has been selected.",
+                next_action="Run launch preview for the selected tenant template.",
+            )
+        )
+
+    missing_inputs = preview_payload.get("missing_inputs") or []
+    preview_blockers = preview_payload.get("blockers") or []
+    can_apply = preview_payload.get("can_apply") is True
+    if can_apply and not missing_inputs and not preview_blockers:
+        checks.append(
+            _certification_check(
+                ref="preview_apply_ready",
+                label="Preview apply-ready",
+                status_value="passed",
+                message="Latest stored launch preview is apply-ready.",
+            )
+        )
+    else:
+        message = "Launch preview is not apply-ready."
+        if missing_inputs:
+            message = f"Launch preview is missing inputs: {', '.join(missing_inputs)}."
+        elif preview_blockers:
+            message = f"Launch preview has blockers: {'; '.join(preview_blockers)}."
+        blockers.append(message)
+        checks.append(
+            _certification_check(
+                ref="preview_apply_ready",
+                label="Preview apply-ready",
+                status_value="blocked",
+                message=message,
+                next_action="Resolve inputs/blockers and rerun launch preview.",
+            )
+        )
+
+    baseline_run = _latest_successful_baseline_run(tenant)
+    if baseline_run:
+        checks.append(
+            _certification_check(
+                ref="safe_apply",
+                label="Safe baseline applied",
+                status_value="passed",
+                message=f"Baseline evidence exists from {baseline_run.run_type} {baseline_run.blueprint_version}.",
+                evidence_run_id=str(baseline_run.id),
+            )
+        )
+    else:
+        blockers.append("Certified safe launch setup has not been applied.")
+        checks.append(
+            _certification_check(
+                ref="safe_apply",
+                label="Safe baseline applied",
+                status_value="blocked",
+                message="Certified safe launch setup has not been applied.",
+                next_action="Apply safe launch setup after an apply-ready preview.",
+            )
+        )
+
+    latest_drift = _latest_launch_run(tenant=tenant, run_type=TenantLaunchRunType.VERIFY, mode="drift_check")
+    latest_repair_apply = _latest_launch_run(tenant=tenant, run_type=TenantLaunchRunType.REPAIR, mode="apply")
+    if baseline_run is None:
+        checks.append(
+            _certification_check(
+                ref="drift_clear",
+                label="Seed drift clear",
+                status_value="blocked",
+                message="Drift cannot be checked before safe baseline apply.",
+                next_action="Apply safe launch setup, then run seed drift check.",
+            )
+        )
+        blockers.append("Seed drift has not been checked against an applied baseline.")
+    elif latest_drift is None:
+        blockers.append("Seed drift check has not been run after baseline apply.")
+        checks.append(
+            _certification_check(
+                ref="drift_clear",
+                label="Seed drift clear",
+                status_value="blocked",
+                message="Seed drift check has not been run.",
+                next_action="Run seed drift check.",
+            )
+        )
+    elif latest_drift.created_at < baseline_run.created_at or (
+        latest_repair_apply and latest_drift.created_at < latest_repair_apply.created_at
+    ):
+        blockers.append("Seed drift check is stale.")
+        checks.append(
+            _certification_check(
+                ref="drift_clear",
+                label="Seed drift clear",
+                status_value="blocked",
+                message="Seed drift check is older than the latest baseline/repair evidence.",
+                evidence_run_id=str(latest_drift.id),
+                next_action="Rerun seed drift check.",
+            )
+        )
+    else:
+        drift_counts = latest_drift.result_payload.get("counts", {})
+        missing_refs = drift_counts.get("missing_ref_count", 0) or 0
+        field_drifts = drift_counts.get("field_drift_count", 0) or 0
+        unchecked_refs = drift_counts.get("unchecked_ref_count", 0) or 0
+        if missing_refs or field_drifts:
+            message = (
+                f"Seed drift is not clear: {missing_refs} missing refs, "
+                f"{field_drifts} field differences, {unchecked_refs} unchecked refs."
+            )
+            blockers.append(message)
+            checks.append(
+                _certification_check(
+                    ref="drift_clear",
+                    label="Seed drift clear",
+                    status_value="blocked",
+                    message=message,
+                    evidence_run_id=str(latest_drift.id),
+                    next_action="Repair missing refs or manually review field/unchecked drift, then rerun drift check.",
+                )
+            )
+        else:
+            checks.append(
+                _certification_check(
+                    ref="drift_clear",
+                    label="Seed drift clear",
+                    status_value="passed",
+                    message="Latest seed drift check has no missing refs or field differences.",
+                    evidence_run_id=str(latest_drift.id),
+                )
+            )
+            if unchecked_refs:
+                message = f"Seed drift has {unchecked_refs} unchecked refs that require manual evidence review."
+                warnings.append(message)
+                checks.append(
+                    _certification_check(
+                        ref="unchecked_refs_reviewed",
+                        label="Unchecked refs reviewed",
+                        status_value="warning",
+                        message=message,
+                        evidence_run_id=str(latest_drift.id),
+                        next_action="Review unchecked refs in drift evidence before final production signoff.",
+                    )
+                )
+
+    plan_gated_modules = preview_payload.get("plan_gated_modules") or []
+    if plan_gated_modules:
+        info_message = f"Subscription-gated modules are out of scope for {tenant.subscription_plan}: {', '.join(plan_gated_modules)}."
+        info.append(info_message)
+        checks.append(
+            _certification_check(
+                ref="subscription_scope",
+                label="Subscription scope",
+                status_value="info",
+                message=info_message,
+            )
+        )
+    else:
+        checks.append(
+            _certification_check(
+                ref="subscription_scope",
+                label="Subscription scope",
+                status_value="passed",
+                message="No launch modules are gated by the current subscription.",
+            )
+        )
+
+    newer_versions = []
+    if onboarding.launch_blueprint_ref and onboarding.launch_blueprint_version:
+        current_version_key = _version_sort_key(onboarding.launch_blueprint_version)
+        newer_versions = [
+            blueprint.version
+            for blueprint in list_blueprints()
+            if blueprint.ref == onboarding.launch_blueprint_ref
+            and _version_sort_key(blueprint.version) > current_version_key
+        ]
+    if newer_versions:
+        message = f"Newer blueprint version available: {sorted(newer_versions, key=_version_sort_key)[-1]}."
+        warnings.append(message)
+        checks.append(
+            _certification_check(
+                ref="template_version",
+                label="Template version",
+                status_value="warning",
+                message=message,
+                next_action="Run template upgrade compare when customer is ready.",
+            )
+        )
+    else:
+        checks.append(
+            _certification_check(
+                ref="template_version",
+                label="Template version",
+                status_value="passed",
+                message="Tenant is on the latest known blueprint version.",
+            )
+        )
+
+    if onboarding.handoff_completed_at:
+        checks.append(
+            _certification_check(
+                ref="customer_handoff",
+                label="Customer handoff",
+                status_value="passed",
+                message="Customer handoff is complete.",
+            )
+        )
+    else:
+        blockers.append("Customer handoff is not complete.")
+        checks.append(
+            _certification_check(
+                ref="customer_handoff",
+                label="Customer handoff",
+                status_value="blocked",
+                message="Customer handoff is not complete.",
+                next_action="Complete customer handoff with notes after QA review.",
+            )
+        )
+
+    failed_runs = TenantLaunchRun.objects.filter(
+        tenant=tenant,
+        status=TenantLaunchRunStatus.FAILED,
+        run_type__in=[
+            TenantLaunchRunType.PREVIEW,
+            TenantLaunchRunType.APPLY,
+            TenantLaunchRunType.VERIFY,
+            TenantLaunchRunType.REPAIR,
+            TenantLaunchRunType.UPGRADE,
+        ],
+    ).count()
+    if failed_runs:
+        message = f"{failed_runs} failed launch run(s) exist and should be reviewed."
+        warnings.append(message)
+        checks.append(
+            _certification_check(
+                ref="failed_runs_reviewed",
+                label="Failed launch runs",
+                status_value="warning",
+                message=message,
+                next_action="Review failed launch evidence before production signoff.",
+            )
+        )
+    else:
+        checks.append(
+            _certification_check(
+                ref="failed_runs_reviewed",
+                label="Failed launch runs",
+                status_value="passed",
+                message="No failed launch runs found.",
+            )
+        )
+
+    status_value = "pass" if not blockers else "fail"
+    return {
+        "tenant_id": str(tenant.id),
+        "tenant_code": tenant.code,
+        "status": status_value,
+        "blueprint_ref": onboarding.launch_blueprint_ref,
+        "blueprint_version": onboarding.launch_blueprint_version,
+        "subscription_plan": tenant.subscription_plan,
+        "blocker_count": len(blockers),
+        "warning_count": len(warnings),
+        "info_count": len(info),
+        "checks": checks,
+        "blockers": blockers,
+        "warnings": warnings,
+        "info": info,
+        "latest_baseline_run_id": str(baseline_run.id) if baseline_run else "",
+        "latest_drift_run_id": str(latest_drift.id) if latest_drift else "",
+        "generated_at": timezone.now().isoformat(),
+    }
 
 
 def _validate_apply_ready_preview_is_current(*, onboarding: TenantOnboarding, tenant: Tenant, preview_run: TenantLaunchRun) -> None:
@@ -917,6 +2017,15 @@ class PlatformTenantLaunchRunListView(APIView):
         return response.Response(PlatformTenantLaunchRunSerializer(payload, many=True).data)
 
 
+class PlatformTenantLaunchCertificationReportView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    def get(self, request, item_id):
+        tenant = _get_tenant_or_404(item_id)
+        report = _launch_certification_report(tenant=tenant, onboarding=tenant.onboarding_record)
+        return response.Response(report)
+
+
 class PlatformTenantLaunchPreviewView(APIView):
     permission_classes = [IsPlatformStaff]
 
@@ -976,6 +2085,7 @@ class PlatformTenantLaunchPreviewView(APIView):
                 "change_reason": change_reason,
                 "change_reasons": change_reasons,
                 "requires_change_reason": bool(change_reasons),
+                "governance_summary": preview_payload.get("governance_summary", {}),
             },
         )
         _create_preview_seeded_items(run=run, preview_payload=preview_payload)
@@ -1117,6 +2227,7 @@ class PlatformTenantLaunchApplyView(APIView):
                 "plan_gated_modules": sorted(preview_payload.get("plan_gated_modules") or []),
                 "uncertified_modules": sorted(preview_payload.get("uncertified_modules") or []),
                 "subscription_plan": tenant.subscription_plan,
+                "governance_summary": preview_payload.get("governance_summary", {}),
             },
         )
 
@@ -1141,7 +2252,19 @@ class PlatformTenantLaunchApplyView(APIView):
                     ownership_mode=module_payload.get("ownership_mode", ""),
                     message=result.message,
                     payload={**module_payload, "result": result.as_dict()},
-                    evidence={"source": "platform_launch_safe_apply", "preview_run_id": str(preview_run.id)},
+                    evidence={
+                        "source": "platform_launch_safe_apply",
+                        "preview_run_id": str(preview_run.id),
+                        "governance": {
+                            "post_onboarding_owner": module_payload.get("post_onboarding_owner", ""),
+                            "editable_by_roles": module_payload.get("editable_by_roles", []),
+                            "customer_editable_after_handoff": module_payload.get(
+                                "customer_editable_after_handoff",
+                                False,
+                            ),
+                            "post_apply_action": module_payload.get("post_apply_action", ""),
+                        },
+                    },
                 )
             except Exception as exc:
                 errors.append({"module_ref": module_ref, "message": str(exc)})
@@ -1156,7 +2279,19 @@ class PlatformTenantLaunchApplyView(APIView):
                     ownership_mode=module_payload.get("ownership_mode", ""),
                     message=str(exc)[:255],
                     payload=module_payload,
-                    evidence={"source": "platform_launch_safe_apply", "preview_run_id": str(preview_run.id)},
+                    evidence={
+                        "source": "platform_launch_safe_apply",
+                        "preview_run_id": str(preview_run.id),
+                        "governance": {
+                            "post_onboarding_owner": module_payload.get("post_onboarding_owner", ""),
+                            "editable_by_roles": module_payload.get("editable_by_roles", []),
+                            "customer_editable_after_handoff": module_payload.get(
+                                "customer_editable_after_handoff",
+                                False,
+                            ),
+                            "post_apply_action": module_payload.get("post_apply_action", ""),
+                        },
+                    },
                 )
 
         for module_ref, module_payload in module_payloads.items():
@@ -1181,7 +2316,16 @@ class PlatformTenantLaunchApplyView(APIView):
                 ownership_mode=module_payload.get("ownership_mode", ""),
                 message=message,
                 payload=module_payload,
-                evidence={"source": "platform_launch_safe_apply", "preview_run_id": str(preview_run.id)},
+                evidence={
+                    "source": "platform_launch_safe_apply",
+                    "preview_run_id": str(preview_run.id),
+                    "governance": {
+                        "post_onboarding_owner": module_payload.get("post_onboarding_owner", ""),
+                        "editable_by_roles": module_payload.get("editable_by_roles", []),
+                        "customer_editable_after_handoff": module_payload.get("customer_editable_after_handoff", False),
+                        "post_apply_action": module_payload.get("post_apply_action", ""),
+                    },
+                },
             )
 
         finished_at = timezone.now()
@@ -1193,6 +2337,7 @@ class PlatformTenantLaunchApplyView(APIView):
             "plan_gated_modules": sorted(preview_payload.get("plan_gated_modules") or []),
             "uncertified_modules": sorted(preview_payload.get("uncertified_modules") or []),
             "safe_apply_modules": sorted(apply_allowed_modules),
+            "governance_summary": preview_payload.get("governance_summary", {}),
             "results": results,
         }
         apply_run.errors = errors
@@ -1225,6 +2370,729 @@ class PlatformTenantLaunchApplyView(APIView):
         apply_run = TenantLaunchRun.objects.prefetch_related("seeded_items").get(id=apply_run.id)
         return response.Response(
             PlatformTenantLaunchRunSerializer(_serialize_launch_run(apply_run)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PlatformTenantLaunchDriftCheckView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def post(self, request, item_id):
+        tenant = _get_tenant_or_404(item_id)
+        onboarding = tenant.onboarding_record
+        serializer = PlatformTenantLaunchDriftRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        baseline_run = _latest_successful_baseline_run(tenant)
+        if baseline_run is None:
+            raise exceptions.ValidationError("Apply certified safe launch setup before checking launch drift.")
+
+        idempotency_key = data.get("idempotency_key", "")
+        if idempotency_key:
+            existing_run = (
+                TenantLaunchRun.objects.filter(
+                    tenant=tenant,
+                    run_type=TenantLaunchRunType.VERIFY,
+                    idempotency_key=idempotency_key,
+                )
+                .prefetch_related("seeded_items")
+                .order_by("-created_at")
+                .first()
+            )
+            if existing_run:
+                return response.Response(PlatformTenantLaunchRunSerializer(_serialize_launch_run(existing_run)).data)
+
+        plan = _launch_drift_plan(tenant=tenant, onboarding=onboarding, baseline_run=baseline_run)
+        started_at = timezone.now()
+        finished_at = timezone.now()
+        run = TenantLaunchRun.objects.create(
+            onboarding=onboarding,
+            tenant=tenant,
+            blueprint_ref=baseline_run.blueprint_ref,
+            blueprint_version=baseline_run.blueprint_version,
+            subscription_plan=tenant.subscription_plan,
+            run_type=TenantLaunchRunType.VERIFY,
+            status=TenantLaunchRunStatus.SUCCEEDED,
+            requested_by_identifier=_actor_identifier(request),
+            idempotency_key=idempotency_key,
+            started_at=started_at,
+            finished_at=finished_at,
+            input_payload=baseline_run.input_payload,
+            plan_snapshot=baseline_run.plan_snapshot,
+            result_payload=plan,
+            evidence={
+                "source": "platform_launch_drift_check",
+                "baseline_run_id": str(baseline_run.id),
+                "drift_policy": plan["drift_policy"],
+                "governance_summary": plan.get("governance_summary", {}),
+            },
+        )
+        items = []
+        for module in plan["modules"]:
+            missing_count = module.get("missing_count") or 0
+            unchecked_count = module.get("unchecked_count") or 0
+            message = (
+                f"{missing_count} baseline refs are missing."
+                if missing_count
+                else f"{unchecked_count} baseline refs need manual evidence review."
+                if unchecked_count
+                else "Baseline refs are present."
+            )
+            items.append(
+                TenantLaunchSeededItem(
+                    launch_run=run,
+                    tenant=tenant,
+                    item_key=module["ref"],
+                    item_kind="launch_module",
+                    module_ref=module["ref"],
+                    action=TenantLaunchItemAction.BLOCK if missing_count else TenantLaunchItemAction.NOOP,
+                    status=TenantLaunchItemStatus.BLOCKED if missing_count else TenantLaunchItemStatus.SKIPPED,
+                    ownership_mode=module.get("ownership_mode", ""),
+                    message=message,
+                    payload=module,
+                    evidence={
+                        "source": "platform_launch_drift_check",
+                        "baseline_run_id": str(baseline_run.id),
+                        "governance": _module_governance_evidence(module),
+                    },
+                )
+            )
+        if items:
+            TenantLaunchSeededItem.objects.bulk_create(items)
+        return response.Response(
+            PlatformTenantLaunchRunSerializer(_serialize_launch_run(run)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PlatformTenantLaunchRepairPreviewView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def post(self, request, item_id):
+        tenant = _get_tenant_or_404(item_id)
+        onboarding = tenant.onboarding_record
+        serializer = PlatformTenantLaunchRepairRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        latest_apply = _latest_successful_baseline_run(tenant)
+        if latest_apply is None:
+            raise exceptions.ValidationError("Apply certified safe launch setup before running launch repair.")
+
+        plan = _launch_repair_plan(tenant=tenant, onboarding=onboarding, apply_run=latest_apply)
+        module_refs = {module["ref"] for module in plan["modules"]}
+        requested_modules = set(data.get("requested_modules") or [])
+        unknown_requested = sorted(requested_modules - module_refs)
+        if unknown_requested:
+            raise exceptions.ValidationError(
+                {"requested_modules": f"These modules are not in the launch baseline: {', '.join(unknown_requested)}."}
+            )
+
+        started_at = timezone.now()
+        finished_at = timezone.now()
+        run = TenantLaunchRun.objects.create(
+            onboarding=onboarding,
+            tenant=tenant,
+            blueprint_ref=latest_apply.blueprint_ref,
+            blueprint_version=latest_apply.blueprint_version,
+            subscription_plan=tenant.subscription_plan,
+            run_type=TenantLaunchRunType.REPAIR,
+            status=TenantLaunchRunStatus.SUCCEEDED,
+            requested_by_identifier=_actor_identifier(request),
+            idempotency_key=data.get("idempotency_key", ""),
+            started_at=started_at,
+            finished_at=finished_at,
+            input_payload=latest_apply.input_payload,
+            plan_snapshot=latest_apply.plan_snapshot,
+            result_payload={
+                "mode": "preview",
+                "requested_modules": sorted(requested_modules),
+                **plan,
+            },
+            evidence={
+                "source": "platform_launch_repair_preview",
+                "latest_apply_run_id": str(latest_apply.id),
+                "change_reason": data.get("change_reason", ""),
+                "governance_summary": plan.get("governance_summary", {}),
+            },
+        )
+        items = []
+        for module in plan["modules"]:
+            missing_refs = module.get("missing_refs") or []
+            unchecked_refs = module.get("unchecked_refs") or []
+            message = (
+                f"{len(missing_refs)} missing baseline refs can be repaired."
+                if missing_refs
+                else f"{len(unchecked_refs)} refs need manual evidence review."
+                if unchecked_refs
+                else "Baseline refs are present."
+            )
+            items.append(
+                TenantLaunchSeededItem(
+                    launch_run=run,
+                    tenant=tenant,
+                    item_key=module["ref"],
+                    item_kind="launch_module",
+                    module_ref=module["ref"],
+                    action=TenantLaunchItemAction.PLAN if missing_refs else TenantLaunchItemAction.NOOP,
+                    status=TenantLaunchItemStatus.PLANNED if missing_refs else TenantLaunchItemStatus.SKIPPED,
+                    ownership_mode=module.get("ownership_mode", ""),
+                    message=message,
+                    payload=module,
+                    evidence={"source": "platform_launch_repair_preview", "latest_apply_run_id": str(latest_apply.id)},
+                )
+            )
+        if items:
+            TenantLaunchSeededItem.objects.bulk_create(items)
+        return response.Response(
+            PlatformTenantLaunchRunSerializer(_serialize_launch_run(run)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PlatformTenantLaunchRepairApplyView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def post(self, request, item_id):
+        tenant = _get_tenant_or_404(item_id)
+        onboarding = tenant.onboarding_record
+        serializer = PlatformTenantLaunchRepairRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        actor_identifier = _actor_identifier(request)
+        idempotency_key = data.get("idempotency_key", "")
+        if idempotency_key:
+            existing_run = (
+                TenantLaunchRun.objects.filter(
+                    tenant=tenant,
+                    run_type=TenantLaunchRunType.REPAIR,
+                    idempotency_key=idempotency_key,
+                )
+                .prefetch_related("seeded_items")
+                .order_by("-created_at")
+                .first()
+            )
+            if existing_run:
+                return response.Response(PlatformTenantLaunchRunSerializer(_serialize_launch_run(existing_run)).data)
+
+        latest_apply = _latest_successful_baseline_run(tenant)
+        if latest_apply is None:
+            raise exceptions.ValidationError("Apply certified safe launch setup before running launch repair.")
+
+        plan = _launch_repair_plan(tenant=tenant, onboarding=onboarding, apply_run=latest_apply)
+        module_payloads = _module_payloads_by_ref(latest_apply.plan_snapshot)
+        module_refs = set(module_payloads)
+        repairable_modules = set(plan["repairable_modules"])
+        requested_modules = set(data.get("requested_modules") or [])
+        unknown_requested = sorted(requested_modules - module_refs)
+        if unknown_requested:
+            raise exceptions.ValidationError(
+                {"requested_modules": f"These modules are not in the launch baseline: {', '.join(unknown_requested)}."}
+            )
+        modules_to_apply = requested_modules or repairable_modules
+        disallowed_safe = sorted(module for module in modules_to_apply if module not in SAFE_APPLY_MODULES)
+        if disallowed_safe:
+            return response.Response(
+                PlatformMutationResultSerializer(
+                    {
+                        "detail": f"Launch repair can only run certified safe modules: {', '.join(disallowed_safe)}.",
+                        "tenant_status": tenant.status,
+                        "onboarding_status": tenant.onboarding_status,
+                    }
+                ).data,
+                status=status.HTTP_409_CONFLICT,
+            )
+        forced_modules = sorted(modules_to_apply - repairable_modules)
+        change_reason = data.get("change_reason", "").strip()
+        if forced_modules and not change_reason:
+            return response.Response(
+                PlatformMutationResultSerializer(
+                    {
+                        "detail": (
+                            "A change reason is required to rerun launch modules that do not have missing baseline refs: "
+                            f"{', '.join(forced_modules)}."
+                        ),
+                        "tenant_status": tenant.status,
+                        "onboarding_status": tenant.onboarding_status,
+                    }
+                ).data,
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not modules_to_apply:
+            raise exceptions.ValidationError("No missing launch baseline records are available for repair.")
+
+        started_at = timezone.now()
+        repair_run = TenantLaunchRun.objects.create(
+            onboarding=onboarding,
+            tenant=tenant,
+            blueprint_ref=latest_apply.blueprint_ref,
+            blueprint_version=latest_apply.blueprint_version,
+            subscription_plan=tenant.subscription_plan,
+            run_type=TenantLaunchRunType.REPAIR,
+            status=TenantLaunchRunStatus.RUNNING,
+            requested_by_identifier=actor_identifier,
+            idempotency_key=idempotency_key,
+            started_at=started_at,
+            input_payload=latest_apply.input_payload,
+            plan_snapshot=latest_apply.plan_snapshot,
+            evidence={
+                "source": "platform_launch_repair_apply",
+                "latest_apply_run_id": str(latest_apply.id),
+                "change_reason": change_reason,
+                "repairable_modules": sorted(repairable_modules),
+                "forced_modules": forced_modules,
+                "governance_summary": plan.get("governance_summary", {}),
+            },
+        )
+
+        results = []
+        errors = []
+        repaired_modules = set()
+        for module_ref in sorted(modules_to_apply):
+            module_payload = module_payloads.get(module_ref, {"ref": module_ref})
+            try:
+                result = SEEDER_BY_MODULE[module_ref](onboarding, latest_apply.input_payload)
+                results.append(result.as_dict())
+                repaired_modules.add(module_ref)
+                action = (
+                    TenantLaunchItemAction.CREATE
+                    if result.created
+                    else TenantLaunchItemAction.UPDATE
+                    if result.existing
+                    else TenantLaunchItemAction.NOOP
+                )
+                TenantLaunchSeededItem.objects.create(
+                    launch_run=repair_run,
+                    tenant=tenant,
+                    item_key=module_ref,
+                    item_kind="launch_module",
+                    module_ref=module_ref,
+                    action=action,
+                    status=TenantLaunchItemStatus.SUCCEEDED,
+                    ownership_mode=module_payload.get("ownership_mode", ""),
+                    message=result.message,
+                    payload={**module_payload, "result": result.as_dict()},
+                    evidence={
+                        "source": "platform_launch_repair_apply",
+                        "latest_apply_run_id": str(latest_apply.id),
+                        "change_reason": change_reason,
+                        "forced": module_ref in forced_modules,
+                        "governance": _module_governance_evidence(module_payload),
+                    },
+                )
+            except Exception as exc:
+                errors.append({"module_ref": module_ref, "message": str(exc)})
+                TenantLaunchSeededItem.objects.create(
+                    launch_run=repair_run,
+                    tenant=tenant,
+                    item_key=module_ref,
+                    item_kind="launch_module",
+                    module_ref=module_ref,
+                    action=TenantLaunchItemAction.UPDATE,
+                    status=TenantLaunchItemStatus.FAILED,
+                    ownership_mode=module_payload.get("ownership_mode", ""),
+                    message=str(exc)[:255],
+                    payload=module_payload,
+                    evidence={
+                        "source": "platform_launch_repair_apply",
+                        "latest_apply_run_id": str(latest_apply.id),
+                        "change_reason": change_reason,
+                        "forced": module_ref in forced_modules,
+                        "governance": _module_governance_evidence(module_payload),
+                    },
+                )
+
+        for module_ref, module_payload in module_payloads.items():
+            if module_ref in repaired_modules or repair_run.seeded_items.filter(item_key=module_ref).exists():
+                continue
+            TenantLaunchSeededItem.objects.create(
+                launch_run=repair_run,
+                tenant=tenant,
+                item_key=module_ref,
+                item_kind="launch_module",
+                module_ref=module_ref,
+                action=TenantLaunchItemAction.NOOP,
+                status=TenantLaunchItemStatus.SKIPPED,
+                ownership_mode=module_payload.get("ownership_mode", ""),
+                message="No missing baseline refs were selected for repair.",
+                payload=module_payload,
+                evidence={
+                    "source": "platform_launch_repair_apply",
+                    "latest_apply_run_id": str(latest_apply.id),
+                    "governance": _module_governance_evidence(module_payload),
+                },
+            )
+
+        finished_at = timezone.now()
+        repair_run.status = TenantLaunchRunStatus.FAILED if errors else TenantLaunchRunStatus.SUCCEEDED
+        repair_run.finished_at = finished_at
+        repair_run.result_payload = {
+            "mode": "apply",
+            "repaired_modules": sorted(repaired_modules),
+            "forced_modules": forced_modules,
+            "repairable_modules": sorted(repairable_modules),
+            "governance_summary": plan.get("governance_summary", {}),
+            "results": results,
+        }
+        repair_run.errors = errors
+        repair_run.save(update_fields=["status", "finished_at", "result_payload", "errors", "updated_at"])
+
+        if not errors:
+            onboarding.launch_status_notes = "Launch baseline repair applied."
+            onboarding.save(update_fields=["launch_status_notes", "updated_at"])
+            add_onboarding_event(
+                onboarding,
+                event_type="launch_baseline_repaired",
+                summary=f"Repaired launch baseline modules for {tenant.code}.",
+                actor_identifier=actor_identifier,
+                payload={
+                    "launch_run_id": str(repair_run.id),
+                    "latest_apply_run_id": str(latest_apply.id),
+                    "repaired_modules": sorted(repaired_modules),
+                    "forced_modules": forced_modules,
+                    "change_reason": change_reason,
+                },
+            )
+
+        repair_run = TenantLaunchRun.objects.prefetch_related("seeded_items").get(id=repair_run.id)
+        return response.Response(
+            PlatformTenantLaunchRunSerializer(_serialize_launch_run(repair_run)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PlatformTenantLaunchUpgradeCompareView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def post(self, request, item_id):
+        tenant = _get_tenant_or_404(item_id)
+        onboarding = tenant.onboarding_record
+        serializer = PlatformTenantLaunchUpgradeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        baseline_run = _latest_successful_baseline_run(tenant)
+        if baseline_run is None:
+            raise exceptions.ValidationError("Apply certified safe launch setup before comparing a launch upgrade.")
+        target_ref = data.get("target_blueprint_ref") or baseline_run.blueprint_ref
+        target_preview = build_launch_preview(
+            tenant=tenant,
+            blueprint_ref=target_ref,
+            blueprint_version=data["target_blueprint_version"],
+            input_payload=baseline_run.input_payload,
+        )
+        target_preview_payload = target_preview.as_dict()
+        if target_preview.blockers:
+            raise exceptions.ValidationError({"detail": "; ".join(target_preview.blockers)})
+        plan = _launch_upgrade_plan(
+            tenant=tenant,
+            onboarding=onboarding,
+            baseline_run=baseline_run,
+            target_preview_payload=target_preview_payload,
+        )
+        requested_modules = set(data.get("requested_modules") or [])
+        known_modules = {item["module_ref"] for item in plan["items"]}
+        unknown_requested = sorted(requested_modules - known_modules)
+        if unknown_requested:
+            raise exceptions.ValidationError(
+                {"requested_modules": f"These modules are not in the upgrade comparison: {', '.join(unknown_requested)}."}
+            )
+
+        started_at = timezone.now()
+        finished_at = timezone.now()
+        run = TenantLaunchRun.objects.create(
+            onboarding=onboarding,
+            tenant=tenant,
+            blueprint_ref=target_preview.blueprint_ref,
+            blueprint_version=target_preview.blueprint_version,
+            subscription_plan=tenant.subscription_plan,
+            run_type=TenantLaunchRunType.UPGRADE,
+            status=TenantLaunchRunStatus.SUCCEEDED,
+            requested_by_identifier=_actor_identifier(request),
+            idempotency_key=data.get("idempotency_key", ""),
+            started_at=started_at,
+            finished_at=finished_at,
+            input_payload=baseline_run.input_payload,
+            plan_snapshot=target_preview_payload,
+            result_payload={
+                "mode": "compare",
+                "requested_modules": sorted(requested_modules),
+                **plan,
+            },
+            evidence={
+                "source": "platform_launch_upgrade_compare",
+                "baseline_run_id": str(baseline_run.id),
+                "change_reason": data.get("change_reason", ""),
+                "governance_summary": plan.get("governance_summary", {}),
+            },
+        )
+        items = []
+        for item in plan["items"]:
+            status_value = TenantLaunchItemStatus.PLANNED if item["action"] in {"add", "change"} else TenantLaunchItemStatus.SKIPPED
+            items.append(
+                TenantLaunchSeededItem(
+                    launch_run=run,
+                    tenant=tenant,
+                    item_key=item["module_ref"],
+                    item_kind="launch_module",
+                    module_ref=item["module_ref"],
+                    action=TenantLaunchItemAction.PLAN if status_value == TenantLaunchItemStatus.PLANNED else TenantLaunchItemAction.NOOP,
+                    status=status_value,
+                    ownership_mode=(target_preview_payload and _module_payloads_by_ref(target_preview_payload).get(item["module_ref"], {})).get("ownership_mode", ""),
+                    message=item["message"],
+                    payload=item,
+                    evidence={"source": "platform_launch_upgrade_compare", "baseline_run_id": str(baseline_run.id)},
+                )
+            )
+        if items:
+            TenantLaunchSeededItem.objects.bulk_create(items)
+        return response.Response(
+            PlatformTenantLaunchRunSerializer(_serialize_launch_run(run)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PlatformTenantLaunchUpgradeApplyView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def post(self, request, item_id):
+        tenant = _get_tenant_or_404(item_id)
+        onboarding = tenant.onboarding_record
+        serializer = PlatformTenantLaunchUpgradeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        actor_identifier = _actor_identifier(request)
+        idempotency_key = data.get("idempotency_key", "")
+        if idempotency_key:
+            existing_run = (
+                TenantLaunchRun.objects.filter(
+                    tenant=tenant,
+                    run_type=TenantLaunchRunType.UPGRADE,
+                    idempotency_key=idempotency_key,
+                )
+                .prefetch_related("seeded_items")
+                .order_by("-created_at")
+                .first()
+            )
+            if existing_run:
+                return response.Response(PlatformTenantLaunchRunSerializer(_serialize_launch_run(existing_run)).data)
+
+        baseline_run = _latest_successful_baseline_run(tenant)
+        if baseline_run is None:
+            raise exceptions.ValidationError("Apply certified safe launch setup before applying a launch upgrade.")
+        target_ref = data.get("target_blueprint_ref") or baseline_run.blueprint_ref
+        target_preview = build_launch_preview(
+            tenant=tenant,
+            blueprint_ref=target_ref,
+            blueprint_version=data["target_blueprint_version"],
+            input_payload=baseline_run.input_payload,
+        )
+        target_preview_payload = target_preview.as_dict()
+        if target_preview.blockers:
+            raise exceptions.ValidationError({"detail": "; ".join(target_preview.blockers)})
+        plan = _launch_upgrade_plan(
+            tenant=tenant,
+            onboarding=onboarding,
+            baseline_run=baseline_run,
+            target_preview_payload=target_preview_payload,
+        )
+        requested_modules = set(data.get("requested_modules") or [])
+        known_modules = {item["module_ref"] for item in plan["items"]}
+        unknown_requested = sorted(requested_modules - known_modules)
+        if unknown_requested:
+            raise exceptions.ValidationError(
+                {"requested_modules": f"These modules are not in the upgrade comparison: {', '.join(unknown_requested)}."}
+            )
+        modules_to_apply = requested_modules or set(plan["actionable_modules"])
+        disallowed_modules = sorted(modules_to_apply - set(plan["actionable_modules"]))
+        if disallowed_modules:
+            return response.Response(
+                PlatformMutationResultSerializer(
+                    {
+                        "detail": f"These modules are not safe actionable upgrade modules: {', '.join(disallowed_modules)}.",
+                        "tenant_status": tenant.status,
+                        "onboarding_status": tenant.onboarding_status,
+                    }
+                ).data,
+                status=status.HTTP_409_CONFLICT,
+            )
+        if plan["blockers"]:
+            return response.Response(
+                PlatformMutationResultSerializer(
+                    {
+                        "detail": "; ".join(plan["blockers"]),
+                        "tenant_status": tenant.status,
+                        "onboarding_status": tenant.onboarding_status,
+                    }
+                ).data,
+                status=status.HTTP_409_CONFLICT,
+            )
+        change_reason = data.get("change_reason", "").strip()
+        selected_customer_owned_changes = [
+            item["module_ref"]
+            for item in plan["items"]
+            if item["module_ref"] in modules_to_apply and item["customer_owned_change"]
+        ]
+        if selected_customer_owned_changes and not change_reason:
+            return response.Response(
+                PlatformMutationResultSerializer(
+                    {
+                        "detail": (
+                            "A change reason is required to upgrade customer-owned launch modules: "
+                            f"{', '.join(sorted(selected_customer_owned_changes))}."
+                        ),
+                        "tenant_status": tenant.status,
+                        "onboarding_status": tenant.onboarding_status,
+                    }
+                ).data,
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        target_module_payloads = _module_payloads_by_ref(target_preview_payload)
+        started_at = timezone.now()
+        upgrade_run = TenantLaunchRun.objects.create(
+            onboarding=onboarding,
+            tenant=tenant,
+            blueprint_ref=target_preview.blueprint_ref,
+            blueprint_version=target_preview.blueprint_version,
+            subscription_plan=tenant.subscription_plan,
+            run_type=TenantLaunchRunType.UPGRADE,
+            status=TenantLaunchRunStatus.RUNNING,
+            requested_by_identifier=actor_identifier,
+            idempotency_key=idempotency_key,
+            started_at=started_at,
+            input_payload=baseline_run.input_payload,
+            plan_snapshot=target_preview_payload,
+            evidence={
+                "source": "platform_launch_upgrade_apply",
+                "baseline_run_id": str(baseline_run.id),
+                "change_reason": change_reason,
+                "target_blueprint_ref": target_preview.blueprint_ref,
+                "target_blueprint_version": target_preview.blueprint_version,
+                "governance_summary": plan.get("governance_summary", {}),
+            },
+        )
+
+        results = []
+        errors = []
+        upgraded_modules = set()
+        for module_ref in sorted(modules_to_apply):
+            module_payload = target_module_payloads.get(module_ref, {"ref": module_ref})
+            try:
+                result = SEEDER_BY_MODULE[module_ref](onboarding, baseline_run.input_payload)
+                results.append(result.as_dict())
+                upgraded_modules.add(module_ref)
+                TenantLaunchSeededItem.objects.create(
+                    launch_run=upgrade_run,
+                    tenant=tenant,
+                    item_key=module_ref,
+                    item_kind="launch_module",
+                    module_ref=module_ref,
+                    action=TenantLaunchItemAction.UPDATE if result.existing else TenantLaunchItemAction.CREATE,
+                    status=TenantLaunchItemStatus.SUCCEEDED,
+                    ownership_mode=module_payload.get("ownership_mode", ""),
+                    message=result.message,
+                    payload={**module_payload, "result": result.as_dict()},
+                    evidence={
+                        "source": "platform_launch_upgrade_apply",
+                        "baseline_run_id": str(baseline_run.id),
+                        "change_reason": change_reason,
+                        "governance": _module_governance_evidence(module_payload),
+                    },
+                )
+            except Exception as exc:
+                errors.append({"module_ref": module_ref, "message": str(exc)})
+                TenantLaunchSeededItem.objects.create(
+                    launch_run=upgrade_run,
+                    tenant=tenant,
+                    item_key=module_ref,
+                    item_kind="launch_module",
+                    module_ref=module_ref,
+                    action=TenantLaunchItemAction.UPDATE,
+                    status=TenantLaunchItemStatus.FAILED,
+                    ownership_mode=module_payload.get("ownership_mode", ""),
+                    message=str(exc)[:255],
+                    payload=module_payload,
+                    evidence={
+                        "source": "platform_launch_upgrade_apply",
+                        "baseline_run_id": str(baseline_run.id),
+                        "change_reason": change_reason,
+                        "governance": _module_governance_evidence(module_payload),
+                    },
+                )
+
+        for module_ref, module_payload in target_module_payloads.items():
+            if module_ref in upgraded_modules or upgrade_run.seeded_items.filter(item_key=module_ref).exists():
+                continue
+            TenantLaunchSeededItem.objects.create(
+                launch_run=upgrade_run,
+                tenant=tenant,
+                item_key=module_ref,
+                item_kind="launch_module",
+                module_ref=module_ref,
+                action=TenantLaunchItemAction.NOOP,
+                status=TenantLaunchItemStatus.SKIPPED,
+                ownership_mode=module_payload.get("ownership_mode", ""),
+                message="Module was not selected for upgrade apply.",
+                payload=module_payload,
+                evidence={
+                    "source": "platform_launch_upgrade_apply",
+                    "baseline_run_id": str(baseline_run.id),
+                    "governance": _module_governance_evidence(module_payload),
+                },
+            )
+
+        finished_at = timezone.now()
+        upgrade_run.status = TenantLaunchRunStatus.FAILED if errors else TenantLaunchRunStatus.SUCCEEDED
+        upgrade_run.finished_at = finished_at
+        upgrade_run.result_payload = {
+            "mode": "apply",
+            "upgraded_modules": sorted(upgraded_modules),
+            "target_blueprint_ref": target_preview.blueprint_ref,
+            "target_blueprint_version": target_preview.blueprint_version,
+            "governance_summary": plan.get("governance_summary", {}),
+            "results": results,
+        }
+        upgrade_run.errors = errors
+        upgrade_run.save(update_fields=["status", "finished_at", "result_payload", "errors", "updated_at"])
+
+        if not errors:
+            onboarding.launch_blueprint_ref = target_preview.blueprint_ref
+            onboarding.launch_blueprint_version = target_preview.blueprint_version
+            onboarding.launch_preview_payload = target_preview_payload
+            onboarding.launch_subscription_plan_snapshot = tenant.subscription_plan
+            onboarding.launch_status_notes = "Launch blueprint upgrade applied."
+            onboarding.save(
+                update_fields=[
+                    "launch_blueprint_ref",
+                    "launch_blueprint_version",
+                    "launch_preview_payload",
+                    "launch_subscription_plan_snapshot",
+                    "launch_status_notes",
+                    "updated_at",
+                ]
+            )
+            add_onboarding_event(
+                onboarding,
+                event_type="launch_blueprint_upgraded",
+                summary=f"Upgraded launch blueprint baseline for {tenant.code}.",
+                actor_identifier=actor_identifier,
+                payload={
+                    "launch_run_id": str(upgrade_run.id),
+                    "baseline_run_id": str(baseline_run.id),
+                    "target_blueprint_ref": target_preview.blueprint_ref,
+                    "target_blueprint_version": target_preview.blueprint_version,
+                    "upgraded_modules": sorted(upgraded_modules),
+                    "change_reason": change_reason,
+                },
+            )
+
+        upgrade_run = TenantLaunchRun.objects.prefetch_related("seeded_items").get(id=upgrade_run.id)
+        return response.Response(
+            PlatformTenantLaunchRunSerializer(_serialize_launch_run(upgrade_run)).data,
             status=status.HTTP_201_CREATED,
         )
 

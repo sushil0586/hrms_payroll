@@ -7,6 +7,7 @@ import type {
   PlatformLaunchBlueprint,
   PlatformLaunchInputDefinition,
   PlatformLaunchModule,
+  PlatformTenantLaunchCertificationReport,
   PlatformTenantLaunchPreview,
   PlatformTenantLaunchPreviewResponse,
   PlatformTenantLaunchRun,
@@ -118,6 +119,13 @@ function launchModuleChip(module: PlatformLaunchModule) {
   return "";
 }
 
+function editableRoleSummary(module: PlatformLaunchModule) {
+  const roles = module.editable_by_roles ?? [];
+  if (!roles.length) return module.customer_editable_after_handoff ? "Customer editable" : "Platform controlled";
+  if (roles.length <= 2) return roles.join(", ");
+  return `${roles.slice(0, 2).join(", ")} +${roles.length - 2}`;
+}
+
 function previewModuleByRef(preview: PlatformTenantLaunchPreview | null, ref: string) {
   if (!preview) return null;
   return [...preview.planned_modules, ...preview.skipped_modules].find((module) => module.ref === ref) ?? null;
@@ -185,6 +193,13 @@ function countRefs(refs: string[], prefix: string) {
   return refs.filter((ref) => ref.startsWith(prefix)).length;
 }
 
+function certificationChipClass(status: string) {
+  if (status === "pass" || status === "passed") return "record-chip--success";
+  if (status === "fail" || status === "blocked") return "record-chip--danger";
+  if (status === "warning") return "record-chip--warning";
+  return "record-chip--neutral";
+}
+
 function launchEvidenceCards(run: PlatformTenantLaunchRun) {
   if (run.run_type !== "apply" || run.status !== "succeeded") return [];
   const cards: Array<{ title: string; chip: string; tone: "success" | "warning"; lines: string[] }> = [];
@@ -220,6 +235,62 @@ function launchEvidenceCards(run: PlatformTenantLaunchRun) {
   return cards;
 }
 
+function repairPayload(run: PlatformTenantLaunchRun | undefined) {
+  const payload = run?.result_payload;
+  return payload && typeof payload === "object"
+    ? payload as {
+        mode?: string;
+        can_repair?: boolean;
+        missing_ref_count?: number;
+        unchecked_ref_count?: number;
+        repairable_modules?: string[];
+        repaired_modules?: string[];
+        forced_modules?: string[];
+        repair_policy?: string;
+      }
+    : {};
+}
+
+function upgradePayload(run: PlatformTenantLaunchRun | undefined) {
+  const payload = run?.result_payload;
+  return payload && typeof payload === "object"
+    ? payload as {
+        mode?: string;
+        can_upgrade?: boolean;
+        requires_change_reason?: boolean;
+        target_blueprint_ref?: string;
+        target_blueprint_version?: string;
+        actionable_modules?: string[];
+        upgraded_modules?: string[];
+        blockers?: string[];
+        counts?: Record<string, number>;
+      }
+    : {};
+}
+
+function driftPayload(run: PlatformTenantLaunchRun | undefined) {
+  const payload = run?.result_payload;
+  return payload && typeof payload === "object"
+    ? payload as {
+        mode?: string;
+        can_repair?: boolean;
+        repairable_modules?: string[];
+        counts?: {
+          modules_total?: number;
+          modules_in_sync?: number;
+          modules_missing_baseline?: number;
+          modules_needing_manual_review?: number;
+          modules_with_field_drift?: number;
+          missing_ref_count?: number;
+          unchecked_ref_count?: number;
+          field_drift_count?: number;
+          customer_owned_present_ref_count?: number;
+        };
+        drift_policy?: string;
+      }
+    : {};
+}
+
 function ModuleList({ emptyText, modules }: { emptyText: string; modules: PlatformLaunchModule[] }) {
   if (!modules.length) {
     return (
@@ -236,9 +307,17 @@ function ModuleList({ emptyText, modules }: { emptyText: string; modules: Platfo
             <strong>{module.title || module.label}</strong>
             <span>{module.description}</span>
             <span>{launchModuleExplanation(module)}</span>
+            <div className="platform-module-handoff">
+              <span>Owner after handoff: {module.post_onboarding_owner || "Tenant Admin"}</span>
+              <span>Change access: {editableRoleSummary(module)}</span>
+              {module.post_apply_action ? <span>Next action: {module.post_apply_action}</span> : null}
+            </div>
           </div>
           <span className="record-chip">{module.status_label || titleCase(module.ui_status || "planned")}</span>
           <span className="record-chip">{module.editability_label || titleCase(module.ownership_mode)}</span>
+          <span className={`record-chip ${module.customer_editable_after_handoff ? "record-chip--success" : "record-chip--warning"}`}>
+            {module.customer_editable_after_handoff ? "Customer can change" : "Platform controls"}
+          </span>
           <span className={`record-chip ${module.plan_allowed === false ? "record-chip--warning" : "record-chip--success"}`}>
             {module.plan_allowed === false ? `${titleCase(module.minimum_plan)} plan` : `${titleCase(module.tenant_plan || module.minimum_plan)} allowed`}
           </span>
@@ -319,8 +398,10 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [changeReason, setChangeReason] = useState("");
   const [handoffNotes, setHandoffNotes] = useState(onboarding?.customer_handoff_notes ?? "");
+  const [upgradeReason, setUpgradeReason] = useState("");
   const [handoffOnboarding, setHandoffOnboarding] = useState<PlatformTenantOnboarding | null>(null);
   const [preview, setPreview] = useState<PlatformTenantLaunchPreview | null>(null);
+  const [certificationReport, setCertificationReport] = useState<PlatformTenantLaunchCertificationReport | null>(null);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -349,12 +430,14 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
     let cancelled = false;
     async function loadLaunchData() {
       setError("");
-      const [blueprintResponse, runsResponse] = await Promise.all([
+      const [blueprintResponse, runsResponse, certificationResponse] = await Promise.all([
         fetch(`/api/platform/launch-blueprints?country_code=${encodeURIComponent(tenantCountryCode)}&subscription_plan=${encodeURIComponent(tenantSubscriptionPlan)}`),
         fetch(`/api/platform/tenants/${tenantId}/launch-runs`),
+        fetch(`/api/platform/tenants/${tenantId}/launch-certification-report`),
       ]);
       const blueprintPayload = await blueprintResponse.json().catch(() => []);
       const runsPayload = await runsResponse.json().catch(() => []);
+      const certificationPayload = await certificationResponse.json().catch(() => null);
       if (cancelled) return;
       if (!blueprintResponse.ok) {
         setError(apiMessage(blueprintPayload, "Launch blueprints could not be loaded."));
@@ -373,6 +456,11 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
       } else {
         setLaunchRuns(runsPayload as PlatformTenantLaunchRun[]);
       }
+      if (certificationResponse.ok) {
+        setCertificationReport(certificationPayload as PlatformTenantLaunchCertificationReport);
+      } else {
+        setCertificationReport(null);
+      }
     }
     void loadLaunchData();
     return () => {
@@ -382,10 +470,31 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
 
   async function refreshRuns() {
     if (!selectedTenant) return;
-    const runsResponse = await fetch(`/api/platform/tenants/${selectedTenant.id}/launch-runs`);
+    const [runsResponse, certificationResponse] = await Promise.all([
+      fetch(`/api/platform/tenants/${selectedTenant.id}/launch-runs`),
+      fetch(`/api/platform/tenants/${selectedTenant.id}/launch-certification-report`),
+    ]);
     if (runsResponse.ok) {
       setLaunchRuns((await runsResponse.json()) as PlatformTenantLaunchRun[]);
     }
+    if (certificationResponse.ok) {
+      setCertificationReport((await certificationResponse.json()) as PlatformTenantLaunchCertificationReport);
+    }
+  }
+
+  async function handleRefreshCertification() {
+    if (!selectedTenant) return;
+    setBusy("certification");
+    setError("");
+    const response = await fetch(`/api/platform/tenants/${selectedTenant.id}/launch-certification-report`);
+    const payload = await response.json().catch(() => ({}));
+    setBusy("");
+    if (!response.ok) {
+      setError(apiMessage(payload, "Launch certification report could not be loaded."));
+      return;
+    }
+    setCertificationReport(payload as PlatformTenantLaunchCertificationReport);
+    setMessage("Launch certification refreshed.");
   }
 
   async function handlePreview() {
@@ -457,6 +566,115 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
     await refreshRuns();
   }
 
+  async function handleDriftCheck() {
+    if (!selectedTenant) return;
+    setBusy("drift-check");
+    setError("");
+    setMessage("");
+    const response = await fetch(`/api/platform/tenants/${selectedTenant.id}/launch-drift-check`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setBusy("");
+    if (!response.ok) {
+      setError(apiMessage(payload, "Launch drift check failed."));
+      return;
+    }
+    setMessage("Launch drift check completed.");
+    await refreshRuns();
+  }
+
+  async function handleRepairPreview() {
+    if (!selectedTenant) return;
+    setBusy("repair-preview");
+    setError("");
+    setMessage("");
+    const response = await fetch(`/api/platform/tenants/${selectedTenant.id}/launch-repair-preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setBusy("");
+    if (!response.ok) {
+      setError(apiMessage(payload, "Launch repair preview failed."));
+      return;
+    }
+    setMessage("Launch repair preview completed.");
+    await refreshRuns();
+  }
+
+  async function handleRepairApply() {
+    if (!selectedTenant) return;
+    setBusy("repair-apply");
+    setError("");
+    setMessage("");
+    const response = await fetch(`/api/platform/tenants/${selectedTenant.id}/launch-repair-apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setBusy("");
+    if (!response.ok) {
+      setError(apiMessage(payload, "Launch repair apply failed."));
+      return;
+    }
+    setMessage("Launch baseline repair applied.");
+    await refreshRuns();
+  }
+
+  async function handleUpgradeCompare(targetVersion: string) {
+    if (!selectedTenant || !effectiveOnboarding.launch_blueprint_ref) return;
+    setBusy("upgrade-compare");
+    setError("");
+    setMessage("");
+    const response = await fetch(`/api/platform/tenants/${selectedTenant.id}/launch-upgrade-compare`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target_blueprint_ref: effectiveOnboarding.launch_blueprint_ref,
+        target_blueprint_version: targetVersion,
+        change_reason: upgradeReason.trim(),
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setBusy("");
+    if (!response.ok) {
+      setError(apiMessage(payload, "Launch upgrade compare failed."));
+      return;
+    }
+    setMessage("Launch upgrade comparison completed.");
+    await refreshRuns();
+  }
+
+  async function handleUpgradeApply(targetVersion: string) {
+    if (!selectedTenant || !effectiveOnboarding.launch_blueprint_ref) return;
+    setBusy("upgrade-apply");
+    setError("");
+    setMessage("");
+    const response = await fetch(`/api/platform/tenants/${selectedTenant.id}/launch-upgrade-apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target_blueprint_ref: effectiveOnboarding.launch_blueprint_ref,
+        target_blueprint_version: targetVersion,
+        change_reason: upgradeReason.trim(),
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setBusy("");
+    if (!response.ok) {
+      setError(apiMessage(payload, "Launch upgrade apply failed."));
+      return;
+    }
+    setMessage("Launch blueprint upgrade applied.");
+    setUpgradeReason("");
+    await refreshRuns();
+  }
+
   if (!selectedTenant || !onboarding) {
     return (
       <section className="section">
@@ -478,9 +696,41 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
   const skippedModules = currentPreview?.skipped_modules ?? [];
   const payrollDefaultsPosture = postureForModule(previewModuleByRef(currentPreview, "payroll_defaults"), "Payroll defaults");
   const providerPosture = postureForModule(previewModuleByRef(currentPreview, "provider_placeholders"), "Provider placeholders");
+  const governanceSummary = currentPreview?.governance_summary ?? {};
+  const ownerCounts = Object.entries(governanceSummary.owner_counts ?? {});
   const canApplySafeModules = Boolean(currentPreview?.can_apply && currentPreview.safe_apply_modules.length);
   const hasSafeApplyEvidence = Boolean(effectiveOnboarding.launch_applied_at || latestApplyRun);
   const handoffCompleted = Boolean(effectiveOnboarding.handoff_completed_at);
+  const latestDriftCheck = launchRuns.find((run) => run.run_type === "verify" && driftPayload(run).mode === "drift_check");
+  const latestRepairPreview = launchRuns.find((run) => run.run_type === "repair" && repairPayload(run).mode === "preview");
+  const latestRepairApply = launchRuns.find((run) => run.run_type === "repair" && repairPayload(run).mode === "apply");
+  const latestUpgradeCompare = launchRuns.find((run) => run.run_type === "upgrade" && upgradePayload(run).mode === "compare");
+  const latestUpgradeApply = launchRuns.find((run) => run.run_type === "upgrade" && upgradePayload(run).mode === "apply");
+  const latestRepairPreviewPayload = repairPayload(latestRepairPreview);
+  const latestRepairApplyPayload = repairPayload(latestRepairApply);
+  const latestDriftPayload = driftPayload(latestDriftCheck);
+  const latestUpgradeComparePayload = upgradePayload(latestUpgradeCompare);
+  const latestUpgradeApplyPayload = upgradePayload(latestUpgradeApply);
+  const certificationStatus = certificationReport?.status ?? "fail";
+  const certificationIssues = [
+    ...(certificationReport?.blockers ?? []),
+    ...(certificationReport?.warnings ?? []),
+    ...(certificationReport?.info ?? []),
+  ];
+  const currentBlueprintRef = effectiveOnboarding.launch_blueprint_ref || selectedBlueprint?.ref || "";
+  const currentBlueprintVersion = effectiveOnboarding.launch_blueprint_version || selectedBlueprint?.version || "";
+  const upgradeTargets = blueprints
+    .filter((blueprint) => blueprint.ref === currentBlueprintRef && blueprint.version !== currentBlueprintVersion)
+    .sort((left, right) => left.version.localeCompare(right.version));
+  const latestUpgradeTarget = upgradeTargets.at(-1) ?? null;
+  const upgradeReasonRequired = Boolean(latestUpgradeComparePayload.requires_change_reason);
+  const canApplyRepair = Boolean(hasSafeApplyEvidence && latestRepairPreviewPayload.can_repair);
+  const canApplyUpgrade = Boolean(
+    hasSafeApplyEvidence
+      && latestUpgradeTarget
+      && latestUpgradeComparePayload.can_upgrade
+      && (!upgradeReasonRequired || upgradeReason.trim()),
+  );
   const selectedBlueprintChangedAfterApply = Boolean(
     hasSafeApplyEvidence
       && effectiveOnboarding.launch_blueprint_ref
@@ -573,6 +823,79 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
         </article>
       </section>
 
+      <section className="section">
+        <article className="record-card">
+          <div className="record-card__title-wrap">
+            <div className="record-card__title">
+              <h2>QA certification</h2>
+              <span className={`record-chip ${certificationChipClass(certificationStatus)}`}>
+                {certificationReport ? certificationStatus.toUpperCase() : "NOT LOADED"}
+              </span>
+            </div>
+            <p className="section-copy">Production-style launch signoff for the selected template, safe apply, drift, handoff, and subscription scope.</p>
+          </div>
+          <div className="detail-grid">
+            <DetailRow label="Blockers" value={certificationReport?.blocker_count ?? 0} />
+            <DetailRow label="Warnings" value={certificationReport?.warning_count ?? 0} />
+            <DetailRow label="Info" value={certificationReport?.info_count ?? 0} />
+            <DetailRow label="Baseline evidence" value={certificationReport?.latest_baseline_run_id ? "Available" : "Missing"} />
+            <DetailRow label="Drift evidence" value={certificationReport?.latest_drift_run_id ? "Available" : "Missing"} />
+            <DetailRow label="Generated" value={certificationReport ? formatDateTime(certificationReport.generated_at) : "Not loaded"} />
+          </div>
+          {certificationIssues.length ? (
+            <div className="platform-certification-summary" aria-label="Launch certification issues">
+              {certificationReport?.blockers.map((item) => (
+                <div className="notice notice--compact platform-feedback--error" key={`blocker-${item}`}>
+                  <strong>Blocker</strong>
+                  <span>{item}</span>
+                </div>
+              ))}
+              {certificationReport?.warnings.map((item) => (
+                <div className="notice notice--compact platform-certification-warning" key={`warning-${item}`}>
+                  <strong>Warning</strong>
+                  <span>{item}</span>
+                </div>
+              ))}
+              {certificationReport?.info.map((item) => (
+                <div className="notice notice--compact" key={`info-${item}`}>
+                  <strong>Info</strong>
+                  <span className="muted">{item}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="notice notice--compact notice--success">
+              <strong>No launch certification issues detected.</strong>
+              <span className="muted">All required checks are passing for the current subscription scope.</span>
+            </div>
+          )}
+          <div className="tenant-support-access-list platform-certification-checks">
+            {(certificationReport?.checks ?? []).map((check) => (
+              <div className="tenant-support-access-row tenant-support-access-row--stacked" key={check.ref}>
+                <div>
+                  <strong>{check.label}</strong>
+                  <span>{check.message}</span>
+                  {check.next_action ? <span>Next: {check.next_action}</span> : null}
+                </div>
+                <span className={`record-chip ${certificationChipClass(check.status)}`}>{titleCase(check.status)}</span>
+              </div>
+            ))}
+            {!certificationReport ? (
+              <div className="notice notice--compact">
+                <strong>Certification report is not loaded.</strong>
+                <span className="muted">Refresh certification to pull the latest backend evidence.</span>
+              </div>
+            ) : null}
+          </div>
+          <div className="form-actions-bar">
+            <span className="muted">Refresh after preview, apply, drift, repair, upgrade, or handoff evidence changes.</span>
+            <button className="button button--secondary" disabled={Boolean(busy)} onClick={handleRefreshCertification} type="button">
+              {busy === "certification" ? "Refreshing..." : "Refresh certification"}
+            </button>
+          </div>
+        </article>
+      </section>
+
       {selectedBlueprint ? (
         <section className="section">
           <article className="record-card">
@@ -652,6 +975,8 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
               <DetailRow label="Safe apply modules" value={currentPreview.safe_apply_modules.length} />
               <DetailRow label="Certification gated" value={currentPreview.uncertified_modules.length} />
               <DetailRow label="Plan locked" value={currentPreview.plan_gated_modules.length} />
+              <DetailRow label="Customer-owned modules" value={governanceSummary.customer_editable_modules?.length ?? 0} />
+              <DetailRow label="Platform-controlled modules" value={governanceSummary.platform_controlled_modules?.length ?? 0} />
             </div>
             <div className="platform-launch-posture-grid" aria-label="Payroll and provider launch posture">
               <LaunchPostureCard posture={payrollDefaultsPosture} />
@@ -664,6 +989,26 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
                   summary: "Go-live still requires employee assignments, statutory registrations, real provider credentials, provider certification, payroll rehearsal, and finance handoff evidence.",
                 }}
               />
+            </div>
+            <div className="platform-launch-governance-grid" aria-label="Launch governance summary">
+              <div className="platform-launch-governance-card">
+                <strong>After handoff owners</strong>
+                {ownerCounts.length ? (
+                  ownerCounts.map(([owner, count]) => (
+                    <span key={owner}>{owner}: {count}</span>
+                  ))
+                ) : (
+                  <span>Not available</span>
+                )}
+              </div>
+              <div className="platform-launch-governance-card">
+                <strong>Repair policy</strong>
+                <span>{governanceSummary.repair_policy || "Customer-owned modules are repaired only with explicit review."}</span>
+              </div>
+              <div className="platform-launch-governance-card">
+                <strong>Upgrade policy</strong>
+                <span>{governanceSummary.upgrade_policy || "Template upgrades require preview and evidence before apply."}</span>
+              </div>
             </div>
             {currentPreview.missing_inputs.length ? (
               <div className="notice notice--compact platform-validation-strip">
@@ -746,6 +1091,139 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
               type="button"
             >
               {busy === "handoff" ? "Completing..." : handoffCompleted ? "Handoff complete" : "Complete customer handoff"}
+            </button>
+          </div>
+        </article>
+      </section>
+
+      <section className="section">
+        <article className="record-card">
+          <div className="record-card__title-wrap">
+            <div className="record-card__title">
+              <h2>Template upgrade</h2>
+              <span className={`record-chip ${latestUpgradeTarget ? "record-chip--warning" : "record-chip--neutral"}`}>
+                {latestUpgradeTarget ? `${currentBlueprintVersion || "current"} to ${latestUpgradeTarget.version}` : "Latest"}
+              </span>
+            </div>
+            <p className="section-copy">Compare a newer blueprint version before applying any safe template upgrade.</p>
+          </div>
+          <div className="detail-grid">
+            <DetailRow label="Current blueprint" value={currentBlueprintRef ? `${currentBlueprintRef} ${currentBlueprintVersion}` : "Not applied"} />
+            <DetailRow label="Target version" value={latestUpgradeTarget ? latestUpgradeTarget.version : "No newer version"} />
+            <DetailRow label="Can upgrade" value={latestUpgradeComparePayload.can_upgrade ? "Yes" : "No"} />
+            <DetailRow label="Actionable modules" value={latestUpgradeComparePayload.actionable_modules?.join(", ") || "None"} />
+            <DetailRow label="Latest upgrade" value={latestUpgradeApply ? formatDateTime(latestUpgradeApply.created_at) : "Not applied"} />
+            <DetailRow label="Upgraded modules" value={latestUpgradeApplyPayload.upgraded_modules?.join(", ") || "None"} />
+          </div>
+          {latestUpgradeComparePayload.blockers?.length ? (
+            <div className="notice notice--compact platform-validation-strip">
+              <strong>Upgrade blocked</strong>
+              <span className="muted">{latestUpgradeComparePayload.blockers.join(" ")}</span>
+            </div>
+          ) : null}
+          {upgradeReasonRequired ? (
+            <label className="form-field platform-form-field--tall">
+              <span className="muted">Upgrade change reason</span>
+              <textarea
+                className="input-control"
+                name="upgrade_reason"
+                onChange={(event) => setUpgradeReason(event.target.value)}
+                placeholder="Explain customer-owned module review before applying the template upgrade."
+                value={upgradeReason}
+              />
+            </label>
+          ) : null}
+          <div className="form-actions-bar">
+            <span className="muted">Customer-owned module changes require a reviewed reason before apply.</span>
+            <button
+              className="button button--secondary"
+              disabled={Boolean(busy) || !hasSafeApplyEvidence || !latestUpgradeTarget}
+              onClick={() => latestUpgradeTarget ? handleUpgradeCompare(latestUpgradeTarget.version) : undefined}
+              type="button"
+            >
+              {busy === "upgrade-compare" ? "Comparing..." : "Compare upgrade"}
+            </button>
+            <button
+              className="button button--primary"
+              disabled={Boolean(busy) || !canApplyUpgrade || !latestUpgradeTarget}
+              onClick={() => latestUpgradeTarget ? handleUpgradeApply(latestUpgradeTarget.version) : undefined}
+              type="button"
+            >
+              {busy === "upgrade-apply" ? "Applying..." : "Apply upgrade"}
+            </button>
+          </div>
+        </article>
+      </section>
+
+      <section className="section">
+        <article className="record-card">
+          <div className="record-card__title-wrap">
+            <div className="record-card__title">
+              <h2>Seed drift</h2>
+              <span className={`record-chip ${latestDriftPayload.can_repair ? "record-chip--warning" : "record-chip--neutral"}`}>
+                {latestDriftPayload.can_repair ? "Repair needed" : "Baseline check"}
+              </span>
+            </div>
+            <p className="section-copy">Check the current tenant setup against launch baseline evidence before repair or upgrade.</p>
+          </div>
+          <div className="detail-grid">
+            <DetailRow label="Latest check" value={latestDriftCheck ? formatDateTime(latestDriftCheck.created_at) : "Not run"} />
+            <DetailRow label="Modules in sync" value={latestDriftPayload.counts?.modules_in_sync ?? 0} />
+            <DetailRow label="Modules missing baseline" value={latestDriftPayload.counts?.modules_missing_baseline ?? 0} />
+            <DetailRow label="Modules with field drift" value={latestDriftPayload.counts?.modules_with_field_drift ?? 0} />
+            <DetailRow label="Manual review modules" value={latestDriftPayload.counts?.modules_needing_manual_review ?? 0} />
+            <DetailRow label="Missing refs" value={latestDriftPayload.counts?.missing_ref_count ?? 0} />
+            <DetailRow label="Field differences" value={latestDriftPayload.counts?.field_drift_count ?? 0} />
+            <DetailRow label="Customer-owned present refs" value={latestDriftPayload.counts?.customer_owned_present_ref_count ?? 0} />
+            <DetailRow label="Repairable modules" value={latestDriftPayload.repairable_modules?.join(", ") || "None"} />
+          </div>
+          <div className="notice notice--compact">
+            <strong>Drift rule</strong>
+            <span className="muted">
+              {latestDriftPayload.drift_policy || "Run a drift check after safe apply to compare baseline evidence with current tenant records."}
+            </span>
+          </div>
+          <div className="form-actions-bar">
+            <span className="muted">Read-only check. Missing refs can move to baseline repair.</span>
+            <button className="button button--secondary" disabled={Boolean(busy) || !hasSafeApplyEvidence} onClick={handleDriftCheck} type="button">
+              {busy === "drift-check" ? "Checking..." : "Check drift"}
+            </button>
+          </div>
+        </article>
+      </section>
+
+      <section className="section">
+        <article className="record-card">
+          <div className="record-card__title-wrap">
+            <div className="record-card__title">
+              <h2>Baseline repair</h2>
+              <span className={`record-chip ${canApplyRepair ? "record-chip--warning" : "record-chip--neutral"}`}>
+                {canApplyRepair ? "Repair available" : "No repair queued"}
+              </span>
+            </div>
+            <p className="section-copy">Repair checks the last safe apply evidence and recreates missing baseline records without silently overwriting customer-owned changes.</p>
+          </div>
+          <div className="detail-grid">
+            <DetailRow label="Latest preview" value={latestRepairPreview ? formatDateTime(latestRepairPreview.created_at) : "Not run"} />
+            <DetailRow label="Missing baseline refs" value={latestRepairPreviewPayload.missing_ref_count ?? 0} />
+            <DetailRow label="Unchecked refs" value={latestRepairPreviewPayload.unchecked_ref_count ?? 0} />
+            <DetailRow label="Repairable modules" value={latestRepairPreviewPayload.repairable_modules?.join(", ") || "None"} />
+            <DetailRow label="Latest repair" value={latestRepairApply ? formatDateTime(latestRepairApply.created_at) : "Not applied"} />
+            <DetailRow label="Repaired modules" value={latestRepairApplyPayload.repaired_modules?.join(", ") || "None"} />
+          </div>
+          <div className="notice notice--compact">
+            <strong>Repair rule</strong>
+            <span className="muted">
+              {latestRepairPreviewPayload.repair_policy || "Run preview after safe apply to check missing launch baseline records."}
+            </span>
+          </div>
+          <div className="form-actions-bar">
+            <span className="muted">Preview first. Apply is enabled only when missing baseline records are detected.</span>
+            <button className="button button--secondary" disabled={Boolean(busy) || !hasSafeApplyEvidence} onClick={handleRepairPreview} type="button">
+              {busy === "repair-preview" ? "Checking..." : "Preview repair"}
+            </button>
+            <button className="button button--primary" disabled={Boolean(busy) || !canApplyRepair} onClick={handleRepairApply} type="button">
+              {busy === "repair-apply" ? "Repairing..." : "Apply repair"}
             </button>
           </div>
         </article>

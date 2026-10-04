@@ -130,6 +130,41 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         payroll_module = next(item for item in standard["modules"] if item["ref"] == "payroll_defaults")
         self.assertFalse(payroll_module["plan_allowed"])
         self.assertEqual(payroll_module["gating_reason"], "Requires Growth plan.")
+        roles_module = next(item for item in standard["modules"] if item["ref"] == "roles_users")
+        self.assertEqual(roles_module["post_onboarding_owner"], "Tenant Admin")
+        self.assertIn("Tenant Admin", roles_module["editable_by_roles"])
+        self.assertTrue(roles_module["customer_editable_after_handoff"])
+        provider_module = next(item for item in standard["modules"] if item["ref"] == "provider_placeholders")
+        self.assertEqual(provider_module["post_onboarding_owner"], "Platform Admin")
+        self.assertFalse(provider_module["customer_editable_after_handoff"])
+
+    def test_launch_preview_reports_governance_summary_for_handoff(self):
+        self.client.force_authenticate(self.platform_admin)
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        governance = body["preview"]["governance_summary"]
+        self.assertEqual(
+            set(governance["customer_editable_modules"]),
+            {"documents", "leave_attendance", "org_masters", "roles_users", "workflows"},
+        )
+        self.assertEqual(
+            set(governance["platform_controlled_modules"]),
+            {"launch_checklist", "notifications", "tenant_identity"},
+        )
+        self.assertEqual(set(governance["plan_gated_modules"]), {"payroll_defaults", "provider_placeholders"})
+        self.assertEqual(governance["owner_counts"]["HR Admin"], 3)
+        self.assertTrue(governance["requires_change_reason_after_apply"])
+        self.assertIn("customer-owned modules", governance["repair_policy"])
+        self.assertEqual(body["launch_run"]["evidence"]["governance_summary"], governance)
+        preview_item = next(item for item in body["launch_run"]["seeded_items"] if item["item_key"] == "org_masters")
+        self.assertEqual(preview_item["evidence"]["governance_summary"], governance)
 
     def test_launch_preview_records_audit_run_and_subscription_skips(self):
         self.client.force_authenticate(self.platform_admin)
@@ -157,6 +192,11 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         skipped_payroll = next(item for item in body["preview"]["skipped_modules"] if item["ref"] == "payroll_defaults")
         self.assertFalse(skipped_payroll["plan_allowed"])
         self.assertFalse(skipped_payroll["apply_allowed"])
+        self.assertEqual(skipped_payroll["post_onboarding_owner"], "Payroll Admin")
+        self.assertIn("Payroll Admin", skipped_payroll["editable_by_roles"])
+        leave_module = next(item for item in body["preview"]["planned_modules"] if item["ref"] == "leave_attendance")
+        self.assertEqual(leave_module["post_onboarding_owner"], "HR Admin")
+        self.assertTrue(leave_module["post_apply_action"])
         self.assertEqual(body["launch_run"]["status"], TenantLaunchRunStatus.SUCCEEDED)
         item_statuses = {item["item_key"]: item["status"] for item in body["launch_run"]["seeded_items"]}
         self.assertEqual(item_statuses["tenant_identity"], TenantLaunchItemStatus.PLANNED)
@@ -575,6 +615,25 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         self.assertEqual(item_statuses["roles_users"], TenantLaunchItemStatus.SUCCEEDED)
         self.assertEqual(item_statuses["org_masters"], TenantLaunchItemStatus.SUCCEEDED)
         self.assertEqual(item_statuses["workflows"], TenantLaunchItemStatus.SUCCEEDED)
+        seeded_items = {item["item_key"]: item for item in body["seeded_items"]}
+        org_payload = seeded_items["org_masters"]["payload"]
+        self.assertEqual(org_payload["post_onboarding_owner"], "HR Admin")
+        self.assertEqual(org_payload["editable_by_roles"], ["Tenant Admin", "HR Admin"])
+        self.assertTrue(org_payload["customer_editable_after_handoff"])
+        self.assertIn("employee import", org_payload["post_apply_action"])
+        self.assertEqual(
+            seeded_items["org_masters"]["evidence"]["governance"],
+            {
+                "post_onboarding_owner": "HR Admin",
+                "editable_by_roles": ["Tenant Admin", "HR Admin"],
+                "customer_editable_after_handoff": True,
+                "post_apply_action": "HR Admin adjusts departments, grades, locations, designations, and cost centers before employee import.",
+            },
+        )
+        self.assertEqual(
+            set(body["result_payload"]["governance_summary"]["platform_controlled_modules"]),
+            {"launch_checklist", "notifications", "tenant_identity"},
+        )
 
         self.assertEqual(Role.objects.filter(tenant=self.tenant).count(), 4)
         self.assertTrue(Role.objects.filter(tenant=self.tenant, code="tenant-admin").exists())
@@ -661,6 +720,478 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         self.assertEqual(body["status"], TenantLaunchRunStatus.SUCCEEDED)
         self.assertEqual(body["result_payload"]["applied_modules"], ["org_masters"])
         self.assertTrue(Department.objects.filter(tenant=self.tenant, code="operations").exists())
+
+    def test_launch_repair_recreates_missing_seeded_baseline_records(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-repair"},
+            format="json",
+        )
+        DocumentCategory.objects.filter(tenant=self.tenant, code="identity-pan").delete()
+        self.assertFalse(DocumentCategory.objects.filter(tenant=self.tenant, code="identity-pan").exists())
+
+        preview_response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-repair-preview/",
+            {"idempotency_key": "repair-preview-missing-docs"},
+            format="json",
+        )
+
+        self.assertEqual(preview_response.status_code, 201)
+        preview_body = preview_response.json()
+        self.assertEqual(preview_body["run_type"], TenantLaunchRunType.REPAIR)
+        self.assertEqual(preview_body["result_payload"]["mode"], "preview")
+        self.assertTrue(preview_body["result_payload"]["can_repair"])
+        self.assertIn("documents", preview_body["result_payload"]["repairable_modules"])
+        documents_item = next(item for item in preview_body["seeded_items"] if item["item_key"] == "documents")
+        self.assertIn("document_category:identity-pan", documents_item["payload"]["missing_refs"])
+
+        apply_response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-repair-apply/",
+            {"idempotency_key": "repair-apply-missing-docs"},
+            format="json",
+        )
+
+        self.assertEqual(apply_response.status_code, 201)
+        apply_body = apply_response.json()
+        self.assertEqual(apply_body["status"], TenantLaunchRunStatus.SUCCEEDED)
+        self.assertEqual(apply_body["result_payload"]["mode"], "apply")
+        self.assertIn("documents", apply_body["result_payload"]["repaired_modules"])
+        self.assertTrue(DocumentCategory.objects.filter(tenant=self.tenant, code="identity-pan").exists())
+        repaired_item = next(item for item in apply_body["seeded_items"] if item["item_key"] == "documents")
+        self.assertEqual(repaired_item["evidence"]["source"], "platform_launch_repair_apply")
+        self.assertEqual(repaired_item["evidence"]["governance"]["post_onboarding_owner"], "HR Admin")
+
+    def test_launch_drift_check_reports_clean_baseline(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-clean-drift"},
+            format="json",
+        )
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-drift-check/",
+            {"idempotency_key": "drift-clean-baseline"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["run_type"], TenantLaunchRunType.VERIFY)
+        self.assertEqual(body["result_payload"]["mode"], "drift_check")
+        self.assertEqual(body["result_payload"]["counts"]["missing_ref_count"], 0)
+        self.assertEqual(body["result_payload"]["counts"]["modules_missing_baseline"], 0)
+        self.assertGreater(body["result_payload"]["counts"]["customer_owned_present_ref_count"], 0)
+        self.assertFalse(body["result_payload"]["can_repair"])
+        self.assertEqual(body["evidence"]["source"], "platform_launch_drift_check")
+
+    def test_launch_drift_check_reports_missing_seeded_refs(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-missing-drift"},
+            format="json",
+        )
+        DocumentCategory.objects.filter(tenant=self.tenant, code="identity-pan").delete()
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-drift-check/",
+            {"idempotency_key": "drift-missing-doc"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertTrue(body["result_payload"]["can_repair"])
+        self.assertIn("documents", body["result_payload"]["repairable_modules"])
+        self.assertGreater(body["result_payload"]["counts"]["missing_ref_count"], 0)
+        documents_item = next(item for item in body["seeded_items"] if item["item_key"] == "documents")
+        self.assertEqual(documents_item["status"], TenantLaunchItemStatus.BLOCKED)
+        self.assertEqual(documents_item["payload"]["drift_status"], "missing_baseline")
+        self.assertIn("document_category:identity-pan", documents_item["payload"]["missing_refs"])
+
+    def test_launch_drift_check_reports_document_field_drift(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-document-field-drift"},
+            format="json",
+        )
+        category = DocumentCategory.objects.get(tenant=self.tenant, code="identity-pan")
+        category.name = "PAN Document"
+        category.save(update_fields=["name", "updated_at"])
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-drift-check/",
+            {"idempotency_key": "drift-document-field"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["result_payload"]["counts"]["missing_ref_count"], 0)
+        self.assertEqual(body["result_payload"]["counts"]["modules_with_field_drift"], 1)
+        self.assertEqual(body["result_payload"]["counts"]["field_drift_count"], 1)
+        documents_item = next(item for item in body["seeded_items"] if item["item_key"] == "documents")
+        self.assertEqual(documents_item["payload"]["drift_status"], "field_drift")
+        self.assertEqual(documents_item["payload"]["drift_action"], "manual_review")
+        self.assertEqual(
+            documents_item["payload"]["field_drifts"][0],
+            {
+                "record_ref": "document_category:identity-pan",
+                "field": "name",
+                "expected": "PAN Card",
+                "actual": "PAN Document",
+            },
+        )
+
+    def test_launch_drift_check_reports_org_master_field_drift(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-org-field-drift"},
+            format="json",
+        )
+        legal_entity = LegalEntity.objects.get(tenant=self.tenant, code="default-legal-entity")
+        legal_entity.name = "Acme India Updated"
+        legal_entity.save(update_fields=["name", "updated_at"])
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-drift-check/",
+            {"idempotency_key": "drift-org-field"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["result_payload"]["counts"]["modules_with_field_drift"], 1)
+        org_item = next(item for item in body["seeded_items"] if item["item_key"] == "org_masters")
+        self.assertEqual(org_item["payload"]["drift_status"], "field_drift")
+        self.assertIn(
+            {
+                "record_ref": "legal_entity:default-legal-entity",
+                "field": "name",
+                "expected": "Acme India Pvt Ltd",
+                "actual": "Acme India Updated",
+            },
+            org_item["payload"]["field_drifts"],
+        )
+
+    def test_launch_drift_check_reports_leave_attendance_field_drift(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-leave-attendance-field-drift"},
+            format="json",
+        )
+        policy = LeavePolicy.objects.get(tenant=self.tenant, code="casual-leave-policy")
+        policy.annual_entitlement = 10
+        policy.save(update_fields=["annual_entitlement", "updated_at"])
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-drift-check/",
+            {"idempotency_key": "drift-leave-attendance-field"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["result_payload"]["counts"]["modules_with_field_drift"], 1)
+        item = next(item for item in body["seeded_items"] if item["item_key"] == "leave_attendance")
+        self.assertEqual(item["payload"]["drift_status"], "field_drift")
+        self.assertIn(
+            {
+                "record_ref": "leave_policy:casual-leave-policy",
+                "field": "annual_entitlement",
+                "expected": "12.00",
+                "actual": "10.00",
+            },
+            item["payload"]["field_drifts"],
+        )
+
+    def test_launch_drift_check_reports_workflow_field_drift(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-workflow-field-drift"},
+            format="json",
+        )
+        step = WorkflowStep.objects.get(template__tenant=self.tenant, template__code="leave-approval-standard", step_order=1)
+        step.escalate_after_hours = 12
+        step.save(update_fields=["escalate_after_hours", "updated_at"])
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-drift-check/",
+            {"idempotency_key": "drift-workflow-field"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["result_payload"]["counts"]["modules_with_field_drift"], 1)
+        item = next(item for item in body["seeded_items"] if item["item_key"] == "workflows")
+        self.assertEqual(item["payload"]["drift_status"], "field_drift")
+        self.assertIn(
+            {
+                "record_ref": "workflow_step:leave-approval-standard:1",
+                "field": "escalate_after_hours",
+                "expected": 24,
+                "actual": 12,
+            },
+            item["payload"]["field_drifts"],
+        )
+
+    def test_launch_certification_report_fails_before_required_evidence(self):
+        self.client.force_authenticate(self.platform_admin)
+
+        response = self.client.get(f"/api/v1/platform/tenants/{self.tenant.id}/launch-certification-report/")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "fail")
+        self.assertGreater(body["blocker_count"], 0)
+        self.assertIn("No launch blueprint has been selected.", body["blockers"])
+        checks = {item["ref"]: item for item in body["checks"]}
+        self.assertEqual(checks["blueprint_selected"]["status"], "blocked")
+        self.assertEqual(checks["safe_apply"]["status"], "blocked")
+
+    def test_launch_certification_report_passes_after_clean_handoff(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-certification"},
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-drift-check/",
+            {"idempotency_key": "drift-before-certification"},
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-handoff/",
+            {"handoff_notes": "QA reviewed baseline, drift, and customer-owned setup responsibilities."},
+            format="json",
+        )
+
+        response = self.client.get(f"/api/v1/platform/tenants/{self.tenant.id}/launch-certification-report/")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "pass")
+        self.assertEqual(body["blocker_count"], 0)
+        self.assertGreaterEqual(body["info_count"], 1)
+        self.assertIn("payroll_defaults", body["info"][0])
+        checks = {item["ref"]: item for item in body["checks"]}
+        self.assertEqual(checks["preview_apply_ready"]["status"], "passed")
+        self.assertEqual(checks["safe_apply"]["status"], "passed")
+        self.assertEqual(checks["drift_clear"]["status"], "passed")
+        self.assertEqual(checks["customer_handoff"]["status"], "passed")
+        self.assertEqual(checks["subscription_scope"]["status"], "info")
+
+    def test_launch_certification_report_blocks_on_field_drift(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-certification-drift"},
+            format="json",
+        )
+        category = DocumentCategory.objects.get(tenant=self.tenant, code="identity-pan")
+        category.name = "PAN Document"
+        category.save(update_fields=["name", "updated_at"])
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-drift-check/",
+            {"idempotency_key": "drift-before-certification-drift"},
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-handoff/",
+            {"handoff_notes": "Attempted handoff with field drift."},
+            format="json",
+        )
+
+        response = self.client.get(f"/api/v1/platform/tenants/{self.tenant.id}/launch-certification-report/")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "fail")
+        self.assertIn("field differences", " ".join(body["blockers"]))
+        checks = {item["ref"]: item for item in body["checks"]}
+        self.assertEqual(checks["drift_clear"]["status"], "blocked")
+
+    def test_launch_repair_forced_module_requires_change_reason(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-forced-repair"},
+            format="json",
+        )
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-repair-apply/",
+            {"requested_modules": ["org_masters"], "idempotency_key": "repair-forced-no-reason"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("change reason is required", response.json()["detail"])
+
+        approved_response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-repair-apply/",
+            {
+                "requested_modules": ["org_masters"],
+                "change_reason": "Platform admin verified customer-owned org masters should be rechecked.",
+                "idempotency_key": "repair-forced-with-reason",
+            },
+            format="json",
+        )
+        self.assertEqual(approved_response.status_code, 201)
+        approved_body = approved_response.json()
+        self.assertEqual(approved_body["result_payload"]["forced_modules"], ["org_masters"])
+        self.assertEqual(
+            approved_body["evidence"]["change_reason"],
+            "Platform admin verified customer-owned org masters should be rechecked.",
+        )
+
+    def test_launch_upgrade_compare_and_apply_requires_customer_owned_change_reason(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-upgrade"},
+            format="json",
+        )
+
+        compare_response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-upgrade-compare/",
+            {"target_blueprint_version": "v2", "idempotency_key": "upgrade-compare-v2"},
+            format="json",
+        )
+
+        self.assertEqual(compare_response.status_code, 201)
+        compare_body = compare_response.json()
+        self.assertEqual(compare_body["run_type"], TenantLaunchRunType.UPGRADE)
+        self.assertEqual(compare_body["result_payload"]["mode"], "compare")
+        self.assertTrue(compare_body["result_payload"]["can_upgrade"])
+        self.assertTrue(compare_body["result_payload"]["requires_change_reason"])
+        self.assertEqual(compare_body["result_payload"]["target_blueprint_version"], "v2")
+        changed_modules = {
+            item["module_ref"]
+            for item in compare_body["result_payload"]["items"]
+            if item["action"] == "change"
+        }
+        self.assertEqual(changed_modules, {"documents", "workflows"})
+
+        blocked_apply_response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-upgrade-apply/",
+            {"target_blueprint_version": "v2", "idempotency_key": "upgrade-apply-v2-no-reason"},
+            format="json",
+        )
+        self.assertEqual(blocked_apply_response.status_code, 409)
+        self.assertIn("change reason is required", blocked_apply_response.json()["detail"])
+
+        apply_response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-upgrade-apply/",
+            {
+                "target_blueprint_version": "v2",
+                "change_reason": "Customer-owned document and workflow handoff guidance reviewed for v2.",
+                "idempotency_key": "upgrade-apply-v2",
+            },
+            format="json",
+        )
+
+        self.assertEqual(apply_response.status_code, 201)
+        apply_body = apply_response.json()
+        self.assertEqual(apply_body["status"], TenantLaunchRunStatus.SUCCEEDED)
+        self.assertEqual(apply_body["run_type"], TenantLaunchRunType.UPGRADE)
+        self.assertEqual(apply_body["result_payload"]["target_blueprint_version"], "v2")
+        self.assertEqual(set(apply_body["result_payload"]["upgraded_modules"]), {"documents", "workflows"})
+        self.tenant.onboarding_record.refresh_from_db()
+        self.assertEqual(self.tenant.onboarding_record.launch_blueprint_version, "v2")
+        self.assertEqual(self.tenant.onboarding_record.launch_status_notes, "Launch blueprint upgrade applied.")
+
+    def test_launch_upgrade_blocks_when_current_baseline_needs_repair(self):
+        self.client.force_authenticate(self.platform_admin)
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-before-upgrade-repair-block"},
+            format="json",
+        )
+        DocumentCategory.objects.filter(tenant=self.tenant, code="identity-pan").delete()
+
+        compare_response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-upgrade-compare/",
+            {"target_blueprint_version": "v2", "idempotency_key": "upgrade-compare-repair-block"},
+            format="json",
+        )
+
+        self.assertEqual(compare_response.status_code, 201)
+        compare_body = compare_response.json()
+        self.assertFalse(compare_body["result_payload"]["can_upgrade"])
+        self.assertIn("Repair missing launch baseline records before upgrade.", compare_body["result_payload"]["blockers"])
+        documents_item = next(
+            item for item in compare_body["result_payload"]["items"] if item["module_ref"] == "documents"
+        )
+        self.assertTrue(documents_item["baseline_missing"])
 
     def test_launch_preview_after_safe_apply_requires_change_reason_for_changed_inputs(self):
         self.client.force_authenticate(self.platform_admin)

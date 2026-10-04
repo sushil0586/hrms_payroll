@@ -37,9 +37,38 @@ class LaunchPreviewResult:
     safe_apply_modules: tuple[str, ...]
     plan_gated_modules: tuple[str, ...]
     uncertified_modules: tuple[str, ...]
+    governance_summary: dict
 
     def as_dict(self) -> dict:
         return asdict(self)
+
+
+def _governance_summary(*, planned_modules: list[dict], skipped_modules: list[dict]) -> dict:
+    all_modules = [*planned_modules, *skipped_modules]
+    customer_editable = [
+        module["ref"]
+        for module in all_modules
+        if module.get("customer_editable_after_handoff") is True and module.get("plan_allowed") is not False
+    ]
+    platform_controlled = [
+        module["ref"]
+        for module in all_modules
+        if module.get("customer_editable_after_handoff") is False and module.get("plan_allowed") is not False
+    ]
+    plan_gated = [module["ref"] for module in skipped_modules if module.get("plan_allowed") is False]
+    owner_counts: dict[str, int] = {}
+    for module in all_modules:
+        owner = module.get("post_onboarding_owner") or "Tenant Admin"
+        owner_counts[owner] = owner_counts.get(owner, 0) + 1
+    return {
+        "customer_editable_modules": customer_editable,
+        "platform_controlled_modules": platform_controlled,
+        "plan_gated_modules": plan_gated,
+        "owner_counts": owner_counts,
+        "requires_change_reason_after_apply": True,
+        "repair_policy": "customer-owned modules are repaired only for missing baseline records; customer changes require explicit review.",
+        "upgrade_policy": "template upgrades require preview, change reason, and module-level evidence before apply.",
+    }
 
 
 def _planned_module_payload(module, *, missing_inputs: list[str], tenant_plan: str) -> dict:
@@ -119,6 +148,15 @@ def build_launch_preview(
             safe_apply_modules=(),
             plan_gated_modules=(),
             uncertified_modules=(),
+            governance_summary={
+                "customer_editable_modules": [],
+                "platform_controlled_modules": [],
+                "plan_gated_modules": [],
+                "owner_counts": {},
+                "requires_change_reason_after_apply": True,
+                "repair_policy": "No registered blueprint.",
+                "upgrade_policy": "No registered blueprint.",
+            },
         )
 
     provided_inputs = set((input_payload or {}).keys())
@@ -198,4 +236,5 @@ def build_launch_preview(
         safe_apply_modules=tuple(sorted(dict.fromkeys(safe_apply_modules))),
         plan_gated_modules=tuple(sorted(dict.fromkeys(plan_gated_modules))),
         uncertified_modules=tuple(sorted(dict.fromkeys(uncertified_modules))),
+        governance_summary=_governance_summary(planned_modules=planned_modules, skipped_modules=skipped_modules),
     )

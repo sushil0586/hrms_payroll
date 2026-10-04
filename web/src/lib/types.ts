@@ -5631,9 +5631,13 @@ export type PlatformLaunchModule = {
   title?: string;
   minimum_plan: string;
   ownership_mode: string;
+  post_onboarding_owner?: string;
+  editable_by_roles?: string[];
+  customer_editable_after_handoff?: boolean;
   required_inputs: string[];
   child_seeder: string;
   description: string;
+  post_apply_action?: string;
   ui_status?: string;
   status_label?: string;
   action_label?: string;
@@ -5690,6 +5694,15 @@ export type PlatformTenantLaunchPreview = {
   safe_apply_modules: string[];
   plan_gated_modules: string[];
   uncertified_modules: string[];
+  governance_summary: {
+    customer_editable_modules?: string[];
+    platform_controlled_modules?: string[];
+    plan_gated_modules?: string[];
+    owner_counts?: Record<string, number>;
+    requires_change_reason_after_apply?: boolean;
+    repair_policy?: string;
+    upgrade_policy?: string;
+  };
 };
 
 export type PlatformTenantLaunchSeededItem = {
@@ -5729,6 +5742,34 @@ export type PlatformTenantLaunchRun = {
   seeded_items: PlatformTenantLaunchSeededItem[];
   created_at: string;
   updated_at: string;
+};
+
+export type PlatformTenantLaunchCertificationCheck = {
+  ref: string;
+  label: string;
+  status: "passed" | "blocked" | "warning" | "info" | string;
+  message: string;
+  evidence_run_id: string;
+  next_action: string;
+};
+
+export type PlatformTenantLaunchCertificationReport = {
+  tenant_id: string;
+  tenant_code: string;
+  status: "pass" | "fail" | string;
+  blueprint_ref: string;
+  blueprint_version: string;
+  subscription_plan: string;
+  blocker_count: number;
+  warning_count: number;
+  info_count: number;
+  checks: PlatformTenantLaunchCertificationCheck[];
+  blockers: string[];
+  warnings: string[];
+  info: string[];
+  latest_baseline_run_id: string;
+  latest_drift_run_id: string;
+  generated_at: string;
 };
 
 export type PlatformTenantLaunchPreviewResponse = {

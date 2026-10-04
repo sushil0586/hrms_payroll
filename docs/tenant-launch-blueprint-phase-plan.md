@@ -192,6 +192,10 @@ Key fields:
 - source_template_version
 - source_item_key
 - ownership_mode
+- post_onboarding_owner
+- editable_by_roles
+- customer_editable_after_handoff
+- post_apply_action
 - managed_by_platform
 - last_applied_hash
 - current_hash
@@ -238,6 +242,10 @@ Each child returns:
 - blocker list
 - seeded item refs
 - evidence payload
+
+Preview and apply evidence also include `governance_summary` so Platform Admin and QA can see
+which seeded modules are customer-editable, platform-controlled, subscription-gated, and owned by
+which post-handoff role before repair/upgrade overwrite rules are enabled.
 
 ## Core Safety Rules
 

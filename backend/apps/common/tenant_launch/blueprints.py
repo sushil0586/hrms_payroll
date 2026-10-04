@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 
 PLAN_ORDER = {
@@ -18,9 +18,13 @@ class LaunchModule:
     label: str
     minimum_plan: str = "starter"
     ownership_mode: str = "customer_owned"
+    post_onboarding_owner: str = "Tenant Admin"
+    editable_by_roles: tuple[str, ...] = field(default_factory=lambda: ("Tenant Admin",))
+    customer_editable_after_handoff: bool = True
     required_inputs: tuple[str, ...] = field(default_factory=tuple)
     child_seeder: str = ""
     description: str = ""
+    post_apply_action: str = ""
 
     def as_dict(self) -> dict:
         return {
@@ -28,9 +32,13 @@ class LaunchModule:
             "label": self.label,
             "minimum_plan": self.minimum_plan,
             "ownership_mode": self.ownership_mode,
+            "post_onboarding_owner": self.post_onboarding_owner,
+            "editable_by_roles": list(self.editable_by_roles),
+            "customer_editable_after_handoff": self.customer_editable_after_handoff,
             "required_inputs": list(self.required_inputs),
             "child_seeder": self.child_seeder,
             "description": self.description,
+            "post_apply_action": self.post_apply_action,
         }
 
 
@@ -73,53 +81,81 @@ CORE_MODULES = (
         ref="tenant_identity",
         label="Tenant Identity",
         ownership_mode="platform_managed",
+        post_onboarding_owner="Platform Admin",
+        editable_by_roles=("Platform Admin",),
+        customer_editable_after_handoff=False,
         required_inputs=("legal_name", "registered_address", "primary_contact"),
         child_seeder="seed_tenant_identity",
         description="Company identity, country context, timezone, and platform handoff metadata.",
+        post_apply_action="Platform Admin verifies legal identity and records any legal-name changes through change control.",
     ),
     LaunchModule(
         ref="roles_users",
         label="Roles and Users",
         ownership_mode="platform_managed",
+        post_onboarding_owner="Tenant Admin",
+        editable_by_roles=("Platform Admin", "Tenant Admin"),
+        customer_editable_after_handoff=True,
         required_inputs=("tenant_admin_contact",),
         child_seeder="seed_roles_users",
         description="Tenant Admin, HR Admin, Payroll Admin, Manager, Finance, Auditor, and Employee defaults.",
+        post_apply_action="Tenant Admin invites real admins, reviews role membership, and removes any temporary launch access.",
     ),
     LaunchModule(
         ref="org_masters",
         label="Organization Masters",
         ownership_mode="customer_owned",
+        post_onboarding_owner="HR Admin",
+        editable_by_roles=("Tenant Admin", "HR Admin"),
+        customer_editable_after_handoff=True,
         required_inputs=("legal_entity", "default_branch", "default_department"),
         child_seeder="seed_org_masters",
         description="Legal entity, branch, department, cost center, grade, designation, and employment type defaults.",
+        post_apply_action="HR Admin adjusts departments, grades, locations, designations, and cost centers before employee import.",
     ),
     LaunchModule(
         ref="documents",
         label="Document Requirements",
         ownership_mode="customer_owned",
+        post_onboarding_owner="HR Admin",
+        editable_by_roles=("Tenant Admin", "HR Admin"),
+        customer_editable_after_handoff=True,
         child_seeder="seed_documents",
         description="India onboarding document categories and verification requirements.",
+        post_apply_action="HR Admin confirms required documents and collection rules before inviting employees.",
     ),
     LaunchModule(
         ref="workflows",
         label="Approval Workflows",
         ownership_mode="customer_owned",
+        post_onboarding_owner="Tenant Admin",
+        editable_by_roles=("Tenant Admin", "HR Admin", "Payroll Admin"),
+        customer_editable_after_handoff=True,
         child_seeder="seed_workflows",
         description="Default HR, leave, attendance, payroll, and document approval chains.",
+        post_apply_action="Tenant Admin assigns real approvers and tests approval routing before go-live.",
     ),
     LaunchModule(
         ref="notifications",
         label="Notification Templates",
         ownership_mode="platform_managed",
+        post_onboarding_owner="Platform Admin",
+        editable_by_roles=("Platform Admin",),
+        customer_editable_after_handoff=False,
         child_seeder="seed_notifications",
         description="Production-ready invite, approval, reminder, payroll, and launch readiness messages.",
+        post_apply_action="Platform Admin keeps templates versioned and verifies delivery settings in the target environment.",
     ),
     LaunchModule(
         ref="launch_checklist",
         label="Launch Checklist",
         ownership_mode="platform_managed",
+        post_onboarding_owner="Platform Admin",
+        editable_by_roles=("Platform Admin",),
+        customer_editable_after_handoff=False,
         child_seeder="seed_launch_checklist",
         description="Readiness checkpoints and evidence requirements for tenant handoff.",
+        post_apply_action="Platform Admin closes readiness evidence before customer handoff.",
     ),
 )
 
@@ -130,21 +166,29 @@ PAYROLL_MODULES = (
         label="Payroll Defaults",
         minimum_plan="growth",
         ownership_mode="customer_owned",
+        post_onboarding_owner="Payroll Admin",
+        editable_by_roles=("Tenant Admin", "Payroll Admin", "Finance Admin"),
+        customer_editable_after_handoff=True,
         required_inputs=("pay_frequency", "salary_structure_style", "financial_year"),
         child_seeder="seed_payroll_defaults",
         description=(
             "India payroll calendars, pay groups, salary components, statutory placeholders, "
             "and finance handoff defaults."
         ),
+        post_apply_action="Payroll Admin validates pay groups, statutory registrations, salary structures, and employee payroll assignments before rehearsal.",
     ),
     LaunchModule(
         ref="provider_placeholders",
         label="Provider Placeholders",
         minimum_plan="growth",
         ownership_mode="platform_locked",
+        post_onboarding_owner="Platform Admin",
+        editable_by_roles=("Platform Admin",),
+        customer_editable_after_handoff=False,
         required_inputs=("provider_strategy",),
         child_seeder="seed_provider_placeholders",
         description="Provider connection placeholders that require real credentials before production payroll.",
+        post_apply_action="Platform Admin configures credentials, mappings, certification, and activation before live provider submissions.",
     ),
 )
 
@@ -154,9 +198,13 @@ ATTENDANCE_MODULES = (
         ref="leave_attendance",
         label="Leave and Attendance",
         ownership_mode="customer_owned",
+        post_onboarding_owner="HR Admin",
+        editable_by_roles=("Tenant Admin", "HR Admin"),
+        customer_editable_after_handoff=True,
         required_inputs=("work_week", "holiday_region"),
         child_seeder="seed_leave_attendance",
         description="India leave types, holidays, attendance policy, shifts, and regularization defaults.",
+        post_apply_action="HR Admin confirms leave policies, assignment scope, holidays, shifts, and attendance rules before employee rollout.",
     ),
 )
 
@@ -167,10 +215,34 @@ SHIFT_MODULES = (
         label="Shift Attendance",
         minimum_plan="growth",
         ownership_mode="customer_owned",
+        post_onboarding_owner="HR Admin",
+        editable_by_roles=("Tenant Admin", "HR Admin"),
+        customer_editable_after_handoff=True,
         required_inputs=("shift_patterns", "weekly_off_policy"),
         child_seeder="seed_leave_attendance",
         description="Shift patterns, roster policy, overtime readiness, and late/early rules.",
+        post_apply_action="HR Admin configures real shift patterns, roster ownership, overtime rules, and weekly-off exceptions.",
     ),
+)
+
+
+CORE_MODULES_V2 = tuple(
+    replace(
+        module,
+        post_apply_action=(
+            "HR Admin confirms document rules, expiry reminders, and employee upload guidance before inviting employees."
+        ),
+    )
+    if module.ref == "documents"
+    else replace(
+        module,
+        post_apply_action=(
+            "Tenant Admin assigns real approvers, tests escalation routing, and records approval owners before go-live."
+        ),
+    )
+    if module.ref == "workflows"
+    else module
+    for module in CORE_MODULES
 )
 
 
@@ -189,6 +261,21 @@ BLUEPRINTS = (
         required_inputs=("legal_name", "registered_address", "tenant_admin_contact", "work_week", "holiday_region"),
         recommended_for=("Office teams", "SaaS companies", "Professional teams"),
         modules=CORE_MODULES + ATTENDANCE_MODULES + PAYROLL_MODULES,
+    ),
+    LaunchBlueprint(
+        ref="india-standard-sme",
+        version="v2",
+        label="India Standard SME",
+        country_code="IN",
+        industry_refs=("general", "technology", "professional_services"),
+        minimum_plan="starter",
+        compatible_plans=("starter", "growth", "enterprise"),
+        workforce_model="office",
+        payroll_scope="hrms_with_optional_payroll",
+        summary="Updated Indian office setup with stronger handoff guidance for documents and approval workflows.",
+        required_inputs=("legal_name", "registered_address", "tenant_admin_contact", "work_week", "holiday_region"),
+        recommended_for=("Office teams", "SaaS companies", "Professional teams"),
+        modules=CORE_MODULES_V2 + ATTENDANCE_MODULES + PAYROLL_MODULES,
     ),
     LaunchBlueprint(
         ref="india-services-company",

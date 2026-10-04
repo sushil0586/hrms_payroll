@@ -194,9 +194,13 @@ class PlatformLaunchModuleSerializer(serializers.Serializer):
     title = serializers.CharField(required=False)
     minimum_plan = serializers.CharField()
     ownership_mode = serializers.CharField()
+    post_onboarding_owner = serializers.CharField(required=False, allow_blank=True)
+    editable_by_roles = serializers.ListField(child=serializers.CharField(), required=False)
+    customer_editable_after_handoff = serializers.BooleanField(required=False)
     required_inputs = serializers.ListField(child=serializers.CharField())
     child_seeder = serializers.CharField(allow_blank=True)
     description = serializers.CharField(allow_blank=True)
+    post_apply_action = serializers.CharField(required=False, allow_blank=True)
     ui_status = serializers.CharField(required=False, allow_blank=True)
     status_label = serializers.CharField(required=False, allow_blank=True)
     action_label = serializers.CharField(required=False, allow_blank=True)
@@ -266,6 +270,34 @@ class PlatformTenantLaunchApplyRequestSerializer(serializers.Serializer):
     idempotency_key = serializers.CharField(max_length=120, required=False, allow_blank=True)
 
 
+class PlatformTenantLaunchRepairRequestSerializer(serializers.Serializer):
+    requested_modules = serializers.ListField(
+        child=serializers.CharField(max_length=80),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
+    change_reason = serializers.CharField(max_length=1000, required=False, allow_blank=True)
+    idempotency_key = serializers.CharField(max_length=120, required=False, allow_blank=True)
+
+
+class PlatformTenantLaunchUpgradeRequestSerializer(serializers.Serializer):
+    target_blueprint_ref = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    target_blueprint_version = serializers.CharField(max_length=40)
+    requested_modules = serializers.ListField(
+        child=serializers.CharField(max_length=80),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
+    change_reason = serializers.CharField(max_length=1000, required=False, allow_blank=True)
+    idempotency_key = serializers.CharField(max_length=120, required=False, allow_blank=True)
+
+
+class PlatformTenantLaunchDriftRequestSerializer(serializers.Serializer):
+    idempotency_key = serializers.CharField(max_length=120, required=False, allow_blank=True)
+
+
 class PlatformTenantLaunchHandoffRequestSerializer(serializers.Serializer):
     handoff_notes = serializers.CharField(max_length=4000, trim_whitespace=True)
 
@@ -288,6 +320,7 @@ class PlatformTenantLaunchPreviewSerializer(serializers.Serializer):
     safe_apply_modules = serializers.ListField(child=serializers.CharField())
     plan_gated_modules = serializers.ListField(child=serializers.CharField())
     uncertified_modules = serializers.ListField(child=serializers.CharField())
+    governance_summary = serializers.JSONField()
 
 
 class PlatformTenantLaunchSeededItemSerializer(serializers.Serializer):
