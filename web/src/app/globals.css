@@ -17277,6 +17277,48 @@ a.payroll-setup-mini-card {
   background: #f0fdfa;
 }
 
+.payroll-provider-card-next {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.payroll-provider-card-next strong,
+.payroll-provider-card-next span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.payroll-provider-card-next strong {
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.payroll-provider-card-next span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.payroll-provider-card-next--ready {
+  border-color: rgba(22, 163, 74, 0.22);
+  background: #f0fdf4;
+}
+
+.payroll-provider-card-next--warning {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: #fffbeb;
+}
+
+.payroll-provider-card-next--blocked {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: #fef2f2;
+}
+
 .launch-rail-guard {
   display: flex;
   align-items: center;
@@ -17353,6 +17395,223 @@ a.payroll-setup-mini-card {
   background: #fbfdff;
 }
 
+.payroll-provider-lane-plan {
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.payroll-provider-lane-plan--ready {
+  border-color: rgba(22, 163, 74, 0.22);
+}
+
+.payroll-provider-lane-plan--warning {
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.payroll-provider-lane-plan--blocked {
+  border-color: rgba(220, 38, 38, 0.22);
+}
+
+.payroll-provider-lane-step-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.payroll-provider-lane-step {
+  display: flex;
+  min-width: 0;
+  min-height: 92px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 8px;
+  background: #ffffff;
+  color: inherit;
+  text-decoration: none;
+}
+
+.payroll-provider-lane-step--done {
+  border-color: rgba(22, 163, 74, 0.2);
+  background: #f8fffb;
+}
+
+.payroll-provider-lane-step--open {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: #fffdf7;
+}
+
+.payroll-provider-lane-step div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.payroll-provider-lane-step strong,
+.payroll-provider-lane-step span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.payroll-provider-lane-step strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.payroll-provider-lane-step span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.payroll-provider-lane-blockers {
+  display: grid;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.payroll-provider-lane-blockers div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.payroll-provider-lane-mapping-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  margin: 0 16px 16px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.payroll-provider-lane-mapping-summary div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.payroll-provider-lane-mapping-summary strong,
+.payroll-provider-lane-mapping-summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.payroll-provider-lane-mapping-summary strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.payroll-provider-lane-mapping-summary span:not(.workspace-card__eyebrow) {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.payroll-provider-lane-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.provider-connection-modal-shell {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.provider-connection-modal {
+  display: grid;
+  width: min(1120px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  gap: 16px;
+}
+
+.provider-connection-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.provider-connection-form-grid .toggle-inline {
+  min-height: 44px;
+  align-self: end;
+  padding: 10px 2px;
+}
+
+.provider-connection-config-textarea {
+  min-height: 220px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.provider-connection-modal-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
+  background: #ffffff;
+}
+
+.provider-connection-modal-footer div {
+  display: grid;
+  min-width: min(100%, 360px);
+  margin-right: auto;
+  gap: 4px;
+}
+
+.provider-connection-modal-footer strong,
+.provider-connection-modal-footer span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.provider-connection-modal-footer strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.provider-connection-modal-footer span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.payroll-provider-activation-action {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.payroll-provider-activation-action span {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .payroll-provider-gate-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -17412,13 +17671,32 @@ a.payroll-setup-mini-card {
 }
 
 .payroll-provider-table {
-  min-width: 980px;
+  min-width: 1180px;
 }
 
 .payroll-provider-table code,
 .payroll-provider-table span,
 .payroll-provider-table strong {
   overflow-wrap: anywhere;
+}
+
+.payroll-provider-register-action {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.payroll-provider-register-action strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.payroll-provider-register-action span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .payroll-provider-cert-block {
@@ -21209,6 +21487,11 @@ a.payroll-setup-mini-card {
   .payroll-rule-builder-validation,
   .payroll-rule-builder-preview-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payroll-provider-lane-mapping-summary {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
   }
 
   .launch-remediation-card__grid,

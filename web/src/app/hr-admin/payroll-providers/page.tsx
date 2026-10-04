@@ -27,6 +27,8 @@ import { LaunchRehearsalActions } from "./launch-rehearsal-actions";
 import { MappingPackLifecycleActions } from "./mapping-pack-lifecycle-actions";
 import { MappingPackRuleBuilder } from "./mapping-pack-rule-builder";
 import { ProviderCertificationActions } from "./provider-certification-actions";
+import { ProviderConnectionActivationAction } from "./provider-connection-activation-action";
+import { ProviderConnectionEditor } from "./provider-connection-editor";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -51,6 +53,25 @@ type ProviderFailureBucket = {
 };
 
 type ProviderTab = "overview" | "connections" | "mapping" | "delivery" | "registry";
+type ProviderLaneTone = "ready" | "warning" | "blocked";
+
+type ProviderLaneStep = {
+  ref: string;
+  label: string;
+  status: "done" | "open";
+  detail: string;
+  tab: ProviderTab;
+};
+
+type ProviderLanePlan = {
+  tone: ProviderLaneTone;
+  label: string;
+  headline: string;
+  nextAction: string;
+  blockers: string[];
+  steps: ProviderLaneStep[];
+  canActivate: boolean;
+};
 
 const PROVIDER_TABS: Array<{ id: ProviderTab; label: string; helper: string }> = [
   { id: "overview", label: "Overview", helper: "Readiness and rehearsal" },
@@ -140,6 +161,168 @@ function readinessGates(connection: HrAdminPayrollProviderConnection): Readiness
 
 function snapshotRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function providerLanePlan({
+  connection,
+  mappingPacks,
+  simulationRuns,
+}: {
+  connection: HrAdminPayrollProviderConnection;
+  mappingPacks: HrAdminPayrollProviderSchemaMappingPack[];
+  simulationRuns: HrAdminPayrollProviderSchemaMappingSimulation[];
+}): ProviderLanePlan {
+  const gates = readinessGates(connection);
+  const readiness = snapshotRecord(connection.readiness_snapshot);
+  const config = snapshotRecord(connection.config_snapshot);
+  const activeMappingPack = mappingPacks.find((pack) => pack.status === "active") ?? null;
+  const latestMappingPack = mappingPacks[0] ?? null;
+  const latestSimulation = simulationRuns[0] ?? null;
+  const activeAllowed = Boolean(readiness.active_allowed);
+  const isPlaceholder = config.placeholder === true || connection.provider_ref.includes("placeholder");
+  const liveDeliveryDisabled = config.live_delivery_enabled === false;
+  const runtimeGateRefs = new Set([
+    "adapter_configured",
+    "channel_configured",
+    "credential_reference_configured",
+    "callback_contract_configured",
+    "retry_policy_configured",
+  ]);
+  const missingRuntimeGates = gates.filter((gate) => runtimeGateRefs.has(gate.ref) && !gate.passed);
+  const certificationPassed = connection.certification_status === "passed";
+  const mappingReady = Boolean(activeMappingPack);
+  const simulationBlocked = latestSimulation?.status === "blocked";
+  const blockers = [
+    isPlaceholder ? "Provider placeholder is still selected" : "",
+    liveDeliveryDisabled ? "Live delivery is disabled in provider config" : "",
+    ...missingRuntimeGates.map((gate) => gate.label),
+    mappingReady ? "" : "No active schema mapping pack",
+    simulationBlocked ? "Latest mapping simulation is blocked" : "",
+    certificationPassed ? "" : "Certification is not passed",
+  ].filter(Boolean);
+
+  const steps: ProviderLaneStep[] = [
+    {
+      ref: "provider_runtime",
+      label: "Runtime route",
+      status: !isPlaceholder && !liveDeliveryDisabled && missingRuntimeGates.length === 0 ? "done" : "open",
+      detail: missingRuntimeGates.length
+        ? missingRuntimeGates.map((gate) => gate.label).join(", ")
+        : isPlaceholder
+          ? "Replace seeded placeholder with a real provider route."
+          : liveDeliveryDisabled
+            ? "Enable live delivery after provider credentials and contract are approved."
+            : "Adapter, channel, callback, retry policy, and credential reference are configured.",
+      tab: "registry",
+    },
+    {
+      ref: "schema_mapping",
+      label: "Schema mapping",
+      status: mappingReady && !simulationBlocked ? "done" : "open",
+      detail: activeMappingPack
+        ? `${activeMappingPack.mapping_profile_ref} v${activeMappingPack.version} is active.`
+        : latestMappingPack
+          ? `${latestMappingPack.mapping_profile_ref} v${latestMappingPack.version} is ${latestMappingPack.status_label.toLowerCase()}.`
+          : "Create or activate a mapping pack for this provider artifact.",
+      tab: "mapping",
+    },
+    {
+      ref: "sandbox_certification",
+      label: "Sandbox certification",
+      status: certificationPassed ? "done" : "open",
+      detail: certificationPassed
+        ? `${connection.certification_status_label} using ${connection.certification_profile_ref}.`
+        : "Run certification after runtime route and mapping are ready.",
+      tab: "connections",
+    },
+    {
+      ref: "activation",
+      label: "Activation",
+      status: connection.status === "active" ? "done" : "open",
+      detail: connection.status === "active"
+        ? "Connection is active for governed handoff routes."
+        : activeAllowed && mappingReady
+          ? "Ready for platform approval to activate this provider lane."
+          : "Activation is blocked until all launch gates pass.",
+      tab: "connections",
+    },
+  ];
+
+  if (connection.status === "active") {
+    return {
+      tone: "ready",
+      label: "Active",
+      headline: "Active provider lane",
+      nextAction: "Monitor callbacks, retries, and finance handoff evidence.",
+      blockers: [],
+      steps,
+      canActivate: false,
+    };
+  }
+  if (isPlaceholder || liveDeliveryDisabled) {
+    return {
+      tone: "blocked",
+      label: "Placeholder",
+      headline: "Replace provider placeholder",
+      nextAction: "Configure the real provider route, credential reference, and live delivery flag before certification.",
+      blockers,
+      steps,
+      canActivate: false,
+    };
+  }
+  if (missingRuntimeGates.length) {
+    return {
+      tone: "blocked",
+      label: "Config needed",
+      headline: "Complete runtime configuration",
+      nextAction: `Fix ${missingRuntimeGates[0].label.toLowerCase()} first.`,
+      blockers,
+      steps,
+      canActivate: false,
+    };
+  }
+  if (!mappingReady || simulationBlocked) {
+    return {
+      tone: "warning",
+      label: "Mapping needed",
+      headline: "Activate mapping coverage",
+      nextAction: "Review simulation output and activate the mapping pack for this provider lane.",
+      blockers,
+      steps,
+      canActivate: false,
+    };
+  }
+  if (!certificationPassed) {
+    return {
+      tone: "warning",
+      label: "Certify",
+      headline: "Ready for sandbox certification",
+      nextAction: "Run certification and review scenario evidence.",
+      blockers,
+      steps,
+      canActivate: false,
+    };
+  }
+  if (activeAllowed) {
+    return {
+      tone: "ready",
+      label: "Activate",
+      headline: "Certified, pending activation",
+      nextAction: "Activate after platform approval and live-rail window confirmation.",
+      blockers,
+      steps,
+      canActivate: true,
+    };
+  }
+  return {
+    tone: "warning",
+    label: "Review",
+    headline: "Review provider readiness",
+    nextAction: "Inspect readiness gates and certification evidence.",
+    blockers,
+    steps,
+    canActivate: false,
+  };
 }
 
 function scenarioResults(run: HrAdminPayrollProviderCertificationRun | null): Record<string, unknown>[] {
@@ -287,10 +470,14 @@ function selectedProviderEvents({
 
 function ProviderRail({
   connections,
+  mappingPacks,
+  simulationRuns,
   selectedConnection,
   activeTab,
 }: {
   connections: HrAdminPayrollProviderConnection[];
+  mappingPacks: HrAdminPayrollProviderSchemaMappingPack[];
+  simulationRuns: HrAdminPayrollProviderSchemaMappingSimulation[];
   selectedConnection: HrAdminPayrollProviderConnection | null;
   activeTab: ProviderTab;
 }) {
@@ -303,6 +490,11 @@ function ProviderRail({
       <div className="payroll-setup-card-list">
         {connections.map((connection) => {
           const gates = readinessGates(connection);
+          const lanePlan = providerLanePlan({
+            connection,
+            mappingPacks: mappingPacks.filter((item) => item.provider_connection_id === connection.id || item.provider_ref === connection.provider_ref),
+            simulationRuns: simulationRuns.filter((item) => item.provider_connection_id === connection.id || item.provider_ref === connection.provider_ref),
+          });
           return (
             <Link
               className={`payroll-setup-mini-card payroll-provider-card ${selectedConnection?.id === connection.id ? "is-selected" : ""}`}
@@ -317,6 +509,10 @@ function ProviderRail({
               <div className="payroll-input-run-card__counts">
                 <span>{gates.filter((gate) => gate.passed).length}/{gates.length || 6} gates</span>
                 <span>{connection.certification_status_label}</span>
+              </div>
+              <div className={`payroll-provider-card-next payroll-provider-card-next--${lanePlan.tone}`}>
+                <strong>{lanePlan.label}</strong>
+                <span>{lanePlan.nextAction}</span>
               </div>
               <code>{connection.provider_ref}</code>
             </Link>
@@ -569,6 +765,17 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
   const latestSelectedRun = selectedCertificationRuns[0] ?? null;
   const selectedGates = selectedConnection ? readinessGates(selectedConnection) : [];
   const selectedReadyCount = selectedGates.filter((gate) => gate.passed).length;
+  const selectedLanePlan = selectedConnection
+    ? providerLanePlan({
+        connection: selectedConnection,
+        mappingPacks: selectedMappingPacks,
+        simulationRuns: selectedSimulationRuns,
+      })
+    : null;
+  const selectedActiveMappingPack = selectedMappingPacks.find((pack) => pack.status === "active") ?? null;
+  const selectedDraftMappingPack = selectedMappingPacks.find((pack) => pack.status === "draft") ?? null;
+  const selectedLatestMappingPack = selectedActiveMappingPack ?? selectedDraftMappingPack ?? selectedMappingPacks[0] ?? null;
+  const selectedLatestSimulation = selectedSimulationRuns[0] ?? null;
   const selectedEvents = selectedProviderEvents({
     providerRef: selectedConnection?.provider_ref,
     deliveries: handoffSetup.deliveries,
@@ -675,7 +882,13 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
 
       <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-provider-workspace">
-          <ProviderRail connections={setup.connections} selectedConnection={selectedConnection} activeTab={activeTab} />
+          <ProviderRail
+            connections={setup.connections}
+            mappingPacks={setup.schema_mapping_packs}
+            simulationRuns={setup.schema_mapping_simulations}
+            selectedConnection={selectedConnection}
+            activeTab={activeTab}
+          />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -717,6 +930,94 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                 <strong>{selectedSimulationRuns[0]?.comparison_status ? titleCase(selectedSimulationRuns[0].comparison_status) : "Pending"}</strong>
               </article>
             </div>
+
+            {selectedLanePlan ? (
+              <section className={`payroll-setup-assignment-panel payroll-provider-lane-plan payroll-provider-lane-plan--${selectedLanePlan.tone}`}>
+                <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+                  <div>
+                    <span className="workspace-card__eyebrow">Selected lane plan</span>
+                    <h2>{selectedLanePlan.headline}</h2>
+                    <p className="section-copy section-copy-soft">{selectedLanePlan.nextAction}</p>
+                  </div>
+                  <div className="payroll-provider-lane-actions">
+                    {selectedConnection ? (
+                      <ProviderConnectionEditor
+                        connection={selectedConnection}
+                        providerKinds={setup.options.provider_kinds}
+                        connectionStatuses={setup.options.connection_statuses}
+                      />
+                    ) : null}
+                    {selectedConnection && selectedLanePlan.canActivate ? (
+                      <ProviderConnectionActivationAction connectionId={selectedConnection.id} />
+                    ) : null}
+                    {selectedConnection ? (
+                      <Link className="button button--secondary" href={providerHref("mapping", selectedConnection.id)}>
+                        Review mapping
+                      </Link>
+                    ) : null}
+                    <StatusBadge status={selectedLanePlan.tone} label={selectedLanePlan.label} />
+                  </div>
+                </div>
+                <div className="payroll-provider-lane-step-grid">
+                  {selectedLanePlan.steps.map((step) => (
+                    <Link
+                      className={`payroll-provider-lane-step payroll-provider-lane-step--${step.status}`}
+                      href={providerHref(step.tab, selectedConnection?.id)}
+                      key={step.ref}
+                    >
+                      <div>
+                        <strong>{step.label}</strong>
+                        <span>{step.detail}</span>
+                      </div>
+                      <StatusBadge status={step.status === "done" ? "passed" : selectedLanePlan.tone} label={step.status === "done" ? "Done" : "Open"} />
+                    </Link>
+                  ))}
+                </div>
+                <div className="payroll-provider-lane-mapping-summary">
+                  <div>
+                    <span className="workspace-card__eyebrow">Mapping coverage</span>
+                    <strong>
+                      {selectedActiveMappingPack
+                        ? `Active v${selectedActiveMappingPack.version}`
+                        : selectedDraftMappingPack
+                          ? `Draft v${selectedDraftMappingPack.version}`
+                          : "Missing mapping pack"}
+                    </strong>
+                    <span>
+                      {selectedLatestMappingPack
+                        ? `${selectedLatestMappingPack.mapping_profile_ref} / ${selectedLatestMappingPack.artifact_kind_label}`
+                        : "Create or import a mapping pack before provider activation."}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="workspace-card__eyebrow">Latest simulation</span>
+                    <strong>
+                      {selectedLatestSimulation
+                        ? `${selectedLatestSimulation.status_label} / ${titleCase(selectedLatestSimulation.comparison_status)}`
+                        : "Not simulated"}
+                    </strong>
+                    <span>
+                      {selectedLatestSimulation
+                        ? `${selectedLatestSimulation.passed_gate_count}/${selectedLatestSimulation.gate_count} gates, ${selectedLatestSimulation.changed_path_count} changed paths`
+                        : "Run simulation from the mapping workspace when a draft changes."}
+                    </span>
+                  </div>
+                  <Link className="button button--secondary" href={providerHref("mapping", selectedConnection?.id)}>
+                    Open mapping
+                  </Link>
+                </div>
+                {selectedLanePlan.blockers.length ? (
+                  <div className="payroll-provider-lane-blockers">
+                    <span className="workspace-card__eyebrow">Open blockers</span>
+                    <div>
+                      {selectedLanePlan.blockers.slice(0, 5).map((blocker) => (
+                        <span className="record-chip" key={blocker}>{blocker}</span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
 
             {activeTab === "overview" ? (
               <>
@@ -1333,37 +1634,49 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
                       <th>Credential</th>
                       <th>Certification</th>
                       <th>Latest run</th>
+                      <th>Next step</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {setup.connections.map((connection) => (
-                      <tr className={selectedConnection?.id === connection.id ? "is-selected" : ""} key={connection.id}>
-                        <td>
-                          <Link href={providerHref("connections", connection.id)}>
-                            <strong>{connection.provider_name}</strong>
-                            <span>{connection.provider_ref}</span>
-                            <span>{connection.channel_ref}</span>
-                          </Link>
-                        </td>
-                        <td><StatusBadge status={connection.provider_kind} label={connection.provider_kind_label} /></td>
-                        <td><code>{connection.adapter_ref}</code></td>
-                        <td><code>{connection.credential_ref || "not_required"}</code></td>
-                        <td><StatusBadge status={connection.certification_status} label={connection.certification_status_label} /></td>
-                        <td>
-                          {setup.certification_runs.find((run) => run.provider_connection_id === connection.id)
-                            ? <StatusBadge
-                                status={setup.certification_runs.find((run) => run.provider_connection_id === connection.id)?.status ?? "pending"}
-                                label={setup.certification_runs.find((run) => run.provider_connection_id === connection.id)?.status_label ?? "Pending"}
-                              />
-                            : "Pending"}
-                        </td>
-                        <td><StatusBadge status={connection.status} label={connection.status_label} /></td>
-                      </tr>
-                    ))}
+                    {setup.connections.map((connection) => {
+                      const lanePlan = providerLanePlan({
+                        connection,
+                        mappingPacks: setup.schema_mapping_packs.filter((item) => item.provider_connection_id === connection.id || item.provider_ref === connection.provider_ref),
+                        simulationRuns: setup.schema_mapping_simulations.filter((item) => item.provider_connection_id === connection.id || item.provider_ref === connection.provider_ref),
+                      });
+                      const latestRun = setup.certification_runs.find((run) => run.provider_connection_id === connection.id);
+                      return (
+                        <tr className={selectedConnection?.id === connection.id ? "is-selected" : ""} key={connection.id}>
+                          <td>
+                            <Link href={providerHref("connections", connection.id)}>
+                              <strong>{connection.provider_name}</strong>
+                              <span>{connection.provider_ref}</span>
+                              <span>{connection.channel_ref}</span>
+                            </Link>
+                          </td>
+                          <td><StatusBadge status={connection.provider_kind} label={connection.provider_kind_label} /></td>
+                          <td><code>{connection.adapter_ref}</code></td>
+                          <td><code>{connection.credential_ref || "not_required"}</code></td>
+                          <td><StatusBadge status={connection.certification_status} label={connection.certification_status_label} /></td>
+                          <td>
+                            {latestRun
+                              ? <StatusBadge status={latestRun.status} label={latestRun.status_label} />
+                              : "Pending"}
+                          </td>
+                          <td>
+                            <Link className="payroll-provider-register-action" href={providerHref(lanePlan.steps.find((step) => step.status === "open")?.tab ?? "connections", connection.id)}>
+                              <strong>{lanePlan.headline}</strong>
+                              <span>{lanePlan.nextAction}</span>
+                            </Link>
+                          </td>
+                          <td><StatusBadge status={connection.status} label={connection.status_label} /></td>
+                        </tr>
+                      );
+                    })}
                     {!setup.connections.length ? (
                       <tr>
-                        <td colSpan={7}>
+                        <td colSpan={8}>
                           <div className="empty-state">No provider connections are configured yet.</div>
                         </td>
                       </tr>

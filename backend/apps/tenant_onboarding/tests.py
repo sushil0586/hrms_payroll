@@ -378,6 +378,15 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         self.assertEqual(mapping_pack.status, PayrollProviderSchemaMappingPackStatus.DRAFT)
         self.assertEqual(mapping_pack.transform_rules, [])
 
+        with self.assertRaisesMessage(DjangoValidationError, "Active provider connections require"):
+            save_hr_admin_payroll_provider_connection(
+                actor,
+                {"status": PayrollProviderConnectionStatus.ACTIVE},
+                item=bank_connection,
+            )
+        bank_connection.refresh_from_db()
+        self.assertEqual(bank_connection.status, PayrollProviderConnectionStatus.BLOCKED)
+
         bank_connection.status = PayrollProviderConnectionStatus.ACTIVE
         with self.assertRaisesMessage(DjangoValidationError, "Active provider connections require"):
             bank_connection.save()
@@ -455,12 +464,6 @@ class PlatformLaunchBlueprintApiTests(TestCase):
             },
             item=mapping_pack,
         )
-        mapping_pack = activate_payroll_provider_schema_mapping_pack_for_actor(
-            actor,
-            mapping_pack,
-            approval_snapshot={"approval_reason": "QA sandbox mapping certification passed."},
-        )
-        self.assertEqual(mapping_pack.status, PayrollProviderSchemaMappingPackStatus.ACTIVE)
 
         certification_run = run_payroll_provider_connection_certification(
             configured_connection,
@@ -474,10 +477,29 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         self.assertEqual(configured_connection.certification_status, PayrollProviderCertificationStatus.PASSED)
         self.assertTrue(configured_connection.readiness_snapshot["active_allowed"])
 
-        configured_connection.status = PayrollProviderConnectionStatus.ACTIVE
-        configured_connection.save()
+        with self.assertRaisesMessage(DjangoValidationError, "active schema mapping pack"):
+            save_hr_admin_payroll_provider_connection(
+                actor,
+                {"status": PayrollProviderConnectionStatus.ACTIVE},
+                item=configured_connection,
+            )
         configured_connection.refresh_from_db()
-        self.assertEqual(configured_connection.status, PayrollProviderConnectionStatus.ACTIVE)
+        self.assertEqual(configured_connection.status, PayrollProviderConnectionStatus.CERTIFIED)
+
+        mapping_pack = activate_payroll_provider_schema_mapping_pack_for_actor(
+            actor,
+            mapping_pack,
+            approval_snapshot={"approval_reason": "QA sandbox mapping certification passed."},
+        )
+        self.assertEqual(mapping_pack.status, PayrollProviderSchemaMappingPackStatus.ACTIVE)
+
+        activated_connection = save_hr_admin_payroll_provider_connection(
+            actor,
+            {"status": PayrollProviderConnectionStatus.ACTIVE},
+            item=configured_connection,
+        )
+        self.assertEqual(activated_connection.status, PayrollProviderConnectionStatus.ACTIVE)
+        self.assertTrue(activated_connection.readiness_snapshot["active_allowed"])
 
         setup_payload = get_hr_admin_payroll_provider_connection_setup_payload_for_tenant(self.tenant)
         summary = setup_payload["summary"]

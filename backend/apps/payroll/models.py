@@ -4088,6 +4088,27 @@ class PayrollProviderConnection(UUIDPrimaryKeyModel, TimeStampedModel):
                 errors["config_snapshot"] = "Active provider connections cannot use placeholder configuration."
             if config.get("live_delivery_enabled") is False:
                 errors["config_snapshot"] = "Active provider connections require live delivery enabled."
+            required_artifact_kind = {
+                PayrollProviderConnectionKind.BANK: PayrollOutputArtifactKind.BANK_ADVICE,
+                PayrollProviderConnectionKind.ACCOUNTING: PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
+                PayrollProviderConnectionKind.STATUTORY: PayrollOutputArtifactKind.STATUTORY_REPORT,
+            }.get(self.provider_kind)
+            if required_artifact_kind:
+                active_mapping_queryset = PayrollProviderSchemaMappingPack.objects.filter(
+                    tenant=self.tenant,
+                    artifact_kind=required_artifact_kind,
+                    status=PayrollProviderSchemaMappingPackStatus.ACTIVE,
+                )
+                if self.pk:
+                    active_mapping_exists = active_mapping_queryset.filter(provider_connection=self).exists()
+                else:
+                    active_mapping_exists = False
+                active_mapping_exists = active_mapping_exists or active_mapping_queryset.filter(
+                    provider_connection__isnull=True,
+                    provider_ref=self.provider_ref,
+                ).exists()
+                if not active_mapping_exists:
+                    errors["status"] = "Active provider connections require an active schema mapping pack."
         if errors:
             raise ValidationError(errors)
 

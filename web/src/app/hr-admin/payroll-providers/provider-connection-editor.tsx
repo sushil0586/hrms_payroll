@@ -1,0 +1,332 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
+import type { HrAdminEnumOption, HrAdminPayrollProviderConnection } from "@/lib/types";
+
+type Props = {
+  connection: HrAdminPayrollProviderConnection;
+  providerKinds: HrAdminEnumOption[];
+  connectionStatuses: HrAdminEnumOption[];
+};
+
+type FormValue = {
+  provider_ref: string;
+  provider_name: string;
+  provider_kind: string;
+  environment_ref: string;
+  status: string;
+  adapter_ref: string;
+  sandbox_adapter_ref: string;
+  channel_ref: string;
+  credential_ref: string;
+  credential_profile_ref: string;
+  credential_required: boolean;
+  callback_profile_ref: string;
+  callback_verification_ref: string;
+  retry_policy_ref: string;
+  certification_profile_ref: string;
+  real_provider_route: boolean;
+  live_delivery_enabled: boolean;
+  requires_real_credentials: boolean;
+  config_snapshot: string;
+};
+
+function configRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function prettyJson(value: Record<string, unknown>) {
+  return JSON.stringify(value, null, 2);
+}
+
+function errorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") {
+    return fallback;
+  }
+  const record = payload as Record<string, unknown>;
+  if (typeof record.detail === "string" && record.detail) {
+    return record.detail;
+  }
+  for (const [key, value] of Object.entries(record)) {
+    if (Array.isArray(value) && value.length) {
+      return `${key}: ${String(value[0])}`;
+    }
+    if (typeof value === "string") {
+      return `${key}: ${value}`;
+    }
+  }
+  return fallback;
+}
+
+function initialValue(connection: HrAdminPayrollProviderConnection): FormValue {
+  const config = configRecord(connection.config_snapshot);
+  return {
+    provider_ref: connection.provider_ref,
+    provider_name: connection.provider_name,
+    provider_kind: connection.provider_kind,
+    environment_ref: connection.environment_ref,
+    status: connection.status,
+    adapter_ref: connection.adapter_ref,
+    sandbox_adapter_ref: connection.sandbox_adapter_ref,
+    channel_ref: connection.channel_ref,
+    credential_ref: connection.credential_ref,
+    credential_profile_ref: connection.credential_profile_ref,
+    credential_required: connection.credential_required,
+    callback_profile_ref: connection.callback_profile_ref,
+    callback_verification_ref: connection.callback_verification_ref,
+    retry_policy_ref: connection.retry_policy_ref,
+    certification_profile_ref: connection.certification_profile_ref,
+    real_provider_route: config.placeholder !== true && !connection.provider_ref.includes("placeholder"),
+    live_delivery_enabled: config.live_delivery_enabled !== false,
+    requires_real_credentials: Boolean(config.requires_real_credentials ?? connection.credential_required),
+    config_snapshot: prettyJson(config),
+  };
+}
+
+function adapterConfigKey(providerKind: string) {
+  if (providerKind === "bank") {
+    return "bank_payout_adapter";
+  }
+  if (providerKind === "accounting") {
+    return "accounting_journal_adapter";
+  }
+  if (providerKind === "statutory") {
+    return "statutory_filing_adapter";
+  }
+  return "";
+}
+
+function mergeProviderRoute(config: Record<string, unknown>, form: FormValue) {
+  const currentRoute = configRecord(config.provider_route);
+  const currentAdapterContract = configRecord(currentRoute.adapter_contract);
+  const route: Record<string, unknown> = {
+    ...currentRoute,
+    provider_ref: form.provider_ref.trim(),
+    provider_kind: form.provider_kind,
+    adapter_ref: form.adapter_ref.trim(),
+    channel_ref: form.channel_ref.trim(),
+    credential_ref: form.credential_ref.trim(),
+    credential_required: form.credential_required,
+    credential_profile_ref: form.credential_profile_ref.trim(),
+    callback_profile_ref: form.callback_profile_ref.trim(),
+    callback_verification_ref: form.callback_verification_ref.trim(),
+    retry_policy_ref: form.retry_policy_ref.trim(),
+    certification_profile_ref: form.certification_profile_ref.trim(),
+    adapter_contract: {
+      ...currentAdapterContract,
+      expected_adapter_ref: form.adapter_ref.trim(),
+      expected_provider_ref: form.provider_ref.trim(),
+    },
+  };
+  const key = adapterConfigKey(form.provider_kind);
+  if (key) {
+    route[key] = {
+      ...configRecord(currentRoute[key]),
+      credential_ref: form.credential_ref.trim(),
+      credential_profile_ref: form.credential_profile_ref.trim(),
+    };
+  }
+  return route;
+}
+
+export function ProviderConnectionEditor({ connection, providerKinds, connectionStatuses }: Props) {
+  const router = useRouter();
+  const [isOpen, setIsOpen] = useState(false);
+  const [formValue, setFormValue] = useState(() => initialValue(connection));
+  const [isSaving, setIsSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const modalTitleId = useMemo(() => `provider-connection-editor-${connection.id}`, [connection.id]);
+
+  function update<Key extends keyof FormValue>(key: Key, value: FormValue[Key]) {
+    setFormValue((current) => ({ ...current, [key]: value }));
+  }
+
+  function openEditor() {
+    setFormValue(initialValue(connection));
+    setNotice("");
+    setIsOpen(true);
+  }
+
+  async function save() {
+    setIsSaving(true);
+    setNotice("");
+    let config: Record<string, unknown>;
+    try {
+      config = configRecord(JSON.parse(formValue.config_snapshot || "{}"));
+    } catch {
+      setIsSaving(false);
+      setNotice("Config JSON is invalid.");
+      return;
+    }
+
+    const configSnapshot: Record<string, unknown> = {
+      ...config,
+      placeholder: formValue.real_provider_route ? false : config.placeholder,
+      live_delivery_enabled: formValue.live_delivery_enabled,
+      requires_real_credentials: formValue.requires_real_credentials,
+      provider_route: mergeProviderRoute(config, formValue),
+      updated_from: "hr_admin.payroll_provider_connection_editor.v1",
+    };
+
+    const payload = {
+      provider_ref: formValue.provider_ref.trim(),
+      provider_name: formValue.provider_name.trim(),
+      provider_kind: formValue.provider_kind,
+      environment_ref: formValue.environment_ref.trim(),
+      status: formValue.status,
+      adapter_ref: formValue.adapter_ref.trim(),
+      sandbox_adapter_ref: formValue.sandbox_adapter_ref.trim(),
+      channel_ref: formValue.channel_ref.trim(),
+      credential_ref: formValue.credential_ref.trim(),
+      credential_profile_ref: formValue.credential_profile_ref.trim(),
+      credential_required: formValue.credential_required,
+      callback_profile_ref: formValue.callback_profile_ref.trim(),
+      callback_verification_ref: formValue.callback_verification_ref.trim(),
+      retry_policy_ref: formValue.retry_policy_ref.trim(),
+      certification_profile_ref: formValue.certification_profile_ref.trim(),
+      config_snapshot: configSnapshot,
+    };
+
+    const response = await fetch(`/api/hr-admin/payroll-provider-connections/${connection.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => ({}));
+    setIsSaving(false);
+    if (!response.ok) {
+      setNotice(errorMessage(result, "Provider connection could not be saved."));
+      return;
+    }
+    setNotice(errorMessage(result, "Provider connection saved."));
+    setIsOpen(false);
+    router.refresh();
+  }
+
+  return (
+    <>
+      <button className="button button--primary" type="button" onClick={openEditor}>
+        Configure provider
+      </button>
+      {isOpen ? (
+        <div className="modal-shell provider-connection-modal-shell" role="presentation">
+          <section
+            aria-modal="true"
+            aria-labelledby={modalTitleId}
+            className="modal provider-connection-modal"
+            role="dialog"
+          >
+            <div className="modal__header">
+              <div>
+                <span className="workspace-card__eyebrow">Provider setup</span>
+                <h2 id={modalTitleId}>Configure provider connection</h2>
+                <p>Use secret references and provider refs only. Do not paste raw API keys, passwords, or certificates here.</p>
+              </div>
+              <button className="button button--ghost" type="button" onClick={() => setIsOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="provider-connection-form-grid">
+              <label className="form-field">
+                <span>Provider name</span>
+                <input className="input-control" value={formValue.provider_name} onChange={(event) => update("provider_name", event.target.value)} />
+              </label>
+              <label className="form-field">
+                <span>Provider ref</span>
+                <input className="input-control" value={formValue.provider_ref} onChange={(event) => update("provider_ref", event.target.value)} />
+              </label>
+              <label className="form-field">
+                <span>Provider kind</span>
+                <select className="input-control" value={formValue.provider_kind} onChange={(event) => update("provider_kind", event.target.value)}>
+                  {providerKinds.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label className="form-field">
+                <span>Environment</span>
+                <input className="input-control" value={formValue.environment_ref} onChange={(event) => update("environment_ref", event.target.value)} placeholder="sandbox / staging / production" />
+              </label>
+              <label className="form-field">
+                <span>Status</span>
+                <select className="input-control" value={formValue.status} onChange={(event) => update("status", event.target.value)}>
+                  {connectionStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label className="form-field">
+                <span>Adapter ref</span>
+                <input className="input-control" value={formValue.adapter_ref} onChange={(event) => update("adapter_ref", event.target.value)} />
+              </label>
+              <label className="form-field">
+                <span>Sandbox adapter ref</span>
+                <input className="input-control" value={formValue.sandbox_adapter_ref} onChange={(event) => update("sandbox_adapter_ref", event.target.value)} />
+              </label>
+              <label className="form-field">
+                <span>Channel ref</span>
+                <input className="input-control" value={formValue.channel_ref} onChange={(event) => update("channel_ref", event.target.value)} />
+              </label>
+              <label className="form-field">
+                <span>Credential ref</span>
+                <input className="input-control" value={formValue.credential_ref} onChange={(event) => update("credential_ref", event.target.value)} placeholder="secret-manager://..." />
+              </label>
+              <label className="form-field">
+                <span>Credential profile</span>
+                <input className="input-control" value={formValue.credential_profile_ref} onChange={(event) => update("credential_profile_ref", event.target.value)} />
+              </label>
+              <label className="form-field">
+                <span>Callback profile</span>
+                <input className="input-control" value={formValue.callback_profile_ref} onChange={(event) => update("callback_profile_ref", event.target.value)} />
+              </label>
+              <label className="form-field">
+                <span>Callback verification</span>
+                <input className="input-control" value={formValue.callback_verification_ref} onChange={(event) => update("callback_verification_ref", event.target.value)} />
+              </label>
+              <label className="form-field">
+                <span>Retry policy</span>
+                <input className="input-control" value={formValue.retry_policy_ref} onChange={(event) => update("retry_policy_ref", event.target.value)} />
+              </label>
+              <label className="form-field">
+                <span>Certification profile</span>
+                <input className="input-control" value={formValue.certification_profile_ref} onChange={(event) => update("certification_profile_ref", event.target.value)} />
+              </label>
+              <label className="toggle-inline">
+                <input type="checkbox" checked={formValue.credential_required} onChange={(event) => update("credential_required", event.target.checked)} />
+                Credential required
+              </label>
+              <label className="toggle-inline">
+                <input type="checkbox" checked={formValue.real_provider_route} onChange={(event) => update("real_provider_route", event.target.checked)} />
+                Real provider route
+              </label>
+              <label className="toggle-inline">
+                <input type="checkbox" checked={formValue.live_delivery_enabled} onChange={(event) => update("live_delivery_enabled", event.target.checked)} />
+                Live delivery enabled
+              </label>
+              <label className="toggle-inline">
+                <input type="checkbox" checked={formValue.requires_real_credentials} onChange={(event) => update("requires_real_credentials", event.target.checked)} />
+                Requires real credential reference
+              </label>
+              <label className="form-field form-field--full">
+                <span>Advanced config JSON</span>
+                <textarea className="input-control provider-connection-config-textarea" rows={10} value={formValue.config_snapshot} onChange={(event) => update("config_snapshot", event.target.value)} />
+              </label>
+            </div>
+
+            <div className="provider-connection-modal-footer">
+              <div>
+                <strong>{connection.provider_name}</strong>
+                <span>{notice || "Saving recomputes provider readiness immediately."}</span>
+              </div>
+              <button className="button button--secondary" type="button" onClick={() => setIsOpen(false)} disabled={isSaving}>
+                Cancel
+              </button>
+              <button className="button button--primary" type="button" onClick={save} disabled={isSaving}>
+                {isSaving ? "Saving" : "Save provider"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
+  );
+}
