@@ -1,0 +1,25 @@
+[Unit]
+Description=HRMS Payroll SaaS Next.js frontend
+After=network-online.target hrms-payroll-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=www-data
+WorkingDirectory=/var/www/hrms-payroll-saas/current/web
+EnvironmentFile=-/var/www/hrms-payroll-saas/shared/web.env
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 3020
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/www/hrms-payroll-saas/shared /var/www/hrms-payroll-saas/current/web/.next
+
+[Install]
+WantedBy=multi-user.target

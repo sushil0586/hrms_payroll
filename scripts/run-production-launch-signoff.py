@@ -132,9 +132,17 @@ ENV_CHECKS = [
     {
         "key": "HRMS_NOTIFICATION_PROCESSOR_ENABLED",
         "local_required": False,
+        "staging_required": False,
+        "production_required": False,
+        "purpose": "Enables Celery Beat notification scheduling when Celery Beat is the scheduler.",
+        "expected": "true",
+    },
+    {
+        "key": "HRMS_NOTIFICATION_WORKER_ENABLED",
+        "local_required": False,
         "staging_required": True,
         "production_required": True,
-        "purpose": "Enables notification worker scheduling.",
+        "purpose": "Confirms a notification worker process/timer is deployed.",
         "expected": "true",
     },
     {

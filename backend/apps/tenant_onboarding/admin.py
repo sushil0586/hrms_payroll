@@ -2,6 +2,8 @@ from django.contrib import admin
 
 from apps.tenant_onboarding.models import (
     PublicTenantLead,
+    TenantLaunchRun,
+    TenantLaunchSeededItem,
     TenantOnboarding,
     TenantOnboardingAdminContact,
     TenantOnboardingChecklistItem,
@@ -25,10 +27,38 @@ class TenantOnboardingEventInline(admin.TabularInline):
     readonly_fields = ("event_type", "summary", "payload", "actor_identifier", "created_at", "updated_at")
 
 
+class TenantLaunchRunInline(admin.TabularInline):
+    model = TenantLaunchRun
+    extra = 0
+    readonly_fields = (
+        "blueprint_ref",
+        "blueprint_version",
+        "run_type",
+        "status",
+        "requested_by_identifier",
+        "started_at",
+        "finished_at",
+        "created_at",
+    )
+    fields = (
+        "blueprint_ref",
+        "blueprint_version",
+        "run_type",
+        "status",
+        "requested_by_identifier",
+        "started_at",
+        "finished_at",
+        "created_at",
+    )
+    can_delete = False
+
+
 @admin.register(TenantOnboarding)
 class TenantOnboardingAdmin(admin.ModelAdmin):
     list_display = (
         "tenant",
+        "launch_blueprint_ref",
+        "launch_readiness_status",
         "owner_mode",
         "setup_style",
         "data_setup_style",
@@ -36,9 +66,21 @@ class TenantOnboardingAdmin(admin.ModelAdmin):
         "baseline_published_at",
         "handoff_completed_at",
     )
-    list_filter = ("owner_mode", "setup_style", "data_setup_style", "policy_control_style")
+    list_filter = (
+        "launch_readiness_status",
+        "owner_mode",
+        "setup_style",
+        "data_setup_style",
+        "policy_control_style",
+    )
     search_fields = ("tenant__name", "tenant__code", "industry_context", "notes")
-    inlines = [TenantOnboardingAdminContactInline, TenantOnboardingChecklistItemInline, TenantOnboardingEventInline]
+    readonly_fields = ("launch_preview_payload",)
+    inlines = [
+        TenantOnboardingAdminContactInline,
+        TenantOnboardingChecklistItemInline,
+        TenantLaunchRunInline,
+        TenantOnboardingEventInline,
+    ]
 
 
 @admin.register(PublicTenantLead)
@@ -69,3 +111,57 @@ class TenantOnboardingEventAdmin(admin.ModelAdmin):
     list_filter = ("event_type",)
     search_fields = ("event_type", "summary", "onboarding__tenant__name", "onboarding__tenant__code")
     readonly_fields = ("payload",)
+
+
+class TenantLaunchSeededItemInline(admin.TabularInline):
+    model = TenantLaunchSeededItem
+    extra = 0
+    readonly_fields = (
+        "tenant",
+        "item_key",
+        "item_kind",
+        "module_ref",
+        "action",
+        "status",
+        "ownership_mode",
+        "object_ref",
+        "message",
+        "created_at",
+    )
+    fields = (
+        "item_key",
+        "item_kind",
+        "module_ref",
+        "action",
+        "status",
+        "ownership_mode",
+        "object_ref",
+        "message",
+        "created_at",
+    )
+    can_delete = False
+
+
+@admin.register(TenantLaunchRun)
+class TenantLaunchRunAdmin(admin.ModelAdmin):
+    list_display = (
+        "tenant",
+        "blueprint_ref",
+        "blueprint_version",
+        "run_type",
+        "status",
+        "requested_by_identifier",
+        "created_at",
+    )
+    list_filter = ("run_type", "status", "blueprint_ref", "subscription_plan")
+    search_fields = ("tenant__name", "tenant__code", "blueprint_ref", "requested_by_identifier", "idempotency_key")
+    readonly_fields = ("plan_snapshot", "result_payload", "errors", "evidence", "created_at", "updated_at")
+    inlines = [TenantLaunchSeededItemInline]
+
+
+@admin.register(TenantLaunchSeededItem)
+class TenantLaunchSeededItemAdmin(admin.ModelAdmin):
+    list_display = ("tenant", "item_key", "item_kind", "module_ref", "action", "status", "ownership_mode")
+    list_filter = ("module_ref", "item_kind", "action", "status", "ownership_mode")
+    search_fields = ("tenant__name", "tenant__code", "item_key", "object_ref", "message")
+    readonly_fields = ("payload", "evidence", "created_at", "updated_at")

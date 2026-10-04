@@ -199,17 +199,20 @@ class Command(BaseCommand):
 
     def _worker_gates(self, *, strict: bool) -> list[Gate]:
         beat_schedule = getattr(settings, "CELERY_BEAT_SCHEDULE", {}) or {}
+        notification_processor_enabled = bool(getattr(settings, "NOTIFICATION_PROCESSOR_ENABLED", False))
+        notification_worker_declared = _env_bool("HRMS_NOTIFICATION_WORKER_ENABLED", False)
+        notification_beat_scheduled = "process-pending-notifications" in beat_schedule
         return [
             _gate(
                 "notifications.processor_enabled",
-                bool(getattr(settings, "NOTIFICATION_PROCESSOR_ENABLED", False)),
-                "Notification processor is enabled.",
+                notification_processor_enabled or notification_worker_declared,
+                "Notification processor is enabled or an EC2 worker/timer is declared.",
                 severity="blocker" if strict else "warning",
             ),
             _gate(
-                "notifications.beat_scheduled",
-                "process-pending-notifications" in beat_schedule,
-                "Notification Celery beat schedule is registered.",
+                "notifications.scheduler_declared",
+                notification_beat_scheduled or notification_worker_declared,
+                "Notification Celery beat schedule or EC2 systemd timer is declared.",
                 severity="blocker" if strict else "warning",
             ),
             _gate(

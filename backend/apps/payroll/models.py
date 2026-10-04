@@ -4071,6 +4071,7 @@ class PayrollProviderConnection(UUIDPrimaryKeyModel, TimeStampedModel):
         if self.credential_required and not self.credential_ref:
             errors["credential_ref"] = "Credential-required provider connections must use a credential_ref."
         if self.status == PayrollProviderConnectionStatus.ACTIVE:
+            config = self.config_snapshot if isinstance(self.config_snapshot, dict) else {}
             required_refs = {
                 "adapter_ref": self.adapter_ref,
                 "channel_ref": self.channel_ref,
@@ -4083,6 +4084,10 @@ class PayrollProviderConnection(UUIDPrimaryKeyModel, TimeStampedModel):
                 errors["status"] = f"Active provider connections require {', '.join(missing)}."
             if self.certification_status != PayrollProviderCertificationStatus.PASSED:
                 errors["certification_status"] = "Active provider connections require passed certification."
+            if config.get("placeholder") is True:
+                errors["config_snapshot"] = "Active provider connections cannot use placeholder configuration."
+            if config.get("live_delivery_enabled") is False:
+                errors["config_snapshot"] = "Active provider connections require live delivery enabled."
         if errors:
             raise ValidationError(errors)
 

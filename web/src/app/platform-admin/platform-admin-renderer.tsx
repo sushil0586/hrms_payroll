@@ -4,7 +4,7 @@ import type { PlatformTenantListItem } from "@/lib/types";
 import { PlatformAdminConsole } from "./platform-admin-console";
 
 export type SearchParamValue = string | string[] | undefined;
-export type PlatformPanel = "control" | "leads" | "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
+export type PlatformPanel = "control" | "leads" | "tenants" | "launch" | "onboarding" | "admins" | "policy-packs" | "events";
 
 export function normalizeParam(value: SearchParamValue) {
   return Array.isArray(value) ? value[0] : value;
@@ -20,7 +20,7 @@ function resolveSelectedTenantId(params: Record<string, SearchParamValue>, tenan
 
 export function resolvePanel(params: Record<string, SearchParamValue>) {
   const requested = normalizeParam(params.panel);
-  if (["control", "leads", "tenants", "onboarding", "admins", "policy-packs", "events"].includes(requested ?? "")) {
+  if (["control", "leads", "tenants", "launch", "onboarding", "admins", "policy-packs", "events"].includes(requested ?? "")) {
     return requested as PlatformPanel;
   }
   return "control";
@@ -32,7 +32,7 @@ export async function renderPlatformAdminConsole(panel: PlatformPanel, params: R
   const shouldLoadLeads = panel === "leads";
   const shouldLoadTenants = panel === "tenants";
   const shouldLoadPolicyPacks = panel === "policy-packs" || panel === "onboarding";
-  const needsSelectedTenant = ["onboarding", "admins", "policy-packs", "events"].includes(panel);
+  const needsSelectedTenant = ["launch", "onboarding", "admins", "policy-packs", "events"].includes(panel);
 
   const [leadResult, tenantResult, policyPackResult] = await Promise.all([
     shouldLoadLeads ? getPlatformPublicLeads() : Promise.resolve({ data: summaryResult.data.lead_queue }),

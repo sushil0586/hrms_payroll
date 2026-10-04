@@ -5589,6 +5589,15 @@ export type PlatformTenantOnboarding = {
   setup_style: string;
   data_setup_style: string;
   policy_control_style: string;
+  launch_blueprint_ref: string;
+  launch_blueprint_version: string;
+  launch_readiness_status: string;
+  launch_subscription_plan_snapshot: string;
+  launch_preview_payload: Record<string, unknown>;
+  launch_selected_at: string | null;
+  launch_applied_at: string | null;
+  launch_verified_at: string | null;
+  launch_status_notes: string;
   country_context: string;
   industry_context: string;
   notes: string;
@@ -5600,6 +5609,131 @@ export type PlatformTenantOnboarding = {
   admin_contacts: PlatformOnboardingAdminContact[];
   checklist_items: PlatformOnboardingChecklistItem[];
   recent_events: PlatformOnboardingEvent[];
+};
+
+export type PlatformLaunchInputDefinition = {
+  key: string;
+  label: string;
+  group: string;
+  field_type: string;
+  help_text: string;
+  owner_role: string;
+  placeholder: string;
+  example: string;
+  required: boolean;
+  sensitive: boolean;
+  choices: { value: string; label: string }[];
+};
+
+export type PlatformLaunchModule = {
+  ref: string;
+  label: string;
+  title?: string;
+  minimum_plan: string;
+  ownership_mode: string;
+  required_inputs: string[];
+  child_seeder: string;
+  description: string;
+  ui_status?: string;
+  status_label?: string;
+  action_label?: string;
+  action_needed?: string;
+  editability_label?: string;
+  missing_inputs?: string[];
+  skip_reason?: string;
+  tenant_plan?: string;
+  plan_allowed?: boolean;
+  safe_apply_enabled?: boolean;
+  apply_allowed?: boolean;
+  gating_reason?: string;
+};
+
+export type PlatformLaunchBlueprint = {
+  ref: string;
+  version: string;
+  label: string;
+  country_code: string;
+  industry_refs: string[];
+  minimum_plan: string;
+  compatible_plans: string[];
+  workforce_model: string;
+  payroll_scope: string;
+  summary: string;
+  required_inputs: string[];
+  input_schema: PlatformLaunchInputDefinition[];
+  recommended_for: string[];
+  modules: PlatformLaunchModule[];
+  compatibility?: {
+    country_matches: boolean;
+    plan_allowed: boolean;
+    included_module_count?: number;
+    plan_gated_module_count?: number;
+    safe_apply_module_count?: number;
+  };
+};
+
+export type PlatformTenantLaunchPreview = {
+  can_apply: boolean;
+  blueprint_ref: string;
+  blueprint_version: string;
+  tenant_code: string;
+  subscription_plan: string;
+  country_code: string;
+  planned_modules: PlatformLaunchModule[];
+  skipped_modules: PlatformLaunchModule[];
+  missing_inputs: string[];
+  required_inputs: string[];
+  input_schema: PlatformLaunchInputDefinition[];
+  blockers: string[];
+  warnings: string[];
+  child_seeders: string[];
+  safe_apply_modules: string[];
+  plan_gated_modules: string[];
+  uncertified_modules: string[];
+};
+
+export type PlatformTenantLaunchSeededItem = {
+  id: string;
+  item_key: string;
+  item_kind: string;
+  module_ref: string;
+  action: string;
+  status: string;
+  ownership_mode: string;
+  object_ref: string;
+  checksum_sha256: string;
+  message: string;
+  payload: Record<string, unknown>;
+  evidence: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformTenantLaunchRun = {
+  id: string;
+  tenant_id: string;
+  blueprint_ref: string;
+  blueprint_version: string;
+  subscription_plan: string;
+  run_type: string;
+  status: string;
+  requested_by_identifier: string;
+  idempotency_key: string;
+  started_at: string | null;
+  finished_at: string | null;
+  input_payload: Record<string, unknown>;
+  plan_snapshot: Record<string, unknown>;
+  result_payload: Record<string, unknown>;
+  errors: unknown[];
+  evidence: Record<string, unknown>;
+  seeded_items: PlatformTenantLaunchSeededItem[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformTenantLaunchPreviewResponse = {
+  preview: PlatformTenantLaunchPreview;
+  launch_run: PlatformTenantLaunchRun;
 };
 
 export type PlatformPolicyPackListItem = {

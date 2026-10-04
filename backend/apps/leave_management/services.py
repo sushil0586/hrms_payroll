@@ -476,7 +476,8 @@ def _assignment_scopes_overlap(candidate_scope, existing_assignment: LeavePolicy
     if candidate_employee_id and existing_employee_id:
         return str(candidate_employee_id) == str(existing_employee_id)
     if candidate_employee_id:
-        candidate_employee = existing_assignment.employee.__class__.objects.filter(
+        candidate_employee_model = LeavePolicyAssignment.employee.field.related_model
+        candidate_employee = candidate_employee_model.objects.filter(
             tenant=existing_assignment.tenant,
             id=candidate_employee_id,
         ).first()

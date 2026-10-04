@@ -1,0 +1,12 @@
+[Unit]
+Description=Run HRMS payroll provider job processing every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+AccuracySec=10s
+Persistent=true
+Unit=hrms-payroll-provider-jobs.service
+
+[Install]
+WantedBy=timers.target

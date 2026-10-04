@@ -31,6 +31,49 @@ class PolicyControlStyle(models.TextChoices):
     MIXED = "mixed", "Mixed"
 
 
+class LaunchReadinessStatus(models.TextChoices):
+    NOT_CONFIGURED = "not_configured", "Not Configured"
+    CONFIGURED = "configured", "Configured"
+    STAGE_READY = "stage_ready", "Stage Ready"
+    CUSTOMER_READY = "customer_ready", "Customer Ready"
+    PAYROLL_REHEARSAL_READY = "payroll_rehearsal_ready", "Payroll Rehearsal Ready"
+    PRODUCTION_READY = "production_ready", "Production Ready"
+    BLOCKED = "blocked", "Blocked"
+
+
+class TenantLaunchRunType(models.TextChoices):
+    PREVIEW = "preview", "Preview"
+    APPLY = "apply", "Apply"
+    VERIFY = "verify", "Verify"
+    REPAIR = "repair", "Repair"
+    UPGRADE = "upgrade", "Upgrade"
+
+
+class TenantLaunchRunStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    RUNNING = "running", "Running"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED = "failed", "Failed"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class TenantLaunchItemAction(models.TextChoices):
+    PLAN = "plan", "Plan"
+    CREATE = "create", "Create"
+    UPDATE = "update", "Update"
+    SKIP = "skip", "Skip"
+    NOOP = "noop", "No-op"
+    BLOCK = "block", "Block"
+
+
+class TenantLaunchItemStatus(models.TextChoices):
+    PLANNED = "planned", "Planned"
+    SUCCEEDED = "succeeded", "Succeeded"
+    SKIPPED = "skipped", "Skipped"
+    BLOCKED = "blocked", "Blocked"
+    FAILED = "failed", "Failed"
+
+
 class AdminProvisioningStatus(models.TextChoices):
     PLANNED = "planned", "Planned"
     PROVISIONED = "provisioned", "Provisioned"
@@ -122,6 +165,19 @@ class TenantOnboarding(UUIDPrimaryKeyModel, TimeStampedModel):
         choices=PolicyControlStyle.choices,
         default=PolicyControlStyle.MIXED,
     )
+    launch_blueprint_ref = models.CharField(max_length=120, blank=True)
+    launch_blueprint_version = models.CharField(max_length=40, blank=True)
+    launch_readiness_status = models.CharField(
+        max_length=40,
+        choices=LaunchReadinessStatus.choices,
+        default=LaunchReadinessStatus.NOT_CONFIGURED,
+    )
+    launch_subscription_plan_snapshot = models.CharField(max_length=40, blank=True)
+    launch_preview_payload = models.JSONField(default=dict, blank=True)
+    launch_selected_at = models.DateTimeField(blank=True, null=True)
+    launch_applied_at = models.DateTimeField(blank=True, null=True)
+    launch_verified_at = models.DateTimeField(blank=True, null=True)
+    launch_status_notes = models.TextField(blank=True)
     country_context = models.CharField(max_length=2, blank=True)
     industry_context = models.CharField(max_length=80, blank=True)
     notes = models.TextField(blank=True)
@@ -138,6 +194,104 @@ class TenantOnboarding(UUIDPrimaryKeyModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"Onboarding - {self.tenant.name}"
+
+
+class TenantLaunchRun(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Auditable execution record for tenant launch blueprint operations."""
+
+    onboarding = models.ForeignKey(
+        TenantOnboarding,
+        on_delete=models.CASCADE,
+        related_name="launch_runs",
+    )
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="launch_runs",
+    )
+    blueprint_ref = models.CharField(max_length=120)
+    blueprint_version = models.CharField(max_length=40)
+    subscription_plan = models.CharField(max_length=40)
+    run_type = models.CharField(
+        max_length=20,
+        choices=TenantLaunchRunType.choices,
+        default=TenantLaunchRunType.PREVIEW,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=TenantLaunchRunStatus.choices,
+        default=TenantLaunchRunStatus.PENDING,
+    )
+    requested_by_identifier = models.CharField(max_length=120, blank=True)
+    idempotency_key = models.CharField(max_length=120, blank=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    finished_at = models.DateTimeField(blank=True, null=True)
+    input_payload = models.JSONField(default=dict, blank=True)
+    plan_snapshot = models.JSONField(default=dict, blank=True)
+    result_payload = models.JSONField(default=dict, blank=True)
+    errors = models.JSONField(default=list, blank=True)
+    evidence = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "run_type", "status"]),
+            models.Index(fields=["tenant", "blueprint_ref", "blueprint_version"]),
+            models.Index(fields=["tenant", "idempotency_key"]),
+        ]
+        verbose_name = "Tenant Launch Run"
+        verbose_name_plural = "Tenant Launch Runs"
+
+    def __str__(self) -> str:
+        return f"{self.tenant.code}:{self.blueprint_ref}:{self.run_type}:{self.status}"
+
+
+class TenantLaunchSeededItem(UUIDPrimaryKeyModel, TimeStampedModel):
+    """Planned or applied item inside a launch run, with ownership and evidence."""
+
+    launch_run = models.ForeignKey(
+        TenantLaunchRun,
+        on_delete=models.CASCADE,
+        related_name="seeded_items",
+    )
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="launch_seeded_items",
+    )
+    item_key = models.CharField(max_length=180)
+    item_kind = models.CharField(max_length=80)
+    module_ref = models.CharField(max_length=80)
+    action = models.CharField(
+        max_length=20,
+        choices=TenantLaunchItemAction.choices,
+        default=TenantLaunchItemAction.PLAN,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=TenantLaunchItemStatus.choices,
+        default=TenantLaunchItemStatus.PLANNED,
+    )
+    ownership_mode = models.CharField(max_length=40, blank=True)
+    object_ref = models.CharField(max_length=180, blank=True)
+    checksum_sha256 = models.CharField(max_length=64, blank=True)
+    message = models.CharField(max_length=255, blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    evidence = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["module_ref", "item_kind", "item_key"]
+        unique_together = [("launch_run", "item_key")]
+        indexes = [
+            models.Index(fields=["tenant", "module_ref", "status"]),
+            models.Index(fields=["tenant", "item_kind"]),
+            models.Index(fields=["tenant", "object_ref"]),
+        ]
+        verbose_name = "Tenant Launch Seeded Item"
+        verbose_name_plural = "Tenant Launch Seeded Items"
+
+    def __str__(self) -> str:
+        return f"{self.tenant.code}:{self.item_key}:{self.status}"
 
 
 class TenantOnboardingAdminContact(UUIDPrimaryKeyModel, TimeStampedModel):

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run HRMS Payroll SaaS notification delivery worker every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+AccuracySec=15s
+Persistent=true
+Unit=hrms-payroll-notification-worker.service
+
+[Install]
+WantedBy=timers.target

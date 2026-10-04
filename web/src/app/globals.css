@@ -8208,6 +8208,92 @@ select.input-control {
   border-color: rgba(239, 68, 68, 0.22);
 }
 
+.platform-admin-shell .platform-input-group {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.platform-admin-shell .platform-input-group:first-child {
+  border-top: 0;
+}
+
+.platform-admin-shell--launch .tenant-support-access-row--stacked:not(.platform-template-row) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.platform-admin-shell--launch .tenant-support-access-row--stacked:not(.platform-template-row) > div,
+.platform-admin-shell--launch .tenant-support-access-row--stacked:not(.platform-template-row) > .record-chip {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.platform-admin-shell--launch .tenant-support-access-row--stacked:not(.platform-template-row) > .record-chip {
+  justify-self: start;
+}
+
+.platform-admin-shell--launch .platform-launch-posture-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.platform-admin-shell--launch .platform-launch-posture-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.platform-admin-shell--launch .platform-launch-posture-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.platform-admin-shell--launch .platform-launch-posture-card__header strong {
+  min-width: 0;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.platform-admin-shell--launch .platform-launch-posture-card > span {
+  color: #475569;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.platform-admin-shell--launch .platform-launch-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.platform-admin-shell--launch .platform-launch-evidence-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.platform-admin-shell--launch .platform-launch-evidence-card > span {
+  color: #475569;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
 .platform-admin-shell .button {
   max-width: 100%;
   min-height: 40px;
@@ -8483,6 +8569,8 @@ select.input-control {
   .platform-admin-shell .platform-control-center,
   .platform-admin-shell .platform-control-grid,
   .platform-admin-shell .support-session-grid,
+  .platform-admin-shell--launch .platform-launch-posture-grid,
+  .platform-admin-shell--launch .platform-launch-evidence-grid,
   .platform-admin-shell .employee-master-layout {
     grid-template-columns: minmax(0, 1fr);
   }

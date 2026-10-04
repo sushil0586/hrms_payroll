@@ -1,0 +1,12 @@
+[Unit]
+Description=Run HRMS payroll provider retry processing every minute
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=60s
+AccuracySec=10s
+Persistent=true
+Unit=hrms-payroll-provider-retries.service
+
+[Install]
+WantedBy=timers.target

@@ -41,6 +41,31 @@ Run the full staging gate after the preflight is clean:
 pnpm qa:launch-signoff:staging
 ```
 
+Run the coding-side stage verification loop with sandbox/contract payroll
+dependencies:
+
+```bash
+pnpm qa:stage-verification
+```
+
+Run the same loop with EC2 service/timer checks:
+
+```bash
+pnpm qa:stage-verification:ec2
+```
+
+This writes `web/qa-artifacts/stage-verification-*` and is intentionally not a
+production credential proof. It verifies static deploy gates, demo isolation,
+web lint/typecheck, deployed smoke, and optional EC2 service state while real
+provider/storage credentials remain tracked separately for final production.
+
+On EC2 staging, apply the non-secret backend env contract gates before deploy
+when real provider/storage credentials are still backlog:
+
+```bash
+bash /var/www/hrms-payroll-saas/current/ops/ec2/apply_stage_contract_env.sh
+```
+
 Run the standard post-deploy smoke check after flipping a release:
 
 ```bash

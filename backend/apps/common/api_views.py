@@ -11948,7 +11948,8 @@ def get_hr_admin_payroll_provider_connection_setup_payload(actor) -> dict:
 
 
 def get_hr_admin_payroll_provider_connection_setup_payload_for_tenant(tenant, *, user=None) -> dict:
-    ensure_default_payroll_provider_connections(tenant, created_by=user)
+    if not PayrollProviderConnection.objects.filter(tenant=tenant).exists():
+        ensure_default_payroll_provider_connections(tenant, created_by=user)
     queryset = PayrollProviderConnection.objects.filter(tenant=tenant)
     connections = list(
         queryset.select_related("certified_by", "last_tested_by", "created_by", "updated_by").order_by(

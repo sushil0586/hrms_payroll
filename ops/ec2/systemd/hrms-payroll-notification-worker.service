@@ -1,0 +1,18 @@
+[Unit]
+Description=HRMS Payroll SaaS notification delivery worker
+After=network-online.target postgresql.service hrms-payroll-backend.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=www-data
+WorkingDirectory=/var/www/hrms-payroll-saas/current/backend
+EnvironmentFile=/var/www/hrms-payroll-saas/shared/backend.env
+Environment=DJANGO_SETTINGS_MODULE=config.settings.production
+ExecStart=/var/www/hrms-payroll-saas/current/backend/.venv/bin/python manage.py process_notifications --limit 100
+Nice=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/www/hrms-payroll-saas/shared /var/www/hrms-payroll-saas/current/backend/media

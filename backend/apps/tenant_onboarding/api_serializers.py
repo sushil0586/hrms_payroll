@@ -5,11 +5,14 @@ from rest_framework import serializers
 from apps.tenant_onboarding.models import (
     AdminProvisioningStatus,
     DataSetupStyle,
+    LaunchReadinessStatus,
     OnboardingOwnerMode,
     OnboardingSetupStyle,
     PolicyControlStyle,
     PublicLeadIntent,
     PublicLeadStatus,
+    TenantLaunchRunStatus,
+    TenantLaunchRunType,
 )
 from apps.tenants.models import SeedPack, SubscriptionPlan, TenantOnboardingStatus, TenantStatus
 
@@ -109,6 +112,15 @@ class PlatformTenantOnboardingSerializer(serializers.Serializer):
     setup_style = serializers.CharField()
     data_setup_style = serializers.CharField()
     policy_control_style = serializers.CharField()
+    launch_blueprint_ref = serializers.CharField(allow_blank=True)
+    launch_blueprint_version = serializers.CharField(allow_blank=True)
+    launch_readiness_status = serializers.CharField()
+    launch_subscription_plan_snapshot = serializers.CharField(allow_blank=True)
+    launch_preview_payload = serializers.JSONField()
+    launch_selected_at = serializers.DateTimeField(allow_null=True)
+    launch_applied_at = serializers.DateTimeField(allow_null=True)
+    launch_verified_at = serializers.DateTimeField(allow_null=True)
+    launch_status_notes = serializers.CharField(allow_blank=True)
     country_context = serializers.CharField(allow_blank=True)
     industry_context = serializers.CharField(allow_blank=True)
     notes = serializers.CharField(allow_blank=True)
@@ -127,6 +139,8 @@ class PlatformTenantOnboardingWriteSerializer(serializers.Serializer):
     setup_style = serializers.ChoiceField(choices=OnboardingSetupStyle.values, required=False)
     data_setup_style = serializers.ChoiceField(choices=DataSetupStyle.values, required=False)
     policy_control_style = serializers.ChoiceField(choices=PolicyControlStyle.values, required=False)
+    launch_readiness_status = serializers.ChoiceField(choices=LaunchReadinessStatus.values, required=False)
+    launch_status_notes = serializers.CharField(required=False, allow_blank=True)
     country_context = serializers.CharField(max_length=2, required=False, allow_blank=True)
     industry_context = serializers.CharField(max_length=80, required=False, allow_blank=True)
     notes = serializers.CharField(required=False, allow_blank=True)
@@ -172,6 +186,147 @@ class PlatformMutationResultSerializer(serializers.Serializer):
     detail = serializers.CharField()
     tenant_status = serializers.CharField(required=False)
     onboarding_status = serializers.CharField(required=False)
+
+
+class PlatformLaunchModuleSerializer(serializers.Serializer):
+    ref = serializers.CharField()
+    label = serializers.CharField()
+    title = serializers.CharField(required=False)
+    minimum_plan = serializers.CharField()
+    ownership_mode = serializers.CharField()
+    required_inputs = serializers.ListField(child=serializers.CharField())
+    child_seeder = serializers.CharField(allow_blank=True)
+    description = serializers.CharField(allow_blank=True)
+    ui_status = serializers.CharField(required=False, allow_blank=True)
+    status_label = serializers.CharField(required=False, allow_blank=True)
+    action_label = serializers.CharField(required=False, allow_blank=True)
+    action_needed = serializers.CharField(required=False, allow_blank=True)
+    editability_label = serializers.CharField(required=False, allow_blank=True)
+    missing_inputs = serializers.ListField(child=serializers.CharField(), required=False)
+    skip_reason = serializers.CharField(required=False, allow_blank=True)
+    tenant_plan = serializers.CharField(required=False, allow_blank=True)
+    plan_allowed = serializers.BooleanField(required=False)
+    safe_apply_enabled = serializers.BooleanField(required=False)
+    apply_allowed = serializers.BooleanField(required=False)
+    gating_reason = serializers.CharField(required=False, allow_blank=True)
+
+
+class PlatformLaunchInputDefinitionSerializer(serializers.Serializer):
+    key = serializers.CharField()
+    label = serializers.CharField()
+    group = serializers.CharField()
+    field_type = serializers.CharField()
+    help_text = serializers.CharField()
+    owner_role = serializers.CharField()
+    placeholder = serializers.CharField(allow_blank=True)
+    example = serializers.CharField(allow_blank=True)
+    required = serializers.BooleanField()
+    sensitive = serializers.BooleanField()
+    choices = serializers.JSONField()
+
+
+class PlatformLaunchBlueprintSerializer(serializers.Serializer):
+    ref = serializers.CharField()
+    version = serializers.CharField()
+    label = serializers.CharField()
+    country_code = serializers.CharField()
+    industry_refs = serializers.ListField(child=serializers.CharField())
+    minimum_plan = serializers.CharField()
+    compatible_plans = serializers.ListField(child=serializers.CharField())
+    workforce_model = serializers.CharField()
+    payroll_scope = serializers.CharField()
+    summary = serializers.CharField()
+    required_inputs = serializers.ListField(child=serializers.CharField())
+    input_schema = PlatformLaunchInputDefinitionSerializer(many=True)
+    recommended_for = serializers.ListField(child=serializers.CharField())
+    modules = PlatformLaunchModuleSerializer(many=True)
+    compatibility = serializers.JSONField(required=False)
+
+
+class PlatformTenantLaunchPreviewRequestSerializer(serializers.Serializer):
+    blueprint_ref = serializers.CharField(max_length=120)
+    blueprint_version = serializers.CharField(max_length=40, required=False, allow_blank=True)
+    input_payload = serializers.JSONField(required=False, default=dict)
+    change_reason = serializers.CharField(max_length=1000, required=False, allow_blank=True)
+    idempotency_key = serializers.CharField(max_length=120, required=False, allow_blank=True)
+
+    def validate_input_payload(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Input payload must be an object.")
+        return value
+
+
+class PlatformTenantLaunchApplyRequestSerializer(serializers.Serializer):
+    requested_modules = serializers.ListField(
+        child=serializers.CharField(max_length=80),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
+    idempotency_key = serializers.CharField(max_length=120, required=False, allow_blank=True)
+
+
+class PlatformTenantLaunchHandoffRequestSerializer(serializers.Serializer):
+    handoff_notes = serializers.CharField(max_length=4000, trim_whitespace=True)
+
+
+class PlatformTenantLaunchPreviewSerializer(serializers.Serializer):
+    can_apply = serializers.BooleanField()
+    blueprint_ref = serializers.CharField()
+    blueprint_version = serializers.CharField()
+    tenant_code = serializers.CharField()
+    subscription_plan = serializers.CharField()
+    country_code = serializers.CharField()
+    planned_modules = PlatformLaunchModuleSerializer(many=True)
+    skipped_modules = PlatformLaunchModuleSerializer(many=True)
+    missing_inputs = serializers.ListField(child=serializers.CharField())
+    required_inputs = serializers.ListField(child=serializers.CharField())
+    input_schema = PlatformLaunchInputDefinitionSerializer(many=True)
+    blockers = serializers.ListField(child=serializers.CharField())
+    warnings = serializers.ListField(child=serializers.CharField())
+    child_seeders = serializers.ListField(child=serializers.CharField())
+    safe_apply_modules = serializers.ListField(child=serializers.CharField())
+    plan_gated_modules = serializers.ListField(child=serializers.CharField())
+    uncertified_modules = serializers.ListField(child=serializers.CharField())
+
+
+class PlatformTenantLaunchSeededItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    item_key = serializers.CharField()
+    item_kind = serializers.CharField()
+    module_ref = serializers.CharField()
+    action = serializers.CharField()
+    status = serializers.CharField()
+    ownership_mode = serializers.CharField(allow_blank=True)
+    object_ref = serializers.CharField(allow_blank=True)
+    checksum_sha256 = serializers.CharField(allow_blank=True)
+    message = serializers.CharField(allow_blank=True)
+    payload = serializers.JSONField()
+    evidence = serializers.JSONField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class PlatformTenantLaunchRunSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    tenant_id = serializers.UUIDField()
+    blueprint_ref = serializers.CharField()
+    blueprint_version = serializers.CharField()
+    subscription_plan = serializers.CharField()
+    run_type = serializers.ChoiceField(choices=TenantLaunchRunType.values)
+    status = serializers.ChoiceField(choices=TenantLaunchRunStatus.values)
+    requested_by_identifier = serializers.CharField(allow_blank=True)
+    idempotency_key = serializers.CharField(allow_blank=True)
+    started_at = serializers.DateTimeField(allow_null=True)
+    finished_at = serializers.DateTimeField(allow_null=True)
+    input_payload = serializers.JSONField()
+    plan_snapshot = serializers.JSONField()
+    result_payload = serializers.JSONField()
+    errors = serializers.JSONField()
+    evidence = serializers.JSONField()
+    seeded_items = PlatformTenantLaunchSeededItemSerializer(many=True, required=False)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
 
 
 class PlatformPermissionCatalogItemSerializer(serializers.Serializer):

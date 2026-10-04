@@ -1,0 +1,24 @@
+[Unit]
+Description=HRMS Payroll SaaS Django backend
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=www-data
+WorkingDirectory=/var/www/hrms-payroll-saas/current/backend
+EnvironmentFile=/var/www/hrms-payroll-saas/shared/backend.env
+Environment=DJANGO_SETTINGS_MODULE=config.settings.production
+ExecStart=/var/www/hrms-payroll-saas/current/backend/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8020 --workers 2 --timeout 120 --access-logfile - --error-logfile -
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/www/hrms-payroll-saas/shared /var/www/hrms-payroll-saas/current/backend/staticfiles /var/www/hrms-payroll-saas/current/backend/media
+
+[Install]
+WantedBy=multi-user.target

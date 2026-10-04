@@ -19,6 +19,7 @@ import type {
   PlatformTenantListItem,
   PlatformTenantOnboarding,
 } from "@/lib/types";
+import { PlatformLaunchWorkspace } from "./platform-launch-workspace";
 
 type Props = {
   initialPanel: PlatformPanel;
@@ -31,7 +32,7 @@ type Props = {
 };
 
 type MutationMethod = "POST" | "PATCH" | "DELETE";
-type PlatformPanel = "control" | "leads" | "tenants" | "onboarding" | "admins" | "policy-packs" | "events";
+type PlatformPanel = "control" | "leads" | "tenants" | "launch" | "onboarding" | "admins" | "policy-packs" | "events";
 type PlatformPolicyPackItem = NonNullable<PlatformPolicyPackListItem["items"]>[number];
 type ConfirmAction = {
   title: string;
@@ -43,10 +44,11 @@ type ConfirmAction = {
 
 const PAGE_SIZE = 8;
 
-const platformTabs: { panel: PlatformPanel; label: string; countKey: "control" | "leads" | "tenants" | "onboarding" | "admins" | "policyPacks" | "events" }[] = [
+const platformTabs: { panel: PlatformPanel; label: string; countKey: "control" | "leads" | "tenants" | "launch" | "onboarding" | "admins" | "policyPacks" | "events" }[] = [
   { panel: "control", label: "Control", countKey: "control" },
   { panel: "leads", label: "Leads", countKey: "leads" },
   { panel: "tenants", label: "Tenants", countKey: "tenants" },
+  { panel: "launch", label: "Launch Blueprint", countKey: "launch" },
   { panel: "onboarding", label: "Launch Readiness", countKey: "onboarding" },
   { panel: "admins", label: "Admin Access", countKey: "admins" },
   { panel: "policy-packs", label: "Setup Templates", countKey: "policyPacks" },
@@ -68,6 +70,11 @@ const panelGuides: Record<PlatformPanel, { title: string; description: string; s
     title: "Tenants",
     description: "Search the customer registry, select a tenant, and create new customer organizations when needed.",
     steps: ["Find or create tenant", "Select tenant", "Open onboarding"],
+  },
+  launch: {
+    title: "Launch Blueprint",
+    description: "Select a guided India launch blueprint, collect required inputs, preview setup impact, and apply certified safe setup.",
+    steps: ["Select blueprint", "Complete launch inputs", "Preview and safe apply"],
   },
   onboarding: {
     title: "Launch Readiness",
@@ -95,6 +102,7 @@ const panelPills: Record<PlatformPanel, string[]> = {
   control: ["Action queue", "Tenant readiness", "Launch blockers"],
   leads: ["Public signup", "Qualification", "Tenant conversion"],
   tenants: ["Customer registry", "Create tenant", "Select workspace"],
+  launch: ["Blueprint selection", "Required inputs", "Safe apply"],
   onboarding: ["Setup details", "Launch readiness", "Go-live evidence"],
   admins: ["Admin contacts", "Login access", "Secure sharing"],
   "policy-packs": ["Setup templates", "Publish", "Apply"],
@@ -487,6 +495,7 @@ function buildPanelHref(panel: PlatformPanel, selectedTenantId?: string) {
     control: "/platform-admin",
     leads: "/platform-admin/leads",
     tenants: "/platform-admin/tenants",
+    launch: "/platform-admin/launch",
     onboarding: "/platform-admin/onboarding",
     admins: "/platform-admin/admins",
     "policy-packs": "/platform-admin/policy-packs",
@@ -754,6 +763,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     control: summary.counts.active_leads + tenantCounts.onboarding,
     leads: summary.counts.active_leads,
     tenants: summary.counts.tenants,
+    launch: selectedTenant && onboarding ? 1 : 0,
     onboarding: selectedTenant && onboarding ? 2 : 0,
     admins: onboarding?.admin_contacts.length ?? 0,
     policyPacks: summary.counts.policy_packs,
@@ -1546,6 +1556,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
             <div className="platform-command-grid">
               <Link className="button button--primary" href={buildPanelHref("leads", selectedTenant?.id)}>Review leads</Link>
               <Link className="button button--secondary" href={buildPanelHref("tenants", selectedTenant?.id)}>Create tenant</Link>
+              <Link className="button button--secondary" href={buildPanelHref("launch", selectedTenant?.id)}>Launch blueprint</Link>
               <Link className="button button--secondary" href={buildPanelHref("admins", selectedTenant?.id)}>Create admin access</Link>
               <Link className="button button--secondary" href={buildPanelHref("policy-packs", selectedTenant?.id)}>Setup templates</Link>
               <Link className="button button--secondary" href="/hr-admin/saas-operations">Ops health</Link>
@@ -1863,8 +1874,16 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
       </section>
       ) : null}
 
+      {initialPanel === "launch" && !(selectedTenant && onboarding) ? (
+        <PlatformLaunchWorkspace onboarding={onboarding} selectedTenant={selectedTenant} />
+      ) : null}
+
       {selectedTenant && onboarding ? (
         <>
+          {initialPanel === "launch" ? (
+            <PlatformLaunchWorkspace onboarding={onboarding} selectedTenant={selectedTenant} />
+          ) : null}
+
           {initialPanel === "onboarding" ? (
           <section className="section support-session-grid platform-onboarding-overview-grid" data-testid="platform-admin-onboarding-panel">
             <article className="record-card platform-tenant-profile-card">

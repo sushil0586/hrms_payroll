@@ -15,6 +15,8 @@
     "qa:launch-signoff": "python3 scripts/run-production-launch-signoff.py",
     "qa:launch-signoff:staging": "python3 scripts/run-production-launch-signoff.py --mode staging",
     "qa:launch-signoff:staging-preflight": "python3 scripts/run-production-launch-signoff.py --mode staging --preflight-only",
+    "qa:stage-verification": "python3 scripts/run-stage-verification.py",
+    "qa:stage-verification:ec2": "python3 scripts/run-stage-verification.py --ssh-target ubuntu@3.106.125.117 --ssh-key ~/Downloads/bansalsushil05.pem",
     "qa:final-production-audit": "python3 scripts/run-final-production-audit.py",
     "qa:production-preflight": "cd backend && ../.venv/bin/python manage.py production_preflight --strict",
     "qa:production-preflight:static": "cd backend && ../.venv/bin/python manage.py production_preflight --strict --skip-network",

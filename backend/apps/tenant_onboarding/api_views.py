@@ -9,9 +9,13 @@ from django.utils import timezone
 from rest_framework import exceptions, permissions, response, status
 from rest_framework.views import APIView
 
+from apps.common.tenant_launch.preview import build_launch_preview
+from apps.common.tenant_launch.registry import get_blueprint, list_blueprints, serialize_blueprint
+from apps.common.tenant_launch.seeders import SAFE_APPLY_MODULES, SEEDER_BY_MODULE
 from apps.iam.models import MembershipStatus, PermissionCatalogEntry
 from apps.iam.permission_catalog import get_permission_catalog
 from apps.tenant_onboarding.api_serializers import (
+    PlatformLaunchBlueprintSerializer,
     PlatformMutationResultSerializer,
     PlatformOnboardingAdminContactSerializer,
     PlatformOnboardingAdminContactWriteSerializer,
@@ -20,6 +24,11 @@ from apps.tenant_onboarding.api_serializers import (
     PlatformProvisionAdminResultSerializer,
     PlatformProvisionAdminSerializer,
     PlatformTenantListItemSerializer,
+    PlatformTenantLaunchApplyRequestSerializer,
+    PlatformTenantLaunchHandoffRequestSerializer,
+    PlatformTenantLaunchPreviewRequestSerializer,
+    PlatformTenantLaunchPreviewSerializer,
+    PlatformTenantLaunchRunSerializer,
     PlatformTenantOnboardingSerializer,
     PlatformTenantOnboardingWriteSerializer,
     PlatformTenantWriteSerializer,
@@ -31,8 +40,15 @@ from apps.tenant_onboarding.api_serializers import (
 from apps.tenant_onboarding.models import (
     AdminProvisioningStatus,
     ChecklistStatus,
+    LaunchReadinessStatus,
     PublicLeadStatus,
     PublicTenantLead,
+    TenantLaunchRun,
+    TenantLaunchRunStatus,
+    TenantLaunchRunType,
+    TenantLaunchItemAction,
+    TenantLaunchItemStatus,
+    TenantLaunchSeededItem,
     TenantOnboarding,
     TenantOnboardingAdminContact,
 )
@@ -95,6 +111,15 @@ def _serialize_onboarding(item: TenantOnboarding) -> dict:
         "setup_style": item.setup_style,
         "data_setup_style": item.data_setup_style,
         "policy_control_style": item.policy_control_style,
+        "launch_blueprint_ref": item.launch_blueprint_ref,
+        "launch_blueprint_version": item.launch_blueprint_version,
+        "launch_readiness_status": item.launch_readiness_status,
+        "launch_subscription_plan_snapshot": item.launch_subscription_plan_snapshot,
+        "launch_preview_payload": item.launch_preview_payload,
+        "launch_selected_at": item.launch_selected_at,
+        "launch_applied_at": item.launch_applied_at,
+        "launch_verified_at": item.launch_verified_at,
+        "launch_status_notes": item.launch_status_notes,
         "country_context": item.country_context,
         "industry_context": item.industry_context,
         "notes": item.notes,
@@ -216,6 +241,160 @@ def _serialize_public_lead(item: PublicTenantLead) -> dict:
     }
 
 
+def _serialize_launch_run(item: TenantLaunchRun) -> dict:
+    return {
+        "id": item.id,
+        "tenant_id": item.tenant_id,
+        "blueprint_ref": item.blueprint_ref,
+        "blueprint_version": item.blueprint_version,
+        "subscription_plan": item.subscription_plan,
+        "run_type": item.run_type,
+        "status": item.status,
+        "requested_by_identifier": item.requested_by_identifier,
+        "idempotency_key": item.idempotency_key,
+        "started_at": item.started_at,
+        "finished_at": item.finished_at,
+        "input_payload": item.input_payload,
+        "plan_snapshot": item.plan_snapshot,
+        "result_payload": item.result_payload,
+        "errors": item.errors,
+        "evidence": item.evidence,
+        "seeded_items": [_serialize_launch_seeded_item(seeded_item) for seeded_item in item.seeded_items.all()],
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def _serialize_launch_seeded_item(item: TenantLaunchSeededItem) -> dict:
+    return {
+        "id": item.id,
+        "item_key": item.item_key,
+        "item_kind": item.item_kind,
+        "module_ref": item.module_ref,
+        "action": item.action,
+        "status": item.status,
+        "ownership_mode": item.ownership_mode,
+        "object_ref": item.object_ref,
+        "checksum_sha256": item.checksum_sha256,
+        "message": item.message,
+        "payload": item.payload,
+        "evidence": item.evidence,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def _create_preview_seeded_items(*, run: TenantLaunchRun, preview_payload: dict) -> None:
+    evidence = {
+        "source": "platform_launch_preview",
+        "launch_run_id": str(run.id),
+    }
+    items = []
+    for module in preview_payload.get("planned_modules", []):
+        has_missing_inputs = bool(module.get("missing_inputs"))
+        items.append(
+            TenantLaunchSeededItem(
+                launch_run=run,
+                tenant=run.tenant,
+                item_key=module["ref"],
+                item_kind="launch_module",
+                module_ref=module["ref"],
+                action=TenantLaunchItemAction.BLOCK if has_missing_inputs else TenantLaunchItemAction.PLAN,
+                status=TenantLaunchItemStatus.BLOCKED if has_missing_inputs else TenantLaunchItemStatus.PLANNED,
+                ownership_mode=module.get("ownership_mode", ""),
+                message=module.get("action_needed", ""),
+                payload=module,
+                evidence=evidence,
+            )
+        )
+    for module in preview_payload.get("skipped_modules", []):
+        items.append(
+            TenantLaunchSeededItem(
+                launch_run=run,
+                tenant=run.tenant,
+                item_key=module["ref"],
+                item_kind="launch_module",
+                module_ref=module["ref"],
+                action=TenantLaunchItemAction.SKIP,
+                status=TenantLaunchItemStatus.SKIPPED,
+                ownership_mode=module.get("ownership_mode", ""),
+                message=module.get("skip_reason", module.get("action_needed", "")),
+                payload=module,
+                evidence=evidence,
+            )
+        )
+    if items:
+        TenantLaunchSeededItem.objects.bulk_create(items)
+
+
+def _latest_apply_ready_preview(tenant: Tenant) -> TenantLaunchRun | None:
+    previews = (
+        TenantLaunchRun.objects.filter(
+            tenant=tenant,
+            run_type=TenantLaunchRunType.PREVIEW,
+            status=TenantLaunchRunStatus.SUCCEEDED,
+        )
+        .order_by("-created_at")
+    )
+    for preview in previews:
+        if preview.plan_snapshot.get("can_apply") is True:
+            return preview
+    return None
+
+
+def _module_payloads_by_ref(preview_payload: dict) -> dict[str, dict]:
+    payloads = {}
+    for module in preview_payload.get("planned_modules", []):
+        payloads[module["ref"]] = module
+    for module in preview_payload.get("skipped_modules", []):
+        payloads[module["ref"]] = module
+    return payloads
+
+
+def _latest_successful_apply_run(tenant: Tenant) -> TenantLaunchRun | None:
+    return (
+        TenantLaunchRun.objects.filter(
+            tenant=tenant,
+            run_type=TenantLaunchRunType.APPLY,
+            status=TenantLaunchRunStatus.SUCCEEDED,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _launch_change_reasons(*, onboarding: TenantOnboarding, tenant: Tenant, preview_payload: dict, input_payload: dict) -> list[str]:
+    if not onboarding.launch_applied_at:
+        return []
+
+    latest_apply = _latest_successful_apply_run(tenant)
+    reasons = []
+    if latest_apply is None:
+        reasons.append("launch setup was marked applied but no successful apply evidence exists")
+    elif latest_apply.input_payload != input_payload:
+        reasons.append("launch input payload changed after safe apply")
+
+    if onboarding.launch_blueprint_ref and preview_payload.get("blueprint_ref") != onboarding.launch_blueprint_ref:
+        reasons.append("launch blueprint changed after safe apply")
+    if onboarding.launch_blueprint_version and preview_payload.get("blueprint_version") != onboarding.launch_blueprint_version:
+        reasons.append("launch blueprint version changed after safe apply")
+    if onboarding.launch_subscription_plan_snapshot and tenant.subscription_plan != onboarding.launch_subscription_plan_snapshot:
+        reasons.append("tenant subscription plan changed after safe apply")
+    return reasons
+
+
+def _validate_apply_ready_preview_is_current(*, onboarding: TenantOnboarding, tenant: Tenant, preview_run: TenantLaunchRun) -> None:
+    preview_payload = preview_run.plan_snapshot
+    if preview_run.subscription_plan != tenant.subscription_plan or preview_payload.get("subscription_plan") != tenant.subscription_plan:
+        raise exceptions.ValidationError("Tenant subscription changed after preview. Run a new launch preview before applying safe modules.")
+    if onboarding.launch_subscription_plan_snapshot != tenant.subscription_plan:
+        raise exceptions.ValidationError("Tenant launch plan snapshot is stale. Run a new launch preview before applying safe modules.")
+    if onboarding.launch_blueprint_ref != preview_run.blueprint_ref or onboarding.launch_blueprint_version != preview_run.blueprint_version:
+        raise exceptions.ValidationError("Launch blueprint changed after preview. Run a new launch preview before applying safe modules.")
+    if onboarding.launch_preview_payload != preview_payload:
+        raise exceptions.ValidationError("Launch preview evidence is stale. Run a new launch preview before applying safe modules.")
+
+
 class PlatformPermissionCatalogListView(APIView):
     permission_classes = [IsPlatformStaff]
 
@@ -231,6 +410,42 @@ class PlatformPermissionCatalogListView(APIView):
                 for item in sorted(get_permission_catalog(), key=lambda item: (item["module"], item["key"]))
             ]
         return response.Response(PlatformPermissionCatalogItemSerializer(payload, many=True).data)
+
+
+class PlatformLaunchBlueprintListView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    def get(self, request):
+        country_code = request.query_params.get("country_code", "").strip().upper()
+        subscription_plan = request.query_params.get("subscription_plan", "").strip()
+        blueprints = list_blueprints()
+        if country_code:
+            blueprints = [blueprint for blueprint in blueprints if blueprint.country_code == country_code]
+        payload = [
+            serialize_blueprint(
+                blueprint,
+                subscription_plan=subscription_plan,
+                country_code=country_code,
+            )
+            for blueprint in blueprints
+        ]
+        return response.Response(PlatformLaunchBlueprintSerializer(payload, many=True).data)
+
+
+class PlatformLaunchBlueprintDetailView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    def get(self, request, blueprint_ref: str):
+        version = request.query_params.get("version", "").strip()
+        blueprint = get_blueprint(blueprint_ref, version or None)
+        if blueprint is None:
+            raise exceptions.NotFound("Launch blueprint not found.")
+        payload = serialize_blueprint(
+            blueprint,
+            subscription_plan=request.query_params.get("subscription_plan", "").strip(),
+            country_code=request.query_params.get("country_code", "").strip().upper(),
+        )
+        return response.Response(PlatformLaunchBlueprintSerializer(payload).data)
 
 
 def _catalog_entry_from_code(permission_key: str) -> PermissionCatalogEntry | None:
@@ -688,6 +903,386 @@ class PlatformTenantOnboardingDetailView(APIView):
             summary=f"Onboarding details updated for {tenant.code}.",
             actor_identifier=_actor_identifier(request),
             payload={"fields": sorted(list(serializer.validated_data.keys()))},
+        )
+        return response.Response(PlatformTenantOnboardingSerializer(_serialize_onboarding(onboarding)).data)
+
+
+class PlatformTenantLaunchRunListView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    def get(self, request, item_id):
+        tenant = _get_tenant_or_404(item_id)
+        runs = TenantLaunchRun.objects.filter(tenant=tenant).prefetch_related("seeded_items").order_by("-created_at")[:50]
+        payload = [_serialize_launch_run(item) for item in runs]
+        return response.Response(PlatformTenantLaunchRunSerializer(payload, many=True).data)
+
+
+class PlatformTenantLaunchPreviewView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def post(self, request, item_id):
+        tenant = _get_tenant_or_404(item_id)
+        onboarding = tenant.onboarding_record
+        serializer = PlatformTenantLaunchPreviewRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        started_at = timezone.now()
+        preview = build_launch_preview(
+            tenant=tenant,
+            blueprint_ref=data["blueprint_ref"],
+            blueprint_version=data.get("blueprint_version") or None,
+            input_payload=data.get("input_payload") or {},
+        )
+        preview_payload = preview.as_dict()
+        input_payload = data.get("input_payload") or {}
+        change_reason = data.get("change_reason", "").strip()
+        change_reasons = _launch_change_reasons(
+            onboarding=onboarding,
+            tenant=tenant,
+            preview_payload=preview_payload,
+            input_payload=input_payload,
+        )
+        if change_reasons and not change_reason:
+            raise exceptions.ValidationError(
+                {
+                    "change_reason": (
+                        "A change reason is required after safe launch setup has been applied. "
+                        f"Detected: {', '.join(change_reasons)}."
+                    )
+                }
+            )
+        finished_at = timezone.now()
+        errors = [{"message": blocker} for blocker in preview.blockers]
+        run = TenantLaunchRun.objects.create(
+            onboarding=onboarding,
+            tenant=tenant,
+            blueprint_ref=preview.blueprint_ref,
+            blueprint_version=preview.blueprint_version,
+            subscription_plan=tenant.subscription_plan,
+            run_type=TenantLaunchRunType.PREVIEW,
+            status=TenantLaunchRunStatus.SUCCEEDED if not preview.blockers else TenantLaunchRunStatus.FAILED,
+            requested_by_identifier=_actor_identifier(request),
+            idempotency_key=data.get("idempotency_key", ""),
+            started_at=started_at,
+            finished_at=finished_at,
+            input_payload=input_payload,
+            plan_snapshot=preview_payload,
+            result_payload={"can_apply": preview.can_apply, "change_reasons": change_reasons},
+            errors=errors,
+            evidence={
+                "source": "platform_launch_preview",
+                "recorded_at": finished_at.isoformat(),
+                "change_reason": change_reason,
+                "change_reasons": change_reasons,
+                "requires_change_reason": bool(change_reasons),
+            },
+        )
+        _create_preview_seeded_items(run=run, preview_payload=preview_payload)
+
+        if not preview.blockers:
+            onboarding.launch_blueprint_ref = preview.blueprint_ref
+            onboarding.launch_blueprint_version = preview.blueprint_version
+            onboarding.launch_subscription_plan_snapshot = tenant.subscription_plan
+            onboarding.launch_preview_payload = preview_payload
+            onboarding.launch_selected_at = finished_at
+            onboarding.launch_readiness_status = (
+                LaunchReadinessStatus.CONFIGURED
+                if preview.can_apply
+                else LaunchReadinessStatus.BLOCKED
+            )
+            onboarding.launch_status_notes = (
+                "Launch preview is apply-ready."
+                if preview.can_apply and not change_reasons
+                else "Launch change preview is apply-ready and requires review before handoff."
+                if preview.can_apply
+                else "Launch preview has missing customer inputs."
+            )
+            onboarding.save(
+                update_fields=[
+                    "launch_blueprint_ref",
+                    "launch_blueprint_version",
+                    "launch_subscription_plan_snapshot",
+                    "launch_preview_payload",
+                    "launch_selected_at",
+                    "launch_readiness_status",
+                    "launch_status_notes",
+                    "updated_at",
+                ]
+            )
+        add_onboarding_event(
+            onboarding,
+            event_type="launch_blueprint_previewed",
+            summary=f"Previewed launch blueprint {preview.blueprint_ref} for {tenant.code}.",
+            actor_identifier=_actor_identifier(request),
+            payload={
+                "launch_run_id": str(run.id),
+                "blueprint_ref": preview.blueprint_ref,
+                "blueprint_version": preview.blueprint_version,
+                "can_apply": preview.can_apply,
+                "missing_inputs": list(preview.missing_inputs),
+                "blockers": list(preview.blockers),
+                "change_reason": change_reason,
+                "change_reasons": change_reasons,
+            },
+        )
+        return response.Response(
+            {
+                "preview": PlatformTenantLaunchPreviewSerializer(preview_payload).data,
+                "launch_run": PlatformTenantLaunchRunSerializer(_serialize_launch_run(run)).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PlatformTenantLaunchApplyView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def post(self, request, item_id):
+        tenant = _get_tenant_or_404(item_id)
+        onboarding = tenant.onboarding_record
+        serializer = PlatformTenantLaunchApplyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        actor_identifier = _actor_identifier(request)
+        idempotency_key = data.get("idempotency_key", "")
+
+        if idempotency_key:
+            existing_run = (
+                TenantLaunchRun.objects.filter(
+                    tenant=tenant,
+                    run_type=TenantLaunchRunType.APPLY,
+                    idempotency_key=idempotency_key,
+                )
+                .prefetch_related("seeded_items")
+                .order_by("-created_at")
+                .first()
+            )
+            if existing_run:
+                return response.Response(PlatformTenantLaunchRunSerializer(_serialize_launch_run(existing_run)).data)
+
+        preview_run = _latest_apply_ready_preview(tenant)
+        if preview_run is None:
+            raise exceptions.ValidationError("Run an apply-ready launch preview before applying safe modules.")
+        _validate_apply_ready_preview_is_current(onboarding=onboarding, tenant=tenant, preview_run=preview_run)
+
+        preview_payload = preview_run.plan_snapshot
+        module_payloads = _module_payloads_by_ref(preview_payload)
+        requested_modules = set(data.get("requested_modules") or [])
+        apply_allowed_modules = set(preview_payload.get("safe_apply_modules") or [])
+        unknown_requested = sorted(module for module in requested_modules if module not in module_payloads)
+        if unknown_requested:
+            raise exceptions.ValidationError(
+                {"requested_modules": f"These modules are not in the latest launch preview: {', '.join(unknown_requested)}."}
+            )
+        modules_to_apply = requested_modules or apply_allowed_modules
+        disallowed_requested = sorted(modules_to_apply - apply_allowed_modules)
+        if disallowed_requested:
+            return response.Response(
+                PlatformMutationResultSerializer(
+                    {
+                        "detail": (
+                            "Launch apply is only enabled for modules allowed by the latest preview, "
+                            "current subscription, and certified safe seeder list. "
+                            f"These modules are gated: {', '.join(disallowed_requested)}."
+                        ),
+                        "tenant_status": tenant.status,
+                        "onboarding_status": tenant.onboarding_status,
+                    }
+                ).data,
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        started_at = timezone.now()
+        apply_run = TenantLaunchRun.objects.create(
+            onboarding=onboarding,
+            tenant=tenant,
+            blueprint_ref=preview_run.blueprint_ref,
+            blueprint_version=preview_run.blueprint_version,
+            subscription_plan=tenant.subscription_plan,
+            run_type=TenantLaunchRunType.APPLY,
+            status=TenantLaunchRunStatus.RUNNING,
+            requested_by_identifier=actor_identifier,
+            idempotency_key=idempotency_key,
+            started_at=started_at,
+            input_payload=preview_run.input_payload,
+            plan_snapshot=preview_payload,
+            evidence={
+                "source": "platform_launch_safe_apply",
+                "preview_run_id": str(preview_run.id),
+                "requested_modules": sorted(requested_modules),
+                "safe_modules": sorted(SAFE_APPLY_MODULES),
+                "apply_allowed_modules": sorted(apply_allowed_modules),
+                "plan_gated_modules": sorted(preview_payload.get("plan_gated_modules") or []),
+                "uncertified_modules": sorted(preview_payload.get("uncertified_modules") or []),
+                "subscription_plan": tenant.subscription_plan,
+            },
+        )
+
+        results = []
+        errors = []
+        applied_modules = set()
+        for module_ref in sorted(modules_to_apply):
+            seeder = SEEDER_BY_MODULE[module_ref]
+            module_payload = module_payloads.get(module_ref, {"ref": module_ref})
+            try:
+                result = seeder(onboarding, preview_run.input_payload)
+                results.append(result.as_dict())
+                applied_modules.add(module_ref)
+                TenantLaunchSeededItem.objects.create(
+                    launch_run=apply_run,
+                    tenant=tenant,
+                    item_key=module_ref,
+                    item_kind="launch_module",
+                    module_ref=module_ref,
+                    action=TenantLaunchItemAction.UPDATE if result.existing else TenantLaunchItemAction.CREATE,
+                    status=TenantLaunchItemStatus.SUCCEEDED,
+                    ownership_mode=module_payload.get("ownership_mode", ""),
+                    message=result.message,
+                    payload={**module_payload, "result": result.as_dict()},
+                    evidence={"source": "platform_launch_safe_apply", "preview_run_id": str(preview_run.id)},
+                )
+            except Exception as exc:
+                errors.append({"module_ref": module_ref, "message": str(exc)})
+                TenantLaunchSeededItem.objects.create(
+                    launch_run=apply_run,
+                    tenant=tenant,
+                    item_key=module_ref,
+                    item_kind="launch_module",
+                    module_ref=module_ref,
+                    action=TenantLaunchItemAction.UPDATE,
+                    status=TenantLaunchItemStatus.FAILED,
+                    ownership_mode=module_payload.get("ownership_mode", ""),
+                    message=str(exc)[:255],
+                    payload=module_payload,
+                    evidence={"source": "platform_launch_safe_apply", "preview_run_id": str(preview_run.id)},
+                )
+
+        for module_ref, module_payload in module_payloads.items():
+            if module_ref in applied_modules:
+                continue
+            if apply_run.seeded_items.filter(item_key=module_ref).exists():
+                continue
+            if module_ref in SAFE_APPLY_MODULES:
+                message = "Safe module was not requested in this apply run."
+            elif module_payload.get("plan_allowed") is False:
+                message = module_payload.get("skip_reason") or "Module is gated by the current subscription."
+            else:
+                message = "Module remains gated until its child seeder is certified."
+            TenantLaunchSeededItem.objects.create(
+                launch_run=apply_run,
+                tenant=tenant,
+                item_key=module_ref,
+                item_kind="launch_module",
+                module_ref=module_ref,
+                action=TenantLaunchItemAction.SKIP,
+                status=TenantLaunchItemStatus.SKIPPED,
+                ownership_mode=module_payload.get("ownership_mode", ""),
+                message=message,
+                payload=module_payload,
+                evidence={"source": "platform_launch_safe_apply", "preview_run_id": str(preview_run.id)},
+            )
+
+        finished_at = timezone.now()
+        apply_run.status = TenantLaunchRunStatus.FAILED if errors else TenantLaunchRunStatus.SUCCEEDED
+        apply_run.finished_at = finished_at
+        apply_run.result_payload = {
+            "applied_modules": sorted(applied_modules),
+            "gated_modules": sorted(set(module_payloads) - applied_modules),
+            "plan_gated_modules": sorted(preview_payload.get("plan_gated_modules") or []),
+            "uncertified_modules": sorted(preview_payload.get("uncertified_modules") or []),
+            "safe_apply_modules": sorted(apply_allowed_modules),
+            "results": results,
+        }
+        apply_run.errors = errors
+        apply_run.save(update_fields=["status", "finished_at", "result_payload", "errors", "updated_at"])
+
+        if not errors:
+            onboarding.launch_applied_at = finished_at
+            onboarding.launch_readiness_status = LaunchReadinessStatus.STAGE_READY
+            onboarding.launch_status_notes = "Certified safe launch modules have been applied."
+            onboarding.save(
+                update_fields=[
+                    "launch_applied_at",
+                    "launch_readiness_status",
+                    "launch_status_notes",
+                    "updated_at",
+                ]
+            )
+            add_onboarding_event(
+                onboarding,
+                event_type="launch_safe_modules_applied",
+                summary=f"Applied certified safe launch modules for {tenant.code}.",
+                actor_identifier=actor_identifier,
+                payload={
+                    "launch_run_id": str(apply_run.id),
+                    "preview_run_id": str(preview_run.id),
+                    "applied_modules": sorted(applied_modules),
+                },
+            )
+
+        apply_run = TenantLaunchRun.objects.prefetch_related("seeded_items").get(id=apply_run.id)
+        return response.Response(
+            PlatformTenantLaunchRunSerializer(_serialize_launch_run(apply_run)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PlatformTenantLaunchHandoffView(APIView):
+    permission_classes = [IsPlatformStaff]
+
+    @transaction.atomic
+    def post(self, request, item_id):
+        tenant = _get_tenant_or_404(item_id)
+        onboarding = tenant.onboarding_record
+        serializer = PlatformTenantLaunchHandoffRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        handoff_notes = serializer.validated_data["handoff_notes"].strip()
+        latest_apply = _latest_successful_apply_run(tenant)
+        if latest_apply is None:
+            raise exceptions.ValidationError("Certified safe launch setup must be applied before customer handoff.")
+        if onboarding.launch_readiness_status not in {
+            LaunchReadinessStatus.STAGE_READY,
+            LaunchReadinessStatus.CUSTOMER_READY,
+            LaunchReadinessStatus.PAYROLL_REHEARSAL_READY,
+            LaunchReadinessStatus.PRODUCTION_READY,
+        }:
+            raise exceptions.ValidationError("Launch readiness must be stage ready before customer handoff.")
+
+        completed_at = timezone.now()
+        onboarding.launch_readiness_status = LaunchReadinessStatus.CUSTOMER_READY
+        onboarding.handoff_completed_at = completed_at
+        onboarding.customer_handoff_notes = handoff_notes
+        onboarding.launch_status_notes = "Customer handoff completed. Customer-owned setup can continue."
+        onboarding.save(
+            update_fields=[
+                "launch_readiness_status",
+                "handoff_completed_at",
+                "customer_handoff_notes",
+                "launch_status_notes",
+                "updated_at",
+            ]
+        )
+        tenant.onboarding_status = TenantOnboardingStatus.HANDOFF_READY
+        tenant.save(update_fields=["onboarding_status", "updated_at"])
+        set_checklist_item_status(
+            onboarding,
+            code="handoff_completed",
+            status=ChecklistStatus.COMPLETED,
+            actor_identifier=_actor_identifier(request),
+        )
+        add_onboarding_event(
+            onboarding,
+            event_type="launch_customer_handoff_completed",
+            summary=f"Customer handoff completed for {tenant.code}.",
+            actor_identifier=_actor_identifier(request),
+            payload={
+                "apply_run_id": str(latest_apply.id),
+                "handoff_completed_at": completed_at.isoformat(),
+                "handoff_notes": handoff_notes,
+                "launch_readiness_status": onboarding.launch_readiness_status,
+            },
         )
         return response.Response(PlatformTenantOnboardingSerializer(_serialize_onboarding(onboarding)).data)
 

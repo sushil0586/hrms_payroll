@@ -1,0 +1,24 @@
+[Unit]
+Description=HRMS Payroll SaaS Celery worker
+After=network-online.target redis-server.service postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=www-data
+WorkingDirectory=/var/www/hrms-payroll-saas/current/backend
+EnvironmentFile=/var/www/hrms-payroll-saas/shared/backend.env
+Environment=DJANGO_SETTINGS_MODULE=config.settings.production
+ExecStart=/var/www/hrms-payroll-saas/current/backend/.venv/bin/celery -A config worker --loglevel=INFO --concurrency=2
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=60
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/www/hrms-payroll-saas/shared /var/www/hrms-payroll-saas/current/backend/media
+
+[Install]
+WantedBy=multi-user.target

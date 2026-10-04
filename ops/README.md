@@ -5,6 +5,37 @@ HRMS/payroll SaaS.
 
 ## Release
 
+EC2/systemd is the primary production deployment target for this project.
+Docker Compose files are optional local/reference artifacts and are not required
+for EC2.
+
+### EC2
+
+Use `ops/ec2/README.md` for the reproducible EC2 release, rollback, nginx, and
+systemd runbook.
+
+1. Populate `/var/www/hrms-payroll-saas/shared/backend.env` from
+   `backend/.env.example` and `docs/payroll-production-env-template.md`.
+2. Deploy a timestamped release:
+
+   ```bash
+   APP_ROOT=/var/www/hrms-payroll-saas \
+   REPO_URL=https://github.com/<org>/<repo>.git \
+   RELEASE_REF=main \
+   bash ops/ec2/deploy.sh
+   ```
+
+3. Run final launch evidence:
+
+   ```bash
+   cd /var/www/hrms-payroll-saas/current
+   pnpm qa:final-production-audit
+   ```
+
+### Docker Reference
+
+Only use this path when the target host is intentionally Docker based.
+
 1. Populate `.env.production` from `backend/.env.example` and
    `docs/payroll-production-env-template.md`.
 2. Run migrations as a release step:

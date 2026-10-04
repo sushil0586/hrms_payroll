@@ -513,6 +513,8 @@ def payroll_provider_connection_readiness_snapshot(connection: PayrollProviderCo
     """Build deterministic onboarding gates for a provider connection."""
 
     certification_passed = connection.certification_status == PayrollProviderCertificationStatus.PASSED
+    config = connection.config_snapshot if isinstance(connection.config_snapshot, dict) else {}
+    credential_required = connection.credential_required or bool(config.get("requires_real_credentials"))
     gates = [
         {
             "ref": "adapter_configured",
@@ -529,8 +531,8 @@ def payroll_provider_connection_readiness_snapshot(connection: PayrollProviderCo
         {
             "ref": "credential_reference_configured",
             "label": "Credential reference configured",
-            "passed": bool(connection.credential_ref) if connection.credential_required else True,
-            "value": connection.credential_ref or "not_required",
+            "passed": bool(connection.credential_ref) if credential_required else True,
+            "value": connection.credential_ref or ("missing" if credential_required else "not_required"),
         },
         {
             "ref": "callback_contract_configured",
@@ -564,7 +566,7 @@ def payroll_provider_connection_readiness_snapshot(connection: PayrollProviderCo
         "total_gate_count": total,
         "blocking_gate_refs": [gate["ref"] for gate in gates if not gate["passed"]],
         "active_allowed": active_allowed,
-        "credential_required": connection.credential_required,
+        "credential_required": credential_required,
         "uses_credential_ref": bool(connection.credential_ref),
         "updated_at": timezone.now().isoformat(),
     }
@@ -594,6 +596,14 @@ def record_payroll_provider_connection_certification(
 ) -> PayrollProviderConnection:
     if certification_status not in PayrollProviderCertificationStatus.values:
         raise PayrollProviderConnectionError("Unsupported payroll provider certification status.")
+    if certification_status == PayrollProviderCertificationStatus.PASSED:
+        preflight_blockers = _certification_preflight_blockers(connection)
+        if preflight_blockers:
+            blocking_refs = [str(item.get("ref") or "") for item in preflight_blockers if item.get("ref")]
+            raise PayrollProviderConnectionError(
+                "Payroll provider certification cannot pass until setup gates are complete: "
+                + ", ".join(blocking_refs)
+            )
     evidence = evidence_snapshot if isinstance(evidence_snapshot, dict) else {}
     now = timezone.now()
     material = json.dumps(evidence, sort_keys=True, default=str)
@@ -677,6 +687,7 @@ def _default_certification_artifact_kind(connection: PayrollProviderConnection) 
 
 def _certification_preflight_blockers(connection: PayrollProviderConnection) -> list[dict[str, Any]]:
     readiness = payroll_provider_connection_readiness_snapshot(connection)
+    config = connection.config_snapshot if isinstance(connection.config_snapshot, dict) else {}
     blockers = []
     for gate in readiness.get("gates", []):
         if isinstance(gate, dict) and gate.get("ref") != "certification_passed" and not gate.get("passed"):
@@ -690,6 +701,10 @@ def _certification_preflight_blockers(connection: PayrollProviderConnection) -> 
     adapter_ref = connection.sandbox_adapter_ref or connection.adapter_ref
     if not adapter_ref:
         blockers.append({"ref": "sandbox_adapter_required", "label": "Sandbox adapter required", "value": ""})
+    if config.get("placeholder") is True:
+        blockers.append({"ref": "provider_placeholder_config", "label": "Provider placeholder replaced", "value": "placeholder"})
+    if config.get("live_delivery_enabled") is False:
+        blockers.append({"ref": "live_delivery_enabled", "label": "Live delivery enabled", "value": False})
     return blockers
 
 
