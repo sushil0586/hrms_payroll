@@ -71,6 +71,19 @@ pnpm qa:public-launch-gate
 
 The public launch gate writes timestamped JSON, Markdown, and command-log evidence under `web/qa-artifacts/public-launch-gate-*`.
 
+Run the final production audit only after deployed credentials, email proof
+recipient, provider/storage secrets, worker flags, and enterprise identity scope
+are configured:
+
+```bash
+pnpm qa:final-production-audit
+```
+
+This audit executes production preflight, email delivery proof, post-deploy
+smoke, deployed RBAC, notification, payroll, provider, storage, and finance
+handoff browser suites, then writes a PASS/FAIL evidence bundle under
+`web/qa-artifacts/final-production-audit-*`.
+
 The runner writes a timestamped evidence folder under `web/qa-artifacts/production-launch-signoff-*` with:
 
 - command logs

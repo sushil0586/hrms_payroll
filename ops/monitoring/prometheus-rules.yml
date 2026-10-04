@@ -1,0 +1,52 @@
+groups:
+  - name: hrms-production
+    rules:
+      - alert: HrmsBackendHealthDown
+        expr: probe_success{job="hrms-backend-health"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: HRMS backend health endpoint is down.
+      - alert: HrmsWebHealthDown
+        expr: probe_success{job="hrms-web-health"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: HRMS web endpoint is down.
+      - alert: HrmsRedisDown
+        expr: redis_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: HRMS Redis is unavailable.
+      - alert: HrmsPostgresDown
+        expr: pg_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: HRMS Postgres is unavailable.
+      - alert: HrmsNotificationFailures
+        expr: increase(hrms_notification_delivery_failures_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: HRMS notification delivery failures detected.
+      - alert: HrmsPayrollProviderFailures
+        expr: increase(hrms_payroll_provider_failures_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: HRMS payroll provider failures detected.
+      - alert: HrmsBackupRestoreEvidenceStale
+        expr: time() - hrms_backup_restore_last_success_timestamp_seconds > 604800
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: HRMS backup restore rehearsal evidence is stale.

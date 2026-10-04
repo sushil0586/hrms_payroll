@@ -10,12 +10,12 @@ It should be reviewed before any pilot, internal beta, payroll handoff, or custo
 
 ## 2. Release Gate Status
 
-Current status as of September 5, 2026:
+Current status as of October 4, 2026:
 
-- Functional and browser release-readiness gates are green.
-- Critical JavaScript production audit findings are cleared.
+- Local functional and browser gates have broad coverage, but public launch still requires deployed role-login/RBAC proof.
+- Production runtime now has a fail-fast `production_preflight` gate for DB, Redis, email, workers, provider credentials, storage controls, auth posture, and demo-mode isolation.
 - One mobile dependency advisory remains open through React Native Metro `image-size`.
-- HRMS is suitable for a web-first internal pilot after release owner acceptance of the remaining mobile risk.
+- HRMS remains suitable only for a web-first controlled pilot until the current tenant payroll, provider, storage, backup/restore, alerting, and deployed-access gates are evidenced.
 
 ---
 
@@ -32,7 +32,7 @@ Current status as of September 5, 2026:
 
 - Local seeded credentials are intended for development and pilot verification only.
 - Production-like pilots must set environment-specific secrets, API URLs, database credentials, and notification provider credentials outside the repository.
-- Demo fallback behavior is intentionally explicit and environment-driven.
+- Demo fallback behavior is intentionally explicit and environment-driven. Production runtime must keep `HRMS_ENABLE_DEMO_DATA=false`; the web app and production preflight now fail fast if demo mode is enabled in production.
 
 ---
 
@@ -40,20 +40,21 @@ Current status as of September 5, 2026:
 
 ### Payroll
 
-- Payroll engine development has not started.
-- Salary structures, payroll runs, statutory filings, payslips, bank files, and compliance calculations remain future payroll scope.
-- HRMS data can be used as the payroll foundation only after release-risk acceptance.
+- Payroll domain models, setup, calculation, outputs, payslips, provider delivery, storage governance, and finance handoff flows exist in code and automated certification suites.
+- Public launch still requires one clean real-tenant payroll run from input lock through calculation, review, output generation, payslip publication, finance handoff, provider receipts, and audit evidence.
+- Payroll must not be treated as production-certified until provider credentials, storage policy controls, worker runtime, backup/restore, and alerting evidence pass `production_preflight` and launch signoff.
 
 ### Mobile
 
 - Mobile currently has typecheck coverage.
 - Mobile does not yet have the same browser/visual/live workflow coverage as web.
-- Mobile production readiness is blocked or exception-based until the `image-size` advisory decision is closed.
+- Mobile includes explicit seeded demo entry and placeholder quick actions for mobile punch/history. Demo entry is out of production scope; mobile punch/history are fix-now only if mobile attendance is included in launch.
+- Mobile production readiness is blocked or exception-based until the `image-size` advisory decision is closed and the mobile launch scope is signed off.
 
 ### Provider Integrations
 
 - Notification delivery has an extensible backend and operational diagnostics.
-- Production-grade provider onboarding, credentials, provider-specific failure taxonomy, and delivery SLA monitoring require environment-specific implementation and validation.
+- Production-grade provider onboarding, credentials, provider-specific failure taxonomy, and delivery SLA monitoring require environment-specific configuration and validation.
 - Email, SMS, push, and WhatsApp provider behavior should be tested with real provider sandboxes before customer pilot use.
 
 ### Reporting
@@ -76,8 +77,8 @@ Current status as of September 5, 2026:
 
 ## 5. Operational Limitations
 
-- Stage now runs `process_notifications` through `hrms-payroll-notification-worker.timer`, which loads `/var/www/hrms-payroll-saas/shared/backend.env` and processes queued notifications every minute. Production must carry the same systemd timer or an equivalent Celery/cron worker before launch. `send_document_expiry_reminders` still needs environment-specific scheduling if expiry reminders are in launch scope.
-- Observability, alerting, backups, and secrets management need environment-specific setup outside the app code.
+- Production must run notification and payroll provider workers. `production_preflight --strict` requires notification processing and declared payroll provider worker deployment before launch.
+- Observability, alerting, backups, restore rehearsal, and secrets management need environment-specific setup and evidence. Versioned Docker Compose and backup/restore scripts exist under `docker-compose.production.yml` and `ops/`, but a production launch still requires target-environment proof.
 - Cross-browser coverage remains future work; current browser gates are Chromium-based.
 - Manual pilot screenshot review should be repeated whenever visual baselines or major UI surfaces change.
 

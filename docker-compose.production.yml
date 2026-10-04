@@ -1,0 +1,173 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./ops/backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      REDIS_URL: redis://redis:6379/0
+      HRMS_ENVIRONMENT: production
+      HRMS_ENABLE_DEMO_DATA: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python manage.py production_preflight --json --strict --skip-network >/tmp/preflight.json && curl -fsS http://localhost:8000/api/v1/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env.production
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      REDIS_URL: redis://redis:6379/0
+      HRMS_ENVIRONMENT: production
+      HRMS_ENABLE_DEMO_DATA: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    profiles: ["release"]
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      REDIS_URL: redis://redis:6379/0
+      HRMS_ENVIRONMENT: production
+      HRMS_ENABLE_DEMO_DATA: "false"
+      HRMS_PAYROLL_PROVIDER_WORKER_ENABLED: "true"
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: ["celery", "-A", "config", "worker", "-l", "INFO"]
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      REDIS_URL: redis://redis:6379/0
+      HRMS_ENVIRONMENT: production
+      HRMS_ENABLE_DEMO_DATA: "false"
+      HRMS_NOTIFICATION_PROCESSOR_ENABLED: "true"
+      HRMS_PAYROLL_PROVIDER_WORKER_ENABLED: "true"
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: ["celery", "-A", "config", "beat", "-l", "INFO"]
+
+  payroll-provider-jobs:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      REDIS_URL: redis://redis:6379/0
+      HRMS_ENVIRONMENT: production
+      HRMS_ENABLE_DEMO_DATA: "false"
+      HRMS_PAYROLL_PROVIDER_WORKER_ENABLED: "true"
+    depends_on:
+      backend:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - while true; do python manage.py process_payroll_provider_jobs --limit "$${HRMS_PAYROLL_PROVIDER_JOB_LIMIT:-100}"; sleep "$${HRMS_PAYROLL_PROVIDER_WORKER_INTERVAL_SECONDS:-60}"; done
+
+  payroll-provider-retries:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      REDIS_URL: redis://redis:6379/0
+      HRMS_ENVIRONMENT: production
+      HRMS_ENABLE_DEMO_DATA: "false"
+      HRMS_PAYROLL_PROVIDER_WORKER_ENABLED: "true"
+    depends_on:
+      backend:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - while true; do python manage.py process_payroll_provider_retries --limit "$${HRMS_PAYROLL_PROVIDER_RETRY_LIMIT:-100}"; sleep "$${HRMS_PAYROLL_PROVIDER_WORKER_INTERVAL_SECONDS:-60}"; done
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      HRMS_ENVIRONMENT: production
+      HRMS_ENABLE_DEMO_DATA: "false"
+      HRMS_API_BASE_URL: ${HRMS_API_BASE_URL:?set HRMS_API_BASE_URL}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres-data:
+  redis-data:

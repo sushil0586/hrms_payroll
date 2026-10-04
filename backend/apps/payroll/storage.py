@@ -582,17 +582,16 @@ def _positive_int(value: Any, default: int = 0) -> int:
 
 def _policy_entries_from_settings() -> dict[str, Any]:
     entries = getattr(settings, "PAYROLL_ARTIFACT_STORAGE_POLICIES", None)
-    if entries is None:
-        raw_json = os.getenv(PAYROLL_STORAGE_POLICIES_ENV, "").strip()
-        if raw_json:
-            try:
-                entries = json.loads(raw_json)
-            except json.JSONDecodeError as exc:
-                raise PayrollArtifactStorageError(
-                    f"Payroll artifact storage policy resolver could not parse {PAYROLL_STORAGE_POLICIES_ENV}.",
-                    code="storage_policy_invalid_json",
-                    retryable=False,
-                ) from exc
+    raw_json = os.getenv(PAYROLL_STORAGE_POLICIES_ENV, "").strip()
+    if raw_json and (entries is None or entries == {}):
+        try:
+            entries = json.loads(raw_json)
+        except json.JSONDecodeError as exc:
+            raise PayrollArtifactStorageError(
+                f"Payroll artifact storage policy resolver could not parse {PAYROLL_STORAGE_POLICIES_ENV}.",
+                code="storage_policy_invalid_json",
+                retryable=False,
+            ) from exc
     return entries if isinstance(entries, dict) else {}
 
 
@@ -870,17 +869,16 @@ def describe_payroll_artifact_storage_policy_registry(
 
 def _credential_entries_from_settings() -> dict[str, Any]:
     entries = getattr(settings, "PAYROLL_ARTIFACT_STORAGE_CREDENTIALS", None)
-    if entries is None:
-        raw_json = os.getenv(PAYROLL_STORAGE_CREDENTIALS_ENV, "").strip()
-        if raw_json:
-            try:
-                entries = json.loads(raw_json)
-            except json.JSONDecodeError as exc:
-                raise PayrollArtifactStorageError(
-                    f"Payroll artifact storage credential resolver could not parse {PAYROLL_STORAGE_CREDENTIALS_ENV}.",
-                    code="credential_resolver_invalid_json",
-                    retryable=False,
-                ) from exc
+    raw_json = os.getenv(PAYROLL_STORAGE_CREDENTIALS_ENV, "").strip()
+    if raw_json and (entries is None or entries == {}):
+        try:
+            entries = json.loads(raw_json)
+        except json.JSONDecodeError as exc:
+            raise PayrollArtifactStorageError(
+                f"Payroll artifact storage credential resolver could not parse {PAYROLL_STORAGE_CREDENTIALS_ENV}.",
+                code="credential_resolver_invalid_json",
+                retryable=False,
+            ) from exc
     return entries if isinstance(entries, dict) else {}
 
 

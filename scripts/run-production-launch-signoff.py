@@ -122,6 +122,29 @@ ENV_CHECKS = [
         "purpose": "Tenant payroll artifact storage policy registry.",
     },
     {
+        "key": "HRMS_PAYROLL_PROVIDER_WORKER_ENABLED",
+        "local_required": False,
+        "staging_required": True,
+        "production_required": True,
+        "purpose": "Confirms a payroll provider worker process/timer is deployed.",
+        "expected": "true",
+    },
+    {
+        "key": "HRMS_NOTIFICATION_PROCESSOR_ENABLED",
+        "local_required": False,
+        "staging_required": True,
+        "production_required": True,
+        "purpose": "Enables notification worker scheduling.",
+        "expected": "true",
+    },
+    {
+        "key": "HRMS_ENTERPRISE_IDENTITY_STATUS",
+        "local_required": False,
+        "staging_required": True,
+        "production_required": True,
+        "purpose": "MFA/SSO/SCIM launch posture; set to verified or not_in_scope.",
+    },
+    {
         "key": "PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFICATION_MODE",
         "local_required": False,
         "staging_required": False,
@@ -434,6 +457,12 @@ def main() -> int:
     if not args.skip_backend_checks:
         steps.append(run_step("django check", [args.python, "manage.py", "check"], BACKEND, logs_dir, env))
         steps.append(run_step("django migrations dry run", [args.python, "manage.py", "makemigrations", "--check", "--dry-run"], BACKEND, logs_dir, env))
+        preflight_command = [args.python, "manage.py", "production_preflight", "--json"]
+        if args.mode in {"staging", "production"}:
+            preflight_command.append("--strict")
+        if args.mode == "local":
+            preflight_command.append("--skip-network")
+        steps.append(run_step("production runtime preflight", preflight_command, BACKEND, logs_dir, env))
 
     if not args.skip_management_commands:
         steps.append(

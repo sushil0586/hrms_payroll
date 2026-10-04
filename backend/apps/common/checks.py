@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from django.conf import settings
 from django.core.checks import Error, Warning, register
 
@@ -42,5 +44,27 @@ def production_safety_checks(app_configs, **kwargs):  # noqa: ARG001
     database = getattr(settings, "DATABASES", {}).get("default", {})
     if database.get("PASSWORD") in {"", "postgres", "password"}:
         issues.append(Warning("Default database password looks like a local placeholder.", id="hrms.W003"))
+
+    auth_classes = settings.REST_FRAMEWORK.get("DEFAULT_AUTHENTICATION_CLASSES", [])
+    if "rest_framework.authentication.BasicAuthentication" in auth_classes:
+        issues.append(Error("DRF BasicAuthentication must not be enabled for production.", id="hrms.E006"))
+
+    if os.getenv("HRMS_ENABLE_DEMO_DATA", "").strip().lower() in {"1", "true", "yes", "on"}:
+        issues.append(Error("HRMS_ENABLE_DEMO_DATA must be false for production.", id="hrms.E007"))
+
+    unsafe_email_backends = {
+        "django.core.mail.backends.console.EmailBackend",
+        "django.core.mail.backends.locmem.EmailBackend",
+        "django.core.mail.backends.dummy.EmailBackend",
+        "django.core.mail.backends.filebased.EmailBackend",
+    }
+    if getattr(settings, "EMAIL_BACKEND", "") in unsafe_email_backends:
+        issues.append(Error("Production email must use a live provider backend.", id="hrms.E008"))
+
+    if not getattr(settings, "NOTIFICATION_PROCESSOR_ENABLED", False):
+        issues.append(Error("HRMS_NOTIFICATION_PROCESSOR_ENABLED must be true for production.", id="hrms.E009"))
+
+    if getattr(settings, "PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFICATION_MODE", "") != "strict":
+        issues.append(Error("Payroll artifact storage control verification must be strict in production.", id="hrms.E010"))
 
     return issues

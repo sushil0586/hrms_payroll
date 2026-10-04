@@ -496,16 +496,15 @@ def validate_payroll_provider_route_config(config: dict[str, Any]) -> None:
 
 def _credential_entries_from_settings() -> dict[str, Any]:
     entries = getattr(settings, "PAYROLL_PROVIDER_CREDENTIALS", None)
-    if entries is None:
-        raw_json = os.getenv(PAYROLL_PROVIDER_CREDENTIALS_ENV, "").strip()
-        if raw_json:
-            try:
-                entries = json.loads(raw_json)
-            except json.JSONDecodeError as exc:
-                raise PayrollProviderAdapterError(
-                    f"Payroll provider credential resolver could not parse {PAYROLL_PROVIDER_CREDENTIALS_ENV}.",
-                    code="provider_credential_resolver_invalid_json",
-                ) from exc
+    raw_json = os.getenv(PAYROLL_PROVIDER_CREDENTIALS_ENV, "").strip()
+    if raw_json and (entries is None or entries == {}):
+        try:
+            entries = json.loads(raw_json)
+        except json.JSONDecodeError as exc:
+            raise PayrollProviderAdapterError(
+                f"Payroll provider credential resolver could not parse {PAYROLL_PROVIDER_CREDENTIALS_ENV}.",
+                code="provider_credential_resolver_invalid_json",
+            ) from exc
     return entries if isinstance(entries, dict) else {}
 
 
@@ -3669,4 +3668,8 @@ def get_payroll_provider_adapter(adapter_ref: str) -> PayrollProviderAdapter:
         return _configured_provider_adapter(registry[adapter_ref])
     if adapter_ref in BUILTIN_PAYROLL_PROVIDER_ADAPTER_CLASSES:
         return BUILTIN_PAYROLL_PROVIDER_ADAPTER_CLASSES[adapter_ref]()
-    return ManualPayrollProviderAdapter()
+    raise PayrollProviderAdapterError(
+        f"Payroll provider adapter {adapter_ref or '<empty>'} is not registered.",
+        code="provider_adapter_not_registered",
+        retryable=False,
+    )

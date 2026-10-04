@@ -52,3 +52,15 @@ corepack pnpm --dir mobile start
 
 If the backend is unavailable, the app can still open in seeded demo mode from the login screen.
 Live login sessions are stored securely on-device and restored on the next launch when the token is still valid.
+
+## Production Scope Classification
+
+| Area | Status | Launch decision |
+| --- | --- | --- |
+| Login and session restore | Live-capable | Fix-now for any mobile launch. |
+| ESS dashboard, leave request, attendance regularization | Live-capable | Fix-now if mobile ESS is in launch scope. |
+| Manager approvals | Live-capable | Fix-now if mobile MSS is in launch scope. |
+| Seeded demo workspace | Demo-only | Out-of-scope for production; must not be used as launch evidence. |
+| Mobile punch / geo attendance quick action | Placeholder | Fix-now only if mobile attendance punch is in launch scope; otherwise explicitly exclude. |
+| Attendance history calendar/audit | Placeholder | Out-of-scope unless mobile attendance history is committed for launch. |
+| Production distribution | Blocked/exception-based | Requires dependency advisory decision, mobile device QA, and store/release owner signoff. |
