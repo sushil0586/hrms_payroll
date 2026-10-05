@@ -6411,6 +6411,19 @@ class MeLeaveTypeListView(EmployeeContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        balances = (
+            LeaveBalance.objects.filter(id__in=[item.id for item in ensure_employee_leave_balances(employee)])
+            .select_related("leave_policy__leave_type")
+            .order_by("leave_policy__leave_type__name")
+        )
+        leave_types = []
+        seen_leave_type_ids = set()
+        for balance in balances:
+            leave_type = balance.leave_policy.leave_type
+            if leave_type.id in seen_leave_type_ids or not leave_type.is_active:
+                continue
+            seen_leave_type_ids.add(leave_type.id)
+            leave_types.append(leave_type)
         payload = [
             {
                 "id": leave_type.id,
@@ -6422,7 +6435,7 @@ class MeLeaveTypeListView(EmployeeContextMixin, APIView):
                 "requires_attachment": leave_type.requires_attachment,
                 "allow_negative_balance": leave_type.allow_negative_balance,
             }
-            for leave_type in LeaveType.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")
+            for leave_type in leave_types
         ]
         return response.Response(LeaveTypeOptionSerializer(payload, many=True).data)
 

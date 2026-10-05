@@ -1,9 +1,11 @@
 from types import SimpleNamespace
 
 from django.test import TestCase
+from rest_framework.test import APIClient
 
 from apps.common.api_views import save_hr_admin_leave_policy_assignment
-from apps.employees.models import Employee
+from apps.employees.models import Employee, EmploymentStatus
+from apps.iam.models import MembershipStatus, TenantMembership, User
 from apps.leave_management.models import LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveType
 from apps.leave_management.services import preview_leave_policy_assignment_conflicts, preview_leave_policy_assignment_resolution
 from apps.organizations.models import Department, EmploymentType, Grade
@@ -223,3 +225,80 @@ class LeavePolicyAssignmentConflictTests(TestCase):
         self.assertIsNone(assignment.department_id)
         self.assertIsNone(assignment.grade_id)
         self.assertIsNone(assignment.employment_type_id)
+
+
+class EssLeaveTypeAssignmentVisibilityTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="employee",
+            email="employee@example.com",
+            password="test-pass",
+        )
+        self.tenant = Tenant.objects.create(
+            code="visibility-co",
+            name="Visibility Co",
+            legal_name="Visibility Co Pvt Ltd",
+            status=TenantStatus.ACTIVE,
+            subscription_plan=SubscriptionPlan.GROWTH,
+            country_code="IN",
+            timezone="Asia/Kolkata",
+        )
+        self.membership = TenantMembership.objects.create(
+            tenant=self.tenant,
+            user=self.user,
+            status=MembershipStatus.ACTIVE,
+            is_default=True,
+            employee_code="EMP-0001",
+        )
+        self.employee = Employee.objects.create(
+            tenant=self.tenant,
+            membership=self.membership,
+            employee_code="EMP-0001",
+            first_name="Aditi",
+            employment_status=EmploymentStatus.ACTIVE,
+        )
+        self.assigned_type = LeaveType.objects.create(
+            tenant=self.tenant,
+            code="sick-leave",
+            name="Sick Leave",
+            is_active=True,
+        )
+        self.optional_type = LeaveType.objects.create(
+            tenant=self.tenant,
+            code="jury-duty",
+            name="Jury Duty Leave",
+            is_active=True,
+        )
+        self.assigned_policy = LeavePolicy.objects.create(
+            tenant=self.tenant,
+            leave_type=self.assigned_type,
+            code="sick-policy",
+            name="Sick Policy",
+            status=LeavePolicyStatus.ACTIVE,
+            annual_entitlement="12.00",
+        )
+        LeavePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            leave_policy=self.assigned_policy,
+            employee=self.employee,
+            priority=100,
+            is_active=True,
+        )
+        LeavePolicy.objects.create(
+            tenant=self.tenant,
+            leave_type=self.optional_type,
+            code="jury-policy",
+            name="Jury Duty Policy",
+            status=LeavePolicyStatus.ACTIVE,
+            annual_entitlement="10.00",
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_ess_leave_types_only_include_employee_assigned_leave_types(self):
+        response = self.client.get("/api/v1/me/leave-types/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual([item["code"] for item in payload], ["sick-leave"])
+        self.assertEqual(payload[0]["name"], "Sick Leave")

@@ -120,7 +120,7 @@ test.describe("HR Admin browser workflow gate", () => {
     await expectLiveBrowserPage(page, {
       path: "/ess/leave",
       heading: "Leave",
-      visibleText: ["Leave balances"],
+      visibleText: ["Balances"],
     });
     await expect(page.getByText("No leave balances are mapped yet.")).toHaveCount(0);
 
