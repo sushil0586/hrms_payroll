@@ -12,7 +12,7 @@ Payroll impact is out of scope for this certificate.
 
 Status: PASS WITH CONTROLLED PENDING ITEMS
 
-The HR Admin leave and attendance baseline is certified for the assigned employee flow on stage. Optional/global leave templates are configured and extendable, but not certified as assigned employee flows until intentionally enabled by a tenant blueprint or employee/organization assignment.
+The HR Admin leave and attendance baseline is certified for the assigned employee flow on stage. Optional/global leave templates are configured and extendable, and they are gated from ESS until intentionally enabled by a tenant blueprint or employee/organization assignment.
 
 ## Passed Evidence
 
@@ -58,8 +58,8 @@ Attendance assignment created:
 Verified for `sushilbansal86@gmail.com`:
 
 - Earned Leave: closing balance `12.00`.
-- Casual Leave: closing balance `12.00`.
-- Sick Leave: closing balance `12.00`.
+- Casual Leave: closing balance `11.00`, reserved `1.00`.
+- Sick Leave: closing balance `11.00`, consumed `1.00`, reserved `0.00`.
 
 ### ESS Attendance
 
@@ -80,6 +80,22 @@ Submitted through ESS browser:
 - Workflow reference created: `b8c1e706-9a6c-4398-9229-65f437281a4d`.
 - Request ID: `548d6712-bc24-44d7-b177-27016cc11020`.
 
+### Browser Manager Approval
+
+Certified through ESS and MSS browser on stage:
+
+- Employee: `sushilbansal86@gmail.com`.
+- Reporting manager: `sushil@accerio.in`.
+- Leave type: `sick leave`.
+- Policy: `Stage certification sick leave`.
+- Date: `2026-12-04`.
+- Requested units: `1.00`.
+- Request ID: `cd7405fa-ab04-4b17-a1a5-a6d50acfda27`.
+- Workflow reference: `44132782-c315-434d-b027-2b740007852f`.
+- Final status: `approved`.
+- MSS pending queue for this request after approval: `0`.
+- Sick Leave balance after approval: closing `11.00`, consumed `1.00`, reserved `0.00`.
+
 ### Optional Leave Templates
 
 Created as configurable, extendable templates:
@@ -94,20 +110,57 @@ Created as configurable, extendable templates:
 
 Jury Duty is certified as configuration-ready and optional. It is not a mandatory India default and should only affect a tenant/employee when assigned by blueprint or HR Admin.
 
-## Local Code Fix
+## Deployed Code Fix
 
-Fixed locally:
+Fixed and verified on stage:
 
 - ESS leave type options now derive from employee-resolved leave balances/assignments instead of all active tenant leave types.
 - This prevents optional templates such as Jury Duty or Maternity Leave from appearing in ESS unless assigned.
 
+Stage verification for `sushilbansal86@gmail.com`:
+
+- Before optional certification assignment, ESS leave types returned only Earned Leave, Casual Leave, and Sick Leave.
+- Optional leak detected before assignment: `false`.
+- After optional certification assignment, ESS intentionally returns Comp Off, Jury Duty, Loss of Pay, and Maternity for Sushil.
+
+### Optional Flow Browser Certification
+
+Certified through ESS browser submission and MSS browser manager approval:
+
+- Maternity Leave: request `8fe1c0fb-0216-48f0-97ad-f0906d170187`, workflow `a714e78f-d24f-443a-91a9-86053ea09590`, date `2027-01-05`, status `approved`, approved units `1.00`.
+- Jury Duty Leave: request `5c600784-49dc-44da-a541-e8613dd78ef9`, workflow `c1b82d30-4a30-4258-bf25-0b26bec11af6`, date `2026-12-07`, status `approved`, approved units `1.00`.
+- Comp Off Leave: request `b71bb7f0-5930-4abb-8efc-94307df564c1`, workflow `8b7d5768-7bb9-4634-a2e4-9326d804b27d`, date `2026-12-10`, status `approved`, approved units `1.00`.
+- Loss of Pay Leave: request `4352733a-821f-45d8-986c-7c1d3955dd5d`, workflow `e9cc5742-7e9b-4543-a7d7-9b9a450c17d2`, date `2026-12-11`, status `approved`, approved units `1.00`.
+- MSS pending queue for all four certified optional requests after approval: `0`.
+
+Post-approval balance evidence for `sushilbansal86@gmail.com`:
+
+- Maternity Leave, year `2027`: closing `181.00`, consumed `1.00`, reserved `0.00`.
+- Jury Duty Leave, year `2026`: closing `9.00`, consumed `1.00`, reserved `0.00`.
+- Comp Off Leave, year `2026`: adjustment `1.00`, consumed `1.00`, closing `0.00`.
+- Loss of Pay Leave, year `2026`: closing `-1.00`, consumed `1.00`, reserved `0.00`.
+
+Stage configuration corrected during certification:
+
+- Loss of Pay Leave now allows negative balance so unpaid leave can be requested without paid entitlement.
+
+## Local Code Fixes Pending Deploy
+
+Prepared locally:
+
+- India launch seed defaults now create Loss of Pay as an unpaid leave type that allows negative balance.
+- Platform Admin launch blueprints now expose optional leave add-ons as checkbox toggles.
+- Blueprint apply now creates only selected optional leave templates, policies, assignments, and current employee balances.
+- ESS leave request copy was simplified around evidence, balance warnings, and approval routing.
+- ESS attendance correction copy was simplified around record selection, manager approval, and submit actions.
+
 Regression test:
 
 ```bash
-.venv/bin/python backend/manage.py test apps.leave_management.tests
+.venv/bin/python backend/manage.py test apps.leave_management.tests apps.tenant_onboarding.tests
 ```
 
-Result: `7 tests OK`
+Result: `39 tests OK`
 
 Additional checks:
 
@@ -119,77 +172,23 @@ git diff --check
 
 Result: all passed.
 
-Deployment note: this ESS leave-type visibility fix must be deployed before stage reflects the new gating behavior.
-
 ## Controlled Pending Items
 
-### P1: Deploy ESS Leave-Type Visibility Fix
+### P2: LOP Payroll Impact Handoff
 
-Current stage is configured correctly, but optional leave types can still appear in ESS until the local API fix is deployed.
-
-Acceptance:
-
-- `/me/leave-types/` returns only employee-assigned/resolved leave types.
-- Optional templates remain available in HR Admin.
-- Optional templates do not appear in ESS until assigned.
-
-### P1: Manager Approval Certification
-
-Sushil currently has no reporting manager, so the submitted casual leave request is pending but not fully certified through manager approval.
+LOP leave request and approval are certified. Payroll impact is still out of current scope.
 
 Acceptance:
 
-- Assign reporting manager or use a managed employee.
-- Submit leave request from ESS.
-- Approve/reject from MSS browser.
-- Verify ESS status update.
-
-### P1: Maternity Scenario With Eligible Employee
-
-Maternity policy is configured, but needs an eligible employee/persona for a true E2E test.
-
-Acceptance:
-
-- Assign Maternity policy to a female employee meeting eligibility.
-- Submit request with evidence.
-- Verify balance/reservation and approval routing.
-
-### P1: Jury Duty Optional Flow
-
-Jury Duty is configuration-ready but intentionally unassigned by default.
-
-Acceptance:
-
-- Enable Jury Duty through assignment or blueprint add-on.
-- Verify ESS visibility only after assignment.
-- Submit request with evidence reference or file.
-- Verify approval routing.
-
-### P2: Comp-Off Earn/Consume Workflow
-
-Comp Off policy is configured, but comp-off credit earning is not certified.
-
-Acceptance:
-
-- Credit comp-off entitlement through HR Admin or attendance workflow.
-- Verify ESS availability.
-- Submit comp-off leave request.
-
-### P2: LOP Payroll Impact
-
-LOP leave is configured but payroll impact is out of current scope.
-
-Acceptance:
-
-- Submit LOP request.
 - Verify payroll input/pay-days impact after payroll scope resumes.
 
 ### P2: Platform Admin Blueprint Toggles
 
-Optional leave templates are currently stage-configured manually.
+Implemented locally and pending deployment/stage verification.
 
 Acceptance:
 
 - Platform Admin can choose India default vs optional global add-ons.
 - Blueprint apply creates only selected templates and assignments.
+- Optional add-ons initialize mapped current employee balances only when selected.
 - Post-onboarding changes remain role-governed.

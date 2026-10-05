@@ -88,6 +88,10 @@ function compactInputPayload(values: Record<string, string>) {
   );
 }
 
+function checkboxInputChecked(value: string) {
+  return ["1", "true", "yes", "on", "enabled"].includes(value.trim().toLowerCase());
+}
+
 function launchModuleExplanation(module: PlatformLaunchModule) {
   if (module.ref === "payroll_defaults") {
     if (module.plan_allowed === false) return "Available from Growth. No payroll setup will be created for this tenant plan.";
@@ -344,6 +348,22 @@ function InputField({
   onChange: (key: string, value: string) => void;
   value: string;
 }) {
+  if (field.field_type === "checkbox") {
+    return (
+      <label className="toggle-field platform-launch-toggle-field">
+        <div>
+          <strong>{field.label}</strong>
+          <p className="section-copy">{field.help_text}</p>
+        </div>
+        <input
+          checked={checkboxInputChecked(value)}
+          name={field.key}
+          onChange={(event) => onChange(field.key, event.target.checked ? "true" : "")}
+          type="checkbox"
+        />
+      </label>
+    );
+  }
   if (field.field_type === "select") {
     return (
       <label className="form-field">

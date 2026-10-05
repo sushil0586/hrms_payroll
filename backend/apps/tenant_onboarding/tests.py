@@ -605,6 +605,28 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         self.tenant.onboarding_record.refresh_from_db()
         self.assertEqual(self.tenant.onboarding_record.launch_readiness_status, LaunchReadinessStatus.BLOCKED)
 
+    def test_launch_preview_exposes_optional_leave_addon_toggles_without_requiring_them(self):
+        self.client.force_authenticate(self.platform_admin)
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        fields = {field["key"]: field for field in body["preview"]["input_schema"]}
+        self.assertTrue(body["preview"]["can_apply"])
+        self.assertIn("enable_maternity_leave", fields)
+        self.assertIn("enable_comp_off_leave", fields)
+        self.assertIn("enable_jury_duty_leave", fields)
+        self.assertEqual(fields["enable_maternity_leave"]["field_type"], "checkbox")
+        self.assertFalse(fields["enable_maternity_leave"]["required"])
+        self.assertNotIn("enable_maternity_leave", body["preview"]["missing_inputs"])
+        self.assertNotIn("enable_comp_off_leave", body["preview"]["missing_inputs"])
+        self.assertNotIn("enable_jury_duty_leave", body["preview"]["missing_inputs"])
+
     def test_launch_apply_requires_apply_ready_preview(self):
         self.client.force_authenticate(self.platform_admin)
 
@@ -746,6 +768,71 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         self.assertEqual(AttendancePolicy.objects.filter(tenant=self.tenant).count(), 1)
         self.assertEqual(DocumentCategory.objects.filter(tenant=self.tenant).count(), 7)
         self.assertEqual(WorkflowTemplate.objects.filter(tenant=self.tenant).count(), 5)
+
+    def test_launch_apply_seeds_selected_optional_leave_addons_only(self):
+        self.client.force_authenticate(self.platform_admin)
+        admin_employee = Employee.objects.create(
+            tenant=self.tenant,
+            employee_code="ADMIN-0001",
+            first_name="Aditi",
+            last_name="Gupta",
+            work_email="aditi.gupta1789@example.com",
+            employment_status=EmploymentStatus.ACTIVE,
+        )
+        payload = self._preview_payload()
+        payload["idempotency_key"] = "preview-safe-acme-with-leave-addons"
+        payload["input_payload"] = {
+            **payload["input_payload"],
+            "enable_maternity_leave": "true",
+            "enable_comp_off_leave": "true",
+            "enable_jury_duty_leave": "true",
+        }
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            payload,
+            format="json",
+        )
+
+        response = self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-safe-acme-with-leave-addons"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        admin_employee.refresh_from_db()
+        self.assertEqual(LeaveType.objects.filter(tenant=self.tenant).count(), 7)
+        self.assertEqual(LeavePolicy.objects.filter(tenant=self.tenant).count(), 7)
+        self.assertEqual(LeavePolicyAssignment.objects.filter(tenant=self.tenant).count(), 7)
+        self.assertEqual(
+            LeaveBalance.objects.filter(tenant=self.tenant, employee=admin_employee).count(),
+            7,
+        )
+        self.assertTrue(
+            LeaveType.objects.filter(
+                tenant=self.tenant,
+                code="maternity-leave",
+                requires_attachment=True,
+            ).exists()
+        )
+        self.assertTrue(LeaveType.objects.filter(tenant=self.tenant, code="comp-off-leave").exists())
+        self.assertTrue(
+            LeaveType.objects.filter(
+                tenant=self.tenant,
+                code="jury-duty-leave",
+                requires_attachment=True,
+            ).exists()
+        )
+        self.assertTrue(
+            LeaveType.objects.filter(
+                tenant=self.tenant,
+                code="loss-of-pay",
+                allow_negative_balance=True,
+            ).exists()
+        )
+        self.assertFalse(LeaveType.objects.filter(tenant=self.tenant, code="paternity-leave").exists())
+        self.assertFalse(LeaveType.objects.filter(tenant=self.tenant, code="bereavement-leave").exists())
+        self.assertFalse(LeaveType.objects.filter(tenant=self.tenant, code="marriage-leave").exists())
 
     def test_leave_policy_changes_and_new_assignments_refresh_employee_balances(self):
         self.client.force_authenticate(self.platform_admin)

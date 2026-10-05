@@ -22,6 +22,7 @@ class LaunchModule:
     editable_by_roles: tuple[str, ...] = field(default_factory=lambda: ("Tenant Admin",))
     customer_editable_after_handoff: bool = True
     required_inputs: tuple[str, ...] = field(default_factory=tuple)
+    optional_inputs: tuple[str, ...] = field(default_factory=tuple)
     child_seeder: str = ""
     description: str = ""
     post_apply_action: str = ""
@@ -36,6 +37,7 @@ class LaunchModule:
             "editable_by_roles": list(self.editable_by_roles),
             "customer_editable_after_handoff": self.customer_editable_after_handoff,
             "required_inputs": list(self.required_inputs),
+            "optional_inputs": list(self.optional_inputs),
             "child_seeder": self.child_seeder,
             "description": self.description,
             "post_apply_action": self.post_apply_action,
@@ -202,6 +204,14 @@ ATTENDANCE_MODULES = (
         editable_by_roles=("Tenant Admin", "HR Admin"),
         customer_editable_after_handoff=True,
         required_inputs=("work_week", "holiday_region"),
+        optional_inputs=(
+            "enable_maternity_leave",
+            "enable_paternity_leave",
+            "enable_bereavement_leave",
+            "enable_marriage_leave",
+            "enable_comp_off_leave",
+            "enable_jury_duty_leave",
+        ),
         child_seeder="seed_leave_attendance",
         description="India leave types, holidays, attendance policy, shifts, and regularization defaults.",
         post_apply_action="HR Admin confirms leave policies, assignment scope, holidays, shifts, and attendance rules before employee rollout.",
@@ -219,6 +229,14 @@ SHIFT_MODULES = (
         editable_by_roles=("Tenant Admin", "HR Admin"),
         customer_editable_after_handoff=True,
         required_inputs=("shift_patterns", "weekly_off_policy"),
+        optional_inputs=(
+            "enable_maternity_leave",
+            "enable_paternity_leave",
+            "enable_bereavement_leave",
+            "enable_marriage_leave",
+            "enable_comp_off_leave",
+            "enable_jury_duty_leave",
+        ),
         child_seeder="seed_leave_attendance",
         description="Shift patterns, roster policy, overtime readiness, and late/early rules.",
         post_apply_action="HR Admin configures real shift patterns, roster ownership, overtime rules, and weekly-off exceptions.",

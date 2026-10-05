@@ -343,6 +343,99 @@ LEAVE_TYPE_DEFINITIONS = (
         "accrual_frequency": AccrualFrequency.NONE,
         "allow_half_day": True,
         "notice_days_required": 0,
+        "allow_negative_balance": True,
+    },
+)
+
+
+OPTIONAL_LEAVE_TYPE_DEFINITIONS = (
+    {
+        "input_key": "enable_maternity_leave",
+        "code": "maternity-leave",
+        "name": "Maternity Leave",
+        "short_code": "ML",
+        "category": LeaveCategory.MATERNITY,
+        "description": "Statutory maternity leave with evidence-ready employee request flow.",
+        "policy_code": "maternity-leave-policy",
+        "annual_entitlement": Decimal("182.00"),
+        "max_carry_forward": Decimal("0.00"),
+        "accrual_frequency": AccrualFrequency.YEARLY,
+        "allow_half_day": False,
+        "notice_days_required": 0,
+        "requires_attachment": True,
+    },
+    {
+        "input_key": "enable_paternity_leave",
+        "code": "paternity-leave",
+        "name": "Paternity Leave",
+        "short_code": "PL",
+        "category": LeaveCategory.PATERNITY,
+        "description": "Configurable paternity leave for new-parent support.",
+        "policy_code": "paternity-leave-policy",
+        "annual_entitlement": Decimal("15.00"),
+        "max_carry_forward": Decimal("0.00"),
+        "accrual_frequency": AccrualFrequency.YEARLY,
+        "allow_half_day": False,
+        "notice_days_required": 0,
+        "requires_attachment": True,
+    },
+    {
+        "input_key": "enable_bereavement_leave",
+        "code": "bereavement-leave",
+        "name": "Bereavement Leave",
+        "short_code": "BL",
+        "category": LeaveCategory.SPECIAL,
+        "description": "Compassionate leave for bereavement and family emergency scenarios.",
+        "policy_code": "bereavement-leave-policy",
+        "annual_entitlement": Decimal("5.00"),
+        "max_carry_forward": Decimal("0.00"),
+        "accrual_frequency": AccrualFrequency.YEARLY,
+        "allow_half_day": False,
+        "notice_days_required": 0,
+    },
+    {
+        "input_key": "enable_marriage_leave",
+        "code": "marriage-leave",
+        "name": "Marriage Leave",
+        "short_code": "MRG",
+        "category": LeaveCategory.SPECIAL,
+        "description": "Special paid leave for marriage events.",
+        "policy_code": "marriage-leave-policy",
+        "annual_entitlement": Decimal("5.00"),
+        "max_carry_forward": Decimal("0.00"),
+        "accrual_frequency": AccrualFrequency.YEARLY,
+        "allow_half_day": False,
+        "notice_days_required": 0,
+        "requires_attachment": True,
+    },
+    {
+        "input_key": "enable_comp_off_leave",
+        "code": "comp-off-leave",
+        "name": "Comp Off Leave",
+        "short_code": "CO",
+        "category": LeaveCategory.COMPENSATORY,
+        "description": "Compensatory off leave; HR credits earned units before employees consume them.",
+        "policy_code": "comp-off-leave-policy",
+        "annual_entitlement": Decimal("0.00"),
+        "max_carry_forward": Decimal("0.00"),
+        "accrual_frequency": AccrualFrequency.NONE,
+        "allow_half_day": False,
+        "notice_days_required": 0,
+    },
+    {
+        "input_key": "enable_jury_duty_leave",
+        "code": "jury-duty-leave",
+        "name": "Jury Duty Leave",
+        "short_code": "JD",
+        "category": LeaveCategory.SPECIAL,
+        "description": "Optional jury-duty leave template for global or future country-specific use.",
+        "policy_code": "jury-duty-leave-policy",
+        "annual_entitlement": Decimal("10.00"),
+        "max_carry_forward": Decimal("0.00"),
+        "accrual_frequency": AccrualFrequency.YEARLY,
+        "allow_half_day": False,
+        "notice_days_required": 0,
+        "requires_attachment": True,
     },
 )
 
@@ -914,6 +1007,15 @@ def _input_value(input_payload: dict | None, key: str, fallback: str = "") -> st
     return cleaned or fallback
 
 
+def _input_enabled(input_payload: dict | None, key: str) -> bool:
+    if not input_payload:
+        return False
+    value = input_payload.get(key)
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
 def _stable_code(value: str, fallback: str) -> str:
     code = slugify(value)[:60]
     return code or fallback
@@ -1350,8 +1452,24 @@ def seed_leave_attendance(onboarding: TenantOnboarding, input_payload: dict | No
     region = _holiday_region(input_payload)
     current_year = timezone.now().date().year
 
+    selected_optional_keys = {
+        definition["input_key"]
+        for definition in OPTIONAL_LEAVE_TYPE_DEFINITIONS
+        if _input_enabled(input_payload, definition["input_key"])
+    }
+    selected_optional_definitions = [
+        definition
+        for definition in OPTIONAL_LEAVE_TYPE_DEFINITIONS
+        if definition["input_key"] in selected_optional_keys
+    ]
+    skipped.extend(
+        f"optional_leave_addon:{definition['input_key']}"
+        for definition in OPTIONAL_LEAVE_TYPE_DEFINITIONS
+        if definition["input_key"] not in selected_optional_keys
+    )
+
     leave_policies = []
-    for definition in LEAVE_TYPE_DEFINITIONS:
+    for definition in (*LEAVE_TYPE_DEFINITIONS, *selected_optional_definitions):
         leave_type, was_created = LeaveType.objects.get_or_create(
             tenant=tenant,
             code=definition["code"],
@@ -1363,6 +1481,8 @@ def seed_leave_attendance(onboarding: TenantOnboarding, input_payload: dict | No
                 "description": definition["description"],
                 "is_system_seeded": True,
                 "is_approval_required": True,
+                "requires_attachment": definition.get("requires_attachment", False),
+                "allow_negative_balance": definition.get("allow_negative_balance", False),
                 "source_kind": PolicySourceKind.TENANT_NATIVE,
                 "delegation_mode": DelegationMode.TENANT_EDITABLE,
             },

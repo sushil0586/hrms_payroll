@@ -36,6 +36,7 @@ def serialize_blueprint(blueprint: LaunchBlueprint, *, subscription_plan: str = 
     module_payloads = []
     for module in blueprint.modules:
         input_keys.update(module.required_inputs)
+        input_keys.update(module.optional_inputs)
         module_payload = module.as_dict()
         if subscription_plan:
             plan_allowed = plan_allows(module.minimum_plan, subscription_plan)

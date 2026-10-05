@@ -25,7 +25,7 @@ Returns the available blueprint catalog. Each blueprint includes:
   - `customer_editable_after_handoff`: whether customer roles can maintain it after handoff.
   - `post_apply_action`: operational next step after safe seeding.
 - `input_schema`: UI-ready field definitions grouped by Company Details, Admin Contact,
-  Work Schedule, Payroll Setup, Provider Setup, and Compliance Details.
+  Work Schedule, Leave Add-ons, Payroll Setup, Provider Setup, and Compliance Details.
 
 The UI should render `input_schema` as a guided form and hide internal fields such as
 `child_seeder` from non-technical users.
@@ -49,7 +49,9 @@ Example:
     "default_branch": "Bengaluru",
     "default_department": "Operations",
     "work_week": "mon_fri",
-    "holiday_region": "KA"
+    "holiday_region": "KA",
+    "enable_maternity_leave": "true",
+    "enable_comp_off_leave": "true"
   },
   "idempotency_key": "preview-acme-standard-v1"
 }
@@ -59,6 +61,8 @@ The response includes:
 
 - `preview.can_apply`: true only when country, subscription, and required inputs pass.
 - `preview.input_schema`: the same UI-ready field schema for all inputs involved in the selected blueprint.
+  Optional leave add-ons use `field_type=checkbox`, `required=false`, and do not appear in
+  `preview.missing_inputs` when omitted.
 - `preview.planned_modules`: sections that can be prepared for the tenant plan.
 - `preview.skipped_modules`: sections skipped by subscription.
 - `preview.missing_inputs`: customer/platform inputs needed before apply.
@@ -120,6 +124,20 @@ initializes current-period leave balance ledger rows from the resolved policy.
 For active employees that already exist and match seeded attendance policy assignments, safe
 apply initializes current-month system attendance placeholders so ESS regularization has a
 record to target.
+
+The India leave baseline always creates Casual Leave, Sick Leave, Earned Leave, and Loss of Pay.
+Platform Admin can opt into launch-time add-ons by sending checkbox values in `input_payload`:
+
+- `enable_maternity_leave`
+- `enable_paternity_leave`
+- `enable_bereavement_leave`
+- `enable_marriage_leave`
+- `enable_comp_off_leave`
+- `enable_jury_duty_leave`
+
+Only selected add-ons create leave type, policy, assignment, and matching current employee balance
+rows. Unselected add-ons remain skipped in apply evidence and can be created later by HR Admin
+through normal leave configuration.
 
 Growth and Enterprise `payroll_defaults` creates only tenant-owned payroll setup records:
 payroll calendar, default pay group, salary components, salary structure shell/version/lines,

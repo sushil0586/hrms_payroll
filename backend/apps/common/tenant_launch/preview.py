@@ -185,6 +185,7 @@ def build_launch_preview(
 
     for module in blueprint.modules:
         all_input_keys.update(module.required_inputs)
+        all_input_keys.update(module.optional_inputs)
         module_missing_inputs = sorted(set(module.required_inputs) - provided_inputs)
         if plan_allows(module.minimum_plan, tenant.subscription_plan):
             planned_payload = _planned_module_payload(

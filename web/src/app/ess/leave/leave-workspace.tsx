@@ -361,7 +361,7 @@ function LeaveApplyModal({
         <div className="modal__header">
           <div>
             <h2>Apply leave</h2>
-            <p>Choose dates, add a clear reason, and attach proof when the policy asks for it.</p>
+            <p>Choose the leave type and dates. Add evidence only when this policy asks for it.</p>
           </div>
           <button aria-label="Close apply leave dialog" className="button button--secondary" onClick={onClose} type="button">Close</button>
         </div>
@@ -370,7 +370,7 @@ function LeaveApplyModal({
             <label className="form-field">
               <span className="muted">Leave type</span>
               <select className="input-control" disabled={!leaveTypes.length} name="leave_type_id" onChange={(event) => setLeaveTypeId(event.target.value)} required value={leaveTypeId}>
-                {!leaveTypes.length ? <option value="">No leave types assigned</option> : null}
+                {!leaveTypes.length ? <option value="">No leave types available</option> : null}
                 {leaveTypes.map((item) => (
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
@@ -421,7 +421,7 @@ function LeaveApplyModal({
               />
             </label>
             <label className="form-field form-field--full">
-              <span className="muted">Reason</span>
+              <span className="muted">Reason for leave</span>
               <textarea className="input-control" name="reason" required rows={3} />
             </label>
             {selectedFile ? (
@@ -441,18 +441,18 @@ function LeaveApplyModal({
             ) : null}
             {!leaveTypes.length ? (
               <div className="notice form-field--full" role="status">
-                <strong>Leave setup is missing.</strong>
-                <span className="muted">HR needs to assign at least one active leave type and policy before you can submit leave.</span>
+                <strong>No leave type is available.</strong>
+                <span className="muted">Ask HR to assign a leave policy before submitting a request.</span>
               </div>
             ) : null}
             {attachmentRequired && !evidenceReady ? (
               <div className="notice form-field--full" role="status">
                 <strong>Evidence required.</strong>
-                <span className="muted">Attach a file or add a reference before submitting this leave type.</span>
+                <span className="muted">Upload a file or add a reference for this leave type.</span>
               </div>
             ) : null}
             <div className="form-actions-bar form-field--full">
-              <span className="muted">Manager approval opens automatically when this policy needs it.</span>
+              <span className="muted">After you submit, approval goes to your manager when required.</span>
               <button className="button button--primary" disabled={submitting || !leaveTypes.length || !requestEstimate.valid || !evidenceReady} type="submit">
                 {submitting ? "Submitting..." : "Submit leave"}
               </button>
@@ -466,15 +466,15 @@ function LeaveApplyModal({
             </div>
             <div className="leave-summary-metrics">
               <DetailRow label="Available" value={matchingBalance ? formatUnits(balanceAvailable) : "Not mapped"} />
-              <DetailRow label="After request" value={matchingBalance && requestEstimate.valid ? formatUnits(balanceAfter) : "Pending"} />
+              <DetailRow label="Balance after request" value={matchingBalance && requestEstimate.valid ? formatUnits(balanceAfter) : "Pending"} />
               <DetailRow label="Weekend days" value={requestEstimate.valid ? String(requestEstimate.weekendDays) : "Pending"} />
-              <DetailRow label="Attachment" value={attachmentRequired ? "Required" : "Optional"} />
+              <DetailRow label="Evidence" value={attachmentRequired ? "Required" : "Optional"} />
             </div>
             <div className="leave-policy-helper">
-              <strong>Policy guidance</strong>
+              <strong>What happens next</strong>
               <span>{selectedLeaveType?.unit ? `Unit: ${selectedLeaveType.unit.replaceAll("_", " ")}.` : "Unit validation happens on submit."}</span>
-              <span>{attachmentRequired ? "Attach evidence before submitting this leave type." : "Evidence is optional unless HR asks later."}</span>
-              <span>{selectedLeaveType?.allow_negative_balance ? "Negative balance is allowed by policy." : "Request should stay within available balance."}</span>
+              <span>{attachmentRequired ? "Evidence must be attached before submitting." : "Evidence is optional for this leave type."}</span>
+              <span>{selectedLeaveType?.allow_negative_balance ? "This leave type can be requested even without available balance." : "The request should stay within available balance."}</span>
             </div>
             {!requestEstimate.valid ? (
               <div className="notice">
@@ -484,8 +484,8 @@ function LeaveApplyModal({
             ) : null}
             {hasBalanceRisk ? (
               <div className="notice">
-                <strong>Balance warning.</strong>
-                <span className="muted">This request is above the current mapped balance and may be rejected.</span>
+                <strong>Balance may be low.</strong>
+                <span className="muted">The request is above the current balance and may be blocked or rejected.</span>
               </div>
             ) : null}
             {overlappingRequest ? (
@@ -495,8 +495,8 @@ function LeaveApplyModal({
               </div>
             ) : null}
             <div className="notice notice--success">
-              <strong>Final validation</strong>
-              <span className="muted">Holiday calendars, policy limits, and approval routing are checked again when you submit.</span>
+              <strong>Checked on submit</strong>
+              <span className="muted">The system rechecks holidays, balance, policy limits, and approval route.</span>
             </div>
           </aside>
         </form>
@@ -639,8 +639,8 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
             ))
           ) : (
             <div className="notice">
-              <strong>No leave balances are mapped yet.</strong>
-              <span className="muted">Contact HR if you expected leave balances here.</span>
+              <strong>No leave balance is assigned yet.</strong>
+              <span className="muted">Ask HR to assign the right leave policies for your role.</span>
             </div>
           )}
         </div>

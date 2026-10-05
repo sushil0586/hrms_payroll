@@ -221,7 +221,7 @@ function AttendanceRegularizationModal({
         <div className="modal__header">
           <div>
             <h2>Regularize attendance</h2>
-            <p>Pick the affected day, explain the correction, and submit it to your manager.</p>
+            <p>Choose the day that needs correction, explain what changed, and send it for approval.</p>
           </div>
           <button aria-label="Close regularize attendance dialog" className="button button--secondary" onClick={onClose} type="button">Close</button>
         </div>
@@ -230,7 +230,7 @@ function AttendanceRegularizationModal({
             <label className="form-field form-field--full">
               <span className="muted">Attendance record</span>
               <select className="input-control" name="attendance_record_id" onChange={(event) => setSelectedRecordId(event.target.value)} required value={selectedRecordId}>
-                {!attendanceRecords.length ? <option value="">No attendance records available</option> : null}
+                {!attendanceRecords.length ? <option value="">No days available for correction</option> : null}
                 {attendanceRecords.map((record) => (
                   <option disabled={record.is_locked} key={record.id} value={record.id}>{formatRecordLabel(record)}</option>
                 ))}
@@ -266,8 +266,8 @@ function AttendanceRegularizationModal({
             ) : null}
             {!attendanceRecords.length ? (
               <div className="notice form-field--full" role="status">
-                <strong>No attendance record available.</strong>
-                <span className="muted">HR needs to create attendance records before you can request a correction.</span>
+                <strong>No attendance day is available.</strong>
+                <span className="muted">Ask HR to generate attendance records before requesting a correction.</span>
               </div>
             ) : null}
             {selectedRecord?.is_locked ? (
@@ -283,9 +283,9 @@ function AttendanceRegularizationModal({
               </div>
             ) : null}
             <div className="form-actions-bar form-field--full">
-              <span className="muted">Regularizations route to the reporting manager inbox.</span>
+              <span className="muted">After you submit, your manager receives this correction for approval.</span>
               <button className="button button--primary" disabled={submitting || !canSubmit} type="submit">
-                {submitting ? "Submitting..." : "Submit regularization"}
+                {submitting ? "Submitting..." : "Submit correction"}
               </button>
             </div>
           </div>
@@ -300,8 +300,8 @@ function AttendanceRegularizationModal({
             </div>
             <div className="leave-policy-helper">
               <strong>Before you submit</strong>
-              <span>Use this only for missed punch, wrong day status, late entry, or remote-work correction.</span>
-              <span>Manager approval is required before HR and payroll can trust the correction.</span>
+              <span>Use this for a missed punch, wrong day status, late entry, or remote-work correction.</span>
+              <span>Manager approval is required before HR or payroll uses the correction.</span>
             </div>
             {hasTimeOrderRisk ? (
               <div className="notice">
