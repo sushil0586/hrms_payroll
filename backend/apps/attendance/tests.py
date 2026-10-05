@@ -1,13 +1,25 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.attendance.models import AttendancePolicy, AttendancePolicyAssignment, AttendancePolicyStatus, AttendanceRecord, AttendanceSource, AttendanceStatus
+from apps.attendance.models import (
+    AttendancePolicy,
+    AttendancePolicyAssignment,
+    AttendancePolicyStatus,
+    AttendanceRecord,
+    AttendanceSource,
+    AttendanceStatus,
+    Holiday,
+    HolidayCalendar,
+    HolidayType,
+    Shift,
+)
 from apps.attendance.services import (
     ensure_employee_attendance_records,
+    evaluate_attendance_runtime,
     preview_attendance_policy_assignment_conflicts,
     preview_attendance_policy_assignment_resolution,
 )
@@ -312,3 +324,108 @@ class AttendancePolicyAssignmentConflictTests(TestCase):
         records[0].refresh_from_db()
         self.assertEqual(records[0].status, AttendanceStatus.ABSENT)
         self.assertEqual(records[0].source, AttendanceSource.SYSTEM)
+
+    def test_attendance_runtime_marks_policy_holiday_before_missing_punch(self):
+        calendar = HolidayCalendar.objects.create(
+            tenant=self.tenant,
+            code="india-2027",
+            name="India Holidays 2027",
+            year=2027,
+            is_active=True,
+        )
+        Holiday.objects.create(
+            calendar=calendar,
+            date=date(2027, 1, 26),
+            name="Republic Day",
+            holiday_type=HolidayType.COMPULSORY,
+        )
+        self.default_policy.holiday_calendar = calendar
+        self.default_policy.config_snapshot = {"derivation": {"enabled": True, "missing_punch_status": AttendanceStatus.ABSENT}}
+        self.default_policy.save(update_fields=["holiday_calendar", "config_snapshot", "updated_at"])
+        AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.default_policy,
+            priority=100,
+            is_active=True,
+        )
+
+        runtime = evaluate_attendance_runtime(employee=self.employee, attendance_date=date(2027, 1, 26))
+
+        self.assertEqual(runtime["status"], AttendanceStatus.HOLIDAY)
+        self.assertEqual(runtime["holiday"].name, "Republic Day")
+
+    def test_attendance_runtime_marks_shift_weekly_off_before_missing_punch(self):
+        shift = Shift.objects.create(
+            tenant=self.tenant,
+            code="general",
+            name="General Shift",
+            start_time=time(10, 0),
+            end_time=time(18, 0),
+            working_hours=Decimal("8.00"),
+            weekly_off_days=["sunday"],
+            is_active=True,
+        )
+        self.default_policy.default_shift = shift
+        self.default_policy.config_snapshot = {"derivation": {"enabled": True, "missing_punch_status": AttendanceStatus.ABSENT}}
+        self.default_policy.save(update_fields=["default_shift", "config_snapshot", "updated_at"])
+        AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.default_policy,
+            priority=100,
+            is_active=True,
+        )
+
+        runtime = evaluate_attendance_runtime(employee=self.employee, attendance_date=date(2027, 1, 3))
+
+        self.assertEqual(runtime["status"], AttendanceStatus.WEEKLY_OFF)
+        self.assertEqual(runtime["shift"].name, "General Shift")
+
+    def test_attendance_runtime_derives_late_minutes_and_overtime_from_shift(self):
+        shift = Shift.objects.create(
+            tenant=self.tenant,
+            code="general",
+            name="General Shift",
+            start_time=time(10, 0),
+            end_time=time(18, 0),
+            working_hours=Decimal("8.00"),
+            grace_in_minutes=10,
+            grace_out_minutes=5,
+            is_active=True,
+        )
+        self.default_policy.default_shift = shift
+        self.default_policy.full_day_min_hours = Decimal("8.00")
+        self.default_policy.half_day_min_hours = Decimal("4.00")
+        self.default_policy.overtime_threshold_minutes = 30
+        self.default_policy.config_snapshot = {"derivation": {"enabled": True, "late_status_mode": AttendanceStatus.LATE}}
+        self.default_policy.save(
+            update_fields=[
+                "default_shift",
+                "full_day_min_hours",
+                "half_day_min_hours",
+                "overtime_threshold_minutes",
+                "config_snapshot",
+                "updated_at",
+            ],
+        )
+        AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.default_policy,
+            priority=100,
+            is_active=True,
+        )
+        attendance_date = date(2027, 1, 4)
+        check_in = timezone.make_aware(datetime.combine(attendance_date, time(10, 20)))
+        check_out = timezone.make_aware(datetime.combine(attendance_date, time(19, 0)))
+
+        runtime = evaluate_attendance_runtime(
+            employee=self.employee,
+            attendance_date=attendance_date,
+            check_in_at=check_in,
+            check_out_at=check_out,
+        )
+
+        self.assertEqual(runtime["status"], AttendanceStatus.LATE)
+        self.assertEqual(runtime["late_minutes"], 20)
+        self.assertEqual(runtime["early_exit_minutes"], 0)
+        self.assertEqual(runtime["work_duration_hours"], Decimal("8.67"))
+        self.assertEqual(runtime["overtime_hours"], Decimal("0.17"))

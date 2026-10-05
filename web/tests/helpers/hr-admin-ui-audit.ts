@@ -8,7 +8,7 @@ import { expectNoAppError, expectNoHorizontalOverflow, suppressBrowserTestNoise 
 const hrAdminRoot = path.join(process.cwd(), "src/app/hr-admin");
 const playwrightBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? 3100}`;
 const hrAdminUsername = process.env.PLAYWRIGHT_LIVE_HR_ADMIN_USERNAME ?? "nisha.rao";
-const seedPassword = process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123";
+const hrAdminPassword = process.env.PLAYWRIGHT_LIVE_HR_ADMIN_PASSWORD ?? process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123";
 const authenticatedPages = new WeakSet<Page>();
 
 export function discoverHrAdminRoutes(directory = hrAdminRoot, includeDynamic = false): string[] {
@@ -52,7 +52,7 @@ export async function gotoDemoHrAdmin(page: Page, route: string) {
     const response = await page.request.post("/api/auth/login", {
       data: {
         identifier: hrAdminUsername,
-        password: seedPassword,
+        password: hrAdminPassword,
       },
     }).catch(() => null);
 

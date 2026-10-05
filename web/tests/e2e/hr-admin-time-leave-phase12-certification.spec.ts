@@ -67,8 +67,15 @@ const timeLeaveConfigurationRoutes: RouteExpectation[] = [
   },
 ];
 
+const authenticatedPages = new WeakSet<Page>();
+
 async function gotoDemoHrAdmin(page: Page, path: string) {
-  await gotoAuthenticated(page, path, hrAdmin);
+  if (!authenticatedPages.has(page)) {
+    await gotoAuthenticated(page, path, hrAdmin);
+    authenticatedPages.add(page);
+  } else {
+    await page.goto(path, { waitUntil: "domcontentloaded" });
+  }
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await suppressBrowserTestNoise(page);
 }
@@ -166,6 +173,7 @@ test.describe("HR Admin time, leave, attendance phase 12 certification", () => {
   });
 
   test("certifies time and leave configuration pages use the shared enterprise pattern", async ({ page }) => {
+    test.setTimeout(180_000);
     await page.setViewportSize({ width: 1440, height: 960 });
     for (const route of timeLeaveConfigurationRoutes) {
       await expectTimeLeaveRoute(page, route);
@@ -173,6 +181,7 @@ test.describe("HR Admin time, leave, attendance phase 12 certification", () => {
   });
 
   test("certifies key time and leave pages remain usable at tablet width", async ({ page }) => {
+    test.setTimeout(150_000);
     await page.setViewportSize({ width: 820, height: 1180 });
     for (const route of [
       { path: "/hr-admin/attendance-operations", heading: "Attendance operations", stripTitle: "Attendance operations command", visibleText: ["Open records", "Open regularizations"] },

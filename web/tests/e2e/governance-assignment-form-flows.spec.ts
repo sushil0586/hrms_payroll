@@ -26,6 +26,29 @@ function uniquePriority() {
   return 800_000 + Math.floor(Date.now() % 100_000);
 }
 
+type HrAdminEmployeeListItem = {
+  id: string;
+  employee_code: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  department_id?: string | null;
+  grade_id?: string | null;
+  employment_type_id?: string | null;
+};
+
+type HrAdminPolicyOptionsPayload = {
+  departments: Array<{ id: string; name: string }>;
+  grades: Array<{ id: string; name: string }>;
+  employment_types: Array<{ id: string; name: string }>;
+};
+
+type AttendancePolicyPayload = {
+  id: string;
+  name: string;
+  code: string;
+};
+
 function field(scope: Locator, label: string) {
   return scope
     .getByText(label, { exact: true })
@@ -155,6 +178,97 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
   return payload as T;
 }
 
+async function apiPost<T>(page: Page, path: string, data: unknown, expectedStatus = 201) {
+  const response = await page.request.post(`/api/hr-admin/${path}`, { data });
+  const payload = await response.json().catch(() => null);
+  expect(response.status(), `POST ${path} failed with ${response.status()}: ${JSON.stringify(payload)}`).toBe(expectedStatus);
+  return payload as T;
+}
+
+function apiBaseUrl() {
+  if (process.env.HRMS_API_BASE_URL) {
+    return process.env.HRMS_API_BASE_URL.replace(/\/$/, "");
+  }
+  if (process.env.PLAYWRIGHT_BASE_URL) {
+    return `${process.env.PLAYWRIGHT_BASE_URL.replace(/\/$/, "")}/api/v1`;
+  }
+  return "http://127.0.0.1:8001/api/v1";
+}
+
+async function authHeaders(page: Page) {
+  const token = (await page.context().cookies()).find((cookie) => cookie.name === "hrms_access_token")?.value;
+  expect(token).toBeTruthy();
+  return { Authorization: `Token ${token}` };
+}
+
+async function apiGetBackend<T>(page: Page, path: string) {
+  const response = await page.request.get(`${apiBaseUrl()}${path}`, { headers: await authHeaders(page) });
+  const payload = await response.json().catch(() => null);
+  expect(response.ok(), `GET ${path} failed with ${response.status()}: ${JSON.stringify(payload)}`).toBeTruthy();
+  return payload as T;
+}
+
+async function apiPostBackend<T>(page: Page, path: string, data: unknown, expectedStatus = 201) {
+  const response = await page.request.post(`${apiBaseUrl()}${path}`, {
+    headers: await authHeaders(page),
+    data,
+  });
+  const payload = await response.json().catch(() => null);
+  expect(response.status(), `POST ${path} failed with ${response.status()}: ${JSON.stringify(payload)}`).toBe(expectedStatus);
+  return payload as T;
+}
+
+async function createScopedEmployeeForAttendanceResolution(page: Page) {
+  const options = await apiGetBackend<HrAdminPolicyOptionsPayload>(page, "/hr-admin/policy-options/");
+  const department = options.departments[0];
+  const grade = options.grades[0];
+  const employmentType = options.employment_types[0];
+  expect(department || grade || employmentType, "Expected policy options to expose department, grade, or employment type").toBeTruthy();
+  const employeeCode = uniqueCode("ATT_RES_EMP");
+  return apiPostBackend<HrAdminEmployeeListItem>(page, "/hr-admin/employees/", {
+    employee_code: employeeCode,
+    employment_status: "active",
+    first_name: "Attendance",
+    last_name: "Resolution",
+    work_email: `${employeeCode.toLowerCase()}@example.test`,
+    date_of_joining: "2026-01-01",
+    department_id: department?.id ?? null,
+    grade_id: grade?.id ?? null,
+    employment_type_id: employmentType?.id ?? null,
+  });
+}
+
+async function createAttendancePolicyViaApi(page: Page, label: string) {
+  const code = uniqueCode(`ATT_RES_${label}`).toLowerCase().replaceAll("_", "-");
+  return apiPost<AttendancePolicyPayload>(page, "attendance-policies", {
+    code,
+    name: `Browser ${label} ${code}`,
+    status: "active",
+    attendance_unit: "day",
+    full_day_min_hours: "8.00",
+    half_day_min_hours: "4.00",
+    late_mark_after_minutes: 15,
+    max_late_marks_in_period: 3,
+    overtime_threshold_minutes: 0,
+    allow_manual_entry: true,
+    allow_web_checkin: true,
+    allow_mobile_checkin: true,
+    allow_geofenced_checkin: false,
+    allow_regularization: true,
+    require_regularization_reason: true,
+    config_snapshot: {
+      derivation: {
+        enabled: true,
+        auto_mark_holiday: true,
+        auto_mark_weekly_off: true,
+        missing_punch_status: "unknown",
+        late_status_mode: "present",
+        derive_overtime: true,
+      },
+    },
+  });
+}
+
 async function ensureOption(fieldLocator: Locator, createRecord: () => Promise<string>, reopen: () => Promise<void>) {
   if (await hasNonEmptyOption(fieldLocator)) {
     return;
@@ -260,13 +374,13 @@ test.describe("HR admin governance and assignment forms", () => {
     });
 
     await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments/new");
-    await expectPageReady(page, /Create attendance policy assignment/);
+    await expectPageReady(page, /Create attendance assignment/);
 
     const attendancePolicy = page.getByRole("combobox", { name: /^Attendance policy/ });
     if (!(await hasNonEmptyOption(attendancePolicy))) {
       await createAttendancePolicyThroughBrowser(page);
       await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments/new");
-      await expectPageReady(page, /Create attendance policy assignment/);
+      await expectPageReady(page, /Create attendance assignment/);
     }
     await selectFirstNonEmptyOption(page.getByRole("combobox", { name: /^Attendance policy/ }));
     await expect(page.getByText("One existing attendance assignment overlaps")).toBeVisible();
@@ -279,7 +393,7 @@ test.describe("HR admin governance and assignment forms", () => {
 
     for (const target of [
       { path: "/hr-admin/leave-policy-assignments/new", title: /Create leave assignment|Create leave policy assignment/ },
-      { path: "/hr-admin/attendance-policy-assignments/new", title: /Create attendance policy assignment|Attendance policy assignment/ },
+      { path: "/hr-admin/attendance-policy-assignments/new", title: /Create attendance assignment/ },
     ]) {
       await gotoAuthenticated(page, target.path);
       await expectPageReady(page, target.title);
@@ -395,13 +509,13 @@ test.describe("HR admin governance and assignment forms", () => {
 
   test("attendance policy assignment creates, reads, updates, and deactivates through browser", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments/new");
-    await expectPageReady(page, /Create attendance policy assignment|Attendance policy assignment/);
+    await expectPageReady(page, /Create attendance assignment/);
     await ensureOption(
       page.getByRole("combobox", { name: /^Attendance policy/ }),
       () => createAttendancePolicyThroughBrowser(page),
       async () => {
         await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments/new");
-        await expectPageReady(page, /Create attendance policy assignment|Attendance policy assignment/);
+        await expectPageReady(page, /Create attendance assignment/);
       },
     );
 
@@ -424,7 +538,7 @@ test.describe("HR admin governance and assignment forms", () => {
     await expect(page.getByText("inactive").first()).toBeVisible();
 
     await gotoAuthenticated(page, `/hr-admin/attendance-policy-assignments/${created.id}/edit`);
-    await expectPageReady(page, /Edit attendance policy assignment|Edit assignment/);
+    await expectPageReady(page, /Edit attendance assignment/);
     await expect(field(page.locator("form").first(), "Priority")).toHaveValue(String(priority));
     await field(page.locator("form").first(), "Priority").fill(String(priority + 1));
     await submitAndCapture(page, `attendance-policy-assignments/${created.id}`, "PATCH", async () => {
@@ -432,6 +546,56 @@ test.describe("HR admin governance and assignment forms", () => {
     });
     await expect(page).toHaveURL(/\/hr-admin\/attendance-policy-assignments$/);
     await expect(page.getByText(`Priority ${priority + 1}`).first()).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("attendance policy resolution inspector proves nearest scope wins at equal priority", async ({ page }) => {
+    test.setTimeout(120_000);
+    await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments");
+    const employee = await createScopedEmployeeForAttendanceResolution(page);
+    const priority = uniquePriority();
+    const globalPolicy = await createAttendancePolicyViaApi(page, "Global");
+    const scopedPolicy = await createAttendancePolicyViaApi(page, "Scoped");
+    const overridePolicy = await createAttendancePolicyViaApi(page, "Override");
+
+    await apiPost(page, "attendance-policy-assignments", {
+      attendance_policy_id: globalPolicy.id,
+      priority,
+      is_active: true,
+    });
+    await apiPost(page, "attendance-policy-assignments", {
+      attendance_policy_id: scopedPolicy.id,
+      department_id: employee.department_id ?? null,
+      grade_id: employee.department_id ? null : employee.grade_id ?? null,
+      employment_type_id: employee.department_id || employee.grade_id ? null : employee.employment_type_id ?? null,
+      priority,
+      is_active: true,
+    });
+
+    await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments");
+    const inspector = page.locator("section").filter({ has: page.getByRole("heading", { name: "Resolution inspector" }) }).first();
+    await expect(inspector).toBeVisible();
+    await inspector.getByRole("combobox", { name: "Employee" }).selectOption(employee.id);
+    await inspector.getByRole("button", { name: "Inspect resolution" }).click();
+    await expect(inspector.getByText(scopedPolicy.name).first()).toBeVisible();
+    await expect(inspector.getByText("Tenant default scope")).toHaveCount(0);
+
+    await apiPost(page, "attendance-policy-assignments", {
+      attendance_policy_id: overridePolicy.id,
+      employee_id: employee.id,
+      department_id: employee.department_id ?? null,
+      grade_id: employee.grade_id ?? null,
+      employment_type_id: employee.employment_type_id ?? null,
+      priority,
+      is_active: true,
+    });
+
+    await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments");
+    const refreshedInspector = page.locator("section").filter({ has: page.getByRole("heading", { name: "Resolution inspector" }) }).first();
+    await refreshedInspector.getByRole("combobox", { name: "Employee" }).selectOption(employee.id);
+    await refreshedInspector.getByRole("button", { name: "Inspect resolution" }).click();
+    await expect(refreshedInspector.getByText(overridePolicy.name).first()).toBeVisible();
+    await expect(refreshedInspector.getByText(new RegExp(`Employee: ${employee.employee_code}`)).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 

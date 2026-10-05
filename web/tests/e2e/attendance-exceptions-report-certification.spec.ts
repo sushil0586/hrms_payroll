@@ -94,7 +94,7 @@ test.describe("Phase R4-T attendance exceptions SLA report certification", () =>
 
   test("employee cannot access attendance exceptions report or exports", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     await page.goto("/hr-admin/reports/attendance-exceptions", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);

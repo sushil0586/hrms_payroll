@@ -94,7 +94,7 @@ test.describe("Phase R4-S leave balance report certification", () => {
 
   test("employee cannot access leave balance report or exports", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     await page.goto("/hr-admin/reports/leave-balance", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);

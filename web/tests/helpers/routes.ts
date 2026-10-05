@@ -106,7 +106,7 @@ export const governanceAssignmentVisualRoutes: RouteExpectation[] = [
   { path: "/hr-admin/leave-policies/lp-1/edit", heading: /Edit leave policy/ },
   { path: "/hr-admin/attendance-policies/ap-1/edit", heading: "Edit attendance policy" },
   { path: "/hr-admin/leave-policy-assignments/new", heading: /Create leave policy assignment/ },
-  { path: "/hr-admin/attendance-policy-assignments/new", heading: /Create attendance policy assignment/ },
+  { path: "/hr-admin/attendance-policy-assignments/new", heading: /Create attendance assignment/ },
   { path: "/hr-admin/workflow-template-assignments/new", heading: "Create workflow assignment" },
   { path: "/hr-admin/document-requirements/new", heading: "Create document requirement" },
   { path: "/hr-admin/employee-shift-assignments/new", heading: /Create shift assignment/ },
