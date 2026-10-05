@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectDialogStable } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 function field(scope: Page | Locator, label: string | RegExp) {
@@ -85,11 +86,15 @@ test.describe("ESS Attendance launch certification", () => {
       await expect(detailDialog.getByText("Manager decision").first()).toBeVisible();
       await expect(detailDialog.getByRole("heading", { name: "Timeline" })).toBeVisible();
       await expect(detailDialog.getByRole("heading", { name: "Correction details" })).toBeVisible();
+      await expectDialogStable(page, "Regularization detail");
       await page.keyboard.press("Escape");
       await expect(detailDialog).toBeHidden();
     }
 
     await page.setViewportSize({ width: 390, height: 844 });
+    const compactDialog = await openRegularizationModal(page);
+    await expectDialogStable(page, "Regularize attendance");
+    await compactDialog.getByRole("button", { name: "Close" }).click();
     await expectNoHorizontalOverflow(page);
   });
 
@@ -98,6 +103,7 @@ test.describe("ESS Attendance launch certification", () => {
     await expectPageReady(page, "Attendance");
 
     const dialog = await openRegularizationModal(page);
+    await expectDialogStable(page, "Regularize attendance");
     await expect(dialog.getByText("Reason required.")).toBeVisible();
     await expect(submitCorrectionButton(dialog)).toBeDisabled();
 
@@ -112,6 +118,7 @@ test.describe("ESS Attendance launch certification", () => {
 
     await field(dialog, "Requested check-out").fill("2026-10-02T19:00");
     await expect(submitCorrectionButton(dialog)).toBeEnabled();
+    await expectDialogStable(page, "Regularize attendance");
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
   });

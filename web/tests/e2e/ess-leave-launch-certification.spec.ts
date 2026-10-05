@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectDialogStable } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated } from "../helpers/staging-auth";
 
 function field(scope: Page | Locator, label: string, index = 0) {
@@ -57,6 +58,7 @@ test.describe("ESS Leave launch certification", () => {
       await expect(detail.getByRole("heading", { name: "Timeline" })).toBeVisible();
       await expect(detail.getByRole("heading", { name: "Request details" })).toBeVisible();
       await expect(detail.getByRole("heading", { name: "Evidence", exact: true })).toBeVisible();
+      await expectDialogStable(page, "Leave request detail");
       await page.keyboard.press("Escape");
       await expect(detail).toHaveCount(0);
     }
@@ -65,6 +67,9 @@ test.describe("ESS Leave launch certification", () => {
     await gotoAuthenticated(page, "/ess/leave", employee);
     await expectPageReady(page, "Leave");
     await expect(page.getByRole("heading", { name: "Leave requests" })).toBeVisible();
+    const compactApplyDialog = await openApplyLeave(page);
+    await expectDialogStable(page, "Apply leave");
+    await compactApplyDialog.getByRole("button", { name: "Close" }).click();
     await expectNoHorizontalOverflow(page);
   });
 
@@ -73,6 +78,7 @@ test.describe("ESS Leave launch certification", () => {
     await expectPageReady(page, "Leave");
 
     const dialog = await openApplyLeave(page);
+    await expectDialogStable(page, "Apply leave");
     const leaveType = field(dialog, "Leave type");
     const sickLeaveValue = await optionValueByName(leaveType, /sick/);
 
@@ -101,6 +107,7 @@ test.describe("ESS Leave launch certification", () => {
 
     await field(dialog, "End date").fill(isoDateFromToday(20));
     await expect(dialog.getByText("Checked on submit")).toBeVisible();
+    await expectDialogStable(page, "Apply leave");
     await expectNoHorizontalOverflow(page);
   });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 
 import { ManagerDecisionPanel } from "@/app/mss/approvals/manager-decision-panel";
 import type { AttendanceRegularizationItem, LeaveRequestItem } from "@/lib/types";
@@ -123,62 +124,64 @@ function LeaveReviewModal({
           </button>
         </div>
 
-        <div className="mss-approval-modal-summary">
-          <article>
-            <span>Employee</span>
-            <strong>{item.employee_name || "Unknown"}</strong>
-            <small>{item.employee_code || "No employee code"}</small>
-          </article>
-          <article>
-            <span>Leave period</span>
-            <strong>{formatDate(item.start_date)}</strong>
-            <small>to {formatDate(item.end_date)}</small>
-          </article>
-          <article>
-            <span>Units</span>
-            <strong>{item.requested_units}</strong>
-            <small>{titleCase(item.status)}</small>
-          </article>
-        </div>
-
-        <section className="ess-modal-section">
-          <h3>Request context</h3>
-          <div className="detail-grid">
-            <DetailRow label="Request type" value={requestActionLabel(item.request_action)} />
-            <DetailRow label="Department" value={item.department || "Not mapped"} />
-            <DetailRow label="Designation" value={item.designation || "Not mapped"} />
-            <DetailRow label="Leave type" value={item.leave_type} />
-            <DetailRow label="Date range" value={`${formatDate(item.start_date)} to ${formatDate(item.end_date)}`} />
-            <DetailRow label="Applied at" value={formatDateTime(item.applied_at)} />
-            <DetailRow
-              label={isCancellationRequest ? "Cancellation reason" : "Employee reason"}
-              value={item.reason || "No reason provided."}
-            />
-            {item.cancel_requires_reapproval ? (
-              <DetailRow
-                label="Cancellation route"
-                value={item.cancel_approval_route ? titleCase(item.cancel_approval_route) : "Uses the original leave route"}
-              />
-            ) : null}
+        <div className="mss-approval-modal__body">
+          <div className="mss-approval-modal-summary">
+            <article>
+              <span>Employee</span>
+              <strong>{item.employee_name || "Unknown"}</strong>
+              <small>{item.employee_code || "No employee code"}</small>
+            </article>
+            <article>
+              <span>Leave period</span>
+              <strong>{formatDate(item.start_date)}</strong>
+              <small>to {formatDate(item.end_date)}</small>
+            </article>
+            <article>
+              <span>Units</span>
+              <strong>{item.requested_units}</strong>
+              <small>{titleCase(item.status)}</small>
+            </article>
           </div>
-        </section>
 
-        <section className="ess-modal-section">
-          <h3>Evidence</h3>
-          <LeaveEvidenceList item={item} />
-        </section>
+          <section className="ess-modal-section">
+            <h3>Request context</h3>
+            <div className="detail-grid">
+              <DetailRow label="Request type" value={requestActionLabel(item.request_action)} />
+              <DetailRow label="Department" value={item.department || "Not mapped"} />
+              <DetailRow label="Designation" value={item.designation || "Not mapped"} />
+              <DetailRow label="Leave type" value={item.leave_type} />
+              <DetailRow label="Date range" value={`${formatDate(item.start_date)} to ${formatDate(item.end_date)}`} />
+              <DetailRow label="Applied at" value={formatDateTime(item.applied_at)} />
+              <DetailRow
+                label={isCancellationRequest ? "Cancellation reason" : "Employee reason"}
+                value={item.reason || "No reason provided."}
+              />
+              {item.cancel_requires_reapproval ? (
+                <DetailRow
+                  label="Cancellation route"
+                  value={item.cancel_approval_route ? titleCase(item.cancel_approval_route) : "Uses the original leave route"}
+                />
+              ) : null}
+            </div>
+          </section>
 
-        <ManagerDecisionPanel
-          canDecide={canDecide}
-          description="Capture the manager decision after reviewing the full leave context."
-          employeeReason={item.reason}
-          itemId={item.id}
-          kind="leave"
-          requestAction={item.request_action}
-          state={state}
-          status={item.status}
-          title={isCancellationRequest ? "Cancellation decision" : "Leave decision"}
-        />
+          <section className="ess-modal-section">
+            <h3>Evidence</h3>
+            <LeaveEvidenceList item={item} />
+          </section>
+
+          <ManagerDecisionPanel
+            canDecide={canDecide}
+            description="Capture the manager decision after reviewing the full leave context."
+            employeeReason={item.reason}
+            itemId={item.id}
+            kind="leave"
+            requestAction={item.request_action}
+            state={state}
+            status={item.status}
+            title={isCancellationRequest ? "Cancellation decision" : "Leave decision"}
+          />
+        </div>
       </div>
     </div>
   );
@@ -209,48 +212,50 @@ function AttendanceReviewModal({
           </button>
         </div>
 
-        <div className="mss-approval-modal-summary">
-          <article>
-            <span>Employee</span>
-            <strong>{item.employee_name || "Unknown"}</strong>
-            <small>{item.employee_code || "No employee code"}</small>
-          </article>
-          <article>
-            <span>Attendance date</span>
-            <strong>{formatDate(item.attendance_date)}</strong>
-            <small>{titleCase(item.status)}</small>
-          </article>
-          <article>
-            <span>Correction</span>
-            <strong>{titleCase(item.requested_status)}</strong>
-            <small>from {titleCase(item.current_status)}</small>
-          </article>
-        </div>
-
-        <section className="ess-modal-section">
-          <h3>Correction context</h3>
-          <div className="detail-grid">
-            <DetailRow label="Employee" value={`${item.employee_name || "Unknown"} (${item.employee_code || "N/A"})`} />
-            <DetailRow label="Attendance date" value={formatDate(item.attendance_date)} />
-            <DetailRow label="Current status" value={titleCase(item.current_status)} />
-            <DetailRow label="Requested status" value={titleCase(item.requested_status)} />
-            <DetailRow label="Actual check-in" value={formatDateTime(item.actual_check_in_at)} />
-            <DetailRow label="Requested check-in" value={formatDateTime(item.requested_check_in_at)} />
-            <DetailRow label="Applied at" value={formatDateTime(item.applied_at)} />
-            <DetailRow label="Reason" value={item.reason || "No reason provided."} />
+        <div className="mss-approval-modal__body">
+          <div className="mss-approval-modal-summary">
+            <article>
+              <span>Employee</span>
+              <strong>{item.employee_name || "Unknown"}</strong>
+              <small>{item.employee_code || "No employee code"}</small>
+            </article>
+            <article>
+              <span>Attendance date</span>
+              <strong>{formatDate(item.attendance_date)}</strong>
+              <small>{titleCase(item.status)}</small>
+            </article>
+            <article>
+              <span>Correction</span>
+              <strong>{titleCase(item.requested_status)}</strong>
+              <small>from {titleCase(item.current_status)}</small>
+            </article>
           </div>
-        </section>
 
-        <ManagerDecisionPanel
-          canDecide={canDecide}
-          description="Approve or reject the attendance exception with a manager note."
-          employeeReason={item.reason}
-          itemId={item.id}
-          kind="attendance"
-          state={state}
-          status={item.status}
-          title="Regularization decision"
-        />
+          <section className="ess-modal-section">
+            <h3>Correction context</h3>
+            <div className="detail-grid">
+              <DetailRow label="Employee" value={`${item.employee_name || "Unknown"} (${item.employee_code || "N/A"})`} />
+              <DetailRow label="Attendance date" value={formatDate(item.attendance_date)} />
+              <DetailRow label="Current status" value={titleCase(item.current_status)} />
+              <DetailRow label="Requested status" value={titleCase(item.requested_status)} />
+              <DetailRow label="Actual check-in" value={formatDateTime(item.actual_check_in_at)} />
+              <DetailRow label="Requested check-in" value={formatDateTime(item.requested_check_in_at)} />
+              <DetailRow label="Applied at" value={formatDateTime(item.applied_at)} />
+              <DetailRow label="Reason" value={item.reason || "No reason provided."} />
+            </div>
+          </section>
+
+          <ManagerDecisionPanel
+            canDecide={canDecide}
+            description="Approve or reject the attendance exception with a manager note."
+            employeeReason={item.reason}
+            itemId={item.id}
+            kind="attendance"
+            state={state}
+            status={item.status}
+            title="Regularization decision"
+          />
+        </div>
       </div>
     </div>
   );
@@ -263,18 +268,23 @@ export function ManagerApprovalReviewAction(props: Props) {
     : props.variant === "secondary"
       ? "button button--secondary"
       : "button button--ghost";
+  const modal = isOpen && typeof document !== "undefined"
+    ? createPortal(
+        props.kind === "leave" ? (
+          <LeaveReviewModal canDecide={props.canDecide} item={props.item} onClose={() => setIsOpen(false)} state={props.state} />
+        ) : (
+          <AttendanceReviewModal canDecide={props.canDecide} item={props.item} onClose={() => setIsOpen(false)} state={props.state} />
+        ),
+        document.body,
+      )
+    : null;
 
   return (
     <>
       <button className={buttonClass} onClick={() => setIsOpen(true)} type="button">
         Review
       </button>
-      {isOpen && props.kind === "leave" ? (
-        <LeaveReviewModal canDecide={props.canDecide} item={props.item} onClose={() => setIsOpen(false)} state={props.state} />
-      ) : null}
-      {isOpen && props.kind === "attendance" ? (
-        <AttendanceReviewModal canDecide={props.canDecide} item={props.item} onClose={() => setIsOpen(false)} state={props.state} />
-      ) : null}
+      {modal}
     </>
   );
 }

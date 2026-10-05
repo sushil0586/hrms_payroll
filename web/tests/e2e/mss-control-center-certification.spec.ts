@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectDialogStable } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated, manager, platformAdmin, supportAgent, type Persona } from "../helpers/staging-auth";
 
 async function expectManagerActionControls(page: Page) {
@@ -77,6 +78,7 @@ test.describe("Manager self service dashboard certification", () => {
       await leaveReview.click();
       await expect(page.getByRole("dialog", { name: "Leave approval review" })).toBeVisible();
       await expectManagerActionControls(page);
+      await expectDialogStable(page, "Leave approval review");
       await page.getByRole("button", { name: "Close leave approval review" }).click();
     }
 
@@ -93,6 +95,7 @@ test.describe("Manager self service dashboard certification", () => {
       await attendanceReview.click();
       await expect(page.getByRole("dialog", { name: "Attendance approval review" })).toBeVisible();
       await expectManagerActionControls(page);
+      await expectDialogStable(page, "Attendance approval review");
       await page.getByRole("button", { name: "Close attendance approval review" }).click();
     }
 
@@ -103,6 +106,22 @@ test.describe("Manager self service dashboard certification", () => {
     await expect(page.getByRole("heading", { name: "Completed decisions" })).toBeVisible();
     await expect(page.getByText("No completed manager decisions are available yet.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
+  });
+
+  test("approval review dialog remains stable on compact screens", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoAuthenticated(page, "/mss/approvals?queue=leave", manager);
+    await expectPageReady(page, "Manager approvals");
+
+    const reviewButton = page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).first();
+    if (!(await reviewButton.isVisible().catch(() => false))) {
+      await expect(page.getByText(/No pending leave approvals|No leave approval selected/).first()).toBeVisible();
+      return;
+    }
+
+    await reviewButton.click();
+    await expectManagerActionControls(page);
+    await expectDialogStable(page, "Leave approval review");
   });
 
   test("manager decision panel handles success and validation errors without mutating staging rows", async ({ page }) => {

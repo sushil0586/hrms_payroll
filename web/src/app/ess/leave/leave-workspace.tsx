@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
@@ -615,6 +616,33 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
     ? leaveRequests.items.find((item) => item.id === selectedRequestId) ?? null
     : null;
   const selectedRequest = clickedRequest ?? linkedRequest;
+  const modal = typeof document !== "undefined"
+    ? (
+        <>
+          {applyOpen ? createPortal(
+            <LeaveApplyModal
+              balances={balances}
+              isDemo={isDemo}
+              leaveRequests={leaveRequests.items}
+              leaveTypes={leaveTypes}
+              onClose={() => setApplyOpen(false)}
+            />,
+            document.body,
+          ) : null}
+          {selectedRequest ? createPortal(
+            <LeaveDetailModal
+              isDemo={isDemo}
+              item={selectedRequest}
+              onClose={() => {
+                setDismissedRequestId(selectedRequest.id);
+                setClickedRequest(null);
+              }}
+            />,
+            document.body,
+          ) : null}
+        </>
+      )
+    : null;
 
   return (
     <main className="shell shell--workspace">
@@ -794,25 +822,7 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
         />
       </section>
 
-      {applyOpen ? (
-        <LeaveApplyModal
-          balances={balances}
-          isDemo={isDemo}
-          leaveRequests={leaveRequests.items}
-          leaveTypes={leaveTypes}
-          onClose={() => setApplyOpen(false)}
-        />
-      ) : null}
-      {selectedRequest ? (
-        <LeaveDetailModal
-          isDemo={isDemo}
-          item={selectedRequest}
-          onClose={() => {
-            setDismissedRequestId(selectedRequest.id);
-            setClickedRequest(null);
-          }}
-        />
-      ) : null}
+      {modal}
     </main>
   );
 }

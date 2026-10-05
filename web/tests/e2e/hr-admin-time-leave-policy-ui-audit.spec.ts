@@ -31,6 +31,53 @@ const timeLeavePolicyRoutes = [
   "/hr-admin/shift-roster-templates/new",
 ];
 
+const timeLeavePolicyRouteGroups = [
+  {
+    name: "operations",
+    routes: [
+      "/hr-admin/attendance-operations",
+      "/hr-admin/attendance-records",
+      "/hr-admin/attendance-regularizations",
+      "/hr-admin/leave-balances",
+      "/hr-admin/policies",
+      "/hr-admin/policy-assignments",
+    ],
+  },
+  {
+    name: "leave setup",
+    routes: [
+      "/hr-admin/leave-types",
+      "/hr-admin/leave-types/new",
+      "/hr-admin/leave-policies",
+      "/hr-admin/leave-policies/new",
+      "/hr-admin/leave-policy-assignments",
+      "/hr-admin/leave-policy-assignments/new",
+    ],
+  },
+  {
+    name: "attendance setup",
+    routes: [
+      "/hr-admin/shifts",
+      "/hr-admin/shifts/new",
+      "/hr-admin/holiday-calendars",
+      "/hr-admin/holiday-calendars/new",
+      "/hr-admin/attendance-policies",
+      "/hr-admin/attendance-policies/new",
+    ],
+  },
+  {
+    name: "assignment and roster setup",
+    routes: [
+      "/hr-admin/attendance-policy-assignments",
+      "/hr-admin/attendance-policy-assignments/new",
+      "/hr-admin/employee-shift-assignments",
+      "/hr-admin/employee-shift-assignments/new",
+      "/hr-admin/shift-roster-templates",
+      "/hr-admin/shift-roster-templates/new",
+    ],
+  },
+];
+
 const timeLeavePolicyPathPatterns = [
   ...timeLeavePolicyRoutes.map((route) => new RegExp(`^${route.replaceAll("/", "\\/")}$`)),
   /^\/hr-admin\/attendance-records\/[^/]+\/edit$/,
@@ -269,13 +316,20 @@ async function auditLinkedTimeLeavePolicyRoute(
 }
 
 test.describe("HR Admin time, leave, and policy UI audit", () => {
-  test("certifies time/leave/policy page layout, controls, and internal links", async ({ page }) => {
-    test.setTimeout(480_000);
-    await page.setViewportSize({ width: 1440, height: 960 });
+  for (const routeGroup of timeLeavePolicyRouteGroups) {
+    test(`certifies ${routeGroup.name} page layout, controls, and internal links`, async ({ page }) => {
+      test.setTimeout(360_000);
+      await page.setViewportSize({ width: 1440, height: 960 });
 
-    for (const route of timeLeavePolicyRoutes) {
-      await auditTimeLeavePolicyRoute(page, route);
-    }
+      for (const route of routeGroup.routes) {
+        await auditTimeLeavePolicyRoute(page, route);
+      }
+    });
+  }
+
+  test("certifies time/leave/policy dynamic edit links", async ({ page }) => {
+    test.setTimeout(600_000);
+    await page.setViewportSize({ width: 1440, height: 960 });
 
     for (const dynamicRoute of dynamicTimeLeavePolicyRoutes) {
       await auditLinkedTimeLeavePolicyRoute(

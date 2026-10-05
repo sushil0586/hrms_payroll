@@ -6,6 +6,8 @@ import { employee, gotoAuthenticated, manager, type Persona } from "../helpers/s
 
 const essRoutes = [
   "/ess",
+  "/ess/leave",
+  "/ess/attendance",
   "/ess/payslips",
   "/ess/statutory-declarations",
   "/ess/documents",

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -396,6 +397,30 @@ export function AttendanceWorkspace({ attendanceRecords, currentParams, dashboar
       item.rejection_reason ?? "",
     ].some((value) => value.toLowerCase().includes(normalizedQuery));
   });
+  const modal = typeof document !== "undefined"
+    ? (
+        <>
+          {regularizeOpen ? createPortal(
+            <AttendanceRegularizationModal
+              attendanceRecords={attendanceRecords}
+              isDemo={isDemo}
+              onClose={() => setRegularizeOpen(false)}
+            />,
+            document.body,
+          ) : null}
+          {selectedRegularization ? createPortal(
+            <AttendanceDetailModal
+              item={selectedRegularization}
+              onClose={() => {
+                setDismissedRegularizationId(selectedRegularization.id);
+                setClickedRegularization(null);
+              }}
+            />,
+            document.body,
+          ) : null}
+        </>
+      )
+    : null;
 
   return (
     <main className="shell shell--workspace">
@@ -543,22 +568,7 @@ export function AttendanceWorkspace({ attendanceRecords, currentParams, dashboar
         />
       </section>
 
-      {regularizeOpen ? (
-        <AttendanceRegularizationModal
-          attendanceRecords={attendanceRecords}
-          isDemo={isDemo}
-          onClose={() => setRegularizeOpen(false)}
-        />
-      ) : null}
-      {selectedRegularization ? (
-        <AttendanceDetailModal
-          item={selectedRegularization}
-          onClose={() => {
-            setDismissedRegularizationId(selectedRegularization.id);
-            setClickedRegularization(null);
-          }}
-        />
-      ) : null}
+      {modal}
     </main>
   );
 }
