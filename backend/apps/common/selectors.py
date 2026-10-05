@@ -30,6 +30,7 @@ from apps.common.models import (
     SaasUsageMeterSnapshot,
 )
 from apps.attendance.models import AttendancePolicy, AttendancePolicyStatus, AttendanceRecord, AttendanceRegularization, AttendanceStatus, RegularizationStatus
+from apps.attendance.services import ensure_employee_attendance_records
 from apps.documents.models import DocumentCategory, DocumentRequirementRule, EmployeeDocument, VerificationStatus
 from apps.employee_lifecycle.models import EmployeeExit, EmployeeMovement, EmployeeOnboarding, ExitStatus, OnboardingStatus, ProbationDecision, ProbationReview
 from apps.employees.models import Employee, EmployeeBankAccount, EmploymentStatus
@@ -3653,6 +3654,7 @@ def get_employee_attendance_summary(employee: Employee) -> dict:
 
     today = timezone.localdate()
     month_start = today.replace(day=1)
+    ensure_employee_attendance_records(employee, from_date=month_start, to_date=today)
     records = AttendanceRecord.objects.filter(
         employee=employee,
         attendance_date__gte=month_start,

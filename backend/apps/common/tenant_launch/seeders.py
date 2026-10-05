@@ -20,6 +20,7 @@ from apps.attendance.models import (
     HolidayType,
     Shift,
 )
+from apps.attendance.services import ensure_employee_attendance_records
 from apps.documents.models import DocumentCategory, DocumentCategoryType, DocumentRequirementRule
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import Role, RolePermission, ScopeType
@@ -1524,10 +1525,16 @@ def seed_leave_attendance(onboarding: TenantOnboarding, input_payload: dict | No
             balance_refs.append(f"leave_balance:{employee.employee_code}:{balance.leave_policy.code}:{balance.period_year}")
     existing.extend(balance_refs)
 
+    attendance_refs = []
+    for employee in employees:
+        for record in ensure_employee_attendance_records(employee):
+            attendance_refs.append(f"attendance_record:{employee.employee_code}:{record.attendance_date.isoformat()}")
+    existing.extend(attendance_refs)
+
     return SeederResult(
         module_ref="leave_attendance",
         status="succeeded",
-        message="Leave and attendance defaults are ready for employee onboarding, including current employee leave balances.",
+        message="Leave and attendance defaults are ready for employee onboarding, including current employee leave balances and attendance placeholders.",
         created=created,
         existing=existing,
         skipped=skipped,

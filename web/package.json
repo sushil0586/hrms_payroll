@@ -33,6 +33,7 @@
     "certify:users:phase6": "playwright test tests/e2e/user-journey-phase6-ess-mss-practical-workflow.spec.ts",
     "certify:users:readonly": "playwright test tests/e2e/user-journey-phase1-access-routing.spec.ts tests/e2e/user-journey-phase2-workspace-usability.spec.ts tests/e2e/user-journey-phase4-manager-workflow.spec.ts tests/e2e/user-journey-phase5-payroll-close-workflow.spec.ts tests/e2e/user-journey-phase6-ess-mss-practical-workflow.spec.ts",
     "certify:users": "playwright test tests/e2e/user-journey-phase1-access-routing.spec.ts tests/e2e/user-journey-phase2-workspace-usability.spec.ts tests/e2e/user-journey-phase3-hr-admin-operations.spec.ts tests/e2e/user-journey-phase4-manager-workflow.spec.ts tests/e2e/user-journey-phase5-payroll-close-workflow.spec.ts tests/e2e/user-journey-phase6-ess-mss-practical-workflow.spec.ts",
+    "certify:hr-admin:browser": "playwright test tests/e2e/hr-admin-browser-workflow-gate.spec.ts --workers=1",
     "test:visual": "playwright test tests/visual",
     "test:browser": "playwright test",
     "test:browser:update": "playwright test --update-snapshots"

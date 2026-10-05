@@ -10,6 +10,7 @@
     "typecheck:mobile": "pnpm --dir mobile typecheck",
     "test:web:e2e": "pnpm --dir web test:e2e",
     "test:web:e2e:live": "pnpm --dir web test:e2e:live",
+    "qa:hr-admin-browser": "pnpm --dir web certify:hr-admin:browser",
     "test:web:visual": "pnpm --dir web test:visual",
     "test:web:browser": "pnpm --dir web test:browser",
     "qa:launch-signoff": "python3 scripts/run-production-launch-signoff.py",

@@ -7,11 +7,12 @@ from django.utils import timezone
 
 from apps.attendance.models import AttendancePolicy, AttendancePolicyAssignment, AttendancePolicyStatus, AttendanceRecord, AttendanceSource, AttendanceStatus
 from apps.attendance.services import (
+    ensure_employee_attendance_records,
     preview_attendance_policy_assignment_conflicts,
     preview_attendance_policy_assignment_resolution,
 )
 from apps.common.api_views import save_hr_admin_attendance_policy, save_hr_admin_attendance_policy_assignment
-from apps.employees.models import Employee
+from apps.employees.models import Employee, EmploymentStatus
 from apps.organizations.models import Department, EmploymentType, Grade
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
 
@@ -68,6 +69,7 @@ class AttendancePolicyAssignmentConflictTests(TestCase):
             tenant=self.tenant,
             employee_code="E001",
             first_name="Anika",
+            employment_status=EmploymentStatus.ACTIVE,
             department=self.department,
             grade=self.employee_grade,
             employment_type=self.employee_type,
@@ -270,3 +272,43 @@ class AttendancePolicyAssignmentConflictTests(TestCase):
 
         record.refresh_from_db()
         self.assertEqual(record.status, AttendanceStatus.PRESENT)
+
+    def test_active_employee_with_policy_gets_current_month_attendance_placeholders(self):
+        AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.default_policy,
+            priority=100,
+            is_active=True,
+        )
+        today = timezone.localdate()
+
+        records = ensure_employee_attendance_records(self.employee)
+
+        self.assertEqual(len(records), today.day)
+        self.assertEqual(
+            AttendanceRecord.objects.filter(
+                tenant=self.tenant,
+                employee=self.employee,
+                attendance_date__gte=today.replace(day=1),
+                attendance_date__lte=today,
+                source=AttendanceSource.SYSTEM,
+            ).count(),
+            today.day,
+        )
+
+    def test_attendance_placeholders_apply_derivation_rules(self):
+        self.default_policy.config_snapshot = {"derivation": {"enabled": True, "missing_punch_status": AttendanceStatus.ABSENT}}
+        self.default_policy.save(update_fields=["config_snapshot", "updated_at"])
+        AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.default_policy,
+            priority=100,
+            is_active=True,
+        )
+
+        records = ensure_employee_attendance_records(self.employee, from_date=timezone.localdate(), to_date=timezone.localdate())
+
+        self.assertEqual(len(records), 1)
+        records[0].refresh_from_db()
+        self.assertEqual(records[0].status, AttendanceStatus.ABSENT)
+        self.assertEqual(records[0].source, AttendanceSource.SYSTEM)

@@ -504,6 +504,7 @@ from apps.attendance.models import (
 from apps.tenants.models import Tenant
 from apps.attendance.services import (
     evaluate_attendance_runtime,
+    ensure_employee_attendance_records,
     normalize_employee_shift_assignment_config,
     normalize_attendance_policy_config,
     preview_attendance_policy_assignment_conflicts,
@@ -942,6 +943,7 @@ def save_hr_admin_employee(actor, validated_data, *, item=None):
 
     item.save()
     ensure_employee_leave_balances(item)
+    ensure_employee_attendance_records(item)
     refresh_attendance_records_for_employee(item)
     return item
 
@@ -6439,6 +6441,7 @@ class MeAttendanceRecordListView(EmployeeContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        ensure_employee_attendance_records(employee)
         records = (
             AttendanceRecord.objects.filter(employee=employee)
             .select_related("shift")

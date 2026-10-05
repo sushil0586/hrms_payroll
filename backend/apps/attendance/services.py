@@ -1090,6 +1090,35 @@ def _refresh_attendance_record_from_policy(record: AttendanceRecord) -> Attendan
     return record
 
 
+def ensure_employee_attendance_records(employee, *, from_date: date | None = None, to_date: date | None = None) -> list[AttendanceRecord]:
+    if getattr(employee, "employment_status", None) != EmploymentStatus.ACTIVE:
+        return []
+
+    today = timezone.localdate()
+    from_date = from_date or today.replace(day=1)
+    to_date = to_date or today
+    if to_date < from_date:
+        return []
+
+    records: list[AttendanceRecord] = []
+    current_date = from_date
+    while current_date <= to_date:
+        record, created = AttendanceRecord.objects.get_or_create(
+            tenant=employee.tenant,
+            employee=employee,
+            attendance_date=current_date,
+            defaults={
+                "source": AttendanceSource.SYSTEM,
+                "status": AttendanceStatus.UNKNOWN,
+            },
+        )
+        if created:
+            record = _refresh_attendance_record_from_policy(record)
+        records.append(record)
+        current_date += timedelta(days=1)
+    return records
+
+
 def refresh_attendance_records_for_employee(employee, *, from_date: date | None = None, to_date: date | None = None) -> list[AttendanceRecord]:
     today = timezone.localdate()
     from_date = from_date or today.replace(day=1)
