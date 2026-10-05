@@ -21,6 +21,7 @@ from apps.attendance.models import (
     Shift,
 )
 from apps.documents.models import DocumentCategory, DocumentCategoryType, DocumentRequirementRule
+from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import Role, RolePermission, ScopeType
 from apps.iam.permission_catalog import get_permission_catalog
 from apps.leave_management.models import (
@@ -32,6 +33,7 @@ from apps.leave_management.models import (
     LeaveType,
     LeaveUnit,
 )
+from apps.leave_management.services import ensure_employee_leave_balances
 from apps.notifications.models import (
     NotificationAudienceType,
     NotificationChannel,
@@ -1141,6 +1143,65 @@ def seed_notifications(onboarding: TenantOnboarding, input_payload: dict | None 
     )
 
 
+def _default_grade_for_launch_employee(employee: Employee, grades_by_code: dict[str, Grade]) -> Grade | None:
+    if employee.employee_code.startswith("ADMIN-"):
+        return grades_by_code.get("g3") or grades_by_code.get("g1")
+    membership = getattr(employee, "membership", None)
+    if membership:
+        role_codes = set(
+            membership.membership_roles.filter(role__is_active=True).values_list("role__code", flat=True)
+        )
+        if role_codes & {"tenant-admin", "hr-admin", "manager", "payroll-finance-manager"}:
+            return grades_by_code.get("g3") or grades_by_code.get("g1")
+    return grades_by_code.get("g1")
+
+
+def _ensure_default_employee_org_context(
+    *,
+    tenant,
+    legal_entity: LegalEntity,
+    branch: Branch,
+    location: Location,
+    business_unit: BusinessUnit,
+    department: Department,
+    grades_by_code: dict[str, Grade],
+    employment_type: EmploymentType | None,
+) -> list[str]:
+    updated_refs: list[str] = []
+    employees = (
+        Employee.objects.filter(tenant=tenant, employment_status=EmploymentStatus.ACTIVE)
+        .select_related("membership")
+        .prefetch_related("membership__membership_roles__role")
+    )
+    for employee in employees:
+        update_fields: list[str] = []
+        if not employee.legal_entity_id:
+            employee.legal_entity = legal_entity
+            update_fields.append("legal_entity")
+        if not employee.branch_id:
+            employee.branch = branch
+            update_fields.append("branch")
+        if not employee.location_id:
+            employee.location = location
+            update_fields.append("location")
+        if not employee.business_unit_id:
+            employee.business_unit = business_unit
+            update_fields.append("business_unit")
+        if not employee.department_id:
+            employee.department = department
+            update_fields.append("department")
+        if not employee.grade_id:
+            employee.grade = _default_grade_for_launch_employee(employee, grades_by_code)
+            update_fields.append("grade")
+        if not employee.employment_type_id and employment_type:
+            employee.employment_type = employment_type
+            update_fields.append("employment_type")
+        if update_fields:
+            employee.save(update_fields=[*update_fields, "updated_at"])
+            updated_refs.append(f"employee_org_context:{employee.employee_code}")
+    return updated_refs
+
+
 @transaction.atomic
 def seed_org_masters(onboarding: TenantOnboarding, input_payload: dict | None = None) -> SeederResult:
     tenant = onboarding.tenant
@@ -1177,7 +1238,7 @@ def seed_org_masters(onboarding: TenantOnboarding, input_payload: dict | None = 
     )
     (created if was_created else existing).append("location:head-office")
 
-    _, was_created = Branch.objects.get_or_create(
+    branch, was_created = Branch.objects.get_or_create(
         tenant=tenant,
         code="default-branch",
         defaults={
@@ -1234,8 +1295,9 @@ def seed_org_masters(onboarding: TenantOnboarding, input_payload: dict | None = 
         )
         (created if was_created else existing).append(f"designation:{code}")
 
+    employment_types_by_code = {}
     for code, name, description, payroll_eligible in EMPLOYMENT_TYPE_DEFINITIONS:
-        _, was_created = EmploymentType.objects.get_or_create(
+        employment_type, was_created = EmploymentType.objects.get_or_create(
             tenant=tenant,
             code=code,
             defaults={
@@ -1244,7 +1306,21 @@ def seed_org_masters(onboarding: TenantOnboarding, input_payload: dict | None = 
                 "is_payroll_eligible": payroll_eligible,
             },
         )
+        employment_types_by_code[code] = employment_type
         (created if was_created else existing).append(f"employment_type:{code}")
+
+    existing.extend(
+        _ensure_default_employee_org_context(
+            tenant=tenant,
+            legal_entity=legal_entity,
+            branch=branch,
+            location=location,
+            business_unit=business_unit,
+            department=department,
+            grades_by_code=grades_by_code,
+            employment_type=employment_types_by_code.get("full-time"),
+        )
+    )
 
     return SeederResult(
         module_ref="org_masters",
@@ -1434,10 +1510,24 @@ def seed_leave_attendance(onboarding: TenantOnboarding, input_payload: dict | No
     if work_week == "custom":
         skipped.append("custom_work_week_requires_customer_review")
 
+    balance_refs = []
+    employees = Employee.objects.filter(tenant=tenant, employment_status=EmploymentStatus.ACTIVE).select_related(
+        "tenant",
+        "legal_entity",
+        "branch",
+        "department",
+        "grade",
+        "employment_type",
+    )
+    for employee in employees:
+        for balance in ensure_employee_leave_balances(employee):
+            balance_refs.append(f"leave_balance:{employee.employee_code}:{balance.leave_policy.code}:{balance.period_year}")
+    existing.extend(balance_refs)
+
     return SeederResult(
         module_ref="leave_attendance",
         status="succeeded",
-        message="Leave and attendance defaults are ready for employee onboarding.",
+        message="Leave and attendance defaults are ready for employee onboarding, including current employee leave balances.",
         created=created,
         existing=existing,
         skipped=skipped,

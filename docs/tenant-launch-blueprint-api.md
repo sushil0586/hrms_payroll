@@ -111,10 +111,12 @@ If `requested_modules` includes a module that is still uncertified for safe appl
 `409 Conflict`.
 
 Safe apply creates an `apply` launch run and item-level evidence. It does not create employees,
-employee documents, document artifacts, employee leave balances, employee attendance records,
+employee documents, document artifacts, employee attendance records,
 payroll periods, employee pay group assignments, employee salary assignments, statutory
 registration numbers, statutory rate slabs, provider credentials, workflow instances, runtime
 approval actions, payroll runs, or finance handoff runtime records.
+For active employees that already exist and match seeded leave policy assignments, safe apply
+initializes current-period leave balance ledger rows from the resolved policy.
 
 Growth and Enterprise `payroll_defaults` creates only tenant-owned payroll setup records:
 payroll calendar, default pay group, salary components, salary structure shell/version/lines,

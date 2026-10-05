@@ -14,6 +14,7 @@ from apps.attendance.models import (
     AttendancePolicyAssignment,
     AttendancePolicyStatus,
     AttendanceRecord,
+    AttendanceSource,
     AttendanceRegularization,
     AttendanceStatus,
     EmployeeShiftAssignmentKind,
@@ -1056,6 +1057,96 @@ def evaluate_attendance_runtime(
         "early_exit_minutes": early_exit_minutes,
         "overtime_hours": overtime_hours,
     }
+
+
+def _refresh_attendance_record_from_policy(record: AttendanceRecord) -> AttendanceRecord:
+    explicit_status = record.status if record.status in {AttendanceStatus.ON_LEAVE, AttendanceStatus.REMOTE} else None
+    runtime = evaluate_attendance_runtime(
+        employee=record.employee,
+        attendance_date=record.attendance_date,
+        check_in_at=record.check_in_at,
+        check_out_at=record.check_out_at,
+        explicit_status=explicit_status,
+    )
+    record.status = runtime["status"]
+    record.shift = runtime["shift"]
+    record.holiday = runtime["holiday"]
+    record.work_duration_hours = runtime["work_duration_hours"]
+    record.overtime_hours = runtime["overtime_hours"]
+    record.late_minutes = runtime["late_minutes"]
+    record.early_exit_minutes = runtime["early_exit_minutes"]
+    record.save(
+        update_fields=[
+            "status",
+            "shift",
+            "holiday",
+            "work_duration_hours",
+            "overtime_hours",
+            "late_minutes",
+            "early_exit_minutes",
+            "updated_at",
+        ]
+    )
+    return record
+
+
+def refresh_attendance_records_for_employee(employee, *, from_date: date | None = None, to_date: date | None = None) -> list[AttendanceRecord]:
+    today = timezone.localdate()
+    from_date = from_date or today.replace(day=1)
+    to_date = to_date or today
+    records = (
+        AttendanceRecord.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            attendance_date__gte=from_date,
+            attendance_date__lte=to_date,
+            is_locked=False,
+            is_regularized=False,
+        )
+        .exclude(source=AttendanceSource.MANUAL)
+        .select_related(
+            "employee",
+            "employee__tenant",
+            "employee__legal_entity",
+            "employee__branch",
+            "employee__location",
+            "employee__department",
+            "employee__grade",
+            "employee__employment_type",
+            "shift",
+            "holiday",
+        )
+    )
+    return [_refresh_attendance_record_from_policy(record) for record in records]
+
+
+def refresh_attendance_records_for_tenant(tenant, *, from_date: date | None = None, to_date: date | None = None) -> list[AttendanceRecord]:
+    today = timezone.localdate()
+    from_date = from_date or today.replace(day=1)
+    to_date = to_date or today
+    records = (
+        AttendanceRecord.objects.filter(
+            tenant=tenant,
+            attendance_date__gte=from_date,
+            attendance_date__lte=to_date,
+            is_locked=False,
+            is_regularized=False,
+        )
+        .exclude(source=AttendanceSource.MANUAL)
+        .select_related(
+            "employee",
+            "employee__tenant",
+            "employee__legal_entity",
+            "employee__branch",
+            "employee__location",
+            "employee__department",
+            "employee__grade",
+            "employee__employment_type",
+            "shift",
+            "holiday",
+        )
+    )
+    return [_refresh_attendance_record_from_policy(record) for record in records]
 
 
 @transaction.atomic

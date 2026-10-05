@@ -37,7 +37,7 @@ from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMember
 from apps.iam.permission_catalog import get_permission_catalog, get_tenant_assignable_permission_keys
 from apps.iam.permission_checks import get_role_permission_keys
 from apps.leave_management.models import LeaveBalance, LeavePolicy, LeavePolicyStatus, LeaveRequest, LeaveRequestStatus, LeaveType
-from apps.leave_management.services import _get_leave_request_lifecycle_runtime, get_leave_policy_period_year
+from apps.leave_management.services import _get_leave_request_lifecycle_runtime, ensure_employee_leave_balances, get_leave_policy_period_year
 from apps.notifications.models import Notification, NotificationEventDefinition, NotificationStatus, NotificationTemplate, NotificationTemplateStatus
 from apps.notifications.services import trigger_notification_event
 from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, EmploymentType, Grade, LegalEntity, Location
@@ -3591,6 +3591,7 @@ def get_employee_leave_summary(employee: Employee) -> dict:
     """Builds an employee leave summary for ESS dashboards."""
 
     today = timezone.localdate()
+    current_balances = ensure_employee_leave_balances(employee, as_of=today)
     resolved_policies = list(
         LeavePolicy.objects.filter(
             tenant=employee.tenant,
@@ -3601,7 +3602,11 @@ def get_employee_leave_summary(employee: Employee) -> dict:
         .distinct()
     )
     period_years = {get_leave_policy_period_year(leave_policy=policy, as_of=today) for policy in resolved_policies}
-    balances = LeaveBalance.objects.filter(employee=employee, period_year__in=period_years or {today.year}).select_related("leave_policy__leave_type")
+    current_balance_ids = [balance.id for balance in current_balances]
+    if current_balance_ids:
+        balances = LeaveBalance.objects.filter(id__in=current_balance_ids).select_related("leave_policy__leave_type")
+    else:
+        balances = LeaveBalance.objects.filter(employee=employee, period_year__in=period_years or {today.year}).select_related("leave_policy__leave_type")
     pending_requests = LeaveRequest.objects.filter(
         employee=employee,
         status=LeaveRequestStatus.PENDING,

@@ -1,13 +1,16 @@
+from datetime import datetime, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 
 from django.test import TestCase
+from django.utils import timezone
 
-from apps.attendance.models import AttendancePolicy, AttendancePolicyAssignment, AttendancePolicyStatus
+from apps.attendance.models import AttendancePolicy, AttendancePolicyAssignment, AttendancePolicyStatus, AttendanceRecord, AttendanceSource, AttendanceStatus
 from apps.attendance.services import (
     preview_attendance_policy_assignment_conflicts,
     preview_attendance_policy_assignment_resolution,
 )
-from apps.common.api_views import save_hr_admin_attendance_policy_assignment
+from apps.common.api_views import save_hr_admin_attendance_policy, save_hr_admin_attendance_policy_assignment
 from apps.employees.models import Employee
 from apps.organizations.models import Department, EmploymentType, Grade
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
@@ -188,3 +191,82 @@ class AttendancePolicyAssignmentConflictTests(TestCase):
         self.assertIsNone(assignment.department_id)
         self.assertIsNone(assignment.grade_id)
         self.assertIsNone(assignment.employment_type_id)
+
+    def test_attendance_policy_change_refreshes_current_unlocked_records(self):
+        actor = SimpleNamespace(tenant=self.tenant)
+        today = timezone.localdate()
+        check_in_at = timezone.make_aware(datetime.combine(today, datetime.min.time())) + timedelta(hours=9)
+        check_out_at = check_in_at + timedelta(hours=5)
+        self.default_policy.full_day_min_hours = Decimal("8.00")
+        self.default_policy.half_day_min_hours = Decimal("4.00")
+        self.default_policy.config_snapshot = {"derivation": {"enabled": True}}
+        self.default_policy.save(update_fields=["full_day_min_hours", "half_day_min_hours", "config_snapshot", "updated_at"])
+        AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.default_policy,
+            priority=100,
+            is_active=True,
+        )
+        record = AttendanceRecord.objects.create(
+            tenant=self.tenant,
+            employee=self.employee,
+            attendance_date=today,
+            status=AttendanceStatus.HALF_DAY,
+            source=AttendanceSource.WEB,
+            check_in_at=check_in_at,
+            check_out_at=check_out_at,
+            work_duration_hours=Decimal("5.00"),
+        )
+
+        save_hr_admin_attendance_policy(
+            actor,
+            {"full_day_min_hours": Decimal("4.00")},
+            item=self.default_policy,
+        )
+
+        record.refresh_from_db()
+        self.assertEqual(record.status, AttendanceStatus.PRESENT)
+        self.assertEqual(record.work_duration_hours, Decimal("5.00"))
+
+    def test_new_attendance_assignment_refreshes_employee_current_record(self):
+        actor = SimpleNamespace(tenant=self.tenant)
+        today = timezone.localdate()
+        check_in_at = timezone.make_aware(datetime.combine(today, datetime.min.time())) + timedelta(hours=9)
+        check_out_at = check_in_at + timedelta(hours=5)
+        self.default_policy.full_day_min_hours = Decimal("8.00")
+        self.default_policy.half_day_min_hours = Decimal("4.00")
+        self.default_policy.config_snapshot = {"derivation": {"enabled": True}}
+        self.default_policy.save(update_fields=["full_day_min_hours", "half_day_min_hours", "config_snapshot", "updated_at"])
+        self.department_policy.full_day_min_hours = Decimal("4.00")
+        self.department_policy.half_day_min_hours = Decimal("2.00")
+        self.department_policy.config_snapshot = {"derivation": {"enabled": True}}
+        self.department_policy.save(update_fields=["full_day_min_hours", "half_day_min_hours", "config_snapshot", "updated_at"])
+        AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.default_policy,
+            priority=100,
+            is_active=True,
+        )
+        record = AttendanceRecord.objects.create(
+            tenant=self.tenant,
+            employee=self.employee,
+            attendance_date=today,
+            status=AttendanceStatus.HALF_DAY,
+            source=AttendanceSource.WEB,
+            check_in_at=check_in_at,
+            check_out_at=check_out_at,
+            work_duration_hours=Decimal("5.00"),
+        )
+
+        save_hr_admin_attendance_policy_assignment(
+            actor,
+            {
+                "attendance_policy_id": self.department_policy.id,
+                "department_id": self.department.id,
+                "priority": 10,
+                "is_active": True,
+            },
+        )
+
+        record.refresh_from_db()
+        self.assertEqual(record.status, AttendanceStatus.PRESENT)

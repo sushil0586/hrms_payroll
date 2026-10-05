@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.attendance.models import Holiday, HolidayCalendar, HolidayType
+from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipStatus, TenantMembership
 from apps.leave_management.models import (
     LeaveBalance,
@@ -17,6 +18,7 @@ from apps.leave_management.models import (
     LeaveDayPortion,
     LeavePolicy,
     LeavePolicyAssignment,
+    LeaveType,
     LeaveRequest,
     LeaveRequestStatus,
 )
@@ -1048,6 +1050,56 @@ def _get_or_create_leave_balance(*, employee, leave_policy: LeavePolicy, period_
         _recalculate_closing_balance(balance)
         balance.save(update_fields=["accrued_amount", "carry_forward_amount", "closing_balance", "updated_at"])
     return balance
+
+
+def ensure_employee_leave_balances(employee, *, as_of: date | None = None) -> list[LeaveBalance]:
+    """Create or refresh current-period balances for policies resolved by assignment."""
+
+    if getattr(employee, "employment_status", None) != "active":
+        return []
+
+    as_of = as_of or timezone.localdate()
+    balances: list[LeaveBalance] = []
+    leave_types = LeaveType.objects.filter(tenant=employee.tenant, is_active=True).order_by("name")
+    for leave_type in leave_types:
+        assignment = _find_matching_leave_policy_assignment(employee, leave_type)
+        if not assignment:
+            continue
+        leave_policy = assignment.leave_policy
+        period_year = get_leave_policy_period_year(leave_policy=leave_policy, as_of=as_of)
+        balances.append(
+            _get_or_create_leave_balance(
+                employee=employee,
+                leave_policy=leave_policy,
+                period_year=period_year,
+                as_of=as_of,
+            )
+        )
+    return balances
+
+
+def ensure_leave_balances_for_policy(leave_policy: LeavePolicy, *, as_of: date | None = None) -> list[LeaveBalance]:
+    """Refresh balances for active employees whose current assignment resolves to this policy."""
+
+    as_of = as_of or timezone.localdate()
+    balances: list[LeaveBalance] = []
+    employees = Employee.objects.filter(
+        tenant=leave_policy.tenant,
+        employment_status=EmploymentStatus.ACTIVE,
+    ).select_related(
+        "tenant",
+        "legal_entity",
+        "branch",
+        "department",
+        "grade",
+        "employment_type",
+    )
+    for employee in employees.iterator():
+        assignment = _find_matching_leave_policy_assignment(employee, leave_policy.leave_type)
+        if not assignment or assignment.leave_policy_id != leave_policy.id:
+            continue
+        balances.extend(ensure_employee_leave_balances(employee, as_of=as_of))
+    return balances
 
 
 def _employee_service_days(employee, *, as_of: date) -> int:

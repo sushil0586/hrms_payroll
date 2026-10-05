@@ -512,6 +512,8 @@ from apps.attendance.services import (
     preview_employee_shift_assignment_conflicts,
     preview_employee_shift_assignment_resolution,
     preview_shift_roster_template_rollout,
+    refresh_attendance_records_for_employee,
+    refresh_attendance_records_for_tenant,
     get_shift_roster_rollout_employee_queryset,
     resolve_regularization,
     submit_regularization,
@@ -607,6 +609,8 @@ from apps.leave_management.services import (
     _employee_can_review_leave_balance_transaction,
     apply_leave_balance_admin_action,
     cancel_leave_request,
+    ensure_employee_leave_balances,
+    ensure_leave_balances_for_policy,
     normalize_leave_policy_config,
     preview_leave_policy_configuration,
     preview_leave_policy_assignment_conflicts,
@@ -937,6 +941,8 @@ def save_hr_admin_employee(actor, validated_data, *, item=None):
     _validate_employee_structure_consistency(item)
 
     item.save()
+    ensure_employee_leave_balances(item)
+    refresh_attendance_records_for_employee(item)
     return item
 
 
@@ -1217,6 +1223,7 @@ def save_hr_admin_organization_item(actor, section: str, validated_data, *, item
                 setattr(item, field, validated_data[field])
 
     item.save()
+    ensure_leave_balances_for_policy(item)
     return item
 
 def _hr_admin_actor_identifier(actor) -> str:
@@ -1363,6 +1370,7 @@ def save_hr_admin_attendance_policy(actor, validated_data, *, item=None):
         item.config_snapshot = normalize_attendance_policy_config(validated_data.get("config_snapshot"))
 
     item.save()
+    refresh_attendance_records_for_tenant(tenant)
     return item
 
 
@@ -1687,6 +1695,7 @@ def save_hr_admin_leave_policy(actor, validated_data, *, item=None):
         raise serializers.ValidationError({"leave_type_id": "This field is required."})
 
     item.save()
+    ensure_leave_balances_for_policy(item)
     return item
 
 
@@ -1782,6 +1791,7 @@ def save_hr_admin_leave_policy_assignment(actor, validated_data, *, item=None):
             }
         )
     item.save()
+    ensure_leave_balances_for_policy(item.leave_policy)
     return item
 
 
@@ -1930,6 +1940,7 @@ def save_hr_admin_attendance_policy_assignment(actor, validated_data, *, item=No
             }
         )
     item.save()
+    refresh_attendance_records_for_tenant(tenant)
     return item
 
 

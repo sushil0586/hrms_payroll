@@ -1,3 +1,4 @@
+from decimal import Decimal
 from types import SimpleNamespace
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -6,12 +7,15 @@ from rest_framework.test import APIClient
 
 from apps.common.api_views import (
     get_hr_admin_payroll_provider_connection_setup_payload_for_tenant,
+    save_hr_admin_leave_policy,
+    save_hr_admin_leave_policy_assignment,
     save_hr_admin_payroll_provider_connection,
 )
 from apps.attendance.models import AttendancePolicy, AttendancePolicyAssignment, Holiday, HolidayCalendar, Shift
 from apps.documents.models import DocumentCategory, DocumentRequirementRule
+from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import Role, User
-from apps.leave_management.models import LeavePolicy, LeavePolicyAssignment, LeaveType
+from apps.leave_management.models import LeaveBalance, LeavePolicy, LeavePolicyAssignment, LeaveType
 from apps.notifications.models import NotificationEventDefinition, NotificationTemplate
 from apps.organizations.models import Branch, Department, EmploymentType, Grade, LegalEntity, Location
 from apps.payroll.models import (
@@ -611,6 +615,14 @@ class PlatformLaunchBlueprintApiTests(TestCase):
 
     def test_launch_apply_runs_only_certified_safe_seeders(self):
         self.client.force_authenticate(self.platform_admin)
+        admin_employee = Employee.objects.create(
+            tenant=self.tenant,
+            employee_code="ADMIN-0001",
+            first_name="Aditi",
+            last_name="Gupta",
+            work_email="aditi.gupta1789@example.com",
+            employment_status=EmploymentStatus.ACTIVE,
+        )
         self.client.post(
             f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
             self._preview_payload(),
@@ -641,6 +653,14 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         self.assertEqual(item_statuses["roles_users"], TenantLaunchItemStatus.SUCCEEDED)
         self.assertEqual(item_statuses["org_masters"], TenantLaunchItemStatus.SUCCEEDED)
         self.assertEqual(item_statuses["workflows"], TenantLaunchItemStatus.SUCCEEDED)
+        admin_employee.refresh_from_db()
+        self.assertIsNotNone(admin_employee.legal_entity_id)
+        self.assertIsNotNone(admin_employee.branch_id)
+        self.assertIsNotNone(admin_employee.department_id)
+        self.assertEqual(
+            LeaveBalance.objects.filter(tenant=self.tenant, employee=admin_employee).count(),
+            4,
+        )
         seeded_items = {item["item_key"]: item for item in body["seeded_items"]}
         org_payload = seeded_items["org_masters"]["payload"]
         self.assertEqual(org_payload["post_onboarding_owner"], "HR Admin")
@@ -726,6 +746,89 @@ class PlatformLaunchBlueprintApiTests(TestCase):
         self.assertEqual(AttendancePolicy.objects.filter(tenant=self.tenant).count(), 1)
         self.assertEqual(DocumentCategory.objects.filter(tenant=self.tenant).count(), 7)
         self.assertEqual(WorkflowTemplate.objects.filter(tenant=self.tenant).count(), 5)
+
+    def test_leave_policy_changes_and_new_assignments_refresh_employee_balances(self):
+        self.client.force_authenticate(self.platform_admin)
+        admin_employee = Employee.objects.create(
+            tenant=self.tenant,
+            employee_code="ADMIN-0001",
+            first_name="Aditi",
+            last_name="Gupta",
+            work_email="aditi.gupta1789@example.com",
+            employment_status=EmploymentStatus.ACTIVE,
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-preview/",
+            self._preview_payload(),
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/platform/tenants/{self.tenant.id}/launch-apply/",
+            {"idempotency_key": "apply-leave-balance-resync"},
+            format="json",
+        )
+        admin_employee.refresh_from_db()
+
+        casual_policy = LeavePolicy.objects.get(tenant=self.tenant, code="casual-leave-policy")
+        casual_balance = LeaveBalance.objects.get(tenant=self.tenant, employee=admin_employee, leave_policy=casual_policy)
+        original_accrued_amount = casual_balance.accrued_amount
+
+        save_hr_admin_leave_policy(
+            admin_employee,
+            {"annual_entitlement": casual_policy.annual_entitlement * Decimal("2.00")},
+            item=casual_policy,
+        )
+
+        casual_balance.refresh_from_db()
+        self.assertEqual(casual_balance.accrued_amount, original_accrued_amount * Decimal("2.00"))
+        self.assertEqual(casual_balance.closing_balance, casual_balance.accrued_amount)
+
+        special_policy = LeavePolicy.objects.create(
+            tenant=self.tenant,
+            leave_type=casual_policy.leave_type,
+            code="casual-leave-special-policy",
+            name="Casual Leave Special Policy",
+            status=casual_policy.status,
+            effective_from=casual_policy.effective_from,
+            accrual_frequency=casual_policy.accrual_frequency,
+            annual_entitlement=Decimal("24.00"),
+            max_carry_forward=Decimal("0.00"),
+            min_days_per_request=Decimal("0.50"),
+            notice_days_required=0,
+            allow_half_day=True,
+        )
+        employee = Employee.objects.create(
+            tenant=self.tenant,
+            employee_code="EMP-0001",
+            first_name="Rahul",
+            last_name="Mehta",
+            work_email="rahul.mehta@example.com",
+            employment_status=EmploymentStatus.ACTIVE,
+            legal_entity=admin_employee.legal_entity,
+            branch=admin_employee.branch,
+            location=admin_employee.location,
+            department=admin_employee.department,
+            grade=admin_employee.grade,
+            employment_type=admin_employee.employment_type,
+        )
+
+        save_hr_admin_leave_policy_assignment(
+            admin_employee,
+            {
+                "leave_policy_id": special_policy.id,
+                "employee_id": employee.id,
+                "priority": 10,
+                "is_active": True,
+            },
+        )
+
+        self.assertTrue(
+            LeaveBalance.objects.filter(
+                tenant=self.tenant,
+                employee=employee,
+                leave_policy=special_policy,
+            ).exists()
+        )
 
     def test_enterprise_factory_launch_seeds_shift_attendance_policy_baseline(self):
         self.client.force_authenticate(self.platform_admin)

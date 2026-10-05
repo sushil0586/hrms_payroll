@@ -106,7 +106,7 @@ function launchModuleExplanation(module: PlatformLaunchModule) {
     return "Creates document categories and requirement rules. It does not create employee documents or uploaded artifacts.";
   }
   if (module.ref === "leave_attendance") {
-    return "Creates default leave, holiday, shift, and attendance policy records. It does not create employee attendance or leave balances.";
+    return "Creates default leave, holiday, shift, and attendance policy records, and initializes mapped current employee leave balances. It does not create employee attendance records.";
   }
   return module.action_needed || module.skip_reason || "Ready for review.";
 }
