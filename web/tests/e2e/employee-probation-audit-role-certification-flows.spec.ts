@@ -120,7 +120,7 @@ async function expectProbationQueueCertified(page: Page, workflowRef?: string) {
   }
   await expect(page.getByRole("link", { name: "Create probation review" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Back to lifecycle" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Probation reviews", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Probation reviews", exact: true })).toBeVisible();
   for (const label of ["Search", "Decision", "Owner", "Rows per page", "Bulk owner", "Bulk decision"]) {
     await expect(field(page, label), `${label} probation queue control should be visible`).toBeVisible();
   }
@@ -153,42 +153,40 @@ async function expectAuditCenterCertified(page: Page) {
 }
 
 async function expectEssCertified(page: Page) {
-  await expectPageReady(page, "Self service");
-  for (const action of ["Home", "Open MSS"]) {
-    await expect(page.getByRole("link", { name: action })).toBeVisible();
+  await expectPageReady(page, "My workspace");
+  for (const action of ["Apply leave", "Regularize attendance", "Inbox"]) {
+    await expect(page.getByRole("link", { name: action }).first()).toBeVisible();
   }
-  await expect(page.locator("main").getByRole("button", { name: "Sign out" })).toBeVisible();
-  for (const metric of ["Pending leave requests", "Pending regularizations", "Hours this month", "Today"]) {
+  await expect(page.getByRole("button", { name: "Sign out" }).first()).toBeVisible();
+  for (const metric of ["Pending leave", "Attendance fixes", "Hours this month", "Today"]) {
     await expect(page.locator(".metric-tile, .metric-tile-soft").filter({ hasText: metric }).first()).toBeVisible();
   }
-  for (const heading of ["Profile snapshot", "Attendance today", "Leave balances", "Leave request history", "Leave request detail", "Regularization history", "Regularization detail"]) {
-    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-  }
-  for (const tab of ["all", "pending", "approved", "rejected"]) {
-    await expect(page.getByRole("link", { name: new RegExp(tab, "i") }).first()).toBeVisible();
+  for (const heading of ["Today's actions", "What do you want to do?", "My profile", "Today", "Leave balances"]) {
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
   }
   await expectNoHorizontalOverflow(page);
 }
 
 async function expectMssCertified(page: Page) {
-  await expectPageReady(page, "Manager inbox");
+  await expectPageReady(page, "Manager approvals");
   for (const action of ["Home", "Open ESS"]) {
     await expect(page.getByRole("link", { name: action })).toBeVisible();
   }
-  await expect(page.locator("main").getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" }).first()).toBeVisible();
   for (const metric of ["Team members", "Leave approvals", "Regularizations", "Exceptions today"]) {
     await expect(page.locator(".metric-tile, .metric-tile-soft").filter({ hasText: metric }).first()).toBeVisible();
   }
-  await expect(page.getByRole("heading", { name: "Approval queues" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Approval views" })).toBeVisible();
   const approvalTabbar = page.locator(".tabbar").filter({ hasText: "Leave" }).filter({ hasText: "Attendance" }).first();
   await expect(approvalTabbar.getByRole("link", { name: /Leave/ })).toBeVisible();
   await expect(approvalTabbar.getByRole("link", { name: /Attendance/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Leave approvals" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Leave approval detail" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Selected leave request" })).toBeVisible();
   await approvalTabbar.getByRole("link", { name: /Attendance/ }).click();
   await expect(page).toHaveURL(/queue=attendance/);
-  await expect(page.getByRole("heading", { name: "Attendance regularizations" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Regularization detail" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Attendance approvals" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pending attendance fixes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Selected attendance request" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 }
 

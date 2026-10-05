@@ -27,6 +27,12 @@ async function expectSelectHasOptions(locator: Locator, minimum = 1) {
   expect(count).toBeGreaterThanOrEqual(minimum);
 }
 
+async function expectNativeRequired(locator: Locator) {
+  await expect
+    .poll(async () => locator.evaluate((element) => (element as HTMLInputElement | HTMLSelectElement).validity.valueMissing))
+    .toBe(true);
+}
+
 async function selectFirstNonEmptyOption(locator: Locator) {
   const value = await locator.evaluate((element) => {
     const select = element as HTMLSelectElement;
@@ -280,7 +286,7 @@ test.describe("Phase 3C employee review, movement, and exit certification", () =
     await page.reload();
     await expectMovementFormCertified(page, "create");
     await page.getByRole("button", { name: "Create movement" }).click();
-    await expect(page.getByText("Unable to save movement.").or(page.getByText(/employee/i)).first()).toBeVisible();
+    await expectNativeRequired(field(page, "Employee"));
     await selectOptionContaining(field(page, "Employee"), employeeCode);
     await selectFirstNonEmptyOption(field(page, "Movement type"));
     await field(page, "Status").selectOption("pending");

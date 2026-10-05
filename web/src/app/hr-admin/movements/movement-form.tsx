@@ -80,10 +80,10 @@ export function MovementForm({ initialValue, mode, options, itemId }: Props) {
             title="Movement context"
           >
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Employee</span><select className="input-control" value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
+              <label className="form-field"><span className="muted">Employee</span><select className="input-control" required value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
               <label className="form-field"><span className="muted">Movement type</span><select className="input-control" value={formValue.movement_type} onChange={(e) => update("movement_type", e.target.value)}>{options.movement_types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
               <label className="form-field"><span className="muted">Status</span><select className="input-control" value={formValue.status} onChange={(e) => update("status", e.target.value)}>{options.lifecycle_event_statuses.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
-              <label className="form-field"><span className="muted">Effective date</span><input className="input-control" type="date" value={formValue.effective_date ?? ""} onChange={(e) => update("effective_date", e.target.value || null)} /></label>
+              <label className="form-field"><span className="muted">Effective date</span><input className="input-control" required type="date" value={formValue.effective_date ?? ""} onChange={(e) => update("effective_date", e.target.value || null)} /></label>
               <label className="form-field"><span className="muted">Reason</span><input className="input-control" value={formValue.reason} onChange={(e) => update("reason", e.target.value)} /></label>
               <label className="form-field"><span className="muted">Workflow reference</span><input className="input-control" value={formValue.workflow_reference} onChange={(e) => update("workflow_reference", e.target.value)} /></label>
             </div>

@@ -27,6 +27,25 @@ async function selectFirstNonEmptyOption(locator: Locator) {
   return value;
 }
 
+async function selectOptionThatPopulates(source: Locator, target: Locator, label: string) {
+  const values = await source.evaluate((element) => {
+    const select = element as HTMLSelectElement;
+    return Array.from(select.options)
+      .filter((option) => option.value)
+      .map((option) => option.value);
+  });
+
+  for (const value of values) {
+    await source.selectOption(value);
+    const populated = await target.evaluate((element) => (element as HTMLSelectElement).value);
+    if (populated) {
+      return value;
+    }
+  }
+
+  throw new Error(`No ${label} option auto-populates its dependent field.`);
+}
+
 async function selectOptionContaining(locator: Locator, text: string) {
   const value = await locator.evaluate((element, targetText) => {
     const select = element as HTMLSelectElement;
@@ -77,9 +96,9 @@ async function createEmployeeThroughBrowser(page: Page, input: {
   await field(page, "Confirmation date").fill("2026-07-01");
   await selectFirstNonEmptyOption(field(page, "Legal entity"));
   await selectFirstNonEmptyOption(field(page, "Branch"));
-  await selectFirstNonEmptyOption(field(page, "Department"));
+  await selectOptionThatPopulates(field(page, "Department"), field(page, "Business unit"), "department");
   await selectFirstNonEmptyOption(field(page, "Cost center"));
-  await selectFirstNonEmptyOption(field(page, "Designation"));
+  await selectOptionThatPopulates(field(page, "Designation"), field(page, "Grade"), "designation");
   await selectFirstNonEmptyOption(field(page, "Employment type"));
   if (input.reportingManagerCode) {
     await selectOptionContaining(field(page, "Reporting manager"), input.reportingManagerCode);
@@ -104,7 +123,7 @@ async function provisionAccessThroughBrowser(page: Page, input: {
   roleCode: "employee" | "manager";
 }) {
   await gotoAuthenticated(page, `/hr-admin/employees/${input.employeeId}/access`);
-  await expectPageReady(page, /Manage system access/);
+  await expectPageReady(page, /Access for/);
   await expect(page.getByRole("heading", { name: "Identity and membership" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Access controls" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Role assignment" })).toBeVisible();
@@ -170,23 +189,24 @@ test.describe("Phase 3E fresh access and role visibility certification", () => {
     });
 
     await loginAs(page, { username: employeeUsername, password: PASSWORD }, "/ess");
-    await expectPageReady(page, "Self service");
+    await expectPageReady(page, "My workspace");
     await expect(page.getByText(employeeCode).first()).toBeVisible();
     await expect(page.getByText("Fresh Employee").first()).toBeVisible();
-    await expect(page.getByText("Reporting manager: Fresh Manager").first()).toBeVisible();
-    await expect(page.getByRole("link", { name: "Open MSS" })).toBeVisible();
+    await expect(page.getByText("Fresh Manager").first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open MSS" })).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
 
     await loginAs(page, { username: managerUsername, password: PASSWORD }, "/mss/approvals");
-    await expectPageReady(page, "Manager inbox");
+    await expectPageReady(page, "Manager approvals");
     await expect(page.locator(".metric-tile, .metric-tile-soft").filter({ hasText: "Team members" }).first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Approval queues" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Approval views" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Leave approvals" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Leave approval detail" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Selected leave request" })).toBeVisible();
     await page.locator(".tabbar").filter({ hasText: "Attendance" }).first().getByRole("link", { name: /Attendance/ }).click();
     await expect(page).toHaveURL(/queue=attendance/);
-    await expect(page.getByRole("heading", { name: "Attendance regularizations" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Regularization detail" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Attendance approvals" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pending attendance fixes" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Selected attendance request" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     await loginAs(page, hrAdmin, `/hr-admin/employees?employeeId=${employeeId}`);

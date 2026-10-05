@@ -62,8 +62,9 @@ function buildDocumentEvents() {
 
 function buildOnboardingEvents() {
   return (item: Awaited<ReturnType<typeof getHrAdminOnboardings>>["data"]["items"][number]) =>
-    item.checklist_snapshot.flatMap((workItem) =>
-      workItem.history.map((entry, index) => ({
+    item.checklist_snapshot.flatMap((workItem) => {
+      const history = Array.isArray(workItem.history) ? workItem.history : [];
+      return history.map((entry, index) => ({
         id: `onboarding-${item.id}-${workItem.code}-${index}`,
         occurredAt: safeString(entry.at) || item.actual_joining_date || item.expected_joining_date || "",
         actor: safeString(entry.by) || "system",
@@ -72,14 +73,15 @@ function buildOnboardingEvents() {
         detail: safeString(entry.note) || safeString(entry.action) || "Checklist history update.",
         href: `/hr-admin/onboardings/${item.id}/edit`,
         recordLabel: `${item.employee_name} • ${item.workflow_reference || "Workflow not linked"}`,
-      })),
-    );
+      }));
+    });
 }
 
 function buildExitEvents() {
   return (item: Awaited<ReturnType<typeof getHrAdminExits>>["data"]["items"][number]) =>
-    item.clearance_status_snapshot.items.flatMap((workItem) =>
-      workItem.history.map((entry, index) => ({
+    item.clearance_status_snapshot.items.flatMap((workItem) => {
+      const history = Array.isArray(workItem.history) ? workItem.history : [];
+      return history.map((entry, index) => ({
         id: `exit-${item.id}-${workItem.code}-${index}`,
         occurredAt: safeString(entry.at) || item.actual_exit_date || item.notice_end_date || "",
         actor: safeString(entry.by) || "system",
@@ -88,8 +90,8 @@ function buildExitEvents() {
         detail: safeString(entry.note) || safeString(entry.action) || "Clearance history update.",
         href: `/hr-admin/exits/${item.id}/edit`,
         recordLabel: `${item.employee_name} • ${item.workflow_reference || "Workflow not linked"}`,
-      })),
-    );
+      }));
+    });
 }
 
 function buildNotificationEvents() {

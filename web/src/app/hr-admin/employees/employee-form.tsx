@@ -192,6 +192,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const selectedBranch = options.branches.find((branch) => branch.id === formValue.branch_id);
+  const selectedDepartment = options.departments.find((department) => department.id === formValue.department_id);
   const selectedDesignation = options.designations.find((designation) => designation.id === formValue.designation_id);
 
   const filteredBranches = options.branches.filter(
@@ -210,7 +211,6 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
     (item) => !formValue.business_unit_id || item.business_unit_id === formValue.business_unit_id,
   );
   const filteredBusinessUnits = options.business_units.filter((item) => {
-    const selectedDepartment = options.departments.find((department) => department.id === formValue.department_id);
     if (selectedDepartment?.business_unit_id) {
       return item.id === selectedDepartment.business_unit_id;
     }
@@ -263,6 +263,10 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
   const departmentWarning =
     formValue.business_unit_id && filteredDepartments.length === 0
       ? "No active departments are mapped to this business unit."
+      : null;
+  const departmentBusinessUnitWarning =
+    selectedDepartment && !selectedDepartment.business_unit_id
+      ? "This department has no mapped business unit. Select the business unit manually before saving."
       : null;
   const gradeWarning =
     selectedDesignation && !selectedDesignation.grade_id
@@ -473,7 +477,9 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                 <select className="input-control" value={formValue.business_unit_id ?? ""} onChange={(event) => updateField("business_unit_id", event.target.value || null)}>
                   {selectOptions(filteredBusinessUnits)}
                 </select>
-                <FieldHint>Department selection will align or narrow the business unit automatically.</FieldHint>
+                <FieldHint tone={departmentBusinessUnitWarning ? "warning" : "default"}>
+                  {departmentBusinessUnitWarning ?? "Department selection will align or narrow the business unit automatically."}
+                </FieldHint>
                 <FieldError message={fieldErrors.business_unit_id} />
               </label>
               <label className="form-field">

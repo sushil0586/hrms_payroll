@@ -200,19 +200,38 @@ test.describe("Phase 3B employee documents and onboarding certification", () => 
     const roleId = rolePayload.role.id as string;
 
     const username = `qa.doc.viewer.${suffix}`;
-    const inviteResponse = await page.request.post("/api/tenant-admin/memberships", {
+    const employeeResponse = await page.request.post("/api/hr-admin/employees", {
+      data: {
+        employee_code: `DOCVIEW-${suffix}`,
+        employment_status: "active",
+        first_name: "QA",
+        last_name: "Doc Viewer",
+        work_email: `${username}@example.com`,
+      },
+    });
+    const employeePayload = await employeeResponse.json();
+    expect(employeeResponse.ok(), `Document viewer employee create failed: ${employeeResponse.status()} ${JSON.stringify(employeePayload)}`).toBeTruthy();
+    const employeeId = employeePayload.id as string;
+    expect(employeeId).toBeTruthy();
+
+    const accessResponse = await page.request.post(`/api/hr-admin/employees/${employeeId}/access`, {
       data: {
         username,
         email: `${username}@example.com`,
         first_name: "QA",
         last_name: "Doc Viewer",
+        display_name: "QA Doc Viewer",
+        phone_number: "",
+        is_user_active: true,
+        must_change_password: false,
         membership_status: "active",
+        is_default_membership: true,
         role_ids: [roleId],
       },
     });
-    expect(inviteResponse.ok()).toBeTruthy();
-    const invitePayload = await inviteResponse.json();
-    const generatedPassword = invitePayload.generated_password as string;
+    const accessPayload = await accessResponse.json();
+    expect(accessResponse.ok(), `Document viewer access create failed: ${accessResponse.status()} ${JSON.stringify(accessPayload)}`).toBeTruthy();
+    const generatedPassword = accessPayload.generated_password as string;
     expect(generatedPassword).toBeTruthy();
 
     await page.request.post("/api/auth/logout").catch(() => null);
@@ -395,6 +414,14 @@ test.describe("Phase 3B employee documents and onboarding certification", () => 
     await expectOnboardingFormCertified(page, "edit");
     await field(page, "Status").selectOption("completed");
     await expect(page.getByText("Completion is still blocked.").or(page.getByText("Readiness preview.")).first()).toBeVisible();
+    const blockedCompletionResult = await submitAndCapture(page, `onboardings/${createResult.payload.id}`, "PATCH", async () => {
+      await page.getByRole("button", { name: "Save changes" }).click();
+    });
+    expect(blockedCompletionResult.ok).toBeFalsy();
+    await expect(page.getByText("Save failed.")).toBeVisible();
+    await expect(page.getByText(/checklist item.*open|checklist items.*open/i).first()).toBeVisible();
+
+    await field(page, "Status").selectOption("in_progress");
     await field(page, "Notes").fill(`Phase 3B onboarding notes updated for ${workflowRef}.`);
     const updateResult = await submitAndCapture(page, `onboardings/${createResult.payload.id}`, "PATCH", async () => {
       await page.getByRole("button", { name: "Save changes" }).click();

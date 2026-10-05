@@ -43,6 +43,25 @@ async function selectFirstNonEmptyOption(locator: Locator) {
   return value;
 }
 
+async function selectOptionThatPopulates(source: Locator, target: Locator, label: string) {
+  const values = await source.evaluate((element) => {
+    const select = element as HTMLSelectElement;
+    return Array.from(select.options)
+      .filter((option) => option.value)
+      .map((option) => option.value);
+  });
+
+  for (const value of values) {
+    await source.selectOption(value);
+    const populated = await target.evaluate((element) => (element as HTMLSelectElement).value);
+    if (populated) {
+      return value;
+    }
+  }
+
+  throw new Error(`No ${label} option auto-populates its dependent field.`);
+}
+
 async function selectLegalEntityWithStructuralMappings(page: Page) {
   const legalEntity = field(page, "Legal entity");
   const options = await legalEntity.evaluate((element) => {
@@ -230,9 +249,9 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     const branch = await selectFirstNonEmptyOption(field(page, "Branch"));
     await expect(field(page, "Legal entity")).toHaveValue(legalEntity);
     await expect(field(page, "Branch")).toHaveValue(branch);
-    await selectFirstNonEmptyOption(field(page, "Department"));
+    await selectOptionThatPopulates(field(page, "Department"), field(page, "Business unit"), "department");
     await expect(field(page, "Business unit")).not.toHaveValue("");
-    await selectFirstNonEmptyOption(field(page, "Designation"));
+    await selectOptionThatPopulates(field(page, "Designation"), field(page, "Grade"), "designation");
     await expect(field(page, "Grade")).not.toHaveValue("");
     await selectFirstNonEmptyOption(field(page, "Cost center"));
     await selectFirstNonEmptyOption(field(page, "Employment type"));
