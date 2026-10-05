@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectDialogStable } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated } from "../helpers/staging-auth";
 
 function field(scope: Page | Locator, label: string) {
@@ -54,6 +55,7 @@ test.describe("ESS Documents launch certification", () => {
     await expectPageReady(page, "Documents");
 
     const dialog = await openUploadDialog(page);
+    await expectDialogStable(page, "Upload document");
     await expect(dialog.getByRole("button", { name: "Submit for review" })).toBeDisabled();
 
     await field(dialog, "Title").fill(`Playwright document ${Date.now()}`);
@@ -69,7 +71,17 @@ test.describe("ESS Documents launch certification", () => {
     });
     await expect(dialog.getByRole("button", { name: "Submit for review" })).toBeEnabled();
 
+    let uploadAttempt = 0;
     await page.route("**/api/me/employee-documents", async (route) => {
+      uploadAttempt += 1;
+      if (uploadAttempt === 1) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ file: ["Uploaded file could not be scanned. Try another PDF."] }),
+        });
+        return;
+      }
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -77,6 +89,10 @@ test.describe("ESS Documents launch certification", () => {
       });
     });
 
+    await dialog.getByRole("button", { name: "Submit for review" }).click();
+    await expect(dialog.getByText("Upload failed.")).toBeVisible();
+    await expect(dialog.getByText("Uploaded file could not be scanned. Try another PDF.")).toBeVisible();
+    await expectDialogStable(page, "Upload document");
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     await expect(dialog.getByText("Upload submitted.")).toBeVisible();
     await expect(dialog.getByText("Your document has been sent to HR for verification.")).toBeVisible();
@@ -102,6 +118,7 @@ test.describe("ESS Documents launch certification", () => {
       await expect(detail).toBeVisible();
       await expect(detail.getByText("Review status")).toBeVisible();
       await expect(detail.getByText("Audit trail")).toBeVisible();
+      await expectDialogStable(page, "Document detail");
       await page.keyboard.press("Escape");
       await expect(detail).toHaveCount(0);
     }
@@ -111,5 +128,21 @@ test.describe("ESS Documents launch certification", () => {
       await expect(download).toHaveAttribute("href", /\/api\/me\/employee-documents\/.+\/download/);
     }
     await expectNoHorizontalOverflow(page);
+  });
+
+  test("document dialogs remain stable on compact screens", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoAuthenticated(page, "/ess/documents", employee);
+    await expectPageReady(page, "Documents");
+
+    const uploadDialog = await openUploadDialog(page);
+    await expectDialogStable(page, "Upload document");
+    await uploadDialog.getByRole("button", { name: "Close" }).click();
+
+    const reviewButton = page.getByRole("button", { name: "Review" }).first();
+    if (await reviewButton.isVisible().catch(() => false)) {
+      await reviewButton.click();
+      await expectDialogStable(page, "Document detail");
+    }
   });
 });

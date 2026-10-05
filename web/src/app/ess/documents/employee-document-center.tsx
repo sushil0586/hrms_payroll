@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -351,6 +352,30 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   const expiringRequirements = data.requirement_items.filter((item) => item.current_is_expired || item.current_is_expiring_soon);
   const pendingReviewItems = data.items.filter((item) => item.verification_status === "pending");
   const completedRequirements = data.requirement_items.filter((item) => item.is_compliant);
+  const modal = typeof document !== "undefined"
+    ? (
+        <>
+          {isUploadOpen ? createPortal(
+            <UploadDocumentModal
+              data={data}
+              feedback={feedback}
+              formValue={formValue}
+              isSubmitting={isSubmitting}
+              onClose={() => setIsUploadOpen(false)}
+              onFieldChange={updateUploadField}
+              onSubmit={handleUpload}
+              selectedRequirement={selectedRequirement}
+            />,
+            document.body,
+          ) : null}
+
+          {selectedDocument ? createPortal(
+            <DocumentDetailModal item={selectedDocument} onClose={() => setSelectedDocument(null)} />,
+            document.body,
+          ) : null}
+        </>
+      )
+    : null;
 
   function openUpload(requirement?: EssDocumentRequirementItem) {
     setFeedback(null);
@@ -658,22 +683,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
         />
       </section>
 
-      {isUploadOpen ? (
-        <UploadDocumentModal
-          data={data}
-          feedback={feedback}
-          formValue={formValue}
-          isSubmitting={isSubmitting}
-          onClose={() => setIsUploadOpen(false)}
-          onFieldChange={updateUploadField}
-          onSubmit={handleUpload}
-          selectedRequirement={selectedRequirement}
-        />
-      ) : null}
-
-      {selectedDocument ? (
-        <DocumentDetailModal item={selectedDocument} onClose={() => setSelectedDocument(null)} />
-      ) : null}
+      {modal}
     </div>
   );
 }

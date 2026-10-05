@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { NotificationReadToggle } from "@/components/patterns/notification-read-toggle";
 import type { HrAdminNotification } from "@/lib/types";
@@ -60,14 +61,8 @@ export function UserNotificationDetailAction({ endpoint, item, sourceHref, varia
 
   const title = item.title || item.event_definition_name || "Notification";
   const attempts = `${item.attempt_count}/${item.max_attempts}`;
-
-  return (
-    <>
-      <button className={`button button--${variant}`} onClick={() => setIsOpen(true)} type="button">
-        Review notification
-      </button>
-
-      {isOpen ? (
+  const modal = isOpen && typeof document !== "undefined"
+    ? createPortal(
         <div className="modal-shell" role="presentation">
           <div aria-label={`Notification detail for ${title}`} aria-modal="true" className="modal user-notification-modal" role="dialog">
             <div className="modal__header">
@@ -157,8 +152,18 @@ export function UserNotificationDetailAction({ endpoint, item, sourceHref, varia
               </section>
             </div>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <>
+      <button className={`button button--${variant}`} onClick={() => setIsOpen(true)} type="button">
+        Review notification
+      </button>
+
+      {modal}
     </>
   );
 }

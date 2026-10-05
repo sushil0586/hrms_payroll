@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { PayslipReadReceiptAction } from "@/app/ess/payslips/payslip-read-receipt-action";
 import type { EssPayrollPayslip } from "@/lib/types";
@@ -87,14 +88,8 @@ function useEscapeClose(isOpen: boolean, onClose: () => void) {
 export function PayslipDetailAction({ payslip, variant = "secondary" }: { payslip: EssPayrollPayslip; variant?: "primary" | "secondary" }) {
   const [isOpen, setIsOpen] = useState(false);
   useEscapeClose(isOpen, () => setIsOpen(false));
-
-  return (
-    <>
-      <button className={`button button--${variant}`} onClick={() => setIsOpen(true)} type="button">
-        Review payslip
-      </button>
-
-      {isOpen ? (
+  const modal = isOpen && typeof document !== "undefined"
+    ? createPortal(
         <div className="modal-shell" role="presentation">
           <div aria-label={`Payslip detail for ${payslip.period_name}`} aria-modal="true" className="modal ess-payslip-modal" role="dialog">
             <div className="modal__header">
@@ -194,8 +189,18 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
               </section>
             </div>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <>
+      <button className={`button button--${variant}`} onClick={() => setIsOpen(true)} type="button">
+        Review payslip
+      </button>
+
+      {modal}
     </>
   );
 }
