@@ -56,7 +56,7 @@ test.describe("ESS Leave launch certification", () => {
       await expect(detail).toBeVisible();
       await expect(detail.getByRole("heading", { name: "Timeline" })).toBeVisible();
       await expect(detail.getByRole("heading", { name: "Request details" })).toBeVisible();
-      await expect(detail.getByRole("heading", { name: "Evidence" })).toBeVisible();
+      await expect(detail.getByRole("heading", { name: "Evidence", exact: true })).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(detail).toHaveCount(0);
     }
@@ -100,7 +100,7 @@ test.describe("ESS Leave launch certification", () => {
     await expect(dialog.getByRole("button", { name: "Submit leave" })).toBeDisabled();
 
     await field(dialog, "End date").fill(isoDateFromToday(20));
-    await expect(dialog.getByText("Final validation")).toBeVisible();
+    await expect(dialog.getByText("Checked on submit")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 

@@ -127,6 +127,12 @@ INPUT_DEFINITIONS = {
         owner_role="HR Admin",
         placeholder="KA",
         example="KA",
+        choices=(
+            {"value": "KA", "label": "Karnataka"},
+            {"value": "MH", "label": "Maharashtra"},
+            {"value": "DL", "label": "Delhi"},
+            {"value": "TN", "label": "Tamil Nadu"},
+        ),
     ),
     "enable_maternity_leave": LaunchInputDefinition(
         key="enable_maternity_leave",

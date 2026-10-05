@@ -19,6 +19,16 @@ function pagination(page: Page) {
   return directoryPanel(page).locator(".pagination-bar");
 }
 
+async function openEmployeeImportTools(page: Page) {
+  const disclosure = page.locator("details.employee-imports-disclosure").first();
+  await expect(disclosure).toBeVisible();
+  const isOpen = await disclosure.evaluate((element) => (element as HTMLDetailsElement).open);
+  if (!isOpen) {
+    await disclosure.locator("summary").click();
+  }
+  await expect(disclosure).toHaveAttribute("open", "");
+}
+
 function fieldByLabel(scope: Page | Locator, label: string) {
   const control = scope
     .locator("label.form-field")
@@ -210,19 +220,38 @@ test.describe("Certification: HR admin employee directory", () => {
     const roleId = rolePayload.role.id as string;
 
     const username = `qa.hr.viewer.${suffix}`;
-    const inviteResponse = await page.request.post("/api/tenant-admin/memberships", {
+    const employeeResponse = await page.request.post("/api/hr-admin/employees", {
+      data: {
+        employee_code: `EMPVIEW-${suffix}`,
+        first_name: "QA",
+        last_name: "HR Viewer",
+        work_email: `${username}@example.com`,
+        employment_status: "active",
+      },
+    });
+    const employeePayload = await employeeResponse.json();
+    expect(employeeResponse.ok(), `Employee fixture create failed: ${employeeResponse.status()} ${JSON.stringify(employeePayload)}`).toBeTruthy();
+    const employeeId = employeePayload.id as string;
+    expect(employeeId).toBeTruthy();
+
+    const accessResponse = await page.request.post(`/api/hr-admin/employees/${employeeId}/access`, {
       data: {
         username,
         email: `${username}@example.com`,
         first_name: "QA",
         last_name: "HR Viewer",
+        display_name: "QA HR Viewer",
+        phone_number: "",
+        is_user_active: true,
+        must_change_password: false,
         membership_status: "active",
+        is_default_membership: true,
         role_ids: [roleId],
       },
     });
-    expect(inviteResponse.ok()).toBeTruthy();
-    const invitePayload = await inviteResponse.json();
-    const generatedPassword = invitePayload.generated_password as string;
+    const accessPayload = await accessResponse.json();
+    expect(accessResponse.ok(), `Employee access fixture create failed: ${accessResponse.status()} ${JSON.stringify(accessPayload)}`).toBeTruthy();
+    const generatedPassword = accessPayload.generated_password as string;
     expect(generatedPassword).toBeTruthy();
 
     await page.request.post("/api/auth/logout").catch(() => null);
@@ -231,9 +260,9 @@ test.describe("Certification: HR admin employee directory", () => {
     await expectPageReady(page, "Employees");
 
     const navigation = page.getByRole("navigation");
-    await expect(navigation.getByRole("link", { name: /People/ })).toBeVisible();
-    await expect(navigation.getByRole("link", { name: /Payroll/ })).toHaveCount(0);
-    await expect(navigation.getByRole("link", { name: /Organization/ })).toHaveCount(0);
+    await expect(navigation.locator('a[href="/hr-admin/employees"]')).toBeVisible();
+    await expect(navigation.locator('a[href*="/hr-admin/payroll"]')).toHaveCount(0);
+    await expect(navigation.locator('a[href="/hr-admin/organization"]')).toHaveCount(0);
     await expect(page.getByRole("link", { name: "New employee" })).toHaveCount(0);
     await expect(page.getByTestId("employee-import-workbench")).toHaveCount(0);
     await expect(page.getByTestId("employee-bank-import-workbench")).toHaveCount(0);
@@ -303,6 +332,7 @@ test.describe("Certification: HR admin employee directory", () => {
 
     await gotoAuthenticated(page, `/hr-admin/employees?q=${employee.employee_code}&status=all&page_size=5`);
     await expectDirectoryPageCertified(page);
+    await openEmployeeImportTools(page);
 
     const workbench = page.getByTestId("employee-manager-import-workbench");
     await expect(workbench).toBeVisible();
@@ -380,6 +410,7 @@ test.describe("Certification: HR admin employee directory", () => {
 
     await gotoAuthenticated(page, `/hr-admin/employees?q=${employee.employee_code}&status=all&page_size=5`);
     await expectDirectoryPageCertified(page);
+    await openEmployeeImportTools(page);
 
     const workbench = page.getByTestId("employee-bank-import-workbench");
     await expect(workbench).toBeVisible();
@@ -440,6 +471,7 @@ test.describe("Certification: HR admin employee directory", () => {
 
     await gotoAuthenticated(page, "/hr-admin/employees?page_size=5");
     await expectDirectoryPageCertified(page);
+    await openEmployeeImportTools(page);
 
     const workbench = page.getByTestId("employee-import-workbench");
     await expect(workbench).toBeVisible();

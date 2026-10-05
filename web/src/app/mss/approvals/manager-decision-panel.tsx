@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Props = {
@@ -50,16 +50,22 @@ export function ManagerDecisionPanel({
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   const isPending = status === "pending";
   const isCancellationRequest = requestAction === "cancellation_request";
 
   async function handleDecision(action: "approve" | "reject") {
+    if (isSubmittingRef.current) {
+      return;
+    }
+    isSubmittingRef.current = true;
     setError("");
     setSuccessMessage("");
 
     if (!canDecide) {
       setError(kind === "leave" ? "Leave approval permission is required." : "Attendance review permission is required.");
+      isSubmittingRef.current = false;
       return;
     }
 
@@ -69,15 +75,24 @@ export function ManagerDecisionPanel({
           ? "Demo approval captured. Live workflow updates will run once this page is connected to a signed-in manager."
           : "Demo rejection captured. Live workflow updates will run once this page is connected to a signed-in manager.",
       );
+      isSubmittingRef.current = false;
       return;
     }
 
     setIsSubmitting(true);
-    const response = await fetch(getEndpoint(kind, itemId, action), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comment }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(getEndpoint(kind, itemId, action), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment }),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(
@@ -87,6 +102,7 @@ export function ManagerDecisionPanel({
         ),
       );
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
     setSuccessMessage(
@@ -100,6 +116,7 @@ export function ManagerDecisionPanel({
     );
     setComment("");
     setIsSubmitting(false);
+    isSubmittingRef.current = false;
     router.refresh();
   }
 

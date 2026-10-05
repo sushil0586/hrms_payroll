@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -35,6 +35,7 @@ export function AttendanceRecordForm({ initialValue, options, itemId }: Props) {
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   function update<Key extends keyof HrAdminAttendanceRecordWriteInput>(key: Key, value: HrAdminAttendanceRecordWriteInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
@@ -42,21 +43,34 @@ export function AttendanceRecordForm({ initialValue, options, itemId }: Props) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
     setError("");
     setIsSubmitting(true);
-    const response = await fetch(`/api/hr-admin/attendance-records/${itemId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...formValue,
-        check_in_at: formValue.check_in_at ? new Date(formValue.check_in_at).toISOString() : null,
-        check_out_at: formValue.check_out_at ? new Date(formValue.check_out_at).toISOString() : null,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/hr-admin/attendance-records/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formValue,
+          check_in_at: formValue.check_in_at ? new Date(formValue.check_in_at).toISOString() : null,
+          check_out_at: formValue.check_out_at ? new Date(formValue.check_out_at).toISOString() : null,
+        }),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      submittingRef.current = false;
       return;
     }
     router.push("/hr-admin/attendance-records");

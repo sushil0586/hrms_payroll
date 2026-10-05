@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -33,6 +33,7 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Pro
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const codeLocked = isGovernanceFieldLocked(item, "code");
   const nameLocked = isGovernanceFieldLocked(item, "name");
   const shortCodeLocked = isGovernanceFieldLocked(item, "short_code");
@@ -51,23 +52,36 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Pro
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmittingRef.current) {
+      return;
+    }
     if (mode === "edit" && item && item.can_edit_directly === false) {
       setError("This record cannot be edited directly in its current governance state.");
       return;
     }
+    isSubmittingRef.current = true;
     setError("");
     setIsSubmitting(true);
 
-    const response = await fetch(mode === "create" ? "/api/hr-admin/leave-types" : `/api/hr-admin/leave-types/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/leave-types" : `/api/hr-admin/leave-types/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
 

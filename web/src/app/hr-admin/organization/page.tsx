@@ -351,6 +351,7 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
     fallbackPath: "/hr-admin",
   });
   const canManageOrganization = sessionHasPermission(sessionUser, "organization.manage");
+  const canViewEmployees = sessionHasPermission(sessionUser, "employees.view");
   const currentParams = (await searchParams) ?? {};
   const snapshotResult = await getHrAdminOrganizationSnapshot();
   const sections = getSections(snapshotResult.data);
@@ -401,9 +402,11 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
                 Create {activeSection.label.slice(0, -1).toLowerCase()}
               </Link>
             ) : null}
-            <Link className="button button--secondary" href="/hr-admin/employees">
-              Open employee masters
-            </Link>
+            {canViewEmployees ? (
+              <Link className="button button--secondary" href="/hr-admin/employees">
+                Open employee masters
+              </Link>
+            ) : null}
           </>
         }
         pills={[

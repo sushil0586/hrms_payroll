@@ -80,6 +80,28 @@ function groupedInputs(schema: PlatformLaunchInputDefinition[]) {
   }, {});
 }
 
+const LAUNCH_INPUT_GROUP_ORDER = [
+  "Company Details",
+  "Admin Contact",
+  "Organization Structure",
+  "Work Schedule",
+  "Leave Add-ons",
+  "Payroll Setup",
+  "Provider Setup",
+  "Compliance Details",
+] as const;
+
+function orderedInputGroups(schema: PlatformLaunchInputDefinition[]) {
+  const groups = groupedInputs(schema);
+  const preferredOrder = new Map<string, number>(LAUNCH_INPUT_GROUP_ORDER.map((group, index) => [group, index]));
+  return Object.entries(groups).sort(([left], [right]) => {
+    const leftRank = preferredOrder.get(left) ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = preferredOrder.get(right) ?? Number.MAX_SAFE_INTEGER;
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    return left.localeCompare(right);
+  });
+}
+
 function compactInputPayload(values: Record<string, string>) {
   return Object.fromEntries(
     Object.entries(values)
@@ -90,6 +112,15 @@ function compactInputPayload(values: Record<string, string>) {
 
 function checkboxInputChecked(value: string) {
   return ["1", "true", "yes", "on", "enabled"].includes(value.trim().toLowerCase());
+}
+
+function missingInputLabels(schema: PlatformLaunchInputDefinition[], keys: string[]) {
+  const labels = new Map(schema.map((field) => [field.key, field.label]));
+  return keys.map((key) => labels.get(key) ?? titleCase(key));
+}
+
+function groupClassName(group: string) {
+  return `platform-input-group platform-input-group--${group.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
 }
 
 function launchModuleExplanation(module: PlatformLaunchModule) {
@@ -202,6 +233,37 @@ function certificationChipClass(status: string) {
   if (status === "fail" || status === "blocked") return "record-chip--danger";
   if (status === "warning") return "record-chip--warning";
   return "record-chip--neutral";
+}
+
+function launchCertificationChipClass(status: string, readyForFinalReview: boolean) {
+  if (!readyForFinalReview && (status === "fail" || status === "blocked")) return "record-chip--warning";
+  return certificationChipClass(status);
+}
+
+function LaunchStepCard({
+  description,
+  index,
+  status,
+  title,
+  tone,
+}: {
+  description: string;
+  index: number;
+  status: string;
+  title: string;
+  tone: "neutral" | "success" | "warning";
+}) {
+  const chipClass = tone === "success" ? "record-chip--success" : tone === "warning" ? "record-chip--warning" : "";
+  return (
+    <div className={`platform-launch-step platform-launch-step--${tone}`}>
+      <span className="platform-launch-step__index">{index}</span>
+      <div>
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </div>
+      <span className={`record-chip ${chipClass}`}>{status}</span>
+    </div>
+  );
 }
 
 function launchEvidenceCards(run: PlatformTenantLaunchRun) {
@@ -427,7 +489,7 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
   const [error, setError] = useState("");
 
   const selectedBlueprint = blueprints.find((blueprint) => blueprint.ref === selectedBlueprintRef) ?? blueprints[0] ?? null;
-  const inputGroups = useMemo(() => groupedInputs(selectedBlueprint?.input_schema ?? []), [selectedBlueprint]);
+  const inputGroups = useMemo(() => orderedInputGroups(selectedBlueprint?.input_schema ?? []), [selectedBlueprint]);
   const resolvedInputValues = useMemo(() => {
     if (!selectedBlueprint) return inputValues;
     const next = { ...inputValues };
@@ -731,7 +793,13 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
   const latestDriftPayload = driftPayload(latestDriftCheck);
   const latestUpgradeComparePayload = upgradePayload(latestUpgradeCompare);
   const latestUpgradeApplyPayload = upgradePayload(latestUpgradeApply);
+  const finalCertificationReady = Boolean(hasSafeApplyEvidence && latestDriftCheck && handoffCompleted);
   const certificationStatus = certificationReport?.status ?? "fail";
+  const certificationDisplayStatus = certificationReport
+    ? (finalCertificationReady ? certificationStatus.toUpperCase() : "PENDING SETUP")
+    : "NOT LOADED";
+  const certificationIssueLabel = finalCertificationReady ? "Blocker" : "Pending step";
+  const certificationIssueClass = finalCertificationReady ? "platform-feedback--error" : "platform-certification-warning";
   const certificationIssues = [
     ...(certificationReport?.blockers ?? []),
     ...(certificationReport?.warnings ?? []),
@@ -757,6 +825,54 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
       && selectedBlueprint
       && selectedBlueprint.ref !== effectiveOnboarding.launch_blueprint_ref,
   );
+  const localMissingInputKeys = selectedBlueprint?.input_schema
+    .filter((field) => field.required && !resolvedInputValues[field.key]?.trim())
+    .map((field) => field.key) ?? [];
+  const localMissingLabels = selectedBlueprint ? missingInputLabels(selectedBlueprint.input_schema, localMissingInputKeys) : [];
+  const previewMissingLabels = currentPreview && selectedBlueprint
+    ? missingInputLabels(selectedBlueprint.input_schema, currentPreview.missing_inputs)
+    : [];
+  const applyDisabledReason = (() => {
+    if (!selectedBlueprint) return "Select a launch blueprint before applying setup.";
+    if (hasSafeApplyEvidence) return "Safe setup is already applied. Use drift, repair, or upgrade actions for later changes.";
+    if (!currentPreview) return "Preview the launch plan first. Apply stays locked until preview passes.";
+    if (currentPreview.blockers.length) return currentPreview.blockers[0];
+    if (currentPreview.missing_inputs.length) return `Complete ${previewMissingLabels.join(", ")} before applying.`;
+    if (!currentPreview.can_apply) return "Resolve preview warnings or subscription gates before applying.";
+    if (!currentPreview.safe_apply_modules.length) return "No certified safe modules are available for this preview.";
+    return "";
+  })();
+  const launchStepCards = [
+    {
+      title: "Choose template",
+      description: selectedBlueprint ? selectedBlueprint.label : "Select the onboarding template for this customer.",
+      status: selectedBlueprint ? "Selected" : "Needed",
+      tone: selectedBlueprint ? "success" : "warning",
+    },
+    {
+      title: "Complete setup inputs",
+      description: localMissingLabels.length ? localMissingLabels.slice(0, 3).join(", ") : "Required launch inputs are filled.",
+      status: localMissingLabels.length ? `${localMissingLabels.length} missing` : "Ready",
+      tone: localMissingLabels.length ? "warning" : "success",
+    },
+    {
+      title: "Preview plan",
+      description: currentPreview ? "Preview evidence is loaded for this session." : "Review modules, gates, and owners before apply.",
+      status: currentPreview ? (currentPreview.can_apply ? "Apply-ready" : "Needs review") : "Not run",
+      tone: currentPreview ? (currentPreview.can_apply ? "success" : "warning") : "neutral",
+    },
+    {
+      title: "Apply safe setup",
+      description: applyDisabledReason || "Certified safe modules can be applied now.",
+      status: applyDisabledReason ? "Locked" : "Ready",
+      tone: applyDisabledReason ? "warning" : "success",
+    },
+  ] satisfies Array<{
+    description: string;
+    status: string;
+    title: string;
+    tone: "neutral" | "success" | "warning";
+  }>;
 
   return (
     <>
@@ -767,6 +883,32 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
           </div>
         </section>
       ) : null}
+
+      <section className="section">
+        <article className="record-card platform-launch-workflow-card">
+          <div className="record-card__title-wrap">
+            <div className="record-card__title">
+              <h2>Launch workflow</h2>
+              <span className={`record-chip ${applyDisabledReason ? "record-chip--warning" : "record-chip--success"}`}>
+                {applyDisabledReason ? "In progress" : "Ready to apply"}
+              </span>
+            </div>
+            <p className="section-copy">Run the customer setup in order: choose template, confirm inputs, preview evidence, then apply the certified safe modules.</p>
+          </div>
+          <div className="platform-launch-steps" aria-label="Tenant launch workflow">
+            {launchStepCards.map((step, index) => (
+              <LaunchStepCard
+                description={step.description}
+                index={index + 1}
+                key={step.title}
+                status={step.status}
+                title={step.title}
+                tone={step.tone}
+              />
+            ))}
+          </div>
+        </article>
+      </section>
 
       <section className="section support-session-grid" data-testid="platform-launch-blueprint-panel">
         <article className="record-card">
@@ -847,13 +989,19 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
         <article className="record-card">
           <div className="record-card__title-wrap">
             <div className="record-card__title">
-              <h2>QA certification</h2>
-              <span className={`record-chip ${certificationChipClass(certificationStatus)}`}>
-                {certificationReport ? certificationStatus.toUpperCase() : "NOT LOADED"}
+              <h2>Final launch certification</h2>
+              <span className={`record-chip ${launchCertificationChipClass(certificationStatus, finalCertificationReady)}`}>
+                {certificationDisplayStatus}
               </span>
             </div>
-            <p className="section-copy">Production-style launch signoff for the selected template, safe apply, drift, handoff, and subscription scope.</p>
+            <p className="section-copy">Production-style signoff runs after preview, safe apply, drift check, and customer handoff evidence exist.</p>
           </div>
+          {!finalCertificationReady ? (
+            <div className="notice notice--compact platform-certification-warning">
+              <strong>Certification is not expected to pass yet.</strong>
+              <span>Complete the guided launch steps first. The items below are pending setup steps, not data-quality failures.</span>
+            </div>
+          ) : null}
           <div className="detail-grid">
             <DetailRow label="Blockers" value={certificationReport?.blocker_count ?? 0} />
             <DetailRow label="Warnings" value={certificationReport?.warning_count ?? 0} />
@@ -865,8 +1013,8 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
           {certificationIssues.length ? (
             <div className="platform-certification-summary" aria-label="Launch certification issues">
               {certificationReport?.blockers.map((item) => (
-                <div className="notice notice--compact platform-feedback--error" key={`blocker-${item}`}>
-                  <strong>Blocker</strong>
+                <div className={`notice notice--compact ${certificationIssueClass}`} key={`blocker-${item}`}>
+                  <strong>{certificationIssueLabel}</strong>
                   <span>{item}</span>
                 </div>
               ))}
@@ -897,7 +1045,7 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
                   <span>{check.message}</span>
                   {check.next_action ? <span>Next: {check.next_action}</span> : null}
                 </div>
-                <span className={`record-chip ${certificationChipClass(check.status)}`}>{titleCase(check.status)}</span>
+                <span className={`record-chip ${launchCertificationChipClass(check.status, finalCertificationReady)}`}>{finalCertificationReady ? titleCase(check.status) : check.status === "blocked" ? "Pending" : titleCase(check.status)}</span>
               </div>
             ))}
             {!certificationReport ? (
@@ -921,14 +1069,20 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
           <article className="record-card">
             <div className="record-card__title-wrap">
               <div className="record-card__title">
-                <h2>Required inputs</h2>
+                <h2>Launch inputs</h2>
                 <span className="record-chip">{selectedBlueprint.input_schema.length} fields</span>
               </div>
-              <p className="section-copy">Fields are grouped for platform operators. Sensitive/provider values are only placeholders at this phase.</p>
+              <p className="section-copy">Complete the required company setup fields, then select only the optional add-ons this customer wants at launch.</p>
             </div>
+            {localMissingLabels.length ? (
+              <div className="notice notice--compact platform-validation-strip platform-validation-strip--warning">
+                <strong>Required before preview can become apply-ready</strong>
+                <span className="muted">{localMissingLabels.join(", ")}</span>
+              </div>
+            ) : null}
             <div className="platform-control-grid">
-              {Object.entries(inputGroups).map(([group, fields]) => (
-                <div className="platform-input-group" key={group}>
+              {inputGroups.map(([group, fields]) => (
+                <div className={groupClassName(group)} key={group}>
                   <div className="record-card__title">
                     <h3>{group}</h3>
                     <span className="record-chip">{fields.length}</span>
@@ -968,9 +1122,17 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
               </div>
             ) : null}
             <div className="form-actions-bar">
-              <span className="muted">Preview shows what will configure, what needs input, and what remains gated.</span>
+              <span className="muted">{applyDisabledReason || "Preview passed. Certified safe setup is ready to apply."}</span>
               <button className="button button--primary" disabled={Boolean(busy)} onClick={handlePreview} type="button">
                 {busy === "preview" ? "Previewing..." : "Preview launch plan"}
+              </button>
+              <button
+                className="button button--primary"
+                disabled={Boolean(busy) || Boolean(applyDisabledReason) || !canApplySafeModules}
+                onClick={handleSafeApply}
+                type="button"
+              >
+                {busy === "apply" ? "Applying..." : "Apply safe launch setup"}
               </button>
             </div>
           </article>
@@ -1033,12 +1195,17 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
             {currentPreview.missing_inputs.length ? (
               <div className="notice notice--compact platform-validation-strip">
                 <strong>Inputs needed</strong>
-                <span className="muted">{currentPreview.missing_inputs.map(titleCase).join(", ")}</span>
+                <span className="muted">{previewMissingLabels.join(", ")}</span>
               </div>
             ) : null}
             <div className="form-actions-bar">
-              <span className="muted">Safe apply creates only modules allowed by the latest preview, subscription, and certified seeder list.</span>
-              <button className="button button--primary" disabled={Boolean(busy) || !canApplySafeModules} onClick={handleSafeApply} type="button">
+              <span className="muted">{applyDisabledReason || "Safe apply creates only modules allowed by this preview, subscription, and certified seeder list."}</span>
+              <button
+                className="button button--primary"
+                disabled={Boolean(busy) || Boolean(applyDisabledReason) || !canApplySafeModules}
+                onClick={handleSafeApply}
+                type="button"
+              >
                 {busy === "apply" ? "Applying..." : "Apply safe launch setup"}
               </button>
             </div>

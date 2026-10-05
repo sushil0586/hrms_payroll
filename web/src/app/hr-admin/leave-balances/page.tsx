@@ -7,12 +7,35 @@ import { getHrAdminLeaveBalances, getHrAdminLeaveBalanceTransactions, getHrAdmin
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
-export default async function HrAdminLeaveBalancesPage() {
+type SearchParamValue = string | string[] | undefined;
+type PageProps = {
+  searchParams?: Promise<Record<string, SearchParamValue>>;
+};
+
+function normalizeParam(value: SearchParamValue) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function HrAdminLeaveBalancesPage({ searchParams }: PageProps) {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view"], fallbackPath: "/hr-admin" });
   const canManageBalances = sessionHasPermission(sessionUser, "leave.balances.manage");
+  const currentParams = (await searchParams) ?? {};
+  const q = normalizeParam(currentParams.q) ?? "";
+  const employeeId = normalizeParam(currentParams.employee_id) ?? "";
+  const leavePolicyId = normalizeParam(currentParams.leave_policy_id) ?? "";
+  const transactionStatus = normalizeParam(currentParams.transaction_status) ?? "";
   const [balancesResult, transactionsResult, optionsResult] = await Promise.all([
-    getHrAdminLeaveBalances(),
-    getHrAdminLeaveBalanceTransactions(),
+    getHrAdminLeaveBalances({
+      q: q || undefined,
+      employee_id: employeeId || undefined,
+      leave_policy_id: leavePolicyId || undefined,
+    }),
+    getHrAdminLeaveBalanceTransactions({
+      q: q || undefined,
+      employee_id: employeeId || undefined,
+      leave_policy_id: leavePolicyId || undefined,
+      status: transactionStatus || undefined,
+    }),
     getHrAdminPolicyOptions(),
   ]);
   const encashedTotal = balancesResult.data.reduce((sum, item) => sum + Number(item.encashed_amount), 0);
@@ -61,6 +84,12 @@ export default async function HrAdminLeaveBalancesPage() {
         initialTransactions={transactionsResult.data}
         options={optionsResult.data}
         canManageBalances={canManageBalances}
+        initialFilters={{
+          employeeId,
+          policyId: leavePolicyId,
+          query: q,
+          transactionStatus,
+        }}
       />
     </main>
   );

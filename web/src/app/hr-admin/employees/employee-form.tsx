@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -187,6 +187,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
@@ -275,17 +276,29 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmittingRef.current) {
+      return;
+    }
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError("");
     setFieldErrors({});
 
-    const response = await fetch(mode === "create" ? "/api/hr-admin/employees" : `/api/hr-admin/employees/${employeeId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(normalizePayload(formValue)),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/employees" : `/api/hr-admin/employees/${employeeId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(normalizePayload(formValue)),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -293,6 +306,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
       setError(nextErrors.message);
       setFieldErrors(nextErrors.fieldErrors);
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -76,6 +76,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [previewEmployeeId, setPreviewEmployeeId] = useState(options.employees[0]?.id ?? "");
   const [previewUnits, setPreviewUnits] = useState("1.00");
   const [previewError, setPreviewError] = useState("");
@@ -191,21 +192,34 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmittingRef.current) {
+      return;
+    }
     if (mode === "edit" && item && item.can_edit_directly === false) {
       setError("This record cannot be edited directly in its current governance state.");
       return;
     }
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError("");
-    const response = await fetch(mode === "create" ? "/api/hr-admin/leave-policies" : `/api/hr-admin/leave-policies/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/leave-policies" : `/api/hr-admin/leave-policies/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
     router.push("/hr-admin/leave-policies");
@@ -224,17 +238,24 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
       return;
     }
     setIsPreviewLoading(true);
-    const response = await fetch("/api/hr-admin/leave-policies/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        employee_id: previewEmployeeId,
-        leave_type_id: formValue.leave_type_id,
-        requested_units: previewUnits,
-        policy_id: itemId ?? null,
-        config_snapshot: formValue.config_snapshot,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/hr-admin/leave-policies/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_id: previewEmployeeId,
+          leave_type_id: formValue.leave_type_id,
+          requested_units: previewUnits,
+          policy_id: itemId ?? null,
+          config_snapshot: formValue.config_snapshot,
+        }),
+      });
+    } catch {
+      setPreviewError("Unable to reach the server. Check your connection and try again.");
+      setIsPreviewLoading(false);
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setPreviewError(getErrorMessage(payload));

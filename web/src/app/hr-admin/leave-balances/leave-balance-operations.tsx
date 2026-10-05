@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
@@ -17,6 +17,12 @@ type Props = {
   initialTransactions: HrAdminLeaveBalanceTransaction[];
   options: HrAdminPolicyOptions;
   canManageBalances?: boolean;
+  initialFilters?: {
+    employeeId?: string;
+    policyId?: string;
+    query?: string;
+    transactionStatus?: string;
+  };
 };
 
 type ImportStatus = "ready" | "blocked" | "created" | "failed";
@@ -177,6 +183,7 @@ function LeaveBalanceImportWorkbench({
   const [rows, setRows] = useState<LeaveBalanceImportRow[]>([]);
   const [message, setMessage] = useState("");
   const [isCommitting, setIsCommitting] = useState(false);
+  const isCommittingRef = useRef(false);
   const readyCount = rows.filter((row) => row.status === "ready").length;
   const createdCount = rows.filter((row) => row.status === "created").length;
   const employeesByCode = useMemo(() => new Map(balances.map((item) => [item.employee_code.toLowerCase(), item])), [balances]);
@@ -239,21 +246,36 @@ function LeaveBalanceImportWorkbench({
   }
 
   async function commitReadyRows() {
+    if (isCommittingRef.current) {
+      return;
+    }
     if (!canManageBalances) {
       setMessage("You need leave balance management permission to commit imports.");
       return;
     }
+    isCommittingRef.current = true;
     setIsCommitting(true);
     const nextRows = [...rows];
 
     for (let index = 0; index < nextRows.length; index += 1) {
       const row = nextRows[index];
       if (row.status !== "ready" || !row.payload) continue;
-      const response = await fetch("/api/hr-admin/leave-balances/actions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(row.payload),
-      });
+      let response: Response;
+      try {
+        response = await fetch("/api/hr-admin/leave-balances/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(row.payload),
+        });
+      } catch {
+        nextRows[index] = {
+          ...row,
+          status: "failed",
+          message: "Unable to reach the server. Check your connection and try again.",
+        };
+        setRows([...nextRows]);
+        continue;
+      }
       const payload = await response.json().catch(() => ({}));
       if (response.ok) {
         onResult(payload as HrAdminLeaveBalanceActionResult);
@@ -267,6 +289,7 @@ function LeaveBalanceImportWorkbench({
     }
 
     setIsCommitting(false);
+    isCommittingRef.current = false;
     setMessage("Commit complete. Created rows are saved as leave balance transactions.");
   }
 
@@ -369,20 +392,28 @@ function LeaveBalanceImportWorkbench({
   );
 }
 
-export function LeaveBalanceOperations({ initialBalances, initialTransactions, options, canManageBalances = true }: Props) {
+export function LeaveBalanceOperations({
+  initialBalances,
+  initialTransactions,
+  options,
+  canManageBalances = true,
+  initialFilters,
+}: Props) {
   const router = useRouter();
   const [balances, setBalances] = useState(initialBalances);
   const [transactions, setTransactions] = useState(initialTransactions);
-  const [query, setQuery] = useState("");
-  const [employeeFilter, setEmployeeFilter] = useState("");
-  const [policyFilter, setPolicyFilter] = useState("");
-  const [transactionStatusFilter, setTransactionStatusFilter] = useState("");
+  const [query, setQuery] = useState(initialFilters?.query ?? "");
+  const [employeeFilter, setEmployeeFilter] = useState(initialFilters?.employeeId ?? "");
+  const [policyFilter, setPolicyFilter] = useState(initialFilters?.policyId ?? "");
+  const [transactionStatusFilter, setTransactionStatusFilter] = useState(initialFilters?.transactionStatus ?? "");
   const [formValue, setFormValue] = useState<HrAdminLeaveBalanceActionInput>(defaultActionValue);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [reviewReasonById, setReviewReasonById] = useState<Record<string, string>>({});
   const [reviewingTransactionId, setReviewingTransactionId] = useState<string | null>(null);
+  const reviewingTransactionRef = useRef<string | null>(null);
   const [balancePage, setBalancePage] = useState(1);
   const [transactionPage, setTransactionPage] = useState(1);
 
@@ -436,22 +467,35 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmittingRef.current) {
+      return;
+    }
     setError("");
     setSuccessMessage("");
     if (!canManageBalances) {
       setError("You need leave balance management permission to apply balance actions.");
       return;
     }
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
-    const response = await fetch("/api/hr-admin/leave-balances/actions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/hr-admin/leave-balances/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
     const result = payload as HrAdminLeaveBalanceActionResult;
@@ -467,6 +511,7 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
     setFormValue(defaultActionValue);
     setSuccessMessage(result.message);
     setIsSubmitting(false);
+    isSubmittingRef.current = false;
     router.refresh();
   }
 
@@ -483,25 +528,38 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
   }
 
   async function handleReview(transactionId: string, decision: "approve" | "reject") {
+    if (reviewingTransactionRef.current) {
+      return;
+    }
     setError("");
     setSuccessMessage("");
     if (!canManageBalances) {
       setError("You need leave balance management permission to review balance transactions.");
       return;
     }
+    reviewingTransactionRef.current = transactionId;
     setReviewingTransactionId(transactionId);
-    const response = await fetch(`/api/hr-admin/leave-balances/transactions/${transactionId}/review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        decision,
-        rejection_reason: reviewReasonById[transactionId] ?? "",
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/hr-admin/leave-balances/transactions/${transactionId}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decision,
+          rejection_reason: reviewReasonById[transactionId] ?? "",
+        }),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setReviewingTransactionId(null);
+      reviewingTransactionRef.current = null;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setReviewingTransactionId(null);
+      reviewingTransactionRef.current = null;
       return;
     }
     const result = payload as HrAdminLeaveBalanceActionResult;
@@ -510,6 +568,7 @@ export function LeaveBalanceOperations({ initialBalances, initialTransactions, o
     setReviewReasonById((current) => ({ ...current, [transactionId]: "" }));
     setSuccessMessage(result.message);
     setReviewingTransactionId(null);
+    reviewingTransactionRef.current = null;
     router.refresh();
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { AttendanceRegularizationItem } from "@/lib/types";
@@ -31,19 +31,33 @@ export function AttendanceRegularizationReviewForm({ item }: Props) {
   const [comment, setComment] = useState(item.status === "approved" ? item.manager_comment || "" : item.rejection_reason || item.manager_comment || "");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   async function handleDecision(action: "approve" | "reject") {
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
     setError("");
     setIsSubmitting(true);
-    const response = await fetch(`/api/hr-admin/attendance-regularizations/${item.id}/${action}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comment }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/hr-admin/attendance-regularizations/${item.id}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment }),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      submittingRef.current = false;
       return;
     }
     router.push("/hr-admin/attendance-regularizations");

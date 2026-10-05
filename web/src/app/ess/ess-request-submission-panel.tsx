@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { EssAttendanceRecordOption, EssLeaveTypeOption } from "@/lib/types";
@@ -33,6 +33,7 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
   const router = useRouter();
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [submitting, setSubmitting] = useState<"leave" | "attendance" | null>(null);
+  const submittingRef = useRef<"leave" | "attendance" | null>(null);
   const showLeaveForm = mode === "all" || mode === "leave";
   const showAttendanceForm = mode === "all" || mode === "attendance";
   const defaultLeaveType = leaveTypes[0]?.id ?? "";
@@ -41,65 +42,95 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
 
   async function submitLeave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = "leave";
     setFeedback(null);
     if (isDemo) {
       setFeedback({ tone: "error", message: "Leave requests are only available in live mode." });
+      submittingRef.current = null;
       return;
     }
     const formData = new FormData(event.currentTarget);
     setSubmitting("leave");
-    const response = await fetch("/api/me/leave-requests", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        leave_type_id: String(formData.get("leave_type_id") ?? ""),
-        start_date: String(formData.get("start_date") ?? ""),
-        end_date: String(formData.get("end_date") ?? ""),
-        start_day_portion: String(formData.get("start_day_portion") ?? "full_day"),
-        end_day_portion: String(formData.get("end_day_portion") ?? "full_day"),
-        reason: String(formData.get("reason") ?? ""),
-        attachment_reference: String(formData.get("attachment_reference") ?? ""),
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/me/leave-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leave_type_id: String(formData.get("leave_type_id") ?? ""),
+          start_date: String(formData.get("start_date") ?? ""),
+          end_date: String(formData.get("end_date") ?? ""),
+          start_day_portion: String(formData.get("start_day_portion") ?? "full_day"),
+          end_day_portion: String(formData.get("end_day_portion") ?? "full_day"),
+          reason: String(formData.get("reason") ?? ""),
+          attachment_reference: String(formData.get("attachment_reference") ?? ""),
+        }),
+      });
+    } catch {
+      setSubmitting(null);
+      submittingRef.current = null;
+      setFeedback({ tone: "error", message: "Unable to reach the server. Check your connection and try again." });
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     setSubmitting(null);
     if (!response.ok) {
       setFeedback({ tone: "error", message: getErrorMessage(payload, "Unable to submit leave request.") });
+      submittingRef.current = null;
       return;
     }
     event.currentTarget.reset();
     setFeedback({ tone: "success", message: "Leave request submitted." });
+    submittingRef.current = null;
     router.refresh();
   }
 
   async function submitRegularization(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = "attendance";
     setFeedback(null);
     if (isDemo) {
       setFeedback({ tone: "error", message: "Attendance regularizations are only available in live mode." });
+      submittingRef.current = null;
       return;
     }
     const formData = new FormData(event.currentTarget);
     setSubmitting("attendance");
-    const response = await fetch("/api/me/attendance-regularizations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        attendance_record_id: String(formData.get("attendance_record_id") ?? ""),
-        requested_status: String(formData.get("requested_status") ?? "present"),
-        requested_check_in_at: String(formData.get("requested_check_in_at") ?? "") || null,
-        requested_check_out_at: String(formData.get("requested_check_out_at") ?? "") || null,
-        reason: String(formData.get("reason") ?? ""),
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/me/attendance-regularizations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attendance_record_id: String(formData.get("attendance_record_id") ?? ""),
+          requested_status: String(formData.get("requested_status") ?? "present"),
+          requested_check_in_at: String(formData.get("requested_check_in_at") ?? "") || null,
+          requested_check_out_at: String(formData.get("requested_check_out_at") ?? "") || null,
+          reason: String(formData.get("reason") ?? ""),
+        }),
+      });
+    } catch {
+      setSubmitting(null);
+      submittingRef.current = null;
+      setFeedback({ tone: "error", message: "Unable to reach the server. Check your connection and try again." });
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     setSubmitting(null);
     if (!response.ok) {
       setFeedback({ tone: "error", message: getErrorMessage(payload, "Unable to submit attendance regularization.") });
+      submittingRef.current = null;
       return;
     }
     event.currentTarget.reset();
     setFeedback({ tone: "success", message: "Attendance regularization submitted." });
+    submittingRef.current = null;
     router.refresh();
   }
 

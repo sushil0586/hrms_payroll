@@ -1225,7 +1225,6 @@ def save_hr_admin_organization_item(actor, section: str, validated_data, *, item
                 setattr(item, field, validated_data[field])
 
     item.save()
-    ensure_leave_balances_for_policy(item)
     return item
 
 def _hr_admin_actor_identifier(actor) -> str:

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ORGANIZATION_SECTION_CONFIG, type OrganizationSectionKey } from "@/app/hr-admin/organization/section-config";
@@ -130,6 +130,7 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<OrganizationFieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const sectionMeta = ORGANIZATION_SECTION_CONFIG[section];
   const filteredBusinessUnits = itemId ? options.business_units.filter((item) => item.id !== itemId) : options.business_units;
   const filteredDepartments = itemId ? options.departments.filter((item) => item.id !== itemId) : options.departments;
@@ -142,17 +143,29 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmittingRef.current) {
+      return;
+    }
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError("");
     setFieldErrors({});
 
-    const response = await fetch(mode === "create" ? `/api/hr-admin/organization/${section}` : `/api/hr-admin/organization/${section}/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(normalizePayload(formValue)),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? `/api/hr-admin/organization/${section}` : `/api/hr-admin/organization/${section}/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(normalizePayload(formValue)),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -160,6 +173,7 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
       setError(nextErrors.message);
       setFieldErrors(nextErrors.fieldErrors);
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
 

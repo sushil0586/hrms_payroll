@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -56,6 +56,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminAttendancePolicyAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
+  const submittingRef = useRef(false);
   const hasEmployeeOverride = Boolean(formValue.employee_id);
   const selectedBranch = options.branches.find((item) => item.id === formValue.branch_id);
   const filteredBranches = filteredByLegalEntity(options.branches, formValue.legal_entity_id);
@@ -143,21 +144,35 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
     if (conflictCheck?.has_blocking_conflict) {
       setError(conflictCheck.summary);
+      submittingRef.current = false;
       return;
     }
     setIsSubmitting(true);
     setError("");
-    const response = await fetch(mode === "create" ? "/api/hr-admin/attendance-policy-assignments" : `/api/hr-admin/attendance-policy-assignments/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/attendance-policy-assignments" : `/api/hr-admin/attendance-policy-assignments/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      submittingRef.current = false;
       return;
     }
     router.push("/hr-admin/attendance-policy-assignments");

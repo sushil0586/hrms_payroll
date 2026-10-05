@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -60,6 +60,7 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
   const [fieldErrors, setFieldErrors] = useState<AccessFieldErrors>({});
   const [successNotice, setSuccessNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const hasSelectedRoles = formValue.role_ids.length > 0;
   const employeeBlocksActiveAccess = ["inactive", "exited"].includes(employeeStatus);
   const hasActiveAccessSelection = formValue.is_user_active || formValue.membership_status === "active";
@@ -93,17 +94,29 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmittingRef.current) {
+      return;
+    }
+    isSubmittingRef.current = true;
     setError("");
     setSuccessNotice("");
     setIsSubmitting(true);
 
-    const response = await fetch(`/api/hr-admin/employees/${employeeId}/access`, {
-      method: existingAccess ? "PATCH" : "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/hr-admin/employees/${employeeId}/access`, {
+        method: existingAccess ? "PATCH" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -111,6 +124,7 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
       setError(nextErrors.message);
       setFieldErrors(nextErrors.fieldErrors);
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
 
@@ -121,6 +135,7 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
     setSuccessNotice(`Employee access saved successfully.${generatedPassword}`);
     setFormValue(employeeAccessDetailToFormValue(payload as HrAdminEmployeeAccessDetail));
     setIsSubmitting(false);
+    isSubmittingRef.current = false;
     router.refresh();
   }
 

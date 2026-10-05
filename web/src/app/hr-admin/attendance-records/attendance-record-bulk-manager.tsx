@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -83,6 +83,7 @@ export function AttendanceRecordBulkManager({
   const [lateOnly, setLateOnly] = useState(currentFilters.late_only);
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
   const [bulkStatus, setBulkStatus] = useState(statusOptions[0]?.value ?? "present");
+  const submittingRef = useRef(false);
 
   const allSelected = items.length > 0 && selectedIds.length === items.length;
 
@@ -112,12 +113,18 @@ export function AttendanceRecordBulkManager({
   }
 
   async function handleBulkAction(action: "lock" | "unlock" | "set_status" | "mark_regularized" | "clear_regularized") {
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
     if (state !== "live") {
       setError("Bulk actions are disabled in demo mode.");
+      submittingRef.current = false;
       return;
     }
     if (!canManageRecords) {
       setError("You need attendance record management permission to run bulk actions.");
+      submittingRef.current = false;
       return;
     }
     setError("");
@@ -129,19 +136,29 @@ export function AttendanceRecordBulkManager({
     if (action === "set_status") {
       body.status = bulkStatus;
     }
-    const response = await fetch("/api/hr-admin/attendance-records/bulk-actions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/hr-admin/attendance-records/bulk-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      submittingRef.current = false;
       return;
     }
     setSelectedIds([]);
     setIsSubmitting(false);
+    submittingRef.current = false;
     router.refresh();
   }
 

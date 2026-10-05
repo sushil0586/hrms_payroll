@@ -45,18 +45,66 @@ async function switchTo(page: Page, path: string, persona: Persona) {
   await gotoAuthenticated(page, path, persona);
 }
 
+async function firstSelectableRecordValue(select: Locator) {
+  return select.evaluate((element) => {
+    const selectElement = element as HTMLSelectElement;
+    const option = Array.from(selectElement.options).find((item) => item.value && !item.disabled);
+    return option?.value ?? "";
+  });
+}
+
+async function firstRecordValue(select: Locator) {
+  return select.evaluate((element) => {
+    const selectElement = element as HTMLSelectElement;
+    const option = Array.from(selectElement.options).find((item) => item.value);
+    return option?.value ?? "";
+  });
+}
+
+async function unlockAttendanceRecordForCertification(page: Page, recordId: string) {
+  await switchTo(page, "/hr-admin/attendance-records", hrAdmin);
+  const response = await page.request.post("/api/hr-admin/attendance-records/bulk-actions", {
+    data: {
+      action: "unlock",
+      record_ids: [recordId],
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+
 async function createEssRegularization(page: Page, reason: string) {
   await clearPendingEmployeeRegularization(page);
-  await switchTo(page, "/ess", employee);
-  await expectPageReady(page, "Self service");
-  await field(page, "Requested status").selectOption("remote");
-  await field(page, "Reason", 1).fill(reason);
+  await switchTo(page, "/ess/attendance", employee);
+  await expectPageReady(page, "Attendance");
+  await page.getByRole("button", { name: "Regularize attendance" }).first().click();
+  let dialog = page.getByRole("dialog", { name: "Regularize attendance" });
+  await expect(dialog).toBeVisible();
+  let recordSelect = field(dialog, "Attendance record");
+  let recordId = await firstSelectableRecordValue(recordSelect);
+  if (!recordId) {
+    const lockedRecordId = await firstRecordValue(recordSelect);
+    expect(lockedRecordId, "Employee should have an attendance record available for regularization setup.").toBeTruthy();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await unlockAttendanceRecordForCertification(page, lockedRecordId);
+    await switchTo(page, "/ess/attendance", employee);
+    await expectPageReady(page, "Attendance");
+    await page.getByRole("button", { name: "Regularize attendance" }).first().click();
+    dialog = page.getByRole("dialog", { name: "Regularize attendance" });
+    await expect(dialog).toBeVisible();
+    recordSelect = field(dialog, "Attendance record");
+    recordId = await firstSelectableRecordValue(recordSelect);
+  }
+  expect(recordId, "Employee should have an unlocked attendance record for regularization setup.").toBeTruthy();
+  await recordSelect.selectOption(recordId);
+  await field(dialog, "Requested status").selectOption("remote");
+  await field(dialog, "Reason").fill(reason);
   const result = await submitAndCapture<{ id: string; status: string }>(
     page,
     "/api/me/attendance-regularizations",
     "POST",
     async () => {
-      await page.getByRole("button", { name: "Submit regularization" }).click();
+      await dialog.getByRole("button", { name: /Submit (correction|regularization)/ }).click();
     },
   );
   expect(result.ok).toBeTruthy();
@@ -82,6 +130,104 @@ async function clearPendingEmployeeRegularization(page: Page) {
 }
 
 test.describe("Phase 4C HR-admin operations certification", () => {
+  test("attendance policy preview validates inputs, handles network recovery, and blocks duplicate preview requests", async ({ page }) => {
+    test.setTimeout(3 * 60 * 1000);
+    await switchTo(page, "/hr-admin/attendance-policies/new", hrAdmin);
+    await expectPageReady(page, "Create attendance policy");
+    await expect(page.getByRole("heading", { name: "Policy preview" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Preview attendance outcome" }).click();
+    await expect(page.getByText("Select an attendance date for preview.")).toBeVisible();
+
+    await field(page, "Attendance date").fill("2026-10-05");
+    let previewAttempts = 0;
+    await page.route("**/api/hr-admin/attendance-policies/preview", async (route) => {
+      if (route.request().method() === "POST") {
+        previewAttempts += 1;
+        await route.abort("failed");
+        return;
+      }
+      await route.continue();
+    });
+    await page.getByRole("button", { name: "Preview attendance outcome" }).click();
+    await expect(page.getByText("Unable to reach the server. Check your connection and try again.")).toBeVisible();
+    expect(previewAttempts).toBe(1);
+
+    await page.unroute("**/api/hr-admin/attendance-policies/preview");
+    previewAttempts = 0;
+    await page.route("**/api/hr-admin/attendance-policies/preview", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      previewAttempts += 1;
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await route.fulfill({
+        contentType: "application/json",
+        status: 200,
+        body: JSON.stringify({
+          derived_status: "present",
+          resolved_shift_name: "General Shift",
+          matched_holiday_name: null,
+          matched_holiday_type: null,
+          work_duration_hours: "8.00",
+          overtime_hours: "0.00",
+          late_minutes: 0,
+          early_exit_minutes: 0,
+          current_resolved_policy_name: "Monthly attendance",
+          current_assignment_priority: 100,
+          current_assignment_scope: ["Tenant default"],
+          draft_policy_matches_current_resolution: true,
+          resolved_config: {},
+        }),
+      });
+    });
+    await page.getByRole("button", { name: "Preview attendance outcome" }).click();
+    await page.getByRole("button", { name: "Previewing..." }).click();
+    await expect(page.getByText("Derived status")).toBeVisible();
+    await expect(page.locator(".detail-row").filter({ hasText: "Resolved shift" }).getByText("General Shift")).toBeVisible();
+    expect(previewAttempts).toBe(1);
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("attendance record bulk actions recover from network failure without duplicate mutations", async ({ page }) => {
+    test.setTimeout(3 * 60 * 1000);
+    await switchTo(page, "/hr-admin/attendance-records?page_size=10", hrAdmin);
+    await expectPageReady(page, "Attendance records");
+
+    const firstRecord = page.locator("article.record-card").first();
+    await expect(firstRecord).toBeVisible();
+    await ensureChecked(firstRecord.locator("input[type='checkbox']"));
+    await expect(page.getByText("1 selected").first()).toBeVisible();
+
+    let failedAttempts = 0;
+    await page.route("**/api/hr-admin/attendance-records/bulk-actions", async (route) => {
+      if (route.request().method() === "POST") {
+        failedAttempts += 1;
+        await route.abort("failed");
+        return;
+      }
+      await route.continue();
+    });
+    await page.getByRole("button", { name: /^Lock \(1\)$/ }).click();
+    await expect(page.getByText("Unable to reach the server. Check your connection and try again.")).toBeVisible();
+    expect(failedAttempts).toBe(1);
+
+    await page.unroute("**/api/hr-admin/attendance-records/bulk-actions");
+    const recovered = await submitAndCapture<{ updated_count: number }>(
+      page,
+      "/api/hr-admin/attendance-records/bulk-actions",
+      "POST",
+      async () => {
+        await page.getByRole("button", { name: /^Lock \(1\)$/ }).click();
+      },
+    );
+    expect(recovered.ok).toBeTruthy();
+    expect(recovered.requestBody).toMatchObject({ action: "lock" });
+    await expect(page.getByText("0 selected").first()).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("attendance regularization queue filters, inline rejection, full approval, and read-only terminal state", async ({ page }) => {
     test.setTimeout(5 * 60 * 1000);
     const rejectReason = uniqueRef("HR_REG_REJECT");
@@ -92,7 +238,7 @@ test.describe("Phase 4C HR-admin operations certification", () => {
 
     await switchTo(page, `/hr-admin/attendance-regularizations?status=pending&q=${encodeURIComponent(rejectReason)}`, hrAdmin);
     await expectPageReady(page, "Regularizations");
-    await expect(page.getByRole("heading", { name: "Regularizations" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Regularizations" })).toBeVisible();
     await expect(field(page, "Search")).toHaveValue(rejectReason);
     await expect(field(page, "Request status")).toHaveValue("pending");
     await expect(field(page, "Requested attendance status")).toBeVisible();
@@ -157,7 +303,7 @@ test.describe("Phase 4C HR-admin operations certification", () => {
 
     await switchTo(page, "/hr-admin/attendance-records?page_size=10", hrAdmin);
     await expectPageReady(page, "Attendance records");
-    await expect(page.getByRole("heading", { name: "Attendance records", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Attendance records" })).toBeVisible();
     await expect(field(page, "Search")).toBeVisible();
     await expect(field(page, "Status")).toBeVisible();
     await expect(field(page, "Source")).toBeVisible();

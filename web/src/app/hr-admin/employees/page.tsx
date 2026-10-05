@@ -619,7 +619,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                     <span>{employee.reporting_manager || "No manager"}</span>
                     <span>{employee.has_access ? "Access provisioned" : "No access yet"}</span>
                     <span>{employee.assigned_role_count} roles</span>
-                    <span>{employee.direct_reports_count} reports</span>
+                    <span>{employee.direct_reports_count} direct reports</span>
                   </div>
                   {warnings.length ? (
                     <div className="employee-directory-warning-line">

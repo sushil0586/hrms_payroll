@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -51,6 +51,8 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
   const [previewResult, setPreviewResult] = useState<HrAdminAttendancePolicyPreview | null>(null);
   const [previewError, setPreviewError] = useState("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const submittingRef = useRef(false);
+  const previewRef = useRef(false);
   const codeLocked = isGovernanceFieldLocked(item, "code");
   const nameLocked = isGovernanceFieldLocked(item, "name");
   const statusLocked = isGovernanceFieldLocked(item, "status");
@@ -92,21 +94,35 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
     if (mode === "edit" && item && item.can_edit_directly === false) {
       setError("This record cannot be edited directly in its current governance state.");
+      submittingRef.current = false;
       return;
     }
     setError("");
     setIsSubmitting(true);
-    const response = await fetch(mode === "create" ? "/api/hr-admin/attendance-policies" : `/api/hr-admin/attendance-policies/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/attendance-policies" : `/api/hr-admin/attendance-policies/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      submittingRef.current = false;
       return;
     }
     router.push("/hr-admin/attendance-policies");
@@ -114,45 +130,61 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
   }
 
   async function handlePreview() {
+    if (previewRef.current) {
+      return;
+    }
+    previewRef.current = true;
     setPreviewError("");
     setPreviewResult(null);
     if (!previewEmployeeId) {
       setPreviewError("Select an employee for preview.");
+      previewRef.current = false;
       return;
     }
     if (!previewDate) {
       setPreviewError("Select an attendance date for preview.");
+      previewRef.current = false;
       return;
     }
     setIsPreviewLoading(true);
-    const response = await fetch("/api/hr-admin/attendance-policies/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        employee_id: previewEmployeeId,
-        attendance_date: previewDate,
-        requested_status: previewStatus || null,
-        requested_check_in_at: previewCheckInAt ? new Date(previewCheckInAt).toISOString() : null,
-        requested_check_out_at: previewCheckOutAt ? new Date(previewCheckOutAt).toISOString() : null,
-        shift_id: previewShiftId || null,
-        policy_id: itemId ?? null,
-        default_shift_id: formValue.default_shift_id,
-        holiday_calendar_id: formValue.holiday_calendar_id,
-        full_day_min_hours: formValue.full_day_min_hours,
-        half_day_min_hours: formValue.half_day_min_hours,
-        late_mark_after_minutes: formValue.late_mark_after_minutes,
-        overtime_threshold_minutes: formValue.overtime_threshold_minutes,
-        config_snapshot: formValue.config_snapshot,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/hr-admin/attendance-policies/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_id: previewEmployeeId,
+          attendance_date: previewDate,
+          requested_status: previewStatus || null,
+          requested_check_in_at: previewCheckInAt ? new Date(previewCheckInAt).toISOString() : null,
+          requested_check_out_at: previewCheckOutAt ? new Date(previewCheckOutAt).toISOString() : null,
+          shift_id: previewShiftId || null,
+          policy_id: itemId ?? null,
+          default_shift_id: formValue.default_shift_id,
+          holiday_calendar_id: formValue.holiday_calendar_id,
+          full_day_min_hours: formValue.full_day_min_hours,
+          half_day_min_hours: formValue.half_day_min_hours,
+          late_mark_after_minutes: formValue.late_mark_after_minutes,
+          overtime_threshold_minutes: formValue.overtime_threshold_minutes,
+          config_snapshot: formValue.config_snapshot,
+        }),
+      });
+    } catch {
+      setPreviewError("Unable to reach the server. Check your connection and try again.");
+      setIsPreviewLoading(false);
+      previewRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setPreviewError(getErrorMessage(payload));
       setIsPreviewLoading(false);
+      previewRef.current = false;
       return;
     }
     setPreviewResult(payload as HrAdminAttendancePolicyPreview);
     setIsPreviewLoading(false);
+    previewRef.current = false;
   }
 
   return (

@@ -94,7 +94,7 @@ async function selectByCreatedName(page: Page, label: string, record: CreatedRec
 
 async function expectOrganizationListPage(page: Page, section: SectionConfig, code: string, name: string) {
   await gotoAuthenticated(page, `/hr-admin/organization?section=${section.key}&q=${encodeURIComponent(code)}&status=all`);
-  await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+  await expectPageReady(page, "Organization masters");
   await expect(page.getByRole("heading", { name: "Structure catalog" })).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(section.listLabel) })).toBeVisible();
   await expect(field(page, "Search")).toHaveValue(code);
@@ -112,7 +112,7 @@ async function expectOrganizationListPage(page: Page, section: SectionConfig, co
 
 async function openEditForCode(page: Page, section: SectionConfig, code: string) {
   await gotoAuthenticated(page, `/hr-admin/organization?section=${section.key}&q=${encodeURIComponent(code)}&status=all`);
-  await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+  await expectPageReady(page, "Organization masters");
   const editLink = page.locator(".employee-directory-item").filter({ hasText: code }).getByRole("link", { name: "Edit" }).first();
   await expect(editLink).toBeVisible();
   const href = await editLink.getAttribute("href");
@@ -215,13 +215,13 @@ async function deactivateRecord(page: Page, section: SectionConfig, record: Crea
   await expect(page).toHaveURL(new RegExp(`/hr-admin/organization\\?section=${section.key}`), { timeout: 20_000 });
 
   await gotoAuthenticated(page, `/hr-admin/organization?section=${section.key}&q=${encodeURIComponent(record.code)}&status=inactive`);
-  await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+  await expectPageReady(page, "Organization masters");
   await expect(page.locator(".employee-directory-item").filter({ hasText: record.code }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: `${record.name} detail` })).toBeVisible();
   await expect(page.locator(".detail-row").filter({ hasText: "Status" }).filter({ hasText: "inactive" })).toBeVisible();
 
   await gotoAuthenticated(page, `/hr-admin/organization?section=${section.key}&q=${encodeURIComponent(record.code)}&status=active`);
-  await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+  await expectPageReady(page, "Organization masters");
   await expect(page.locator(".employee-directory-item").filter({ hasText: record.code })).toHaveCount(0);
   await expect(page.getByText("No items match this review state.")).toBeVisible();
 }
@@ -448,47 +448,73 @@ test.describe("HR admin organization master CRUD", () => {
     const roleId = rolePayload.role.id as string;
 
     const username = `qa.org.viewer.${suffix}`;
-    const inviteResponse = await page.request.post("/api/tenant-admin/memberships", {
+    const departmentResponse = await page.request.post("/api/hr-admin/organization/departments", {
+      data: {
+        code: `ORGVIEW-DEPT-${suffix}`,
+        name: `Org Viewer Department ${suffix}`,
+        is_active: true,
+      },
+    });
+    const departmentPayload = await departmentResponse.json();
+    expect(departmentResponse.ok(), `Department fixture create failed: ${departmentResponse.status()} ${JSON.stringify(departmentPayload)}`).toBeTruthy();
+    const departmentId = departmentPayload.id as string;
+    expect(departmentId).toBeTruthy();
+
+    const employeeResponse = await page.request.post("/api/hr-admin/employees", {
+      data: {
+        employee_code: `ORGVIEW-${suffix}`,
+        first_name: "QA",
+        last_name: "Org Viewer",
+        work_email: `${username}@example.com`,
+        employment_status: "active",
+      },
+    });
+    const employeePayload = await employeeResponse.json();
+    expect(employeeResponse.ok(), `Employee create failed: ${employeeResponse.status()} ${JSON.stringify(employeePayload)}`).toBeTruthy();
+    const employeeId = employeePayload.id as string;
+    expect(employeeId).toBeTruthy();
+
+    const accessResponse = await page.request.post(`/api/hr-admin/employees/${employeeId}/access`, {
       data: {
         username,
         email: `${username}@example.com`,
         first_name: "QA",
         last_name: "Org Viewer",
+        display_name: "QA Org Viewer",
+        phone_number: "",
+        is_user_active: true,
+        must_change_password: false,
         membership_status: "active",
+        is_default_membership: true,
         role_ids: [roleId],
       },
     });
-    expect(inviteResponse.ok()).toBeTruthy();
-    const invitePayload = await inviteResponse.json();
-    const generatedPassword = invitePayload.generated_password as string;
+    const accessPayload = await accessResponse.json();
+    expect(accessResponse.ok(), `Employee access create failed: ${accessResponse.status()} ${JSON.stringify(accessPayload)}`).toBeTruthy();
+    const generatedPassword = accessPayload.generated_password as string;
     expect(generatedPassword).toBeTruthy();
 
     await page.request.post("/api/auth/logout").catch(() => null);
     await page.context().clearCookies();
     await gotoAuthenticated(page, "/hr-admin/organization?section=departments", { username, password: generatedPassword });
-    await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+    await expectPageReady(page, "Organization masters");
 
     const navigation = page.getByRole("navigation");
     await expect(navigation.getByRole("link", { name: /Organization/ })).toBeVisible();
-    await expect(navigation.getByRole("link", { name: /People/ })).toHaveCount(0);
-    await expect(navigation.getByRole("link", { name: /Payroll/ })).toHaveCount(0);
+    await expect(navigation.locator('a[href="/hr-admin/employees"]')).toHaveCount(0);
+    await expect(navigation.locator('a[href*="/hr-admin/payroll"]')).toHaveCount(0);
+    await expect(page.locator('main a[href="/hr-admin/employees"]')).toHaveCount(0);
     await expect(page.getByRole("link", { name: /^Create / })).toHaveCount(0);
     await expect(page.getByTestId("organization-import-workbench")).toHaveCount(0);
     await expect(page.locator(".employee-directory-item").first()).toBeVisible();
     await expect(page.locator(".employee-directory-item").first().getByRole("link", { name: "Edit" })).toHaveCount(0);
 
-    const snapshotResponse = await page.request.get("/api/hr-admin/organization");
-    expect(snapshotResponse.ok()).toBeTruthy();
-    const snapshot = (await snapshotResponse.json()) as { departments: Array<{ id: string; code: string }> };
-    expect(snapshot.departments.length).toBeGreaterThan(0);
-    const department = snapshot.departments[0];
-
-    const detailResponse = await page.request.get(`/api/hr-admin/organization/departments/${department.id}`);
+    const detailResponse = await page.request.get(`/api/hr-admin/organization/departments/${departmentId}`);
     expect(detailResponse.ok()).toBeTruthy();
 
     await page.goto("/hr-admin/organization/departments/new", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/\/hr-admin\/organization\?section=departments$/);
-    await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+    await expectPageReady(page, "Organization masters");
 
     const blockedCreateResponse = await page.request.post("/api/hr-admin/organization/departments", {
       data: {
@@ -500,7 +526,7 @@ test.describe("HR admin organization master CRUD", () => {
     expect(blockedCreateResponse.status()).toBe(403);
     expect(JSON.stringify(await blockedCreateResponse.json())).toContain("organization.manage");
 
-    const blockedEditResponse = await page.request.patch(`/api/hr-admin/organization/departments/${department.id}`, {
+    const blockedEditResponse = await page.request.patch(`/api/hr-admin/organization/departments/${departmentId}`, {
       data: { name: `Blocked Org Edit ${suffix}` },
     });
     expect(blockedEditResponse.status()).toBe(403);
@@ -561,7 +587,7 @@ test.describe("HR admin organization master CRUD", () => {
     ].join("\n");
 
     await gotoAuthenticated(page, "/hr-admin/organization");
-    await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+    await expectPageReady(page, "Organization masters");
     const workbench = page.getByTestId("organization-import-workbench");
     await expect(workbench).toBeVisible();
     await expect(workbench.getByRole("heading", { name: "Organization master import" })).toBeHidden();

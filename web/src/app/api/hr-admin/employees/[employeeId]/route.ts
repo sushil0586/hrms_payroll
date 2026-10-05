@@ -33,3 +33,25 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const payload = await upstreamResponse.json().catch(() => ({}));
   return NextResponse.json(payload, { status: upstreamResponse.status });
 }
+
+export async function GET(request: NextRequest, context: RouteContext) {
+  if (!API_BASE_URL) {
+    return NextResponse.json({ detail: "HRMS_API_BASE_URL is not configured." }, { status: 500 });
+  }
+
+  const token = request.cookies.get("hrms_access_token")?.value;
+  if (!token) {
+    return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
+  }
+
+  const { employeeId } = await context.params;
+  const upstreamResponse = await fetch(`${API_BASE_URL}/hr-admin/employees/${employeeId}/`, {
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+    cache: "no-store",
+  });
+
+  const payload = await upstreamResponse.json().catch(() => ({}));
+  return NextResponse.json(payload, { status: upstreamResponse.status });
+}

@@ -58,6 +58,44 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function LeaveEvidenceList({ item }: { item: LeaveRequestItem }) {
+  const attachments = item.attachments ?? [];
+  if (!attachments.length && !item.attachment_reference) {
+    return (
+      <div className="notice notice--compact">
+        <strong>No evidence attached.</strong>
+        <span className="muted">This request does not include a supporting document or reference.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="leave-evidence-list">
+      {attachments.map((attachment) => (
+        <a
+          className="leave-evidence-item"
+          href={`/api/manager/leave-requests/${item.id}/attachments/${attachment.id}/download`}
+          key={attachment.id}
+        >
+          <span>
+            <strong>{attachment.file_name}</strong>
+            <small>{attachment.label || attachment.action.replaceAll("_", " ")}</small>
+          </span>
+          <span className="button button--secondary">Download</span>
+        </a>
+      ))}
+      {!attachments.length && item.attachment_reference ? (
+        <div className="leave-evidence-item leave-evidence-item--static">
+          <span>
+            <strong>{item.attachment_reference}</strong>
+            <small>Reference only</small>
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function LeaveReviewModal({
   canDecide,
   item,
@@ -123,6 +161,11 @@ function LeaveReviewModal({
               />
             ) : null}
           </div>
+        </section>
+
+        <section className="ess-modal-section">
+          <h3>Evidence</h3>
+          <LeaveEvidenceList item={item} />
         </section>
 
         <ManagerDecisionPanel

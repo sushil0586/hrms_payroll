@@ -86,13 +86,14 @@ function buildHref(
 
 function resolveSelectedItem<T extends { id: string }>(items: T[], selectedId?: string, selectedDetail?: T | null) {
   if (selectedId) {
+    if (selectedDetail?.id === selectedId) {
+      return selectedDetail;
+    }
     const selected = items.find((item) => item.id === selectedId);
     if (selected) {
       return selected;
     }
-    if (selectedDetail?.id === selectedId) {
-      return selectedDetail;
-    }
+    return null;
   }
   return items[0] ?? null;
 }
@@ -511,10 +512,10 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
   const selectedLeaveId = normalizeParam(currentParams.leaveId);
   const selectedRegularizationId = normalizeParam(currentParams.regId);
   const [selectedLeaveDetail, selectedRegularizationDetail] = await Promise.all([
-    selectedLeaveId && canApproveLeave && !pendingLeave.items.some((item) => item.id === selectedLeaveId)
+    selectedLeaveId && canApproveLeave
       ? getMssLeaveRequestDetail(selectedLeaveId).then((result) => result.data).catch(() => null)
       : Promise.resolve(null),
-    selectedRegularizationId && canReviewAttendance && !pendingRegularizations.items.some((item) => item.id === selectedRegularizationId)
+    selectedRegularizationId && canReviewAttendance
       ? getMssAttendanceRegularizationDetail(selectedRegularizationId).then((result) => result.data).catch(() => null)
       : Promise.resolve(null),
   ]);

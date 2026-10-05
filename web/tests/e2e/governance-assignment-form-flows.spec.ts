@@ -227,7 +227,7 @@ test.describe("HR admin governance and assignment forms", () => {
     });
 
     await gotoAuthenticated(page, "/hr-admin/leave-policy-assignments/new");
-    await expectPageReady(page, /Create leave policy assignment/);
+    await expectPageReady(page, /Create leave assignment|Create leave policy assignment/);
 
     await selectFirstNonEmptyOption(page.getByRole("combobox", { name: /^Leave policy/ }));
     await expect(page.getByText("No overlapping leave assignment detected for this candidate scope.")).toBeVisible();
@@ -278,7 +278,7 @@ test.describe("HR admin governance and assignment forms", () => {
     const legalEntityName = await createLegalEntityWithoutBranches(page);
 
     for (const target of [
-      { path: "/hr-admin/leave-policy-assignments/new", title: /Create leave policy assignment/ },
+      { path: "/hr-admin/leave-policy-assignments/new", title: /Create leave assignment|Create leave policy assignment/ },
       { path: "/hr-admin/attendance-policy-assignments/new", title: /Create attendance policy assignment|Attendance policy assignment/ },
     ]) {
       await gotoAuthenticated(page, target.path);
@@ -348,13 +348,13 @@ test.describe("HR admin governance and assignment forms", () => {
 
   test("leave policy assignment creates, reads, updates, and deactivates through browser", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/leave-policy-assignments/new");
-    await expectPageReady(page, /Create leave policy assignment/);
+    await expectPageReady(page, /Create leave assignment|Create leave policy assignment/);
     await ensureOption(
       page.getByRole("combobox", { name: /^Leave policy/ }),
       () => createLeavePolicyThroughBrowser(page),
       async () => {
         await gotoAuthenticated(page, "/hr-admin/leave-policy-assignments/new");
-        await expectPageReady(page, /Create leave policy assignment/);
+        await expectPageReady(page, /Create leave assignment|Create leave policy assignment/);
       },
     );
 
@@ -382,7 +382,7 @@ test.describe("HR admin governance and assignment forms", () => {
     await expect(page.getByText("inactive").first()).toBeVisible();
 
     await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments/${created.id}/edit`);
-    await expectPageReady(page, /Edit leave policy assignment/);
+    await expectPageReady(page, /Edit leave assignment|Edit leave policy assignment/);
     await expect(field(page.locator("form").first(), "Priority")).toHaveValue(String(priority));
     await field(page.locator("form").first(), "Priority").fill(String(priority + 1));
     await submitAndCapture(page, `leave-policy-assignments/${created.id}`, "PATCH", async () => {

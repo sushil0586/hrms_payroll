@@ -7,6 +7,10 @@ function field(scope: Page | Locator, label: string | RegExp) {
   return scope.getByLabel(label, { exact: typeof label === "string" });
 }
 
+function submitCorrectionButton(scope: Page | Locator) {
+  return scope.getByRole("button", { name: /Submit (correction|regularization)/ });
+}
+
 async function openRegularizationModal(page: Page) {
   await page.getByRole("button", { name: "Regularize attendance" }).first().click();
   const dialog = page.getByRole("dialog", { name: "Regularize attendance" });
@@ -95,19 +99,19 @@ test.describe("ESS Attendance launch certification", () => {
 
     const dialog = await openRegularizationModal(page);
     await expect(dialog.getByText("Reason required.")).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Submit regularization" })).toBeDisabled();
+    await expect(submitCorrectionButton(dialog)).toBeDisabled();
 
     await field(dialog, "Reason").fill("Forgot to punch out after client meeting");
     await expect(dialog.getByText("Reason required.")).toHaveCount(0);
-    await expect(dialog.getByRole("button", { name: "Submit regularization" })).toBeEnabled();
+    await expect(submitCorrectionButton(dialog)).toBeEnabled();
 
     await field(dialog, "Requested check-in").fill("2026-10-02T18:00");
     await field(dialog, "Requested check-out").fill("2026-10-02T09:30");
     await expect(dialog.getByText("Check time order.")).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Submit regularization" })).toBeDisabled();
+    await expect(submitCorrectionButton(dialog)).toBeDisabled();
 
     await field(dialog, "Requested check-out").fill("2026-10-02T19:00");
-    await expect(dialog.getByRole("button", { name: "Submit regularization" })).toBeEnabled();
+    await expect(submitCorrectionButton(dialog)).toBeEnabled();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
   });
@@ -153,7 +157,7 @@ test.describe("ESS Attendance launch certification", () => {
       });
     });
 
-    await dialog.getByRole("button", { name: "Submit regularization" }).click();
+    await submitCorrectionButton(dialog).click();
     await expect(dialog.getByText("Submitted.", { exact: true })).toBeVisible();
     await expect(dialog.getByText("Attendance regularization submitted.")).toBeVisible();
   });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { LeaveRequestItem } from "@/lib/types";
 
@@ -25,11 +25,17 @@ export function LeaveRequestLifecycleActions({ item, isDemo }: Props) {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState<"withdraw" | "cancel" | null>(null);
+  const isSubmittingRef = useRef(false);
 
   async function runAction(action: "withdraw" | "cancel") {
+    if (isSubmittingRef.current) {
+      return;
+    }
+    isSubmittingRef.current = true;
     setError("");
     if (isDemo) {
       setError("Lifecycle actions are only available in live mode.");
+      isSubmittingRef.current = false;
       return;
     }
     setIsSubmitting(action);
@@ -39,17 +45,27 @@ export function LeaveRequestLifecycleActions({ item, isDemo }: Props) {
     if (attachmentFile) {
       body.set("attachment_file", attachmentFile);
     }
-    const response = await fetch(`/api/me/leave-requests/${item.id}/${action}/`, {
-      method: "POST",
-      body,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/me/leave-requests/${item.id}/${action}/`, {
+        method: "POST",
+        body,
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(null);
+      isSubmittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(null);
+      isSubmittingRef.current = false;
       return;
     }
     setIsSubmitting(null);
+    isSubmittingRef.current = false;
     router.refresh();
   }
 

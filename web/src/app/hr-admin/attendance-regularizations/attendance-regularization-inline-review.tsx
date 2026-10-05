@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { AttendanceRegularizationItem } from "@/lib/types";
 
@@ -24,24 +24,39 @@ export function AttendanceRegularizationInlineReview({ item }: Props) {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   async function handleDecision(action: "approve" | "reject") {
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
     setError("");
     setSuccessMessage("");
     setIsSubmitting(true);
-    const response = await fetch(`/api/hr-admin/attendance-regularizations/${item.id}/${action}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comment }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/hr-admin/attendance-regularizations/${item.id}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment }),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      submittingRef.current = false;
       return;
     }
     setSuccessMessage(action === "approve" ? "Regularization approved." : "Regularization rejected.");
     setIsSubmitting(false);
+    submittingRef.current = false;
     router.refresh();
   }
 

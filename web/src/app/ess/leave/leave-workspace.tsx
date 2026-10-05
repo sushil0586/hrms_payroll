@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
@@ -301,6 +301,7 @@ function LeaveApplyModal({
   const [evidenceReference, setEvidenceReference] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((item) => item.id === leaveTypeId) ?? leaveTypes[0] ?? null,
     [leaveTypeId, leaveTypes],
@@ -332,21 +333,35 @@ function LeaveApplyModal({
 
   async function submitLeave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
     setFeedback(null);
     if (isDemo) {
       setFeedback({ tone: "error", message: "Leave requests are only available in live mode." });
+      submittingRef.current = false;
       return;
     }
     const formData = new FormData(event.currentTarget);
     setSubmitting(true);
-    const response = await fetch("/api/me/leave-requests", {
-      method: "POST",
-      body: formData,
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/me/leave-requests", {
+        method: "POST",
+        body: formData,
+      });
+    } catch {
+      setFeedback({ tone: "error", message: "Unable to reach the server. Check your connection and try again." });
+      setSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     setSubmitting(false);
     if (!response.ok) {
       setFeedback({ tone: "error", message: getErrorMessage(payload) });
+      submittingRef.current = false;
       return;
     }
     setFeedback({ tone: "success", message: "Leave request submitted." });

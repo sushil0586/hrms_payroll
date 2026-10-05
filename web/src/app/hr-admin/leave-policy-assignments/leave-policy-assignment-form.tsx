@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -54,6 +54,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminLeavePolicyAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
   const hasEmployeeOverride = Boolean(formValue.employee_id);
@@ -128,21 +129,34 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmittingRef.current) {
+      return;
+    }
     if (conflictCheck?.has_blocking_conflict) {
       setError(conflictCheck.summary);
       return;
     }
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError("");
-    const response = await fetch(mode === "create" ? "/api/hr-admin/leave-policy-assignments" : `/api/hr-admin/leave-policy-assignments/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/leave-policy-assignments" : `/api/hr-admin/leave-policy-assignments/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
     router.push("/hr-admin/leave-policy-assignments");

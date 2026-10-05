@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -168,12 +168,17 @@ function AttendanceRegularizationModal({
   const [reason, setReason] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const selectedRecord = attendanceRecords.find((record) => record.id === selectedRecordId) ?? null;
   const hasTimeOrderRisk = Boolean(checkIn && checkOut && new Date(checkOut) < new Date(checkIn));
   const canSubmit = Boolean(selectedRecord && !selectedRecord.is_locked && !hasTimeOrderRisk && reason.trim());
 
   async function submitRegularization(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
     setFeedback(null);
     if (!canSubmit) {
       setFeedback({
@@ -184,29 +189,40 @@ function AttendanceRegularizationModal({
             ? "Requested check-out cannot be earlier than requested check-in."
             : "Add a clear reason before submitting the correction.",
       });
+      submittingRef.current = false;
       return;
     }
     if (isDemo) {
       setFeedback({ tone: "error", message: "Attendance regularizations are only available in live mode." });
+      submittingRef.current = false;
       return;
     }
     const formData = new FormData(event.currentTarget);
     setSubmitting(true);
-    const response = await fetch("/api/me/attendance-regularizations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        attendance_record_id: String(formData.get("attendance_record_id") ?? ""),
-        requested_status: String(formData.get("requested_status") ?? "present"),
-        requested_check_in_at: String(formData.get("requested_check_in_at") ?? "") || null,
-        requested_check_out_at: String(formData.get("requested_check_out_at") ?? "") || null,
-        reason: String(formData.get("reason") ?? ""),
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/me/attendance-regularizations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attendance_record_id: String(formData.get("attendance_record_id") ?? ""),
+          requested_status: String(formData.get("requested_status") ?? "present"),
+          requested_check_in_at: String(formData.get("requested_check_in_at") ?? "") || null,
+          requested_check_out_at: String(formData.get("requested_check_out_at") ?? "") || null,
+          reason: String(formData.get("reason") ?? ""),
+        }),
+      });
+    } catch {
+      setFeedback({ tone: "error", message: "Unable to reach the server. Check your connection and try again." });
+      setSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     setSubmitting(false);
     if (!response.ok) {
       setFeedback({ tone: "error", message: getErrorMessage(payload) });
+      submittingRef.current = false;
       return;
     }
     setFeedback({ tone: "success", message: "Attendance regularization submitted." });
