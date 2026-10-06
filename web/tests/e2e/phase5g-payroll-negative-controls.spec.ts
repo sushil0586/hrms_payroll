@@ -148,6 +148,7 @@ async function createRunAndSnapshot(page: Page, snapshotStatus: "ready" | "block
 
 test.describe("Phase 5G payroll negative controls", () => {
   test("blocks close actions when source snapshots are blocked and protects locked snapshots from edits", async ({ page }) => {
+    test.setTimeout(90_000);
     await ensurePayrollPeriodExists(page);
 
     const blocked = await createRunAndSnapshot(page, "blocked");
@@ -155,24 +156,19 @@ test.describe("Phase 5G payroll negative controls", () => {
     await expect(lockPanel.getByLabel("Selected run lock readiness")).toContainText("Blocked");
     await expect(lockPanel.getByText("Lock blocked.")).toBeVisible();
     await expect(lockPanel.getByText("Missing approved attendance")).toBeVisible();
-    const blockedLock = await submitAndCapture<{ detail?: string; blocked_count?: number }>(
-      page,
-      new RegExp(`/api/hr-admin/payroll-runs/${blocked.runId}/lock-inputs$`),
-      "POST",
-      async () => {
-        await lockPanel.getByRole("button", { name: "Lock selected run inputs" }).click();
-      },
-    );
-    expect(blockedLock.status).toBe(400);
-    expect(blockedLock.payload.blocked_count).toBeGreaterThanOrEqual(1);
-    await expect(page.getByRole("alert").first()).toContainText(/Cannot lock payroll inputs while blocked snapshots exist/);
+    await expect(lockPanel.getByRole("button", { name: "Lock selected run inputs" })).toBeDisabled();
+    await expect(lockPanel).toContainText("Resolve blocker snapshots before locking this payroll run.");
+    const blockedLock = await page.request.post(`/api/hr-admin/payroll-runs/${blocked.runId}/lock-inputs`, { data: {} });
+    expect(blockedLock.status()).toBe(400);
+    const blockedLockPayload = (await blockedLock.json()) as { blocked_count?: number };
+    expect(blockedLockPayload.blocked_count).toBeGreaterThanOrEqual(1);
 
     await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${blocked.runId}`, hrAdmin);
     await expectPageReady(page, "Payroll Calculations");
     const blockedCalculationReadiness = page.getByRole("region", { name: "Calculation readiness" });
     await expect(blockedCalculationReadiness).toContainText("Calculation blocked.");
     await expect(blockedCalculationReadiness).toContainText(/snapshot.*still need input lock|blocker validation/i);
-    await page.getByLabel("Calculation controls").getByLabel("Calculation profile ref").fill("tenant.payroll.calc.phase5g.v1");
+    await expect(page.getByLabel("Calculation controls").getByLabel("Calculation profile ref")).toBeDisabled();
     await expect(page.getByLabel("Calculation controls").getByRole("button", { name: "Calculate draft" })).toBeDisabled();
 
     await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);

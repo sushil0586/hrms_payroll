@@ -96,12 +96,12 @@ test.describe("Phase R4-H compliance report hub certification", () => {
 
   test("employee cannot access compliance report hub", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     await page.goto("/hr-admin/reports/compliance", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("compliance-report-hub")).toHaveCount(0);
-    await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
+    await expect(page.getByRole("heading", { name: "My workspace" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Compliance Hub" })).toHaveCount(0);
   });
 });

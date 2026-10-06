@@ -5228,6 +5228,17 @@ export type LeaveRequestItem = {
     action: string;
     label: string;
   }>;
+  approval_steps?: Array<{
+    level: number;
+    name: string;
+    status: string;
+    actor_type: string;
+    manager_name: string;
+    manager_email: string;
+    comment: string;
+    acted_at: string | null;
+    is_current: boolean;
+  }>;
   approval_route?: string;
   required_attachment_label?: string | null;
   manager_comment?: string;
@@ -5255,6 +5266,18 @@ export type LeaveRequestItem = {
   designation?: string | null;
 };
 
+export type ApprovalStepItem = {
+  level: number;
+  name: string;
+  status: string;
+  actor_type: string;
+  manager_name: string;
+  manager_email: string;
+  comment: string;
+  acted_at: string | null;
+  is_current: boolean;
+};
+
 export type AttendanceRegularizationItem = {
   id: string;
   attendance_record_id: string;
@@ -5271,6 +5294,7 @@ export type AttendanceRegularizationItem = {
   manager_comment?: string;
   rejection_reason?: string;
   workflow_reference: string;
+  approval_steps?: ApprovalStepItem[];
   applied_at: string | null;
   resolved_at?: string | null;
   created_at: string;

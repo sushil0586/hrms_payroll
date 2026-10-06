@@ -120,9 +120,32 @@ export function DocumentComplianceReportWorkspace({ documents }: { documents: Hr
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setVerificationStatus("All");
+    setRecordStatus("All");
+    setCategory("All");
+    setExpiryFocus("All");
+    setSortBy("risk");
+    setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Document compliance report workspace">
       <div className="report-catalog-workspace document-compliance-report" data-testid="document-compliance-report">
+        <div className="report-command-panel">
+          <div>
+            <span className="workspace-card__eyebrow">Document compliance</span>
+            <h2>Verification and expiry evidence</h2>
+            <p className="section-copy section-copy-soft">Review missing verification, expiry risk, and re-upload follow-up before exporting or printing the compliance view.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
+            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
+          </div>
+        </div>
+
         <div className="metric-grid-modern payroll-setup-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Documents</span>
@@ -146,56 +169,63 @@ export function DocumentComplianceReportWorkspace({ documents }: { documents: Hr
           </article>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Document compliance filters">
-          <label>
-            <span>Search documents</span>
-            <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, category, title, number" />
-          </label>
-          <label>
-            <span>Verification status</span>
-            <select aria-label="Verification status" className="input-control" value={verificationStatus} onChange={(event) => updateFilter(() => setVerificationStatus(event.target.value))}>
-              {verificationStatuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Record status</span>
-            <select aria-label="Record status" className="input-control" value={recordStatus} onChange={(event) => updateFilter(() => setRecordStatus(event.target.value))}>
-              {recordStatuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Category</span>
-            <select aria-label="Category" className="input-control" value={category} onChange={(event) => updateFilter(() => setCategory(event.target.value))}>
-              {categories.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Expiry focus</span>
-            <select aria-label="Expiry focus" className="input-control" value={expiryFocus} onChange={(event) => updateFilter(() => setExpiryFocus(event.target.value))}>
-              <option value="All">All documents</option>
-              <option value="expiring">Expiring soon</option>
-              <option value="expired">Expired</option>
-              <option value="missing_expiry">Missing expiry</option>
-            </select>
-          </label>
-          <label>
-            <span>Sort</span>
-            <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
-              <option value="risk">Compliance risk</option>
-              <option value="employee">Employee</option>
-              <option value="verification">Verification status</option>
-              <option value="expiry">Expiry date</option>
-              <option value="category">Category</option>
-            </select>
-          </label>
+        <div className="report-filter-panel" aria-label="Document compliance filters">
+          <div className="report-filter-panel__header">
+            <div>
+              <strong>Filter document evidence</strong>
+              <span>Use verification and expiry filters to prepare HR follow-up queues.</span>
+            </div>
+            <button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button>
+          </div>
+          <div className="report-filter-grid report-filter-grid--hr-core">
+            <label className="report-filter-field report-filter-field--wide">
+              <span>Search documents</span>
+              <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, category, title, number" />
+            </label>
+            <label className="report-filter-field">
+              <span>Verification status</span>
+              <select aria-label="Verification status" className="input-control" value={verificationStatus} onChange={(event) => updateFilter(() => setVerificationStatus(event.target.value))}>
+                {verificationStatuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Record status</span>
+              <select aria-label="Record status" className="input-control" value={recordStatus} onChange={(event) => updateFilter(() => setRecordStatus(event.target.value))}>
+                {recordStatuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Category</span>
+              <select aria-label="Category" className="input-control" value={category} onChange={(event) => updateFilter(() => setCategory(event.target.value))}>
+                {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Expiry focus</span>
+              <select aria-label="Expiry focus" className="input-control" value={expiryFocus} onChange={(event) => updateFilter(() => setExpiryFocus(event.target.value))}>
+                <option value="All">All documents</option>
+                <option value="expiring">Expiring soon</option>
+                <option value="expired">Expired</option>
+                <option value="missing_expiry">Missing expiry</option>
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Sort</span>
+              <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
+                <option value="risk">Compliance risk</option>
+                <option value="employee">Employee</option>
+                <option value="verification">Verification status</option>
+                <option value="expiry">Expiry date</option>
+                <option value="category">Category</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{categories.length - 1}</strong> categories</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => complianceRisk(item) === "High").length}</strong> high risk</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
         </div>
 
         <div className="report-catalog-table-wrap">

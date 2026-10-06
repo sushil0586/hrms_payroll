@@ -131,6 +131,48 @@ function mergeProviderRoute(config: Record<string, unknown>, form: FormValue) {
   return route;
 }
 
+function firstMissingField(form: FormValue) {
+  const requiredFields: Array<[keyof FormValue, string]> = [
+    ["provider_name", "Provider name"],
+    ["provider_ref", "Provider ref"],
+    ["environment_ref", "Environment"],
+    ["status", "Status"],
+  ];
+  const runtimeFields: Array<[keyof FormValue, string]> = [
+    ["adapter_ref", "Adapter ref"],
+    ["channel_ref", "Channel ref"],
+    ["callback_profile_ref", "Callback profile"],
+    ["callback_verification_ref", "Callback verification"],
+    ["retry_policy_ref", "Retry policy"],
+    ["certification_profile_ref", "Certification profile"],
+  ];
+  const credentialFields: Array<[keyof FormValue, string]> = [
+    ["credential_ref", "Credential ref"],
+    ["credential_profile_ref", "Credential profile"],
+  ];
+
+  const missingBase = requiredFields.find(([field]) => !String(form[field] ?? "").trim());
+  if (missingBase) {
+    return missingBase[1];
+  }
+
+  if (form.real_provider_route || form.live_delivery_enabled) {
+    const missingRuntime = runtimeFields.find(([field]) => !String(form[field] ?? "").trim());
+    if (missingRuntime) {
+      return missingRuntime[1];
+    }
+  }
+
+  if (form.credential_required || form.requires_real_credentials) {
+    const missingCredential = credentialFields.find(([field]) => !String(form[field] ?? "").trim());
+    if (missingCredential) {
+      return missingCredential[1];
+    }
+  }
+
+  return "";
+}
+
 export function ProviderConnectionEditor({ connection, providerKinds, connectionStatuses }: Props) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -152,6 +194,17 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
   async function save() {
     setIsSaving(true);
     setNotice("");
+    const missingField = firstMissingField(formValue);
+    if (missingField) {
+      setIsSaving(false);
+      setNotice(`${missingField} is required before this provider setup can be saved.`);
+      return;
+    }
+    if (formValue.live_delivery_enabled && !formValue.real_provider_route) {
+      setIsSaving(false);
+      setNotice("Live delivery requires a real provider route.");
+      return;
+    }
     let config: Record<string, unknown>;
     try {
       config = configRecord(JSON.parse(formValue.config_snapshot || "{}"));

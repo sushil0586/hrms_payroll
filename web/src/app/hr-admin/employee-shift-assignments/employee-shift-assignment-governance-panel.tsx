@@ -55,7 +55,7 @@ export function EmployeeShiftAssignmentGovernancePanel({ employees }: Props) {
       }
       setResult(payload);
     } catch {
-      setError("Unable to inspect shift resolution.");
+      setError("Unable to reach the server. Check your connection and try again.");
     } finally {
       setIsLoading(false);
     }

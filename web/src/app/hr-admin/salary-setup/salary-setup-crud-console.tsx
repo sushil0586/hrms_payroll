@@ -288,6 +288,37 @@ function nullable(value: string) {
   return value.trim() ? value.trim() : null;
 }
 
+function isCurrencyCode(value: string) {
+  return /^[A-Z]{3}$/.test(value.trim());
+}
+
+function isIsoDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00`));
+}
+
+function isNumberAtLeast(value: string, min: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= min;
+}
+
+function isWholeNumberAtLeast(value: string, min: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= min;
+}
+
+function validateDateWindow(from: string, to: string, label: string) {
+  if (!isIsoDate(from)) {
+    return `${label} effective from must be a valid date.`;
+  }
+  if (to && !isIsoDate(to)) {
+    return `${label} effective to must be a valid date.`;
+  }
+  if (to && to < from) {
+    return `${label} effective to cannot be earlier than effective from.`;
+  }
+  return "";
+}
+
 function assignmentTemplateCsv() {
   return `${assignmentImportHeaders.join(",")}\n`;
 }
@@ -756,6 +787,84 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
     setRecordPages((current) => ({ ...current, [tab]: Math.max(1, page) }));
   }
 
+  function reportValidation(family: ConfigFamily, message: string) {
+    setFeedback({ family, tone: "error", message });
+    return false;
+  }
+
+  function validateComponent() {
+    if (componentForm.value_type === "formula" && !componentForm.formula_ref.trim()) {
+      return reportValidation("component", "Formula reference is required when value type is formula.");
+    }
+    if (!componentForm.payslip_visibility.trim()) {
+      return reportValidation("component", "Payslip visibility must be set before saving a salary component.");
+    }
+    return true;
+  }
+
+  function validateStructure() {
+    if (!isCurrencyCode(structureForm.currency_code)) {
+      return reportValidation("structure", "Currency code must be a 3-letter ISO code such as INR.");
+    }
+    return true;
+  }
+
+  function validateVersion() {
+    if (!versionForm.structure_id) {
+      return reportValidation("version", "Select a salary structure before creating a version.");
+    }
+    if (!isWholeNumberAtLeast(versionForm.version, 1)) {
+      return reportValidation("version", "Version must be a whole number greater than or equal to 1.");
+    }
+    const dateError = validateDateWindow(versionForm.effective_from, versionForm.effective_to, "Version");
+    if (dateError) {
+      return reportValidation("version", dateError);
+    }
+    if (!isNumberAtLeast(versionForm.annual_ctc, 0)) {
+      return reportValidation("version", "Annual CTC must be zero or a positive amount.");
+    }
+    if (!isCurrencyCode(versionForm.currency_code)) {
+      return reportValidation("version", "Currency code must be a 3-letter ISO code such as INR.");
+    }
+    return true;
+  }
+
+  function validateLine() {
+    if (!lineForm.structure_version_id || !lineForm.component_id) {
+      return reportValidation("line", "Select both a structure version and a salary component before saving the line.");
+    }
+    if (!isWholeNumberAtLeast(lineForm.display_order, 1)) {
+      return reportValidation("line", "Display order must be a whole number greater than or equal to 1.");
+    }
+    if (lineForm.amount && !isNumberAtLeast(lineForm.amount, 0)) {
+      return reportValidation("line", "Amount must be zero or a positive amount.");
+    }
+    if (lineForm.percentage && (!isNumberAtLeast(lineForm.percentage, 0) || Number(lineForm.percentage) > 100)) {
+      return reportValidation("line", "Percentage must be between 0 and 100.");
+    }
+    if (!lineForm.amount.trim() && !lineForm.percentage.trim() && !lineForm.formula_ref.trim()) {
+      return reportValidation("line", "Set an amount, percentage, or formula reference before saving a component line.");
+    }
+    return true;
+  }
+
+  function validateAssignment() {
+    if (!assignmentForm.employee_id || !assignmentForm.structure_version_id) {
+      return reportValidation("assignment", "Select both an employee and a structure version before saving the assignment.");
+    }
+    const dateError = validateDateWindow(assignmentForm.effective_from, assignmentForm.effective_to, "Assignment");
+    if (dateError) {
+      return reportValidation("assignment", dateError);
+    }
+    if (assignmentForm.annual_ctc_override && !isNumberAtLeast(assignmentForm.annual_ctc_override, 0)) {
+      return reportValidation("assignment", "Annual CTC override must be zero or a positive amount.");
+    }
+    if (assignmentForm.status === "active" && !assignmentForm.assignment_reason.trim()) {
+      return reportValidation("assignment", "Assignment reason is required before activating employee salary coverage.");
+    }
+    return true;
+  }
+
   function buildAssignmentImportRow(row: Record<string, string>, index: number, batchKeys: Set<string>): AssignmentImportRow {
     const errors: string[] = [];
     const employeeCode = row.employee_code.trim();
@@ -871,11 +980,18 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
     setSubmitting(family);
     setFeedback(null);
 
-    const response = await fetch(itemId ? `/api/hr-admin/${path}/${itemId}` : `/api/hr-admin/${path}`, {
-      method: itemId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(itemId ? `/api/hr-admin/${path}/${itemId}` : `/api/hr-admin/${path}`, {
+        method: itemId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      setSubmitting(null);
+      setFeedback({ family, tone: "error", message: `Network connection failed while saving ${familyLabels[family]}. Please retry.` });
+      return;
+    }
 
     const payload = await response.json().catch(() => ({}));
     setSubmitting(null);
@@ -1086,6 +1202,9 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           id="salary-component-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!validateComponent()) {
+              return;
+            }
             void save<HrAdminSalaryComponent>("component", "salary-components", componentForm.id, {
               code: componentForm.code,
               name: componentForm.name,
@@ -1150,6 +1269,9 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           id="salary-structure-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!validateStructure()) {
+              return;
+            }
             void save<HrAdminSalaryStructure>("structure", "salary-structures", structureForm.id, {
               code: structureForm.code,
               name: structureForm.name,
@@ -1205,6 +1327,9 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           id="salary-version-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!validateVersion()) {
+              return;
+            }
             void save<HrAdminSalaryStructureVersion>("version", "salary-structure-versions", versionForm.id, {
               structure_id: versionForm.structure_id,
               version: Number(versionForm.version),
@@ -1266,6 +1391,9 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           id="salary-line-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!validateLine()) {
+              return;
+            }
             void save<HrAdminSalaryStructureComponent>("line", "salary-structure-components", lineForm.id, {
               structure_version_id: lineForm.structure_version_id,
               component_id: lineForm.component_id,
@@ -1326,6 +1454,9 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
           id="salary-assignment-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!validateAssignment()) {
+              return;
+            }
             void save<HrAdminEmployeeSalaryAssignment>("assignment", "employee-salary-assignments", assignmentForm.id, {
               employee_id: assignmentForm.employee_id,
               structure_version_id: assignmentForm.structure_version_id,

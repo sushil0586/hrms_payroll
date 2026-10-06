@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
 import { ComplianceEvidenceStrip } from "@/app/hr-admin/compliance-evidence-strip";
+import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { ReportExportAuditWorkspace } from "./report-export-audit-workspace";
 
-export default function ReportExportAuditsPage() {
+export default async function ReportExportAuditsPage() {
+  await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
+
   return (
     <main className="shell">
       <PageIntro

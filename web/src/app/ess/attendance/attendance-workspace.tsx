@@ -87,6 +87,21 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function getCurrentApprovalStep(item: AttendanceRegularizationItem) {
+  return (item.approval_steps ?? []).find((step) => step.is_current) ?? null;
+}
+
+function getApprovalWaitingLabel(item: AttendanceRegularizationItem) {
+  if (item.status !== "pending") {
+    return "";
+  }
+  const currentStep = getCurrentApprovalStep(item);
+  if (!currentStep) {
+    return "Pending approval from the configured approver";
+  }
+  return `Pending approval from ${currentStep.manager_name || currentStep.name || `Level ${currentStep.level} approver`}`;
+}
+
 function useEscapeClose(onClose: () => void) {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -103,13 +118,14 @@ function useEscapeClose(onClose: () => void) {
 function AttendanceDecisionCard({ item }: { item: AttendanceRegularizationItem }) {
   const isOpen = item.status === "pending";
   const tone = item.status === "rejected" ? "blocked" : isOpen ? "current" : "complete";
-  const message = item.manager_comment || item.rejection_reason || (isOpen ? "Waiting for manager review." : "No manager note was added.");
+  const waitingLabel = getApprovalWaitingLabel(item);
+  const message = item.manager_comment || item.rejection_reason || (isOpen ? "The correction is still moving through the configured approval route." : "No manager note was added.");
 
   return (
     <section className={`attendance-decision-card attendance-decision-card--${tone}`}>
       <div>
-        <span className="detail-label">Manager decision</span>
-        <h3>{isOpen ? "Waiting for review" : formatStatus(item.status)}</h3>
+        <span className="detail-label">Approval status</span>
+        <h3>{waitingLabel || formatStatus(item.status)}</h3>
         <p>{message}</p>
       </div>
       <span className={statusClass(item.status)}>{formatStatus(item.status)}</span>
@@ -119,6 +135,7 @@ function AttendanceDecisionCard({ item }: { item: AttendanceRegularizationItem }
 
 function AttendanceTimeline({ item }: { item: AttendanceRegularizationItem }) {
   const hasDecision = Boolean(item.resolved_at || item.manager_comment || item.rejection_reason || item.status !== "pending");
+  const approvalSteps = item.approval_steps ?? [];
   const timeline = [
     {
       label: "Submitted",
@@ -126,12 +143,26 @@ function AttendanceTimeline({ item }: { item: AttendanceRegularizationItem }) {
       when: item.applied_at ?? item.created_at,
       state: "complete",
     },
-    {
-      label: hasDecision ? "Manager decision" : "Awaiting decision",
-      detail: hasDecision ? (item.manager_comment || item.rejection_reason || `Request ${formatStatus(item.status)}.`) : "Your manager still needs to review this correction.",
-      when: item.resolved_at ?? null,
-      state: hasDecision ? (item.status === "rejected" ? "blocked" : "complete") : "current",
-    },
+    ...(
+      approvalSteps.length
+        ? approvalSteps.map((step) => ({
+            label: `Level ${step.level}: ${step.name}`,
+            detail: [
+              step.manager_name ? `Approver: ${step.manager_name}` : "Approver not assigned",
+              step.comment ? `Note: ${step.comment}` : null,
+            ].filter(Boolean).join(" • "),
+            when: step.acted_at,
+            state: step.status === "rejected" ? "blocked" : step.is_current ? "current" : step.status === "approved" ? "complete" : "pending",
+          }))
+        : [
+            {
+              label: hasDecision ? "Manager decision" : "Awaiting decision",
+              detail: hasDecision ? (item.manager_comment || item.rejection_reason || `Request ${formatStatus(item.status)}.`) : "Your manager still needs to review this correction.",
+              when: item.resolved_at ?? null,
+              state: hasDecision ? (item.status === "rejected" ? "blocked" : "complete") : "current",
+            },
+          ]
+    ),
   ];
 
   return (
@@ -526,27 +557,30 @@ export function AttendanceWorkspace({ attendanceRecords, currentParams, dashboar
           </div>
           <div className="leave-request-grid">
             {visibleRegularizations.length ? (
-              visibleRegularizations.map((item) => (
-                <button
-                  className="leave-request-card"
-                  key={item.id}
-                  onClick={() => {
-                    setDismissedRegularizationId(null);
-                    setClickedRegularization(item);
-                  }}
-                  type="button"
-                >
-                  <span className="leave-request-card__main">
-                    <strong>{formatDate(item.attendance_date)}</strong>
-                    <small>{formatStatus(item.current_status)} to {formatStatus(item.requested_status)}</small>
-                    <span className="muted">{item.reason || "No reason provided."}</span>
-                  </span>
-                  <span className="leave-request-card__side">
-                    <span className={statusClass(item.status)}>{formatStatus(item.status)}</span>
-                    <span className="queue-summary-chip">{formatDateTime(item.applied_at ?? item.created_at)}</span>
-                  </span>
-                </button>
-              ))
+              visibleRegularizations.map((item) => {
+                const waitingLabel = getApprovalWaitingLabel(item);
+                return (
+                  <button
+                    className="leave-request-card"
+                    key={item.id}
+                    onClick={() => {
+                      setDismissedRegularizationId(null);
+                      setClickedRegularization(item);
+                    }}
+                    type="button"
+                  >
+                    <span className="leave-request-card__main">
+                      <strong>{formatDate(item.attendance_date)}</strong>
+                      <small>{formatStatus(item.current_status)} to {formatStatus(item.requested_status)}</small>
+                      <span className="muted">{waitingLabel || item.reason || "No reason provided."}</span>
+                    </span>
+                    <span className="leave-request-card__side">
+                      <span className={statusClass(item.status)}>{formatStatus(item.status)}</span>
+                      <span className="queue-summary-chip">{formatDateTime(item.applied_at ?? item.created_at)}</span>
+                    </span>
+                  </button>
+                );
+              })
             ) : (
               <div className="notice">
                 <strong>{regularizations.items.length ? "No regularizations match this search." : "No regularizations in this view."}</strong>

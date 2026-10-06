@@ -574,6 +574,7 @@ from apps.payroll.services import (
     schedule_payroll_provider_delivery_retry,
     save_payroll_provider_schema_mapping_pack_for_actor,
     simulate_payroll_provider_schema_mapping_pack_for_actor,
+    payroll_provider_connection_readiness_snapshot,
     sync_payroll_provider_connection_readiness,
     submit_payroll_adjustment,
     submit_payroll_run_review,
@@ -12159,6 +12160,22 @@ def save_hr_admin_payroll_provider_connection(actor, data: dict, item: PayrollPr
     ]:
         if field_name in data:
             setattr(item, field_name, data[field_name])
+    if item.status == PayrollProviderConnectionStatus.ACTIVE:
+        readiness = payroll_provider_connection_readiness_snapshot(item)
+        blockers = [str(ref) for ref in readiness.get("blocking_gate_refs", []) if ref]
+        active_mapping_exists = False
+        if item.pk:
+            active_mapping_exists = PayrollProviderSchemaMappingPack.objects.filter(
+                tenant=actor.tenant,
+                status=PayrollProviderSchemaMappingPackStatus.ACTIVE,
+            ).filter(Q(provider_connection=item) | Q(provider_ref=item.provider_ref)).exists()
+        if not active_mapping_exists:
+            blockers.append("active_schema_mapping_pack")
+        if blockers or not readiness.get("active_allowed"):
+            raise DjangoValidationError({
+                "status": "Active provider connections require certification, runtime gates, credential references, callback/retry setup, and an active schema mapping pack before activation: "
+                + ", ".join(blockers or ["provider_activation_not_ready"])
+            })
     item.updated_by = getattr(actor, "user", None)
     item.save()
     return sync_payroll_provider_connection_readiness(item)

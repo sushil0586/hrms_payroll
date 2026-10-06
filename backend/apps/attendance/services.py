@@ -30,7 +30,7 @@ from apps.attendance.models import (
 )
 from apps.employees.models import Employee, EmploymentStatus
 from apps.notifications.services import trigger_notification_event
-from apps.workflows.models import WorkflowAction, WorkflowModule
+from apps.workflows.models import WorkflowAction, WorkflowActorType, WorkflowModule
 from apps.workflows.services import create_workflow_instance, resolve_workflow_action
 
 
@@ -1226,6 +1226,16 @@ def submit_regularization(
         employee_identifier=str(employee.id),
         payload_snapshot={"attendance_regularization_id": str(regularization.id)},
         manager_membership=manager_membership,
+        approval_steps=[
+            {
+                "name": "Manager Approval",
+                "actor_type": WorkflowActorType.MANAGER,
+                "membership": manager_membership,
+                "actor_identifier": str(manager_membership.user_id),
+            }
+        ]
+        if manager_membership
+        else None,
     )
     regularization.workflow_reference = str(workflow_instance.id)
     regularization.save(update_fields=["workflow_reference", "updated_at"])

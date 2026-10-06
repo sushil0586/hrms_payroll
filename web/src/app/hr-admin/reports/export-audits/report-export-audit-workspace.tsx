@@ -41,6 +41,27 @@ function chipClass(value: string) {
   return "record-chip";
 }
 
+function auditMatchesFilters(item: ExportAudit, filters: { exportType: string; query: string; reportKey: string }) {
+  if (filters.reportKey !== "All" && item.report_key !== filters.reportKey) return false;
+  if (filters.exportType !== "All" && item.export_type !== filters.exportType) return false;
+  const normalizedQuery = filters.query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  return [
+    item.actor_display,
+    item.report_key,
+    item.export_type,
+    item.checksum_sha256,
+    item.request_identifier,
+    item.content_type,
+    JSON.stringify(item.filters),
+    item.source_endpoints.join(" "),
+    item.evidence_columns.join(" "),
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(normalizedQuery);
+}
+
 export function ReportExportAuditWorkspace() {
   const [items, setItems] = useState<ExportAudit[]>([]);
   const [query, setQuery] = useState("");
@@ -48,14 +69,17 @@ export function ReportExportAuditWorkspace() {
   const [exportType, setExportType] = useState("All");
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
     const params = new URLSearchParams();
     if (query.trim()) params.set("q", query.trim());
     if (reportKey !== "All") params.set("report_key", reportKey);
     if (exportType !== "All") params.set("export_type", exportType);
     queueMicrotask(() => {
+      if (!active) return;
       setItems([]);
       setStatus("loading");
     });
@@ -68,87 +92,134 @@ export function ReportExportAuditWorkspace() {
         return response.json() as Promise<{ items: ExportAudit[] }>;
       })
       .then((payload) => {
-        setItems(payload.items);
+        if (!active) return;
+        setItems(payload.items.filter((item) => auditMatchesFilters(item, { exportType, query, reportKey })));
         setStatus("ready");
       })
       .catch((error) => {
-        if (error.name !== "AbortError") setStatus("error");
+        if (active && error.name !== "AbortError") setStatus("error");
       });
-    return () => controller.abort();
-  }, [exportType, query, reportKey]);
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [exportType, query, reloadToken, reportKey]);
 
   const reportKeys = useMemo(
     () => ["All", ...Array.from(new Set([...reportCatalog.map((item) => item.key), ...items.map((item) => item.report_key)])).sort()],
     [items],
   );
   const exportTypes = ["All", "csv", "manifest"];
-  const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const filteredItems = useMemo(
+    () => items.filter((item) => auditMatchesFilters(item, { exportType, query, reportKey })),
+    [exportType, items, query, reportKey],
+  );
+  const pageCount = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const firstIndex = (currentPage - 1) * PAGE_SIZE;
-  const visibleItems = items.slice(firstIndex, firstIndex + PAGE_SIZE);
+  const visibleItems = filteredItems.slice(firstIndex, firstIndex + PAGE_SIZE);
 
   function updateFilter(action: () => void) {
     action();
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setReportKey("All");
+    setExportType("All");
+    setPage(1);
+  }
+
+  function reloadAudits() {
+    setReloadToken((value) => value + 1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Report export audit history">
       <div className="report-catalog-workspace" data-testid="report-export-audit-workspace">
+        <div className="report-command-panel">
+          <div>
+            <small className="workspace-card__eyebrow">Export evidence ledger</small>
+            <h2>Report download audit trail</h2>
+            <p className="section-copy section-copy-soft">Review who generated each CSV or manifest, which filters were used, and which checksum proves the exported evidence.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <button className="button button--secondary" type="button" onClick={reloadAudits}>
+              Refresh history
+            </button>
+            <button className="button button--ghost" type="button" onClick={() => window.print()}>
+              Print audit
+            </button>
+          </div>
+        </div>
+
         <div className="metric-grid-modern payroll-setup-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Audit records</span>
-            <strong>{items.length}</strong>
+            <strong>{filteredItems.length}</strong>
             <small>Current workspace exports</small>
           </article>
           <article className="metric-tile metric-tile-soft">
             <span>CSV exports</span>
-            <strong>{items.filter((item) => item.export_type === "csv").length}</strong>
+            <strong>{filteredItems.filter((item) => item.export_type === "csv").length}</strong>
             <small>Report downloads</small>
           </article>
           <article className="metric-tile metric-tile-soft">
             <span>Manifests</span>
-            <strong>{items.filter((item) => item.export_type === "manifest").length}</strong>
+            <strong>{filteredItems.filter((item) => item.export_type === "manifest").length}</strong>
             <small>Audit proof requests</small>
           </article>
           <article className="metric-tile metric-tile-soft">
             <span>Reports</span>
-            <strong>{new Set(items.map((item) => item.report_key)).size}</strong>
+            <strong>{new Set(filteredItems.map((item) => item.report_key)).size}</strong>
             <small>Distinct report keys</small>
           </article>
         </div>
 
-        <div className="report-catalog-toolbar statutory-deductions-toolbar" aria-label="Export audit filters">
-          <label>
-            <span>Search audits</span>
-            <input
-              className="input-control"
-              type="search"
-              value={query}
-              onChange={(event) => updateFilter(() => setQuery(event.target.value))}
-              placeholder="Search report, checksum, filters, request"
-            />
-          </label>
-          <label>
-            <span>Report</span>
-            <select aria-label="Report key" className="input-control" value={reportKey} onChange={(event) => updateFilter(() => setReportKey(event.target.value))}>
-              {reportKeys.map((item) => (
-                <option key={item} value={item}>
-                  {item === "All" ? item : titleCase(item)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Export type</span>
-            <select aria-label="Export type" className="input-control" value={exportType} onChange={(event) => updateFilter(() => setExportType(event.target.value))}>
-              {exportTypes.map((item) => (
-                <option key={item} value={item}>
-                  {item === "All" ? item : titleCase(item)}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="report-filter-panel" aria-label="Export audit filters">
+          <div className="report-filter-panel__header">
+            <div>
+              <strong>Filter export history</strong>
+              <span>Find records by report key, checksum, source endpoint, evidence column, request id, or filter payload.</span>
+            </div>
+            <button className="button button--ghost" type="button" onClick={clearFilters}>
+              Clear filters
+            </button>
+          </div>
+          <div className="report-filter-grid report-filter-grid--export-audit">
+            <label className="report-filter-field">
+              Search audits
+              <input
+                className="input-control"
+                type="search"
+                value={query}
+                onChange={(event) => updateFilter(() => setQuery(event.target.value))}
+                onInput={(event) => updateFilter(() => setQuery(event.currentTarget.value))}
+                placeholder="Search report, checksum, filters, request"
+              />
+            </label>
+            <label className="report-filter-field">
+              Report
+              <select aria-label="Report key" className="input-control" value={reportKey} onChange={(event) => updateFilter(() => setReportKey(event.target.value))}>
+                {reportKeys.map((item) => (
+                  <option key={item} value={item}>
+                    {item === "All" ? item : titleCase(item)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              Export type
+              <select aria-label="Export type" className="input-control" value={exportType} onChange={(event) => updateFilter(() => setExportType(event.target.value))}>
+                {exportTypes.map((item) => (
+                  <option key={item} value={item}>
+                    {item === "All" ? item : titleCase(item)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
@@ -158,6 +229,11 @@ export function ReportExportAuditWorkspace() {
           <span className="queue-summary-chip">
             <strong>{status === "loading" ? "Loading" : status === "error" ? "Blocked" : "Ready"}</strong> status
           </span>
+          {status === "error" ? (
+            <button className="button button--secondary" type="button" onClick={reloadAudits}>
+              Retry loading
+            </button>
+          ) : null}
         </div>
 
         <div className="report-catalog-table-wrap">
@@ -221,7 +297,7 @@ export function ReportExportAuditWorkspace() {
             Previous
           </button>
           <span>
-            Showing {items.length === 0 ? 0 : firstIndex + 1}-{Math.min(firstIndex + PAGE_SIZE, items.length)} of {items.length}
+            Showing {filteredItems.length === 0 ? 0 : firstIndex + 1}-{Math.min(firstIndex + PAGE_SIZE, filteredItems.length)} of {filteredItems.length}
           </span>
           <button className="button button--secondary" type="button" disabled={currentPage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>
             Next

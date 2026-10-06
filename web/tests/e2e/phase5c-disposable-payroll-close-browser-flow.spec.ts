@@ -404,7 +404,7 @@ test.describe("Phase 5F disposable payroll close browser flow", () => {
       },
     );
     expect(snapshotResult.ok).toBeTruthy();
-    await expect(page.getByText("payroll input snapshot saved.").first()).toBeVisible();
+    await expect(page.getByText("Payroll input snapshot saved.").first()).toBeVisible();
 
     const updateResult = await submitAndCapture<{ id: string; snapshot_status: string }>(
       page,

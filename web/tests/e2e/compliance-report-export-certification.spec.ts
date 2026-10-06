@@ -67,7 +67,7 @@ test.describe("Phase R4-F compliance report export certification", () => {
 
   test("employee cannot download audited HR admin compliance report exports", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     for (const item of exportCases) {
       const response = await page.request.get(`/api/hr-admin/reports/${item.key}`);

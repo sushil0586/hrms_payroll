@@ -142,9 +142,32 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setPolicy("All");
+    setLeaveType("All");
+    setPeriodYear("All");
+    setRisk("All");
+    setSortBy("risk");
+    setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Leave balance report workspace">
       <div className="report-catalog-workspace leave-balance-report" data-testid="leave-balance-report">
+        <div className="report-command-panel">
+          <div>
+            <span className="workspace-card__eyebrow">Leave balance</span>
+            <h2>Balance liability and utilization</h2>
+            <p className="section-copy section-copy-soft">Review available balances, reserved units, utilization, and liability risk before exporting or printing the current view.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
+            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
+          </div>
+        </div>
+
         <div className="metric-grid-modern payroll-setup-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Balance rows</span>
@@ -168,54 +191,61 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
           </article>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Leave balance filters">
-          <label>
-            <span>Search leave</span>
-            <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, policy, leave type" />
-          </label>
-          <label>
-            <span>Leave policy</span>
-            <select aria-label="Leave policy" className="input-control" value={policy} onChange={(event) => updateFilter(() => setPolicy(event.target.value))}>
-              {policies.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Leave type</span>
-            <select aria-label="Leave type" className="input-control" value={leaveType} onChange={(event) => updateFilter(() => setLeaveType(event.target.value))}>
-              {leaveTypes.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Period year</span>
-            <select aria-label="Period year" className="input-control" value={periodYear} onChange={(event) => updateFilter(() => setPeriodYear(event.target.value))}>
-              {years.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Liability risk</span>
-            <select aria-label="Liability risk" className="input-control" value={risk} onChange={(event) => updateFilter(() => setRisk(event.target.value))}>
-              {risks.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Sort</span>
-            <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
-              <option value="risk">Risk first</option>
-              <option value="employee">Employee</option>
-              <option value="policy">Policy</option>
-              <option value="closing">Closing balance</option>
-              <option value="utilization">Utilization</option>
-              <option value="reserved">Reserved units</option>
-            </select>
-          </label>
+        <div className="report-filter-panel" aria-label="Leave balance filters">
+          <div className="report-filter-panel__header">
+            <div>
+              <strong>Filter balance ledger</strong>
+              <span>Use policy and leave type filters for liability review; use risk for exception follow-up.</span>
+            </div>
+            <button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button>
+          </div>
+          <div className="report-filter-grid report-filter-grid--leave">
+            <label className="report-filter-field report-filter-field--wide">
+              <span>Search leave</span>
+              <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, policy, leave type" />
+            </label>
+            <label className="report-filter-field">
+              <span>Leave policy</span>
+              <select aria-label="Leave policy" className="input-control" value={policy} onChange={(event) => updateFilter(() => setPolicy(event.target.value))}>
+                {policies.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Leave type</span>
+              <select aria-label="Leave type" className="input-control" value={leaveType} onChange={(event) => updateFilter(() => setLeaveType(event.target.value))}>
+                {leaveTypes.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Period year</span>
+              <select aria-label="Period year" className="input-control" value={periodYear} onChange={(event) => updateFilter(() => setPeriodYear(event.target.value))}>
+                {years.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Liability risk</span>
+              <select aria-label="Liability risk" className="input-control" value={risk} onChange={(event) => updateFilter(() => setRisk(event.target.value))}>
+                {risks.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Sort</span>
+              <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
+                <option value="risk">Risk first</option>
+                <option value="employee">Employee</option>
+                <option value="policy">Policy</option>
+                <option value="closing">Closing balance</option>
+                <option value="utilization">Utilization</option>
+                <option value="reserved">Reserved units</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.liabilityState === "Overdrawn").length}</strong> overdrawn</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => numeric(item.encashed_amount) > 0).length}</strong> encashed</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
         </div>
 
         <div className="report-catalog-table-wrap">

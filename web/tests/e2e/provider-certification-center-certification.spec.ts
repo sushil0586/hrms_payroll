@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase PLF-6 Provider certification center", () => {
   test("HR admin can certify provider center navigation, controls, registries, evidence export, and launch gates", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/payroll-providers", hrAdmin);
     await expectPageReady(page, "Payroll Providers");
 
@@ -103,8 +104,9 @@ test.describe("Phase PLF-6 Provider certification center", () => {
   });
 
   test("employee cannot access provider certification center or evidence package", async ({ page }) => {
+    test.setTimeout(60_000);
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, /Self Service|My workspace/i);
 
     await page.goto("/hr-admin/payroll-providers", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);

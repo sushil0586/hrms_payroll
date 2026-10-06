@@ -64,6 +64,23 @@ export default async function HrAdminReportsPage() {
         </div>
       </section>
 
+      <section className="section" aria-label="Report workspaces">
+        <div className="report-workspace-grid">
+          {[
+            { href: "/hr-admin/reports/hr-core", title: "HR Core Reports", copy: "Workforce, documents, lifecycle, and employee master reporting.", count: reportCatalog.filter((report) => report.category === "HR Core").length },
+            { href: "/hr-admin/reports/attendance", title: "Attendance Reports", copy: "Daily attendance, exception SLA, and leave balance reporting.", count: reportCatalog.filter((report) => report.category === "Attendance").length },
+            { href: "/hr-admin/reports/payroll", title: "Payroll Reports", copy: "Payroll register, variance, adjustments, payslips, bank advice, and handoff reports.", count: reportCatalog.filter((report) => report.category === "Payroll Finance").length },
+            { href: "/hr-admin/reports/compliance", title: "Compliance Reports", copy: "Statutory deductions, filings, challans, provider receipts, and readiness packages.", count: reportCatalog.filter((report) => report.category === "Compliance").length },
+          ].map((workspace) => (
+            <Link className="report-workspace-card" href={workspace.href} key={workspace.href}>
+              <span className="workspace-card__eyebrow">{workspace.count} reports</span>
+              <strong>{workspace.title}</strong>
+              <span>{workspace.copy}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       <section className="section">
         <div className="workspace-grid-modern">
           <article className="workspace-card workspace-card--feature reports-export-card">

@@ -22,9 +22,12 @@ from apps.attendance.services import (
     evaluate_attendance_runtime,
     preview_attendance_policy_assignment_conflicts,
     preview_attendance_policy_assignment_resolution,
+    submit_regularization,
 )
+from apps.common.selectors import get_employee_attendance_regularizations, get_manager_pending_attendance_regularizations
 from apps.common.api_views import save_hr_admin_attendance_policy, save_hr_admin_attendance_policy_assignment
 from apps.employees.models import Employee, EmploymentStatus
+from apps.iam.models import MembershipStatus, TenantMembership, User
 from apps.organizations.models import Department, EmploymentType, Grade
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
 
@@ -429,3 +432,77 @@ class AttendancePolicyAssignmentConflictTests(TestCase):
         self.assertEqual(runtime["early_exit_minutes"], 0)
         self.assertEqual(runtime["work_duration_hours"], Decimal("8.67"))
         self.assertEqual(runtime["overtime_hours"], Decimal("0.17"))
+
+
+class AttendanceRegularizationApprovalTrackTests(TestCase):
+    def setUp(self):
+        self.tenant = Tenant.objects.create(
+            code="attendance-runtime",
+            name="Attendance Runtime",
+            legal_name="Attendance Runtime Pvt Ltd",
+            status=TenantStatus.ACTIVE,
+            subscription_plan=SubscriptionPlan.GROWTH,
+            country_code="IN",
+            timezone="Asia/Kolkata",
+        )
+        self.employee_user = User.objects.create_user(username="attendance-employee", email="attendance-employee@example.com", password="test-pass")
+        self.manager_user = User.objects.create_user(
+            username="attendance-manager",
+            email="attendance-manager@example.com",
+            password="test-pass",
+            first_name="Meera",
+            last_name="Manager",
+        )
+        self.employee_membership = TenantMembership.objects.create(
+            tenant=self.tenant,
+            user=self.employee_user,
+            status=MembershipStatus.ACTIVE,
+            is_default=True,
+            employee_code="EMP-ATT",
+        )
+        self.manager_membership = TenantMembership.objects.create(
+            tenant=self.tenant,
+            user=self.manager_user,
+            status=MembershipStatus.ACTIVE,
+            employee_code="MGR-ATT",
+        )
+        self.manager = Employee.objects.create(
+            tenant=self.tenant,
+            membership=self.manager_membership,
+            employee_code="MGR-ATT",
+            first_name="Meera",
+            last_name="Manager",
+            employment_status=EmploymentStatus.ACTIVE,
+        )
+        self.employee = Employee.objects.create(
+            tenant=self.tenant,
+            membership=self.employee_membership,
+            employee_code="EMP-ATT",
+            first_name="Aditi",
+            reporting_manager=self.manager,
+            employment_status=EmploymentStatus.ACTIVE,
+        )
+        self.attendance_record = AttendanceRecord.objects.create(
+            tenant=self.tenant,
+            employee=self.employee,
+            attendance_date=timezone.localdate() - timedelta(days=1),
+            status=AttendanceStatus.ABSENT,
+            source=AttendanceSource.SYSTEM,
+        )
+
+    def test_regularization_exposes_pending_approval_track_to_ess_and_mss(self):
+        regularization = submit_regularization(
+            employee=self.employee,
+            attendance_record=self.attendance_record,
+            requested_status=AttendanceStatus.PRESENT,
+            reason="Missed web punch",
+        )
+
+        employee_items = get_employee_attendance_regularizations(self.employee)
+        manager_items = get_manager_pending_attendance_regularizations(self.manager)
+
+        self.assertEqual(str(employee_items[0]["id"]), str(regularization.id))
+        self.assertEqual(employee_items[0]["approval_steps"][0]["manager_name"], "Meera Manager")
+        self.assertTrue(employee_items[0]["approval_steps"][0]["is_current"])
+        self.assertEqual([str(item["id"]) for item in manager_items], [str(regularization.id)])
+        self.assertEqual(manager_items[0]["approval_steps"][0]["manager_email"], "attendance-manager@example.com")

@@ -312,6 +312,12 @@ test.describe("HR admin salary setup flows", () => {
     await expectFields(structureForm, ["Code", "Name", "Pay group", "Currency code", "Status", "Description", "Config profile reference"]);
     await expectOptions(structureForm, "Status");
     const structureCode = uniqueCode("SAL_STRUCT");
+    await field(structureForm, "Code").fill(structureCode);
+    await field(structureForm, "Name").fill(`Browser ${structureCode}`);
+    await field(structureForm, "Currency code").fill("IN");
+    await structureForm.getByRole("button", { name: "Create structure" }).click();
+    await expect(page.getByText("Currency code must be a 3-letter ISO code such as INR.")).toBeVisible();
+
     const structure = await submitAndCapture<{ id: string; code: string; name: string }>(page, "salary-structures", "POST", async () => {
       await field(structureForm, "Code").fill(structureCode);
       await field(structureForm, "Name").fill(`Browser ${structureCode}`);
@@ -334,6 +340,14 @@ test.describe("HR admin salary setup flows", () => {
     await expectFields(versionForm, ["Structure", "Version", "Effective from", "Effective to", "Annual CTC", "Currency code", "Status", "Config profile reference"]);
     await expectOptions(versionForm, "Structure");
     await expectOptions(versionForm, "Status");
+    await field(versionForm, "Structure").selectOption(structure.id);
+    await field(versionForm, "Version").fill("1");
+    await field(versionForm, "Effective from").fill("2026-04-01");
+    await field(versionForm, "Effective to").fill("2026-03-31");
+    await field(versionForm, "Annual CTC").fill("1200000");
+    await versionForm.getByRole("button", { name: "Create version" }).click();
+    await expect(page.getByText("Version effective to cannot be earlier than effective from.")).toBeVisible();
+
     const version = await submitAndCapture<{ id: string; version: number }>(page, "salary-structure-versions", "POST", async () => {
       await field(versionForm, "Structure").selectOption(structure.id);
       await expect(page.getByText("Selected salary structure is not active yet.")).toBeVisible();
@@ -359,6 +373,14 @@ test.describe("HR admin salary setup flows", () => {
     await expect(lineForm.getByRole("checkbox", { name: "Active line" })).toBeVisible();
     await expectOptions(lineForm, "Structure version");
     await expectOptions(lineForm, "Component");
+    await field(lineForm, "Structure version").selectOption(version.id);
+    await field(lineForm, "Component").selectOption(component.id);
+    await field(lineForm, "Display order").fill("10");
+    await field(lineForm, "Amount").fill("");
+    await field(lineForm, "Percentage").fill("125");
+    await lineForm.getByRole("button", { name: "Create component line" }).click();
+    await expect(page.getByText("Percentage must be between 0 and 100.")).toBeVisible();
+
     const line = await submitAndCapture<{ id: string }>(page, "salary-structure-components", "POST", async () => {
       await field(lineForm, "Structure version").selectOption(version.id);
       await field(lineForm, "Component").selectOption(component.id);
@@ -386,6 +408,13 @@ test.describe("HR admin salary setup flows", () => {
     await expectOptions(assignmentForm, "Structure version");
     await expectOptions(assignmentForm, "Status");
     const assignmentReason = `Browser salary assignment ${Date.now()}`;
+    await field(assignmentForm, "Structure version").selectOption(version.id);
+    await field(assignmentForm, "Effective from").fill("2026-04-01");
+    await field(assignmentForm, "Status").selectOption("active");
+    await field(assignmentForm, "Assignment reason").fill("");
+    await assignmentForm.getByRole("button", { name: "Create assignment" }).click();
+    await expect(page.getByText("Assignment reason is required before activating employee salary coverage.")).toBeVisible();
+
     const assignment = await submitAndCapture<{ id: string }>(page, "employee-salary-assignments", "POST", async () => {
       await field(assignmentForm, "Structure version").selectOption(version.id);
       await expect(page.getByText("Selected structure version is not active yet.")).toBeVisible();

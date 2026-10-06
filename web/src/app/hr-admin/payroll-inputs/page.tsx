@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
+import { getHrAdminPayrollInputSnapshots, getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
 import type { HrAdminPayrollInputSnapshot, HrAdminPayrollRun } from "@/lib/types";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
@@ -326,7 +326,18 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
   const snapshotPage = parsePositiveInteger(currentParams.snapshotPage, 1);
   const snapshotSize = normalizePageSize(currentParams.snapshotSize);
   const result = await getHrAdminPayrollInputSnapshotSetup();
-  const setup = result.data;
+  const selectedRunSnapshotsResult = selectedRunId
+    ? await getHrAdminPayrollInputSnapshots({ payroll_run_id: selectedRunId })
+    : null;
+  const setup = selectedRunSnapshotsResult
+    ? {
+        ...result.data,
+        snapshots: [
+          ...selectedRunSnapshotsResult.data,
+          ...result.data.snapshots.filter((snapshot) => !selectedRunSnapshotsResult.data.some((selected) => selected.id === snapshot.id)),
+        ],
+      }
+    : result.data;
   const selectedRun = setup.runs.find((item) => item.id === selectedRunId) ?? setup.runs[0] ?? null;
   const visibleSnapshots = selectedRun
     ? setup.snapshots.filter((item) => item.payroll_run_id === selectedRun.id)

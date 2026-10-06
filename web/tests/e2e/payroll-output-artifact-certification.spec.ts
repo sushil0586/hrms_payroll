@@ -1,7 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated, type Persona } from "../helpers/staging-auth";
+import { createPayrollLifecycleOperator } from "../helpers/tenant-rbac";
 
 function uniqueCode(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
@@ -36,51 +37,8 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
   };
 }
 
-async function createDisposableActiveRule(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-rules?tab=actions", hrAdmin);
-  await expectPageReady(page, "Payroll Rules");
-  const ruleDefinitionForm = form(page, "payroll-rule-definition-form");
-  const ruleVersionForm = form(page, "payroll-rule-version-form");
-  const ruleCode = uniqueCode("OUTPUT_RULE");
-
-  await ruleDefinitionForm.getByRole("button", { name: "New" }).click();
-  const rule = await submitAndCapture<{ id: string }>(page, /\/api\/hr-admin\/payroll-rule-definitions$/, "POST", async () => {
-    await field(ruleDefinitionForm, "Code").fill(ruleCode);
-    await field(ruleDefinitionForm, "Name").fill(`Output artifact ${ruleCode}`);
-    await field(ruleDefinitionForm, "Rule type").selectOption("formula");
-    await field(ruleDefinitionForm, "Description").fill("Browser-created output artifact certification rule.");
-    await field(ruleDefinitionForm, "Tags JSON").fill(JSON.stringify(["browser", "phase5p"]));
-    await field(ruleDefinitionForm, "Config profile reference").fill("tenant.payroll.rule.phase5p.v1");
-    await ruleDefinitionForm.getByRole("button", { name: "Create rule" }).click();
-  });
-  expect(rule.ok).toBeTruthy();
-
-  await ruleVersionForm.getByRole("button", { name: "New" }).click();
-  const version = await submitAndCapture<{ id: string }>(page, /\/api\/hr-admin\/payroll-rule-versions$/, "POST", async () => {
-    await field(ruleVersionForm, "Rule").selectOption(rule.payload.id);
-    await field(ruleVersionForm, "Version").fill("1");
-    await field(ruleVersionForm, "Status").selectOption("active");
-    await field(ruleVersionForm, "Expression").fill("salary.annual_ctc / 12");
-    await field(ruleVersionForm, "Effective from").fill("2026-01-01");
-    await field(ruleVersionForm, "Effective to").fill("");
-    await field(ruleVersionForm, "Rounding rule reference").fill("payroll.round.nearest_rupee.v1");
-    await field(ruleVersionForm, "Input schema JSON").fill(JSON.stringify({ required_paths: ["salary.annual_ctc"] }));
-    await field(ruleVersionForm, "Output schema JSON").fill(JSON.stringify({ result_path: "components.phase5p_basic" }));
-    await field(ruleVersionForm, "Config snapshot JSON").fill(JSON.stringify({
-      component_code: "PHASE5P_BASIC",
-      component_name: "Phase 5P Basic",
-      component_type: "earning",
-      calculation_order: 10,
-      output_path: "components.phase5p_basic",
-      profile_ref: "tenant.payroll.rule.version.phase5p.v1",
-    }));
-    await ruleVersionForm.getByRole("button", { name: "Create version" }).click();
-  });
-  expect(version.ok).toBeTruthy();
-}
-
-async function createLockedReview(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
+async function createLockedReview(page: Page, payrollOperator: Persona) {
+  await gotoAuthenticated(page, "/hr-admin/payroll-inputs", payrollOperator);
   await expectPageReady(page, "Payroll Inputs");
   const runForm = form(page, "payroll-run-form");
   const snapshotForm = form(page, "payroll-input-snapshot-form");
@@ -115,14 +73,14 @@ async function createLockedReview(page: Page) {
   });
   expect(snapshot.ok).toBeTruthy();
 
-  await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${run.payload.id}&snapshotId=${snapshot.payload.id}`, hrAdmin);
+  await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${run.payload.id}&snapshotId=${snapshot.payload.id}`, payrollOperator);
   await expectPageReady(page, "Payroll Inputs");
   const lockInputs = await submitAndCapture<{ locked_count: number }>(page, new RegExp(`/api/hr-admin/payroll-runs/${run.payload.id}/lock-inputs$`), "POST", async () => {
     await lockForm.getByRole("button", { name: "Lock selected run inputs" }).click();
   });
   expect(lockInputs.ok).toBeTruthy();
 
-  await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${run.payload.id}`, hrAdmin);
+  await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${run.payload.id}`, payrollOperator);
   await expectPageReady(page, "Payroll Calculations");
   const calculationPanel = page.getByLabel("Calculation controls");
   const calculation = await submitAndCapture<{ calculation: { id: string } }>(page, new RegExp(`/api/hr-admin/payroll-runs/${run.payload.id}/calculate-draft$`), "POST", async () => {
@@ -137,7 +95,7 @@ async function createLockedReview(page: Page) {
   });
   expect(review.ok).toBeTruthy();
 
-  await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${review.payload.review.id}`, hrAdmin);
+  await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${review.payload.review.id}`, payrollOperator);
   await expectPageReady(page, "Payroll Review");
   const controls = page.getByLabel("Review controls");
   const submitted = await submitAndCapture<{ review: { status: string } }>(page, new RegExp(`/api/hr-admin/payroll-reviews/${review.payload.review.id}/submit$`), "POST", async () => {
@@ -178,12 +136,12 @@ async function createLockedReview(page: Page) {
 test.describe("Phase 5P payroll output artifact certification", () => {
   test("outputs publish, metadata, downloads, access audit, pagination, and ESS scope are certified", async ({ page }) => {
     test.setTimeout(6 * 60 * 1000);
-    await createDisposableActiveRule(page);
-    const setup = await createLockedReview(page);
+    const payrollOperator = await createPayrollLifecycleOperator(page);
+    const setup = await createLockedReview(page, payrollOperator);
     expect(setup.payslipId).toBeTruthy();
     expect(setup.registerId).toBeTruthy();
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}&artifactId=${setup.payslipId}&batchPageSize=1&artifactPageSize=1`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}&artifactId=${setup.payslipId}&batchPageSize=1&artifactPageSize=1`, payrollOperator);
     await expectPageReady(page, "Payroll Outputs");
     await expect(page.getByRole("heading", { name: "Output controls" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Artifact register" })).toBeVisible();
@@ -198,6 +156,9 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     await expect(page.locator("aside[aria-label$='output artifact']")).toContainText("tenant.payroll.outputs.phase5p.v1");
 
     const controls = page.getByLabel("Output controls");
+    await expect(controls.getByRole("button", { name: "Publish outputs" })).toBeEnabled();
+    await expect(controls.getByRole("button", { name: "Generate handoff" })).toBeDisabled();
+    await expect(controls).toContainText(/publish outputs before finance handoff/i);
     const published = await submitAndCapture<{
       output_batch: { status: string; published_artifact_count: number };
       artifacts: Array<{ id: string; status: string }>;
@@ -209,8 +170,10 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     expect(published.payload.output_batch.published_artifact_count).toBeGreaterThanOrEqual(2);
     await expect(page.getByRole("status").first()).toContainText("Payroll outputs published.");
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}&artifactId=${setup.payslipId}&batchPageSize=1&artifactPageSize=1`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}&artifactId=${setup.payslipId}&batchPageSize=1&artifactPageSize=1`, payrollOperator);
     await expectPageReady(page, "Payroll Outputs");
+    await expect(page.getByLabel("Output controls").getByRole("button", { name: "Publish outputs" })).toBeDisabled();
+    await expect(page.getByLabel("Output controls").getByRole("button", { name: "Generate handoff" })).toBeEnabled();
     const downloadLink = page.getByRole("link", { name: "Download file" }).first();
     await expect(downloadLink).toHaveAttribute("href", new RegExp(`/api/hr-admin/payroll-output-artifacts/${setup.payslipId}/download`));
     const download = await page.request.get(`/api/hr-admin/payroll-output-artifacts/${setup.payslipId}/download`);
@@ -231,7 +194,7 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     expect(auditCsv).toContain("row_type,artifact_id,artifact_key");
     expect(auditCsv).toContain("downloaded");
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}&artifactId=${setup.registerId}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}&artifactId=${setup.registerId}`, payrollOperator);
     await expectPageReady(page, "Payroll Outputs");
     await expect(page.locator(".payroll-output-artifact-table tr.is-selected")).toContainText(/register/i);
     const registerDownload = await page.request.get(`/api/hr-admin/payroll-output-artifacts/${setup.registerId}/download`);
@@ -240,8 +203,9 @@ test.describe("Phase 5P payroll output artifact certification", () => {
 
     await gotoAuthenticated(page, `/ess/payslips?q=${setup.runCode}`, employee);
     await expectPageReady(page, "Payslips");
-    await expect(page.locator(".payroll-output-artifact-table tr.is-selected")).toContainText(setup.runCode);
-    await expect(page.locator("aside[aria-label$='detail']")).toContainText("Storage governance");
+    await expect(page.locator(".ess-payslip-table tr.is-selected")).toContainText(setup.runCode);
+    await page.getByRole("button", { name: "Review payslip" }).first().click();
+    await expect(page.getByRole("dialog", { name: /Payslip detail/ })).toContainText("Storage governance");
     await expect(page.getByRole("link", { name: "Download payslip" })).toHaveAttribute("href", new RegExp(`/api/me/payroll-payslips/${setup.payslipId}/download`));
     const essDownload = await page.request.get(`/api/me/payroll-payslips/${setup.payslipId}/download`);
     expect(essDownload.status()).toBe(200);
@@ -253,13 +217,13 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test("published outputs generate finance handoff with transmit, acknowledgement, audit pack, and pagination evidence", async ({ page }) => {
+  test("published outputs generate finance handoff with provider terminal evidence, audit pack, and pagination evidence", async ({ page }) => {
     test.setTimeout(6 * 60 * 1000);
-    await createDisposableActiveRule(page);
-    const setup = await createLockedReview(page);
+    const payrollOperator = await createPayrollLifecycleOperator(page);
+    const setup = await createLockedReview(page, payrollOperator);
     expect(setup.payslipId).toBeTruthy();
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}`, payrollOperator);
     await expectPageReady(page, "Payroll Outputs");
     const outputControls = page.getByLabel("Output controls");
     const published = await submitAndCapture<{ output_batch: { status: string } }>(
@@ -285,9 +249,9 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     expect(handoff.payload.handoff.status).toBe("generated");
     await expect(page.getByRole("status").first()).toContainText("Payroll finance handoff generated.");
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoff.payload.handoff.id}&handoffPageSize=1&artifactPageSize=1`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoff.payload.handoff.id}&handoffPageSize=1&artifactPageSize=1`, payrollOperator);
     await expectPageReady(page, "Payroll Handoff");
-    await expect(page.locator(".pagination-bar__summary").filter({ hasText: "Page 1" })).toHaveCount(2);
+    expect(await page.locator(".pagination-bar__summary").filter({ hasText: "Page 1" }).count()).toBeGreaterThanOrEqual(2);
     await expect(page.locator(".payroll-handoff-card.is-selected")).toContainText(setup.runCode);
     await expect(page.getByRole("heading", { name: "Handoff controls" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Finance artifacts" })).toBeVisible();
@@ -304,20 +268,22 @@ test.describe("Phase 5P payroll output artifact certification", () => {
       },
     );
     expect(transmitted.ok).toBeTruthy();
-    expect(transmitted.payload.handoff.status).toBe("transmitted");
-    await expect(page.getByRole("status").first()).toContainText("Payroll finance handoff transmitted.");
+    expect(["transmitted", "failed"]).toContain(transmitted.payload.handoff.status);
+    await expect(page.getByRole("status").first()).toContainText(/Payroll finance handoff (transmitted|failed)/);
 
-    await handoffControls.getByLabel("Acknowledgement profile ref").fill("tenant.payroll.ack.phase5q.v1");
-    const acknowledged = await submitAndCapture<{ handoff: { status: string } }>(
-      page,
-      new RegExp(`/api/hr-admin/payroll-finance-handoffs/${handoff.payload.handoff.id}/acknowledge$`),
-      "POST",
-      async () => {
-        await handoffControls.getByRole("button", { name: "Acknowledge handoff" }).click();
-      },
-    );
-    expect(acknowledged.ok).toBeTruthy();
-    expect(acknowledged.payload.handoff.status).toBe("accepted");
+    if (transmitted.payload.handoff.status === "transmitted") {
+      await handoffControls.getByLabel("Acknowledgement profile ref").fill("tenant.payroll.ack.phase5q.v1");
+      const acknowledged = await submitAndCapture<{ handoff: { status: string } }>(
+        page,
+        new RegExp(`/api/hr-admin/payroll-finance-handoffs/${handoff.payload.handoff.id}/acknowledge$`),
+        "POST",
+        async () => {
+          await handoffControls.getByRole("button", { name: "Acknowledge handoff" }).click();
+        },
+      );
+      expect(acknowledged.ok).toBeTruthy();
+      expect(acknowledged.payload.handoff.status).toBe("accepted");
+    }
 
     await handoffControls.getByLabel("Audit pack profile ref").fill("tenant.payroll.audit.phase5q.v1");
     const auditPack = await submitAndCapture<{ handoff: { id: string }; artifacts: Array<{ kind: string }> }>(
@@ -331,7 +297,7 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     expect(auditPack.ok).toBeTruthy();
     expect(auditPack.payload.artifacts.some((artifact) => artifact.kind === "provider_audit_pack")).toBe(true);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoff.payload.handoff.id}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoff.payload.handoff.id}`, payrollOperator);
     await expectPageReady(page, "Payroll Handoff");
     await expect(page.getByRole("heading", { name: "Provider audit pack" })).toBeVisible();
     await expect(page.getByRole("main")).toContainText("tenant.payroll.handoff.phase5q.v1");

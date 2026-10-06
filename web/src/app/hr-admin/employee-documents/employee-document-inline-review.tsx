@@ -34,15 +34,22 @@ export function EmployeeDocumentInlineReview({ item, verificationStatusOptions }
     setIsSubmitting(true);
     const nextVerificationStatus = overrides?.verificationStatus ?? verificationStatus;
     const nextReuploadRequested = overrides?.reuploadRequested ?? reuploadRequested;
-    const response = await fetch(`/api/hr-admin/employee-documents/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        verification_status: nextVerificationStatus,
-        rejection_reason: reviewNote,
-        reupload_requested: nextReuploadRequested,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/hr-admin/employee-documents/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          verification_status: nextVerificationStatus,
+          rejection_reason: reviewNote,
+          reupload_requested: nextReuploadRequested,
+        }),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));

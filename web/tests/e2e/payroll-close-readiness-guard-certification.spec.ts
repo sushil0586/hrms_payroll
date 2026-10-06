@@ -141,18 +141,13 @@ test.describe("Phase 5M payroll close readiness guard certification", () => {
     await expect(page.locator(".payroll-input-lock-grid .detail-row").filter({ hasText: "Blocked" })).toContainText("1");
     const blockedDetail = page.locator("aside[aria-label$='payroll input snapshot']");
     await expect(blockedDetail.getByText("Missing cost center.", { exact: true })).toBeVisible();
+    await expect(form(page, "payroll-input-lock-form").getByRole("button", { name: "Lock selected run inputs" })).toBeDisabled();
+    await expect(form(page, "payroll-input-lock-form")).toContainText("Resolve blocker snapshots before locking this payroll run.");
 
-    const blockedLock = await submitAndCapture<{ blocked_count?: number }>(
-      page,
-      new RegExp(`/api/hr-admin/payroll-runs/${blockedRun.id}/lock-inputs$`),
-      "POST",
-      async () => {
-        await form(page, "payroll-input-lock-form").getByRole("button", { name: "Lock selected run inputs" }).click();
-      },
-    );
-    expect(blockedLock.status).toBe(400);
-    expect(blockedLock.payload.blocked_count).toBeGreaterThanOrEqual(1);
-    await expect(page.getByRole("alert").first()).toContainText(/Cannot lock payroll inputs while blocked snapshots exist/);
+    const blockedLock = await page.request.post(`/api/hr-admin/payroll-runs/${blockedRun.id}/lock-inputs`, { data: {} });
+    expect(blockedLock.status()).toBe(400);
+    const blockedLockPayload = (await blockedLock.json()) as { blocked_count?: number };
+    expect(blockedLockPayload.blocked_count).toBeGreaterThanOrEqual(1);
     await expectNoHorizontalOverflow(page);
   });
 });

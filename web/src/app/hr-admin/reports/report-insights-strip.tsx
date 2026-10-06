@@ -23,42 +23,42 @@ type Props = {
   metrics?: ReportInsightsMetric[];
 };
 
-const NAV_ITEMS: Array<{ key: ReportInsightsArea; label: string; href: string; description: string }> = [
+const NAV_ITEMS: Array<{ activeKeys: ReportInsightsArea[]; label: string; href: string; description: string }> = [
   {
-    key: "catalog",
+    activeKeys: ["catalog"],
     label: "Catalog",
     href: "/hr-admin/reports",
-    description: "Find, filter, export, and audit reports",
+    description: "Search every report",
   },
   {
-    key: "workforce",
-    label: "Workforce",
-    href: "/hr-admin/reports/workforce",
-    description: "Employees, documents, lifecycle, and organization state",
+    activeKeys: ["workforce", "lifecycle"],
+    label: "HR Core",
+    href: "/hr-admin/reports/hr-core",
+    description: "Workforce, documents, lifecycle",
   },
   {
-    key: "time",
-    label: "Time & leave",
-    href: "/hr-admin/reports/attendance-register",
-    description: "Attendance, exceptions, and leave balances",
+    activeKeys: ["time"],
+    label: "Attendance",
+    href: "/hr-admin/reports/attendance",
+    description: "Time, leave, exceptions",
   },
   {
-    key: "payroll",
+    activeKeys: ["payroll"],
     label: "Payroll",
-    href: "/hr-admin/reports/payroll-register",
-    description: "Payroll register, outputs, variances, and settlements",
+    href: "/hr-admin/reports/payroll",
+    description: "Finance, variance, handoff",
   },
   {
-    key: "compliance",
+    activeKeys: ["compliance"],
     label: "Compliance",
     href: "/hr-admin/reports/compliance",
-    description: "Statutory, filings, provider receipts, and manifests",
+    description: "Statutory and filings",
   },
   {
-    key: "delivery",
+    activeKeys: ["delivery"],
     label: "Audit & exports",
     href: "/hr-admin/reports/export-audits",
-    description: "Download history, manifests, checksums, and traceability",
+    description: "Download evidence",
   },
 ];
 
@@ -90,17 +90,20 @@ export function ReportInsightsStrip({
       </div>
 
       <nav className="report-insights-strip__nav" aria-label="Report workspace navigation">
-        {NAV_ITEMS.map((item) => (
-          <Link
-            aria-current={item.key === current ? "page" : undefined}
-            className={`report-insights-strip__link${item.key === current ? " is-active" : ""}`}
-            href={item.href}
-            key={item.key}
-          >
-            <strong>{item.label}</strong>
-            <span>{item.description}</span>
-          </Link>
-        ))}
+        {NAV_ITEMS.map((item) => {
+          const active = item.activeKeys.includes(current);
+          return (
+            <Link
+              aria-current={active ? "page" : undefined}
+              className={`report-insights-strip__link${active ? " is-active" : ""}`}
+              href={item.href}
+              key={item.href}
+            >
+              <strong>{item.label}</strong>
+              <span>{item.description}</span>
+            </Link>
+          );
+        })}
       </nav>
     </section>
   );

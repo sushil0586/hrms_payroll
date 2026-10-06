@@ -148,9 +148,33 @@ export function PayrollInputExceptionsReportWorkspace({
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setRunId("All");
+    setStatus("All");
+    setPayGroup("All");
+    setLockState("All");
+    setIssueType("All");
+    setSortBy("risk");
+    setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Payroll input exceptions report workspace">
       <div className="report-catalog-workspace payroll-input-exceptions-report" data-testid="payroll-input-exceptions-report">
+        <div className="report-command-panel">
+          <div>
+            <small className="workspace-card__eyebrow">Payroll input evidence</small>
+            <h2>Input exception control</h2>
+            <p className="section-copy section-copy-soft">Prioritize blocked snapshots, warning inputs, lock state, and source-hash evidence before payroll close.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
+            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <button className="button button--ghost" type="button" onClick={() => window.print()}>Print report</button>
+          </div>
+        </div>
+
         <div className="metric-grid-modern payroll-setup-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Snapshots</span>
@@ -174,44 +198,52 @@ export function PayrollInputExceptionsReportWorkspace({
           </article>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Payroll input exception filters">
-          <label>
-            <span>Search inputs</span>
+        <div className="report-filter-panel" aria-label="Payroll input exception filters">
+          <div className="report-filter-panel__header">
+            <div>
+              <strong>Filter payroll inputs</strong>
+              <span>Search snapshots by employee, run, issue, pay group, lock state, or source hash.</span>
+            </div>
+            <button className="button button--ghost" type="button" onClick={clearFilters}>Clear filters</button>
+          </div>
+          <div className="report-filter-grid report-filter-grid--payroll-wide">
+          <label className="report-filter-field">
+            Search inputs
             <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, run, issue, hash" />
           </label>
-          <label>
-            <span>Payroll run</span>
+          <label className="report-filter-field">
+            Payroll run
             <select aria-label="Payroll run" className="input-control" value={runId} onChange={(event) => updateFilter(() => setRunId(event.target.value))}>
               <option value="All">All</option>
               {runs.map((run) => <option key={run.id} value={run.id}>{run.name}</option>)}
             </select>
           </label>
-          <label>
-            <span>Snapshot status</span>
+          <label className="report-filter-field">
+            Snapshot status
             <select aria-label="Snapshot status" className="input-control" value={status} onChange={(event) => updateFilter(() => setStatus(event.target.value))}>
               {statuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
             </select>
           </label>
-          <label>
-            <span>Pay group</span>
+          <label className="report-filter-field">
+            Pay group
             <select aria-label="Pay group" className="input-control" value={payGroup} onChange={(event) => updateFilter(() => setPayGroup(event.target.value))}>
               {payGroups.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          <label>
-            <span>Lock state</span>
+          <label className="report-filter-field">
+            Lock state
             <select aria-label="Lock state" className="input-control" value={lockState} onChange={(event) => updateFilter(() => setLockState(event.target.value))}>
               {lockStates.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          <label>
-            <span>Issue type</span>
+          <label className="report-filter-field">
+            Issue type
             <select aria-label="Issue type" className="input-control" value={issueType} onChange={(event) => updateFilter(() => setIssueType(event.target.value))}>
               {issueTypes.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          <label>
-            <span>Sort</span>
+          <label className="report-filter-field">
+            Sort
             <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
               <option value="risk">Risk first</option>
               <option value="employee">Employee</option>
@@ -220,14 +252,13 @@ export function PayrollInputExceptionsReportWorkspace({
               <option value="locked">Lock state</option>
             </select>
           </label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.readinessRisk === "High").length}</strong> high risk</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.source_hash).length}</strong> source hashed</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
         </div>
 
         <div className="report-catalog-table-wrap">

@@ -107,9 +107,31 @@ export function WorkforceReportWorkspace({ employees }: { employees: HrAdminEmpl
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setEmploymentStatus("All");
+    setDepartment("All");
+    setManagerView("All");
+    setSortBy("name");
+    setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Workforce report workspace">
       <div className="report-catalog-workspace workforce-report" data-testid="workforce-report">
+        <div className="report-command-panel">
+          <div>
+            <span className="workspace-card__eyebrow">Workforce</span>
+            <h2>Employee master evidence</h2>
+            <p className="section-copy section-copy-soft">Review employee structure, manager coverage, and access readiness before exporting or printing the current workforce view.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
+            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
+          </div>
+        </div>
+
         <div className="metric-grid-modern payroll-setup-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Employees</span>
@@ -133,49 +155,56 @@ export function WorkforceReportWorkspace({ employees }: { employees: HrAdminEmpl
           </article>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Workforce filters">
-          <label>
-            <span>Search workforce</span>
-            <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search name, code, org, manager" />
-          </label>
-          <label>
-            <span>Employment status</span>
-            <select aria-label="Employment status" className="input-control" value={employmentStatus} onChange={(event) => updateFilter(() => setEmploymentStatus(event.target.value))}>
-              {statusOptions.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Department</span>
-            <select aria-label="Department" className="input-control" value={department} onChange={(event) => updateFilter(() => setDepartment(event.target.value))}>
-              {departmentOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Manager coverage</span>
-            <select aria-label="Manager coverage" className="input-control" value={managerView} onChange={(event) => updateFilter(() => setManagerView(event.target.value))}>
-              <option value="All">All employees</option>
-              <option value="managers">Managers only</option>
-              <option value="needs_reassignment">Needs reassignment</option>
-            </select>
-          </label>
-          <label>
-            <span>Sort</span>
-            <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
-              <option value="name">Employee name</option>
-              <option value="status">Employment status</option>
-              <option value="department">Department</option>
-              <option value="manager_coverage">Manager coverage</option>
-              <option value="access">Access readiness</option>
-            </select>
-          </label>
+        <div className="report-filter-panel" aria-label="Workforce filters">
+          <div className="report-filter-panel__header">
+            <div>
+              <strong>Filter workforce data</strong>
+              <span>Search by employee or organization, then narrow by status, department, or manager coverage.</span>
+            </div>
+            <button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button>
+          </div>
+          <div className="report-filter-grid report-filter-grid--hr-core">
+            <label className="report-filter-field report-filter-field--wide">
+              <span>Search workforce</span>
+              <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search name, code, org, manager" />
+            </label>
+            <label className="report-filter-field">
+              <span>Employment status</span>
+              <select aria-label="Employment status" className="input-control" value={employmentStatus} onChange={(event) => updateFilter(() => setEmploymentStatus(event.target.value))}>
+                {statusOptions.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Department</span>
+              <select aria-label="Department" className="input-control" value={department} onChange={(event) => updateFilter(() => setDepartment(event.target.value))}>
+                {departmentOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Manager coverage</span>
+              <select aria-label="Manager coverage" className="input-control" value={managerView} onChange={(event) => updateFilter(() => setManagerView(event.target.value))}>
+                <option value="All">All employees</option>
+                <option value="managers">Managers only</option>
+                <option value="needs_reassignment">Needs reassignment</option>
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Sort</span>
+              <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
+                <option value="name">Employee name</option>
+                <option value="status">Employment status</option>
+                <option value="department">Department</option>
+                <option value="manager_coverage">Manager coverage</option>
+                <option value="access">Access readiness</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{departmentOptions.length - 1}</strong> departments</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((employee) => !employee.reporting_manager).length}</strong> manager gaps</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
         </div>
 
         <div className="report-catalog-table-wrap">

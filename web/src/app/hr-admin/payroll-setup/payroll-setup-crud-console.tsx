@@ -194,6 +194,32 @@ function nullable(value: string) {
   return value.trim() ? value.trim() : null;
 }
 
+function isCurrencyCode(value: string) {
+  return /^[A-Z]{3}$/.test(value.trim());
+}
+
+function isIsoDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00`));
+}
+
+function isWholeNumberInRange(value: string, min: number, max: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max;
+}
+
+function validateDateWindow(from: string, to: string, label: string) {
+  if (!isIsoDate(from)) {
+    return `${label} start date must be a valid date.`;
+  }
+  if (to && !isIsoDate(to)) {
+    return `${label} end date must be a valid date.`;
+  }
+  if (to && to < from) {
+    return `${label} end date cannot be earlier than the start date.`;
+  }
+  return "";
+}
+
 function optionItems(items: { id: string; name: string }[], emptyLabel?: string) {
   const options = items.map((item) => ({ value: item.id, label: item.name }));
   return emptyLabel ? [{ value: "", label: emptyLabel }, ...options] : options;
@@ -562,6 +588,65 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
     setRecordPages((current) => ({ ...current, [tab]: Math.max(1, page) }));
   }
 
+  function reportValidation(family: ConfigFamily, message: string) {
+    setFeedback({ family, tone: "error", message });
+    return false;
+  }
+
+  function validateCalendar() {
+    if (!isCurrencyCode(calendarForm.currency_code)) {
+      return reportValidation("calendar", "Currency code must be a 3-letter ISO code such as INR.");
+    }
+    if (!isWholeNumberInRange(calendarForm.period_start_day, 1, 31)) {
+      return reportValidation("calendar", "Period start day must be a whole number between 1 and 31.");
+    }
+    return true;
+  }
+
+  function validatePeriod() {
+    if (!periodForm.calendar_id) {
+      return reportValidation("period", "Select a payroll calendar before creating a period.");
+    }
+    const dateError = validateDateWindow(periodForm.start_date, periodForm.end_date, "Payroll period");
+    if (dateError) {
+      return reportValidation("period", dateError);
+    }
+    if (!isIsoDate(periodForm.pay_date)) {
+      return reportValidation("period", "Pay date must be a valid date.");
+    }
+    if (periodForm.pay_date < periodForm.start_date) {
+      return reportValidation("period", "Pay date cannot be earlier than the period start date.");
+    }
+    return true;
+  }
+
+  function validatePayGroup() {
+    if (!payGroupForm.calendar_id) {
+      return reportValidation("payGroup", "Select a payroll calendar before creating a pay group.");
+    }
+    if (!isCurrencyCode(payGroupForm.default_currency_code)) {
+      return reportValidation("payGroup", "Default currency code must be a 3-letter ISO code such as INR.");
+    }
+    if (payGroupForm.legal_entity_id && payGroupForm.branch_id) {
+      const branch = setup.options.branches.find((item) => item.id === payGroupForm.branch_id);
+      if (branch?.legal_entity_id !== payGroupForm.legal_entity_id) {
+        return reportValidation("payGroup", "Selected branch must belong to the selected legal entity.");
+      }
+    }
+    return true;
+  }
+
+  function validateAssignment() {
+    if (!assignmentForm.pay_group_id || !assignmentForm.employee_id) {
+      return reportValidation("assignment", "Select both a pay group and an employee before saving the assignment.");
+    }
+    const dateError = validateDateWindow(assignmentForm.effective_from, assignmentForm.effective_to, "Assignment");
+    if (dateError) {
+      return reportValidation("assignment", dateError);
+    }
+    return true;
+  }
+
   function updatePayGroupLegalEntity(value: string) {
     setPayGroupForm((current) => {
       const branchStillValid = current.branch_id
@@ -596,11 +681,18 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
     setSubmitting(family);
     setFeedback(null);
 
-    const response = await fetch(itemId ? `/api/hr-admin/${path}/${itemId}` : `/api/hr-admin/${path}`, {
-      method: itemId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(itemId ? `/api/hr-admin/${path}/${itemId}` : `/api/hr-admin/${path}`, {
+        method: itemId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      setSubmitting(null);
+      setFeedback({ family, tone: "error", message: `Network connection failed while saving ${familyLabels[family]}. Please retry.` });
+      return;
+    }
 
     const payload = await response.json().catch(() => ({}));
     setSubmitting(null);
@@ -720,6 +812,9 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           id="payroll-calendar-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!validateCalendar()) {
+              return;
+            }
             void save<HrAdminPayrollCalendar>("calendar", "payroll-calendars", calendarForm.id, {
               code: calendarForm.code,
               name: calendarForm.name,
@@ -772,6 +867,9 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           id="payroll-period-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!validatePeriod()) {
+              return;
+            }
             void save<HrAdminPayrollPeriod>("period", "payroll-periods", periodForm.id, {
               calendar_id: periodForm.calendar_id,
               code: periodForm.code,
@@ -823,6 +921,9 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           id="pay-group-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!validatePayGroup()) {
+              return;
+            }
             void save<HrAdminPayGroup>("payGroup", "pay-groups", payGroupForm.id, {
               calendar_id: payGroupForm.calendar_id,
               code: payGroupForm.code,
@@ -895,6 +996,9 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           id="pay-group-assignment-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!validateAssignment()) {
+              return;
+            }
             void save<HrAdminPayGroupAssignment>("assignment", "pay-group-assignments", assignmentForm.id, {
               pay_group_id: assignmentForm.pay_group_id,
               employee_id: assignmentForm.employee_id,

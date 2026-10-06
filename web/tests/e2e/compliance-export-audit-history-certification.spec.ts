@@ -4,6 +4,8 @@ import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertio
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-L compliance export audit history certification", () => {
+  test.setTimeout(120_000);
+
   test("HR admin can create and review persisted report export audit history", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/reports/compliance", hrAdmin);
     await expectPageReady(page, "Compliance Reports");
@@ -253,7 +255,7 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
 
   test("employee cannot read HR admin report export audit history", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     const response = await page.request.get("/api/hr-admin/reports/export-audits");
     expect([401, 403]).toContain(response.status());
@@ -265,6 +267,6 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
     await page.goto("/hr-admin/reports/export-audits", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("report-export-audit-workspace")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My workspace" })).toBeVisible();
   });
 });

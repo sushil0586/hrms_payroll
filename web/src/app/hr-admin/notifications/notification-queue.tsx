@@ -110,11 +110,18 @@ export function NotificationQueue({
   async function handleBulkRetry() {
     setError("");
     setIsSubmittingBulk(true);
-    const response = await fetch("/api/hr-admin/notifications/bulk-retry", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notification_ids: actionableSelectedIds, process_now: true }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/hr-admin/notifications/bulk-retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notification_ids: actionableSelectedIds, process_now: true }),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmittingBulk(false);
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       const detail =

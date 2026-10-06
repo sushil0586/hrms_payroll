@@ -1,7 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { gotoAuthenticated, type Persona } from "../helpers/staging-auth";
+import { createPayrollLifecycleOperator } from "../helpers/tenant-rbac";
 
 function uniqueCode(prefix: string) {
   return `PW_${prefix}_${Date.now()}`;
@@ -36,8 +37,8 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
   };
 }
 
-async function createWarningLockedRun(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
+async function createWarningLockedRun(page: Page, payrollOperator: Persona) {
+  await gotoAuthenticated(page, "/hr-admin/payroll-inputs", payrollOperator);
   await expectPageReady(page, "Payroll Inputs");
 
   const runForm = form(page, "payroll-run-form");
@@ -84,7 +85,7 @@ async function createWarningLockedRun(page: Page) {
   expect(snapshot.ok).toBeTruthy();
   expect(snapshot.payload.snapshot_status).toBe("warning");
 
-  await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${run.payload.id}&snapshotId=${snapshot.payload.id}`, hrAdmin);
+  await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${run.payload.id}&snapshotId=${snapshot.payload.id}`, payrollOperator);
   await expectPageReady(page, "Payroll Inputs");
   await expect(page.locator(".payroll-input-lock-grid .detail-row").filter({ hasText: "Warnings" })).toContainText("1");
   await expect(page.locator("aside[aria-label$='payroll input snapshot']")).toContainText("Missing primary bank account.");
@@ -103,66 +104,13 @@ async function createWarningLockedRun(page: Page) {
   return { runId: run.payload.id, runCode };
 }
 
-async function createDisposableActiveRule(page: Page) {
-  await gotoAuthenticated(page, "/hr-admin/payroll-rules?tab=actions", hrAdmin);
-  await expectPageReady(page, "Payroll Rules");
-  const ruleDefinitionForm = form(page, "payroll-rule-definition-form");
-  const ruleVersionForm = form(page, "payroll-rule-version-form");
-  const ruleCode = uniqueCode("WARN_TRACE_RULE");
-
-  await ruleDefinitionForm.getByRole("button", { name: "New" }).click();
-  const rule = await submitAndCapture<{ id: string; code: string }>(
-    page,
-    /\/api\/hr-admin\/payroll-rule-definitions$/,
-    "POST",
-    async () => {
-      await field(ruleDefinitionForm, "Code").fill(ruleCode);
-      await field(ruleDefinitionForm, "Name").fill(`Warning trace ${ruleCode}`);
-      await field(ruleDefinitionForm, "Rule type").selectOption("formula");
-      await field(ruleDefinitionForm, "Description").fill("Browser-created warning trace calculation rule.");
-      await field(ruleDefinitionForm, "Tags JSON").fill(JSON.stringify(["browser", "phase5n", "warning_trace"]));
-      await field(ruleDefinitionForm, "Config profile reference").fill("tenant.payroll.rule.warning_trace.v1");
-      await ruleDefinitionForm.getByRole("button", { name: "Create rule" }).click();
-    },
-  );
-  expect(rule.ok).toBeTruthy();
-
-  await ruleVersionForm.getByRole("button", { name: "New" }).click();
-  const version = await submitAndCapture<{ id: string; status: string }>(
-    page,
-    /\/api\/hr-admin\/payroll-rule-versions$/,
-    "POST",
-    async () => {
-      await field(ruleVersionForm, "Rule").selectOption(rule.payload.id);
-      await field(ruleVersionForm, "Version").fill("1");
-      await field(ruleVersionForm, "Status").selectOption("active");
-      await field(ruleVersionForm, "Expression").fill("salary.annual_ctc / 12");
-      await field(ruleVersionForm, "Effective from").fill("2026-01-01");
-      await field(ruleVersionForm, "Effective to").fill("");
-      await field(ruleVersionForm, "Rounding rule reference").fill("payroll.round.nearest_rupee.v1");
-      await field(ruleVersionForm, "Input schema JSON").fill(JSON.stringify({ required_paths: ["salary.annual_ctc"] }));
-      await field(ruleVersionForm, "Output schema JSON").fill(JSON.stringify({ result_path: "components.warning_trace_basic" }));
-      await field(ruleVersionForm, "Config snapshot JSON").fill(JSON.stringify({
-        component_code: "WARN_TRACE_BASIC",
-        component_name: "Warning Trace Basic",
-        component_type: "earning",
-        calculation_order: 10,
-        output_path: "components.warning_trace_basic",
-        profile_ref: "tenant.payroll.rule.version.warning_trace.v1",
-      }));
-      await ruleVersionForm.getByRole("button", { name: "Create version" }).click();
-    },
-  );
-  expect(version.ok).toBeTruthy();
-}
-
 test.describe("Phase 5N payroll warning calculation and review trace certification", () => {
   test("warning-locked inputs preserve evidence into calculation validation and review", async ({ page }) => {
     test.setTimeout(5 * 60 * 1000);
-    await createDisposableActiveRule(page);
-    const run = await createWarningLockedRun(page);
+    const payrollOperator = await createPayrollLifecycleOperator(page);
+    const run = await createWarningLockedRun(page, payrollOperator);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${run.runId}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${run.runId}`, payrollOperator);
     await expectPageReady(page, "Payroll Calculations");
     const calculationPanel = page.getByLabel("Calculation controls");
     const calculation = await submitAndCapture<{ calculation: { id: string }; detail?: string }>(
@@ -177,7 +125,7 @@ test.describe("Phase 5N payroll warning calculation and review trace certificati
     expect(calculation.ok).toBeTruthy();
     await expect(page.getByRole("status").first()).toContainText(/Draft payroll calculation completed/);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${run.runId}&calculationId=${calculation.payload.calculation.id}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${run.runId}&calculationId=${calculation.payload.calculation.id}`, payrollOperator);
     await expectPageReady(page, "Payroll Calculations");
     await expect(page.getByRole("heading", { name: "Issue register" })).toBeVisible();
     await expect(page.locator(".payroll-calc-validation-card").filter({ hasText: /warning|source-data/i }).first()).toBeVisible();
@@ -195,7 +143,7 @@ test.describe("Phase 5N payroll warning calculation and review trace certificati
     expect(review.ok).toBeTruthy();
     await expect(page.getByRole("status").first()).toContainText(/Payroll review opened/);
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${review.payload.review.id}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${review.payload.review.id}`, payrollOperator);
     await expectPageReady(page, "Payroll Review");
     await expect(page.locator(".payroll-review-card.is-selected").filter({ hasText: run.runCode })).toBeVisible();
     await expect(page.locator(".payroll-review-card.is-selected")).toContainText("tenant.payroll.review.warning_trace.v1");

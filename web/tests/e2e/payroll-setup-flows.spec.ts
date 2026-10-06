@@ -161,6 +161,13 @@ test.describe("HR admin payroll setup flows", () => {
     await expectOptions(calendarForm, "Frequency");
 
     const calendarCode = uniqueCode("PAY_CAL");
+    await field(calendarForm, "Code").fill(calendarCode);
+    await field(calendarForm, "Name").fill(`Browser ${calendarCode}`);
+    await field(calendarForm, "Period start day").fill("0");
+    await calendarForm.getByRole("button", { name: "Create calendar" }).click();
+    await expect(page.getByText("Period start day must be a whole number between 1 and 31.")).toBeVisible();
+    await field(calendarForm, "Period start day").fill("1");
+
     const calendarResult = await submitAndCapture<{ id: string; code: string; name: string }>(page, "payroll-calendars", "POST", async () => {
       await field(calendarForm, "Code").fill(calendarCode);
       await field(calendarForm, "Name").fill(`Browser ${calendarCode}`);
@@ -198,6 +205,15 @@ test.describe("HR admin payroll setup flows", () => {
     await expectOptions(periodForm, "Calendar");
     await expectOptions(periodForm, "Status");
     const periodCode = uniqueCode("PAY_PER");
+    await field(periodForm, "Calendar").selectOption(calendarResult.payload.id);
+    await field(periodForm, "Code").fill(periodCode);
+    await field(periodForm, "Name").fill(`Browser ${periodCode}`);
+    await field(periodForm, "Start date").fill("2026-06-30");
+    await field(periodForm, "End date").fill("2026-06-01");
+    await field(periodForm, "Pay date").fill("2026-07-01");
+    await periodForm.getByRole("button", { name: "Create period" }).click();
+    await expect(page.getByText("Payroll period end date cannot be earlier than the start date.")).toBeVisible();
+
     const periodResult = await submitAndCapture<{ id: string; code: string; name: string }>(page, "payroll-periods", "POST", async () => {
       await field(periodForm, "Calendar").selectOption(calendarResult.payload.id);
       await field(periodForm, "Code").fill(periodCode);
@@ -254,6 +270,13 @@ test.describe("HR admin payroll setup flows", () => {
     await expect(field(refreshedPayGroupForm, "Branch")).toBeEnabled();
 
     const payGroupCode = uniqueCode("PAY_GROUP");
+    await field(refreshedPayGroupForm, "Calendar").selectOption(calendarResult.payload.id);
+    await field(refreshedPayGroupForm, "Code").fill(payGroupCode);
+    await field(refreshedPayGroupForm, "Name").fill(`Browser ${payGroupCode}`);
+    await field(refreshedPayGroupForm, "Default currency code").fill("IN");
+    await refreshedPayGroupForm.getByRole("button", { name: "Create pay group" }).click();
+    await expect(page.getByText("Default currency code must be a 3-letter ISO code such as INR.")).toBeVisible();
+
     const payGroupResult = await submitAndCapture<{ id: string; code: string; name: string }>(page, "pay-groups", "POST", async () => {
       await field(refreshedPayGroupForm, "Calendar").selectOption(calendarResult.payload.id);
       await field(refreshedPayGroupForm, "Code").fill(payGroupCode);
@@ -282,6 +305,13 @@ test.describe("HR admin payroll setup flows", () => {
     await expectOptions(assignmentForm, "Pay group");
     await expectOptions(assignmentForm, "Employee");
     await expectOptions(assignmentForm, "Status");
+    await field(assignmentForm, "Pay group").selectOption(payGroupResult.payload.id);
+    await field(assignmentForm, "Employee").selectOption({ index: 0 });
+    await field(assignmentForm, "Effective from").fill("2026-08-01");
+    await field(assignmentForm, "Effective to").fill("2026-07-31");
+    await assignmentForm.getByRole("button", { name: "Create assignment" }).click();
+    await expect(page.getByText("Assignment end date cannot be earlier than the start date.")).toBeVisible();
+
     const assignmentResult = await submitAndCapture<{ id: string }>(page, "pay-group-assignments", "POST", async () => {
       await field(assignmentForm, "Pay group").selectOption(payGroupResult.payload.id);
       await field(assignmentForm, "Employee").selectOption({ index: 0 });

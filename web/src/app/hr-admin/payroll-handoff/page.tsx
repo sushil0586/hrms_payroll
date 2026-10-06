@@ -393,6 +393,26 @@ function HandoffRail({
   );
 }
 
+function EvidenceLaneSummary({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "neutral" | "ready" | "warning" | "blocked";
+}) {
+  return (
+    <article className={`payroll-handoff-lane-summary payroll-handoff-lane-summary--${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <em>{detail}</em>
+    </article>
+  );
+}
+
 function artifactAmount(artifact: HrAdminPayrollOutputArtifact | null) {
   if (!artifact) {
     return "0.00";
@@ -1145,8 +1165,56 @@ function DeliveryLedger({
     evidence: undefined,
     handoffId: selectedHandoff?.id,
   };
+  const openDeliveries = visibleDeliveries.filter((delivery) => ["queued", "submitted", "acknowledged"].includes(delivery.status)).length;
+  const failedDeliveries = visibleDeliveries.filter((delivery) => ["failed", "rejected"].includes(delivery.status)).length;
+  const scheduledRetries = visibleRetryEvents.filter((event) => event.status === "scheduled").length;
+  const failedRetries = visibleRetryEvents.filter((event) => event.status === "failed").length;
+  const openJobs = visibleJobs.filter((job) => ["queued", "leased", "running"].includes(job.status)).length;
+  const recoveredJobs = visibleJobs.filter((job) => job.recovery_count > 0 || job.status === "recovered").length;
+  const rejectedCallbacks = visibleEvents.filter((event) => event.status === "rejected" || event.provider_status === "rejected").length;
+  const processedCallbacks = visibleEvents.filter((event) => event.status === "processed").length;
+
   return (
     <>
+      <section className="payroll-setup-assignment-panel payroll-handoff-evidence-summary-panel" aria-label="Provider evidence lane summary">
+        <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
+          <div>
+            <span className="workspace-card__eyebrow">Provider evidence map</span>
+            <h2>Delivery operations</h2>
+          </div>
+          <span className="payroll-setup-count">{visibleDeliveries.length + visibleRetryEvents.length + visibleJobs.length + visibleEvents.length} records</span>
+        </div>
+        <div className="payroll-handoff-lane-summary-grid">
+          <EvidenceLaneSummary
+            label="Deliveries"
+            value={`${visibleDeliveries.length} total`}
+            detail={visibleDeliveries.length ? `${openDeliveries} open / ${failedDeliveries} failed` : "No provider delivery evidence yet"}
+            tone={failedDeliveries > 0 ? "blocked" : openDeliveries > 0 ? "warning" : visibleDeliveries.length > 0 ? "ready" : "neutral"}
+          />
+          <EvidenceLaneSummary
+            label="Retries"
+            value={`${visibleRetryEvents.length} events`}
+            detail={visibleRetryEvents.length ? `${scheduledRetries} scheduled / ${failedRetries} failed` : "No retry recovery required"}
+            tone={failedRetries > 0 ? "blocked" : scheduledRetries > 0 ? "warning" : visibleRetryEvents.length > 0 ? "ready" : "neutral"}
+          />
+          <EvidenceLaneSummary
+            label="Provider jobs"
+            value={`${visibleJobs.length} jobs`}
+            detail={visibleJobs.length ? `${openJobs} open / ${recoveredJobs} recovered` : "No queue jobs recorded"}
+            tone={openJobs > 0 ? "warning" : visibleJobs.length > 0 ? "ready" : "neutral"}
+          />
+          <EvidenceLaneSummary
+            label="Callbacks"
+            value={`${visibleEvents.length} events`}
+            detail={visibleEvents.length ? `${processedCallbacks} processed / ${rejectedCallbacks} rejected` : "No webhook callbacks recorded"}
+            tone={rejectedCallbacks > 0 ? "blocked" : visibleEvents.length > 0 ? "ready" : "neutral"}
+          />
+        </div>
+        <p className="section-copy payroll-handoff-lane-summary-copy">
+          Open a card below to inspect the signed payload, retry decision, worker runtime, or callback security evidence for the selected finance package.
+        </p>
+      </section>
+
       <section className="payroll-setup-assignment-panel payroll-handoff-delivery-panel">
         <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
           <div>

@@ -328,6 +328,11 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
   const selectedRun = selectedReview ? setup.runs.find((item) => item.id === selectedReview.payroll_run_id) ?? null : null;
   const totals = selectedReview?.totals_snapshot ?? {};
   const summary = selectedReview?.exception_summary_snapshot ?? {};
+  const openBlockerCount = visibleExceptions.filter((item) => item.severity === "blocker" && item.status === "open").length;
+  const canSubmitSelectedReview = Boolean(selectedReview && selectedReview.status === "open" && openBlockerCount === 0);
+  const canApproveSelectedReview = Boolean(selectedReview && selectedReview.status === "ready_for_approval");
+  const canLockSelectedReview = Boolean(selectedReview && selectedReview.status === "approved");
+  const canGenerateSelectedOutputs = Boolean(selectedReview && selectedReview.status === "locked");
 
   return (
     <main className="shell shell--payroll-setup shell--payroll-review">
@@ -449,8 +454,14 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   id: "submit-review",
                   label: "Submit review",
                   endpoint: selectedReview ? `/api/hr-admin/payroll-reviews/${selectedReview.id}/submit` : "",
-                  disabled: !canReviewPayroll || !selectedReview,
-                  disabledReason: !canReviewPayroll ? "Requires payroll.review." : "Select a payroll review first.",
+                  disabled: !canReviewPayroll || !canSubmitSelectedReview,
+                  disabledReason: !canReviewPayroll
+                    ? "Requires payroll.review."
+                    : !selectedReview
+                      ? "Select a payroll review first."
+                      : openBlockerCount > 0
+                        ? `${openBlockerCount} open blocker exception${openBlockerCount === 1 ? "" : "s"} must be accepted or resolved before submission.`
+                        : `Review status is ${titleCase(selectedReview.status)}; only open reviews can be submitted.`,
                 },
                 {
                   id: "approve-review",
@@ -461,15 +472,23 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   defaultProfileRef: selectedReview?.review_profile_ref ?? "",
                   commentField: "comment",
                   commentLabel: "Approval comment",
-                  disabled: !canApprovePayroll || !selectedReview,
-                  disabledReason: !canApprovePayroll ? "Requires payroll.approve." : "Select a payroll review first.",
+                  disabled: !canApprovePayroll || !canApproveSelectedReview,
+                  disabledReason: !canApprovePayroll
+                    ? "Requires payroll.approve."
+                    : !selectedReview
+                      ? "Select a payroll review first."
+                      : `Review status is ${titleCase(selectedReview.status)}; submit it before approval.`,
                 },
                 {
                   id: "lock-review",
                   label: "Final lock",
                   endpoint: selectedReview ? `/api/hr-admin/payroll-reviews/${selectedReview.id}/lock` : "",
-                  disabled: !canLockPayroll || !selectedReview,
-                  disabledReason: !canLockPayroll ? "Requires payroll.lock." : "Select a payroll review first.",
+                  disabled: !canLockPayroll || !canLockSelectedReview,
+                  disabledReason: !canLockPayroll
+                    ? "Requires payroll.lock."
+                    : !selectedReview
+                      ? "Select a payroll review first."
+                      : `Review status is ${titleCase(selectedReview.status)}; approval is required before final lock.`,
                 },
                 {
                   id: "generate-outputs",
@@ -478,8 +497,12 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   profileField: "output_profile_ref",
                   profileLabel: "Output profile ref",
                   defaultProfileRef: "tenant.payroll.outputs.v1",
-                  disabled: !canGenerateOutputs || !selectedReview,
-                  disabledReason: !canGenerateOutputs ? "Requires payroll.publish." : "Select a payroll review first.",
+                  disabled: !canGenerateOutputs || !canGenerateSelectedOutputs,
+                  disabledReason: !canGenerateOutputs
+                    ? "Requires payroll.publish."
+                    : !selectedReview
+                      ? "Select a payroll review first."
+                      : `Review status is ${titleCase(selectedReview.status)}; final lock is required before output generation.`,
                 },
               ]}
             />

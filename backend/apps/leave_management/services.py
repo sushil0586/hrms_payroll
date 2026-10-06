@@ -982,16 +982,78 @@ def _find_leave_policy_from_employee_balance(employee, leave_type, *, as_of: dat
     return balance.leave_policy if balance else None
 
 
-def _calculate_requested_units(start_date, end_date, start_day_portion, end_day_portion) -> Decimal:
+def _is_working_leave_date(*, employee, target_date: date) -> bool:
+    from apps.attendance.services import (
+        _resolve_holiday_for_employee,
+        _resolve_shift_for_employee,
+        resolve_attendance_policy_for_employee,
+    )
+
+    attendance_policy = resolve_attendance_policy_for_employee(employee, as_of=target_date)
+    holiday = _resolve_holiday_for_employee(employee, attendance_date=target_date, policy=attendance_policy)
+    if holiday:
+        return False
+    shift = _resolve_shift_for_employee(
+        employee,
+        attendance_date=target_date,
+        fallback_shift=getattr(attendance_policy, "default_shift", None),
+    )
+    weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])}
+    return target_date.strftime("%A").lower() not in weekly_off_days
+
+
+def _calculate_requested_units(
+    start_date,
+    end_date,
+    start_day_portion,
+    end_day_portion,
+    *,
+    employee=None,
+    leave_policy: LeavePolicy | None = None,
+) -> Decimal:
     total_days = (end_date - start_date).days + 1
+    if employee and leave_policy and not leave_policy.allow_weekend_holiday_overlap:
+        counted_dates = [
+            start_date + timedelta(days=offset)
+            for offset in range(total_days)
+            if _is_working_leave_date(employee=employee, target_date=start_date + timedelta(days=offset))
+        ]
+        if not counted_dates:
+            return Decimal("0.00")
+        units = Decimal(len(counted_dates))
+        if start_date in counted_dates and start_day_portion != LeaveDayPortion.FULL_DAY:
+            units -= Decimal("0.5")
+        if end_date in counted_dates and end_day_portion != LeaveDayPortion.FULL_DAY:
+            units -= Decimal("0.5")
+        return max(units, Decimal("0.5")).quantize(Decimal("0.01"))
+
     units = Decimal(total_days)
-    if total_days == 1 and start_day_portion != "full_day" and end_day_portion != "full_day":
+    if total_days == 1 and start_day_portion != LeaveDayPortion.FULL_DAY and end_day_portion != LeaveDayPortion.FULL_DAY:
         return Decimal("0.5")
-    if start_day_portion != "full_day":
+    if start_day_portion != LeaveDayPortion.FULL_DAY:
         units -= Decimal("0.5")
-    if end_day_portion != "full_day":
+    if end_day_portion != LeaveDayPortion.FULL_DAY:
         units -= Decimal("0.5")
-    return max(units, Decimal("0.5"))
+    return max(units, Decimal("0.5")).quantize(Decimal("0.01"))
+
+
+def _find_overlapping_active_leave_request(*, employee, start_date: date, end_date: date) -> LeaveRequest | None:
+    return (
+        LeaveRequest.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            status__in=[
+                LeaveRequestStatus.PENDING,
+                LeaveRequestStatus.PARTIALLY_APPROVED,
+                LeaveRequestStatus.APPROVED,
+            ],
+            start_date__lte=end_date,
+            end_date__gte=start_date,
+        )
+        .select_related("leave_type")
+        .order_by("start_date", "created_at")
+        .first()
+    )
 
 
 def _recalculate_closing_balance(balance: LeaveBalance) -> LeaveBalance:
@@ -1144,11 +1206,30 @@ def _validate_leave_request(
     if not leave_policy:
         raise ValidationError({"leave_type_id": "No active leave policy is assigned to this employee for the selected leave type."})
 
+    if requested_units <= 0:
+        raise ValidationError({"start_date": "Selected dates do not include working leave days under this policy."})
+
     if leave_policy.effective_from and start_date < leave_policy.effective_from:
         raise ValidationError({"start_date": "Leave request starts before this policy becomes effective."})
 
     if leave_policy.effective_to and end_date > leave_policy.effective_to:
         raise ValidationError({"end_date": "Leave request ends after this policy expires."})
+
+    overlapping_request = _find_overlapping_active_leave_request(
+        employee=employee,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    if overlapping_request:
+        raise ValidationError(
+            {
+                "start_date": (
+                    "Selected dates overlap an active "
+                    f"{overlapping_request.leave_type.name} request from "
+                    f"{overlapping_request.start_date} to {overlapping_request.end_date}."
+                )
+            }
+        )
 
     if not leave_policy.allow_half_day and (
         start_day_portion != LeaveDayPortion.FULL_DAY or end_day_portion != LeaveDayPortion.FULL_DAY
@@ -1858,7 +1939,14 @@ def submit_leave_request(
     """Creates and submits a leave request."""
 
     leave_policy = _resolve_leave_policy(employee, leave_type, as_of=start_date)
-    requested_units = _calculate_requested_units(start_date, end_date, start_day_portion, end_day_portion)
+    requested_units = _calculate_requested_units(
+        start_date,
+        end_date,
+        start_day_portion,
+        end_day_portion,
+        employee=employee,
+        leave_policy=leave_policy,
+    )
     policy_runtime = _validate_leave_request(
         employee=employee,
         leave_type=leave_type,
@@ -1986,7 +2074,7 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
             if is_final_approval
             else previous_approved_status
             if is_rejected
-            else LeaveRequestStatus.PENDING
+            else LeaveRequestStatus.PARTIALLY_APPROVED
         )
         leave_request.rejection_reason = comment if is_rejected else ""
         leave_request.manager_comment = comment or leave_request.manager_comment
@@ -2006,7 +2094,7 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
             if is_final_approval
             else LeaveRequestStatus.REJECTED
             if is_rejected
-            else LeaveRequestStatus.PENDING
+            else LeaveRequestStatus.PARTIALLY_APPROVED
         )
         leave_request.approved_units = leave_request.requested_units if is_final_approval else Decimal("0")
         leave_request.approved_at = timezone.now() if is_final_approval else None
@@ -2032,7 +2120,7 @@ def resolve_leave_request(*, leave_request: LeaveRequest, actor_employee, approv
                 start_date=leave_request.start_date,
                 approved_units=Decimal(leave_request.approved_units or leave_request.requested_units or 0),
             )
-    elif previous_status == LeaveRequestStatus.PENDING:
+    elif previous_status in {LeaveRequestStatus.PENDING, LeaveRequestStatus.PARTIALLY_APPROVED}:
         if is_final_approval or is_rejected:
             _release_reserved_leave_balance(
                 employee=leave_request.employee,

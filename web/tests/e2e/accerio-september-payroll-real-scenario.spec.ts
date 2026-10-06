@@ -932,7 +932,7 @@ async function createPayrollRunAndSnapshots(
     );
     expect(response.ok).toBeTruthy();
     snapshotIds.push(response.payload.id);
-    await expect(page.getByText("payroll input snapshot saved.").first()).toBeVisible();
+    await expect(page.getByText("Payroll input snapshot saved.").first()).toBeVisible();
   }
 
   await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${run.payload.id}`, hrAdmin);

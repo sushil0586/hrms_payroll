@@ -137,9 +137,31 @@ export function BankAdviceReportWorkspace({
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setHandoffStatus("All");
+    setDeliveryStatus("All");
+    setProviderRef("All");
+    setSortBy("amount_desc");
+    setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Bank advice report workspace">
       <div className="report-catalog-workspace bank-advice-report" data-testid="bank-advice-report">
+        <div className="report-command-panel">
+          <div>
+            <small className="workspace-card__eyebrow">Finance handoff evidence</small>
+            <h2>Bank advice control</h2>
+            <p className="section-copy section-copy-soft">Review payout totals, provider delivery, handoff status, and checksum evidence before finance sign-off.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
+            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <button className="button button--ghost" type="button" onClick={() => window.print()}>Print report</button>
+          </div>
+        </div>
+
         <div className="metric-grid-modern payroll-setup-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Bank advice files</span>
@@ -163,31 +185,39 @@ export function BankAdviceReportWorkspace({
           </article>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Bank advice filters">
-          <label>
-            <span>Search bank advice</span>
+        <div className="report-filter-panel" aria-label="Bank advice filters">
+          <div className="report-filter-panel__header">
+            <div>
+              <strong>Filter bank advice</strong>
+              <span>Search bank files by run, provider, delivery reference, checksum, or handoff state.</span>
+            </div>
+            <button className="button button--ghost" type="button" onClick={clearFilters}>Clear filters</button>
+          </div>
+          <div className="report-filter-grid report-filter-grid--payroll">
+          <label className="report-filter-field">
+            Search bank advice
             <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search run, provider, file, hash" />
           </label>
-          <label>
-            <span>Handoff status</span>
+          <label className="report-filter-field">
+            Handoff status
             <select aria-label="Handoff status" className="input-control" value={handoffStatus} onChange={(event) => updateFilter(() => setHandoffStatus(event.target.value))}>
               {handoffStatuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
             </select>
           </label>
-          <label>
-            <span>Delivery status</span>
+          <label className="report-filter-field">
+            Delivery status
             <select aria-label="Delivery status" className="input-control" value={deliveryStatus} onChange={(event) => updateFilter(() => setDeliveryStatus(event.target.value))}>
               {deliveryStatuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
             </select>
           </label>
-          <label>
-            <span>Provider</span>
+          <label className="report-filter-field">
+            Provider
             <select aria-label="Provider" className="input-control" value={providerRef} onChange={(event) => updateFilter(() => setProviderRef(event.target.value))}>
               {providerRefs.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          <label>
-            <span>Sort</span>
+          <label className="report-filter-field">
+            Sort
             <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
               <option value="amount_desc">Payout high to low</option>
               <option value="run_name">Run name</option>
@@ -195,14 +225,13 @@ export function BankAdviceReportWorkspace({
               <option value="submitted_desc">Submitted newest</option>
             </select>
           </label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.filter((row) => row.handoff?.status === "transmitted").length}</strong> transmitted</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((row) => row.delivery?.status === "reconciled").length}</strong> reconciled</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
         </div>
 
         <div className="report-catalog-table-wrap">

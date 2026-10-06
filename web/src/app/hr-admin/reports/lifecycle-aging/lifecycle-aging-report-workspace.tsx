@@ -183,9 +183,34 @@ export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecyc
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setItemType("All");
+    setStatus("All");
+    setOwner("All");
+    setBucket("All");
+    setRisk("All");
+    setEscalation("All");
+    setSortBy("overdue");
+    setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Lifecycle aging report workspace">
       <div className="report-catalog-workspace lifecycle-aging-report" data-testid="lifecycle-aging-report">
+        <div className="report-command-panel">
+          <div>
+            <span className="workspace-card__eyebrow">Lifecycle aging</span>
+            <h2>SLA aging and escalation evidence</h2>
+            <p className="section-copy section-copy-soft">Prioritize overdue lifecycle work, owner gaps, escalation dates, and document blockers before export or print review.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
+            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
+          </div>
+        </div>
+
         <div className="metric-grid-modern payroll-setup-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Aging records</span>
@@ -209,68 +234,75 @@ export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecyc
           </article>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Lifecycle aging filters">
-          <label>
-            <span>Search aging</span>
-            <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, owner, workflow, SLA" />
-          </label>
-          <label>
-            <span>Lifecycle type</span>
-            <select aria-label="Lifecycle type" className="input-control" value={itemType} onChange={(event) => updateFilter(() => setItemType(event.target.value))}>
-              {itemTypes.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Status</span>
-            <select aria-label="Status" className="input-control" value={status} onChange={(event) => updateFilter(() => setStatus(event.target.value))}>
-              {statuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Owner</span>
-            <select aria-label="Owner" className="input-control" value={owner} onChange={(event) => updateFilter(() => setOwner(event.target.value))}>
-              {owners.map((item) => <option key={item} value={item}>{item || "Unassigned"}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Age bucket</span>
-            <select aria-label="Age bucket" className="input-control" value={bucket} onChange={(event) => updateFilter(() => setBucket(event.target.value))}>
-              {buckets.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>SLA risk</span>
-            <select aria-label="SLA risk" className="input-control" value={risk} onChange={(event) => updateFilter(() => setRisk(event.target.value))}>
-              {risks.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Escalation</span>
-            <select aria-label="Escalation" className="input-control" value={escalation} onChange={(event) => updateFilter(() => setEscalation(event.target.value))}>
-              <option value="All">All</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="missing">Missing</option>
-            </select>
-          </label>
-          <label>
-            <span>Sort</span>
-            <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
-              <option value="overdue">Overdue first</option>
-              <option value="age">Oldest first</option>
-              <option value="employee">Employee</option>
-              <option value="type">Lifecycle type</option>
-              <option value="owner">Owner</option>
-              <option value="escalation">Escalation date</option>
-            </select>
-          </label>
+        <div className="report-filter-panel" aria-label="Lifecycle aging filters">
+          <div className="report-filter-panel__header">
+            <div>
+              <strong>Filter SLA aging</strong>
+              <span>Use age, risk, owner, and escalation filters to prepare a focused exception review.</span>
+            </div>
+            <button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button>
+          </div>
+          <div className="report-filter-grid report-filter-grid--lifecycle">
+            <label className="report-filter-field report-filter-field--wide">
+              <span>Search aging</span>
+              <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, owner, workflow, SLA" />
+            </label>
+            <label className="report-filter-field">
+              <span>Lifecycle type</span>
+              <select aria-label="Lifecycle type" className="input-control" value={itemType} onChange={(event) => updateFilter(() => setItemType(event.target.value))}>
+                {itemTypes.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Status</span>
+              <select aria-label="Status" className="input-control" value={status} onChange={(event) => updateFilter(() => setStatus(event.target.value))}>
+                {statuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Owner</span>
+              <select aria-label="Owner" className="input-control" value={owner} onChange={(event) => updateFilter(() => setOwner(event.target.value))}>
+                {owners.map((item) => <option key={item} value={item}>{item || "Unassigned"}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Age bucket</span>
+              <select aria-label="Age bucket" className="input-control" value={bucket} onChange={(event) => updateFilter(() => setBucket(event.target.value))}>
+                {buckets.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>SLA risk</span>
+              <select aria-label="SLA risk" className="input-control" value={risk} onChange={(event) => updateFilter(() => setRisk(event.target.value))}>
+                {risks.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Escalation</span>
+              <select aria-label="Escalation" className="input-control" value={escalation} onChange={(event) => updateFilter(() => setEscalation(event.target.value))}>
+                <option value="All">All</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="missing">Missing</option>
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Sort</span>
+              <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
+                <option value="overdue">Overdue first</option>
+                <option value="age">Oldest first</option>
+                <option value="employee">Employee</option>
+                <option value="type">Lifecycle type</option>
+                <option value="owner">Owner</option>
+                <option value="escalation">Escalation date</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.ageBucket === "30+ days").length}</strong> aged 30+ days</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.ownerGap).length}</strong> owner gaps</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
         </div>
 
         <div className="report-catalog-table-wrap">

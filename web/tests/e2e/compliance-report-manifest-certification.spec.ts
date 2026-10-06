@@ -57,7 +57,7 @@ test.describe("Phase R4-J compliance export manifest certification", () => {
 
   test("employee cannot download compliance export manifests", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     for (const item of manifestCases) {
       const response = await page.request.get(`${item.exportPath}&format=manifest`);

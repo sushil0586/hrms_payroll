@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type PayrollAction = {
   id: string;
@@ -29,6 +30,7 @@ type Props = {
 };
 
 export function PayrollCloseActionsPanel({ title, eyebrow, description, actions }: Props) {
+  const router = useRouter();
   const initialRefs = useMemo(
     () => Object.fromEntries(actions.map((action) => [action.id, action.defaultProfileRef ?? ""])),
     [actions],
@@ -68,6 +70,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
         throw new Error(payload.detail || "Payroll action failed.");
       }
       setMessage(payload.detail || `${action.label} completed.`);
+      router.refresh();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Payroll action failed.");
     } finally {
@@ -90,7 +93,11 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
         {actions.map((action) => {
           const isDisabled = Boolean(action.disabled || busyAction);
           return (
-            <article className="payroll-close-action-card" key={action.id}>
+            <article className={`payroll-close-action-card ${action.disabled ? "payroll-close-action-card--disabled" : ""}`} key={action.id}>
+              <div className="payroll-close-action-card__header">
+                <strong>{action.label}</strong>
+                <span>{action.disabled ? "Not ready" : "Ready"}</span>
+              </div>
               {action.profileField ? (
                 <label className="form-field" htmlFor={`${action.id}-profile-ref`}>
                   <span className="muted">{action.profileLabel ?? "Profile ref"}</span>

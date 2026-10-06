@@ -90,25 +90,14 @@ function daysBetweenInclusive(startDate: Date, endDate: Date) {
   return Math.floor((endDate.getTime() - startDate.getTime()) / dayMs) + 1;
 }
 
-function countWeekendDays(startDate: Date, endDate: Date) {
-  const dayMs = 24 * 60 * 60 * 1000;
-  let count = 0;
-  for (let cursor = startDate.getTime(); cursor <= endDate.getTime(); cursor += dayMs) {
-    const day = new Date(cursor).getDay();
-    if (day === 0 || day === 6) count += 1;
-  }
-  return count;
-}
-
 function estimateRequestedUnits(startDateValue: string, endDateValue: string, startPortion: string, endPortion: string) {
   const startDate = parseDateOnly(startDateValue);
   const endDate = parseDateOnly(endDateValue);
   if (!startDate || !endDate || endDate < startDate) {
-    return { days: 0, weekendDays: 0, valid: false };
+    return { days: 0, calendarDays: 0, valid: false };
   }
 
   const calendarDays = daysBetweenInclusive(startDate, endDate);
-  const weekendDays = countWeekendDays(startDate, endDate);
   let days = calendarDays;
 
   if (calendarDays === 1) {
@@ -120,7 +109,7 @@ function estimateRequestedUnits(startDateValue: string, endDateValue: string, st
     if (endPortion !== "full_day") days -= 0.5;
   }
 
-  return { days: Math.max(0.5, days), weekendDays, valid: true };
+  return { days: Math.max(0.5, days), calendarDays, valid: true };
 }
 
 function rangesOverlap(leftStart: string, leftEnd: string, rightStart: string, rightEnd: string) {
@@ -151,6 +140,21 @@ function isRequestInYear(item: LeaveRequestItem, year: number) {
   const endDate = parseDateOnly(item.end_date);
   if (!startDate || !endDate) return false;
   return startDate.getFullYear() === year || endDate.getFullYear() === year;
+}
+
+function getCurrentApprovalStep(item: LeaveRequestItem) {
+  return (item.approval_steps ?? []).find((step) => step.is_current) ?? null;
+}
+
+function getApprovalWaitingLabel(item: LeaveRequestItem) {
+  if (!["pending", "partially_approved"].includes(item.status)) {
+    return "";
+  }
+  const currentStep = getCurrentApprovalStep(item);
+  if (!currentStep) {
+    return "Pending approval from the configured approver";
+  }
+  return `Pending approval from ${currentStep.manager_name || currentStep.name || `Level ${currentStep.level} approver`}`;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -218,6 +222,7 @@ function LeaveTimeline({ item }: { item: LeaveRequestItem }) {
   const isCancelled = item.status === "cancelled";
   const isWithdrawn = item.status === "withdrawn";
   const hasDecision = Boolean(item.approved_at || item.rejection_reason || item.manager_comment || isRejected || item.status === "approved" || item.status === "partially_approved");
+  const approvalSteps = item.approval_steps ?? [];
   const timeline = [
     {
       label: "Submitted",
@@ -225,14 +230,28 @@ function LeaveTimeline({ item }: { item: LeaveRequestItem }) {
       when: item.applied_at,
       state: "complete",
     },
-    {
-      label: hasDecision ? "Manager decision" : "Awaiting decision",
-      detail: hasDecision
-        ? (item.manager_comment || item.rejection_reason || `Request ${formatStatus(item.status)}.`)
-        : "Your manager or configured approver still needs to review this request.",
-      when: item.approved_at ?? (isRejected ? item.updated_at : null),
-      state: hasDecision ? (isRejected ? "blocked" : "complete") : "current",
-    },
+    ...(
+      approvalSteps.length
+        ? approvalSteps.map((step) => ({
+            label: `Level ${step.level}: ${step.name}`,
+            detail: [
+              step.manager_name ? `Approver: ${step.manager_name}` : "Approver not assigned",
+              step.comment ? `Note: ${step.comment}` : null,
+            ].filter(Boolean).join(" • "),
+            when: step.acted_at,
+            state: step.status === "rejected" ? "blocked" : step.is_current ? "current" : step.status === "approved" ? "complete" : "pending",
+          }))
+        : [
+            {
+              label: hasDecision ? "Manager decision" : "Awaiting decision",
+              detail: hasDecision
+                ? (item.manager_comment || item.rejection_reason || `Request ${formatStatus(item.status)}.`)
+                : "Your manager or configured approver still needs to review this request.",
+              when: item.approved_at ?? (isRejected ? item.updated_at : null),
+              state: hasDecision ? (isRejected ? "blocked" : "complete") : "current",
+            },
+          ]
+    ),
   ];
 
   if (isCancelled || isWithdrawn) {
@@ -262,15 +281,16 @@ function LeaveTimeline({ item }: { item: LeaveRequestItem }) {
 
 function LeaveDecisionCard({ item }: { item: LeaveRequestItem }) {
   const decisionText = item.manager_comment || item.rejection_reason || "";
-  const isOpen = item.status === "pending";
+  const isOpen = item.status === "pending" || item.status === "partially_approved";
   const tone = item.status === "rejected" ? "blocked" : isOpen ? "current" : "complete";
+  const waitingLabel = getApprovalWaitingLabel(item);
 
   return (
     <section className={`leave-decision-card leave-decision-card--${tone}`}>
       <div>
-        <span className="detail-label">Manager decision</span>
-        <h3>{isOpen ? "Waiting for review" : formatStatus(item.status)}</h3>
-        <p>{decisionText || (isOpen ? "No decision has been recorded yet." : "No manager note was added.")}</p>
+        <span className="detail-label">Approval status</span>
+        <h3>{waitingLabel || formatStatus(item.status)}</h3>
+        <p>{decisionText || (isOpen ? "The request is still moving through the configured approval route." : "No manager note was added.")}</p>
       </div>
       <span className={statusClass(item.status)}>{formatStatus(item.status)}</span>
     </section>
@@ -365,10 +385,10 @@ function LeaveApplyModal({
       submittingRef.current = false;
       return;
     }
-    setFeedback({ tone: "success", message: "Leave request submitted." });
+    setFeedback({ tone: "success", message: "Leave request submitted. Refreshing your history." });
     event.currentTarget.reset();
+    onClose();
     router.refresh();
-    window.setTimeout(onClose, 650);
   }
 
   return (
@@ -469,7 +489,7 @@ function LeaveApplyModal({
             ) : null}
             <div className="form-actions-bar form-field--full">
               <span className="muted">After you submit, approval goes to your manager when required.</span>
-              <button className="button button--primary" disabled={submitting || !leaveTypes.length || !requestEstimate.valid || !evidenceReady} type="submit">
+              <button className="button button--primary" disabled={submitting || !leaveTypes.length || !requestEstimate.valid || !evidenceReady || Boolean(overlappingRequest)} type="submit">
                 {submitting ? "Submitting..." : "Submit leave"}
               </button>
             </div>
@@ -478,19 +498,19 @@ function LeaveApplyModal({
             <div>
               <span className="detail-label">Request summary</span>
               <h3>{selectedLeaveType?.name ?? "Choose leave type"}</h3>
-              <p>{requestEstimate.valid ? `${formatUnits(requestEstimate.days)} estimated leave units` : "Select a valid date range"}</p>
+              <p>{requestEstimate.valid ? `${formatUnits(requestEstimate.days)} calendar estimate` : "Select a valid date range"}</p>
             </div>
             <div className="leave-summary-metrics">
               <DetailRow label="Available" value={matchingBalance ? formatUnits(balanceAvailable) : "Not mapped"} />
               <DetailRow label="Balance after request" value={matchingBalance && requestEstimate.valid ? formatUnits(balanceAfter) : "Pending"} />
-              <DetailRow label="Weekend days" value={requestEstimate.valid ? String(requestEstimate.weekendDays) : "Pending"} />
+              <DetailRow label="Calendar days" value={requestEstimate.valid ? String(requestEstimate.calendarDays) : "Pending"} />
               <DetailRow label="Evidence" value={attachmentRequired ? "Required" : "Optional"} />
             </div>
             <div className="leave-policy-helper">
               <strong>What happens next</strong>
               <span>{selectedLeaveType?.unit ? `Unit: ${selectedLeaveType.unit.replaceAll("_", " ")}.` : "Unit validation happens on submit."}</span>
               <span>{attachmentRequired ? "Evidence must be attached before submitting." : "Evidence is optional for this leave type."}</span>
-              <span>{selectedLeaveType?.allow_negative_balance ? "This leave type can be requested even without available balance." : "The request should stay within available balance."}</span>
+              <span>{selectedLeaveType?.allow_negative_balance ? "This leave type can be requested even without available balance." : "Final balance check uses the mapped leave and attendance policy."}</span>
             </div>
             {!requestEstimate.valid ? (
               <div className="notice">
@@ -506,8 +526,8 @@ function LeaveApplyModal({
             ) : null}
             {overlappingRequest ? (
               <div className="notice">
-                <strong>Possible overlap.</strong>
-                <span className="muted">You already have {overlappingRequest.leave_type} from {formatDate(overlappingRequest.start_date)} to {formatDate(overlappingRequest.end_date)}.</span>
+                <strong>Leave already exists in this range.</strong>
+                <span className="muted">You already have {overlappingRequest.leave_type} from {formatDate(overlappingRequest.start_date)} to {formatDate(overlappingRequest.end_date)}. Change the dates before submitting.</span>
               </div>
             ) : null}
             <div className="notice notice--success">
@@ -570,7 +590,7 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
   const status = normalizeParam(currentParams.status) ?? "all";
   const selectedRequestId = normalizeParam(currentParams.requestId);
   const page = Math.max(Number(normalizeParam(currentParams.page) || String(leaveRequests.page)) || leaveRequests.page, 1);
-  const tabs = ["all", "pending", "approved", "rejected", "withdrawn", "cancelled"];
+  const tabs = ["all", "pending", "partially_approved", "approved", "rejected", "withdrawn", "cancelled"];
   const totalPages = Math.max(1, Math.ceil(leaveRequests.total_count / leaveRequests.page_size));
   const today = useMemo(() => parseDateOnly(new Date().toISOString().slice(0, 10)) ?? new Date(), []);
   const leaveTypeOptions = useMemo(
@@ -780,27 +800,30 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
           </div>
           <div className="leave-request-grid">
             {visibleRequests.length ? (
-              visibleRequests.map((request) => (
-                <button
-                  className="leave-request-card"
-                  key={request.id}
-                  onClick={() => {
-                    setDismissedRequestId(null);
-                    setClickedRequest(request);
-                  }}
-                  type="button"
-                >
-                  <span className="leave-request-card__main">
-                    <strong>{request.leave_type}</strong>
-                    <small>{formatDate(request.start_date)} to {formatDate(request.end_date)} • {request.requested_units} units</small>
-                    <span className="muted">{request.reason || "No reason provided."}</span>
-                  </span>
-                  <span className="leave-request-card__side">
-                    <span className={statusClass(request.status)}>{formatStatus(request.status)}</span>
-                    <span className="queue-summary-chip">{request.attachments?.length ?? 0} files</span>
-                  </span>
-                </button>
-              ))
+              visibleRequests.map((request) => {
+                const waitingLabel = getApprovalWaitingLabel(request);
+                return (
+                  <button
+                    className="leave-request-card"
+                    key={request.id}
+                    onClick={() => {
+                      setDismissedRequestId(null);
+                      setClickedRequest(request);
+                    }}
+                    type="button"
+                  >
+                    <span className="leave-request-card__main">
+                      <strong>{request.leave_type}</strong>
+                      <small>{formatDate(request.start_date)} to {formatDate(request.end_date)} • {request.requested_units} units</small>
+                      <span className="muted">{waitingLabel || request.reason || "No reason provided."}</span>
+                    </span>
+                    <span className="leave-request-card__side">
+                      <span className={statusClass(request.status)}>{formatStatus(request.status)}</span>
+                      <span className="queue-summary-chip">{request.attachments?.length ?? 0} files</span>
+                    </span>
+                  </button>
+                );
+              })
             ) : (
               <div className="notice">
                 <strong>{leaveRequests.items.length ? "No requests match these filters." : "No leave requests in this view."}</strong>

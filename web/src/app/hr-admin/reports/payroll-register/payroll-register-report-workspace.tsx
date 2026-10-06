@@ -128,9 +128,30 @@ export function PayrollRegisterReportWorkspace({
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setBatchStatus("All");
+    setArtifactStatus("All");
+    setSortBy("published_at_desc");
+    setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Payroll register report workspace">
       <div className="report-catalog-workspace payroll-register-report" data-testid="payroll-register-report">
+        <div className="report-command-panel">
+          <div>
+            <small className="workspace-card__eyebrow">Payroll output evidence</small>
+            <h2>Payroll register control</h2>
+            <p className="section-copy section-copy-soft">Review locked register totals, publish state, source hashes, and downloadable payroll output before finance handoff.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
+            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <button className="button button--ghost" type="button" onClick={() => window.print()}>Print report</button>
+          </div>
+        </div>
+
         <div className="metric-grid-modern payroll-setup-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Register artifacts</span>
@@ -154,9 +175,17 @@ export function PayrollRegisterReportWorkspace({
           </article>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Payroll register filters">
-          <label>
-            <span>Search register</span>
+        <div className="report-filter-panel" aria-label="Payroll register filters">
+          <div className="report-filter-panel__header">
+            <div>
+              <strong>Filter payroll register</strong>
+              <span>Search payroll output by run, file, profile, hash, status, or value sort.</span>
+            </div>
+            <button className="button button--ghost" type="button" onClick={clearFilters}>Clear filters</button>
+          </div>
+          <div className="report-filter-grid report-filter-grid--payroll">
+          <label className="report-filter-field">
+            Search register
             <input
               className="input-control"
               type="search"
@@ -165,8 +194,8 @@ export function PayrollRegisterReportWorkspace({
               placeholder="Search run, file, profile, hash"
             />
           </label>
-          <label>
-            <span>Batch status</span>
+          <label className="report-filter-field">
+            Batch status
             <select className="input-control" value={batchStatus} onChange={(event) => updateFilter(() => setBatchStatus(event.target.value))}>
               {batchStatuses.map((item) => (
                 <option key={item} value={item}>
@@ -175,8 +204,8 @@ export function PayrollRegisterReportWorkspace({
               ))}
             </select>
           </label>
-          <label>
-            <span>Artifact status</span>
+          <label className="report-filter-field">
+            Artifact status
             <select className="input-control" value={artifactStatus} onChange={(event) => updateFilter(() => setArtifactStatus(event.target.value))}>
               {artifactStatuses.map((item) => (
                 <option key={item} value={item}>
@@ -185,8 +214,8 @@ export function PayrollRegisterReportWorkspace({
               ))}
             </select>
           </label>
-          <label>
-            <span>Sort</span>
+          <label className="report-filter-field">
+            Sort
             <select className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
               <option value="published_at_desc">Published newest</option>
               <option value="run_name">Run name</option>
@@ -194,6 +223,7 @@ export function PayrollRegisterReportWorkspace({
               <option value="net_pay_asc">Net pay low to high</option>
             </select>
           </label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
@@ -206,12 +236,6 @@ export function PayrollRegisterReportWorkspace({
           <span className="queue-summary-chip">
             <strong>{currentPage}</strong> of {pageCount} pages
           </span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>
-            Export filtered CSV
-          </Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>
-            Manifest
-          </Link>
         </div>
 
         <div className="report-catalog-table-wrap">

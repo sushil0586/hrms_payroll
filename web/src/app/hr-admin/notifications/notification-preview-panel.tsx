@@ -72,11 +72,17 @@ export function NotificationPreviewPanel({
       setError(built.error);
       return;
     }
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(built.payload),
-    });
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(built.payload),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));

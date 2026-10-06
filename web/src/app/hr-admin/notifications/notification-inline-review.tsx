@@ -50,11 +50,18 @@ export function NotificationInlineReview({
     if (readState === "mark_unread") {
       payload.read_at = null;
     }
-    const response = await fetch(`/api/hr-admin/notifications/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/hr-admin/notifications/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      return;
+    }
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(result));

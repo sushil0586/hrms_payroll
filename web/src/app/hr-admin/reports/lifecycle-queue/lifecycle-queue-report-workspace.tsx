@@ -116,9 +116,33 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setItemType("All");
+    setStatus("All");
+    setOwner("All");
+    setAttentionState("All");
+    setDocumentAttentionState("All");
+    setSortBy("attention");
+    setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Lifecycle queue report workspace">
       <div className="report-catalog-workspace lifecycle-queue-report" data-testid="lifecycle-queue-report">
+        <div className="report-command-panel">
+          <div>
+            <span className="workspace-card__eyebrow">Lifecycle queue</span>
+            <h2>Workflow workload evidence</h2>
+            <p className="section-copy section-copy-soft">Review owner load, document blockers, lifecycle status, and due dates before exporting or printing the queue.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
+            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
+          </div>
+        </div>
+
         <div className="metric-grid-modern payroll-setup-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Lifecycle records</span>
@@ -142,60 +166,67 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
           </article>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Lifecycle queue filters">
-          <label>
-            <span>Search lifecycle</span>
-            <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, owner, workflow, notes" />
-          </label>
-          <label>
-            <span>Lifecycle type</span>
-            <select aria-label="Lifecycle type" className="input-control" value={itemType} onChange={(event) => updateFilter(() => setItemType(event.target.value))}>
-              {itemTypes.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Status</span>
-            <select aria-label="Status" className="input-control" value={status} onChange={(event) => updateFilter(() => setStatus(event.target.value))}>
-              {statuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Owner</span>
-            <select aria-label="Owner" className="input-control" value={owner} onChange={(event) => updateFilter(() => setOwner(event.target.value))}>
-              {owners.map((item) => <option key={item} value={item}>{item || "Unassigned"}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Lifecycle attention</span>
-            <select aria-label="Lifecycle attention" className="input-control" value={attentionState} onChange={(event) => updateFilter(() => setAttentionState(event.target.value))}>
-              {attentionStates.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Document attention</span>
-            <select aria-label="Document attention" className="input-control" value={documentAttentionState} onChange={(event) => updateFilter(() => setDocumentAttentionState(event.target.value))}>
-              {documentAttentionStates.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Sort</span>
-            <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
-              <option value="attention">Attention rank</option>
-              <option value="employee">Employee</option>
-              <option value="type">Lifecycle type</option>
-              <option value="status">Status</option>
-              <option value="owner">Owner</option>
-              <option value="due_date">Due date</option>
-            </select>
-          </label>
+        <div className="report-filter-panel" aria-label="Lifecycle queue filters">
+          <div className="report-filter-panel__header">
+            <div>
+              <strong>Filter lifecycle queue</strong>
+              <span>Narrow by lifecycle type, owner, attention state, or document blocker pressure.</span>
+            </div>
+            <button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button>
+          </div>
+          <div className="report-filter-grid report-filter-grid--lifecycle">
+            <label className="report-filter-field report-filter-field--wide">
+              <span>Search lifecycle</span>
+              <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, owner, workflow, notes" />
+            </label>
+            <label className="report-filter-field">
+              <span>Lifecycle type</span>
+              <select aria-label="Lifecycle type" className="input-control" value={itemType} onChange={(event) => updateFilter(() => setItemType(event.target.value))}>
+                {itemTypes.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Status</span>
+              <select aria-label="Status" className="input-control" value={status} onChange={(event) => updateFilter(() => setStatus(event.target.value))}>
+                {statuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Owner</span>
+              <select aria-label="Owner" className="input-control" value={owner} onChange={(event) => updateFilter(() => setOwner(event.target.value))}>
+                {owners.map((item) => <option key={item} value={item}>{item || "Unassigned"}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Lifecycle attention</span>
+              <select aria-label="Lifecycle attention" className="input-control" value={attentionState} onChange={(event) => updateFilter(() => setAttentionState(event.target.value))}>
+                {attentionStates.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Document attention</span>
+              <select aria-label="Document attention" className="input-control" value={documentAttentionState} onChange={(event) => updateFilter(() => setDocumentAttentionState(event.target.value))}>
+                {documentAttentionStates.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Sort</span>
+              <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
+                <option value="attention">Attention rank</option>
+                <option value="employee">Employee</option>
+                <option value="type">Lifecycle type</option>
+                <option value="status">Status</option>
+                <option value="owner">Owner</option>
+                <option value="due_date">Due date</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{itemTypes.length - 1}</strong> lifecycle types</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.next_due_on).length}</strong> due dates</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
         </div>
 
         <div className="report-catalog-table-wrap">

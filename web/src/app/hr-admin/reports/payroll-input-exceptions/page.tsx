@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
+import { getHrAdminPayrollInputSnapshots, getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { ReportInsightsStrip } from "../report-insights-strip";
@@ -10,7 +10,10 @@ import { PayrollInputExceptionsReportWorkspace } from "./payroll-input-exception
 export default async function PayrollInputExceptionsReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
-  const result = await getHrAdminPayrollInputSnapshotSetup();
+  const [result, snapshotsResult] = await Promise.all([
+    getHrAdminPayrollInputSnapshotSetup(),
+    getHrAdminPayrollInputSnapshots(),
+  ]);
 
   return (
     <main className="shell">
@@ -51,7 +54,7 @@ export default async function PayrollInputExceptionsReportPage() {
         ]}
       />
 
-      <PayrollInputExceptionsReportWorkspace runs={result.data.runs} snapshots={result.data.snapshots} />
+      <PayrollInputExceptionsReportWorkspace runs={result.data.runs} snapshots={snapshotsResult.data} />
     </main>
   );
 }

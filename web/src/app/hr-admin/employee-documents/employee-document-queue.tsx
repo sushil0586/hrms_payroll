@@ -113,11 +113,18 @@ export function EmployeeDocumentQueue({
     setActionError("");
     setActionNotice("");
     setIsSubmittingReminder(true);
-    const response = await fetch("/api/hr-admin/employee-documents/reminders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ document_ids: selectedIds }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/hr-admin/employee-documents/reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ document_ids: selectedIds }),
+      });
+    } catch {
+      setActionError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmittingReminder(false);
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setActionError(String((payload as { detail?: string }).detail || "Unable to send document reminders."));

@@ -49,6 +49,7 @@ import type {
   HrAdminPayrollCalculationSetupResponse,
   HrAdminPayrollAdjustmentSetupResponse,
   HrAdminPayrollFinanceHandoffSetupResponse,
+  HrAdminPayrollInputSnapshot,
   HrAdminPayrollOutputArtifact,
   HrAdminPayrollOutputSetupResponse,
   HrAdminPayrollProviderConnectionSetupResponse,
@@ -487,6 +488,12 @@ export async function getHrAdminSalarySetup() {
 
 export async function getHrAdminPayrollInputSnapshotSetup() {
   return apiGet<HrAdminPayrollInputSnapshotSetupResponse>("/hr-admin/payroll-input-snapshot-setup/");
+}
+
+export async function getHrAdminPayrollInputSnapshots(params?: {
+  payroll_run_id?: string;
+}) {
+  return apiGet<HrAdminPayrollInputSnapshot[]>(`/hr-admin/payroll-input-snapshots/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminPayrollAdjustmentSetup() {

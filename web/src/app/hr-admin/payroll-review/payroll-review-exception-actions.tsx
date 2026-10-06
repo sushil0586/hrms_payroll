@@ -29,6 +29,10 @@ function apiErrorMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
+function isMeaningfulText(value: string, minLength = 5) {
+  return value.trim().length >= minLength;
+}
+
 export function PayrollReviewExceptionActions({ reviewId, selectedException, lines, severityOptions, canManageExceptions }: Props) {
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -44,59 +48,95 @@ export function PayrollReviewExceptionActions({ reviewId, selectedException, lin
 
   async function createException() {
     if (!reviewId) {
+      setNotice("");
+      setError("Select a payroll review before creating an exception.");
+      return;
+    }
+    if (!isMeaningfulText(title)) {
+      setNotice("");
+      setError("Exception title must be at least 5 characters.");
+      return;
+    }
+    if (!isMeaningfulText(detail, 10)) {
+      setNotice("");
+      setError("Exception detail must explain the payroll issue in at least 10 characters.");
+      return;
+    }
+    if (!isMeaningfulText(category, 3)) {
+      setNotice("");
+      setError("Exception category is required.");
       return;
     }
     setBusyAction("create");
     setNotice("");
     setError("");
-    const response = await fetch(`/api/hr-admin/payroll-reviews/${reviewId}/exceptions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        detail,
-        category,
-        severity,
-        calculation_line_id: lineId || null,
-        config_snapshot: {
-          source: "browser",
-          category,
+
+    try {
+      const response = await fetch(`/api/hr-admin/payroll-reviews/${reviewId}/exceptions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          detail: detail.trim(),
+          category: category.trim(),
           severity,
-        },
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    setBusyAction(null);
-    if (!response.ok) {
-      setError(apiErrorMessage(payload, "Exception could not be created."));
-      return;
+          calculation_line_id: lineId || null,
+          config_snapshot: {
+            source: "browser",
+            category: category.trim(),
+            severity,
+          },
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(apiErrorMessage(payload, "Exception could not be created."));
+        return;
+      }
+      setNotice("Exception created.");
+      setTitle("");
+      setDetail("");
+      router.refresh();
+    } catch {
+      setError("Network connection failed while creating the exception. Please retry.");
+    } finally {
+      setBusyAction(null);
     }
-    setNotice("Exception created.");
-    setTitle("");
-    setDetail("");
-    router.refresh();
   }
 
   async function decideException() {
     if (!selectedException) {
+      setNotice("");
+      setError("Select an exception before saving a decision.");
+      return;
+    }
+    if (!isMeaningfulText(reason, 10)) {
+      setNotice("");
+      setError("Decision reason must explain the action in at least 10 characters.");
       return;
     }
     setBusyAction("decision");
     setNotice("");
     setError("");
-    const response = await fetch(`/api/hr-admin/payroll-review-exceptions/${selectedException.id}/decision`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision, reason }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    setBusyAction(null);
-    if (!response.ok) {
-      setError(apiErrorMessage(payload, "Exception decision could not be saved."));
-      return;
+
+    try {
+      const response = await fetch(`/api/hr-admin/payroll-review-exceptions/${selectedException.id}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, reason: reason.trim() }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(apiErrorMessage(payload, "Exception decision could not be saved."));
+        return;
+      }
+      setNotice("Exception decision saved.");
+      router.refresh();
+    } catch {
+      setError("Network connection failed while saving the exception decision. Please retry.");
+    } finally {
+      setBusyAction(null);
     }
-    setNotice("Exception decision saved.");
-    router.refresh();
   }
 
   return (
@@ -140,7 +180,7 @@ export function PayrollReviewExceptionActions({ reviewId, selectedException, lin
               ))}
             </select>
           </label>
-          <button className="button button--primary" type="button" disabled={!canManageExceptions || !reviewId || !title || Boolean(busyAction)} onClick={createException}>
+          <button className="button button--primary" type="button" disabled={!canManageExceptions || !reviewId || !title.trim() || Boolean(busyAction)} onClick={createException}>
             {busyAction === "create" ? "Working..." : "Create exception"}
           </button>
           {!canManageExceptions ? <span className="muted">Requires payroll.review.</span> : null}

@@ -59,6 +59,36 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ApprovalTrack({ item }: { item: LeaveRequestItem | AttendanceRegularizationItem }) {
+  const steps = item.approval_steps ?? [];
+  if (!steps.length) {
+    return (
+      <div className="notice notice--compact">
+        <strong>Approval route unavailable.</strong>
+        <span className="muted">This request does not expose a workflow track yet.</span>
+      </div>
+    );
+  }
+
+  return (
+    <ol className="leave-timeline">
+      {steps.map((step) => (
+        <li
+          className={`leave-timeline__item leave-timeline__item--${step.status === "approved" ? "complete" : step.status === "rejected" ? "blocked" : step.is_current ? "current" : "pending"}`}
+          key={`${step.level}-${step.name}`}
+        >
+          <span className="leave-timeline__dot" aria-hidden="true" />
+          <span>
+            <strong>Level {step.level}: {step.name}</strong>
+            <small>{step.manager_name || "Approver not assigned"}{step.manager_email ? ` • ${step.manager_email}` : ""}</small>
+            <em>{step.comment || (step.is_current ? "Waiting for this decision." : step.status.replaceAll("_", " "))}</em>
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function LeaveEvidenceList({ item }: { item: LeaveRequestItem }) {
   const attachments = item.attachments ?? [];
   if (!attachments.length && !item.attachment_reference) {
@@ -170,6 +200,11 @@ function LeaveReviewModal({
             <LeaveEvidenceList item={item} />
           </section>
 
+          <section className="ess-modal-section">
+            <h3>Approval track</h3>
+            <ApprovalTrack item={item} />
+          </section>
+
           <ManagerDecisionPanel
             canDecide={canDecide}
             description="Capture the manager decision after reviewing the full leave context."
@@ -243,6 +278,11 @@ function AttendanceReviewModal({
               <DetailRow label="Applied at" value={formatDateTime(item.applied_at)} />
               <DetailRow label="Reason" value={item.reason || "No reason provided."} />
             </div>
+          </section>
+
+          <section className="ess-modal-section">
+            <h3>Approval track</h3>
+            <ApprovalTrack item={item} />
           </section>
 
           <ManagerDecisionPanel

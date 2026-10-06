@@ -55,11 +55,18 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
     };
     setError("");
     setIsSubmitting(true);
-    const response = await fetch(`/api/hr-admin/employee-documents/${itemId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(nextValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/hr-admin/employee-documents/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));

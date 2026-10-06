@@ -138,7 +138,7 @@ test.describe("Employee self service control center certification", () => {
     await expect(page.getByLabel("Requested check-in")).toBeVisible();
     await expect(page.getByLabel("Requested check-out")).toBeVisible();
     await expect(page.getByLabel("Reason").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Submit regularization" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Submit correction|Submit regularization/ })).toBeVisible();
   });
 
   test("employee document center exposes upload, requirement, filter, and download controls", async ({ page }) => {

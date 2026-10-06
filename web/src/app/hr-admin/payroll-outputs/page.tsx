@@ -283,6 +283,9 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
   const selectedArtifact = visibleArtifacts.find((item) => item.id === selectedArtifactId) ?? pagedArtifacts[0] ?? visibleArtifacts[0] ?? null;
   const totals = selectedBatch?.totals_snapshot ?? {};
   const summary = selectedBatch?.artifact_summary_snapshot ?? {};
+  const canPublishSelectedBatch = Boolean(selectedBatch && selectedBatch.status === "generated");
+  const canGenerateSelectedHandoff = Boolean(selectedBatch && selectedBatch.status === "published");
+  const handoffReadinessStatus = !selectedBatch ? "blocked" : canGenerateSelectedHandoff ? "ready" : selectedBatch.status;
 
   return (
     <main className="shell shell--payroll-setup shell--payroll-outputs">
@@ -411,8 +414,12 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   id: "publish-outputs",
                   label: "Publish outputs",
                   endpoint: selectedBatch ? `/api/hr-admin/payroll-output-batches/${selectedBatch.id}/publish` : "",
-                  disabled: !canPublishOutputs || !selectedBatch,
-                  disabledReason: !canPublishOutputs ? "Requires payroll.publish." : "Select an output batch first.",
+                  disabled: !canPublishOutputs || !canPublishSelectedBatch,
+                  disabledReason: !canPublishOutputs
+                    ? "Requires payroll.publish."
+                    : !selectedBatch
+                      ? "Select an output batch first."
+                      : `Batch status is ${titleCase(selectedBatch.status)}; only generated batches can be published.`,
                 },
                 {
                   id: "generate-finance-handoff",
@@ -421,8 +428,12 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   profileField: "handoff_profile_ref",
                   profileLabel: "Handoff profile ref",
                   defaultProfileRef: "tenant.payroll.finance.handoff.v1",
-                  disabled: !canGenerateHandoff || !selectedBatch,
-                  disabledReason: !canGenerateHandoff ? "Requires finance.handoff.create." : "Select an output batch first.",
+                  disabled: !canGenerateHandoff || !canGenerateSelectedHandoff,
+                  disabledReason: !canGenerateHandoff
+                    ? "Requires finance.handoff.create."
+                    : !selectedBatch
+                      ? "Select an output batch first."
+                      : `Batch status is ${titleCase(selectedBatch.status)}; publish outputs before finance handoff.`,
                 },
               ]}
             />
@@ -501,16 +512,16 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   <span className="workspace-card__eyebrow">Handoff readiness</span>
                   <h2>Finance handoff readiness</h2>
                 </div>
-                <StatusBadge status="generated" />
+                <StatusBadge status={handoffReadinessStatus} />
               </div>
               <div className="payroll-output-handoff-grid">
                 <article>
                   <strong>Payslips</strong>
-                  <span>Employee portal publishing payloads are available.</span>
+                  <span>{selectedBatch ? "Employee portal publishing payloads are available." : "Select a generated or published output batch first."}</span>
                 </article>
                 <article>
                   <strong>Register</strong>
-                  <span>Run-level register snapshot is ready for finance review.</span>
+                  <span>{selectedBatch ? "Run-level register snapshot is ready for finance review." : "Register evidence appears after output generation."}</span>
                 </article>
                 <article>
                   <strong>Next outputs</strong>

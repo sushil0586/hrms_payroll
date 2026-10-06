@@ -92,13 +92,12 @@ test.describe("Phase R2-C lifecycle queue report certification", () => {
 
   test("employee cannot access lifecycle queue report or exports", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     await page.goto("/hr-admin/reports/lifecycle-queue", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("lifecycle-queue-report")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My workspace" })).toBeVisible();
 
     const csvResponse = await page.request.get("/api/hr-admin/reports/lifecycle-queue?sort=attention");
     expect([401, 403]).toContain(csvResponse.status());

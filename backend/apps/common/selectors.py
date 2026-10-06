@@ -5789,6 +5789,39 @@ def _leave_request_attachment_payloads(request: LeaveRequest) -> list[dict]:
     return rows
 
 
+def _workflow_approval_track_payloads(workflow_reference: str) -> list[dict]:
+    if not workflow_reference:
+        return []
+    assignments = (
+        WorkflowAssignment.objects.filter(step_instance__workflow_instance__id=workflow_reference)
+        .select_related("step_instance", "membership__user")
+        .order_by("step_instance__step_order", "created_at")
+    )
+    rows = []
+    for assignment in assignments:
+        step = assignment.step_instance
+        membership = assignment.membership
+        user = getattr(membership, "user", None) if membership else None
+        rows.append(
+            {
+                "level": step.step_order,
+                "name": step.name,
+                "status": step.status,
+                "actor_type": assignment.actor_type,
+                "manager_name": (user.get_full_name() if user else "") or getattr(user, "username", "") or assignment.actor_identifier,
+                "manager_email": getattr(user, "email", "") if user else "",
+                "comment": step.resolution_comment,
+                "acted_at": step.completed_at,
+                "is_current": step.status in {WorkflowInstanceStatus.PENDING, WorkflowInstanceStatus.IN_PROGRESS},
+            }
+        )
+    return rows
+
+
+def _leave_request_approval_track_payloads(request: LeaveRequest) -> list[dict]:
+    return _workflow_approval_track_payloads(request.workflow_reference)
+
+
 def get_employee_leave_requests(employee: Employee, *, limit: int | None = None) -> list[dict]:
     """Returns employee leave request history for ESS screens."""
 
@@ -5817,6 +5850,7 @@ def get_employee_leave_requests(employee: Employee, *, limit: int | None = None)
             "reason": request.reason,
             "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
             "attachments": _leave_request_attachment_payloads(request),
+            "approval_steps": _leave_request_approval_track_payloads(request),
             "approval_route": str(request.metadata.get("policy_rules", {}).get("approval_route", "") or ""),
             "required_attachment_label": request.metadata.get("policy_rules", {}).get("required_attachment_label"),
             "manager_comment": request.manager_comment,
@@ -5869,6 +5903,7 @@ def get_employee_leave_request_detail(employee: Employee, request_id) -> dict | 
         "reason": request.reason,
         "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
         "attachments": _leave_request_attachment_payloads(request),
+        "approval_steps": _leave_request_approval_track_payloads(request),
         "approval_route": str(request.metadata.get("policy_rules", {}).get("approval_route", "") or ""),
         "required_attachment_label": request.metadata.get("policy_rules", {}).get("required_attachment_label"),
         "manager_comment": request.manager_comment,
@@ -5920,6 +5955,7 @@ def get_employee_attendance_regularizations(employee: Employee, *, limit: int | 
             "manager_comment": regularization.manager_comment,
             "rejection_reason": regularization.rejection_reason,
             "workflow_reference": regularization.workflow_reference,
+            "approval_steps": _workflow_approval_track_payloads(regularization.workflow_reference),
             "applied_at": regularization.applied_at,
             "resolved_at": regularization.resolved_at,
             "created_at": regularization.created_at,
@@ -5955,6 +5991,7 @@ def get_employee_attendance_regularization_detail(employee: Employee, regulariza
         "manager_comment": regularization.manager_comment,
         "rejection_reason": regularization.rejection_reason,
         "workflow_reference": regularization.workflow_reference,
+        "approval_steps": _workflow_approval_track_payloads(regularization.workflow_reference),
         "applied_at": regularization.applied_at,
         "resolved_at": regularization.resolved_at,
         "created_at": regularization.created_at,
@@ -5968,7 +6005,7 @@ def get_manager_pending_leave_requests(manager: Employee, *, limit: int | None =
     assigned_workflow_ids = _get_pending_workflow_instance_ids_for_actor(manager, subject_type="leave_request")
     queryset = (
         LeaveRequest.objects.filter(
-            status=LeaveRequestStatus.PENDING,
+            status__in=[LeaveRequestStatus.PENDING, LeaveRequestStatus.PARTIALLY_APPROVED],
         )
         .select_related("employee__department", "employee__designation", "leave_type", "leave_policy")
         .order_by("start_date", "created_at")
@@ -6002,6 +6039,7 @@ def get_manager_pending_leave_requests(manager: Employee, *, limit: int | None =
             "reason": request.reason,
             "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
             "attachments": _leave_request_attachment_payloads(request),
+            "approval_steps": _leave_request_approval_track_payloads(request),
             "approval_route": str(request.metadata.get("policy_rules", {}).get("approval_route", "") or ""),
             "required_attachment_label": request.metadata.get("policy_rules", {}).get("required_attachment_label"),
             "workflow_reference": request.workflow_reference,
@@ -6062,6 +6100,7 @@ def get_manager_leave_request_detail(manager: Employee, request_id) -> dict | No
         "reason": request.reason,
         "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
         "attachments": _leave_request_attachment_payloads(request),
+        "approval_steps": _leave_request_approval_track_payloads(request),
         "approval_route": str(request.metadata.get("policy_rules", {}).get("approval_route", "") or ""),
         "required_attachment_label": request.metadata.get("policy_rules", {}).get("required_attachment_label"),
         "manager_comment": request.manager_comment,
@@ -6124,6 +6163,7 @@ def get_manager_pending_attendance_regularizations(manager: Employee, *, limit: 
             "status": regularization.status,
             "reason": regularization.reason,
             "workflow_reference": regularization.workflow_reference,
+            "approval_steps": _workflow_approval_track_payloads(regularization.workflow_reference),
             "applied_at": regularization.applied_at,
             "created_at": regularization.created_at,
         }
@@ -6170,6 +6210,7 @@ def get_manager_attendance_regularization_detail(manager: Employee, regularizati
         "manager_comment": regularization.manager_comment,
         "rejection_reason": regularization.rejection_reason,
         "workflow_reference": regularization.workflow_reference,
+        "approval_steps": _workflow_approval_track_payloads(regularization.workflow_reference),
         "applied_at": regularization.applied_at,
         "resolved_at": regularization.resolved_at,
         "created_at": regularization.created_at,

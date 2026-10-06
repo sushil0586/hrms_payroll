@@ -545,6 +545,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
   const pagedValidationIssues = paginate(visibleValidationIssues, issuePage, issueSize);
   const readiness = calculationReadiness(selectedRun);
   const openBlockerCount = visibleValidationIssues.filter((issue) => issue.severity === "blocker").length;
+  const canOpenSelectedReview = Boolean(selectedRun && selectedCalculation);
 
   return (
     <main className="shell shell--payroll-setup shell--payroll-calculations">
@@ -683,8 +684,12 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                   profileField: "review_profile_ref",
                   profileLabel: "Review profile ref",
                   defaultProfileRef: "tenant.payroll.review.v1",
-                  disabled: !canOpenReview || !selectedRun,
-                  disabledReason: !canOpenReview ? "Requires payroll.review." : "Select a payroll run first.",
+                  disabled: !canOpenReview || !canOpenSelectedReview,
+                  disabledReason: !canOpenReview
+                    ? "Requires payroll.review."
+                    : !selectedRun
+                      ? "Select a payroll run first."
+                      : "Complete draft calculation before opening payroll review.",
                 },
               ]}
             />

@@ -115,7 +115,12 @@ export const hrAdminNavigation: HrAdminNavGroup[] = [
   {
     title: "Insights",
     items: [
-      { href: "/hr-admin/reports", label: "Reports", shortLabel: "RP", blurb: "Operational insights", permissions: ["reports.catalog.view", "reports.hr.view", "reports.payroll.view", "reports.compliance.view"] },
+      { href: "/hr-admin/reports", label: "Reports", shortLabel: "RC", blurb: "Catalog and search", permissions: ["reports.catalog.view", "reports.hr.view", "reports.payroll.view", "reports.compliance.view"] },
+      { href: "/hr-admin/reports/hr-core", label: "HR Core Reports", shortLabel: "HR", blurb: "Workforce and lifecycle", permissions: ["reports.catalog.view", "reports.hr.view"] },
+      { href: "/hr-admin/reports/attendance", label: "Attendance Reports", shortLabel: "AR", blurb: "Time, leave, exceptions", permissions: ["reports.catalog.view", "reports.hr.view"] },
+      { href: "/hr-admin/reports/payroll", label: "Payroll Reports", shortLabel: "PY", blurb: "Finance and outputs", permissions: ["reports.catalog.view", "reports.payroll.view"] },
+      { href: "/hr-admin/reports/compliance", label: "Compliance Reports", shortLabel: "CR", blurb: "Statutory evidence", permissions: ["reports.catalog.view", "reports.compliance.view"] },
+      { href: "/hr-admin/reports/export-audits", label: "Export Audits", shortLabel: "EA", blurb: "Download evidence", permissions: ["reports.catalog.view", "reports.hr.view", "reports.payroll.view", "reports.compliance.view"] },
     ],
   },
   {

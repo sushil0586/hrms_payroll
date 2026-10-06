@@ -100,10 +100,17 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
     if (formValue.expires_on) body.set("expires_on", formValue.expires_on);
     if (formValue.file) body.set("file", formValue.file);
 
-    const response = await fetch("/api/hr-admin/employee-documents", {
-      method: "POST",
-      body,
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/hr-admin/employee-documents", {
+        method: "POST",
+        body,
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      return;
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {

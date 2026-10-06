@@ -31,11 +31,18 @@ export function NotificationRetryAction({ itemId, canRetry = true, retryLimitRea
     setError("");
     setSuccessMessage("");
     setIsSubmitting(true);
-    const response = await fetch(`/api/hr-admin/notifications/${itemId}/retry`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ process_now: true }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`/api/hr-admin/notifications/${itemId}/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ process_now: true }),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));

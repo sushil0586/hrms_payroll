@@ -154,9 +154,34 @@ export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAtt
     setPage(1);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setStatus("All");
+    setSource("All");
+    setDepartment("All");
+    setLockState("All");
+    setRegularizedState("All");
+    setException("All");
+    setSortBy("date_desc");
+    setPage(1);
+  }
+
   return (
     <section className="section section--tight" aria-label="Daily attendance register report workspace">
       <div className="report-catalog-workspace attendance-register-report" data-testid="attendance-register-report">
+        <div className="report-command-panel">
+          <div>
+            <span className="workspace-card__eyebrow">Attendance register</span>
+            <h2>Daily attendance proof</h2>
+            <p className="section-copy section-copy-soft">Review the filtered attendance population, then export a CSV, manifest, or print-friendly view with the same filter context.</p>
+          </div>
+          <div className="report-command-panel__actions">
+            <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
+            <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
+            <button className="button button--ghost" onClick={() => window.print()} type="button">Print report</button>
+          </div>
+        </div>
+
         <div className="metric-grid-modern payroll-setup-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Attendance rows</span>
@@ -180,70 +205,77 @@ export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAtt
           </article>
         </div>
 
-        <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Attendance register filters">
-          <label>
-            <span>Search attendance</span>
-            <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, department, status, notes" />
-          </label>
-          <label>
-            <span>Status</span>
-            <select aria-label="Status" className="input-control" value={status} onChange={(event) => updateFilter(() => setStatus(event.target.value))}>
-              {statuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Source</span>
-            <select aria-label="Source" className="input-control" value={source} onChange={(event) => updateFilter(() => setSource(event.target.value))}>
-              {sources.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Department</span>
-            <select aria-label="Department" className="input-control" value={department} onChange={(event) => updateFilter(() => setDepartment(event.target.value))}>
-              {departments.map((item) => <option key={item} value={item}>{item || "Unassigned"}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Lock state</span>
-            <select aria-label="Lock state" className="input-control" value={lockState} onChange={(event) => updateFilter(() => setLockState(event.target.value))}>
-              <option value="All">All</option>
-              <option value="locked">Locked</option>
-              <option value="unlocked">Unlocked</option>
-            </select>
-          </label>
-          <label>
-            <span>Regularization</span>
-            <select aria-label="Regularization" className="input-control" value={regularizedState} onChange={(event) => updateFilter(() => setRegularizedState(event.target.value))}>
-              <option value="All">All</option>
-              <option value="regularized">Regularized</option>
-              <option value="pending">Pending</option>
-            </select>
-          </label>
-          <label>
-            <span>Exception</span>
-            <select aria-label="Exception" className="input-control" value={exception} onChange={(event) => updateFilter(() => setException(event.target.value))}>
-              {exceptions.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Sort</span>
-            <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
-              <option value="date_desc">Date newest</option>
-              <option value="employee">Employee</option>
-              <option value="department">Department</option>
-              <option value="late">Late minutes</option>
-              <option value="overtime">Overtime hours</option>
-              <option value="readiness">Payroll readiness</option>
-            </select>
-          </label>
+        <div className="report-filter-panel" aria-label="Attendance register filters">
+          <div className="report-filter-panel__header">
+            <div>
+              <strong>Filter attendance rows</strong>
+              <span>Use search first, then narrow by operational state or exception type.</span>
+            </div>
+            <button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button>
+          </div>
+          <div className="report-filter-grid report-filter-grid--attendance">
+            <label className="report-filter-field report-filter-field--wide">
+              <span>Search attendance</span>
+              <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search employee, department, status, notes" />
+            </label>
+            <label className="report-filter-field">
+              <span>Status</span>
+              <select aria-label="Status" className="input-control" value={status} onChange={(event) => updateFilter(() => setStatus(event.target.value))}>
+                {statuses.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Source</span>
+              <select aria-label="Source" className="input-control" value={source} onChange={(event) => updateFilter(() => setSource(event.target.value))}>
+                {sources.map((item) => <option key={item} value={item}>{item === "All" ? item : titleCase(item)}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Department</span>
+              <select aria-label="Department" className="input-control" value={department} onChange={(event) => updateFilter(() => setDepartment(event.target.value))}>
+                {departments.map((item) => <option key={item} value={item}>{item || "Unassigned"}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Lock state</span>
+              <select aria-label="Lock state" className="input-control" value={lockState} onChange={(event) => updateFilter(() => setLockState(event.target.value))}>
+                <option value="All">All</option>
+                <option value="locked">Locked</option>
+                <option value="unlocked">Unlocked</option>
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Regularization</span>
+              <select aria-label="Regularization" className="input-control" value={regularizedState} onChange={(event) => updateFilter(() => setRegularizedState(event.target.value))}>
+                <option value="All">All</option>
+                <option value="regularized">Regularized</option>
+                <option value="pending">Pending</option>
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Exception</span>
+              <select aria-label="Exception" className="input-control" value={exception} onChange={(event) => updateFilter(() => setException(event.target.value))}>
+                {exceptions.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="report-filter-field">
+              <span>Sort</span>
+              <select aria-label="Sort" className="input-control" value={sortBy} onChange={(event) => updateFilter(() => setSortBy(event.target.value))}>
+                <option value="date_desc">Date newest</option>
+                <option value="employee">Employee</option>
+                <option value="department">Department</option>
+                <option value="late">Late minutes</option>
+                <option value="overtime">Overtime hours</option>
+                <option value="readiness">Payroll readiness</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.is_locked).length}</strong> locked</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.exceptionType !== "Clear").length}</strong> exceptions</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
-          <Link className="button button--ghost" href={manifestHref} prefetch={false}>Manifest</Link>
         </div>
 
         <div className="report-catalog-table-wrap">

@@ -142,7 +142,7 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
       }
       setResult(payload);
     } catch {
-      setError("Unable to run roster rollout.");
+      setError("Unable to reach the server. Check your connection and try again.");
     } finally {
       setIsLoading(false);
     }

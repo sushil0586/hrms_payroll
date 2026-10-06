@@ -52,8 +52,9 @@ export function ManagerDecisionPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
 
-  const isPending = status === "pending";
+  const isPending = status === "pending" || status === "partially_approved";
   const isCancellationRequest = requestAction === "cancellation_request";
+  const actionLocked = Boolean(successMessage);
 
   async function handleDecision(action: "approve" | "reject") {
     if (isSubmittingRef.current) {
@@ -141,7 +142,7 @@ export function ManagerDecisionPanel({
         <span className="muted">Decision note</span>
         <textarea
           className="input-control"
-          disabled={isSubmitting || !isPending || !canDecide}
+          disabled={isSubmitting || actionLocked || !isPending || !canDecide}
           onChange={(event) => setComment(event.target.value)}
           rows={4}
           value={comment}
@@ -184,7 +185,7 @@ export function ManagerDecisionPanel({
         <div className="form-actions-bar__buttons">
           <button
             className="button button--primary"
-            disabled={isSubmitting || !isPending || !canDecide}
+            disabled={isSubmitting || actionLocked || !isPending || !canDecide}
             onClick={() => handleDecision("approve")}
             type="button"
           >
@@ -192,7 +193,7 @@ export function ManagerDecisionPanel({
           </button>
           <button
             className="button button--secondary"
-            disabled={isSubmitting || !isPending || !canDecide}
+            disabled={isSubmitting || actionLocked || !isPending || !canDecide}
             onClick={() => handleDecision("reject")}
             type="button"
           >

@@ -10,6 +10,14 @@ type Feedback = {
   message: string;
 } | null;
 
+type OperationTab = "run" | "snapshot" | "lock";
+
+const operationTabs: Array<{ value: OperationTab; label: string; detail: string }> = [
+  { value: "run", label: "Payroll run", detail: "Period and pay group scope" },
+  { value: "snapshot", label: "Input snapshot", detail: "Employee source evidence" },
+  { value: "lock", label: "Lock gate", detail: "Final input control" },
+];
+
 function getErrorMessage(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object") return fallback;
   for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
@@ -151,6 +159,7 @@ export function PayrollInputOperationsPanel({
   const [snapshotForm, setSnapshotForm] = useState(() => snapshotToForm(selectedSnapshot, selectedRun?.id ?? "", firstValue(initialSetup.options.employees)));
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [submitting, setSubmitting] = useState<string | null>(null);
+  const [activeOperation, setActiveOperation] = useState<OperationTab>("run");
 
   const selectedPeriod = useMemo(() => setup.options.periods.find((item) => item.id === runForm.period_id), [runForm.period_id, setup.options.periods]);
   const compatiblePayGroups = useMemo(
@@ -193,6 +202,18 @@ export function PayrollInputOperationsPanel({
     selectedPayGroup && selectedPayGroup.status !== "active" ? "Selected pay group is not active yet." : "";
   const manageDisabledReason = "Requires payroll.inputs.manage.";
   const lockDisabledReason = "Requires payroll.lock.";
+  const lockBlockedReason = lockBlockedCount > 0
+    ? "Resolve blocker snapshots before locking this payroll run."
+    : "";
+  const lockEmptyReason = lockSnapshotCount === 0
+    ? "Create at least one input snapshot before locking this payroll run."
+    : "";
+  const lockAlreadyCompleteReason = lockSnapshotCount > 0 && lockLockedCount >= lockSnapshotCount
+    ? "Inputs are already locked for this payroll run."
+    : "";
+  const lockPermissionReason = !canLockInputs ? lockDisabledReason : "";
+  const lockDisabledMessage = lockPermissionReason || lockBlockedReason || lockEmptyReason || lockAlreadyCompleteReason;
+  const canSubmitLock = canLockInputs && lockSnapshotCount > 0 && lockBlockedCount === 0 && !lockAlreadyCompleteReason && Boolean(runForm.id || snapshotForm.payroll_run_id);
 
   function updateRunPeriod(value: string) {
     setRunForm((current) => {
@@ -237,7 +258,8 @@ export function PayrollInputOperationsPanel({
     }));
     setRunForm(runToForm(run));
     setSnapshotForm((current) => ({ ...current, payroll_run_id: run.id }));
-    setFeedback({ tone: "success", message: "payroll run saved." });
+    setFeedback({ tone: "success", message: "Payroll run saved." });
+    setActiveOperation("snapshot");
     router.refresh();
   }
 
@@ -283,11 +305,16 @@ export function PayrollInputOperationsPanel({
         : [snapshot, ...current.snapshots],
     }));
     setSnapshotForm(snapshotToForm(snapshot));
-    setFeedback({ tone: "success", message: "payroll input snapshot saved." });
+    setFeedback({ tone: "success", message: "Payroll input snapshot saved." });
+    setActiveOperation("lock");
     router.refresh();
   }
 
   async function lockInputs() {
+    if (!canSubmitLock) {
+      setFeedback({ tone: "error", message: lockDisabledMessage || "Select a payroll run before locking inputs." });
+      return;
+    }
     setSubmitting("lock");
     setFeedback(null);
     const response = await fetch(`/api/hr-admin/payroll-runs/${runForm.id || snapshotForm.payroll_run_id}/lock-inputs`, {
@@ -311,9 +338,26 @@ export function PayrollInputOperationsPanel({
         <div>
           <span className="workspace-card__eyebrow">Browser operations</span>
           <h2 id="payroll-input-operations-title">Payroll input operations</h2>
+          <p className="section-copy section-copy-soft">Create the run, capture employee source snapshots, then lock only after the guardrail is clear.</p>
         </div>
         <span className="payroll-setup-count">3 controls</span>
       </div>
+
+      <nav className="payroll-input-operation-tabs" aria-label="Payroll input operation steps">
+        {operationTabs.map((tab, index) => (
+          <button
+            aria-current={activeOperation === tab.value ? "step" : undefined}
+            className={`payroll-input-operation-tab ${activeOperation === tab.value ? "payroll-input-operation-tab--active" : ""}`}
+            key={tab.value}
+            type="button"
+            onClick={() => setActiveOperation(tab.value)}
+          >
+            <span>{index + 1}</span>
+            <strong>{tab.label}</strong>
+            <em>{tab.detail}</em>
+          </button>
+        ))}
+      </nav>
 
       {feedback ? (
         <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""}`} role={feedback.tone === "success" ? "status" : "alert"}>
@@ -325,8 +369,9 @@ export function PayrollInputOperationsPanel({
       <div className="salary-crud-grid payroll-input-operations-grid">
         <form
           aria-label="Payroll run form"
-          className="salary-crud-form"
+          className={`salary-crud-form ${activeOperation === "run" ? "is-active" : ""}`}
           data-testid="payroll-run-form"
+          data-operation-panel="run"
           onSubmit={(event) => {
             event.preventDefault();
             void saveRun();
@@ -382,8 +427,9 @@ export function PayrollInputOperationsPanel({
 
         <form
           aria-label="Payroll input snapshot form"
-          className="salary-crud-form"
+          className={`salary-crud-form ${activeOperation === "snapshot" ? "is-active" : ""}`}
           data-testid="payroll-input-snapshot-form"
+          data-operation-panel="snapshot"
           onSubmit={(event) => {
             event.preventDefault();
             void saveSnapshot();
@@ -421,7 +467,12 @@ export function PayrollInputOperationsPanel({
           {!canManageInputs ? <span className="muted">{manageDisabledReason}</span> : null}
         </form>
 
-        <div className="salary-crud-form" aria-label="Payroll input lock panel" data-testid="payroll-input-lock-form">
+        <div
+          className={`salary-crud-form ${activeOperation === "lock" ? "is-active" : ""}`}
+          aria-label="Payroll input lock panel"
+          data-testid="payroll-input-lock-form"
+          data-operation-panel="lock"
+        >
           <div className="salary-crud-form__header">
             <div><span className="workspace-card__eyebrow">Lock gate</span><h3>Input lock</h3></div>
           </div>
@@ -462,10 +513,15 @@ export function PayrollInputOperationsPanel({
               <span className="muted">Create at least one input snapshot before locking this run.</span>
             </div>
           )}
-          <button className="button button--primary" disabled={!canLockInputs || submitting === "lock" || !(runForm.id || snapshotForm.payroll_run_id)} type="button" onClick={() => void lockInputs()}>
+          <button
+            className="button button--primary"
+            disabled={!canSubmitLock || submitting === "lock"}
+            type="button"
+            onClick={() => void lockInputs()}
+          >
             {submitting === "lock" ? "Locking..." : "Lock selected run inputs"}
           </button>
-          {!canLockInputs ? <span className="muted">{lockDisabledReason}</span> : null}
+          {lockDisabledMessage ? <span className="muted">{lockDisabledMessage}</span> : null}
         </div>
       </div>
     </section>
