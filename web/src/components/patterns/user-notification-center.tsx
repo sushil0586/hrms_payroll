@@ -27,8 +27,6 @@ type Props = {
   actionDescription?: string;
   listTitle?: string;
   listDescription?: string;
-  detailTitle?: string;
-  detailDescription?: string;
 };
 
 function normalizeParam(value: SearchParamValue) {
@@ -56,16 +54,6 @@ function buildHref(
   });
   const queryString = params.toString();
   return queryString ? `${basePath}?${queryString}` : basePath;
-}
-
-function resolveSelectedItem(items: HrAdminNotification[], selectedId?: string) {
-  if (selectedId) {
-    const selected = items.find((item) => item.id === selectedId);
-    if (selected) {
-      return selected;
-    }
-  }
-  return items[0] ?? null;
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -103,15 +91,6 @@ function resolveSourceHref(item: HrAdminNotification, workspace: "ess" | "mss") 
   return "";
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-row">
-      <span className="detail-label">{label}</span>
-      <span className="detail-value">{value}</span>
-    </div>
-  );
-}
-
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
@@ -147,13 +126,10 @@ export function UserNotificationCenter({
   workspacePill,
   filterTitle = "Inbox filters",
   filterDescription = "Search your messages, then open one item to review source context and read state.",
-  actionEyebrow = "What to do next",
   actionTitle = "Review messages that need action",
   actionDescription = "Keep this page focused on finding alerts. Open a notification only when you need the full message, delivery trail, or source workflow.",
   listTitle = "Inbox list",
   listDescription = "Open one notification at a time and jump to the related workflow when needed.",
-  detailTitle = "Notification detail",
-  detailDescription = "Selected alert summary. Open review for the full delivery trail.",
 }: Props) {
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
@@ -162,7 +138,6 @@ export function UserNotificationCenter({
   const subjectType = normalizeParam(currentParams.subject_type) ?? "";
   const page = Math.max(Number(normalizeParam(currentParams.page) || String(data.page)) || data.page, 1);
   const pageSize = Math.max(Number(normalizeParam(currentParams.page_size) || String(data.page_size)) || data.page_size, 1);
-  const selected = resolveSelectedItem(data.items, normalizeParam(currentParams.itemId));
   const totalPages = Math.max(1, Math.ceil(data.total_count / data.page_size));
   const unreadOnPage = data.items.filter((item) => !item.read_at).length;
   const highPriorityOnPage = data.items.filter((item) => item.priority === "high" || item.priority === "critical").length;
@@ -291,11 +266,13 @@ export function UserNotificationCenter({
                 <h3>{listTitle}</h3>
                 <p>{listDescription}</p>
               </div>
-              <div className="user-notification-list__actions">
-                {selected ? (
-                  <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${selected.id}`} item={selected} sourceHref={resolveSourceHref(selected, workspace)} variant="primary" />
-                ) : null}
-              </div>
+            </div>
+            <div className="user-notification-inline-guidance" aria-label="Notification review guidance">
+              <strong>{actionTitle}</strong>
+              <span>{actionDescription}</span>
+              <Link className="button button--ghost" href={crossWorkspaceHref}>
+                Open {crossWorkspaceLabel}
+              </Link>
             </div>
             <div className="workspace-table tableish">
               {data.items.length ? (
@@ -310,7 +287,7 @@ export function UserNotificationCenter({
               {data.items.length ? (
                 data.items.map((item) => (
                   <article
-                    className={`workspace-table__row user-notification-row ${selected?.id === item.id ? "tableish__row--active" : ""}`}
+                    className="workspace-table__row user-notification-row"
                     key={item.id}
                   >
                     <div className="user-notification-row__message">
@@ -324,9 +301,6 @@ export function UserNotificationCenter({
                     </div>
                     <span className="muted">{formatDateTime(item.created_at)}</span>
                     <div className="table-actions">
-                      <Link className="button button--ghost" href={buildHref(basePath, currentParams, { itemId: item.id })}>
-                        Select
-                      </Link>
                       <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${item.id}`} item={item} sourceHref={resolveSourceHref(item, workspace)} />
                     </div>
                   </article>
@@ -342,51 +316,6 @@ export function UserNotificationCenter({
               )}
             </div>
           </article>
-
-          <aside className="workspace-data-panel record-card user-notification-detail">
-            <div className="workspace-data-panel__header">
-              <div>
-                <span className="workspace-card__eyebrow">{actionEyebrow}</span>
-                <h2 className="section-heading-soft">{detailTitle}</h2>
-                <p className="section-copy section-copy-soft">{selected ? detailDescription : actionDescription}</p>
-              </div>
-            </div>
-            {selected ? (
-              <div className="stack user-notification-guidance">
-                <div className="user-notification-selected">
-                  <strong>{selected.title || selected.event_definition_name || "Notification"}</strong>
-                  <span>{summarizeMessage(selected)}</span>
-                </div>
-                <div className="detail-grid">
-                  <DetailRow label="Status" value={titleCase(selected.status)} />
-                  <DetailRow label="Priority" value={titleCase(selected.priority)} />
-                  <DetailRow label="Channel" value={titleCase(selected.channel)} />
-                  <DetailRow label="Subject type" value={selected.subject_type || "Not available"} />
-                  <DetailRow label="Reference" value={selected.subject_identifier || "Not available"} />
-                  <DetailRow label="Event" value={selected.event_definition_name || "Not available"} />
-                  <DetailRow label="Created" value={formatDateTime(selected.created_at)} />
-                  <DetailRow label="Read at" value={formatDateTime(selected.read_at)} />
-                </div>
-
-                <div className="record-card__actions">
-                  <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${selected.id}`} item={selected} sourceHref={resolveSourceHref(selected, workspace)} variant="primary" />
-                  {resolveSourceHref(selected, workspace) ? (
-                    <Link className="button button--secondary" href={resolveSourceHref(selected, workspace)}>
-                      Open source
-                    </Link>
-                  ) : null}
-                  <Link className="button button--ghost" href={crossWorkspaceHref}>
-                    Open {crossWorkspaceLabel}
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="notice">
-                <strong>No notification selected.</strong>
-                <span className="muted">Choose a notification from the inbox list to inspect it in detail.</span>
-              </div>
-            )}
-          </aside>
         </div>
       </section>
 

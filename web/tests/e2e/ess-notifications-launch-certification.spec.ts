@@ -1,8 +1,22 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { expectDialogStable } from "../helpers/modal-stability";
 import { employee, gotoAuthenticated } from "../helpers/staging-auth";
+
+async function expectNotificationRowsStayInsideList(page: Page) {
+  await expect(async () => {
+    const clipped = await page.locator(".user-notification-list").evaluate((list) => {
+      const listRect = list.getBoundingClientRect();
+      const rows = Array.from(list.querySelectorAll(".user-notification-row"));
+      return rows.some((row) => {
+        const rowRect = row.getBoundingClientRect();
+        return rowRect.left < listRect.left - 1 || rowRect.right > listRect.right + 1;
+      });
+    });
+    expect(clipped).toBe(false);
+  }).toPass();
+}
 
 test.describe("ESS Notifications launch certification", () => {
   test("inbox keeps filters, list, summary, and full review separate", async ({ page }) => {
@@ -16,7 +30,9 @@ test.describe("ESS Notifications launch certification", () => {
 
     await expect(page.getByRole("heading", { name: "Inbox filters" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Inbox list" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Notification detail" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Notification detail" })).toHaveCount(0);
+    await expect(page.locator(".user-notification-detail")).toHaveCount(0);
+    await expect(page.locator(".user-notification-inline-guidance")).toBeVisible();
     await expect(page.locator(".user-notification-action-band")).toHaveCount(0);
     await expect(page.locator(".user-notification-row--head")).toBeVisible();
     await expect(async () => {
@@ -26,6 +42,7 @@ test.describe("ESS Notifications launch certification", () => {
       });
       expect(rows).toBe(1);
     }).toPass();
+    await expectNotificationRowsStayInsideList(page);
     await expect(page.getByText("Provider logs")).toHaveCount(0);
 
     const review = page.getByRole("button", { name: "Review notification" }).first();

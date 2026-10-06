@@ -29,14 +29,40 @@ async function openApplyLeave(page: Page) {
   return dialog;
 }
 
+async function expectBalanceCardsVisuallyBalanced(page: Page) {
+  const cards = page.locator(".ess-balance-card");
+  const count = await cards.count();
+  if (count === 0) {
+    return;
+  }
+
+  await expect(async () => {
+    const centered = await cards.evaluateAll((items) =>
+      items.every((card) => {
+        const value = card.querySelector(":scope > strong");
+        if (!value) {
+          return false;
+        }
+        const cardRect = card.getBoundingClientRect();
+        const valueRect = value.getBoundingClientRect();
+        const cardCenter = cardRect.left + cardRect.width / 2;
+        const valueCenter = valueRect.left + valueRect.width / 2;
+        return Math.abs(cardCenter - valueCenter) <= 16;
+      }),
+    );
+    expect(centered).toBe(true);
+  }).toPass();
+}
+
 test.describe("ESS Leave launch certification", () => {
   test("leave page keeps one responsibility with balances, history, filters, detail drilldown, and modal actions", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoAuthenticated(page, "/ess/leave", employee);
     await expectPageReady(page, "Leave");
 
-    await expect(page.getByRole("heading", { name: "Balances" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Balance snapshot|Balances/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Leave requests" })).toBeVisible();
+    await expectBalanceCardsVisuallyBalanced(page);
     await expect(page.getByText("Leave request summary")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Submit leave request" })).toHaveCount(0);
 
@@ -44,13 +70,14 @@ test.describe("ESS Leave launch certification", () => {
       await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
     }
 
+    await page.getByText("Filters", { exact: true }).click();
     await expect(page.getByLabel("Search leave history")).toBeVisible();
     await expect(page.getByLabel("Type filter")).toBeVisible();
     await expect(page.getByLabel("Period filter")).toBeVisible();
     await expect(page.getByRole("link", { name: /pending/i }).first()).toBeVisible();
     await expect(page.locator(".pagination-bar").first()).toBeVisible();
 
-    const firstRequest = page.locator("button.leave-request-card").first();
+    const firstRequest = page.locator("button.leave-request-card, .leave-request-row button").first();
     if (await firstRequest.isVisible().catch(() => false)) {
       await firstRequest.click();
       const detail = page.getByRole("dialog", { name: "Leave request detail" });
@@ -138,7 +165,7 @@ test.describe("ESS Leave launch certification", () => {
     });
 
     await dialog.getByRole("button", { name: "Submit leave" }).click();
-    await expect(dialog.getByText("Submitted.", { exact: true })).toBeVisible();
-    await expect(dialog.getByText("Leave request submitted.")).toBeVisible();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Leave requests" })).toBeVisible();
   });
 });

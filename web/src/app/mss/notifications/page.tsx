@@ -51,11 +51,9 @@ export default async function MssNotificationsPage({ searchParams }: PageProps) 
       actionEyebrow="Manager triage"
       actionTitle="Open the source workflow before deciding"
       description="Triage team alerts, failed delivery, and approval follow-up without mixing personal ESS messages."
-      detailDescription="Summary only. Use review for delivery state, read state, and source context."
-      detailTitle="Selected alert"
       filterDescription="Find team alerts by status, channel, priority, or source workflow."
       filterTitle="Alert filters"
-      listDescription="Select one manager alert, then review delivery and source workflow."
+      listDescription="Review one manager alert at a time, then open the source workflow when needed."
       listTitle="Team alert list"
       state={result.state}
       title="Manager notifications"

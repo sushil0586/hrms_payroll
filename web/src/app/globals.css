@@ -3451,6 +3451,40 @@ select.input-control {
   line-height: 1.35;
 }
 
+.ess-balance-card {
+  min-height: 190px;
+  grid-template-rows: auto minmax(46px, 1fr) auto auto;
+}
+
+.ess-balance-card > strong {
+  align-self: center;
+  justify-self: center;
+  width: 100%;
+  padding: 6px 0 2px;
+  font-size: clamp(30px, 2.6vw, 40px);
+  text-align: center;
+}
+
+.ess-balance-card > p {
+  margin: 0;
+  color: #64748b;
+  font-weight: 620;
+  text-align: center;
+}
+
+.ess-balance-card .workspace-summary-card__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ess-balance-card .workspace-summary-card__meta span {
+  justify-content: center;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .workspace-data-panel {
   gap: 14px;
   padding: 16px;
@@ -4501,9 +4535,9 @@ select.input-control {
 
 .ess-documents-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 18px;
+  gap: 14px;
 }
 
 .ess-documents-requirements,
@@ -4624,6 +4658,12 @@ select.input-control {
   gap: 10px;
 }
 
+.ess-documents-checklist--inline {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding-top: 14px;
+}
+
 .ess-documents-checklist > div {
   display: grid;
   gap: 3px;
@@ -4643,6 +4683,15 @@ select.input-control {
   color: #64748b;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.ess-documents-checklist--inline > div {
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.ess-documents-checklist--inline span {
+  line-height: 1.32;
 }
 
 .ess-document-modal {
@@ -4832,9 +4881,9 @@ select.input-control {
 
 .user-notification-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 14px;
+  gap: 12px;
 }
 
 .user-notification-list,
@@ -4865,13 +4914,68 @@ select.input-control {
   font-size: 12px;
 }
 
+.user-notification-inline-guidance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(220, 228, 240, 0.88);
+  border-radius: 13px;
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.user-notification-inline-guidance strong,
+.user-notification-inline-guidance span {
+  min-width: 0;
+}
+
+.user-notification-inline-guidance strong {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.user-notification-inline-guidance span {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.user-notification-inline-guidance .button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 11px;
+  font-size: 12px;
+}
+
 .user-notification-row {
   display: grid;
-  grid-template-columns: minmax(240px, 1.35fr) minmax(96px, 0.42fr) minmax(112px, 0.52fr) minmax(132px, 0.62fr) minmax(148px, auto);
+  grid-template-columns: minmax(280px, 1.5fr) minmax(112px, 0.45fr) minmax(128px, 0.52fr) minmax(150px, 0.62fr) minmax(148px, auto);
   align-items: center;
   gap: 10px;
   border-radius: 0;
   box-shadow: none;
+}
+
+.user-notification-row .table-actions {
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: stretch;
+  min-width: 0;
+}
+
+.user-notification-row .table-actions .button {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .user-notification-row--head {
@@ -5725,6 +5829,10 @@ select.input-control {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .ess-documents-checklist--inline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .user-notification-row {
     grid-template-columns: minmax(0, 1fr) minmax(92px, auto) minmax(110px, auto);
   }
@@ -5758,6 +5866,7 @@ select.input-control {
   .ess-tax-profile-grid,
   .ess-document-requirement-row,
   .ess-tax-proof-row,
+  .ess-documents-checklist--inline,
   .user-notification-filter-disclosure .queue-toolbar__grid,
   .user-notification-row {
     grid-template-columns: minmax(0, 1fr);
@@ -5806,10 +5915,21 @@ select.input-control {
   }
 
   .user-notification-list__actions,
+  .user-notification-inline-guidance,
   .user-notification-row .table-actions,
   .user-notification-detail .record-card__actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .user-notification-inline-guidance {
+    display: grid;
+  }
+
+  .user-notification-inline-guidance span,
+  .user-notification-inline-guidance .button {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .user-notification-list__actions .button,

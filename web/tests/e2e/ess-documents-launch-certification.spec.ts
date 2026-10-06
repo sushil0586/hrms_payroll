@@ -33,7 +33,8 @@ test.describe("ESS Documents launch certification", () => {
     await expect(page.locator(".ess-documents-action-band")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Upload document" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "View" }).first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Before sending a file" })).toBeVisible();
+    await expect(page.locator(".ess-documents-guidance")).toHaveCount(0);
+    await expect(page.locator(".ess-documents-checklist--inline")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Document history" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Upload required document" })).toHaveCount(0);
     await expect(page.getByLabel("File")).toHaveCount(0);

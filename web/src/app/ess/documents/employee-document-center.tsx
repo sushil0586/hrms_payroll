@@ -590,6 +590,12 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                 <span className="queue-summary-chip"><strong>{data.requirement_items.length}</strong> items</span>
               </div>
             </div>
+            <div className="ess-documents-checklist ess-documents-checklist--inline" aria-label="Upload checklist">
+              <div><strong>Clear file</strong><span>Readable corners, names, dates, and numbers.</span></div>
+              <div><strong>Correct category</strong><span>Upload each file under the matching document type.</span></div>
+              <div><strong>Expiry date</strong><span>Add expiry when HR tracks renewals.</span></div>
+              <div><strong>Re-upload note</strong><span>Read HR comments before replacing a returned file.</span></div>
+            </div>
             <div className="ess-document-requirement-table workspace-table" role="table" aria-label="Required documents">
           {reuploadItems.length > 0 ? (
             <div className="notice">
@@ -640,17 +646,6 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
           ))}
             </div>
           </section>
-
-          <aside className="ess-documents-guidance workspace-data-panel">
-            <span className="workspace-card__eyebrow">Upload checklist</span>
-            <h2>Before sending a file</h2>
-            <div className="ess-documents-checklist">
-              <div><strong>Clear file</strong><span>All corners, names, dates, and numbers should be readable.</span></div>
-              <div><strong>Correct category</strong><span>Upload PAN under PAN, bank proof under bank proof, and so on.</span></div>
-              <div><strong>Expiry date</strong><span>Add expiry when HR tracks renewal dates for the document.</span></div>
-              <div><strong>Re-upload note</strong><span>If HR rejected a file, read the review note before replacing it.</span></div>
-            </div>
-          </aside>
         </div>
       </section>
 

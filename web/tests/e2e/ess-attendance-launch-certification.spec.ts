@@ -71,14 +71,14 @@ test.describe("ESS Attendance launch certification", () => {
     await gotoAuthenticated(page, "/ess/attendance", employee);
     await expectPageReady(page, "Attendance");
 
-    for (const heading of ["Today", "Monthly summary", "Correction queue", "Regularizations"]) {
+    for (const heading of ["Today", "Month to date", "Correction queue", "Regularizations"]) {
       await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible();
     }
     await expect(page.getByRole("heading", { name: "Submit regularization" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Regularize attendance" }).first()).toBeVisible();
     await expect(page.locator(".pagination-bar").first()).toBeVisible();
 
-    const firstRegularization = page.locator("button.leave-request-card").first();
+    const firstRegularization = page.locator("button.leave-request-card, .attendance-request-row button").first();
     if (await firstRegularization.count()) {
       await firstRegularization.click();
       const detailDialog = page.getByRole("dialog", { name: "Regularization detail" });
@@ -165,7 +165,7 @@ test.describe("ESS Attendance launch certification", () => {
     });
 
     await submitCorrectionButton(dialog).click();
-    await expect(dialog.getByText("Submitted.", { exact: true })).toBeVisible();
-    await expect(dialog.getByText("Attendance regularization submitted.")).toBeVisible();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Regularizations" })).toBeVisible();
   });
 });
