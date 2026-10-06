@@ -7,7 +7,6 @@ import { createPortal } from "react-dom";
 
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import { PageIntro } from "@/components/patterns/page-intro";
 import type { EssLeaveRequestListResponse, EssLeaveTypeOption, LeaveBalance, LeaveRequestItem } from "@/lib/types";
 
 type SearchParamValue = string | string[] | undefined;
@@ -155,6 +154,19 @@ function getApprovalWaitingLabel(item: LeaveRequestItem) {
     return "Pending approval from the configured approver";
   }
   return `Pending approval from ${currentStep.manager_name || currentStep.name || `Level ${currentStep.level} approver`}`;
+}
+
+function getRequestOwnerLabel(item: LeaveRequestItem) {
+  const waitingLabel = getApprovalWaitingLabel(item);
+  if (waitingLabel) return waitingLabel.replace(/^Pending approval from /, "");
+  const lastDecision = [...(item.approval_steps ?? [])].reverse().find((step) => step.manager_name || step.name);
+  return lastDecision?.manager_name || lastDecision?.name || "Not assigned";
+}
+
+function getPrimaryBalanceLabel(balance: LeaveBalance) {
+  const available = parseNumeric(balance.closing_balance);
+  const formatted = formatUnits(available);
+  return `${formatted} ${formatted === "1" ? "day" : "days"}`;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -354,6 +366,7 @@ function LeaveApplyModal({
 
   async function submitLeave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     if (submittingRef.current) {
       return;
     }
@@ -364,7 +377,7 @@ function LeaveApplyModal({
       submittingRef.current = false;
       return;
     }
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData(form);
     setSubmitting(true);
     let response: Response;
     try {
@@ -386,7 +399,8 @@ function LeaveApplyModal({
       return;
     }
     setFeedback({ tone: "success", message: "Leave request submitted. Refreshing your history." });
-    event.currentTarget.reset();
+    form.reset();
+    submittingRef.current = false;
     onClose();
     router.refresh();
   }
@@ -631,7 +645,10 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
   );
   const attachmentCount = leaveRequests.items.reduce((total, item) => total + (item.attachments?.length ?? 0) + (item.attachment_reference ? 1 : 0), 0);
   const pendingCount = leaveRequests.status_counts.pending ?? 0;
+  const approvedCount = leaveRequests.status_counts.approved ?? 0;
   const filtersActive = Boolean(historyQuery.trim() || historyLeaveType !== "all" || historyPeriod !== "all");
+  const totalAvailableBalance = balances.reduce((total, balance) => total + parseNumeric(balance.closing_balance), 0);
+  const totalReservedBalance = balances.reduce((total, balance) => total + parseNumeric(balance.reserved_amount), 0);
   const linkedRequest = selectedRequestId && selectedRequestId !== dismissedRequestId
     ? leaveRequests.items.find((item) => item.id === selectedRequestId) ?? null
     : null;
@@ -665,35 +682,44 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
     : null;
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
-        eyebrow={state === "live" ? "Live ESS" : "Demo ESS"}
-        title="Leave"
-        description="Review balances and track leave requests. Use focused dialogs for apply, evidence, and lifecycle actions."
-        actions={
-          <>
-            <button className="button button--primary" onClick={() => setApplyOpen(true)} type="button">Apply leave</button>
-            <Link className="button button--secondary" href="/ess">Overview</Link>
-          </>
-        }
-        pills={["Single responsibility", `${leaveRequests.status_counts.pending ?? 0} pending`, `${balances.length} balances`]}
-        showPills
-      />
-
-      <section className="section">
-        <div className="section-header">
-          <div>
-            <h2 className="section-heading-soft">Balances</h2>
-            <p className="section-copy section-copy-soft">Available, used, and reserved balances from mapped leave policies.</p>
-          </div>
+    <main className="shell shell--workspace ess-experience-shell">
+      <section className="workspace-control-header">
+        <div className="workspace-control-header__copy">
+          <span className="workspace-control-header__eyebrow">{state === "live" ? "Live ESS" : "Demo ESS"} / Leave</span>
+          <h1>Leave</h1>
+          <p>Review balances, apply for leave, and track every approval step from one focused workspace.</p>
         </div>
-        <div className="workspace-grid-modern balance-grid">
+        <div className="workspace-control-header__actions">
+          <button className="button button--primary" onClick={() => setApplyOpen(true)} type="button">Apply leave</button>
+          <Link className="button button--secondary" href="/ess">Overview</Link>
+        </div>
+        <div className="workspace-control-header__metrics" aria-label="Leave summary">
+          <span className="queue-summary-chip"><strong>{formatUnits(totalAvailableBalance)}</strong> available</span>
+          <span className="queue-summary-chip"><strong>{pendingCount}</strong> pending</span>
+          <span className="queue-summary-chip"><strong>{approvedCount}</strong> approved</span>
+          <span className="queue-summary-chip"><strong>{formatUnits(totalReservedBalance)}</strong> reserved</span>
+        </div>
+      </section>
+
+      <section className="workspace-section">
+        <div className="workspace-section__header">
+          <div>
+            <h2>Balance snapshot</h2>
+            <p>Balances come from the leave policies assigned to your employee profile.</p>
+          </div>
+          <span className="queue-summary-chip">{balances.length} mapped</span>
+        </div>
+        <div className="workspace-summary-grid balance-grid" aria-label="Leave balance cards">
           {balances.length ? (
             balances.map((balance) => (
-              <article className="workspace-card workspace-card--compact" key={balance.leave_type}>
-                <h3>{balance.leave_type}</h3>
-                <p className="muted">{balance.policy_name}</p>
-                <div className="tableish__meta">
+              <article className="workspace-summary-card ess-balance-card" key={balance.leave_type}>
+                <div>
+                  <span className="workspace-summary-card__icon" aria-hidden="true">{balance.leave_type.slice(0, 2).toUpperCase()}</span>
+                  <h3>{balance.leave_type}</h3>
+                </div>
+                <strong>{getPrimaryBalanceLabel(balance)}</strong>
+                <p>{balance.policy_name || "Policy pending"}</p>
+                <div className="workspace-summary-card__meta">
                   <span>Available: {balance.closing_balance}</span>
                   <span>Used: {balance.consumed_amount}</span>
                   <span>Reserved: {balance.reserved_amount}</span>
@@ -709,7 +735,7 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
         </div>
       </section>
 
-      <section className="section">
+      <section className="workspace-section">
         <div className="leave-history-snapshot" aria-label="Leave history snapshot">
           <article className="leave-history-card">
             <span className="detail-label">Upcoming leave</span>
@@ -732,100 +758,120 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
             <small>Files or references attached in this loaded view.</small>
           </article>
         </div>
-        <article className="record-card panel-card-soft">
-          <div className="section-header">
+        <article className="workspace-data-panel leave-requests-panel">
+          <div className="workspace-data-panel__header">
             <div>
-              <h2 className="section-heading-soft">Leave requests</h2>
-              <p className="section-copy section-copy-soft">Track submitted requests and open details only when needed.</p>
+              <h2>My leave requests</h2>
+              <p>Track submitted requests, approval owner, evidence, and final decisions.</p>
             </div>
             <button className="button button--secondary" onClick={() => setApplyOpen(true)} type="button">New request</button>
           </div>
-          <div className="toolbar">
-            <div className="tabbar">
-              {tabs.map((tab) => (
-                <Link className={`tab ${status === tab ? "tab--active" : ""}`} href={buildHref(currentParams, { status: tab, page: "1" })} key={tab}>
-                  <span>{tab.replace("_", " ")}</span>
-                  <span>{leaveRequests.status_counts[tab as keyof typeof leaveRequests.status_counts] ?? 0}</span>
-                </Link>
-              ))}
+          <div className="workspace-status-tabs">
+            {tabs.map((tab) => (
+              <Link className={`workspace-status-tab ${status === tab ? "workspace-status-tab--active" : ""}`} href={buildHref(currentParams, { status: tab, page: "1" })} key={tab}>
+                <span>{tab.replace("_", " ")}</span>
+                <strong>{leaveRequests.status_counts[tab as keyof typeof leaveRequests.status_counts] ?? 0}</strong>
+              </Link>
+            ))}
+          </div>
+          <details className="workspace-filter-disclosure" open={filtersActive}>
+            <summary>
+              <span>Filters</span>
+              <small>{visibleRequests.length} shown from the loaded page</small>
+            </summary>
+            <div className="leave-history-filters">
+              <label className="form-field">
+                <span className="muted">Search leave history</span>
+                <input
+                  className="input-control"
+                  onChange={(event) => setHistoryQuery(event.target.value)}
+                  placeholder="Type, policy, status, or reason"
+                  value={historyQuery}
+                />
+              </label>
+              <label className="form-field">
+                <span className="muted">Type filter</span>
+                <select className="input-control" onChange={(event) => setHistoryLeaveType(event.target.value)} value={historyLeaveType}>
+                  <option value="all">All types</option>
+                  {leaveTypeOptions.map((leaveType) => (
+                    <option key={leaveType} value={leaveType}>{leaveType}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-field">
+                <span className="muted">Period filter</span>
+                <select className="input-control" onChange={(event) => setHistoryPeriod(event.target.value)} value={historyPeriod}>
+                  <option value="all">All periods</option>
+                  <option value="upcoming">Upcoming</option>
+                  <option value="past">Past</option>
+                  <option value="this_year">This year</option>
+                </select>
+              </label>
+              <button
+                className="button button--secondary"
+                disabled={!filtersActive}
+                onClick={() => {
+                  setHistoryQuery("");
+                  setHistoryLeaveType("all");
+                  setHistoryPeriod("all");
+                }}
+                type="button"
+              >
+                Clear filters
+              </button>
             </div>
-          </div>
-          <div className="leave-history-toolbar">
-            <div>
-              <span className="detail-label">Refine current view</span>
-              <p className="section-copy section-copy-soft">Use filters for the loaded records. Status tabs and pagination still control the full history.</p>
+          </details>
+          <div className="workspace-table leave-request-table" role="table" aria-label="Leave request history">
+            <div className="workspace-table__row workspace-table__row--head" role="row">
+              <span role="columnheader">Date</span>
+              <span role="columnheader">Leave type</span>
+              <span role="columnheader">Duration</span>
+              <span role="columnheader">Status</span>
+              <span role="columnheader">Approver</span>
+              <span role="columnheader">Actions</span>
             </div>
-            <span className="queue-summary-chip">{visibleRequests.length} shown</span>
-          </div>
-          <div className="leave-history-filters">
-            <label className="form-field">
-              <span className="muted">Search leave history</span>
-              <input
-                className="input-control"
-                onChange={(event) => setHistoryQuery(event.target.value)}
-                placeholder="Type, policy, status, or reason"
-                value={historyQuery}
-              />
-            </label>
-            <label className="form-field">
-              <span className="muted">Type filter</span>
-              <select className="input-control" onChange={(event) => setHistoryLeaveType(event.target.value)} value={historyLeaveType}>
-                <option value="all">All types</option>
-                {leaveTypeOptions.map((leaveType) => (
-                  <option key={leaveType} value={leaveType}>{leaveType}</option>
-                ))}
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Period filter</span>
-              <select className="input-control" onChange={(event) => setHistoryPeriod(event.target.value)} value={historyPeriod}>
-                <option value="all">All periods</option>
-                <option value="upcoming">Upcoming</option>
-                <option value="past">Past</option>
-                <option value="this_year">This year</option>
-              </select>
-            </label>
-            <button
-              className="button button--secondary"
-              disabled={!filtersActive}
-              onClick={() => {
-                setHistoryQuery("");
-                setHistoryLeaveType("all");
-                setHistoryPeriod("all");
-              }}
-              type="button"
-            >
-              Clear filters
-            </button>
-          </div>
-          <div className="leave-request-grid">
             {visibleRequests.length ? (
               visibleRequests.map((request) => {
                 const waitingLabel = getApprovalWaitingLabel(request);
                 return (
-                  <button
-                    className="leave-request-card"
+                  <div
+                    className="workspace-table__row leave-request-row"
                     key={request.id}
-                    onClick={() => {
-                      setDismissedRequestId(null);
-                      setClickedRequest(request);
-                    }}
-                    type="button"
+                    role="row"
                   >
-                    <span className="leave-request-card__main">
+                    <span role="cell">
+                      <strong>{formatDate(request.start_date)}</strong>
+                      <small>{formatDate(request.end_date)}</small>
+                    </span>
+                    <span role="cell">
                       <strong>{request.leave_type}</strong>
-                      <small>{formatDate(request.start_date)} to {formatDate(request.end_date)} • {request.requested_units} units</small>
-                      <span className="muted">{waitingLabel || request.reason || "No reason provided."}</span>
+                      <small>{request.policy_name || "Policy pending"}</small>
                     </span>
-                    <span className="leave-request-card__side">
+                    <span role="cell">{request.requested_units} units</span>
+                    <span role="cell">
                       <span className={statusClass(request.status)}>{formatStatus(request.status)}</span>
-                      <span className="queue-summary-chip">{request.attachments?.length ?? 0} files</span>
                     </span>
-                  </button>
+                    <span role="cell">
+                      <strong>{getRequestOwnerLabel(request)}</strong>
+                      <small>{waitingLabel || request.reason || "Decision history available"}</small>
+                    </span>
+                    <span role="cell">
+                      <button
+                        className="button button--secondary"
+                        onClick={() => {
+                          setDismissedRequestId(null);
+                          setClickedRequest(request);
+                        }}
+                        type="button"
+                      >
+                        View
+                      </button>
+                    </span>
+                  </div>
                 );
               })
             ) : (
-              <div className="notice">
+              <div className="notice workspace-empty-state">
                 <strong>{leaveRequests.items.length ? "No requests match these filters." : "No leave requests in this view."}</strong>
                 <span className="muted">{leaveRequests.items.length ? "Clear filters or try another status tab." : "Try another status tab once more data is available."}</span>
               </div>

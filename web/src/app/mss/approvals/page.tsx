@@ -1,9 +1,8 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { LogoutButton } from "@/app/components/logout-button";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import { PageIntro } from "@/components/patterns/page-intro";
 import { ManagerApprovalReviewAction } from "@/app/mss/approvals/manager-approval-review-action";
 import { getMssApprovalInbox, getMssAttendanceRegularizationDetail, getMssLeaveRequestDetail } from "@/lib/api";
 import { requireWorkspaceAccess, sessionHasPermission } from "@/lib/workspace-access";
@@ -124,6 +123,18 @@ function QueueAccessNotice({
   );
 }
 
+function SummaryCard({ label, value, hint }: { label: string; value: ReactNode; hint: string }) {
+  return (
+    <article className="workspace-summary-card metric-tile">
+      <div className="workspace-summary-card__meta">
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <small>{hint}</small>
+      </div>
+    </article>
+  );
+}
+
 function LeaveApprovalSection({
   currentParams,
   response,
@@ -154,19 +165,19 @@ function LeaveApprovalSection({
   }
 
   return (
-    <section className="section queue-review-split">
-      <article className="record-card panel-card-soft">
-        <div className="section-header">
+    <section className="workspace-section queue-review-split mss-approval-queue-grid">
+      <article className="workspace-data-panel record-card">
+        <div className="workspace-data-panel__header section-header">
           <div>
             <h2 className="section-heading-soft">Pending leave requests</h2>
             <p className="section-copy section-copy-soft">Pending queue for manager decisions.</p>
           </div>
         </div>
-        <div className="tableish">
+        <div className="workspace-table tableish mss-approval-table">
           {items.length ? (
             items.map((request) => (
               <article
-                className={`tableish__row ${selected?.id === request.id ? "tableish__row--active" : ""}`}
+                className={`workspace-table__row tableish__row mss-approval-row ${selected?.id === request.id ? "tableish__row--active" : ""}`}
                 key={request.id}
               >
                 <div className="tableish__head">
@@ -213,8 +224,8 @@ function LeaveApprovalSection({
         </div>
       </article>
 
-      <article className="record-card panel-card-soft">
-        <div>
+      <article className="workspace-data-panel record-card mss-approval-detail-panel">
+        <div className="workspace-data-panel__header">
           <h2 className="section-heading-soft">Selected leave request</h2>
           <p className="section-copy section-copy-soft">Detail for the selected leave or cancellation request.</p>
         </div>
@@ -314,19 +325,19 @@ function RegularizationApprovalSection({
   }
 
   return (
-    <section className="section queue-review-split">
-      <article className="record-card panel-card-soft">
-        <div className="section-header">
+    <section className="workspace-section queue-review-split mss-approval-queue-grid">
+      <article className="workspace-data-panel record-card">
+        <div className="workspace-data-panel__header section-header">
           <div>
             <h2 className="section-heading-soft">Pending attendance fixes</h2>
             <p className="section-copy section-copy-soft">Attendance exception queue.</p>
           </div>
         </div>
-        <div className="tableish">
+        <div className="workspace-table tableish mss-approval-table">
           {items.length ? (
             items.map((item) => (
               <article
-                className={`tableish__row ${selected?.id === item.id ? "tableish__row--active" : ""}`}
+                className={`workspace-table__row tableish__row mss-approval-row ${selected?.id === item.id ? "tableish__row--active" : ""}`}
                 key={item.id}
               >
                 <div className="tableish__head">
@@ -368,8 +379,8 @@ function RegularizationApprovalSection({
         </div>
       </article>
 
-      <article className="record-card panel-card-soft">
-        <div>
+      <article className="workspace-data-panel record-card mss-approval-detail-panel">
+        <div className="workspace-data-panel__header">
           <h2 className="section-heading-soft">Selected attendance request</h2>
           <p className="section-copy section-copy-soft">Detail for the selected item.</p>
         </div>
@@ -439,9 +450,9 @@ function DecisionHistorySection({
   canReviewAttendance: boolean;
 }) {
   return (
-    <section className="section">
-      <div className="mss-history-panel panel-card-soft">
-        <div className="mss-history-panel__header">
+    <section className="workspace-section">
+      <div className="workspace-data-panel mss-history-panel">
+        <div className="workspace-data-panel__header mss-history-panel__header">
           <div>
             <span className="eyebrow">Read-only queue</span>
             <h2 className="section-heading-soft">Completed decisions</h2>
@@ -542,37 +553,37 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
   }[queue];
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
-        eyebrow={state === "live" ? "Live MSS" : "Demo MSS"}
-        title="Manager approvals"
-        description="Choose one queue at a time: leave decisions, attendance decisions, or completed decision history."
-        actions={
-          <>
-            <Link className="button button--secondary" href="/">
-              Home
-            </Link>
-            <Link className="button button--secondary" href="/ess">
-              Open ESS
-            </Link>
-            <LogoutButton />
-          </>
-        }
-        pills={["Pending decisions", "Team context"]}
-        showPills
-      />
-
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile className="metric-tile-soft" label="Team members" labelClassName="metric-label-soft" value={summary.team_size} valueClassName="metric-value-soft" trend="Current span" trendClassName="metric-trend-soft" />
-          <MetricTile className="metric-tile-soft" label="Leave approvals" labelClassName="metric-label-soft" value={summary.pending_leave_approvals_count} valueClassName="metric-value-soft" trend="Pending decisions" trendClassName="metric-trend-soft" />
-          <MetricTile className="metric-tile-soft" label="Regularizations" labelClassName="metric-label-soft" value={summary.pending_attendance_regularizations_count} valueClassName="metric-value-soft" trend="Attendance fixes" trendClassName="metric-trend-soft" />
-          <MetricTile className="metric-tile-soft" label="Exceptions today" labelClassName="metric-label-soft" value={summary.attendance_exceptions_today} valueClassName="metric-value-soft" trend="Daily pulse" trendClassName="metric-trend-soft" />
+    <main className="shell shell--workspace shell--mss-approvals">
+      <header className="workspace-control-header">
+        <div className="workspace-control-header__copy">
+          <span className="workspace-control-header__eyebrow">{state === "live" ? "Live MSS" : "Demo MSS"}</span>
+          <h1>Manager approvals</h1>
+          <p>Choose one queue at a time: leave decisions, attendance decisions, or completed decision history.</p>
+          <div className="workspace-control-header__metrics">
+            <span>Pending decisions</span>
+            <span>Team context</span>
+          </div>
         </div>
+        <div className="workspace-control-header__actions">
+          <Link className="button button--secondary" href="/">
+            Home
+          </Link>
+          <Link className="button button--secondary" href="/ess">
+            Open ESS
+          </Link>
+          <LogoutButton />
+        </div>
+      </header>
+
+      <section className="workspace-summary-grid mss-approval-summary-grid" aria-label="Manager approval metrics">
+        <SummaryCard label="Team members" value={summary.team_size} hint="Current span" />
+        <SummaryCard label="Leave approvals" value={summary.pending_leave_approvals_count} hint="Pending decisions" />
+        <SummaryCard label="Regularizations" value={summary.pending_attendance_regularizations_count} hint="Attendance fixes" />
+        <SummaryCard label="Exceptions today" value={summary.attendance_exceptions_today} hint="Daily pulse" />
       </section>
 
-      <section className="section">
-        <div className="mss-approval-focus panel-card-soft">
+      <section className="workspace-section">
+        <div className="workspace-data-panel mss-approval-focus">
           <div>
             <span className="eyebrow">{queueMeta.eyebrow}</span>
             <h2>{queueMeta.title}</h2>
@@ -585,9 +596,9 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      <section className="section">
-        <div className="queue-toolbar panel-card-soft">
-          <div className="toolbar">
+      <section className="workspace-section">
+        <div className="workspace-data-panel queue-toolbar">
+          <div className="workspace-data-panel__header toolbar">
             <div>
               <h2 className="section-heading-soft">Approval views</h2>
               <p className="section-copy section-copy-soft">Keep each manager task separate and easy to scan.</p>
@@ -640,7 +651,7 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
       )}
 
       {inboxState === "demo" ? (
-        <section className="section">
+        <section className="workspace-section">
           <div className="notice">
             <strong>Manager approvals are currently using seeded demo data.</strong>
             <span className="muted">

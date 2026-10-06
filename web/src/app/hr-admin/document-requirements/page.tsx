@@ -5,6 +5,17 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentRequirements } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
+function scopeLabel(item: Awaited<ReturnType<typeof getHrAdminDocumentRequirements>>["data"][number]) {
+  const scopes = [
+    item.legal_entity,
+    item.branch,
+    item.department,
+    item.grade,
+    item.employment_type,
+  ].filter(Boolean);
+  return scopes.length ? scopes.join(" • ") : "Applies to all employees";
+}
+
 export default async function HrAdminDocumentRequirementsPage() {
   const sessionUser = await requireSessionPermission({
     permissionKeys: ["documents.view", "documents.manage"],
@@ -46,9 +57,17 @@ export default async function HrAdminDocumentRequirementsPage() {
                   <p>Mandatory within {item.required_within_days_of_joining} day(s) of joining.</p>
                 </div>
                 <div className="record-card__actions">
-                  <span className="record-chip">{item.is_mandatory ? "Mandatory" : "Optional"}</span>
+                  <span className={`record-chip${item.is_active ? " record-chip--success" : " record-chip--neutral"}`}>{item.is_active ? "Active" : "Inactive"}</span>
+                  <span className={item.is_mandatory ? "record-chip record-chip--warning" : "record-chip"}>{item.is_mandatory ? "Mandatory" : "Optional"}</span>
                   {canManageDocuments ? <Link className="button button--secondary" href={`/hr-admin/document-requirements/${item.id}/edit`}>Edit</Link> : null}
                 </div>
+              </div>
+              <div className="document-review-state">
+                <div>
+                  <span className="document-review-state__label">Scope summary</span>
+                  <strong>{scopeLabel(item)}</strong>
+                </div>
+                <span>{item.is_active ? `Priority ${item.priority}` : "Disabled for compliance checks"}</span>
               </div>
               <div className="record-card__details document-detail-grid">
                 <div><span className="record-card__label">Legal entity</span><strong>{item.legal_entity || "All"}</strong></div>
@@ -60,6 +79,12 @@ export default async function HrAdminDocumentRequirementsPage() {
               </div>
             </article>
           ))}
+          {result.data.length === 0 ? (
+            <div className="empty-state">
+              <strong>No document requirements configured.</strong>
+              <span className="muted">Create rules to make categories visible as required or optional in ESS.</span>
+            </div>
+          ) : null}
         </div>
       </section>
     </main>

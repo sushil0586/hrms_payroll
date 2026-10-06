@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { ManagerDecisionPanel } from "@/app/mss/approvals/manager-decision-panel";
@@ -57,6 +57,23 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <span className="detail-value">{value}</span>
     </div>
   );
+}
+
+function useEscapeClose(isOpen: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 }
 
 function ApprovalTrack({ item }: { item: LeaveRequestItem | AttendanceRegularizationItem }) {
@@ -303,6 +320,7 @@ function AttendanceReviewModal({
 
 export function ManagerApprovalReviewAction(props: Props) {
   const [isOpen, setIsOpen] = useState(false);
+  useEscapeClose(isOpen, () => setIsOpen(false));
   const buttonClass = props.variant === "primary"
     ? "button button--primary"
     : props.variant === "secondary"

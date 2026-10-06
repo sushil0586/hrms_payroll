@@ -579,6 +579,7 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await field(page, "Visibility rules JSON").fill("{bad-json");
     await page.getByRole("button", { name: "Create category" }).click();
     await expect(page.getByText("Visibility rules must be valid JSON.")).toBeVisible();
+    await expect(page.getByText("Category impact")).toBeVisible();
 
     await field(page, "Visibility rules JSON").fill("{}");
     await field(page, "Code").fill(record.code);
@@ -605,6 +606,8 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await expectPageReady(page, "Create document requirement");
     await expect(page.getByRole("heading", { name: "Requirement scope" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Requirement state" })).toBeVisible();
+    await expect(page.getByText("Scope preview")).toBeVisible();
+    await expect(page.getByText("Employee impact")).toBeVisible();
     await expectFields(page, ["Category", "Legal entity", "Branch", "Department", "Grade", "Employment type", "Required within joining days", "Priority"]);
     await expectToggles(page, ["Mandatory", "Active"]);
 
@@ -631,6 +634,7 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await submitAndExpectList(page, "/hr-admin/document-requirements");
     await expect(recordCard(page, category.name)).toBeVisible();
     await expect(recordCard(page, category.name)).toContainText("Optional");
+    await expect(recordCard(page, category.name)).toContainText(requirementScope.legalName);
 
     const editLink = recordCard(page, category.name).getByRole("link", { name: "Edit" }).first();
     await expect(editLink).toBeVisible();
@@ -641,9 +645,11 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await field(page, "Priority").fill("88");
     await toggle(page, "Mandatory").check();
     await toggle(page, "Active").uncheck();
+    await expect(page.getByText("Disabled for ESS checks")).toBeVisible();
     await page.getByRole("button", { name: "Save changes" }).click();
     await submitAndExpectList(page, "/hr-admin/document-requirements");
     await expect(recordCard(page, category.name)).toContainText("Mandatory");
     await expect(recordCard(page, category.name)).toContainText("88");
+    await expect(recordCard(page, category.name)).toContainText("Inactive");
   });
 });

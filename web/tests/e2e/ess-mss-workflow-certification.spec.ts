@@ -163,8 +163,8 @@ test.describe("ESS to MSS workflow certification", () => {
       await expectDialogStable(page, "Apply leave");
 
       await submit.click();
-      await expect(dialog.getByText("Submitted.", { exact: true })).toBeVisible();
-      await expect(dialog.getByText("Leave request submitted.")).toBeVisible();
+      await expect(dialog).toBeHidden();
+      await expect(page.getByRole("button", { name: "Apply leave" }).first()).toBeVisible();
       await page.unroute("**/api/me/leave-requests");
     }
 
@@ -216,8 +216,8 @@ test.describe("ESS to MSS workflow certification", () => {
       await expectDialogStable(page, "Regularize attendance");
 
       await submit.click();
-      await expect(dialog.getByText("Submitted.", { exact: true })).toBeVisible();
-      await expect(dialog.getByText("Attendance regularization submitted.")).toBeVisible();
+      await expect(dialog).toBeHidden();
+      await expect(page.getByRole("button", { name: "Regularize attendance" }).first()).toBeVisible();
       await page.unroute("**/api/me/attendance-regularizations");
     }
 

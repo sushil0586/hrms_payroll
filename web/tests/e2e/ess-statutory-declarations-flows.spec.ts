@@ -13,10 +13,9 @@ test.describe("Employee statutory declaration flows", () => {
     await expect(page.getByText("Current declaration", { exact: true })).toBeVisible();
     await expect(page.getByText("Tax profile", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Proof coverage" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Start declaration|Update declaration/ }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Start declaration|Continue declaration|Review submitted declaration/ }).first()).toBeVisible();
     await expect(page.getByText("Proof register", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Declared items" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Tax declaration checklist" })).toBeVisible();
 
     const taxYears = page.getByLabel("Tax year selector");
     const checklist = page.getByLabel("Tax declaration checklist");
@@ -38,7 +37,7 @@ test.describe("Employee statutory declaration flows", () => {
     expect(checklistBox!.width).toBeGreaterThan(workspaceBox!.width * 0.9);
     expect(workspaceBox!.width).toBeGreaterThan(900);
 
-    await page.getByRole("button", { name: /Start declaration|Update declaration/ }).first().click();
+    await page.getByRole("button", { name: /Start declaration|Update declaration|View setup/ }).first().click();
     const declarationDialog = page.getByRole("dialog", { name: /Start declaration|Update declaration/ });
     await expect(declarationDialog).toBeVisible();
     await expect(declarationDialog.getByLabel("Financial year")).toBeVisible();

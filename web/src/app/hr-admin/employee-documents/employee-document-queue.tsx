@@ -44,6 +44,28 @@ function formatFileSize(fileSizeBytes: number) {
   return `${(fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function humanizeStatus(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function verificationChipClass(status: string) {
+  if (status === "verified") return "record-chip record-chip--success";
+  if (status === "rejected" || status === "expired") return "record-chip record-chip--danger";
+  if (status === "pending") return "record-chip record-chip--warning";
+  return "record-chip";
+}
+
+function reviewStateClass(item: HrAdminEmployeeDocument) {
+  if (item.verification_status === "verified") return "document-review-state document-review-state--success";
+  if (item.verification_status === "rejected" || item.reupload_requested || item.is_expired) return "document-review-state document-review-state--danger";
+  return "document-review-state document-review-state--warning";
+}
+
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -82,6 +104,8 @@ export function EmployeeDocumentQueue({
 
   const actionableItems = items.filter((item) => item.is_expired || item.is_expiring_soon || item.expiry_state === "no_expiry");
   const actionableIds = actionableItems.map((item) => item.id);
+  const pendingReviewCount = items.filter((item) => item.verification_status === "pending").length;
+  const employeeFollowUpCount = items.filter((item) => item.reupload_requested || item.verification_status === "rejected" || item.is_expired).length;
   const allActionableSelected = actionableIds.length > 0 && actionableIds.every((id) => selectedIds.includes(id));
 
   function toggleOne(itemId: string) {
@@ -222,7 +246,8 @@ export function EmployeeDocumentQueue({
         </div>
         <div className="queue-toolbar__summary">
           <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> shared state</span>
-          <span className="queue-summary-chip"><strong>{verificationStatusOptions.length}</strong> verification outcomes</span>
+          <span className="queue-summary-chip"><strong>{pendingReviewCount}</strong> pending HR review</span>
+          <span className="queue-summary-chip"><strong>{employeeFollowUpCount}</strong> waiting on employee</span>
           <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
         </div>
         {!canManageDocuments ? <div className="notice"><strong>Read-only document queue.</strong><span className="muted">Reminder actions require documents.manage.</span></div> : null}
@@ -237,6 +262,7 @@ export function EmployeeDocumentQueue({
               <div className="record-card__title-wrap">
                 <label className="record-card__title">
                   <input
+                    aria-label={`Select ${item.title} for reminder follow-up`}
                     checked={selectedIds.includes(item.id)}
                     disabled={!(item.is_expired || item.is_expiring_soon || item.expiry_state === "no_expiry")}
                     onChange={() => toggleOne(item.id)}
@@ -247,8 +273,8 @@ export function EmployeeDocumentQueue({
                 <div className="record-card__eyebrow">
                   <span className="record-chip">v{item.version_number}</span>
                   <span className="record-chip record-chip--accent">{item.category_name}</span>
-                  <span className="record-chip">{item.verification_status}</span>
-                  <span className="record-chip">{item.status}</span>
+                  <span className={verificationChipClass(item.verification_status)}>{humanizeStatus(item.verification_status)}</span>
+                  <span className="record-chip">{humanizeStatus(item.status)}</span>
                   {item.reupload_requested ? <span className="record-chip">Re-upload</span> : null}
                   {item.is_expired ? <span className="record-chip">Expired</span> : null}
                   {!item.is_expired && item.is_expiring_soon ? <span className="record-chip">Expiring</span> : null}
@@ -260,9 +286,17 @@ export function EmployeeDocumentQueue({
                 {canVerifyDocuments ? <Link className="button button--secondary" href={`/hr-admin/employee-documents/${item.id}/review`}>Review</Link> : null}
               </div>
             </div>
+            <div className={reviewStateClass(item)}>
+              <div>
+                <span className="document-review-state__label">Current review state</span>
+                <strong>{item.review_status_label}</strong>
+              </div>
+              <span>{item.reupload_requested ? "Employee replacement upload requested." : `Owner: ${item.review_owner_label}`}</span>
+            </div>
             <div className="detail-grid document-detail-grid">
-              <div className="detail-row"><span className="detail-label">Verification</span><span className="detail-value">{item.verification_status}</span></div>
-              <div className="detail-row"><span className="detail-label">Record status</span><span className="detail-value">{item.status}</span></div>
+              <div className="detail-row"><span className="detail-label">Verification</span><span className="detail-value">{humanizeStatus(item.verification_status)}</span></div>
+              <div className="detail-row"><span className="detail-label">Record status</span><span className="detail-value">{humanizeStatus(item.status)}</span></div>
+              <div className="detail-row"><span className="detail-label">Review owner</span><span className="detail-value">{item.review_owner_label}</span></div>
               <div className="detail-row"><span className="detail-label">Uploaded by</span><span className="detail-value">{item.uploaded_by_identifier || "Unknown"}</span></div>
               <div className="detail-row"><span className="detail-label">Expires on</span><span className="detail-value">{item.expires_on || "No expiry"}</span></div>
               <div className="detail-row"><span className="detail-label">Expiry state</span><span className="detail-value">{item.expiry_label}</span></div>

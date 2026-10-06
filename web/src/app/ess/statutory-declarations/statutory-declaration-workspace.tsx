@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
-import { PageIntro } from "@/components/patterns/page-intro";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type {
   EssStatutoryDeclaration,
@@ -137,12 +136,29 @@ function ModalShell({
   onClose: () => void;
   wide?: boolean;
 }) {
-  return (
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
     <div className="modal-shell" role="presentation">
       <div aria-label={label} aria-modal="true" className={`modal ess-tax-modal${wide ? " ess-tax-modal--wide" : ""}`} role="dialog">
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
+  );
+}
+
+function SummaryCard({ label, value, hint }: { label: string; value: ReactNode; hint: string }) {
+  return (
+    <article className="workspace-summary-card">
+      <div className="workspace-summary-card__meta">
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <small>{hint}</small>
+      </div>
+    </article>
   );
 }
 
@@ -156,11 +172,12 @@ function TaxYearRail({
   selectedDeclaration: EssStatutoryDeclaration | null;
 }) {
   return (
-    <section className="ess-tax-rail" aria-label="Tax year selector">
-      <div className="ess-tax-panel-header">
+    <section className="workspace-data-panel ess-tax-rail" aria-label="Tax year selector">
+      <div className="workspace-data-panel__header ess-tax-panel-header">
         <div>
           <span className="workspace-card__eyebrow">Tax years</span>
           <h2>My declarations</h2>
+          <p>Choose the financial year you want to review or update.</p>
         </div>
       </div>
       <div className="ess-tax-year-list">
@@ -200,7 +217,7 @@ function TaxYearRail({
 
 function ProfileSummary({ profile }: { profile: HrAdminEmployeeStatutoryProfile | null }) {
   return (
-    <section className="ess-tax-card ess-tax-profile-card">
+    <section className="workspace-data-panel ess-tax-card ess-tax-profile-card">
       <div className="ess-tax-panel-header ess-tax-panel-header--plain">
         <div>
           <span className="workspace-card__eyebrow">Tax profile</span>
@@ -209,7 +226,7 @@ function ProfileSummary({ profile }: { profile: HrAdminEmployeeStatutoryProfile 
         </div>
         <StatusBadge status={profile?.declaration_status || "draft"} label={profile?.declaration_status_label || "Draft"} />
       </div>
-      <div className="detail-grid detail-grid-soft">
+      <div className="workspace-summary-grid ess-tax-profile-grid">
         <DetailRow label="PAN" value={profile?.pan_number || "Pending"} />
         <DetailRow label="Tax regime" value={profile?.tax_regime_label || "Pending"} />
         <DetailRow label="PF / UAN" value={profile?.pf_applicable ? profile.uan_number || "Applicable" : "Not applicable"} />
@@ -224,7 +241,7 @@ function ProfileSummary({ profile }: { profile: HrAdminEmployeeStatutoryProfile 
 function DeclarationSnapshot({ declaration }: { declaration: EssStatutoryDeclaration | null }) {
   if (!declaration) {
     return (
-      <section className="ess-tax-card ess-tax-declaration-card">
+      <section className="workspace-data-panel ess-tax-card ess-tax-declaration-card">
         <div className="ess-tax-panel-header ess-tax-panel-header--plain">
           <div>
             <span className="workspace-card__eyebrow">Current declaration</span>
@@ -237,7 +254,7 @@ function DeclarationSnapshot({ declaration }: { declaration: EssStatutoryDeclara
   }
 
   return (
-    <section className="ess-tax-card ess-tax-declaration-card">
+    <section className="workspace-data-panel ess-tax-card ess-tax-declaration-card">
       <div className="ess-tax-panel-header ess-tax-panel-header--plain">
         <div>
           <span className="workspace-card__eyebrow">Current declaration</span>
@@ -264,7 +281,7 @@ function DeclarationSnapshot({ declaration }: { declaration: EssStatutoryDeclara
           <strong>{declaration.rejected_item_count}</strong>
         </div>
       </div>
-      <div className="detail-grid detail-grid-soft">
+      <div className="workspace-summary-grid ess-tax-profile-grid">
         <DetailRow label="Submitted" value={formatDate(declaration.submitted_at)} />
         <DetailRow label="Verified" value={formatDate(declaration.verified_at)} />
         <DetailRow label="Locked" value={formatDate(declaration.locked_at)} />
@@ -278,7 +295,7 @@ function SectionOverview({ declaration }: { declaration: EssStatutoryDeclaration
   const items = declaration?.items ?? [];
 
   return (
-    <section className="ess-tax-card">
+    <section className="workspace-section ess-tax-card">
       <div className="ess-tax-panel-header ess-tax-panel-header--plain">
         <div>
           <span className="workspace-card__eyebrow">India declaration sections</span>
@@ -326,8 +343,8 @@ function ProofRegister({
   });
 
   return (
-    <section className="ess-tax-card">
-      <div className="ess-tax-panel-header ess-tax-panel-header--plain">
+    <section className="workspace-data-panel ess-tax-card">
+      <div className="workspace-data-panel__header ess-tax-panel-header ess-tax-panel-header--plain">
         <div>
           <span className="workspace-card__eyebrow">Proof register</span>
           <h2>Declared items</h2>
@@ -335,25 +352,35 @@ function ProofRegister({
         </div>
         <span className="payroll-setup-count">{filteredItems.length} shown</span>
       </div>
-      <div className="ess-tax-register-filters">
-        <label className="form-field">
-          <span>Search proofs</span>
-          <input className="input-control" onChange={(event) => setQuery(event.target.value)} placeholder="Section, item, status" value={query} />
-        </label>
-        <label className="form-field">
-          <span>Proof status</span>
-          <select className="input-control" onChange={(event) => setStatus(event.target.value)} value={status}>
-            <option value="">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="submitted">Submitted</option>
-            <option value="verified">Verified</option>
-            <option value="rejected">Rejected</option>
-          </select>
-        </label>
-      </div>
-      <div className="ess-tax-proof-list">
+      <details className="workspace-filter-disclosure ess-tax-register-filters" open>
+        <summary>Refine proof register</summary>
+        <div className="workspace-filter-disclosure__content ess-tax-register-filter-grid">
+          <label className="form-field">
+            <span>Search proofs</span>
+            <input className="input-control" onChange={(event) => setQuery(event.target.value)} placeholder="Section, item, status" value={query} />
+          </label>
+          <label className="form-field">
+            <span>Proof status</span>
+            <select className="input-control" onChange={(event) => setStatus(event.target.value)} value={status}>
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="submitted">Submitted</option>
+              <option value="verified">Verified</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+        </div>
+      </details>
+      <div className="workspace-table ess-tax-proof-list">
+        <div className="workspace-table__row workspace-table__row--head ess-tax-proof-row">
+          <span>Proof</span>
+          <span>Status</span>
+          <span>Declared</span>
+          <span>Accepted</span>
+          <span>Action</span>
+        </div>
         {filteredItems.map((item) => (
-          <button className="ess-tax-proof-card" key={item.id} onClick={() => onOpenProof(item)} type="button">
+          <button className="workspace-table__row ess-tax-proof-row ess-tax-proof-card" key={item.id} onClick={() => onOpenProof(item)} type="button">
             <span>
               <strong>{item.name}</strong>
               <small>
@@ -361,10 +388,9 @@ function ProofRegister({
               </small>
             </span>
             <StatusBadge status={item.proof_status} label={item.proof_status_label} />
-            <span className="ess-tax-proof-card__amounts">
-              <small>{formatMoney(item.declared_amount)} declared</small>
-              <small>{formatMoney(item.verified_amount)} accepted</small>
-            </span>
+            <span>{formatMoney(item.declared_amount)}</span>
+            <span>{formatMoney(item.verified_amount)}</span>
+            <span className="table-action-link">View details</span>
           </button>
         ))}
         {filteredItems.length === 0 ? (
@@ -394,13 +420,24 @@ function NextActionPanel({
   const editable = isEditable(declaration);
   const needsPan = !profile?.pan_number;
   const rejected = declaration?.rejected_item_count ?? 0;
+  const nextActionTitle = !declaration
+    ? "Start declaration"
+    : editable
+      ? "Continue declaration"
+      : "Review submitted declaration";
+  const nextActionCopy = !declaration
+    ? "Choose a financial year and tax regime before adding proof."
+    : editable
+      ? "Add proof rows, correct rejected evidence, and submit when ready."
+      : "Your declaration is submitted or locked. Review proof status and HR decisions.";
 
   return (
-    <section className="ess-tax-next-panel" aria-label="Tax declaration checklist">
+    <section className="workspace-data-panel ess-tax-next-panel" aria-label="Tax declaration checklist">
       <div className="ess-tax-panel-header ess-tax-panel-header--plain">
         <div>
           <span className="workspace-card__eyebrow">What to do next</span>
-          <h2>Tax declaration checklist</h2>
+          <h2>{nextActionTitle}</h2>
+          <p>{nextActionCopy}</p>
         </div>
       </div>
       <div className="ess-tax-next-list">
@@ -419,7 +456,7 @@ function NextActionPanel({
       </div>
       <div className="ess-tax-next-actions">
         <button className="button button--primary" onClick={onStartDeclaration} type="button">
-          {editable ? "Update declaration" : "Start declaration"}
+          {editable ? "Update declaration" : declaration ? "View setup" : "Start declaration"}
         </button>
         <button className="button button--secondary" disabled={!editable} onClick={onAddProof} type="button">
           Add proof
@@ -474,6 +511,21 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     q: filters.q,
     status: filters.status,
   };
+
+  useEffect(() => {
+    if (!activeModal) {
+      return undefined;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setActiveModal(null);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [activeModal]);
 
   function openProofDetail(item: EssStatutoryDeclarationItem) {
     setSelectedProof(item);
@@ -599,42 +651,37 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
 
   return (
     <main className="shell shell--workspace shell--ess-tax">
-      <PageIntro
-        actions={
-          <>
-            <Link className="button button--secondary" href="/ess">
-              Overview
-            </Link>
-            <Link className="button button--secondary" href="/ess/documents">
-              Documents
-            </Link>
-            <button className="button button--primary" onClick={() => setActiveModal("declaration")} type="button">
-              {editableDeclaration ? "Update declaration" : "Start declaration"}
-            </button>
-          </>
-        }
-        className="page-header-surface page-header-surface--compact"
-        description="Choose tax regime, add investment proof, and track HR verification without leaving the self-service flow."
-        descriptionClassName="text-body-premium"
-        eyebrow={isDemo ? "Demo employee tax" : "Live employee tax"}
-        pills={["India ready", "Tenant configured", "Proof tracked"]}
-        showPills
-        title="Statutory Declarations"
-        titleClassName="text-heading-premium page-title-soft"
-      />
-
-      <section className="section section--tight" aria-label="Tax declaration metrics">
-        <div className="metric-grid-modern">
-          <MetricTile className="metric-tile-soft" label="Declarations" value={data.summary.declaration_count} trend="Tax years in view" />
-          <MetricTile className="metric-tile-soft" label="Draft" value={data.summary.draft_declaration_count} trend="Editable declarations" />
-          <MetricTile className="metric-tile-soft" label="Proofs" value={data.summary.declaration_item_count} trend="Declared proof rows" />
-          <MetricTile className="metric-tile-soft" label="Rejected" value={data.summary.rejected_item_count} trend="Need correction" />
-          <MetricTile className="metric-tile-soft" label="Declared" value={formatMoney(data.summary.declared_total_amount)} trend="Employee total" />
-          <MetricTile className="metric-tile-soft" label="Accepted" value={formatMoney(data.summary.verified_total_amount)} trend="Payroll accepted" />
+      <header className="workspace-control-header">
+        <div className="workspace-control-header__copy">
+          <span className="workspace-control-header__eyebrow">{isDemo ? "Demo employee tax" : "Live employee tax"}</span>
+          <h1>Statutory Declarations</h1>
+          <p>Choose tax regime, add investment proof, and track HR verification in one focused self-service workspace.</p>
+          <div className="workspace-control-header__metrics">
+            <span>India ready</span>
+            <span>Tenant configured</span>
+            <span>Proof tracked</span>
+          </div>
         </div>
+        <div className="workspace-control-header__actions">
+          <Link className="button button--secondary" href="/ess">
+            Overview
+          </Link>
+          <Link className="button button--secondary" href="/ess/documents">
+            Documents
+          </Link>
+        </div>
+      </header>
+
+      <section className="workspace-summary-grid ess-tax-summary-grid--metrics" aria-label="Tax declaration metrics">
+        <SummaryCard label="Declarations" value={data.summary.declaration_count} hint="Tax years in view" />
+        <SummaryCard label="Draft" value={data.summary.draft_declaration_count} hint="Editable declarations" />
+        <SummaryCard label="Proofs" value={data.summary.declaration_item_count} hint="Declared proof rows" />
+        <SummaryCard label="Rejected" value={data.summary.rejected_item_count} hint="Need correction" />
+        <SummaryCard label="Declared" value={formatMoney(data.summary.declared_total_amount)} hint="Employee total" />
+        <SummaryCard label="Accepted" value={formatMoney(data.summary.verified_total_amount)} hint="Payroll accepted" />
       </section>
 
-      <section className="section section--tight">
+      <section className="workspace-section">
         <div className="ess-tax-workspace">
           <TaxYearRail declarations={data.items} filters={filters} selectedDeclaration={selectedDeclaration} />
 
@@ -646,47 +693,50 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
             profile={data.profile}
           />
 
-          <section className="ess-tax-main" aria-label="Tax declaration workspace">
+          <section className="workspace-data-panel ess-tax-main" aria-label="Tax declaration workspace">
             <div className="ess-tax-toolbar">
-              <form action="/ess/statutory-declarations" className="ess-tax-filter-form">
-                <label className="form-field">
-                  <span>Search</span>
-                  <input aria-label="Search declarations" className="input-control" defaultValue={filters.q} name="q" placeholder="Year, regime, proof" />
-                </label>
-                <label className="form-field">
-                  <span>Status</span>
-                  <select aria-label="Status" className="input-control" defaultValue={filters.status} name="status">
-                    <option value="">All statuses</option>
-                    <option value="draft">Draft</option>
-                    <option value="submitted">Submitted</option>
-                    <option value="verified">Verified</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="locked">Locked</option>
-                  </select>
-                </label>
-                <label className="form-field">
-                  <span>Financial year</span>
-                  <select aria-label="Financial year" className="input-control" defaultValue={filters.financial_year} name="financial_year">
-                    <option value="">All years</option>
-                    {data.summary.available_financial_years.map((yearOption) => (
-                      <option key={yearOption} value={yearOption}>
-                        {yearOption}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="form-field">
-                  <span>Rows per page</span>
-                  <select aria-label="Rows per page" className="input-control" defaultValue={String(filters.page_size)} name="page_size">
-                    <option value="5">5 / page</option>
-                    <option value="10">10 / page</option>
-                    <option value="25">25 / page</option>
-                  </select>
-                </label>
-                <button className="button button--primary" type="submit">
-                  Apply
-                </button>
-              </form>
+              <details className="workspace-filter-disclosure" open>
+                <summary>Refine declarations</summary>
+                <form action="/ess/statutory-declarations" className="workspace-filter-disclosure__content ess-tax-filter-form">
+                  <label className="form-field">
+                    <span>Search</span>
+                    <input aria-label="Search declarations" className="input-control" defaultValue={filters.q} name="q" placeholder="Year, regime, proof" />
+                  </label>
+                  <label className="form-field">
+                    <span>Status</span>
+                    <select aria-label="Status" className="input-control" defaultValue={filters.status} name="status">
+                      <option value="">All statuses</option>
+                      <option value="draft">Draft</option>
+                      <option value="submitted">Submitted</option>
+                      <option value="verified">Verified</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="locked">Locked</option>
+                    </select>
+                  </label>
+                  <label className="form-field">
+                    <span>Financial year</span>
+                    <select aria-label="Financial year" className="input-control" defaultValue={filters.financial_year} name="financial_year">
+                      <option value="">All years</option>
+                      {data.summary.available_financial_years.map((yearOption) => (
+                        <option key={yearOption} value={yearOption}>
+                          {yearOption}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="form-field">
+                    <span>Rows per page</span>
+                    <select aria-label="Rows per page" className="input-control" defaultValue={String(filters.page_size)} name="page_size">
+                      <option value="5">5 / page</option>
+                      <option value="10">10 / page</option>
+                      <option value="25">25 / page</option>
+                    </select>
+                  </label>
+                  <button className="button button--primary" type="submit">
+                    Apply
+                  </button>
+                </form>
+              </details>
               {notice ? <div className="notice notice--info">{notice}</div> : null}
             </div>
 
@@ -694,24 +744,6 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
               <DeclarationSnapshot declaration={selectedDeclaration} />
               <ProfileSummary profile={data.profile} />
             </div>
-
-            <section className="ess-tax-card ess-tax-primary-action">
-              <div>
-                <span className="workspace-card__eyebrow">Employee submission</span>
-                <h2>{editableDeclaration ? "Update declaration" : "Start declaration"}</h2>
-                <p className="section-copy section-copy-soft">
-                  Keep the page light. Use focused dialogs for regime selection, proof upload, and final submit.
-                </p>
-              </div>
-              <div className="ess-tax-primary-action__buttons">
-                <button className="button button--primary" onClick={() => setActiveModal("declaration")} type="button">
-                  {editableDeclaration ? "Update declaration" : "Start declaration"}
-                </button>
-                <button className="button button--secondary" disabled={!editableDeclaration} onClick={() => setActiveModal("proof")} type="button">
-                  Add proof
-                </button>
-              </div>
-            </section>
 
             <SectionOverview declaration={selectedDeclaration} />
             <ProofRegister items={selectedDeclaration?.items ?? []} onOpenProof={openProofDetail} />

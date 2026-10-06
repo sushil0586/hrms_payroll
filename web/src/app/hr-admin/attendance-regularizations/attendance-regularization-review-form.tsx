@@ -26,6 +26,21 @@ function formatDateTime(value: string | null, fallback: string) {
   }).format(new Date(value));
 }
 
+function titleCase(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getWaitingLabel(item: AttendanceRegularizationItem) {
+  if (item.status !== "pending") {
+    return item.status === "approved" ? "Approved" : item.status === "rejected" ? "Rejected" : titleCase(item.status);
+  }
+  const currentStep = item.approval_steps?.find((step) => step.is_current) ?? item.approval_steps?.[0];
+  if (currentStep?.manager_name) {
+    return `Pending approval from ${currentStep.manager_name}`;
+  }
+  return "Pending approval from configured approver";
+}
+
 export function AttendanceRegularizationReviewForm({ item }: Props) {
   const router = useRouter();
   const [comment, setComment] = useState(item.status === "approved" ? item.manager_comment || "" : item.rejection_reason || item.manager_comment || "");
@@ -86,6 +101,23 @@ export function AttendanceRegularizationReviewForm({ item }: Props) {
           <div className="detail-row"><span className="detail-label">Requested check out</span><span className="detail-value">{formatDateTime(item.requested_check_out_at, "No change")}</span></div>
           <div className="detail-row"><span className="detail-label">Applied at</span><span className="detail-value">{formatDateTime(item.applied_at, "Not submitted")}</span></div>
           <div className="detail-row"><span className="detail-label">Workflow reference</span><span className="detail-value">{item.workflow_reference || "Not linked"}</span></div>
+        </div>
+        <div className="notice notice--quiet">
+          <strong>{getWaitingLabel(item)}</strong>
+          <span className="muted">{item.shift ? `Shift: ${item.shift}` : "No shift is assigned to this attendance record."}</span>
+        </div>
+        <div className="queue-list queue-list--compact">
+          {(item.approval_steps ?? []).length ? item.approval_steps?.map((step) => (
+            <div className="detail-row" key={`${item.id}-${step.level}-${step.name}`}>
+              <span className="detail-label">Level {step.level} • {titleCase(step.status)}</span>
+              <span className="detail-value">{step.name}: {step.manager_name || "Configured approver"}{step.comment ? ` • ${step.comment}` : ""}</span>
+            </div>
+          )) : (
+            <div className="detail-row">
+              <span className="detail-label">Approval track</span>
+              <span className="detail-value">No workflow evidence attached to this request.</span>
+            </div>
+          )}
         </div>
       </article>
 

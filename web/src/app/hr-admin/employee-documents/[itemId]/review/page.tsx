@@ -8,6 +8,15 @@ import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
 
+function humanizeStatus(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default async function HrAdminEmployeeDocumentReviewPage({ params }: PageProps) {
   const { itemId } = await params;
   await requireSessionPermission({
@@ -21,9 +30,13 @@ export default async function HrAdminEmployeeDocumentReviewPage({ params }: Page
       <PageIntro
         eyebrow={documentResult.state === "live" && optionsResult.state === "live" ? "Live document mode" : "Demo document mode"}
         title="Review employee document"
-        description="Verify, reject, or update the metadata for this employee document record."
+        description={documentResult.data.review_status_label}
         actions={<Link className="button button--secondary" href="/hr-admin/employee-documents">Back to employee documents</Link>}
-        pills={[documentResult.data.category_name, documentResult.data.verification_status, documentResult.data.status]}
+        pills={[
+          documentResult.data.category_name,
+          humanizeStatus(documentResult.data.verification_status),
+          `Owner: ${documentResult.data.review_owner_label}`,
+        ]}
       />
       <EmployeeDocumentReviewForm document={documentResult.data} initialValue={employeeDocumentToFormValue(documentResult.data)} itemId={itemId} options={optionsResult.data} />
     </main>

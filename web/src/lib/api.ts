@@ -70,6 +70,7 @@ import type {
   HrAdminSalarySetupResponse,
   HrAdminShift,
   HrAdminHolidayCalendar,
+  HrAdminLeaveRequestListResponse,
   HrAdminLeavePolicy,
   HrAdminLeaveBalance,
   HrAdminLeaveBalanceTransaction,
@@ -648,6 +649,22 @@ export async function getHrAdminAttendanceRegularizations(params?: {
 
 export async function getHrAdminAttendanceRegularization(itemId: string) {
   return apiGet<AttendanceRegularizationItem>(`/hr-admin/attendance-regularizations/${itemId}/`);
+}
+
+export async function getHrAdminLeaveRequests(params?: {
+  page?: number;
+  page_size?: number;
+  q?: string;
+  status?: string;
+  leave_type_code?: string;
+  from_date?: string;
+  to_date?: string;
+}) {
+  return apiGet<HrAdminLeaveRequestListResponse>(`/hr-admin/leave-requests/${buildQueryString(params ?? {})}`);
+}
+
+export async function getHrAdminLeaveRequest(itemId: string) {
+  return apiGet<LeaveRequestItem>(`/hr-admin/leave-requests/${itemId}/`);
 }
 
 export async function getHrAdminAttendancePolicy(itemId: string) {
@@ -2996,6 +3013,8 @@ function getDemoData<T>(path: string): T {
       uploaded_by_identifier: "riya.sharma",
       verified_by_identifier: "",
       verified_at: null,
+      review_owner_label: "HR document verifier",
+      review_status_label: "Pending review from HR document verifier",
       rejection_reason: "",
       reupload_requested: false,
       reupload_requested_at: null,
@@ -3045,6 +3064,8 @@ function getDemoData<T>(path: string): T {
       uploaded_by_identifier: "aman.verma",
       verified_by_identifier: "nisha.rao",
       verified_at: "2026-06-01T14:15:00+05:30",
+      review_owner_label: "nisha.rao",
+      review_status_label: "Verified by nisha.rao",
       rejection_reason: "",
       reupload_requested: false,
       reupload_requested_at: null,
@@ -3103,6 +3124,8 @@ function getDemoData<T>(path: string): T {
       uploaded_by_identifier: "meera.iyer",
       verified_by_identifier: "nisha.rao",
       verified_at: "2026-06-03T11:40:00+05:30",
+      review_owner_label: "nisha.rao",
+      review_status_label: "Returned by nisha.rao",
       rejection_reason: "Uploaded image is blurred. Please re-upload a clearer copy.",
       reupload_requested: true,
       reupload_requested_at: "2026-06-03T11:40:00+05:30",
@@ -14111,6 +14134,51 @@ function getDemoData<T>(path: string): T {
           page_size: pageSize,
           has_next: offset + pageSize < filtered.length,
           has_previous: page > 1,
+        } as T;
+      }
+      if (pathname === "/hr-admin/leave-requests/") {
+        const q = (query.get("q") || "").trim().toLowerCase();
+        const status = query.get("status") || "";
+        const leaveTypeCode = query.get("leave_type_code") || "";
+        const fromDate = query.get("from_date") || "";
+        const toDate = query.get("to_date") || "";
+        const page = Math.max(Number(query.get("page") || "1") || 1, 1);
+        const pageSize = Math.min(Math.max(Number(query.get("page_size") || "25") || 25, 1), 100);
+        const statusCounts = {
+          all: demoLeaveRequests.length,
+          pending: demoLeaveRequests.filter((item) => item.status === "pending").length,
+          approved: demoLeaveRequests.filter((item) => item.status === "approved").length,
+          rejected: demoLeaveRequests.filter((item) => item.status === "rejected").length,
+          withdrawn: demoLeaveRequests.filter((item) => item.status === "withdrawn").length,
+          cancelled: demoLeaveRequests.filter((item) => item.status === "cancelled").length,
+          partially_approved: demoLeaveRequests.filter((item) => item.status === "partially_approved").length,
+        };
+        const filtered = demoLeaveRequests.filter((item) => {
+          if (status && item.status !== status) return false;
+          if (leaveTypeCode && item.leave_type_code !== leaveTypeCode) return false;
+          if (fromDate && item.end_date < fromDate) return false;
+          if (toDate && item.start_date > toDate) return false;
+          if (!q) return true;
+          return [
+            item.employee_name || "",
+            item.employee_code || "",
+            item.leave_type,
+            item.leave_type_code,
+            item.policy_name || "",
+            item.reason,
+            item.status,
+            item.workflow_reference,
+          ].some((value) => value.toLowerCase().includes(q));
+        });
+        const offset = (page - 1) * pageSize;
+        return {
+          items: filtered.slice(offset, offset + pageSize),
+          total_count: filtered.length,
+          page,
+          page_size: pageSize,
+          has_next: offset + pageSize < filtered.length,
+          has_previous: page > 1,
+          status_counts: statusCounts,
         } as T;
       }
       if (pathname === "/hr-admin/employee-documents/") {

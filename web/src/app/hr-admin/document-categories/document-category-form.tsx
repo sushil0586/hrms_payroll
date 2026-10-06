@@ -21,6 +21,16 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to save document category.");
 }
 
+function categoryOutcomeLabel(formValue: HrAdminDocumentCategoryWriteInput) {
+  const outcomes = [];
+  outcomes.push(formValue.is_active ? "Active in setup" : "Hidden from new setup");
+  outcomes.push(formValue.allow_employee_upload ? "Employees can upload" : "HR upload only");
+  outcomes.push(formValue.requires_verification ? "HR verification required" : "Auto-accepted by policy");
+  if (formValue.requires_expiry_date) outcomes.push("Expiry date required");
+  if (formValue.allow_multiple_files) outcomes.push("Multiple files allowed");
+  return outcomes.join(" • ");
+}
+
 export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
@@ -45,11 +55,18 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Pr
       return;
     }
 
-    const response = await fetch(mode === "create" ? "/api/hr-admin/document-categories" : `/api/hr-admin/document-categories/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...formValue, visibility_rules: parsedVisibilityRules }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/document-categories" : `/api/hr-admin/document-categories/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formValue, visibility_rules: parsedVisibilityRules }),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
@@ -76,6 +93,10 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Pr
             <label className="form-field"><span className="muted">Category type</span><select className="input-control" value={formValue.category_type} onChange={(e) => update("category_type", e.target.value)}>{options.document_category_types.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label className="form-field"><span className="muted">Description</span><input className="input-control" value={formValue.description} onChange={(e) => update("description", e.target.value)} /></label>
             <label className="form-field form-field--full"><span className="muted">Visibility rules JSON</span><textarea className="input-control" rows={5} value={formValue.visibility_rules} onChange={(e) => update("visibility_rules", e.target.value)} /></label>
+          </div>
+          <div className="document-decision-effect">
+            <strong>Category impact</strong>
+            <span>{categoryOutcomeLabel(formValue)}</span>
           </div>
         </FormSection>
 

@@ -306,6 +306,7 @@ from apps.common.api_serializers import (
     LeaveTypeOptionSerializer,
     LeaveRequestHistoryListSerializer,
     LeaveRequestHistoryItemSerializer,
+    HrAdminLeaveRequestListSerializer,
     LeaveSummarySerializer,
     LeaveRequestCreateSerializer,
     LeaveRequestLifecycleActionSerializer,
@@ -1545,32 +1546,31 @@ def build_hr_admin_attendance_record_payload(item: AttendanceRecord) -> dict:
 
 
 def build_hr_admin_attendance_regularization_payload(item: AttendanceRegularization) -> dict:
-    return {
-        "id": item.id,
-        "employee_id": item.employee.id,
-        "employee_code": item.employee.employee_code,
-        "employee_name": f"{item.employee.first_name} {item.employee.last_name}".strip() or item.employee.employee_code,
-        "department": item.employee.department.name if item.employee.department else None,
-        "designation": item.employee.designation.name if item.employee.designation else None,
-        "attendance_record_id": item.attendance_record.id,
-        "attendance_date": item.attendance_record.attendance_date,
-        "current_status": item.attendance_record.status,
-        "requested_status": item.requested_status,
-        "shift": item.attendance_record.shift.name if item.attendance_record.shift else None,
-        "requested_check_in_at": item.requested_check_in_at,
-        "requested_check_out_at": item.requested_check_out_at,
-        "actual_check_in_at": item.attendance_record.check_in_at,
-        "actual_check_out_at": item.attendance_record.check_out_at,
-        "status": item.status,
-        "reason": item.reason,
-        "manager_comment": item.manager_comment,
-        "rejection_reason": item.rejection_reason,
-        "workflow_reference": item.workflow_reference,
-        "applied_at": item.applied_at,
-        "resolved_at": item.resolved_at,
-        "created_at": item.created_at,
-        "updated_at": item.updated_at,
-    }
+    payload = get_employee_attendance_regularization_detail(item.employee, item.id) or {}
+    payload.update(
+        {
+            "employee_id": item.employee.id,
+            "employee_code": item.employee.employee_code,
+            "employee_name": f"{item.employee.first_name} {item.employee.last_name}".strip() or item.employee.employee_code,
+            "department": item.employee.department.name if item.employee.department else None,
+            "designation": item.employee.designation.name if item.employee.designation else None,
+        }
+    )
+    return payload
+
+
+def build_hr_admin_leave_request_payload(item: LeaveRequest) -> dict:
+    payload = get_employee_leave_request_detail(item.employee, item.id) or {}
+    payload.update(
+        {
+            "employee_id": item.employee_id,
+            "employee_code": item.employee.employee_code,
+            "employee_name": f"{item.employee.first_name} {item.employee.last_name}".strip() or item.employee.employee_code,
+            "department": item.employee.department.name if item.employee.department else None,
+            "designation": item.employee.designation.name if item.employee.designation else None,
+        }
+    )
+    return payload
 
 
 def save_hr_admin_attendance_record(actor, validated_data, *, item: AttendanceRecord):
@@ -2700,6 +2700,9 @@ def save_hr_admin_document_requirement(actor, validated_data, *, item=None):
                 raise serializers.ValidationError({field_name: "Invalid selection."})
             setattr(item, relation_name, related)
 
+    if item.branch_id and item.legal_entity_id and item.branch.legal_entity_id != item.legal_entity_id:
+        raise serializers.ValidationError({"branch_id": "Branch must belong to the selected legal entity."})
+
     for field in ["is_mandatory", "required_within_days_of_joining", "priority", "is_active"]:
         if field in validated_data:
             setattr(item, field, validated_data[field])
@@ -2709,6 +2712,40 @@ def save_hr_admin_document_requirement(actor, validated_data, *, item=None):
 
     item.save()
     return item
+
+
+def _get_employee_document_review_runtime(item: EmployeeDocument) -> dict:
+    if item.verification_status == VerificationStatus.VERIFIED:
+        if item.category.requires_verification:
+            owner_label = item.verified_by_identifier or "HR document verifier"
+            return {
+                "owner_label": owner_label,
+                "status_label": f"Verified by {owner_label}",
+            }
+        return {
+            "owner_label": "Document policy",
+            "status_label": "Accepted automatically by policy",
+        }
+    if item.verification_status == VerificationStatus.REJECTED:
+        owner_label = item.verified_by_identifier or item.reupload_requested_by_identifier or "HR document verifier"
+        return {
+            "owner_label": owner_label,
+            "status_label": f"Returned by {owner_label}",
+        }
+    if item.verification_status == VerificationStatus.EXPIRED:
+        return {
+            "owner_label": "Employee",
+            "status_label": "Expired. Upload a renewed copy.",
+        }
+    if item.category.requires_verification:
+        return {
+            "owner_label": "HR document verifier",
+            "status_label": "Pending review from HR document verifier",
+        }
+    return {
+        "owner_label": "Document policy",
+        "status_label": "Accepted automatically by policy",
+    }
 
 
 def build_hr_admin_employee_document_payload(item: EmployeeDocument) -> dict:
@@ -2721,6 +2758,7 @@ def build_hr_admin_employee_document_payload(item: EmployeeDocument) -> dict:
     )
     review_history_items = item.verification_logs.order_by("-created_at")
     expiry_runtime = _get_employee_document_expiry_runtime(item)
+    review_runtime = _get_employee_document_review_runtime(item)
     return {
         "id": item.id,
         "employee_id": item.employee_id,
@@ -2751,6 +2789,8 @@ def build_hr_admin_employee_document_payload(item: EmployeeDocument) -> dict:
         "uploaded_by_identifier": item.uploaded_by_identifier,
         "verified_by_identifier": item.verified_by_identifier,
         "verified_at": item.verified_at,
+        "review_owner_label": review_runtime["owner_label"],
+        "review_status_label": review_runtime["status_label"],
         "rejection_reason": item.rejection_reason,
         "reupload_requested": item.reupload_requested,
         "reupload_requested_at": item.reupload_requested_at,
@@ -3307,6 +3347,11 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
             "is_expired": False,
             "is_expiring_soon": False,
         }
+        current_review_runtime = (
+            _get_employee_document_review_runtime(current_document)
+            if current_document
+            else {"owner_label": "", "status_label": "Pending employee upload"}
+        )
         runtime_items.append(
             {
                 "category_id": str(rule.category_id),
@@ -3330,6 +3375,8 @@ def _get_employee_document_requirement_runtime(employee: Employee, *, joining_da
                 "current_is_expired": current_expiry_runtime["is_expired"],
                 "current_is_expiring_soon": current_expiry_runtime["is_expiring_soon"],
                 "current_rejection_reason": current_document.rejection_reason if current_document else "",
+                "current_review_owner_label": current_review_runtime["owner_label"],
+                "current_review_status_label": current_review_runtime["status_label"],
                 "current_uploaded_at": current_document.created_at if current_document else None,
             }
         )
@@ -14881,6 +14928,105 @@ class HrAdminAttendanceRegularizationRejectView(HrAdminContextMixin, APIView):
         )
         payload = {"id": regularization.id, "status": regularization.status, "workflow_reference": regularization.workflow_reference or ""}
         return response.Response(MutationResultSerializer(payload).data)
+
+
+class HrAdminLeaveRequestListView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
+        try:
+            page = max(int(request.query_params.get("page", 1) or 1), 1)
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            page_size = min(max(int(request.query_params.get("page_size", 25) or 25), 1), 100)
+        except (TypeError, ValueError):
+            page_size = 25
+        search_value = (request.query_params.get("q") or "").strip()
+        status_filter = (request.query_params.get("status") or "").strip()
+        leave_type_filter = (request.query_params.get("leave_type_code") or "").strip()
+        employee_id = (request.query_params.get("employee_id") or "").strip()
+        from_date = parse_date((request.query_params.get("from_date") or "").strip())
+        to_date = parse_date((request.query_params.get("to_date") or "").strip())
+
+        queryset = LeaveRequest.objects.filter(tenant=employee.tenant).select_related(
+            "employee__department",
+            "employee__designation",
+            "employee__reporting_manager",
+            "employee__membership",
+            "leave_type",
+            "leave_policy",
+        )
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if leave_type_filter:
+            queryset = queryset.filter(leave_type__code=leave_type_filter)
+        if employee_id:
+            queryset = queryset.filter(employee_id=employee_id)
+        if from_date:
+            queryset = queryset.filter(end_date__gte=from_date)
+        if to_date:
+            queryset = queryset.filter(start_date__lte=to_date)
+        if search_value:
+            date_value = parse_date(search_value)
+            search_query = (
+                Q(employee__first_name__icontains=search_value)
+                | Q(employee__last_name__icontains=search_value)
+                | Q(employee__employee_code__icontains=search_value)
+                | Q(employee__work_email__icontains=search_value)
+                | Q(leave_type__name__icontains=search_value)
+                | Q(leave_type__code__icontains=search_value)
+                | Q(leave_policy__name__icontains=search_value)
+                | Q(reason__icontains=search_value)
+                | Q(status__icontains=search_value)
+                | Q(workflow_reference__icontains=search_value)
+            )
+            if date_value:
+                search_query |= Q(start_date__lte=date_value, end_date__gte=date_value)
+            queryset = queryset.filter(search_query)
+
+        status_base = LeaveRequest.objects.filter(tenant=employee.tenant)
+        status_counts = {
+            "all": status_base.count(),
+            "pending": status_base.filter(status=LeaveRequestStatus.PENDING).count(),
+            "approved": status_base.filter(status=LeaveRequestStatus.APPROVED).count(),
+            "rejected": status_base.filter(status=LeaveRequestStatus.REJECTED).count(),
+            "withdrawn": status_base.filter(status=LeaveRequestStatus.WITHDRAWN).count(),
+            "cancelled": status_base.filter(status=LeaveRequestStatus.CANCELLED).count(),
+            "partially_approved": status_base.filter(status=LeaveRequestStatus.PARTIALLY_APPROVED).count(),
+        }
+        queryset = queryset.order_by("-created_at")
+        total_count = queryset.count()
+        offset = (page - 1) * page_size
+        items = list(queryset[offset : offset + page_size])
+        payload = {
+            "items": [build_hr_admin_leave_request_payload(item) for item in items],
+            "total_count": total_count,
+            "page": page,
+            "page_size": page_size,
+            "has_next": offset + page_size < total_count,
+            "has_previous": page > 1,
+            "status_counts": status_counts,
+        }
+        return response.Response(HrAdminLeaveRequestListSerializer(payload).data)
+
+
+class HrAdminLeaveRequestDetailView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.view")
+        item = (
+            LeaveRequest.objects.filter(tenant=employee.tenant, id=item_id)
+            .select_related("employee__department", "employee__designation", "employee__reporting_manager", "employee__membership", "leave_type", "leave_policy")
+            .first()
+        )
+        if not item:
+            return response.Response({"detail": "Leave request not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(ManagerLeaveApprovalItemSerializer(build_hr_admin_leave_request_payload(item)).data)
 
 
 class HrAdminLeaveTypeListCreateView(HrAdminContextMixin, APIView):

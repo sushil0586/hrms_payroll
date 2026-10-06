@@ -98,7 +98,7 @@ export const hrAdminNavigation: HrAdminNavGroup[] = [
     title: "Time & Leave",
     items: [
       { href: "/hr-admin/attendance-operations", label: "Attendance", shortLabel: "AT", blurb: "Records and review windows", permissions: ["attendance.view", "attendance.records.manage", "attendance.regularization.review"] },
-      { href: "/hr-admin/leave-balances", label: "Leave", shortLabel: "LV", blurb: "Balances and operations", permissions: ["leave.view", "leave.policies.manage"] },
+      { href: "/hr-admin/leave-requests", label: "Leave", shortLabel: "LV", blurb: "Requests and balances", permissions: ["leave.view", "leave.policies.manage"] },
       { href: "/hr-admin/policies", label: "Policies", shortLabel: "PO", blurb: "Leave and attendance rules", permissions: ["leave.policies.manage", "attendance.policies.manage"] },
     ],
   },
@@ -222,6 +222,7 @@ const timeLeaveSearchDestinations: HrAdminSearchDestination[] = [
   { href: "/hr-admin/employee-shift-assignments/new", label: "New shift assignment", description: "Create employee shift assignment", section: "Time & Leave" },
   { href: "/hr-admin/leave-types", label: "Leave types", description: "Leave type catalog", section: "Time & Leave" },
   { href: "/hr-admin/leave-types/new", label: "New leave type", description: "Create leave type", section: "Time & Leave" },
+  { href: "/hr-admin/leave-requests", label: "Leave requests", description: "Tenant-wide leave request queue and approval evidence", section: "Time & Leave" },
   { href: "/hr-admin/leave-policies", label: "Leave policies", description: "Leave accrual and approval policy setup", section: "Time & Leave" },
   { href: "/hr-admin/leave-policies/new", label: "New leave policy", description: "Create leave policy", section: "Time & Leave" },
   { href: "/hr-admin/leave-policy-assignments", label: "Leave policy assignments", description: "Assign leave policies to employees", section: "Time & Leave" },

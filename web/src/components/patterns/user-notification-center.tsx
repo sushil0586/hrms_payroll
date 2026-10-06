@@ -1,7 +1,6 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
-import { PageIntro } from "@/components/patterns/page-intro";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { UserNotificationDetailAction } from "@/components/patterns/user-notification-detail-action";
 import type { HrAdminNotification, HrAdminNotificationListResponse } from "@/lib/types";
@@ -9,7 +8,7 @@ import type { HrAdminNotification, HrAdminNotificationListResponse } from "@/lib
 type SearchParamValue = string | string[] | undefined;
 
 type Props = {
-  actions: React.ReactNode;
+  actions: ReactNode;
   apiEndpointBase: string;
   basePath: string;
   crossWorkspaceHref: string;
@@ -121,6 +120,18 @@ function summarizeMessage(item: HrAdminNotification) {
   return item.body || item.subject || "No body content.";
 }
 
+function SummaryCard({ label, value, hint }: { label: string; value: ReactNode; hint: string }) {
+  return (
+    <article className="workspace-summary-card metric-tile user-notification-metric">
+      <div className="workspace-summary-card__meta">
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <small>{hint}</small>
+      </div>
+    </article>
+  );
+}
+
 export function UserNotificationCenter({
   actions,
   apiEndpointBase,
@@ -159,34 +170,32 @@ export function UserNotificationCenter({
 
   return (
     <main className={`shell shell--workspace user-notification-shell user-notification-shell--${workspace}`}>
-      <PageIntro
-        eyebrow={state === "live" ? "Live notifications" : "Demo notifications"}
-        title={title ?? "Notifications"}
-        description={description ?? (workspace === "mss" ? "Manager alerts, approval nudges, and queue follow-up." : "Personal alerts, document prompts, and request updates.")}
-        className="page-header-surface page-header-surface--compact"
-        titleClassName="text-heading-premium page-title-soft"
-        descriptionClassName="text-body-premium"
-        actions={actions}
-        pills={[
-          `${data.total_count} in view`,
-          `${unreadOnPage} unread on page`,
-          workspacePill ?? (workspace === "mss" ? "Manager inbox" : "Employee inbox"),
-        ]}
-        showPills
-      />
-
-      <section className="section section--tight">
-        <div className="metric-grid-modern">
-          <MetricTile className="metric-tile-soft" label="Notifications" value={data.total_count} trend="Current filtered view" />
-          <MetricTile className="metric-tile-soft" label="Unread on page" value={unreadOnPage} trend="Needs review" />
-          <MetricTile className="metric-tile-soft" label="High priority" value={highPriorityOnPage} trend="Escalated attention" />
-          <MetricTile className="metric-tile-soft" label="Failed on page" value={failedOnPage} trend="Delivery exceptions" />
+      <header className="workspace-control-header">
+        <div className="workspace-control-header__copy">
+          <span className="workspace-control-header__eyebrow">{state === "live" ? "Live notifications" : "Demo notifications"}</span>
+          <h1>{title ?? "Notifications"}</h1>
+          <p>{description ?? (workspace === "mss" ? "Manager alerts, approval nudges, and queue follow-up." : "Personal alerts, document prompts, and request updates.")}</p>
+          <div className="workspace-control-header__metrics">
+            <span>{data.total_count} in view</span>
+            <span>{unreadOnPage} unread on page</span>
+            <span>{workspacePill ?? (workspace === "mss" ? "Manager inbox" : "Employee inbox")}</span>
+          </div>
         </div>
+        <div className="workspace-control-header__actions">
+          {actions}
+        </div>
+      </header>
+
+      <section className="workspace-summary-grid user-notification-summary-grid" aria-label="Notification metrics">
+        <SummaryCard label="Notifications" value={data.total_count} hint="Current filtered view" />
+        <SummaryCard label="Unread on page" value={unreadOnPage} hint="Needs review" />
+        <SummaryCard label="High priority" value={highPriorityOnPage} hint="Escalated attention" />
+        <SummaryCard label="Failed on page" value={failedOnPage} hint="Delivery exceptions" />
       </section>
 
-      <section className="section section--tight queue-layout user-notification-center">
-        <section className="card panel queue-toolbar panel-card-soft user-notification-filters">
-          <div className="queue-toolbar__header">
+      <section className="workspace-section queue-layout user-notification-center">
+        <section className="workspace-data-panel queue-toolbar user-notification-filters">
+          <div className="workspace-data-panel__header queue-toolbar__header">
             <div>
               <h2 className="section-heading-soft">{filterTitle}</h2>
               <p className="section-copy section-copy-soft">
@@ -200,123 +209,120 @@ export function UserNotificationCenter({
             </div>
           </div>
 
-          <form className="queue-toolbar__grid" method="get">
-            <label className="form-field">
-              <span className="muted">Search</span>
-              <input className="input-control" defaultValue={q} name="q" placeholder="Title, body, event, or reference" />
-            </label>
-            <label className="form-field">
-              <span className="muted">Status</span>
-              <select className="input-control" defaultValue={status} name="status">
-                <option value="">All statuses</option>
-                <option value="pending">Pending</option>
-                <option value="sent">Sent</option>
-                <option value="delivered">Delivered</option>
-                <option value="read">Read</option>
-                <option value="failed">Failed</option>
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Channel</span>
-              <select className="input-control" defaultValue={channel} name="channel">
-                <option value="">All channels</option>
-                <option value="in_app">In app</option>
-                <option value="email">Email</option>
-                <option value="sms">SMS</option>
-                <option value="push">Push</option>
-                <option value="whatsapp">WhatsApp</option>
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Priority</span>
-              <select className="input-control" defaultValue={priority} name="priority">
-                <option value="">All priorities</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Subject type</span>
-              <select className="input-control" defaultValue={subjectType} name="subject_type">
-                <option value="">All subjects</option>
-                <option value="leave_request">Leave request</option>
-                <option value="attendance_regularization">Attendance regularization</option>
-                <option value="employee_document">Employee document</option>
-                <option value="employee_onboarding">Onboarding</option>
-                <option value="payroll_payslip">Payroll payslip</option>
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Rows per page</span>
-              <select className="input-control" defaultValue={String(pageSize)} name="page_size">
-                {[10, 25, 50].map((value) => (
-                  <option key={value} value={String(value)}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="queue-toolbar__actions">
-              <button className="button button--primary" type="submit">
-                Apply filters
-              </button>
-              <Link className="button button--ghost" href={basePath}>
-                Clear filters
-              </Link>
-            </div>
-          </form>
+          <details className="workspace-filter-disclosure user-notification-filter-disclosure" open>
+            <summary>Refine notification inbox</summary>
+            <form className="workspace-filter-disclosure__content queue-toolbar__grid" method="get">
+              <label className="form-field">
+                <span className="muted">Search</span>
+                <input className="input-control" defaultValue={q} name="q" placeholder="Title, body, event, or reference" />
+              </label>
+              <label className="form-field">
+                <span className="muted">Status</span>
+                <select className="input-control" defaultValue={status} name="status">
+                  <option value="">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="sent">Sent</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="read">Read</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </label>
+              <label className="form-field">
+                <span className="muted">Channel</span>
+                <select className="input-control" defaultValue={channel} name="channel">
+                  <option value="">All channels</option>
+                  <option value="in_app">In app</option>
+                  <option value="email">Email</option>
+                  <option value="sms">SMS</option>
+                  <option value="push">Push</option>
+                  <option value="whatsapp">WhatsApp</option>
+                </select>
+              </label>
+              <label className="form-field">
+                <span className="muted">Priority</span>
+                <select className="input-control" defaultValue={priority} name="priority">
+                  <option value="">All priorities</option>
+                  <option value="normal">Normal</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </label>
+              <label className="form-field">
+                <span className="muted">Subject type</span>
+                <select className="input-control" defaultValue={subjectType} name="subject_type">
+                  <option value="">All subjects</option>
+                  <option value="leave_request">Leave request</option>
+                  <option value="attendance_regularization">Attendance regularization</option>
+                  <option value="employee_document">Employee document</option>
+                  <option value="employee_onboarding">Onboarding</option>
+                  <option value="payroll_payslip">Payroll payslip</option>
+                </select>
+              </label>
+              <label className="form-field">
+                <span className="muted">Rows per page</span>
+                <select className="input-control" defaultValue={String(pageSize)} name="page_size">
+                  {[10, 25, 50].map((value) => (
+                    <option key={value} value={String(value)}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="queue-toolbar__actions">
+                <button className="button button--primary" type="submit">
+                  Apply filters
+                </button>
+                <Link className="button button--ghost" href={basePath}>
+                  Clear filters
+                </Link>
+              </div>
+            </form>
+          </details>
           <div className="queue-toolbar__summary">
             <span className="queue-summary-chip"><strong>Page {data.page}</strong> inbox state</span>
             <span className="queue-summary-chip"><strong>{crossWorkspaceLabel}</strong> connected workspace</span>
           </div>
         </section>
 
-        <div className="user-notification-action-band">
-          <div>
-            <span className="workspace-card__eyebrow">{actionEyebrow}</span>
-            <h2>{actionTitle}</h2>
-            <p className="section-copy section-copy-soft">
-              {actionDescription}
-            </p>
-          </div>
-          {selected ? (
-            <div className="user-notification-action-band__actions">
-              <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${selected.id}`} item={selected} sourceHref={resolveSourceHref(selected, workspace)} variant="primary" />
-              {resolveSourceHref(selected, workspace) ? (
-                <Link className="button button--secondary" href={resolveSourceHref(selected, workspace)}>
-                  Open source
-                </Link>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-
         <div className="queue-list user-notification-grid">
-          <article className="record-card panel-card-soft user-notification-list">
-            <div className="record-card__header">
+          <article className="workspace-data-panel record-card user-notification-list">
+            <div className="workspace-data-panel__header record-card__header">
               <div className="record-card__title-block">
                 <h3>{listTitle}</h3>
                 <p>{listDescription}</p>
               </div>
+              <div className="user-notification-list__actions">
+                {selected ? (
+                  <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${selected.id}`} item={selected} sourceHref={resolveSourceHref(selected, workspace)} variant="primary" />
+                ) : null}
+              </div>
             </div>
-            <div className="tableish">
+            <div className="workspace-table tableish">
+              {data.items.length ? (
+                <div className="workspace-table__row workspace-table__row--head user-notification-row user-notification-row--head">
+                  <span>Message</span>
+                  <span>Priority</span>
+                  <span>Delivery</span>
+                  <span>Received</span>
+                  <span>Actions</span>
+                </div>
+              ) : null}
               {data.items.length ? (
                 data.items.map((item) => (
                   <article
-                    className={`tableish__row user-notification-row ${selected?.id === item.id ? "tableish__row--active" : ""}`}
+                    className={`workspace-table__row user-notification-row ${selected?.id === item.id ? "tableish__row--active" : ""}`}
                     key={item.id}
                   >
-                    <div className="tableish__head">
+                    <div className="user-notification-row__message">
                       <strong>{item.title || item.event_definition_name || "Notification"}</strong>
+                      <span>{summarizeMessage(item)}</span>
+                    </div>
+                    <span className={`record-chip record-chip--${item.priority}`}>{titleCase(item.priority)}</span>
+                    <div className="user-notification-row__delivery">
                       <span className={`record-chip record-chip--${item.status}`}>{titleCase(item.status)}</span>
+                      <small>{titleCase(item.channel)}</small>
                     </div>
-                    <div className="tableish__meta">
-                      <span>{titleCase(item.channel)}</span>
-                      <span>{titleCase(item.priority)}</span>
-                      <span>{item.event_definition_name || item.subject_type}</span>
-                    </div>
-                    <span className="muted">{summarizeMessage(item)}</span>
+                    <span className="muted">{formatDateTime(item.created_at)}</span>
                     <div className="table-actions">
                       <Link className="button button--ghost" href={buildHref(basePath, currentParams, { itemId: item.id })}>
                         Select
@@ -326,18 +332,24 @@ export function UserNotificationCenter({
                   </article>
                 ))
               ) : (
-                <div className="notice">
+                <div className="notice user-notification-empty">
                   <strong>No notifications match the current filters.</strong>
-                  <span className="muted">Try clearing one or more filters to widen the inbox view.</span>
+                  <span className="muted">Clear filters or widen the search to review the full inbox.</span>
+                  <Link className="button button--secondary" href={basePath}>
+                    Clear filters
+                  </Link>
                 </div>
               )}
             </div>
           </article>
 
-          <aside className="record-card panel-card-soft user-notification-detail">
-            <div>
-              <h2 className="section-heading-soft">{detailTitle}</h2>
-              <p className="section-copy section-copy-soft">{detailDescription}</p>
+          <aside className="workspace-data-panel record-card user-notification-detail">
+            <div className="workspace-data-panel__header">
+              <div>
+                <span className="workspace-card__eyebrow">{actionEyebrow}</span>
+                <h2 className="section-heading-soft">{detailTitle}</h2>
+                <p className="section-copy section-copy-soft">{selected ? detailDescription : actionDescription}</p>
+              </div>
             </div>
             {selected ? (
               <div className="stack user-notification-guidance">
@@ -359,7 +371,7 @@ export function UserNotificationCenter({
                 <div className="record-card__actions">
                   <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${selected.id}`} item={selected} sourceHref={resolveSourceHref(selected, workspace)} variant="primary" />
                   {resolveSourceHref(selected, workspace) ? (
-                    <Link className="button button--ghost" href={resolveSourceHref(selected, workspace)}>
+                    <Link className="button button--secondary" href={resolveSourceHref(selected, workspace)}>
                       Open source
                     </Link>
                   ) : null}

@@ -5,6 +5,15 @@ import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentCategories } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
+function humanizeStatus(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default async function HrAdminDocumentCategoriesPage() {
   const sessionUser = await requireSessionPermission({
     permissionKeys: ["documents.view", "documents.manage"],
@@ -46,18 +55,27 @@ export default async function HrAdminDocumentCategoriesPage() {
                   <p>{item.description || "No description provided."}</p>
                 </div>
                 <div className="record-card__actions">
-                  <span className="record-chip">{item.category_type}</span>
+                  <span className={`record-chip${item.is_active ? " record-chip--success" : " record-chip--neutral"}`}>{item.is_active ? "Active" : "Inactive"}</span>
+                  <span className="record-chip">{humanizeStatus(item.category_type)}</span>
                   {canManageDocuments ? <Link className="button button--secondary" href={`/hr-admin/document-categories/${item.id}/edit`}>Edit</Link> : null}
                 </div>
               </div>
               <div className="record-card__details document-detail-grid">
                 <div><span className="record-card__label">Code</span><strong>{item.code}</strong></div>
-                <div><span className="record-card__label">Type</span><strong>{item.category_type}</strong></div>
+                <div><span className="record-card__label">Type</span><strong>{humanizeStatus(item.category_type)}</strong></div>
                 <div><span className="record-card__label">Verification</span><strong>{item.requires_verification ? "Required" : "Not required"}</strong></div>
                 <div><span className="record-card__label">Upload mode</span><strong>{item.allow_employee_upload ? "Employee upload" : "HR only"}</strong></div>
+                <div><span className="record-card__label">Expiry</span><strong>{item.requires_expiry_date ? "Expiry required" : "Expiry optional"}</strong></div>
+                <div><span className="record-card__label">Files</span><strong>{item.allow_multiple_files ? "Multiple allowed" : "Single active file"}</strong></div>
               </div>
             </article>
           ))}
+          {result.data.length === 0 ? (
+            <div className="empty-state">
+              <strong>No document categories configured.</strong>
+              <span className="muted">Create a category before defining requirements or accepting uploads.</span>
+            </div>
+          ) : null}
         </div>
       </section>
     </main>

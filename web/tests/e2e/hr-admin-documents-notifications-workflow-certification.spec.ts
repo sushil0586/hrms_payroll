@@ -76,6 +76,9 @@ test.describe("HR Admin documents and notifications workflow certification", () 
 
     const documentCard = page.locator("article.document-record-card").first();
     if (await documentCard.isVisible().catch(() => false)) {
+      await expect(documentCard.getByText("Current review state")).toBeVisible();
+      await expect(documentCard.getByText(/Owner:|Employee replacement upload requested/)).toBeVisible();
+      await expect(documentCard.getByText("Review owner")).toBeVisible();
       await field(documentCard, "Review note").fill(`Playwright document review ${Date.now()}`);
       await expectActionFailureThenSuccess(
         page,
@@ -121,6 +124,9 @@ test.describe("HR Admin documents and notifications workflow certification", () 
 
     await expect(page.getByRole("heading", { name: "Document review and verification" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Review details" })).toBeVisible();
+    await expect(page.getByText("Employee-facing status")).toBeVisible();
+    await expect(page.getByText("Decision effect")).toBeVisible();
+    await expect(page.getByText(/employee will see|document stays in the HR verification queue/i).first()).toBeVisible();
     await field(page, /Rejection reason or review note/i).fill(`Playwright full review ${Date.now()}`);
 
     await page.route("**/api/hr-admin/employee-documents/*", async (route) => {

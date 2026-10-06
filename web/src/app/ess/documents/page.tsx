@@ -1,8 +1,6 @@
 import Link from "next/link";
 
 import { EmployeeDocumentCenter } from "@/app/ess/documents/employee-document-center";
-import { MetricTile } from "@/components/patterns/metric-tile";
-import { PageIntro } from "@/components/patterns/page-intro";
 import { getEssDocumentCenter } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
@@ -33,37 +31,17 @@ export default async function EssDocumentsPage({ searchParams }: PageProps) {
   });
 
   return (
-    <main className="shell shell--workspace shell--ess-documents">
-      <PageIntro
-        eyebrow={result.state === "live" ? "Live document center" : "Demo document center"}
-        title="Documents"
-        description="Upload the files HR needs, track review status, and replace documents when a fresh copy is requested."
-        className="page-header-surface page-header-surface--compact"
-        titleClassName="text-heading-premium page-title-soft"
-        descriptionClassName="text-body-premium"
-        actions={
-          <>
-            <Link className="button button--secondary" href="/ess">
-              Overview
-            </Link>
-            <Link className="button button--secondary" href="/ess/payslips">
-              Payslips
-            </Link>
-            <Link className="button button--secondary" href="/ess/notifications">
-              Inbox
-            </Link>
-          </>
-        }
-        pills={["Personal documents", "Self upload", "HR review tracked"]}
-        showPills
-      />
-
-      <section className="section section--tight">
-        <div className="metric-grid-modern">
-          <MetricTile className="metric-tile-soft" label="Required documents" value={result.data.summary.required_document_count} trend="Mapped to your profile" />
-          <MetricTile className="metric-tile-soft" label="Missing now" value={result.data.summary.missing_required_document_count} trend="Needs your upload" />
-          <MetricTile className="metric-tile-soft" label="Expiring soon" value={result.data.summary.expiring_documents} trend="Review before deadline" />
-          <MetricTile className="metric-tile-soft" label="Expired" value={result.data.summary.expired_documents} trend="Replace immediately" />
+    <main className="shell shell--workspace shell--ess-documents ess-experience-shell">
+      <section className="workspace-control-header">
+        <div className="workspace-control-header__copy">
+          <span className="workspace-control-header__eyebrow">{result.state === "live" ? "Live ESS" : "Demo ESS"} / Documents</span>
+          <h1>Documents</h1>
+          <p>Upload the files HR needs, track review status, and replace documents when a fresh copy is requested.</p>
+        </div>
+        <div className="workspace-control-header__actions">
+          <Link className="button button--secondary" href="/ess">Overview</Link>
+          <Link className="button button--secondary" href="/ess/payslips">Payslips</Link>
+          <Link className="button button--secondary" href="/ess/notifications">Inbox</Link>
         </div>
       </section>
 

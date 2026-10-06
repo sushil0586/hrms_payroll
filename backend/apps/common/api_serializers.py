@@ -4742,6 +4742,8 @@ class HrAdminEmployeeDocumentSerializer(serializers.Serializer):
     uploaded_by_identifier = serializers.CharField(allow_blank=True)
     verified_by_identifier = serializers.CharField(allow_blank=True)
     verified_at = serializers.DateTimeField(allow_null=True)
+    review_owner_label = serializers.CharField(allow_blank=True)
+    review_status_label = serializers.CharField()
     rejection_reason = serializers.CharField(allow_blank=True)
     reupload_requested = serializers.BooleanField()
     reupload_requested_at = serializers.DateTimeField(allow_null=True)
@@ -4891,6 +4893,8 @@ class MeDocumentRequirementItemSerializer(serializers.Serializer):
     current_is_expired = serializers.BooleanField()
     current_is_expiring_soon = serializers.BooleanField()
     current_rejection_reason = serializers.CharField(allow_blank=True)
+    current_review_owner_label = serializers.CharField(allow_blank=True)
+    current_review_status_label = serializers.CharField()
     current_uploaded_at = serializers.DateTimeField(allow_null=True)
 
 
@@ -5865,6 +5869,7 @@ class ManagerAttendanceApprovalItemSerializer(serializers.Serializer):
     manager_comment = serializers.CharField(required=False, allow_blank=True)
     rejection_reason = serializers.CharField(required=False, allow_blank=True)
     workflow_reference = serializers.CharField(allow_blank=True)
+    approval_steps = serializers.ListField(child=serializers.DictField(), required=False)
     applied_at = serializers.DateTimeField(allow_null=True)
     resolved_at = serializers.DateTimeField(required=False, allow_null=True)
     created_at = serializers.DateTimeField()
@@ -5878,6 +5883,16 @@ class ManagerLeaveApprovalListSerializer(serializers.Serializer):
     page_size = serializers.IntegerField()
     has_next = serializers.BooleanField()
     has_previous = serializers.BooleanField()
+
+
+class HrAdminLeaveRequestListSerializer(serializers.Serializer):
+    items = ManagerLeaveApprovalItemSerializer(many=True)
+    total_count = serializers.IntegerField()
+    page = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    has_next = serializers.BooleanField()
+    has_previous = serializers.BooleanField()
+    status_counts = PagedStatusCountSerializer()
 
 
 class HrAdminAttendanceRegularizationListSerializer(serializers.Serializer):

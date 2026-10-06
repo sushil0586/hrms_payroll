@@ -30,6 +30,7 @@ from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipStatus, TenantMembership, User
 from apps.organizations.models import Department, EmploymentType, Grade
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
+from apps.workflows.models import WorkflowAssignment
 
 
 class AttendancePolicyAssignmentConflictTests(TestCase):
@@ -506,3 +507,21 @@ class AttendanceRegularizationApprovalTrackTests(TestCase):
         self.assertTrue(employee_items[0]["approval_steps"][0]["is_current"])
         self.assertEqual([str(item["id"]) for item in manager_items], [str(regularization.id)])
         self.assertEqual(manager_items[0]["approval_steps"][0]["manager_email"], "attendance-manager@example.com")
+
+    def test_legacy_regularization_without_assignment_still_shows_pending_manager(self):
+        regularization = submit_regularization(
+            employee=self.employee,
+            attendance_record=self.attendance_record,
+            requested_status=AttendanceStatus.PRESENT,
+            reason="Legacy regularization without assignment",
+        )
+        WorkflowAssignment.objects.filter(step_instance__workflow_instance__id=regularization.workflow_reference).delete()
+
+        employee_items = get_employee_attendance_regularizations(self.employee)
+        manager_items = get_manager_pending_attendance_regularizations(self.manager)
+
+        self.assertEqual(str(employee_items[0]["id"]), str(regularization.id))
+        self.assertEqual(employee_items[0]["approval_steps"][0]["manager_name"], "Meera Manager")
+        self.assertEqual(employee_items[0]["approval_steps"][0]["name"], "Manager Approval")
+        self.assertEqual([str(item["id"]) for item in manager_items], [str(regularization.id)])
+        self.assertEqual(manager_items[0]["approval_steps"][0]["manager_name"], "Meera Manager")

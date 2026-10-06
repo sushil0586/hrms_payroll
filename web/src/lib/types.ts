@@ -1344,6 +1344,8 @@ export type HrAdminEmployeeDocument = {
   uploaded_by_identifier: string;
   verified_by_identifier: string;
   verified_at: string | null;
+  review_owner_label: string;
+  review_status_label: string;
   rejection_reason: string;
   reupload_requested: boolean;
   reupload_requested_at: string | null;
@@ -5319,6 +5321,10 @@ export type EssLeaveRequestListResponse = PaginatedListResponse<LeaveRequestItem
   status_counts: PagedStatusCounts;
 };
 
+export type HrAdminLeaveRequestListResponse = PaginatedListResponse<LeaveRequestItem> & {
+  status_counts: PagedStatusCounts;
+};
+
 export type EssAttendanceRegularizationListResponse = PaginatedListResponse<AttendanceRegularizationItem> & {
   status_counts: PagedStatusCounts;
 };
@@ -5345,6 +5351,8 @@ export type EssDocumentRequirementItem = {
   current_is_expired: boolean;
   current_is_expiring_soon: boolean;
   current_rejection_reason: string;
+  current_review_owner_label: string;
+  current_review_status_label: string;
   current_uploaded_at: string | null;
 };
 

@@ -113,10 +113,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function pluralize(count: number, singular: string, plural = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
 function getRequirementStatus(item: EssDocumentRequirementItem) {
   if (item.current_rejection_reason) {
     return "Returned by HR";
@@ -152,7 +148,7 @@ function getRequirementSummary(item: EssDocumentRequirementItem) {
   if (item.is_compliant) {
     return "No action needed right now.";
   }
-  return "HR review is pending.";
+  return item.current_review_status_label || "HR review is pending.";
 }
 
 function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument; onClose: () => void }) {
@@ -172,8 +168,8 @@ function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument;
         <section className="ess-modal-section">
           <div className="ess-documents-detail-header">
             <div>
-              <span className="workspace-card__eyebrow">Review status</span>
-              <h3>{item.verification_status}</h3>
+              <span className="workspace-card__eyebrow">Current review</span>
+              <h3>{item.review_status_label || item.verification_status}</h3>
             </div>
             <div className="record-card__actions">
               {item.artifact_id ? <Link className="button button--secondary" href={`/api/me/employee-documents/${item.id}/download`}>Download file</Link> : null}
@@ -187,7 +183,8 @@ function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument;
             <DetailRow label="Issued on" value={formatDate(item.issued_on)} />
             <DetailRow label="Expires on" value={item.expires_on || "No expiry"} />
             <DetailRow label="Expiry state" value={item.expiry_label} />
-            <DetailRow label="Reviewer" value={item.verified_by_identifier || "Pending review"} />
+            <DetailRow label="Review owner" value={item.review_owner_label || "Not assigned"} />
+            <DetailRow label="Review status" value={item.review_status_label || item.verification_status} />
           </div>
         </section>
 
@@ -330,6 +327,93 @@ function UploadDocumentModal({
   );
 }
 
+function RequirementDetailModal({
+  currentDocument,
+  item,
+  onClose,
+  onUpload,
+}: {
+  currentDocument: HrAdminEmployeeDocument | undefined;
+  item: EssDocumentRequirementItem;
+  onClose: () => void;
+  onUpload: () => void;
+}) {
+  useEscapeClose(onClose);
+
+  return (
+    <div className="modal-shell" role="presentation">
+      <div aria-label="Required document detail" aria-modal="true" className="modal ess-document-modal ess-document-modal--wide" role="dialog">
+        <div className="modal__header">
+          <div>
+            <span className="workspace-card__eyebrow">Required document</span>
+            <h2>{item.category_name}</h2>
+            <p>{getRequirementSummary(item)}</p>
+          </div>
+          <button aria-label="Close required document detail" className="button button--secondary" onClick={onClose} type="button">Close</button>
+        </div>
+
+        <div className="ess-document-requirement-detail">
+          <section className="ess-modal-section">
+            <div className="ess-documents-detail-header">
+              <div>
+                <span className="workspace-card__eyebrow">Current state</span>
+                <h3>{getRequirementStatus(item)}</h3>
+              </div>
+              <div className="record-card__actions">
+                {item.allow_employee_upload ? (
+                  <button className="button button--primary" onClick={onUpload} type="button">
+                    {item.current_document_id && !item.is_compliant ? "Replace" : "Upload"}
+                  </button>
+                ) : null}
+                {item.current_document_id ? <Link className="button button--secondary" href={`/api/me/employee-documents/${item.current_document_id}/download`}>Download</Link> : null}
+              </div>
+            </div>
+            <div className="detail-grid">
+              <DetailRow label="Current file" value={item.current_document_title || "Not uploaded"} />
+              <DetailRow label="Verification" value={item.current_review_status_label || item.current_verification_status || "Pending upload"} />
+              <DetailRow label="Due on" value={item.due_on || "No deadline"} />
+              <DetailRow label="Expiry required" value={item.requires_expiry_date ? "Yes" : "No"} />
+              <DetailRow label="Uploaded at" value={formatDate(item.current_uploaded_at)} />
+              <DetailRow label="Expiry state" value={item.current_expiry_label} />
+              <DetailRow label="HR verification" value={item.requires_verification ? "Required" : "Auto accepted"} />
+              <DetailRow label="Future due" value={item.is_future_due ? "Yes" : "No"} />
+            </div>
+          </section>
+
+          {item.current_rejection_reason ? (
+            <section className="ess-modal-section">
+              <div className="notice">
+                <strong>Latest review note.</strong>
+                <span className="muted">{item.current_rejection_reason}</span>
+              </div>
+            </section>
+          ) : null}
+
+          {currentDocument ? (
+            <section className="ess-modal-section">
+              <div className="ess-documents-detail-header">
+                <div>
+                  <span className="workspace-card__eyebrow">Uploaded file</span>
+                  <h3>{currentDocument.title}</h3>
+                </div>
+                <span className="queue-summary-chip"><strong>v{currentDocument.version_number}</strong> version</span>
+              </div>
+              <div className="detail-grid">
+                <DetailRow label="Document number" value={currentDocument.document_number || "Not set"} />
+                <DetailRow label="File name" value={currentDocument.file_name || "Not available"} />
+                <DetailRow label="File size" value={formatFileSize(currentDocument.file_size_bytes)} />
+                <DetailRow label="Issued on" value={formatDate(currentDocument.issued_on)} />
+                <DetailRow label="Expires on" value={currentDocument.expires_on || "No expiry"} />
+                <DetailRow label="Review owner" value={currentDocument.review_owner_label || "Not assigned"} />
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -346,12 +430,9 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   const [feedback, setFeedback] = useState<UploadFeedback | null>(null);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<HrAdminEmployeeDocument | null>(null);
+  const [selectedRequirementDetail, setSelectedRequirementDetail] = useState<EssDocumentRequirementItem | null>(null);
   const selectedRequirement = data.requirement_items.find((item) => item.category_id === formValue.category_id);
   const reuploadItems = data.items.filter((item) => item.reupload_requested);
-  const missingRequirements = data.requirement_items.filter((item) => !item.current_document_id && !item.is_future_due);
-  const expiringRequirements = data.requirement_items.filter((item) => item.current_is_expired || item.current_is_expiring_soon);
-  const pendingReviewItems = data.items.filter((item) => item.verification_status === "pending");
-  const completedRequirements = data.requirement_items.filter((item) => item.is_compliant);
   const modal = typeof document !== "undefined"
     ? (
         <>
@@ -371,6 +452,19 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
 
           {selectedDocument ? createPortal(
             <DocumentDetailModal item={selectedDocument} onClose={() => setSelectedDocument(null)} />,
+            document.body,
+          ) : null}
+
+          {selectedRequirementDetail ? createPortal(
+            <RequirementDetailModal
+              currentDocument={data.items.find((item) => item.id === selectedRequirementDetail.current_document_id)}
+              item={selectedRequirementDetail}
+              onClose={() => setSelectedRequirementDetail(null)}
+              onUpload={() => {
+                setSelectedRequirementDetail(null);
+                openUpload(selectedRequirementDetail);
+              }}
+            />,
             document.body,
           ) : null}
         </>
@@ -418,10 +512,17 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
     if (formValue.expires_on) body.set("expires_on", formValue.expires_on);
     if (formValue.file) body.set("file", formValue.file);
 
-    const response = await fetch("/api/me/employee-documents", {
-      method: "POST",
-      body,
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/me/employee-documents", {
+        method: "POST",
+        body,
+      });
+    } catch {
+      setFeedback({ tone: "error", message: "Unable to reach the server. Check your connection and try again." });
+      setIsSubmitting(false);
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setFeedback({ tone: "error", message: extractError(payload) });
@@ -433,62 +534,63 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
       ...INITIAL_UPLOAD_VALUE,
       category_id: data.uploadable_categories[0]?.id ?? "",
     });
-    setFeedback({ tone: "success", message: "Your document has been sent to HR for verification." });
     setIsSubmitting(false);
+    setIsUploadOpen(false);
+    setFeedback({ tone: "success", message: "Your document has been sent to HR for verification." });
     router.refresh();
   }
 
   return (
     <div className="stack ess-documents-center">
-      <section className="section section--tight">
-        <div className="ess-documents-action-band panel-card-soft">
+      <section className="workspace-section ess-documents-status-section">
+        <div className="workspace-section__header">
           <div>
-            <span className="workspace-card__eyebrow">Next document task</span>
-            <h2>{reuploadItems.length ? "Replace the documents HR returned" : "Upload only when a requirement needs action"}</h2>
-            <p className="section-copy section-copy-soft">
-              Keep the workspace simple: review what HR needs here, then use a focused upload dialog for the actual file.
-            </p>
+            <h2>Document status</h2>
+            <p>Current compliance, upload, and renewal focus from your mapped HR document rules.</p>
           </div>
-          <button className="button button--primary" disabled={data.uploadable_categories.length === 0} onClick={() => openUpload()} type="button">Upload document</button>
+          <div className="ess-documents-status-actions">
+            <span className="queue-summary-chip"><strong>{data.summary.total_documents}</strong> uploaded</span>
+            <button className="button button--primary" disabled={data.uploadable_categories.length === 0} onClick={() => openUpload()} type="button">Upload document</button>
+          </div>
+        </div>
+        <div className="workspace-summary-grid metric-grid-modern">
+          <article className="workspace-summary-card metric-tile metric-tile-soft">
+            <div><span className="workspace-summary-card__icon" aria-hidden="true">RD</span><h3>Required</h3></div>
+            <strong>{data.summary.required_document_count}</strong>
+            <p>Required documents mapped to your profile</p>
+          </article>
+          <article className="workspace-summary-card metric-tile metric-tile-soft">
+            <div><span className="workspace-summary-card__icon" aria-hidden="true">MS</span><h3>Missing now</h3></div>
+            <strong>{data.summary.missing_required_document_count}</strong>
+            <p>Needs your upload</p>
+          </article>
+          <article className="workspace-summary-card metric-tile metric-tile-soft">
+            <div><span className="workspace-summary-card__icon" aria-hidden="true">EX</span><h3>Expiring soon</h3></div>
+            <strong>{data.summary.expiring_documents}</strong>
+            <p>Review before deadline</p>
+          </article>
+          <article className="workspace-summary-card metric-tile metric-tile-soft">
+            <div><span className="workspace-summary-card__icon" aria-hidden="true">ER</span><h3>Expired</h3></div>
+            <strong>{data.summary.expired_documents}</strong>
+            <p>Replace immediately</p>
+          </article>
         </div>
       </section>
 
-      <section className="section section--tight">
-        <div className="ess-documents-readiness-band panel-card-soft">
-          <article className={missingRequirements.length ? "is-attention" : "is-complete"}>
-            <span>Missing uploads</span>
-            <strong>{missingRequirements.length}</strong>
-            <p>{missingRequirements.length ? missingRequirements.map((item) => item.category_name).slice(0, 2).join(", ") : "All required uploads exist."}</p>
-          </article>
-          <article className={reuploadItems.length ? "is-attention" : "is-complete"}>
-            <span>Returned by HR</span>
-            <strong>{reuploadItems.length}</strong>
-            <p>{reuploadItems.length ? "Read the note before replacing." : "No corrections requested."}</p>
-          </article>
-          <article className={expiringRequirements.length ? "is-warning" : "is-complete"}>
-            <span>Expiry focus</span>
-            <strong>{expiringRequirements.length}</strong>
-            <p>{expiringRequirements.length ? "Renew before compliance is blocked." : "No urgent renewals."}</p>
-          </article>
-          <article>
-            <span>HR review</span>
-            <strong>{pendingReviewItems.length}</strong>
-            <p>{pendingReviewItems.length ? "Files are waiting for HR." : `${pluralize(completedRequirements.length, "requirement")} complete.`}</p>
-          </article>
-        </div>
-      </section>
-
-      <section className="section section--tight">
+      <section className="workspace-section">
         <div className="ess-documents-workspace">
-          <section className="ess-documents-requirements panel-card-soft">
+          <section className="ess-documents-requirements workspace-data-panel">
             <div className="ess-documents-panel-header">
               <div>
                 <span className="workspace-card__eyebrow">What HR needs</span>
                 <h2>Required documents</h2>
+                <p>Use the row actions to inspect a requirement or upload the correct file.</p>
               </div>
-              <span className="queue-summary-chip"><strong>{data.requirement_items.length}</strong> items</span>
+              <div className="ess-documents-panel-actions">
+                <span className="queue-summary-chip"><strong>{data.requirement_items.length}</strong> items</span>
+              </div>
             </div>
-            <div className="queue-list ess-documents-requirement-list">
+            <div className="ess-document-requirement-table workspace-table" role="table" aria-label="Required documents">
           {reuploadItems.length > 0 ? (
             <div className="notice">
               <strong>Re-upload requested.</strong>
@@ -499,53 +601,47 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               </span>
             </div>
           ) : null}
+          <div className="workspace-table__row workspace-table__row--head ess-document-requirement-row" role="row">
+            <span role="columnheader">Document</span>
+            <span role="columnheader">Status</span>
+            <span role="columnheader">Due / expiry</span>
+            <span role="columnheader">Current file</span>
+            <span role="columnheader">Actions</span>
+          </div>
           {data.requirement_items.map((item) => (
-            <article className="record-card panel-card-soft" key={item.rule_id}>
-              <div className="record-card__header">
-                <div className="record-card__title-wrap">
-                  <div className="record-card__title">
-                    <h2>{item.category_name}</h2>
-                  </div>
-                  <div className="record-card__eyebrow">
-                    <span className={`record-chip ${item.is_compliant ? "record-chip--accent" : ""}`}>{getRequirementStatus(item)}</span>
-                    <span className="record-chip">{item.requires_verification ? "Review required" : "Auto accepted"}</span>
-                    {item.is_future_due ? <span className="record-chip">Future due</span> : null}
-                    {item.current_document_id ? <span className="record-chip">v{data.items.find((entry) => entry.id === item.current_document_id)?.version_number || 1}</span> : null}
-                    {item.current_rejection_reason ? <span className="record-chip">Re-upload</span> : null}
-                    {item.current_is_expired ? <span className="record-chip">Expired</span> : null}
-                    {!item.current_is_expired && item.current_is_expiring_soon ? <span className="record-chip">Expiring</span> : null}
-                  </div>
-                </div>
-                <div className="record-card__actions">
+            <div className="workspace-table__row ess-document-requirement-row" key={item.rule_id} role="row">
+              <span role="cell">
+                <strong>{item.category_name}</strong>
+                <small>{item.requires_verification ? "Review required" : "Auto accepted"}{item.is_future_due ? " • Future due" : ""}</small>
+              </span>
+              <span role="cell">
+                <span className={`record-chip ${item.is_compliant ? "record-chip--accent" : ""}`}>{getRequirementStatus(item)}</span>
+                <small>{item.current_rejection_reason ? "Re-upload requested" : item.current_review_status_label || item.current_verification_status || "Pending upload"}</small>
+              </span>
+              <span role="cell">
+                <strong>{item.due_on || "No deadline"}</strong>
+                <small>{item.current_expiry_label || (item.requires_expiry_date ? "Expiry required" : "No expiry required")}</small>
+              </span>
+              <span role="cell">
+                <strong>{item.current_document_title || "Not uploaded"}</strong>
+                <small>{item.current_uploaded_at ? `Uploaded ${formatDate(item.current_uploaded_at)}` : getRequirementSummary(item)}</small>
+              </span>
+              <span role="cell">
+                <span className="ess-document-row-actions">
+                  <button className="button button--secondary" onClick={() => setSelectedRequirementDetail(item)} type="button">View</button>
                   {item.allow_employee_upload ? (
                     <button className="button button--primary" onClick={() => openUpload(item)} type="button">
                       {item.current_document_id && !item.is_compliant ? "Replace" : "Upload"}
                     </button>
                   ) : null}
-                  {item.current_document_id ? <Link className="button button--ghost" href={`/api/me/employee-documents/${item.current_document_id}/download`}>Download</Link> : null}
-                </div>
-              </div>
-              <p className="section-copy section-copy-soft ess-documents-requirement-summary">{getRequirementSummary(item)}</p>
-              <div className="detail-grid">
-                <div className="detail-row"><span className="detail-label">Current file</span><span className="detail-value">{item.current_document_title || "Not uploaded"}</span></div>
-                <div className="detail-row"><span className="detail-label">Verification</span><span className="detail-value">{item.current_verification_status || "Pending upload"}</span></div>
-                <div className="detail-row"><span className="detail-label">Due on</span><span className="detail-value">{item.due_on || "No deadline"}</span></div>
-                <div className="detail-row"><span className="detail-label">Expiry required</span><span className="detail-value">{item.requires_expiry_date ? "Yes" : "No"}</span></div>
-                <div className="detail-row"><span className="detail-label">Uploaded at</span><span className="detail-value">{formatDate(item.current_uploaded_at)}</span></div>
-                <div className="detail-row"><span className="detail-label">Expiry state</span><span className="detail-value">{item.current_expiry_label}</span></div>
-              </div>
-              {item.current_rejection_reason ? (
-                <div className="notice">
-                  <strong>Latest review note.</strong>
-                  <span className="muted">{item.current_rejection_reason}</span>
-                </div>
-              ) : null}
-            </article>
+                </span>
+              </span>
+            </div>
           ))}
             </div>
           </section>
 
-          <aside className="ess-documents-guidance panel-card-soft">
+          <aside className="ess-documents-guidance workspace-data-panel">
             <span className="workspace-card__eyebrow">Upload checklist</span>
             <h2>Before sending a file</h2>
             <div className="ess-documents-checklist">
@@ -558,117 +654,125 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
         </div>
       </section>
 
-      <section className="section section--tight queue-layout ess-documents-history">
-        <section className="queue-toolbar panel-card-soft">
-          <div className="queue-toolbar__header">
+      <section className="workspace-section ess-documents-history">
+        <section className="workspace-data-panel">
+          <div className="workspace-data-panel__header">
             <div>
-              <h2 className="section-heading-soft">Document history</h2>
-              <p className="section-copy section-copy-soft">Search submitted files, download a copy, and review HR comments.</p>
+              <h2>Document history</h2>
+              <p>Search submitted files, download a copy, and review HR comments.</p>
             </div>
             <div className="queue-toolbar__meta">
               <span className="queue-summary-chip"><strong>{data.total_count}</strong> total records</span>
               <span className="queue-summary-chip"><strong>{data.items.length}</strong> on this page</span>
             </div>
           </div>
-          <div className="queue-toolbar__grid">
-            <label className="form-field">
-              <span className="muted">Search</span>
-              <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Category, title, file, note" value={search} />
-            </label>
-            <label className="form-field">
-              <span className="muted">Verification</span>
-              <select className="input-control" onChange={(event) => setVerificationStatus(event.target.value)} value={verificationStatus}>
-                <option value="all">All verification states</option>
-                {data.verification_statuses.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Category</span>
-              <select className="input-control" onChange={(event) => setCategoryId(event.target.value)} value={categoryId}>
-                <option value="all">All categories</option>
-                {data.categories.map((option) => (
-                  <option key={option.id} value={option.id}>{option.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Expiry focus</span>
-              <select className="input-control" onChange={(event) => setExpiryFilter(event.target.value)} value={expiryFilter}>
-                <option value="all">All documents</option>
-                <option value="expiring">Expiring soon</option>
-                <option value="expired">Expired</option>
-                <option value="missing_expiry">Missing expiry</option>
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="muted">Rows per page</span>
-              <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
-                {[5, 10, 25].map((value) => (
-                  <option key={value} value={String(value)}>{value}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="queue-toolbar__actions">
-            <button className="button button--primary" onClick={() => goToPage(1)} type="button">Apply filters</button>
-            <button
-              className="button button--ghost"
-              onClick={() => {
-                setSearch("");
-                setVerificationStatus("all");
-                setCategoryId("all");
-                setExpiryFilter("all");
-                setPageSize("10");
-                router.push(pathname);
-              }}
-              type="button"
-            >
-              Clear filters
-            </button>
+          <details className="workspace-filter-disclosure" open>
+            <summary>
+              <span>Filters</span>
+              <small>{data.items.length} shown from the loaded page</small>
+            </summary>
+            <div className="ess-document-filter-grid">
+              <label className="form-field">
+                <span className="muted">Search</span>
+                <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Category, title, file, note" value={search} />
+              </label>
+              <label className="form-field">
+                <span className="muted">Verification</span>
+                <select className="input-control" onChange={(event) => setVerificationStatus(event.target.value)} value={verificationStatus}>
+                  <option value="all">All verification states</option>
+                  {data.verification_statuses.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-field">
+                <span className="muted">Category</span>
+                <select className="input-control" onChange={(event) => setCategoryId(event.target.value)} value={categoryId}>
+                  <option value="all">All categories</option>
+                  {data.categories.map((option) => (
+                    <option key={option.id} value={option.id}>{option.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-field">
+                <span className="muted">Expiry focus</span>
+                <select className="input-control" onChange={(event) => setExpiryFilter(event.target.value)} value={expiryFilter}>
+                  <option value="all">All documents</option>
+                  <option value="expiring">Expiring soon</option>
+                  <option value="expired">Expired</option>
+                  <option value="missing_expiry">Missing expiry</option>
+                </select>
+              </label>
+              <label className="form-field">
+                <span className="muted">Rows per page</span>
+                <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+                  {[5, 10, 25].map((value) => (
+                    <option key={value} value={String(value)}>{value}</option>
+                  ))}
+                </select>
+              </label>
+              <button className="button button--primary" onClick={() => goToPage(1)} type="button">Apply filters</button>
+              <button
+                className="button button--ghost"
+                onClick={() => {
+                  setSearch("");
+                  setVerificationStatus("all");
+                  setCategoryId("all");
+                  setExpiryFilter("all");
+                  setPageSize("10");
+                  router.push(pathname);
+                }}
+                type="button"
+              >
+                Clear filters
+              </button>
+            </div>
+          </details>
+
+          <div className="workspace-table ess-document-history-table" role="table" aria-label="Document history">
+            <div className="workspace-table__row workspace-table__row--head" role="row">
+              <span role="columnheader">Document</span>
+              <span role="columnheader">Category</span>
+              <span role="columnheader">Review</span>
+              <span role="columnheader">Expiry</span>
+              <span role="columnheader">Uploaded</span>
+              <span role="columnheader">Actions</span>
+            </div>
+            {data.items.map((item) => (
+              <div className="workspace-table__row ess-document-history-row" key={item.id} role="row">
+                <span role="cell">
+                  <strong>{item.title}</strong>
+                  <small>{item.file_name || "File name pending"} • v{item.version_number}</small>
+                </span>
+                <span role="cell">
+                  <strong>{item.category_name}</strong>
+                  <small>{item.status}</small>
+                </span>
+                <span role="cell">
+                  <strong>{item.review_status_label || item.verification_status}</strong>
+                  <small>{item.reupload_requested ? "Re-upload requested" : item.review_owner_label || "Owner pending"}</small>
+                </span>
+                <span role="cell">
+                  <strong>{item.expiry_label}</strong>
+                  <small>{item.expires_on ? formatDate(item.expires_on) : "No expiry"}</small>
+                </span>
+                <span role="cell">{formatDate(item.created_at)}</span>
+                <span role="cell">
+                  <span className="ess-document-history-actions">
+                    <button className="button button--secondary" onClick={() => setSelectedDocument(item)} type="button">Review</button>
+                    {item.artifact_id ? <Link className="button button--ghost" href={`/api/me/employee-documents/${item.id}/download`}>Download</Link> : null}
+                  </span>
+                </span>
+              </div>
+            ))}
+            {data.items.length === 0 ? (
+              <div className="notice workspace-empty-state">
+                <strong>No documents match the current filters.</strong>
+                <span className="muted">Clear one or more filters to review the full submission history.</span>
+              </div>
+            ) : null}
           </div>
         </section>
-
-        <div className="queue-list">
-          {data.items.map((item) => (
-            <article className="record-card panel-card-soft" key={item.id}>
-              <div className="record-card__header">
-                <div className="record-card__title-wrap">
-                  <div className="record-card__title">
-                    <h2>{item.title}</h2>
-                  </div>
-                  <div className="record-card__eyebrow">
-                    <span className="record-chip">v{item.version_number}</span>
-                    <span className="record-chip record-chip--accent">{item.category_name}</span>
-                    <span className="record-chip">{item.verification_status}</span>
-                    <span className="record-chip">{item.status}</span>
-                    {item.reupload_requested ? <span className="record-chip">Re-upload</span> : null}
-                    {item.is_expired ? <span className="record-chip">Expired</span> : null}
-                    {!item.is_expired && item.is_expiring_soon ? <span className="record-chip">Expiring</span> : null}
-                  </div>
-                  <p className="section-copy section-copy-soft">{item.file_name} • Uploaded {formatDate(item.created_at)}</p>
-                </div>
-                <div className="record-card__actions">
-                  <button className="button button--secondary" onClick={() => setSelectedDocument(item)} type="button">Review</button>
-                  {item.artifact_id ? <Link className="button button--ghost" href={`/api/me/employee-documents/${item.id}/download`}>Download</Link> : null}
-                </div>
-              </div>
-              {item.rejection_reason ? (
-                <div className="notice">
-                  <strong>Re-upload requested.</strong>
-                  <span className="muted">{item.rejection_reason}</span>
-                </div>
-              ) : null}
-            </article>
-          ))}
-          {data.items.length === 0 ? (
-            <div className="card panel">
-              <strong>No documents match the current filters.</strong>
-              <p className="muted">Clear one or more filters to review the full submission history.</p>
-            </div>
-          ) : null}
-        </div>
 
         <PaginationBar
           hasNext={data.has_next}

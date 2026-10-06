@@ -42,6 +42,11 @@ function filteredByLegalEntity(items: HrAdminOptionItem[], legalEntityId: string
   return items.filter((item) => !legalEntityId || item.legal_entity_id === legalEntityId);
 }
 
+function selectedName(items: Array<{ id: string; name: string }>, value: string | null) {
+  if (!value) return "All";
+  return items.find((item) => item.id === value)?.name ?? "Selected record";
+}
+
 export function DocumentRequirementForm({ initialValue, mode, options, itemId }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
@@ -52,6 +57,14 @@ export function DocumentRequirementForm({ initialValue, mode, options, itemId }:
     formValue.legal_entity_id && filteredBranches.length === 0
       ? "No active branches are mapped to this legal entity."
       : null;
+  const scopeSummary = [
+    `Category: ${selectedName(options.categories, formValue.category_id)}`,
+    `Legal entity: ${selectedName(options.legal_entities, formValue.legal_entity_id)}`,
+    `Branch: ${selectedName(options.branches, formValue.branch_id)}`,
+    `Department: ${selectedName(options.departments, formValue.department_id)}`,
+    `Grade: ${selectedName(options.grades, formValue.grade_id)}`,
+    `Employment type: ${selectedName(options.employment_types, formValue.employment_type_id)}`,
+  ].join(" • ");
 
   function update<Key extends keyof HrAdminDocumentRequirementRuleWriteInput>(key: Key, value: HrAdminDocumentRequirementRuleWriteInput[Key]) {
     setFormValue((current) => {
@@ -77,11 +90,18 @@ export function DocumentRequirementForm({ initialValue, mode, options, itemId }:
     event.preventDefault();
     setError("");
     setIsSubmitting(true);
-    const response = await fetch(mode === "create" ? "/api/hr-admin/document-requirements" : `/api/hr-admin/document-requirements/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
+    let response: Response;
+    try {
+      response = await fetch(mode === "create" ? "/api/hr-admin/document-requirements" : `/api/hr-admin/document-requirements/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsSubmitting(false);
+      return;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(payload));
@@ -111,12 +131,18 @@ export function DocumentRequirementForm({ initialValue, mode, options, itemId }:
             <label className="form-field"><span className="muted">Required within joining days</span><input className="input-control" min={0} type="number" value={formValue.required_within_days_of_joining} onChange={(e) => update("required_within_days_of_joining", Number(e.target.value) || 0)} /></label>
             <label className="form-field"><span className="muted">Priority</span><input className="input-control" min={0} type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value) || 0)} /></label>
           </div>
+          <div className="document-decision-effect">
+            <strong>Scope preview</strong>
+            <span>{scopeSummary}</span>
+          </div>
         </FormSection>
 
         <FormSection description="Use these switches to keep the rule active and control whether it is enforced." title="Requirement state">
           <div className="detail-grid">
             <label className="detail-row"><span className="detail-label">Mandatory</span><input checked={formValue.is_mandatory} onChange={(e) => update("is_mandatory", e.target.checked)} type="checkbox" /></label>
             <label className="detail-row"><span className="detail-label">Active</span><input checked={formValue.is_active} onChange={(e) => update("is_active", e.target.checked)} type="checkbox" /></label>
+            <div className="detail-row"><span className="detail-label">Employee impact</span><strong>{formValue.is_active ? (formValue.is_mandatory ? "Required in ESS" : "Optional in ESS") : "Disabled for ESS checks"}</strong></div>
+            <div className="detail-row"><span className="detail-label">Due window</span><strong>{formValue.required_within_days_of_joining} day(s) after joining</strong></div>
           </div>
         </FormSection>
 

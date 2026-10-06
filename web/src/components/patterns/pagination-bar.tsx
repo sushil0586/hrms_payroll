@@ -70,7 +70,7 @@ export function PaginationBar({
             <strong>
               {start}-{end}
             </strong>
-            of {totalCount}
+            of {totalCount} records
           </span>
           <span className="queue-summary-chip">
             <strong>Page {page}</strong>

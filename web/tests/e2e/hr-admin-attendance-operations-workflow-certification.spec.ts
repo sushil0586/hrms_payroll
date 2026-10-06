@@ -161,6 +161,13 @@ test.describe("HR Admin attendance operations workflow certification", () => {
     await expect(page.getByText("No regularizations match the current filters.")).toBeVisible();
     await page.getByRole("button", { name: "Clear filters" }).click();
     await expectPageReady(page, "Regularizations");
+    const visibleRegularizationCards = page.locator("article.record-card").filter({ has: page.locator(".record-chip") });
+    if (await visibleRegularizationCards.count()) {
+      await expect(visibleRegularizationCards.first().getByText(/Pending approval from|Approved|Rejected|Approval track/i).first()).toBeVisible();
+      await expect(visibleRegularizationCards.first().getByText(/approval steps|Approval track/i).first()).toBeVisible();
+    } else {
+      await expect(page.getByText("No regularizations match the current filters.")).toBeVisible();
+    }
 
     const approveButton = await firstEnabledButton(page, "Approve");
     if (approveButton) {
@@ -189,6 +196,7 @@ test.describe("HR Admin attendance operations workflow certification", () => {
       await expectPageReady(page, "Review attendance regularization");
       await expect(page.getByRole("heading", { name: "Request context" })).toBeVisible();
       await expect(page.getByRole("heading", { name: "HR review decision" })).toBeVisible();
+      await expect(page.getByText(/Pending approval from|Approved|Rejected|Approval track/i).first()).toBeVisible();
       await expectNoHorizontalOverflow(page);
     }
 

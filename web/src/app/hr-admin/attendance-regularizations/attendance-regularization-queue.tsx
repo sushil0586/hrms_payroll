@@ -51,6 +51,21 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function titleCase(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getWaitingLabel(item: AttendanceRegularizationItem) {
+  if (item.status !== "pending") {
+    return item.status === "approved" ? "Approved" : item.status === "rejected" ? "Rejected" : titleCase(item.status);
+  }
+  const currentStep = item.approval_steps?.find((step) => step.is_current) ?? item.approval_steps?.[0];
+  if (currentStep?.manager_name) {
+    return `Pending approval from ${currentStep.manager_name}`;
+  }
+  return "Pending approval from configured approver";
+}
+
 export function AttendanceRegularizationQueue({
   items,
   regularizationStatusOptions,
@@ -156,8 +171,9 @@ export function AttendanceRegularizationQueue({
                   <h2>{item.employee_name}</h2>
                 </div>
                 <div className="record-card__eyebrow">
-                  <span className="record-chip record-chip--accent">{item.status}</span>
-                  <span className="record-chip">{item.current_status} to {item.requested_status}</span>
+                  <span className="record-chip record-chip--accent">{titleCase(item.status)}</span>
+                  <span className="record-chip">{titleCase(item.current_status)} to {titleCase(item.requested_status)}</span>
+                  <span className="record-chip">{item.approval_steps?.length ?? 0} approval steps</span>
                 </div>
                 <p className="section-copy section-copy-soft">{item.employee_code} • {item.attendance_date} • {item.shift || "No shift"}</p>
               </div>
@@ -169,11 +185,28 @@ export function AttendanceRegularizationQueue({
                 </div>
               ) : null}
             </div>
+            <div className="notice notice--quiet">
+              <strong>{getWaitingLabel(item)}</strong>
+              <span className="muted">{item.shift ? `Shift: ${item.shift}` : "No shift is assigned to this attendance record."}</span>
+            </div>
             <div className="detail-grid">
               <div className="detail-row"><span className="detail-label">Applied at</span><span className="detail-value">{formatDateTime(item.applied_at)}</span></div>
               <div className="detail-row"><span className="detail-label">Reason</span><span className="detail-value">{item.reason || "No reason"}</span></div>
               <div className="detail-row"><span className="detail-label">Manager comment</span><span className="detail-value">{item.manager_comment || "None"}</span></div>
               <div className="detail-row"><span className="detail-label">Workflow reference</span><span className="detail-value">{item.workflow_reference || "Not linked"}</span></div>
+            </div>
+            <div className="queue-list queue-list--compact">
+              {(item.approval_steps ?? []).length ? item.approval_steps?.map((step) => (
+                <div className="detail-row" key={`${item.id}-${step.level}-${step.name}`}>
+                  <span className="detail-label">Level {step.level} • {titleCase(step.status)}</span>
+                  <span className="detail-value">{step.name}: {step.manager_name || "Configured approver"}{step.comment ? ` • ${step.comment}` : ""}</span>
+                </div>
+              )) : (
+                <div className="detail-row">
+                  <span className="detail-label">Approval track</span>
+                  <span className="detail-value">No workflow evidence attached to this request.</span>
+                </div>
+              )}
             </div>
             {canReviewRegularizations ? (
               <AttendanceRegularizationInlineReview item={item} />

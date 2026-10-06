@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-type TimeLeaveArea = "overview" | "records" | "regularizations" | "balances" | "policies" | "assignments" | "shifts";
+type TimeLeaveArea = "overview" | "records" | "regularizations" | "leaveRequests" | "balances" | "policies" | "assignments" | "shifts";
 
 type TimeLeaveOperationsStripProps = {
   current: TimeLeaveArea;
@@ -35,6 +35,12 @@ const timeLeaveLinks: Array<{
     label: "Regularizations",
     href: "/hr-admin/attendance-regularizations",
     helper: "Correction queue",
+  },
+  {
+    key: "leaveRequests",
+    label: "Leave requests",
+    href: "/hr-admin/leave-requests",
+    helper: "Approval evidence",
   },
   {
     key: "balances",

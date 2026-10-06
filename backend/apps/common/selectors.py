@@ -69,7 +69,7 @@ from apps.payroll.models import (
 )
 from apps.platform_config.models import ConfigCategory, ConfigDataType, ConfigStatus, ConfigurationDefinition, TenantConfiguration
 from apps.tenants.models import Tenant, TenantStatus
-from apps.workflows.models import WorkflowAssignment, WorkflowInstanceStatus, WorkflowStatus, WorkflowTemplate
+from apps.workflows.models import WorkflowAssignment, WorkflowInstance, WorkflowInstanceStatus, WorkflowStatus, WorkflowTemplate
 
 
 logger = logging.getLogger(__name__)
@@ -5818,8 +5818,93 @@ def _workflow_approval_track_payloads(workflow_reference: str) -> list[dict]:
     return rows
 
 
+def _membership_approval_actor_payload(membership: TenantMembership | None, *, fallback_name: str = "") -> tuple[str, str]:
+    user = getattr(membership, "user", None) if membership else None
+    manager_name = (
+        (user.get_full_name() if user else "")
+        or getattr(user, "username", "")
+        or getattr(membership, "employee_code", "")
+        or fallback_name
+    )
+    manager_email = getattr(user, "email", "") if user else ""
+    return manager_name, manager_email
+
+
+def _legacy_leave_approval_track_payloads(request: LeaveRequest) -> list[dict]:
+    if request.status not in {LeaveRequestStatus.PENDING, LeaveRequestStatus.PARTIALLY_APPROVED}:
+        return []
+    workflow_instance = WorkflowInstance.objects.filter(id=request.workflow_reference).first() if request.workflow_reference else None
+    current_step = None
+    if workflow_instance:
+        current_step = (
+            workflow_instance.step_instances.order_by("step_order")
+            .filter(status__in=[WorkflowInstanceStatus.PENDING, WorkflowInstanceStatus.IN_PROGRESS])
+            .first()
+        )
+    level = current_step.step_order if current_step else getattr(workflow_instance, "current_step_order", 1) or 1
+    approval_route = str((request.metadata or {}).get("policy_rules", {}).get("approval_route", "") or "manager_only")
+    employee = request.employee
+    approver_employee = getattr(employee, "reporting_manager", None)
+    if level > 1 and "second_level" in approval_route:
+        approver_employee = getattr(approver_employee, "reporting_manager", None) if approver_employee else None
+    membership = getattr(approver_employee, "membership", None) if approver_employee else None
+    fallback_name = _employee_display_name(approver_employee) if approver_employee else ""
+    manager_name, manager_email = _membership_approval_actor_payload(membership, fallback_name=fallback_name)
+    if not manager_name:
+        return []
+    return [
+        {
+            "level": level,
+            "name": getattr(current_step, "name", "") or ("Second-Level Manager Approval" if level > 1 else "Manager Approval"),
+            "status": getattr(current_step, "status", "") or WorkflowInstanceStatus.PENDING,
+            "actor_type": "manager",
+            "manager_name": manager_name,
+            "manager_email": manager_email,
+            "comment": getattr(current_step, "resolution_comment", "") if current_step else "",
+            "acted_at": getattr(current_step, "completed_at", None) if current_step else None,
+            "is_current": True,
+        }
+    ]
+
+
 def _leave_request_approval_track_payloads(request: LeaveRequest) -> list[dict]:
-    return _workflow_approval_track_payloads(request.workflow_reference)
+    return _workflow_approval_track_payloads(request.workflow_reference) or _legacy_leave_approval_track_payloads(request)
+
+
+def _legacy_attendance_approval_track_payloads(regularization: AttendanceRegularization) -> list[dict]:
+    if regularization.status != RegularizationStatus.PENDING:
+        return []
+    workflow_instance = WorkflowInstance.objects.filter(id=regularization.workflow_reference).first() if regularization.workflow_reference else None
+    current_step = None
+    if workflow_instance:
+        current_step = (
+            workflow_instance.step_instances.order_by("step_order")
+            .filter(status__in=[WorkflowInstanceStatus.PENDING, WorkflowInstanceStatus.IN_PROGRESS])
+            .first()
+        )
+    approver_employee = getattr(regularization.employee, "reporting_manager", None)
+    membership = getattr(approver_employee, "membership", None) if approver_employee else None
+    fallback_name = _employee_display_name(approver_employee) if approver_employee else ""
+    manager_name, manager_email = _membership_approval_actor_payload(membership, fallback_name=fallback_name)
+    if not manager_name:
+        return []
+    return [
+        {
+            "level": current_step.step_order if current_step else 1,
+            "name": getattr(current_step, "name", "") or "Manager Approval",
+            "status": getattr(current_step, "status", "") or WorkflowInstanceStatus.PENDING,
+            "actor_type": "manager",
+            "manager_name": manager_name,
+            "manager_email": manager_email,
+            "comment": getattr(current_step, "resolution_comment", "") if current_step else "",
+            "acted_at": getattr(current_step, "completed_at", None) if current_step else None,
+            "is_current": True,
+        }
+    ]
+
+
+def _attendance_regularization_approval_track_payloads(regularization: AttendanceRegularization) -> list[dict]:
+    return _workflow_approval_track_payloads(regularization.workflow_reference) or _legacy_attendance_approval_track_payloads(regularization)
 
 
 def get_employee_leave_requests(employee: Employee, *, limit: int | None = None) -> list[dict]:
@@ -5955,7 +6040,7 @@ def get_employee_attendance_regularizations(employee: Employee, *, limit: int | 
             "manager_comment": regularization.manager_comment,
             "rejection_reason": regularization.rejection_reason,
             "workflow_reference": regularization.workflow_reference,
-            "approval_steps": _workflow_approval_track_payloads(regularization.workflow_reference),
+            "approval_steps": _attendance_regularization_approval_track_payloads(regularization),
             "applied_at": regularization.applied_at,
             "resolved_at": regularization.resolved_at,
             "created_at": regularization.created_at,
@@ -5991,7 +6076,7 @@ def get_employee_attendance_regularization_detail(employee: Employee, regulariza
         "manager_comment": regularization.manager_comment,
         "rejection_reason": regularization.rejection_reason,
         "workflow_reference": regularization.workflow_reference,
-        "approval_steps": _workflow_approval_track_payloads(regularization.workflow_reference),
+        "approval_steps": _attendance_regularization_approval_track_payloads(regularization),
         "applied_at": regularization.applied_at,
         "resolved_at": regularization.resolved_at,
         "created_at": regularization.created_at,
@@ -6163,7 +6248,7 @@ def get_manager_pending_attendance_regularizations(manager: Employee, *, limit: 
             "status": regularization.status,
             "reason": regularization.reason,
             "workflow_reference": regularization.workflow_reference,
-            "approval_steps": _workflow_approval_track_payloads(regularization.workflow_reference),
+            "approval_steps": _attendance_regularization_approval_track_payloads(regularization),
             "applied_at": regularization.applied_at,
             "created_at": regularization.created_at,
         }
@@ -6210,7 +6295,7 @@ def get_manager_attendance_regularization_detail(manager: Employee, regularizati
         "manager_comment": regularization.manager_comment,
         "rejection_reason": regularization.rejection_reason,
         "workflow_reference": regularization.workflow_reference,
-        "approval_steps": _workflow_approval_track_payloads(regularization.workflow_reference),
+        "approval_steps": _attendance_regularization_approval_track_payloads(regularization),
         "applied_at": regularization.applied_at,
         "resolved_at": regularization.resolved_at,
         "created_at": regularization.created_at,

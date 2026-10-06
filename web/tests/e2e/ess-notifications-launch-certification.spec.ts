@@ -17,7 +17,15 @@ test.describe("ESS Notifications launch certification", () => {
     await expect(page.getByRole("heading", { name: "Inbox filters" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Inbox list" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Notification detail" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Review messages that need action" })).toBeVisible();
+    await expect(page.locator(".user-notification-action-band")).toHaveCount(0);
+    await expect(page.locator(".user-notification-row--head")).toBeVisible();
+    await expect(async () => {
+      const rows = await page.locator(".user-notification-filters .queue-toolbar__meta .queue-summary-chip").evaluateAll((chips) => {
+        const tops = chips.map((chip) => Math.round(chip.getBoundingClientRect().top));
+        return new Set(tops).size;
+      });
+      expect(rows).toBe(1);
+    }).toPass();
     await expect(page.getByText("Provider logs")).toHaveCount(0);
 
     const review = page.getByRole("button", { name: "Review notification" }).first();
@@ -84,7 +92,7 @@ test.describe("ESS Notifications launch certification", () => {
     await expect(page).toHaveURL(/\/ess\/notifications\?.*q=no-ess-notification-should-match-this/);
     await expect(page.getByText("No notifications match the current filters.")).toBeVisible();
 
-    await main.getByRole("link", { name: "Clear filters" }).click();
+    await main.locator("form").getByRole("link", { name: "Clear filters" }).click();
     await expect(page).toHaveURL(/\/ess\/notifications\/?$/);
     await expect(page.getByRole("heading", { name: "Inbox list" })).toBeVisible();
 

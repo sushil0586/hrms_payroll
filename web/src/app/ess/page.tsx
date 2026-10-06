@@ -1,7 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
-import { PageIntro } from "@/components/patterns/page-intro";
 import { getEssDashboard } from "@/lib/api";
 
 function formatDate(value: string | null) {
@@ -115,68 +113,87 @@ export default async function EssPage() {
   ];
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
-        eyebrow={state === "live" ? "Live ESS" : "Demo ESS"}
-        title="My workspace"
-        description="Start with personal actions that need attention, then open a focused page for leave, attendance, documents, payslips, or tax declarations."
-        actions={
-          <>
-            <Link className="button button--primary" href="/ess/leave#apply-leave">
-              Apply leave
-            </Link>
-            <Link className="button button--secondary" href="/ess/attendance#regularize-attendance">
-              Regularize attendance
-            </Link>
-            <Link className="button button--secondary" href="/ess/notifications">
-              Inbox
-            </Link>
-          </>
-        }
-        pills={["Personal view", dashboard.profile.employee_code, dashboard.profile.department || "No department"]}
-        showPills
-      />
-
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile className="metric-tile-soft" label="Pending leave" labelClassName="metric-label-soft" value={pendingLeaveCount} valueClassName="metric-value-soft" trend="Open leave page" trendClassName="metric-trend-soft" />
-          <MetricTile className="metric-tile-soft" label="Attendance fixes" labelClassName="metric-label-soft" value={pendingRegularizationCount} valueClassName="metric-value-soft" trend="Open attendance page" trendClassName="metric-trend-soft" />
-          <MetricTile className="metric-tile-soft" label="Hours this month" labelClassName="metric-label-soft" value={dashboard.attendance.month_to_date.work_duration_hours} valueClassName="metric-value-soft" trend="Logged so far" trendClassName="metric-trend-soft" />
-          <MetricTile className="metric-tile-soft" label="Today" labelClassName="metric-label-soft" value={dashboard.attendance.today.status.replace("_", " ")} valueClassName="metric-value-soft" trend="Attendance state" trendClassName="metric-trend-soft" />
+    <main className="shell shell--workspace ess-experience-shell shell--ess-home">
+      <section className="workspace-control-header">
+        <div className="workspace-control-header__copy">
+          <span className="workspace-control-header__eyebrow">{state === "live" ? "Live ESS" : "Demo ESS"} / Self service</span>
+          <h1>My workspace</h1>
+          <p>Start with personal actions that need attention, then open a focused page for leave, attendance, documents, payslips, tax, or notifications.</p>
+        </div>
+        <div className="workspace-control-header__actions">
+          <Link className="button button--primary" href="/ess/leave#apply-leave">Apply leave</Link>
+          <Link className="button button--secondary" href="/ess/attendance#regularize-attendance">Regularize attendance</Link>
+          <Link className="button button--secondary" href="/ess/notifications">Inbox</Link>
+        </div>
+        <div className="workspace-control-header__metrics" aria-label="Employee summary">
+          <span className="queue-summary-chip"><strong>{dashboard.profile.employee_code}</strong> employee</span>
+          <span className="queue-summary-chip"><strong>{dashboard.profile.department || "No department"}</strong></span>
+          <span className="queue-summary-chip"><strong>{dashboard.profile.reporting_manager || "No manager"}</strong> manager</span>
         </div>
       </section>
 
-      <section className="section ess-home-grid" data-testid="ess-control-center">
-        <article className="panel-card-soft ess-home-card ess-home-card--primary">
-          <div className="ess-home-card__header">
+      <section className="workspace-section">
+        <div className="workspace-summary-grid metric-grid-modern">
+          <article className="workspace-summary-card metric-tile metric-tile-soft">
+            <div><span className="workspace-summary-card__icon" aria-hidden="true">LV</span><h3>Pending leave</h3></div>
+            <strong>{pendingLeaveCount}</strong>
+            <p>Requests waiting for approval or follow-up.</p>
+          </article>
+          <article className="workspace-summary-card metric-tile metric-tile-soft">
+            <div><span className="workspace-summary-card__icon" aria-hidden="true">AT</span><h3>Attendance fixes</h3></div>
+            <strong>{pendingRegularizationCount}</strong>
+            <p>Corrections waiting for manager review.</p>
+          </article>
+          <article className="workspace-summary-card metric-tile metric-tile-soft">
+            <div><span className="workspace-summary-card__icon" aria-hidden="true">HR</span><h3>Hours this month</h3></div>
+            <strong>{dashboard.attendance.month_to_date.work_duration_hours}</strong>
+            <p>Logged so far in this attendance period.</p>
+          </article>
+          <article className="workspace-summary-card metric-tile metric-tile-soft">
+            <div><span className="workspace-summary-card__icon" aria-hidden="true">TD</span><h3>Today status</h3></div>
+            <strong>{dashboard.attendance.today.status.replace("_", " ")}</strong>
+            <p>{formatDate(dashboard.attendance.today.date)} attendance state.</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="workspace-section ess-home-grid" data-testid="ess-control-center">
+        <article className="workspace-data-panel ess-home-card ess-home-card--primary">
+          <div className="workspace-data-panel__header ess-home-card__header">
             <div>
               <span className="workspace-card__eyebrow">Needs attention</span>
               <h2>Today&apos;s actions</h2>
-              <p className="section-copy section-copy-soft">Only actions that may need employee input or review appear here.</p>
+              <p>Only actions that may need employee input or review appear here.</p>
             </div>
             <span className="queue-summary-chip"><strong>{activeSignals}</strong> active signals</span>
           </div>
-          <div className="ess-action-list">
+          <div className="workspace-table ess-action-list" role="table" aria-label="Today actions">
+            <div className="workspace-table__row workspace-table__row--head ess-action-row" role="row">
+              <span role="columnheader">State</span>
+              <span role="columnheader">Action</span>
+              <span role="columnheader">Count</span>
+              <span role="columnheader">Open</span>
+            </div>
             {commandActions.map((item) => (
-              <div className="ess-action-row" key={item.label}>
-                <span className={essActionChipClass(item.status)}>{essActionStatusLabel[item.status]}</span>
-                <div>
+              <div className="workspace-table__row ess-action-row" key={item.label} role="row">
+                <span role="cell"><span className={essActionChipClass(item.status)}>{essActionStatusLabel[item.status]}</span></span>
+                <span role="cell">
                   <strong>{item.label}</strong>
-                  <span>{item.detail}</span>
-                </div>
-                <span className="record-chip">{item.value}</span>
-                <Link className="button button--secondary" href={item.href}>{item.action}</Link>
+                  <small>{item.detail}</small>
+                </span>
+                <span role="cell"><span className="record-chip">{item.value}</span></span>
+                <span role="cell"><Link className="button button--secondary" href={item.href}>{item.action}</Link></span>
               </div>
             ))}
           </div>
         </article>
 
-        <article className="panel-card-soft ess-home-card">
-          <div className="ess-home-card__header">
+        <article className="workspace-data-panel ess-home-card">
+          <div className="workspace-data-panel__header ess-home-card__header">
             <div>
               <span className="workspace-card__eyebrow">Quick actions</span>
               <h2>What do you want to do?</h2>
-              <p className="section-copy section-copy-soft">Use one focused page for each employee task.</p>
+              <p>Use one focused page for each employee task.</p>
             </div>
             <span className={essActionChipClass(activeSignals ? "warning" : "ready")}>{activeSignals ? "Review" : "Ready"}</span>
           </div>
@@ -190,12 +207,12 @@ export default async function EssPage() {
         </article>
       </section>
 
-      <section className="section ess-snapshot-grid">
-        <article className="record-card panel-card-soft ess-profile-card">
-          <div className="section-header">
+      <section className="workspace-section ess-snapshot-grid">
+        <article className="workspace-data-panel ess-profile-card">
+          <div className="workspace-data-panel__header">
             <div>
-              <h2 className="section-heading-soft">My profile</h2>
-              <p className="section-copy section-copy-soft">Employee details used for personal workflows.</p>
+              <h2>My profile</h2>
+              <p>Employee details used for personal workflows.</p>
             </div>
           </div>
           <div className="ess-profile-summary">
@@ -213,11 +230,11 @@ export default async function EssPage() {
           </div>
         </article>
 
-        <article className="record-card panel-card-soft ess-today-card">
-          <div className="section-header">
+        <article className="workspace-data-panel ess-today-card">
+          <div className="workspace-data-panel__header">
             <div>
-              <h2 className="section-heading-soft">Today</h2>
-              <p className="section-copy section-copy-soft">Personal day snapshot.</p>
+              <h2>Today</h2>
+              <p>Personal day snapshot.</p>
             </div>
             <span className={statusClass(dashboard.attendance.today.status)}>{dashboard.attendance.today.status.replace("_", " ")}</span>
           </div>
@@ -232,21 +249,25 @@ export default async function EssPage() {
         </article>
       </section>
 
-      <section className="section">
-        <div className="section-header">
+      <section className="workspace-section">
+        <div className="workspace-section__header">
           <div>
-            <h2 className="section-heading-soft">Leave balances</h2>
-            <p className="section-copy section-copy-soft">A compact balance snapshot. Open Leave for request history and application.</p>
+            <h2>Leave balances</h2>
+            <p>A compact balance snapshot. Open Leave for request history and application.</p>
           </div>
           <Link className="button button--secondary" href="/ess/leave#apply-leave">Apply leave</Link>
         </div>
-        <div className="workspace-grid-modern balance-grid">
+        <div className="workspace-summary-grid balance-grid">
           {dashboard.leave.balances.length ? (
             dashboard.leave.balances.map((balance) => (
-              <article className="workspace-card workspace-card--compact" key={balance.leave_type}>
-                <h3>{balance.leave_type}</h3>
+              <article className="workspace-summary-card ess-balance-card" key={balance.leave_type}>
+                <div>
+                  <span className="workspace-summary-card__icon" aria-hidden="true">{balance.leave_type.slice(0, 2).toUpperCase()}</span>
+                  <h3>{balance.leave_type}</h3>
+                </div>
+                <strong>{balance.closing_balance}</strong>
                 <p className="muted">{balance.policy_name}</p>
-                <div className="tableish__meta">
+                <div className="workspace-summary-card__meta">
                   <span>Available: {balance.closing_balance}</span>
                   <span>Used: {balance.consumed_amount}</span>
                   <span>Reserved: {balance.reserved_amount}</span>
@@ -263,7 +284,7 @@ export default async function EssPage() {
       </section>
 
       {state === "demo" ? (
-        <section className="section">
+        <section className="workspace-section">
           <div className="notice">
             <strong>Web preview is running in demo mode.</strong>
             <span className="muted">

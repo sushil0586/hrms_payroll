@@ -78,78 +78,80 @@ export function UserNotificationDetailAction({ endpoint, item, sourceHref, varia
               </button>
             </div>
 
-            <div className="user-notification-modal-summary">
-              <article>
-                <span>Status</span>
-                <strong>{titleCase(item.status)}</strong>
-              </article>
-              <article>
-                <span>Priority</span>
-                <strong>{titleCase(item.priority)}</strong>
-              </article>
-              <article>
-                <span>Attempts</span>
-                <strong>{attempts}</strong>
-              </article>
-            </div>
+            <div>
+              <div className="user-notification-modal-summary">
+                <article>
+                  <span>Status</span>
+                  <strong>{titleCase(item.status)}</strong>
+                </article>
+                <article>
+                  <span>Priority</span>
+                  <strong>{titleCase(item.priority)}</strong>
+                </article>
+                <article>
+                  <span>Attempts</span>
+                  <strong>{attempts}</strong>
+                </article>
+              </div>
 
-            <div className="user-notification-modal-actions">
-              <NotificationReadToggle endpoint={endpoint} isRead={Boolean(item.read_at)} />
-              {sourceHref ? (
-                <Link className="button button--primary" href={sourceHref}>
-                  Open source
-                </Link>
-              ) : null}
-            </div>
+              <div className="user-notification-modal-actions">
+                <NotificationReadToggle endpoint={endpoint} isRead={Boolean(item.read_at)} />
+                {sourceHref ? (
+                  <Link className="button button--primary" href={sourceHref}>
+                    Open source
+                  </Link>
+                ) : null}
+              </div>
 
-            <div className="user-notification-modal-grid">
-              <section className="ess-modal-section">
-                <span className="workspace-card__eyebrow">Message</span>
-                <div className="record-card__notes">
-                  <strong>{item.subject || title}</strong>
-                  <p>{item.body || "No body content was recorded for this notification."}</p>
-                </div>
-              </section>
-
-              <section className="ess-modal-section">
-                <span className="workspace-card__eyebrow">Delivery</span>
-                <div className="detail-grid">
-                  <DetailRow label="Channel" value={titleCase(item.channel)} />
-                  <DetailRow label="Recipient" value={item.recipient_identifier || item.recipient_address || "Not available"} />
-                  <DetailRow label="Scheduled" value={formatDateTime(item.scheduled_for)} />
-                  <DetailRow label="Sent" value={formatDateTime(item.sent_at)} />
-                  <DetailRow label="Delivered" value={formatDateTime(item.delivered_at)} />
-                  <DetailRow label="Read" value={formatDateTime(item.read_at)} />
-                </div>
-              </section>
-
-              <section className="ess-modal-section">
-                <span className="workspace-card__eyebrow">Source workflow</span>
-                <div className="detail-grid">
-                  <DetailRow label="Event" value={item.event_definition_name || "Direct delivery"} />
-                  <DetailRow label="Subject type" value={item.subject_type || "Not tagged"} />
-                  <DetailRow label="Reference" value={item.subject_identifier || "Not available"} />
-                  <DetailRow label="Created" value={formatDateTime(item.created_at)} />
-                </div>
-              </section>
-
-              <section className="ess-modal-section">
-                <span className="workspace-card__eyebrow">Provider logs</span>
-                {item.delivery_logs.length ? (
-                  <div className="stack-list">
-                    {item.delivery_logs.map((log) => (
-                      <div className="detail-grid" key={log.id}>
-                        <DetailRow label="Provider" value={log.provider_name || "Not available"} />
-                        <DetailRow label="Status" value={titleCase(log.status)} />
-                        <DetailRow label="Logged" value={formatDateTime(log.created_at)} />
-                        <DetailRow label="Message" value={log.error_message || log.provider_reference || "No provider message"} />
-                      </div>
-                    ))}
+              <div className="user-notification-modal-grid">
+                <section className="ess-modal-section">
+                  <span className="workspace-card__eyebrow">Message</span>
+                  <div className="record-card__notes">
+                    <strong>{item.subject || title}</strong>
+                    <p>{item.body || "No body content was recorded for this notification."}</p>
                   </div>
-                ) : (
-                  <p className="section-copy section-copy-soft">No provider logs were attached to this notification.</p>
-                )}
-              </section>
+                </section>
+
+                <section className="ess-modal-section">
+                  <span className="workspace-card__eyebrow">Delivery</span>
+                  <div className="detail-grid">
+                    <DetailRow label="Channel" value={titleCase(item.channel)} />
+                    <DetailRow label="Recipient" value={item.recipient_identifier || item.recipient_address || "Not available"} />
+                    <DetailRow label="Scheduled" value={formatDateTime(item.scheduled_for)} />
+                    <DetailRow label="Sent" value={formatDateTime(item.sent_at)} />
+                    <DetailRow label="Delivered" value={formatDateTime(item.delivered_at)} />
+                    <DetailRow label="Read" value={formatDateTime(item.read_at)} />
+                  </div>
+                </section>
+
+                <section className="ess-modal-section">
+                  <span className="workspace-card__eyebrow">Source workflow</span>
+                  <div className="detail-grid">
+                    <DetailRow label="Event" value={item.event_definition_name || "Direct delivery"} />
+                    <DetailRow label="Subject type" value={item.subject_type || "Not tagged"} />
+                    <DetailRow label="Reference" value={item.subject_identifier || "Not available"} />
+                    <DetailRow label="Created" value={formatDateTime(item.created_at)} />
+                  </div>
+                </section>
+
+                <section className="ess-modal-section">
+                  <span className="workspace-card__eyebrow">Provider logs</span>
+                  {item.delivery_logs.length ? (
+                    <div className="stack-list">
+                      {item.delivery_logs.map((log) => (
+                        <div className="detail-grid" key={log.id}>
+                          <DetailRow label="Provider" value={log.provider_name || "Not available"} />
+                          <DetailRow label="Status" value={titleCase(log.status)} />
+                          <DetailRow label="Logged" value={formatDateTime(log.created_at)} />
+                          <DetailRow label="Message" value={log.error_message || log.provider_reference || "No provider message"} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="section-copy section-copy-soft">No provider logs were attached to this notification.</p>
+                  )}
+                </section>
+              </div>
             </div>
           </div>
         </div>,

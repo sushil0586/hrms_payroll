@@ -35,9 +35,40 @@ function formatFileSize(fileSizeBytes: number) {
   return `${(fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function humanizeStatus(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function verificationChipClass(status: string) {
+  if (status === "verified") return "record-chip record-chip--success";
+  if (status === "rejected" || status === "expired") return "record-chip record-chip--danger";
+  if (status === "pending") return "record-chip record-chip--warning";
+  return "record-chip";
+}
+
+function decisionEffect(status: string, reuploadRequested: boolean) {
+  if (status === "verified") {
+    return "The employee will see this document as verified. Payroll and compliance reports can treat it as accepted evidence.";
+  }
+  if (status === "rejected" || reuploadRequested) {
+    return "The employee will see this as returned for correction and must upload a replacement before the requirement is clean.";
+  }
+  if (status === "expired") {
+    return "The employee will see this as expired and must upload a renewed document.";
+  }
+  return "The document remains in the HR verification queue until a reviewer records a final outcome.";
+}
+
 export function EmployeeDocumentReviewForm({ document, initialValue, options, itemId }: Props) {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [verificationStatus, setVerificationStatus] = useState(initialValue.verification_status);
+  const [reuploadRequested, setReuploadRequested] = useState(initialValue.reupload_requested);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -93,15 +124,24 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
                 <p>{document.employee_name} ({document.employee_code}) • {document.category_name}</p>
               </div>
               <div className="record-card__actions">
-                <span className="record-chip">{document.verification_status}</span>
-                <span className="record-chip">{document.status}</span>
+                <span className={verificationChipClass(document.verification_status)}>{humanizeStatus(document.verification_status)}</span>
+                <span className="record-chip">{humanizeStatus(document.status)}</span>
               </div>
+            </div>
+            <div className="document-review-state">
+              <div>
+                <span className="document-review-state__label">Employee-facing status</span>
+                <strong>{document.review_status_label}</strong>
+              </div>
+              <span>Owner: {document.review_owner_label}</span>
             </div>
             <div className="record-card__details document-detail-grid">
               <div><span className="record-card__label">File</span><strong>{document.file_name}</strong></div>
               <div><span className="record-card__label">Stored artifact</span><strong>{document.artifact_id || "Not linked"}</strong></div>
               <div><span className="record-card__label">Version</span><strong>v{document.version_number}</strong></div>
               <div><span className="record-card__label">Uploaded by</span><strong>{document.uploaded_by_identifier || "Unknown"}</strong></div>
+              <div><span className="record-card__label">Review owner</span><strong>{document.review_owner_label}</strong></div>
+              <div><span className="record-card__label">Review status</span><strong>{document.review_status_label}</strong></div>
               <div><span className="record-card__label">Issued on</span><strong>{document.issued_on || "Not set"}</strong></div>
               <div><span className="record-card__label">Expires on</span><strong>{document.expires_on || "No expiry"}</strong></div>
               <div><span className="record-card__label">Mime type</span><strong>{document.mime_type || "Unknown"}</strong></div>
@@ -120,12 +160,16 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
           <div className="form-grid">
             <label className="form-field"><span className="muted">Title</span><input className="input-control" name="title" defaultValue={initialValue.title} /></label>
             <label className="form-field"><span className="muted">Status</span><select className="input-control" name="status" defaultValue={initialValue.status}>{options.employee_document_statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="form-field"><span className="muted">Verification status</span><select className="input-control" name="verification_status" defaultValue={initialValue.verification_status}>{options.verification_statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label className="form-field"><span className="muted">Verification status</span><select className="input-control" name="verification_status" onChange={(event) => setVerificationStatus(event.target.value)} value={verificationStatus}>{options.verification_statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label className="form-field"><span className="muted">Document number</span><input className="input-control" name="document_number" defaultValue={initialValue.document_number} /></label>
             <label className="form-field"><span className="muted">Issued on</span><input className="input-control" name="issued_on" type="date" defaultValue={initialValue.issued_on ?? ""} /></label>
             <label className="form-field"><span className="muted">Expires on</span><input className="input-control" name="expires_on" type="date" defaultValue={initialValue.expires_on ?? ""} /></label>
-            <label className="form-field"><span className="muted">Re-upload requested</span><select className="input-control" name="reupload_requested" defaultValue={String(initialValue.reupload_requested)}><option value="false">No</option><option value="true">Yes</option></select></label>
+            <label className="form-field"><span className="muted">Re-upload requested</span><select className="input-control" name="reupload_requested" onChange={(event) => setReuploadRequested(event.target.value === "true")} value={String(reuploadRequested)}><option value="false">No</option><option value="true">Yes</option></select></label>
             <label className="form-field form-field--full"><span className="muted">Rejection reason or review note</span><textarea className="input-control" name="rejection_reason" rows={4} defaultValue={initialValue.rejection_reason} /></label>
+          </div>
+          <div className="document-decision-effect">
+            <strong>Decision effect</strong>
+            <span>{decisionEffect(verificationStatus, reuploadRequested)}</span>
           </div>
         </FormSection>
 
@@ -139,8 +183,8 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
                     <p>{entry.file_name}</p>
                   </div>
                   <div className="record-card__actions">
-                    <span className="record-chip">{entry.verification_status}</span>
-                    <span className="record-chip">{entry.status}</span>
+                    <span className={verificationChipClass(entry.verification_status)}>{humanizeStatus(entry.verification_status)}</span>
+                    <span className="record-chip">{humanizeStatus(entry.status)}</span>
                   </div>
                 </div>
               </article>

@@ -1,6 +1,6 @@
 :root {
-  --font-sans: "Avenir Next", "Plus Jakarta Sans", "Manrope", "Segoe UI", sans-serif;
-  --font-display: "Avenir Next", "Plus Jakarta Sans", "Manrope", "Segoe UI", sans-serif;
+  --font-sans: Inter, "SF Pro Text", "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-display: Inter, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 
   --type-size-2xs: 10px;
@@ -16,9 +16,9 @@
 
   --type-weight-regular: 400;
   --type-weight-medium: 500;
-  --type-weight-semibold: 600;
-  --type-weight-bold: 700;
-  --type-weight-heavy: 760;
+  --type-weight-semibold: 560;
+  --type-weight-bold: 620;
+  --type-weight-heavy: 660;
 
   --type-leading-tight: 1.15;
   --type-leading-title: 1.2;

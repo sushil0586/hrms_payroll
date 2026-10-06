@@ -165,6 +165,13 @@ test.describe("Manager self service dashboard certification", () => {
     await expect(dialog.getByText(/Request approved|Cancellation request approved/).first()).toBeVisible();
     await page.unroute("**/api/manager/leave-requests/*/approve");
 
+    await dialog.getByRole("button", { name: "Close" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(reviewButton).toBeVisible();
+    await reviewButton.click();
+    const rejectionDialog = page.getByRole("dialog", { name: "Leave approval review" });
+    await expect(rejectionDialog).toBeVisible();
+
     await page.route("**/api/manager/leave-requests/*/reject", async (route) => {
       await route.fulfill({
         contentType: "application/json",
@@ -172,9 +179,9 @@ test.describe("Manager self service dashboard certification", () => {
         body: JSON.stringify({ comment: ["Decision note is required for rejection."] }),
       });
     });
-    await dialog.getByRole("button", { name: /Reject request|Reject cancellation/ }).first().click();
-    await expect(dialog.getByText("Action failed.").first()).toBeVisible();
-    await expect(dialog.getByText("Decision note is required for rejection.").first()).toBeVisible();
+    await rejectionDialog.getByRole("button", { name: /Reject request|Reject cancellation/ }).first().click();
+    await expect(rejectionDialog.getByText("Action failed.").first()).toBeVisible();
+    await expect(rejectionDialog.getByText("Decision note is required for rejection.").first()).toBeVisible();
     await page.unroute("**/api/manager/leave-requests/*/reject");
   });
 

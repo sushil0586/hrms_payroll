@@ -15,6 +15,7 @@ from apps.leave_management.models import LeavePolicy, LeavePolicyAssignment, Lea
 from apps.leave_management.services import preview_leave_policy_assignment_conflicts, preview_leave_policy_assignment_resolution, resolve_leave_request, submit_leave_request
 from apps.organizations.models import Department, EmploymentType, Grade
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
+from apps.workflows.models import WorkflowAssignment
 
 
 class LeavePolicyAssignmentConflictTests(TestCase):
@@ -536,3 +537,21 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
                 reason="Range includes existing date",
             )
         self.assertIn(str(existing_request.start_date), str(range_error.exception))
+
+    def test_legacy_leave_workflow_without_assignment_still_shows_pending_manager(self):
+        monday = _next_weekday(0)
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday,
+            end_date=monday,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Legacy workflow approval visibility",
+        )
+        WorkflowAssignment.objects.filter(step_instance__workflow_instance__id=leave_request.workflow_reference).delete()
+
+        employee_history = get_employee_leave_requests(self.employee)
+
+        self.assertEqual(employee_history[0]["approval_steps"][0]["manager_name"], "Meera Manager")
+        self.assertTrue(employee_history[0]["approval_steps"][0]["is_current"])

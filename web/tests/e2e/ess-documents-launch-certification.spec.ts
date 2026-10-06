@@ -28,11 +28,11 @@ test.describe("ESS Documents launch certification", () => {
       await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
     }
 
-    for (const readinessItem of ["Missing uploads", "Returned by HR", "Expiry focus", "HR review"]) {
-      await expect(page.locator(".ess-documents-readiness-band").getByText(readinessItem, { exact: true })).toBeVisible();
-    }
-
     await expect(page.getByRole("heading", { name: "Required documents" })).toBeVisible();
+    await expect(page.locator(".ess-documents-readiness-band")).toHaveCount(0);
+    await expect(page.locator(".ess-documents-action-band")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Upload document" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "View" }).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Before sending a file" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Document history" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Upload required document" })).toHaveCount(0);
@@ -43,9 +43,6 @@ test.describe("ESS Documents launch certification", () => {
     }
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/ess/documents", { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
-    await expectPageReady(page, "Documents");
     await expect(page.getByRole("heading", { name: "Required documents" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
@@ -94,10 +91,8 @@ test.describe("ESS Documents launch certification", () => {
     await expect(dialog.getByText("Uploaded file could not be scanned. Try another PDF.")).toBeVisible();
     await expectDialogStable(page, "Upload document");
     await dialog.getByRole("button", { name: "Submit for review" }).click();
-    await expect(dialog.getByText("Upload submitted.")).toBeVisible();
-    await expect(dialog.getByText("Your document has been sent to HR for verification.")).toBeVisible();
-    await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Upload document" }).first()).toBeVisible();
   });
 
   test("document history supports filters, pagination, download links, and detail drilldown", async ({ page }) => {

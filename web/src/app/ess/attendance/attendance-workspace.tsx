@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import { PageIntro } from "@/components/patterns/page-intro";
 import type {
   AttendanceRegularizationItem,
   EmployeeDashboard,
@@ -100,6 +99,13 @@ function getApprovalWaitingLabel(item: AttendanceRegularizationItem) {
     return "Pending approval from the configured approver";
   }
   return `Pending approval from ${currentStep.manager_name || currentStep.name || `Level ${currentStep.level} approver`}`;
+}
+
+function getRegularizationOwnerLabel(item: AttendanceRegularizationItem) {
+  const waitingLabel = getApprovalWaitingLabel(item);
+  if (waitingLabel) return waitingLabel.replace(/^Pending approval from /, "");
+  const lastDecision = [...(item.approval_steps ?? [])].reverse().find((step) => step.manager_name || step.name);
+  return lastDecision?.manager_name || lastDecision?.name || "Not assigned";
 }
 
 function useEscapeClose(onClose: () => void) {
@@ -207,6 +213,7 @@ function AttendanceRegularizationModal({
 
   async function submitRegularization(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     if (submittingRef.current) {
       return;
     }
@@ -229,7 +236,7 @@ function AttendanceRegularizationModal({
       submittingRef.current = false;
       return;
     }
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData(form);
     setSubmitting(true);
     let response: Response;
     try {
@@ -258,9 +265,10 @@ function AttendanceRegularizationModal({
       return;
     }
     setFeedback({ tone: "success", message: "Attendance regularization submitted." });
-    event.currentTarget.reset();
+    form.reset();
+    submittingRef.current = false;
+    onClose();
     router.refresh();
-    window.setTimeout(onClose, 650);
   }
 
   return (
@@ -428,6 +436,10 @@ export function AttendanceWorkspace({ attendanceRecords, currentParams, dashboar
       item.rejection_reason ?? "",
     ].some((value) => value.toLowerCase().includes(normalizedQuery));
   });
+  const pendingCount = regularizations.status_counts.pending ?? 0;
+  const approvedCount = regularizations.status_counts.approved ?? 0;
+  const rejectedCount = regularizations.status_counts.rejected ?? 0;
+  const unlockedRecordCount = attendanceRecords.filter((record) => !record.is_locked).length;
   const modal = typeof document !== "undefined"
     ? (
         <>
@@ -454,135 +466,160 @@ export function AttendanceWorkspace({ attendanceRecords, currentParams, dashboar
     : null;
 
   return (
-    <main className="shell shell--workspace">
-      <PageIntro
-        eyebrow={state === "live" ? "Live ESS" : "Demo ESS"}
-        title="Attendance"
-        description="Review today, submit corrections in a focused dialog, and track manager decisions."
-        actions={
-          <>
-            <button className="button button--primary" onClick={() => setRegularizeOpen(true)} type="button">Regularize attendance</button>
-            <Link className="button button--secondary" href="/ess">Overview</Link>
-          </>
-        }
-        pills={["Single responsibility", formatStatus(dashboard.attendance.today.status), `${dashboard.attendance.pending_regularizations_count} pending`]}
-        showPills
-      />
-
-      <section className="section attendance-summary-grid">
-        <article className="record-card panel-card-soft ess-today-card">
-          <div className="section-header">
-            <div>
-              <h2 className="section-heading-soft">Today</h2>
-              <p className="section-copy section-copy-soft">Current attendance state for the day.</p>
-            </div>
-            <span className={statusClass(dashboard.attendance.today.status)}>{formatStatus(dashboard.attendance.today.status)}</span>
-          </div>
-          <div className="detail-grid">
-            <DetailRow label="Date" value={formatDate(dashboard.attendance.today.date)} />
-            <DetailRow label="Shift" value={dashboard.attendance.today.shift || "Not assigned"} />
-            <DetailRow label="Check-in" value={formatDateTime(dashboard.attendance.today.check_in_at)} />
-            <DetailRow label="Check-out" value={formatDateTime(dashboard.attendance.today.check_out_at)} />
-          </div>
-        </article>
-        <article className="record-card panel-card-soft ess-today-card">
-          <div className="section-header">
-            <div>
-              <h2 className="section-heading-soft">Monthly summary</h2>
-              <p className="section-copy section-copy-soft">Attendance progress for the active month.</p>
-            </div>
-          </div>
-          <div className="attendance-metric-grid">
-            <DetailRow label="Present" value={String(dashboard.attendance.month_to_date.present_days)} />
-            <DetailRow label="Absent" value={String(dashboard.attendance.month_to_date.absent_days)} />
-            <DetailRow label="Late" value={String(dashboard.attendance.month_to_date.late_days)} />
-            <DetailRow label="Hours" value={String(dashboard.attendance.month_to_date.work_duration_hours)} />
-          </div>
-        </article>
-        <article className="record-card panel-card-soft ess-today-card">
-          <div className="section-header">
-            <div>
-              <h2 className="section-heading-soft">Correction queue</h2>
-              <p className="section-copy section-copy-soft">What needs attention before attendance is payroll-safe.</p>
-            </div>
-          </div>
-          <div className="attendance-action-panel">
-            <div>
-              <span className="detail-label">Pending fixes</span>
-              <strong>{dashboard.attendance.pending_regularizations_count}</strong>
-              <small>Open manager decisions or employee corrections.</small>
-            </div>
-            <button className="button button--primary" onClick={() => setRegularizeOpen(true)} type="button">New correction</button>
-          </div>
-        </article>
+    <main className="shell shell--workspace ess-experience-shell">
+      <section className="workspace-control-header">
+        <div className="workspace-control-header__copy">
+          <span className="workspace-control-header__eyebrow">{state === "live" ? "Live ESS" : "Demo ESS"} / Attendance</span>
+          <h1>Attendance</h1>
+          <p>Review today, request corrections, and track every approval decision from one workspace.</p>
+        </div>
+        <div className="workspace-control-header__actions">
+          <button className="button button--primary" onClick={() => setRegularizeOpen(true)} type="button">Regularize attendance</button>
+          <Link className="button button--secondary" href="/ess">Overview</Link>
+        </div>
+        <div className="workspace-control-header__metrics" aria-label="Attendance summary">
+          <span className="queue-summary-chip"><strong>{formatStatus(dashboard.attendance.today.status)}</strong> today</span>
+          <span className="queue-summary-chip"><strong>{pendingCount}</strong> pending</span>
+          <span className="queue-summary-chip"><strong>{approvedCount}</strong> approved</span>
+          <span className="queue-summary-chip"><strong>{unlockedRecordCount}</strong> days editable</span>
+        </div>
       </section>
 
-      <section className="section">
-        <article className="record-card panel-card-soft">
-          <div className="section-header">
+      <section className="workspace-section">
+        <div className="workspace-section__header">
+          <div>
+            <h2>Attendance snapshot</h2>
+            <p>Today, month-to-date, and correction readiness for your active attendance calendar.</p>
+          </div>
+          <span className={statusClass(dashboard.attendance.today.status)}>{formatStatus(dashboard.attendance.today.status)}</span>
+        </div>
+        <div className="workspace-summary-grid attendance-summary-grid">
+          <article className="workspace-summary-card">
             <div>
-              <h2 className="section-heading-soft">Regularizations</h2>
-              <p className="section-copy section-copy-soft">Track correction requests and open details only when needed.</p>
+              <span className="workspace-summary-card__icon" aria-hidden="true">TD</span>
+              <h3>Today</h3>
+            </div>
+            <strong>{formatStatus(dashboard.attendance.today.status)}</strong>
+            <p>{formatDate(dashboard.attendance.today.date)} • {dashboard.attendance.today.shift || "Shift not assigned"}</p>
+            <div className="workspace-summary-card__meta">
+              <span>In: {formatDateTime(dashboard.attendance.today.check_in_at)}</span>
+              <span>Out: {formatDateTime(dashboard.attendance.today.check_out_at)}</span>
+            </div>
+          </article>
+          <article className="workspace-summary-card">
+            <div>
+              <span className="workspace-summary-card__icon" aria-hidden="true">MT</span>
+              <h3>Month to date</h3>
+            </div>
+            <strong>{dashboard.attendance.month_to_date.present_days} present</strong>
+            <p>{dashboard.attendance.month_to_date.work_duration_hours} hours recorded this month.</p>
+            <div className="workspace-summary-card__meta">
+              <span>Absent: {dashboard.attendance.month_to_date.absent_days}</span>
+              <span>Late: {dashboard.attendance.month_to_date.late_days}</span>
+            </div>
+          </article>
+          <article className="workspace-summary-card">
+            <div>
+              <span className="workspace-summary-card__icon" aria-hidden="true">FX</span>
+              <h3>Correction queue</h3>
+            </div>
+            <strong>{pendingCount} pending</strong>
+            <p>Corrections need manager approval before HR or payroll can use them.</p>
+            <div className="workspace-summary-card__meta">
+              <span>Approved: {approvedCount}</span>
+              <span>Rejected: {rejectedCount}</span>
+              <span>Editable days: {unlockedRecordCount}</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section className="workspace-section">
+        <article className="workspace-data-panel attendance-requests-panel">
+          <div className="workspace-data-panel__header">
+            <div>
+              <h2>Regularizations</h2>
+              <p>Track correction requests, approval owner, manager notes, and final decisions.</p>
             </div>
             <button className="button button--secondary" onClick={() => setRegularizeOpen(true)} type="button">New correction</button>
           </div>
-          <div className="toolbar">
-            <div className="tabbar">
-              {tabs.map((tab) => (
-                <Link className={`tab ${status === tab ? "tab--active" : ""}`} href={buildHref(currentParams, { status: tab, regId: undefined, page: "1" })} key={tab}>
-                  <span>{formatStatus(tab)}</span>
-                  <span>{regularizations.status_counts[tab as keyof typeof regularizations.status_counts] ?? 0}</span>
-                </Link>
-              ))}
+          <div className="workspace-status-tabs">
+            {tabs.map((tab) => (
+              <Link className={`workspace-status-tab ${status === tab ? "workspace-status-tab--active" : ""}`} href={buildHref(currentParams, { status: tab, regId: undefined, page: "1" })} key={tab}>
+                <span>{formatStatus(tab)}</span>
+                <strong>{regularizations.status_counts[tab as keyof typeof regularizations.status_counts] ?? 0}</strong>
+              </Link>
+            ))}
+          </div>
+          <details className="workspace-filter-disclosure" open={Boolean(historyQuery.trim())}>
+            <summary>
+              <span>Filters</span>
+              <small>{visibleRegularizations.length} shown from the loaded page</small>
+            </summary>
+            <div className="attendance-history-filter">
+              <label className="form-field">
+                <span className="muted">Search regularizations</span>
+                <input
+                  className="input-control"
+                  onChange={(event) => setHistoryQuery(event.target.value)}
+                  placeholder="Date, status, reason, or manager note"
+                  value={historyQuery}
+                />
+              </label>
+              <button className="button button--secondary" disabled={!historyQuery.trim()} onClick={() => setHistoryQuery("")} type="button">Clear search</button>
             </div>
-          </div>
-          <div className="leave-history-toolbar">
-            <div>
-              <span className="detail-label">Refine current view</span>
-              <p className="section-copy section-copy-soft">Search loaded records by date, status, reason, or manager note.</p>
+          </details>
+          <div className="workspace-table attendance-request-table" role="table" aria-label="Attendance regularization history">
+            <div className="workspace-table__row workspace-table__row--head" role="row">
+              <span role="columnheader">Date</span>
+              <span role="columnheader">Correction</span>
+              <span role="columnheader">Status</span>
+              <span role="columnheader">Submitted</span>
+              <span role="columnheader">Approver</span>
+              <span role="columnheader">Actions</span>
             </div>
-            <span className="queue-summary-chip">{visibleRegularizations.length} shown</span>
-          </div>
-          <div className="attendance-history-filter">
-            <label className="form-field">
-              <span className="muted">Search regularizations</span>
-              <input
-                className="input-control"
-                onChange={(event) => setHistoryQuery(event.target.value)}
-                placeholder="Date, status, reason, or manager note"
-                value={historyQuery}
-              />
-            </label>
-            <button className="button button--secondary" disabled={!historyQuery.trim()} onClick={() => setHistoryQuery("")} type="button">Clear search</button>
-          </div>
-          <div className="leave-request-grid">
             {visibleRegularizations.length ? (
               visibleRegularizations.map((item) => {
                 const waitingLabel = getApprovalWaitingLabel(item);
                 return (
-                  <button
-                    className="leave-request-card"
+                  <div
+                    className="workspace-table__row attendance-request-row"
                     key={item.id}
-                    onClick={() => {
-                      setDismissedRegularizationId(null);
-                      setClickedRegularization(item);
-                    }}
-                    type="button"
+                    role="row"
                   >
-                    <span className="leave-request-card__main">
+                    <span role="cell">
                       <strong>{formatDate(item.attendance_date)}</strong>
-                      <small>{formatStatus(item.current_status)} to {formatStatus(item.requested_status)}</small>
-                      <span className="muted">{waitingLabel || item.reason || "No reason provided."}</span>
+                      <small>{item.workflow_reference || "Workflow pending"}</small>
                     </span>
-                    <span className="leave-request-card__side">
+                    <span role="cell">
+                      <strong>{formatStatus(item.current_status)} to {formatStatus(item.requested_status)}</strong>
+                      <small>{item.reason || "No reason provided."}</small>
+                    </span>
+                    <span role="cell">
                       <span className={statusClass(item.status)}>{formatStatus(item.status)}</span>
-                      <span className="queue-summary-chip">{formatDateTime(item.applied_at ?? item.created_at)}</span>
                     </span>
-                  </button>
+                    <span role="cell">{formatDateTime(item.applied_at ?? item.created_at)}</span>
+                    <span role="cell">
+                      <strong>{getRegularizationOwnerLabel(item)}</strong>
+                      <small>{waitingLabel || item.manager_comment || item.rejection_reason || "Decision history available"}</small>
+                    </span>
+                    <span role="cell">
+                      <button
+                        className="button button--secondary"
+                        onClick={() => {
+                          setDismissedRegularizationId(null);
+                          setClickedRegularization(item);
+                        }}
+                        type="button"
+                      >
+                        View
+                      </button>
+                    </span>
+                  </div>
                 );
               })
             ) : (
-              <div className="notice">
+              <div className="notice workspace-empty-state">
                 <strong>{regularizations.items.length ? "No regularizations match this search." : "No regularizations in this view."}</strong>
                 <span className="muted">{regularizations.items.length ? "Clear search or try another status tab." : "Try another status tab once more data is available."}</span>
               </div>

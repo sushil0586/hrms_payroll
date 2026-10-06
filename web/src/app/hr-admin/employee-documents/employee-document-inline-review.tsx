@@ -19,6 +19,28 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to update employee document.");
 }
 
+function humanizeStatus(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function nextOutcomeText(status: string, reuploadRequested: boolean) {
+  if (status === "verified") {
+    return "Employee will see the document as verified.";
+  }
+  if (status === "rejected" || reuploadRequested) {
+    return "Employee will see a correction request and can upload a replacement.";
+  }
+  if (status === "expired") {
+    return "Employee will see that a renewed document is required.";
+  }
+  return "Document stays in the HR verification queue.";
+}
+
 export function EmployeeDocumentInlineReview({ item, verificationStatusOptions }: Props) {
   const router = useRouter();
   const [verificationStatus, setVerificationStatus] = useState(item.verification_status);
@@ -74,6 +96,16 @@ export function EmployeeDocumentInlineReview({ item, verificationStatusOptions }
           Full review
         </Link>
       </div>
+      <div className="document-inline-status">
+        <div>
+          <span>Current</span>
+          <strong>{item.review_status_label}</strong>
+        </div>
+        <div>
+          <span>After save</span>
+          <strong>{nextOutcomeText(verificationStatus, reuploadRequested)}</strong>
+        </div>
+      </div>
       <div className="form-grid document-inline-review-grid">
         <label className="form-field">
           <span className="muted">Verification status</span>
@@ -85,7 +117,7 @@ export function EmployeeDocumentInlineReview({ item, verificationStatusOptions }
           >
             {verificationStatusOptions.map((option) => (
               <option key={option.value} value={option.value}>
-                {option.label}
+                {option.label || humanizeStatus(option.value)}
               </option>
             ))}
           </select>

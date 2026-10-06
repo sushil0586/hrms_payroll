@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow } from "./assertions";
 
-export async function expectDialogStable(page: Page, label: string) {
+export async function expectDialogStable(page: Page, label: string | RegExp) {
   const dialog = page.getByRole("dialog", { name: label });
   await expect(dialog).toBeVisible();
   const issues = await dialog.evaluate((element) => {
@@ -21,10 +21,15 @@ export async function expectDialogStable(page: Page, label: string) {
     const problems: string[] = [];
 
     if (dialogRect.left < -1 || dialogRect.right > viewportWidth + 1) {
-      problems.push("dialog extends beyond viewport width");
+      problems.push(`dialog extends beyond viewport width (${Math.round(dialogRect.left)}-${Math.round(dialogRect.right)} / ${viewportWidth})`);
+    }
+    const dialogCenterX = dialogRect.left + dialogRect.width / 2;
+    const viewportCenterX = viewportWidth / 2;
+    if (Math.abs(dialogCenterX - viewportCenterX) > 24) {
+      problems.push(`dialog is not centered horizontally (${Math.round(dialogCenterX)} / ${Math.round(viewportCenterX)})`);
     }
     if (dialogRect.top < -1 || dialogRect.bottom > viewportHeight + 1) {
-      problems.push("dialog extends beyond viewport height");
+      problems.push(`dialog extends beyond viewport height (${Math.round(dialogRect.top)}-${Math.round(dialogRect.bottom)} / ${viewportHeight})`);
     }
     if (scrollStyle.overflowY === "visible" && scrollContainer.scrollHeight > scrollContainer.clientHeight + 2) {
       problems.push("dialog content can overflow without an internal scroll container");
@@ -48,6 +53,6 @@ export async function expectDialogStable(page: Page, label: string) {
 
     return [...new Set(problems)];
   });
-  expect(issues, `${label} should be viewport-safe and free of visible control overlap`).toEqual([]);
+  expect(issues, `${String(label)} should be viewport-safe and free of visible control overlap`).toEqual([]);
   await expectNoHorizontalOverflow(page);
 }

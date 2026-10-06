@@ -38,6 +38,15 @@ function parsePayloadValues(value: string) {
   return parsed as Record<string, unknown>;
 }
 
+function humanizeStatus(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetters }: Props) {
   const router = useRouter();
   const defaultEmployeeId = employees[0]?.id ?? "";
@@ -63,6 +72,7 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
     () => employees.find((employee) => employee.id === draft.employee_id),
     [draft.employee_id, employees],
   );
+  const canGenerate = Boolean(draft.employee_id && draft.title.trim() && draft.template_body.trim());
 
   function update<Key extends keyof HrAdminGeneratedLetterDraft>(
     key: Key,
@@ -90,11 +100,18 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
       return;
     }
 
-    const response = await fetch("/api/hr-admin/generated-letters/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/hr-admin/generated-letters/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsPreviewing(false);
+      return;
+    }
     const responsePayload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(responsePayload, "Unable to preview generated letter."));
@@ -119,11 +136,18 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
       return;
     }
 
-    const response = await fetch("/api/hr-admin/generated-letters", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/hr-admin/generated-letters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      setError("Unable to reach the server. Check your connection and try again.");
+      setIsGenerating(false);
+      return;
+    }
     const responsePayload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setError(getErrorMessage(responsePayload, "Unable to generate letter."));
@@ -152,8 +176,15 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
           <div className="form-shell-card__meta">
             <span className="queue-summary-chip"><strong>{draft.letter_type}</strong> type</span>
             <span className="queue-summary-chip"><strong>{selectedEmployee?.employee_code ?? "No employee"}</strong> employee</span>
+            <span className="queue-summary-chip"><strong>{canGenerate ? "Ready" : "Needs input"}</strong> draft</span>
           </div>
         </div>
+        {employees.length === 0 ? (
+          <div className="notice">
+            <strong>No employees available.</strong>
+            <span className="muted">Create or import employees before generating HR letters.</span>
+          </div>
+        ) : null}
 
         <div className="form-shell-card__grid">
           <div className="form-grid">
@@ -162,9 +193,11 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
               <select
                 className="input-control"
                 required
+                disabled={employees.length === 0}
                 value={draft.employee_id}
                 onChange={(event) => update("employee_id", event.target.value)}
               >
+                {employees.length === 0 ? <option value="">No employees available</option> : null}
                 {employees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
                     {employee.full_name} ({employee.employee_code})
@@ -247,6 +280,7 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
           <div className="notice">
             <strong>Letter generated.</strong>
             <span className="muted">{generatedLetter.title} is stored as {generatedLetter.file_name}.</span>
+            {generatedLetter.artifact_id ? <a className="button button--ghost" href={`/api/hr-admin/generated-letters/${generatedLetter.id}/download`}>Download generated letter</a> : null}
           </div>
         ) : null}
 
@@ -256,7 +290,7 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
             <button className="button button--secondary" disabled={isPreviewing || isGenerating} onClick={handlePreview} type="button">
               {isPreviewing ? "Previewing..." : "Preview letter"}
             </button>
-            <button className="button button--primary" disabled={isGenerating || !draft.employee_id} type="submit">
+            <button className="button button--primary" disabled={isGenerating || !canGenerate} type="submit">
               {isGenerating ? "Generating..." : "Generate letter"}
             </button>
           </div>
@@ -276,6 +310,17 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
               <div className="detail-row"><span className="detail-label">Variables</span><span className="detail-value">{preview.used_variables.length || "Ready"}</span></div>
               <div className="detail-row"><span className="detail-label">Missing</span><span className="detail-value">{preview.missing_variables.length}</span></div>
             </div>
+            {preview.missing_variables.length ? (
+              <div className="notice">
+                <strong>Missing variables.</strong>
+                <span className="muted">{preview.missing_variables.join(", ")}</span>
+              </div>
+            ) : (
+              <div className="notice">
+                <strong>Preview ready.</strong>
+                <span className="muted">No missing variables were reported for this draft.</span>
+              </div>
+            )}
             <pre className="notice" style={{ whiteSpace: "pre-wrap" }}>{preview.rendered_text}</pre>
           </>
         ) : (
@@ -311,7 +356,7 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
                 <div className="detail-row"><span className="detail-label">Issue date</span><span className="detail-value">{item.issue_date || "Not set"}</span></div>
                 <div className="detail-row"><span className="detail-label">Workflow</span><span className="detail-value">{item.workflow_reference || "Not linked"}</span></div>
                 <div className="detail-row"><span className="detail-label">File</span><span className="detail-value">{item.file_name || "Pending"}</span></div>
-                <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{item.status}</span></div>
+                <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{humanizeStatus(item.status)}</span></div>
               </div>
             </article>
           ))}
