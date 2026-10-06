@@ -10,22 +10,22 @@ It should be reviewed before any pilot, internal beta, payroll handoff, or custo
 
 ## 2. Release Gate Status
 
-Current status as of October 4, 2026:
+Current status as of October 6, 2026:
 
 - Local functional and browser gates have broad coverage, but public launch still requires deployed role-login/RBAC proof.
 - Production runtime now has a fail-fast `production_preflight` gate for DB, Redis, email, workers, provider credentials, storage controls, auth posture, and demo-mode isolation.
-- One mobile dependency advisory remains open through React Native Metro `image-size`.
+- Production dependency audit has no remaining critical findings after the web dependency security update. Three mobile transitive advisories remain through Expo/React Native tooling packages.
 - HRMS remains suitable only for a web-first controlled pilot until the current tenant payroll, provider, storage, backup/restore, alerting, and deployed-access gates are evidenced.
 
 ---
 
 ## 3. Security And Dependency Limitations
 
-### Mobile Metro `image-size`
+### Mobile Expo/Metro Transitive Advisories
 
-- `pnpm audit --prod` reports two high-severity instances of the same `image-size` advisory through React Native Metro.
-- The audit feed currently reports no patched version.
-- Mobile production distribution should wait for an upstream Expo, React Native, or Metro dependency update, or for explicit security-owner acceptance.
+- `pnpm audit --prod` reports remaining mobile transitive advisories through Expo/React Native tooling: `node-forge`, `braces`, and `sprintf-js`.
+- The audit feed currently reports no patched versions for these remaining packages.
+- Mobile production distribution should wait for upstream Expo, React Native, or Metro dependency updates, or for explicit security-owner acceptance.
 - Web HRMS pilot scope can proceed if the mobile app is excluded from the pilot.
 
 ### Secrets And Environments
@@ -92,7 +92,7 @@ Before pilot kickoff, record:
 - support owner
 - security owner when mobile is in scope
 - whether mobile is in or out of pilot scope
-- decision on the `image-size` release risk
+- decision on the remaining mobile transitive dependency release risk
 - notification provider scope
 - data import or seeded workspace approach
 - rollback and support escalation path

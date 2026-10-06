@@ -60,6 +60,7 @@ const routeToDoc = new Map([
   ["/platform-admin", "platform-admin/dashboard.md"],
   ["/platform-admin/leads", "platform-admin/leads.md"],
   ["/platform-admin/tenants", "platform-admin/tenants.md"],
+  ["/platform-admin/launch", "platform-admin/launch-blueprint.md"],
   ["/platform-admin/onboarding", "platform-admin/launch-readiness.md"],
   ["/platform-admin/admins", "platform-admin/admin-access.md"],
   ["/platform-admin/policy-packs", "platform-admin/setup-templates.md"],

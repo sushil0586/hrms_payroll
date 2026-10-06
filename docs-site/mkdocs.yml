@@ -58,6 +58,7 @@ nav:
       - Tenant Onboarding:
           - Leads: platform-admin/leads.md
           - Tenants: platform-admin/tenants.md
+          - Launch Blueprint: platform-admin/launch-blueprint.md
           - Admin Access: platform-admin/admin-access.md
           - Setup Templates: platform-admin/setup-templates.md
       - Governance:
