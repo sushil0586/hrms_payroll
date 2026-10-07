@@ -522,6 +522,34 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
             ],
         )
 
+    def test_weekly_off_exclusion_follows_custom_roster_not_standard_weekend(self):
+        self.shift.weekly_off_days = ["tuesday", "wednesday"]
+        self.shift.save(update_fields=["weekly_off_days", "updated_at"])
+
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=date(2026, 10, 31),
+            end_date=date(2026, 11, 4),
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Custom roster weekly off",
+        )
+
+        self.assertEqual(leave_request.requested_units, 3)
+        breakdown = leave_request.metadata["unit_breakdown"]
+        self.assertEqual(breakdown["requested_units"], "3.00")
+        self.assertEqual(
+            [(item["date"], item["day"], item["counted"], item["reason"], item["units"]) for item in breakdown["days"]],
+            [
+                ("2026-10-31", "Saturday", True, "working_day", "1.00"),
+                ("2026-11-01", "Sunday", True, "working_day", "1.00"),
+                ("2026-11-02", "Monday", True, "working_day", "1.00"),
+                ("2026-11-03", "Tuesday", False, "weekly_off", "0.00"),
+                ("2026-11-04", "Wednesday", False, "weekly_off", "0.00"),
+            ],
+        )
+
     def test_sandwich_rule_counts_weekly_off_between_leave_dates(self):
         friday = _next_weekday(4)
         self.leave_policy.sandwich_rule_enabled = True

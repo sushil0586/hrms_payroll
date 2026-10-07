@@ -2,7 +2,39 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { expectDialogStable } from "../helpers/modal-stability";
-import { employee, gotoAuthenticated } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+
+test.describe.configure({ mode: "serial" });
+
+type EmployeeListItem = {
+  id: string;
+  employee_code: string;
+  full_name: string;
+  work_email: string;
+};
+
+type ShiftItem = {
+  id: string;
+  name: string;
+  weekly_off_days: string[];
+};
+
+type ShiftResolution = {
+  has_resolution: boolean;
+  shift_id: string | null;
+  shift_name: string | null;
+};
+
+type LeaveSubmission = {
+  id: string;
+  status: string;
+  requested_units: string;
+};
+
+type ShiftAssignment = {
+  id: string;
+  shift_id: string;
+};
 
 function field(scope: Page | Locator, label: string, index = 0) {
   return scope.locator("label.form-field").filter({ hasText: label }).locator("input, select, textarea").nth(index);
@@ -14,12 +46,62 @@ function isoDateFromToday(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function isoDateOffset(isoDate: string, days: number) {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function nextIsoWeekday(minDaysFromToday: number, weekday: number) {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  date.setUTCDate(date.getUTCDate() + minDaysFromToday);
+  while (date.getUTCDay() !== weekday) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
 async function optionValueByName(select: Locator, pattern: RegExp) {
   return select.locator("option").evaluateAll((options, source) => {
     const regexp = new RegExp(source, "i");
     const option = options.find((item) => regexp.test(item.textContent ?? ""));
     return option ? (option as HTMLOptionElement).value : "";
   }, pattern.source);
+}
+
+async function apiJson<T>(page: Page, path: string) {
+  const response = await page.request.get(path);
+  const payload = await response.json().catch(() => ({}));
+  expect(response.ok(), `${path} should be available: ${response.status()} ${JSON.stringify(payload)}`).toBeTruthy();
+  return payload as T;
+}
+
+function findConfiguredEmployee(employees: EmployeeListItem[]) {
+  const configuredLogin = employee.username.toLowerCase();
+  return employees.find((item) =>
+    [item.work_email, item.employee_code, item.full_name].some((value) => {
+      const label = value.toLowerCase();
+      return label === configuredLogin || label.includes(configuredLogin) || configuredLogin.includes(label);
+    }),
+  );
+}
+
+async function submitAndCapture<T>(
+  page: Page,
+  path: string,
+  action: () => Promise<void>,
+) {
+  const [response] = await Promise.all([
+    page.waitForResponse((item) => item.url().includes(path) && item.request().method() === "POST"),
+    action(),
+  ]);
+  return {
+    ok: response.ok(),
+    status: response.status(),
+    payload: (await response.json().catch(() => ({}))) as T,
+  };
 }
 
 async function openApplyLeave(page: Page) {
@@ -167,5 +249,130 @@ test.describe("ESS Leave launch certification", () => {
     await dialog.getByRole("button", { name: "Submit leave" }).click();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Leave requests" })).toBeVisible();
+  });
+
+  test("leave unit calculation follows the employee roster weekly offs instead of a hardcoded weekend", async ({ page }) => {
+    test.setTimeout(4 * 60 * 1000);
+    const runOffsetDays = 540 + (Date.now() % 180);
+    const startDate = nextIsoWeekday(runOffsetDays, 6);
+    const endDate = isoDateOffset(startDate, 4);
+    const retiredStartDate = isoDateOffset(endDate, 26_000);
+    const retiredEndDate = isoDateOffset(retiredStartDate, 1);
+    let createdAssignmentId: string | null = null;
+    let restoredShift = false;
+
+    await gotoAuthenticated(page, "/hr-admin/employee-shift-assignments", hrAdmin);
+    const employeeRecord = findConfiguredEmployee(await apiJson<EmployeeListItem[]>(page, "/api/hr-admin/employees"));
+    test.skip(!employeeRecord, `No HR employee record matched ${employee.username}.`);
+    if (!employeeRecord) {
+      return;
+    }
+
+    const resolutionResponse = await page.request.post("/api/hr-admin/employee-shift-assignments/resolve", {
+      data: {
+        employee_id: employeeRecord.id,
+        attendance_date: startDate,
+        end_date: endDate,
+      },
+    });
+    const resolution = (await resolutionResponse.json().catch(() => ({}))) as ShiftResolution;
+    expect(
+      resolutionResponse.ok(),
+      `Shift resolution should be available: ${resolutionResponse.status()} ${JSON.stringify(resolution)}`,
+    ).toBeTruthy();
+
+    const shifts = await apiJson<ShiftItem[]>(page, "/api/hr-admin/shifts");
+    const originalShift = shifts.find((item) => item.id === resolution.shift_id) ?? shifts[0];
+    test.skip(!originalShift, "No shift is available for the roster calculation check.");
+    if (!originalShift) {
+      return;
+    }
+
+    try {
+      const patchResponse = await page.request.patch(`/api/hr-admin/shifts/${originalShift.id}`, {
+        data: {
+          weekly_off_days: ["tuesday", "wednesday"],
+        },
+      });
+      const patchPayload = await patchResponse.json().catch(() => ({}));
+      expect(
+        patchResponse.ok(),
+        `Shift weekly offs should be patched for roster QA: ${patchResponse.status()} ${JSON.stringify(patchPayload)}`,
+      ).toBeTruthy();
+
+      if (!resolution.shift_id) {
+        const assignmentResponse = await page.request.post("/api/hr-admin/employee-shift-assignments", {
+          data: {
+            employee_id: employeeRecord.id,
+            shift_id: originalShift.id,
+            assignment_kind: "temporary_override",
+            effective_from: startDate,
+            effective_to: endDate,
+            is_primary: false,
+          },
+        });
+        const assignmentPayload = (await assignmentResponse.json().catch(() => ({}))) as ShiftAssignment;
+        expect(
+          assignmentResponse.ok(),
+          `Temporary roster assignment should be created: ${assignmentResponse.status()} ${JSON.stringify(assignmentPayload)}`,
+        ).toBeTruthy();
+        createdAssignmentId = assignmentPayload.id;
+      }
+
+      await gotoAuthenticated(page, "/ess/leave", employee);
+      await expectPageReady(page, "Leave");
+      test.skip(await page.getByText("Demo ESS").isVisible().catch(() => false), "Live roster mutation is skipped in demo mode.");
+
+      const dialog = await openApplyLeave(page);
+      const leaveType = field(dialog, "Leave type");
+      const optionalLeaveValue = await optionValueByName(leaveType, /casual|earned|annual/);
+      test.skip(!optionalLeaveValue, "No optional leave type is available for the roster calculation check.");
+
+      await leaveType.selectOption(optionalLeaveValue);
+      await field(dialog, "Start date").fill(startDate);
+      await field(dialog, "End date").fill(endDate);
+      await field(dialog, "Reason").fill(`Playwright roster weekly-off calculation ${Date.now()}`);
+
+      const result = await submitAndCapture<LeaveSubmission>(
+        page,
+        "/api/me/leave-requests",
+        async () => {
+          await dialog.getByRole("button", { name: "Submit leave" }).click();
+        },
+      );
+      expect(result.ok, `Leave submit should pass for roster QA: ${result.status} ${JSON.stringify(result.payload)}`).toBeTruthy();
+      await expect(dialog).toHaveCount(0);
+
+      await page.goto(`/ess/leave?requestId=${result.payload.id}`, { waitUntil: "domcontentloaded" });
+      await expectPageReady(page, "Leave");
+      const detail = page.getByRole("dialog", { name: "Leave request detail" });
+      await expect(detail).toBeVisible();
+      await expect(detail.getByText("3.00 units requested")).toBeVisible();
+      await expect(detail.getByText("3 working days counted, 2 non-working days excluded.")).toBeVisible();
+      await expect(detail.locator(".leave-unit-breakdown__row").filter({ hasText: "Saturday" })).toContainText("Counted");
+      await expect(detail.locator(".leave-unit-breakdown__row").filter({ hasText: "Sunday" })).toContainText("Counted");
+      await expect(detail.locator(".leave-unit-breakdown__row").filter({ hasText: "Tuesday" })).toContainText("Excluded");
+      await expect(detail.locator(".leave-unit-breakdown__row").filter({ hasText: "Wednesday" })).toContainText("Excluded");
+      await expectNoHorizontalOverflow(page);
+    } finally {
+      if (createdAssignmentId) {
+        await gotoAuthenticated(page, "/hr-admin/employee-shift-assignments", hrAdmin).catch(() => undefined);
+        await page.request.patch(`/api/hr-admin/employee-shift-assignments/${createdAssignmentId}`, {
+          data: {
+            effective_from: retiredStartDate,
+            effective_to: retiredEndDate,
+          },
+        }).catch(() => undefined);
+      }
+      if (originalShift && !restoredShift) {
+        await gotoAuthenticated(page, "/hr-admin/employee-shift-assignments", hrAdmin).catch(() => undefined);
+        const restoreResponse = await page.request.patch(`/api/hr-admin/shifts/${originalShift.id}`, {
+          data: {
+            weekly_off_days: originalShift.weekly_off_days,
+          },
+        });
+        restoredShift = restoreResponse.ok();
+      }
+    }
   });
 });
