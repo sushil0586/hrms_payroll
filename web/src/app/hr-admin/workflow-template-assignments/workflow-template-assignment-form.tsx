@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminOptionItem, HrAdminWorkflowOptions, HrAdminWorkflowTemplateAssignmentWriteInput } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireValue } from "@/lib/ui/validation";
 
 type Props = {
   initialValue: HrAdminWorkflowTemplateAssignmentWriteInput;
@@ -12,6 +13,8 @@ type Props = {
   options: HrAdminWorkflowOptions;
   itemId?: string;
 };
+
+type AssignmentField = "template_id" | "priority";
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save workflow assignment.";
@@ -50,6 +53,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<AssignmentField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const filteredBranches = filteredByLegalEntity(options.branches, formValue.legal_entity_id);
   const filteredDepartments = filteredByBusinessUnit(options.departments, formValue.business_unit_id);
@@ -63,6 +67,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
       : null;
 
   function update<Key extends keyof HrAdminWorkflowTemplateAssignmentWriteInput>(key: Key, value: HrAdminWorkflowTemplateAssignmentWriteInput[Key]) {
+    setFieldErrors((current) => ({ ...current, [key as AssignmentField]: undefined }));
     setFormValue((current) => {
       const nextValue = { ...current, [key]: value };
       if (
@@ -99,6 +104,17 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
     event.preventDefault();
     setIsSubmitting(true);
     setError("");
+    setFieldErrors({});
+    const nextErrors: FieldErrors<AssignmentField> = {
+      template_id: requireValue(formValue.template_id, "Select the workflow template for this assignment."),
+      priority: formValue.priority < 0 ? "Priority cannot be negative." : undefined,
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted workflow assignment fields and try again.");
+      setIsSubmitting(false);
+      return;
+    }
     const response = await fetch(mode === "create" ? "/api/hr-admin/workflow-template-assignments" : `/api/hr-admin/workflow-template-assignments/${itemId}`, {
       method: mode === "create" ? "POST" : "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -115,7 +131,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2 className="section-heading-soft">{mode === "create" ? "Workflow assignment" : "Edit assignment"}</h2>
@@ -126,13 +142,13 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
 
         <FormSection description="Select the template and define where it should apply." title="Assignment scope">
           <div className="form-grid">
-            <label className="form-field"><span className="muted">Workflow template</span><select className="input-control" value={formValue.template_id ?? ""} onChange={(e) => update("template_id", e.target.value || null)}>{selectOptions(options.templates)}</select></label>
+            <label className="form-field"><span className="muted">Workflow template</span><select aria-invalid={Boolean(fieldErrors.template_id)} className="input-control" value={formValue.template_id ?? ""} onChange={(e) => update("template_id", e.target.value || null)}>{selectOptions(options.templates)}</select>{fieldErrors.template_id ? <span className="field-error-text">{fieldErrors.template_id}</span> : null}</label>
             <label className="form-field"><span className="muted">Legal entity</span><select className="input-control" value={formValue.legal_entity_id ?? ""} onChange={(e) => update("legal_entity_id", e.target.value || null)}>{selectOptions(options.legal_entities)}</select><FieldHint>Branch scope narrows to the selected legal entity.</FieldHint></label>
             <label className="form-field"><span className="muted">Branch</span><select className="input-control" disabled={Boolean(branchWarning)} value={formValue.branch_id ?? ""} onChange={(e) => update("branch_id", e.target.value || null)}>{selectOptions(filteredBranches)}</select><FieldHint tone={branchWarning ? "warning" : "default"}>{branchWarning ?? "Branch scope is optional unless the workflow should apply only to a branch."}</FieldHint></label>
             <label className="form-field"><span className="muted">Department</span><select className="input-control" disabled={Boolean(departmentWarning)} value={formValue.department_id ?? ""} onChange={(e) => update("department_id", e.target.value || null)}>{selectOptions(filteredDepartments)}</select><FieldHint tone={departmentWarning ? "warning" : "default"}>{departmentWarning ?? "Department scope narrows to the selected business unit."}</FieldHint></label>
             <label className="form-field"><span className="muted">Business unit</span><select className="input-control" value={formValue.business_unit_id ?? ""} onChange={(e) => update("business_unit_id", e.target.value || null)}>{selectOptions(options.business_units)}</select><FieldHint>Department options narrow to the selected business unit.</FieldHint></label>
             <label className="form-field"><span className="muted">Grade</span><select className="input-control" value={formValue.grade_id ?? ""} onChange={(e) => update("grade_id", e.target.value || null)}>{selectOptions(options.grades)}</select></label>
-            <label className="form-field"><span className="muted">Priority</span><input className="input-control" min={0} type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value) || 0)} /></label>
+            <label className="form-field"><span className="muted">Priority</span><input aria-invalid={Boolean(fieldErrors.priority)} className="input-control" min={0} type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value) || 0)} />{fieldErrors.priority ? <span className="field-error-text">{fieldErrors.priority}</span> : null}</label>
           </div>
         </FormSection>
 
@@ -146,7 +162,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
         </FormSection>
 
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Save failed.</strong>
             <span className="muted">{error}</span>
           </div>

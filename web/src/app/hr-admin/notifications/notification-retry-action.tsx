@@ -66,7 +66,7 @@ export function NotificationRetryAction({ itemId, canRetry = true, retryLimitRea
         </div>
       ) : null}
       {error ? (
-        <div className="notice">
+        <div className="notice notice--error" role="alert">
           <strong>Retry failed.</strong>
           <span className="muted">{error}</span>
         </div>

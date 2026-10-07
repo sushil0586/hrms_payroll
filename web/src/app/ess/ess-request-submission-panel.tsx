@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { EssAttendanceRecordOption, EssLeaveTypeOption } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder } from "@/lib/ui/validation";
 
 type Props = {
   leaveTypes: EssLeaveTypeOption[];
@@ -16,6 +17,9 @@ type Feedback = {
   tone: "success" | "error";
   message: string;
 };
+
+type LeaveField = "leave_type_id" | "start_date" | "end_date" | "reason";
+type AttendanceField = "attendance_record_id" | "requested_check_out_at" | "reason";
 
 function getErrorMessage(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object") return fallback;
@@ -32,6 +36,8 @@ function formatRecordLabel(record: EssAttendanceRecordOption) {
 export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDemo, mode = "all" }: Props) {
   const router = useRouter();
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [leaveFieldErrors, setLeaveFieldErrors] = useState<FieldErrors<LeaveField>>({});
+  const [attendanceFieldErrors, setAttendanceFieldErrors] = useState<FieldErrors<AttendanceField>>({});
   const [submitting, setSubmitting] = useState<"leave" | "attendance" | null>(null);
   const submittingRef = useRef<"leave" | "attendance" | null>(null);
   const showLeaveForm = mode === "all" || mode === "leave";
@@ -40,6 +46,14 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
   const defaultAttendanceRecord = attendanceRecords.find((record) => !record.is_locked)?.id ?? attendanceRecords[0]?.id ?? "";
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
+  function clearLeaveFieldError(field: LeaveField) {
+    setLeaveFieldErrors((current) => ({ ...current, [field]: undefined }));
+  }
+
+  function clearAttendanceFieldError(field: AttendanceField) {
+    setAttendanceFieldErrors((current) => ({ ...current, [field]: undefined }));
+  }
+
   async function submitLeave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submittingRef.current) {
@@ -47,12 +61,27 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
     }
     submittingRef.current = "leave";
     setFeedback(null);
+    setLeaveFieldErrors({});
     if (isDemo) {
       setFeedback({ tone: "error", message: "Leave requests are only available in live mode." });
       submittingRef.current = null;
       return;
     }
     const formData = new FormData(event.currentTarget);
+    const startDate = String(formData.get("start_date") ?? "");
+    const endDate = String(formData.get("end_date") ?? "");
+    const nextErrors: FieldErrors<LeaveField> = {
+      leave_type_id: requireValue(String(formData.get("leave_type_id") ?? ""), "Select a leave type before submitting."),
+      start_date: requireValue(startDate, "Select the leave start date."),
+      end_date: requireValue(endDate, "Select the leave end date.") ?? validateDateOrder(startDate, endDate, "End date must be the same as or after the start date."),
+      reason: requireText(String(formData.get("reason") ?? ""), "Enter the reason for this leave request."),
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setLeaveFieldErrors(nextErrors);
+      setFeedback({ tone: "error", message: "Review the highlighted leave fields and try again." });
+      submittingRef.current = null;
+      return;
+    }
     setSubmitting("leave");
     let response: Response;
     try {
@@ -95,12 +124,26 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
     }
     submittingRef.current = "attendance";
     setFeedback(null);
+    setAttendanceFieldErrors({});
     if (isDemo) {
       setFeedback({ tone: "error", message: "Attendance regularizations are only available in live mode." });
       submittingRef.current = null;
       return;
     }
     const formData = new FormData(event.currentTarget);
+    const checkIn = String(formData.get("requested_check_in_at") ?? "");
+    const checkOut = String(formData.get("requested_check_out_at") ?? "");
+    const nextErrors: FieldErrors<AttendanceField> = {
+      attendance_record_id: requireValue(String(formData.get("attendance_record_id") ?? ""), "Select the attendance day that needs correction."),
+      requested_check_out_at: validateDateOrder(checkIn, checkOut, "Requested check-out cannot be earlier than requested check-in."),
+      reason: requireText(String(formData.get("reason") ?? ""), "Enter the reason for this attendance correction."),
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setAttendanceFieldErrors(nextErrors);
+      setFeedback({ tone: "error", message: "Review the highlighted attendance fields and try again." });
+      submittingRef.current = null;
+      return;
+    }
     setSubmitting("attendance");
     let response: Response;
     try {
@@ -144,22 +187,25 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
               <p className="section-copy section-copy-soft">Create a policy-routed leave request from employee self service.</p>
             </div>
           </div>
-          <form className="form-grid" onSubmit={submitLeave}>
+          <form className="form-grid" noValidate onSubmit={submitLeave}>
             <label className="form-field">
               <span className="muted">Leave type</span>
-              <select className="input-control" defaultValue={defaultLeaveType} name="leave_type_id" required>
+              <select aria-invalid={Boolean(leaveFieldErrors.leave_type_id)} className="input-control" defaultValue={defaultLeaveType} name="leave_type_id" onChange={() => clearLeaveFieldError("leave_type_id")} required>
                 {leaveTypes.map((item) => (
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
               </select>
+              {leaveFieldErrors.leave_type_id ? <span className="field-error-text">{leaveFieldErrors.leave_type_id}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Start date</span>
-              <input className="input-control" defaultValue={today} name="start_date" required type="date" />
+              <input aria-invalid={Boolean(leaveFieldErrors.start_date)} className="input-control" defaultValue={today} name="start_date" onChange={() => clearLeaveFieldError("start_date")} required type="date" />
+              {leaveFieldErrors.start_date ? <span className="field-error-text">{leaveFieldErrors.start_date}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">End date</span>
-              <input className="input-control" defaultValue={today} name="end_date" required type="date" />
+              <input aria-invalid={Boolean(leaveFieldErrors.end_date)} className="input-control" defaultValue={today} name="end_date" onChange={() => clearLeaveFieldError("end_date")} required type="date" />
+              {leaveFieldErrors.end_date ? <span className="field-error-text">{leaveFieldErrors.end_date}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Start day portion</span>
@@ -183,7 +229,8 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
             </label>
             <label className="form-field form-field--full">
               <span className="muted">Reason</span>
-              <textarea className="input-control" name="reason" required rows={3} />
+              <textarea aria-invalid={Boolean(leaveFieldErrors.reason)} className="input-control" name="reason" onChange={() => clearLeaveFieldError("reason")} required rows={3} />
+              {leaveFieldErrors.reason ? <span className="field-error-text">{leaveFieldErrors.reason}</span> : null}
             </label>
             <div className="form-actions-bar form-field--full">
               <span className="muted">Requests appear in MSS when manager approval is required.</span>
@@ -203,14 +250,15 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
               <p className="section-copy section-copy-soft">Request a correction for an employee-owned attendance record.</p>
             </div>
           </div>
-          <form className="form-grid" onSubmit={submitRegularization}>
+          <form className="form-grid" noValidate onSubmit={submitRegularization}>
             <label className="form-field form-field--full">
               <span className="muted">Attendance record</span>
-              <select className="input-control" defaultValue={defaultAttendanceRecord} name="attendance_record_id" required>
+              <select aria-invalid={Boolean(attendanceFieldErrors.attendance_record_id)} className="input-control" defaultValue={defaultAttendanceRecord} name="attendance_record_id" onChange={() => clearAttendanceFieldError("attendance_record_id")} required>
                 {attendanceRecords.map((record) => (
                   <option disabled={record.is_locked} key={record.id} value={record.id}>{formatRecordLabel(record)}</option>
                 ))}
               </select>
+              {attendanceFieldErrors.attendance_record_id ? <span className="field-error-text">{attendanceFieldErrors.attendance_record_id}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Requested status</span>
@@ -228,11 +276,13 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
             </label>
             <label className="form-field">
               <span className="muted">Requested check-out</span>
-              <input className="input-control" name="requested_check_out_at" type="datetime-local" />
+              <input aria-invalid={Boolean(attendanceFieldErrors.requested_check_out_at)} className="input-control" name="requested_check_out_at" onChange={() => clearAttendanceFieldError("requested_check_out_at")} type="datetime-local" />
+              {attendanceFieldErrors.requested_check_out_at ? <span className="field-error-text">{attendanceFieldErrors.requested_check_out_at}</span> : null}
             </label>
             <label className="form-field form-field--full">
               <span className="muted">Reason</span>
-              <textarea className="input-control" name="reason" required rows={3} />
+              <textarea aria-invalid={Boolean(attendanceFieldErrors.reason)} className="input-control" name="reason" onChange={() => clearAttendanceFieldError("reason")} required rows={3} />
+              {attendanceFieldErrors.reason ? <span className="field-error-text">{attendanceFieldErrors.reason}</span> : null}
             </label>
             <div className="form-actions-bar form-field--full">
               <span className="muted">Regularizations route to the reporting manager inbox.</span>
@@ -245,8 +295,8 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
       ) : null}
 
       {feedback ? (
-        <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""}`} role="status">
-          <strong>{feedback.tone === "success" ? "Submitted." : "Submission failed."}</strong>
+        <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"}`} role={feedback.tone === "success" ? "status" : "alert"}>
+          <strong>{feedback.tone === "success" ? "Submitted successfully." : "Submission failed."}</strong>
           <span className="muted">{feedback.message}</span>
         </div>
       ) : null}

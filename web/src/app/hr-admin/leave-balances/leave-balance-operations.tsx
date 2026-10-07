@@ -352,7 +352,7 @@ function LeaveBalanceImportWorkbench({
         {!canManageBalances ? (
           <div className="notice"><strong>Read-only leave balance view.</strong><span className="muted">Imports can be previewed, but committing changes requires leave balance management permission.</span></div>
         ) : null}
-        {message ? <div className="notice">{message}</div> : null}
+        {message ? <div className="notice notice--success" role="status"><strong>Leave balance operation completed.</strong><span>{message}</span></div> : null}
         {rows.length ? (
           <div className="table-scroll">
             <table>

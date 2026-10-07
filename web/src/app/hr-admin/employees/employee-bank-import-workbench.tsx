@@ -317,7 +317,7 @@ export function EmployeeBankImportWorkbench({ employees }: EmployeeBankImportWor
           </div>
         </div>
 
-        {message ? <div className="notice">{message}</div> : null}
+        {message ? <div className="notice notice--success" role="status"><strong>Bank import update completed.</strong><span>{message}</span></div> : null}
 
         {rows.length ? (
           <div className="table-scroll">

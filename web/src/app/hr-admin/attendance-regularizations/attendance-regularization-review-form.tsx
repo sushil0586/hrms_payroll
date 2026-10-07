@@ -151,7 +151,7 @@ export function AttendanceRegularizationReviewForm({ item }: Props) {
           <span className="muted">HR decision note</span>
           <textarea className="input-control" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
         </label>
-        {error ? <div className="notice"><strong>Action failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Action failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Approvals update the attendance regularization queue immediately.</span>
           <div className="form-actions-bar__buttons">

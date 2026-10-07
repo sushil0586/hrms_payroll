@@ -725,6 +725,7 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
   const [assignmentCsvText, setAssignmentCsvText] = useState(assignmentTemplateCsv());
   const [assignmentImportRows, setAssignmentImportRows] = useState<AssignmentImportRow[]>([]);
   const [assignmentImportMessage, setAssignmentImportMessage] = useState("");
+  const [assignmentImportTone, setAssignmentImportTone] = useState<"error" | "success">("success");
   const [isAssignmentImportCommitting, setIsAssignmentImportCommitting] = useState(false);
   const [recordPages, setRecordPages] = useState<Record<ConfigFamily, number>>({
     component: 1,
@@ -891,9 +892,20 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
     }
     if (!row.effective_from.trim()) {
       errors.push("Effective from is required.");
+    } else if (!isIsoDate(row.effective_from.trim())) {
+      errors.push("Effective from must be a valid date.");
+    }
+    if (row.effective_to.trim() && !isIsoDate(row.effective_to.trim())) {
+      errors.push("Effective to must be a valid date.");
     }
     if (row.effective_to.trim() && row.effective_to.trim() < row.effective_from.trim()) {
       errors.push("Effective to cannot be earlier than effective from.");
+    }
+    if (row.annual_ctc_override.trim() && !isNumberAtLeast(row.annual_ctc_override.trim(), 0)) {
+      errors.push("Annual CTC override must be zero or a positive amount.");
+    }
+    if (status === "active" && !row.assignment_reason.trim()) {
+      errors.push("Assignment reason is required before activating employee salary coverage.");
     }
     if (!setup.options.config_statuses.some((item) => item.value === status)) {
       errors.push("Status must match an available status value.");
@@ -930,12 +942,15 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
     if (parsed.error) {
       setAssignmentImportRows([]);
       setAssignmentImportMessage(parsed.error);
+      setAssignmentImportTone("error");
       return;
     }
 
     const batchKeys = new Set<string>();
-    setAssignmentImportRows(parsed.rows.map((row, index) => buildAssignmentImportRow(row, index + 1, batchKeys)));
-    setAssignmentImportMessage("Preview ready. Review blocked rows before committing.");
+    const rows = parsed.rows.map((row, index) => buildAssignmentImportRow(row, index + 1, batchKeys));
+    setAssignmentImportRows(rows);
+    setAssignmentImportTone(rows.some((row) => row.status === "blocked") ? "error" : "success");
+    setAssignmentImportMessage(rows.some((row) => row.status === "blocked") ? "Preview found blocked rows. Fix the highlighted salary assignment rows before committing." : "Preview ready. Review blocked rows before committing.");
   }
 
   async function commitAssignmentImport() {
@@ -966,6 +981,7 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
     }
 
     setIsAssignmentImportCommitting(false);
+    setAssignmentImportTone("success");
     setAssignmentImportMessage("Commit complete. Review employee salary coverage for created assignments.");
     router.refresh();
   }
@@ -1084,8 +1100,8 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
       </div>
 
       {feedback ? (
-        <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""}`} role="status">
-          <strong>{feedback.tone === "success" ? "Saved." : "Save failed."}</strong>
+        <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"}`} role={feedback.tone === "success" ? "status" : "alert"}>
+          <strong>{feedback.tone === "success" ? "Saved successfully." : "Save failed."}</strong>
           <span className="muted">{feedback.message}</span>
         </div>
       ) : null}
@@ -1160,7 +1176,11 @@ export function SalarySetupCrudConsole({ initialSetup }: { initialSetup: HrAdmin
             </button>
           </div>
         </div>
-        {assignmentImportMessage ? <div className="notice">{assignmentImportMessage}</div> : null}
+        {assignmentImportMessage ? (
+          <div className={`notice ${assignmentImportTone === "error" ? "notice--error" : "notice--success"}`} role={assignmentImportTone === "error" ? "alert" : "status"}>
+            {assignmentImportMessage}
+          </div>
+        ) : null}
         {assignmentImportRows.length ? (
           <div className="table-scroll">
             <table>

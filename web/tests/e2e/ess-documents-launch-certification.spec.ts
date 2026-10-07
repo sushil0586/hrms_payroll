@@ -63,9 +63,9 @@ test.describe("ESS Documents launch certification", () => {
     await field(dialog, "Issued on").fill("2026-10-01");
     await field(dialog, "Expires on").fill("2027-10-01");
     await field(dialog, "File").setInputFiles({
-      name: "playwright-document.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.4\n% Playwright document\n%%EOF\n"),
+      name: "unsafe-upload.exe",
+      mimeType: "application/x-msdownload",
+      buffer: Buffer.from("MZ"),
     });
     await expect(dialog.getByRole("button", { name: "Submit for review" })).toBeEnabled();
 
@@ -88,11 +88,24 @@ test.describe("ESS Documents launch certification", () => {
     });
 
     await dialog.getByRole("button", { name: "Submit for review" }).click();
+    await expect(dialog.getByText("Executable or script files are not allowed. Upload a PDF, image, or document file.")).toBeVisible();
+    expect(uploadAttempt).toBe(0);
+
+    await field(dialog, "File").setInputFiles({
+      name: "playwright-document.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\n% Playwright document\n%%EOF\n"),
+    });
+    await expect(dialog.getByRole("button", { name: "Submit for review" })).toBeEnabled();
+
+    await dialog.getByRole("button", { name: "Submit for review" }).click();
     await expect(dialog.getByText("Upload failed.")).toBeVisible();
     await expect(dialog.getByText("Uploaded file could not be scanned. Try another PDF.")).toBeVisible();
     await expectDialogStable(page, "Upload document");
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("status").filter({ hasText: "Document uploaded successfully." })).toBeVisible();
+    await expect(page.getByText("Your document has been sent to HR for verification.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Upload document" }).first()).toBeVisible();
   });
 

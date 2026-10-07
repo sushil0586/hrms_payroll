@@ -285,7 +285,7 @@ export function NotificationQueue({
           <span className="queue-summary-chip"><strong>{notificationPriorityOptions.length}</strong> priorities</span>
         </div>
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Bulk retry failed.</strong>
             <span className="muted">{error}</span>
           </div>

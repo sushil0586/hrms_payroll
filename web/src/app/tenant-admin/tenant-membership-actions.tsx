@@ -84,6 +84,7 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
   const [actionNote, setActionNote] = useState("");
   const [busyRef, setBusyRef] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"success" | "error">("success");
   const [formError, setFormError] = useState("");
   const inviteEmailRef = useRef<HTMLInputElement>(null);
   const editDialogRef = useRef<HTMLDivElement>(null);
@@ -248,7 +249,8 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
       setFormError(apiErrorMessage(result, "Membership invite could not be saved."));
       return;
     }
-    setNotice(result.generated_password ? "Invite saved. Temporary password was generated." : "Invite saved.");
+    setNoticeTone("success");
+    setNotice(result.generated_password ? "Invite saved successfully. A temporary password was generated." : "Invite saved successfully.");
     if (result.membership) {
       upsertMembership(result.membership);
       setMemberSearch(result.membership.email);
@@ -289,7 +291,8 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
       setFormError(apiErrorMessage(result, "Membership action could not be saved."));
       return;
     }
-    setNotice(`${actionLabels[action] ?? titleCase(action)} saved.`);
+    setNoticeTone("success");
+    setNotice(`${actionLabels[action] ?? titleCase(action)} saved successfully.`);
     if (result.membership) {
       upsertMembership(result.membership);
       setMemberSearch(result.membership.email);
@@ -331,7 +334,7 @@ export function TenantMembershipActions({ canManageUsers, data }: Props) {
       </div>
       <p className="tenant-console-empty">Search, review, invite, activate, suspend, revoke, and update roles without leaving the tenant workspace.</p>
       {!canManageUsers ? <span className="tenant-inline-notice tenant-inline-notice--muted" role="status">You can view tenant users. User changes require tenant.users.manage.</span> : null}
-      {notice ? <span className="tenant-inline-notice" role="status">{notice}</span> : null}
+      {notice ? <span className={`tenant-inline-notice tenant-inline-notice--${noticeTone}`} role={noticeTone === "success" ? "status" : "alert"}>{notice}</span> : null}
 
       <div className="tenant-membership-toolbar">
         <label>

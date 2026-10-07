@@ -252,7 +252,7 @@ export function EmployeeDocumentQueue({
         </div>
         {!canManageDocuments ? <div className="notice"><strong>Read-only document queue.</strong><span className="muted">Reminder actions require documents.manage.</span></div> : null}
         {actionNotice ? <div className="notice"><strong>Reminder action complete.</strong><span className="muted">{actionNotice}</span></div> : null}
-        {actionError ? <div className="notice"><strong>Reminder action failed.</strong><span className="muted">{actionError}</span></div> : null}
+        {actionError ? <div className="notice notice--error" role="alert"><strong>Reminder action failed.</strong><span className="muted">{actionError}</span></div> : null}
       </section>
 
       <div className="queue-list document-record-list">

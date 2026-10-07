@@ -275,7 +275,7 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
           </div>
         </div>
 
-        {error ? <div className="notice"><strong>Letter action failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Letter action failed.</strong><span className="muted">{error}</span></div> : null}
         {generatedLetter ? (
           <div className="notice">
             <strong>Letter generated.</strong>

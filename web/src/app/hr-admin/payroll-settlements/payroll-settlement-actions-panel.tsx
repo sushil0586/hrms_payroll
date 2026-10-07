@@ -16,6 +16,11 @@ type Notice = {
   message: string;
 };
 
+function isNumberAtLeast(value: string, min: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= min;
+}
+
 async function readPayload(response: Response) {
   return (await response.json().catch(() => ({}))) as { detail?: string; id?: string; status?: string };
 }
@@ -32,6 +37,7 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
   const [grossAmount, setGrossAmount] = useState("42000");
   const [recoveryAmount, setRecoveryAmount] = useState("3000");
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState("");
 
   async function postJson(url: string, body: Record<string, unknown> = {}, successMessage: string, options: { refresh?: boolean } = {}) {
@@ -63,6 +69,22 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
       setNotice({ tone: "error", message: "Select a run with locked employee snapshots before creating a settlement." });
       return;
     }
+    const nextFieldErrors: Record<string, string> = {};
+    if (!isNumberAtLeast(grossAmount.trim(), 0)) {
+      nextFieldErrors.grossAmount = "Settlement gross due must be zero or a positive amount.";
+    }
+    if (!isNumberAtLeast(recoveryAmount.trim(), 0)) {
+      nextFieldErrors.recoveryAmount = "Settlement recovery must be zero or a positive amount.";
+    }
+    if (!sourceRef.trim()) {
+      nextFieldErrors.sourceRef = "Settlement source reference is required.";
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setNotice({ tone: "error", message: "Fix the highlighted settlement fields before continuing." });
+      return;
+    }
+    setFieldErrors({});
     const settlement = await postJson(
       "/api/hr-admin/payroll-settlements",
       {
@@ -156,15 +178,18 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
         </label>
         <label>
           <span>Gross due</span>
-          <input aria-label="Settlement gross due" inputMode="decimal" value={grossAmount} onChange={(event) => setGrossAmount(event.target.value)} />
+          <input aria-invalid={Boolean(fieldErrors.grossAmount)} aria-label="Settlement gross due" inputMode="decimal" value={grossAmount} onChange={(event) => setGrossAmount(event.target.value)} />
+          {fieldErrors.grossAmount ? <span className="field-error-text" role="alert">{fieldErrors.grossAmount}</span> : null}
         </label>
         <label>
           <span>Recovery</span>
-          <input aria-label="Settlement recovery" inputMode="decimal" value={recoveryAmount} onChange={(event) => setRecoveryAmount(event.target.value)} />
+          <input aria-invalid={Boolean(fieldErrors.recoveryAmount)} aria-label="Settlement recovery" inputMode="decimal" value={recoveryAmount} onChange={(event) => setRecoveryAmount(event.target.value)} />
+          {fieldErrors.recoveryAmount ? <span className="field-error-text" role="alert">{fieldErrors.recoveryAmount}</span> : null}
         </label>
         <label>
           <span>Source reference</span>
-          <input aria-label="Settlement source reference" value={sourceRef} onChange={(event) => setSourceRef(event.target.value)} />
+          <input aria-invalid={Boolean(fieldErrors.sourceRef)} aria-label="Settlement source reference" value={sourceRef} onChange={(event) => setSourceRef(event.target.value)} />
+          {fieldErrors.sourceRef ? <span className="field-error-text" role="alert">{fieldErrors.sourceRef}</span> : null}
         </label>
       </div>
       <div className="payroll-close-action-row">

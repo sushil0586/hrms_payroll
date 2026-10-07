@@ -64,6 +64,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
   const [isActive, setIsActive] = useState(true);
   const [busyRef, setBusyRef] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"success" | "error">("success");
   const [formError, setFormError] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -152,6 +153,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
 
   function openCreateDialog() {
     if (!canManageRoles) {
+      setNoticeTone("error");
       setNotice("You need tenant.roles.manage to create tenant roles.");
       return;
     }
@@ -169,6 +171,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
 
   function openEditDialog(role: RoleItem) {
     if (!canManageRoles) {
+      setNoticeTone("error");
       setNotice("You need tenant.roles.manage to update tenant roles.");
       return;
     }
@@ -229,13 +232,15 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
       setFormError(apiErrorMessage(result, "Role could not be saved."));
       return;
     }
-    setNotice(dialogMode === "edit" ? "Role updated." : "Role created.");
+    setNoticeTone("success");
+    setNotice(dialogMode === "edit" ? "Role updated successfully." : "Role created successfully.");
     closeDialog();
     router.refresh();
   }
 
   async function runStatusAction(role: RoleItem, action: "activate" | "deactivate") {
     if (!canManageRoles) {
+      setNoticeTone("error");
       setNotice("You need tenant.roles.manage to change role status.");
       return;
     }
@@ -250,10 +255,12 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
     const result = await response.json().catch(() => ({}));
     setBusyRef("");
     if (!response.ok) {
+      setNoticeTone("error");
       setNotice(apiErrorMessage(result, "Role status could not be changed."));
       return;
     }
-    setNotice(action === "activate" ? "Role activated." : "Role deactivated.");
+    setNoticeTone("success");
+    setNotice(action === "activate" ? "Role activated successfully." : "Role deactivated successfully.");
     router.refresh();
   }
 
@@ -270,7 +277,7 @@ export function TenantRoleActions({ canManageRoles, data }: { canManageRoles: bo
       </div>
       <p className="tenant-console-empty">System roles stay protected. Custom roles can be created, edited, activated, deactivated, and assigned from the Users page.</p>
       {!canManageRoles ? <span className="tenant-inline-notice tenant-inline-notice--muted" role="status">You can view tenant roles. Role changes require tenant.roles.manage.</span> : null}
-      {notice ? <span className="tenant-inline-notice" role="status">{notice}</span> : null}
+      {notice ? <span className={`tenant-inline-notice tenant-inline-notice--${noticeTone}`} role={noticeTone === "success" ? "status" : "alert"}>{notice}</span> : null}
       <section className="tenant-role-design-guide" aria-label="Role design workflow">
         <div>
           <span className="record-chip">1</span>

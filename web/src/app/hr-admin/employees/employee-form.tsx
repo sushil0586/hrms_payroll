@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeWriteInput, HrAdminOptionItem } from "@/lib/types";
+import { hasFieldErrors, requireText, validateDateOrder, validateEmail } from "@/lib/ui/validation";
 
 type EmployeeFormProps = {
   initialValue: HrAdminEmployeeWriteInput;
@@ -83,7 +84,7 @@ function FieldHint({ children, tone = "default" }: { children: string; tone?: "d
 }
 
 function FieldError({ message }: { message?: string }) {
-  return message ? <span className="muted">{message}</span> : null;
+  return message ? <span className="field-error-text" role="alert">{message}</span> : null;
 }
 
 function sanitizeStructureValue(
@@ -227,16 +228,16 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
   });
   const dateWarnings: string[] = [];
   if (formValue.date_of_birth && formValue.date_of_joining && formValue.date_of_birth >= formValue.date_of_joining) {
-    dateWarnings.push("date of birth must be earlier than date of joining");
+    dateWarnings.push("Date of birth must be earlier than date of joining");
   }
   if (formValue.date_of_joining && formValue.probation_end_date && formValue.probation_end_date < formValue.date_of_joining) {
-    dateWarnings.push("probation end date cannot be earlier than date of joining");
+    dateWarnings.push("Probation end date cannot be earlier than date of joining");
   }
   if (formValue.date_of_joining && formValue.confirmation_date && formValue.confirmation_date < formValue.date_of_joining) {
-    dateWarnings.push("confirmation date cannot be earlier than date of joining");
+    dateWarnings.push("Confirmation date cannot be earlier than date of joining");
   }
   if (formValue.probation_end_date && formValue.confirmation_date && formValue.confirmation_date < formValue.probation_end_date) {
-    dateWarnings.push("confirmation date cannot be earlier than probation end date");
+    dateWarnings.push("Confirmation date cannot be earlier than probation end date");
   }
   const mappingWarnings: string[] = [];
   if (formValue.branch_id && !formValue.legal_entity_id) {
@@ -284,9 +285,29 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
       return;
     }
     isSubmittingRef.current = true;
-    setIsSubmitting(true);
     setError("");
     setFieldErrors({});
+    const nextErrors: FieldErrors = {
+      employee_code: requireText(formValue.employee_code, "Enter the employee code."),
+      first_name: requireText(formValue.first_name, "Enter the first name."),
+      work_email: validateEmail(formValue.work_email, "Enter a valid work email address."),
+      personal_email: validateEmail(formValue.personal_email, "Enter a valid personal email address."),
+      date_of_birth:
+        formValue.date_of_birth && formValue.date_of_joining && formValue.date_of_birth >= formValue.date_of_joining
+          ? "Date of birth must be earlier than date of joining."
+          : undefined,
+      probation_end_date: validateDateOrder(formValue.date_of_joining, formValue.probation_end_date, "Probation end date cannot be earlier than date of joining."),
+      confirmation_date:
+        validateDateOrder(formValue.date_of_joining, formValue.confirmation_date, "Confirmation date cannot be earlier than date of joining.") ??
+        validateDateOrder(formValue.probation_end_date, formValue.confirmation_date, "Confirmation date cannot be earlier than probation end date."),
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted employee fields and try again.");
+      isSubmittingRef.current = false;
+      return;
+    }
+    setIsSubmitting(true);
 
     let response: Response;
     try {
@@ -320,7 +341,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
   }
 
   return (
-    <form className="section form-layout-modern employee-child-form" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern employee-child-form" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -341,7 +362,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
 
         <div className="form-shell-card__grid">
           {dateWarnings.length ? (
-            <div className="notice form-shell-card__notice">
+            <div className="notice notice--error form-shell-card__notice" role="alert">
               <strong>Date review needed.</strong>
               <span className="muted">{dateWarnings.join(", ")}.</span>
             </div>
@@ -359,7 +380,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Employee code</span>
-                <input className="input-control" required value={formValue.employee_code} onChange={(event) => updateField("employee_code", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.employee_code)} className="input-control" required value={formValue.employee_code} onChange={(event) => updateField("employee_code", event.target.value)} />
                 <FieldError message={fieldErrors.employee_code} />
               </label>
               <label className="form-field">
@@ -375,7 +396,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
               </label>
               <label className="form-field">
                 <span className="muted">First name</span>
-                <input className="input-control" required value={formValue.first_name} onChange={(event) => updateField("first_name", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.first_name)} className="input-control" required value={formValue.first_name} onChange={(event) => updateField("first_name", event.target.value)} />
                 <FieldError message={fieldErrors.first_name} />
               </label>
               <label className="form-field">
@@ -400,11 +421,13 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Work email</span>
-                <input className="input-control" type="email" value={formValue.work_email} onChange={(event) => updateField("work_email", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.work_email)} className="input-control" type="email" value={formValue.work_email} onChange={(event) => updateField("work_email", event.target.value)} />
+                <FieldError message={fieldErrors.work_email} />
               </label>
               <label className="form-field">
                 <span className="muted">Personal email</span>
-                <input className="input-control" type="email" value={formValue.personal_email} onChange={(event) => updateField("personal_email", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.personal_email)} className="input-control" type="email" value={formValue.personal_email} onChange={(event) => updateField("personal_email", event.target.value)} />
+                <FieldError message={fieldErrors.personal_email} />
               </label>
               <label className="form-field">
                 <span className="muted">Phone number</span>
@@ -412,7 +435,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
               </label>
               <label className="form-field">
                 <span className="muted">Date of birth</span>
-                <input className="input-control" type="date" value={formValue.date_of_birth ?? ""} onChange={(event) => updateField("date_of_birth", event.target.value || null)} />
+                <input aria-invalid={Boolean(fieldErrors.date_of_birth)} className="input-control" type="date" value={formValue.date_of_birth ?? ""} onChange={(event) => updateField("date_of_birth", event.target.value || null)} />
                 <FieldError message={fieldErrors.date_of_birth} />
               </label>
               <label className="form-field">
@@ -422,12 +445,12 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
               </label>
               <label className="form-field">
                 <span className="muted">Probation end date</span>
-                <input className="input-control" type="date" value={formValue.probation_end_date ?? ""} onChange={(event) => updateField("probation_end_date", event.target.value || null)} />
+                <input aria-invalid={Boolean(fieldErrors.probation_end_date)} className="input-control" type="date" value={formValue.probation_end_date ?? ""} onChange={(event) => updateField("probation_end_date", event.target.value || null)} />
                 <FieldError message={fieldErrors.probation_end_date} />
               </label>
               <label className="form-field form-field--full">
                 <span className="muted">Confirmation date</span>
-                <input className="input-control" type="date" value={formValue.confirmation_date ?? ""} onChange={(event) => updateField("confirmation_date", event.target.value || null)} />
+                <input aria-invalid={Boolean(fieldErrors.confirmation_date)} className="input-control" type="date" value={formValue.confirmation_date ?? ""} onChange={(event) => updateField("confirmation_date", event.target.value || null)} />
                 <FieldError message={fieldErrors.confirmation_date} />
               </label>
             </div>
@@ -553,7 +576,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
         </div>
 
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Save failed.</strong>
             <span className="muted">{error}</span>
           </div>

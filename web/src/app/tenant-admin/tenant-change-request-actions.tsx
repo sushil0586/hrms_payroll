@@ -67,6 +67,7 @@ export function TenantChangeRequestActions({
   const [requestPageIndex, setRequestPageIndex] = useState(0);
   const [busyRef, setBusyRef] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"success" | "error">("success");
   const [payloadError, setPayloadError] = useState("");
 
   const selectedType = requestTypes.find((item) => item.value === requestType) ?? requestTypes[0];
@@ -139,11 +140,13 @@ export function TenantChangeRequestActions({
     if (titleError || targetError || validation.error || !validation.payload) {
       setBusyRef("");
       setPayloadError(validation.error);
+      setNoticeTone("error");
       setNotice(titleError || targetError || validation.error || "Complete the required request fields.");
       return;
     }
     if (!canManageChangeRequests) {
       setBusyRef("");
+      setNoticeTone("error");
       setNotice("Your role can view plan details but cannot create or manage change requests.");
       return;
     }
@@ -162,10 +165,12 @@ export function TenantChangeRequestActions({
     const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminChangeRequestMutationResult>;
     setBusyRef("");
     if (!response.ok) {
+      setNoticeTone("error");
       setNotice(apiErrorMessage(result, "Change request could not be submitted."));
       return;
     }
-    setNotice("Change request submitted.");
+    setNoticeTone("success");
+    setNotice("Change request submitted successfully. The request is now in the tenant change queue.");
     if (result.change_request) {
       upsertRequest(result.change_request);
     }
@@ -188,10 +193,12 @@ export function TenantChangeRequestActions({
     const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminChangeRequestMutationResult>;
     setBusyRef("");
     if (!response.ok) {
+      setNoticeTone("error");
       setNotice(apiErrorMessage(result, "Change request action could not be saved."));
       return;
     }
-    setNotice(`${actionLabels[action] ?? titleCase(action)} saved.`);
+    setNoticeTone("success");
+    setNotice(`${actionLabels[action] ?? titleCase(action)} saved successfully.`);
     if (result.change_request) {
       upsertRequest(result.change_request);
     }
@@ -284,7 +291,7 @@ export function TenantChangeRequestActions({
           <button className="button button--primary" disabled={!canSubmit} onClick={submitChangeRequest} type="button">
             {busyRef === "create" ? "Submitting" : "Submit request"}
           </button>
-          {notice ? <span role="status">{notice}</span> : null}
+          {notice ? <span className={`tenant-inline-notice tenant-inline-notice--${noticeTone}`} role={noticeTone === "success" ? "status" : "alert"}>{notice}</span> : null}
         </div>
       </section>
 

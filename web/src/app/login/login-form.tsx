@@ -4,19 +4,34 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { hasFieldErrors, requireText, type FieldErrors } from "@/lib/ui/validation";
 import { getPrimaryWorkspaceHref } from "@/lib/workspace-routing";
+
+type LoginField = "identifier" | "password";
 
 export function LoginForm() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<LoginField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const nextFieldErrors: FieldErrors<LoginField> = {
+      identifier: requireText(identifier, "Enter your username or email."),
+      password: requireText(password, "Enter your password."),
+    };
+    if (hasFieldErrors(nextFieldErrors)) {
+      setFieldErrors(nextFieldErrors);
+      setError("");
+      return;
+    }
+
     setIsSubmitting(true);
     setError("");
+    setFieldErrors({});
 
     let response: Response;
     try {
@@ -52,7 +67,7 @@ export function LoginForm() {
   }
 
   return (
-    <form className="form-shell-card auth-form-shell" onSubmit={handleSubmit}>
+    <form className="form-shell-card auth-form-shell" noValidate onSubmit={handleSubmit}>
       <div className="form-shell-card__intro">
         <h2 className="section-heading-soft">Sign in</h2>
         <p className="section-copy section-copy-soft">Use the same account for platform, tenant, HR admin, manager, and employee workspaces.</p>
@@ -71,10 +86,15 @@ export function LoginForm() {
         <input
           required
           value={identifier}
-          onChange={(event) => setIdentifier(event.target.value)}
+          aria-invalid={Boolean(fieldErrors.identifier)}
+          onChange={(event) => {
+            setIdentifier(event.target.value);
+            setFieldErrors((current) => ({ ...current, identifier: undefined }));
+          }}
           className="auth-input"
           placeholder="riya.sharma@northstar.example"
         />
+        {fieldErrors.identifier ? <span className="field-error-text" role="alert">{fieldErrors.identifier}</span> : null}
       </label>
 
       <label className="auth-field">
@@ -83,13 +103,18 @@ export function LoginForm() {
           required
           type="password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          aria-invalid={Boolean(fieldErrors.password)}
+          onChange={(event) => {
+            setPassword(event.target.value);
+            setFieldErrors((current) => ({ ...current, password: undefined }));
+          }}
           className="auth-input"
           placeholder="Enter your password"
         />
+        {fieldErrors.password ? <span className="field-error-text" role="alert">{fieldErrors.password}</span> : null}
       </label>
 
-      {error ? <div className="notice"><span className="muted">{error}</span></div> : null}
+      {error ? <div className="notice notice--error" role="alert"><span className="muted">{error}</span></div> : null}
 
       <div className="form-actions-bar auth-form-shell__actions">
         <Link className="auth-recovery-link" href="/forgot-password">

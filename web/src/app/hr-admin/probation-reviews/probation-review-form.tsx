@@ -109,7 +109,7 @@ export function ProbationReviewForm({ initialValue, mode, options, itemId }: Pro
             <span className="muted">An extension decision should include an extension end date so the probation queue can process it safely.</span>
           </div>
         ) : null}
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">This review will immediately reflect in the probation queue and lifecycle inbox.</span>
           <div className="form-actions-bar__buttons">

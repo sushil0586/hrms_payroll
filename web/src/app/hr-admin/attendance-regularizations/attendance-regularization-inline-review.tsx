@@ -82,7 +82,7 @@ export function AttendanceRegularizationInlineReview({ item }: Props) {
         />
       </label>
       {error ? (
-        <div className="notice">
+        <div className="notice notice--error" role="alert">
           <strong>Action failed.</strong>
           <span className="muted">{error}</span>
         </div>

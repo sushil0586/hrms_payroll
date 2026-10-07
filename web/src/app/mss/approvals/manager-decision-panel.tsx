@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { requireText } from "@/lib/ui/validation";
+
 type Props = {
   itemId: string;
   kind: "leave" | "attendance";
@@ -48,6 +50,7 @@ export function ManagerDecisionPanel({
   const router = useRouter();
   const [comment, setComment] = useState("");
   const [error, setError] = useState("");
+  const [commentError, setCommentError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -62,7 +65,16 @@ export function ManagerDecisionPanel({
     }
     isSubmittingRef.current = true;
     setError("");
+    setCommentError("");
     setSuccessMessage("");
+
+    const nextCommentError = action === "reject" ? requireText(comment, "Enter a decision note before rejecting this request.") : undefined;
+    if (nextCommentError) {
+      setCommentError(nextCommentError);
+      setError("Review the highlighted decision note and try again.");
+      isSubmittingRef.current = false;
+      return;
+    }
 
     if (!canDecide) {
       setError(kind === "leave" ? "Leave approval permission is required." : "Attendance review permission is required.");
@@ -143,19 +155,24 @@ export function ManagerDecisionPanel({
         <textarea
           className="input-control"
           disabled={isSubmitting || actionLocked || !isPending || !canDecide}
-          onChange={(event) => setComment(event.target.value)}
+          aria-invalid={Boolean(commentError)}
+          onChange={(event) => {
+            setComment(event.target.value);
+            setCommentError("");
+          }}
           rows={4}
           value={comment}
         />
+        {commentError ? <span className="field-error-text" role="alert">{commentError}</span> : null}
       </label>
       {error ? (
-        <div className="notice">
+        <div className="notice notice--error" role="alert">
           <strong>Action failed.</strong>
           <span className="muted">{error}</span>
         </div>
       ) : null}
       {successMessage ? (
-        <div className="notice">
+        <div className="notice notice--success" role="status">
           <strong>Action saved.</strong>
           <span className="muted">{successMessage}</span>
         </div>

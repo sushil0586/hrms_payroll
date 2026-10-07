@@ -402,10 +402,12 @@ function ModuleList({ emptyText, modules }: { emptyText: string; modules: Platfo
 }
 
 function InputField({
+  error,
   field,
   onChange,
   value,
 }: {
+  error?: string;
   field: PlatformLaunchInputDefinition;
   onChange: (key: string, value: string) => void;
   value: string;
@@ -430,13 +432,14 @@ function InputField({
     return (
       <label className="form-field">
         <span className="muted">{field.label}</span>
-        <select className="input-control" name={field.key} onChange={(event) => onChange(field.key, event.target.value)} required={field.required} value={value}>
+        <select aria-invalid={Boolean(error)} className="input-control" name={field.key} onChange={(event) => onChange(field.key, event.target.value)} required={field.required} value={value}>
           <option value="">Select</option>
           {field.choices.map((choice) => (
             <option key={choice.value} value={choice.value}>{choice.label}</option>
           ))}
         </select>
         <span className="platform-validation-note">{field.help_text}</span>
+        {error ? <span className="field-error-text" role="alert">{error}</span> : null}
       </label>
     );
   }
@@ -446,6 +449,7 @@ function InputField({
         <span className="muted">{field.label}</span>
         <textarea
           className="input-control"
+          aria-invalid={Boolean(error)}
           name={field.key}
           onChange={(event) => onChange(field.key, event.target.value)}
           placeholder={field.placeholder}
@@ -453,6 +457,7 @@ function InputField({
           value={value}
         />
         <span className="platform-validation-note">{field.help_text}</span>
+        {error ? <span className="field-error-text" role="alert">{error}</span> : null}
       </label>
     );
   }
@@ -461,6 +466,7 @@ function InputField({
       <span className="muted">{field.label}</span>
       <input
         className="input-control"
+        aria-invalid={Boolean(error)}
         name={field.key}
         onChange={(event) => onChange(field.key, event.target.value)}
         placeholder={field.placeholder || field.example}
@@ -469,6 +475,7 @@ function InputField({
         value={value}
       />
       <span className="platform-validation-note">{field.help_text}</span>
+      {error ? <span className="field-error-text" role="alert">{error}</span> : null}
     </label>
   );
 }
@@ -487,6 +494,7 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const selectedBlueprint = blueprints.find((blueprint) => blueprint.ref === selectedBlueprintRef) ?? blueprints[0] ?? null;
   const inputGroups = useMemo(() => orderedInputGroups(selectedBlueprint?.input_schema ?? []), [selectedBlueprint]);
@@ -581,6 +589,22 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
 
   async function handlePreview() {
     if (!selectedTenant || !selectedBlueprint) return;
+    const nextFieldErrors: Record<string, string> = {};
+    selectedBlueprint.input_schema.forEach((field) => {
+      if (field.required && !resolvedInputValues[field.key]?.trim()) {
+        nextFieldErrors[`launchInput:${field.key}`] = `${field.label} is required.`;
+      }
+    });
+    if (hasSafeApplyEvidence && !changeReason.trim()) {
+      nextFieldErrors.changeReason = "Change reason is required after safe setup has already been applied.";
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setError("Fix the highlighted launch inputs before previewing.");
+      setMessage("");
+      return;
+    }
+    setFieldErrors({});
     setBusy("preview");
     setError("");
     setMessage("");
@@ -629,6 +653,13 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
 
   async function handleCustomerHandoff() {
     if (!selectedTenant) return;
+    if (!handoffNotes.trim()) {
+      setFieldErrors({ handoffNotes: "Handoff notes are required." });
+      setError("Add handoff notes before completing customer handoff.");
+      setMessage("");
+      return;
+    }
+    setFieldErrors({});
     setBusy("handoff");
     setError("");
     setMessage("");
@@ -1094,8 +1125,14 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
                         key={field.key}
                         onChange={(key, value) => {
                           setInputValues((current) => ({ ...current, [key]: value }));
+                          setFieldErrors((current) => {
+                            const { [`launchInput:${key}`]: _removed, ...rest } = current;
+                            void _removed;
+                            return rest;
+                          });
                           setPreview(null);
                         }}
+                        error={fieldErrors[`launchInput:${field.key}`]}
                         value={resolvedInputValues[field.key] ?? ""}
                       />
                     ))}
@@ -1112,12 +1149,21 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
                 <label className="form-field form-field--full">
                   <span className="muted">Change reason</span>
                   <textarea
+                    aria-invalid={Boolean(fieldErrors.changeReason)}
                     className="input-control"
                     name="change_reason"
-                    onChange={(event) => setChangeReason(event.target.value)}
+                    onChange={(event) => {
+                      setChangeReason(event.target.value);
+                      setFieldErrors((current) => {
+                        const { changeReason: _removed, ...rest } = current;
+                        void _removed;
+                        return rest;
+                      });
+                    }}
                     placeholder="Example: Customer changed default branch before handoff."
                     value={changeReason}
                   />
+                  {fieldErrors.changeReason ? <span className="field-error-text" role="alert">{fieldErrors.changeReason}</span> : null}
                 </label>
               </div>
             ) : null}
@@ -1262,12 +1308,21 @@ export function PlatformLaunchWorkspace({ onboarding, selectedTenant }: Props) {
           <label className="form-field platform-form-field--tall">
             <span className="muted">Handoff notes</span>
             <textarea
+              aria-invalid={Boolean(fieldErrors.handoffNotes)}
               className="input-control"
               name="handoff_notes"
-              onChange={(event) => setHandoffNotes(event.target.value)}
+              onChange={(event) => {
+                setHandoffNotes(event.target.value);
+                setFieldErrors((current) => {
+                  const { handoffNotes: _removed, ...rest } = current;
+                  void _removed;
+                  return rest;
+                });
+              }}
               placeholder="Summarize what was handed over, what remains customer-owned, and any gated setup."
               value={handoffNotes}
             />
+            {fieldErrors.handoffNotes ? <span className="field-error-text" role="alert">{fieldErrors.handoffNotes}</span> : null}
           </label>
           <div className="form-actions-bar">
             <span className="muted">Handoff moves launch readiness to customer ready and records audit evidence.</span>

@@ -118,7 +118,7 @@ export function NotificationInlineReview({
         </label>
       </div>
       {error ? (
-        <div className="notice">
+        <div className="notice notice--error" role="alert">
           <strong>Save failed.</strong>
           <span className="muted">{error}</span>
         </div>

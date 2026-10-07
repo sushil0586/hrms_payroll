@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type { EssLeaveRequestListResponse, EssLeaveTypeOption, LeaveBalance, LeaveRequestItem } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder, validateUploadFile } from "@/lib/ui/validation";
 
 type SearchParamValue = string | string[] | undefined;
 
@@ -24,6 +25,8 @@ type Feedback = {
   tone: "success" | "error";
   message: string;
 };
+
+type LeaveApplyField = "leave_type_id" | "start_date" | "end_date" | "attachment_file" | "attachment_reference" | "reason";
 
 function formatDate(value: string | null) {
   if (!value) return "Not available";
@@ -333,6 +336,7 @@ function LeaveApplyModal({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [evidenceReference, setEvidenceReference] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeaveApplyField>>({});
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const selectedLeaveType = useMemo(
@@ -364,6 +368,10 @@ function LeaveApplyModal({
   const evidenceReady = !attachmentRequired || Boolean(selectedFile || evidenceReference.trim());
   const fileSizeLabel = selectedFile ? `${Math.max(1, Math.ceil(selectedFile.size / 1024))} KB` : null;
 
+  function clearFieldError(field: LeaveApplyField) {
+    setFieldErrors((current) => ({ ...current, [field]: undefined }));
+  }
+
   async function submitLeave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -372,12 +380,33 @@ function LeaveApplyModal({
     }
     submittingRef.current = true;
     setFeedback(null);
+    setFieldErrors({});
+    const formData = new FormData(form);
+    const nextErrors: FieldErrors<LeaveApplyField> = {
+      leave_type_id: requireValue(leaveTypeId, "Select a leave type before submitting."),
+      start_date: requireValue(startDate, "Select the leave start date."),
+      end_date: requireValue(endDate, "Select the leave end date.") ?? validateDateOrder(startDate, endDate, "End date must be the same as or after the start date."),
+      attachment_file: validateUploadFile(selectedFile, {
+        blockedTypeMessage: "This file type is not allowed for leave evidence. Upload a PDF, image, or document file.",
+      }),
+      attachment_reference: attachmentRequired && !selectedFile ? requireText(evidenceReference, "Upload evidence or enter an evidence reference for this leave type.") : undefined,
+      reason: requireText(String(formData.get("reason") ?? ""), "Enter the reason for this leave request."),
+    };
+    if (overlappingRequest) {
+      nextErrors.start_date = "This date range overlaps an existing approved or pending leave request.";
+      nextErrors.end_date = "Choose dates outside the existing leave request.";
+    }
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setFeedback({ tone: "error", message: "Review the highlighted leave fields and try again." });
+      submittingRef.current = false;
+      return;
+    }
     if (isDemo) {
       setFeedback({ tone: "error", message: "Leave requests are only available in live mode." });
       submittingRef.current = false;
       return;
     }
-    const formData = new FormData(form);
     setSubmitting(true);
     let response: Response;
     try {
@@ -415,24 +444,27 @@ function LeaveApplyModal({
           </div>
           <button aria-label="Close apply leave dialog" className="button button--secondary" onClick={onClose} type="button">Close</button>
         </div>
-        <form className="leave-apply-layout" onSubmit={submitLeave}>
+        <form className="leave-apply-layout" noValidate onSubmit={submitLeave}>
           <div className="form-grid leave-apply-form">
             <label className="form-field">
               <span className="muted">Leave type</span>
-              <select className="input-control" disabled={!leaveTypes.length} name="leave_type_id" onChange={(event) => setLeaveTypeId(event.target.value)} required value={leaveTypeId}>
+              <select aria-invalid={Boolean(fieldErrors.leave_type_id)} className="input-control" disabled={!leaveTypes.length} name="leave_type_id" onChange={(event) => { setLeaveTypeId(event.target.value); clearFieldError("leave_type_id"); }} required value={leaveTypeId}>
                 {!leaveTypes.length ? <option value="">No leave types available</option> : null}
                 {leaveTypes.map((item) => (
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
               </select>
+              {fieldErrors.leave_type_id ? <span className="field-error-text" role="alert">{fieldErrors.leave_type_id}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Start date</span>
-              <input className="input-control" name="start_date" onChange={(event) => setStartDate(event.target.value)} required type="date" value={startDate} />
+              <input aria-invalid={Boolean(fieldErrors.start_date)} className="input-control" name="start_date" onChange={(event) => { setStartDate(event.target.value); clearFieldError("start_date"); }} required type="date" value={startDate} />
+              {fieldErrors.start_date ? <span className="field-error-text" role="alert">{fieldErrors.start_date}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">End date</span>
-              <input className="input-control" name="end_date" onChange={(event) => setEndDate(event.target.value)} required type="date" value={endDate} />
+              <input aria-invalid={Boolean(fieldErrors.end_date)} className="input-control" name="end_date" onChange={(event) => { setEndDate(event.target.value); clearFieldError("end_date"); }} required type="date" value={endDate} />
+              {fieldErrors.end_date ? <span className="field-error-text" role="alert">{fieldErrors.end_date}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Start day portion</span>
@@ -454,25 +486,30 @@ function LeaveApplyModal({
               <span className="muted">Evidence file</span>
               <input
                 accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                aria-invalid={Boolean(fieldErrors.attachment_file)}
                 className="input-control"
                 name="attachment_file"
-                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => { setSelectedFile(event.target.files?.[0] ?? null); clearFieldError("attachment_file"); clearFieldError("attachment_reference"); }}
                 type="file"
               />
+              {fieldErrors.attachment_file ? <span className="field-error-text" role="alert">{fieldErrors.attachment_file}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Evidence reference</span>
               <input
                 className="input-control"
                 name="attachment_reference"
-                onChange={(event) => setEvidenceReference(event.target.value)}
+                aria-invalid={Boolean(fieldErrors.attachment_reference)}
+                onChange={(event) => { setEvidenceReference(event.target.value); clearFieldError("attachment_reference"); }}
                 placeholder="Medical certificate, travel proof, or policy note"
                 value={evidenceReference}
               />
+              {fieldErrors.attachment_reference ? <span className="field-error-text" role="alert">{fieldErrors.attachment_reference}</span> : null}
             </label>
             <label className="form-field form-field--full">
               <span className="muted">Reason for leave</span>
-              <textarea className="input-control" name="reason" required rows={3} />
+              <textarea aria-invalid={Boolean(fieldErrors.reason)} className="input-control" name="reason" onChange={() => clearFieldError("reason")} required rows={3} />
+              {fieldErrors.reason ? <span className="field-error-text" role="alert">{fieldErrors.reason}</span> : null}
             </label>
             {selectedFile ? (
               <div className="leave-file-preview form-field--full">
@@ -484,8 +521,8 @@ function LeaveApplyModal({
               </div>
             ) : null}
             {feedback ? (
-              <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""} form-field--full`} role="status">
-                <strong>{feedback.tone === "success" ? "Submitted." : "Submission failed."}</strong>
+              <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"} form-field--full`} role={feedback.tone === "success" ? "status" : "alert"}>
+                <strong>{feedback.tone === "success" ? "Submitted successfully." : "Submission failed."}</strong>
                 <span className="muted">{feedback.message}</span>
               </div>
             ) : null}

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import type { FieldErrors } from "@/lib/ui/validation";
 import type { HrAdminEnumOption, HrAdminPayrollProviderConnection } from "@/lib/types";
 
 type Props = {
@@ -32,6 +33,21 @@ type FormValue = {
   requires_real_credentials: boolean;
   config_snapshot: string;
 };
+type ProviderConnectionField =
+  | "provider_name"
+  | "provider_ref"
+  | "environment_ref"
+  | "status"
+  | "adapter_ref"
+  | "channel_ref"
+  | "credential_ref"
+  | "credential_profile_ref"
+  | "callback_profile_ref"
+  | "callback_verification_ref"
+  | "retry_policy_ref"
+  | "certification_profile_ref"
+  | "real_provider_route"
+  | "config_snapshot";
 
 function configRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -131,52 +147,65 @@ function mergeProviderRoute(config: Record<string, unknown>, form: FormValue) {
   return route;
 }
 
-function firstMissingField(form: FormValue) {
-  const requiredFields: Array<[keyof FormValue, string]> = [
-    ["provider_name", "Provider name"],
-    ["provider_ref", "Provider ref"],
-    ["environment_ref", "Environment"],
-    ["status", "Status"],
+function validateProviderConnection(form: FormValue) {
+  const fieldErrors: FieldErrors<ProviderConnectionField> = {};
+  const requiredFields: Array<[ProviderConnectionField, keyof FormValue, string]> = [
+    ["provider_name", "provider_name", "Provider name is required before this provider setup can be saved."],
+    ["provider_ref", "provider_ref", "Provider ref is required before this provider setup can be saved."],
+    ["environment_ref", "environment_ref", "Environment is required before this provider setup can be saved."],
+    ["status", "status", "Status is required before this provider setup can be saved."],
   ];
-  const runtimeFields: Array<[keyof FormValue, string]> = [
-    ["adapter_ref", "Adapter ref"],
-    ["channel_ref", "Channel ref"],
-    ["callback_profile_ref", "Callback profile"],
-    ["callback_verification_ref", "Callback verification"],
-    ["retry_policy_ref", "Retry policy"],
-    ["certification_profile_ref", "Certification profile"],
+  const runtimeFields: Array<[ProviderConnectionField, keyof FormValue, string]> = [
+    ["adapter_ref", "adapter_ref", "Adapter ref is required for a real or live provider route."],
+    ["channel_ref", "channel_ref", "Channel ref is required for a real or live provider route."],
+    ["callback_profile_ref", "callback_profile_ref", "Callback profile is required for a real or live provider route."],
+    ["callback_verification_ref", "callback_verification_ref", "Callback verification is required for a real or live provider route."],
+    ["retry_policy_ref", "retry_policy_ref", "Retry policy is required for a real or live provider route."],
+    ["certification_profile_ref", "certification_profile_ref", "Certification profile is required for a real or live provider route."],
   ];
-  const credentialFields: Array<[keyof FormValue, string]> = [
-    ["credential_ref", "Credential ref"],
-    ["credential_profile_ref", "Credential profile"],
+  const credentialFields: Array<[ProviderConnectionField, keyof FormValue, string]> = [
+    ["credential_ref", "credential_ref", "Credential ref is required when credentials are required."],
+    ["credential_profile_ref", "credential_profile_ref", "Credential profile is required when credentials are required."],
   ];
 
-  const missingBase = requiredFields.find(([field]) => !String(form[field] ?? "").trim());
-  if (missingBase) {
-    return missingBase[1];
-  }
+  requiredFields.forEach(([errorField, formField, message]) => {
+    if (!String(form[formField] ?? "").trim()) {
+      fieldErrors[errorField] = message;
+    }
+  });
 
   if (form.real_provider_route || form.live_delivery_enabled) {
-    const missingRuntime = runtimeFields.find(([field]) => !String(form[field] ?? "").trim());
-    if (missingRuntime) {
-      return missingRuntime[1];
-    }
+    runtimeFields.forEach(([errorField, formField, message]) => {
+      if (!String(form[formField] ?? "").trim()) {
+        fieldErrors[errorField] = message;
+      }
+    });
   }
 
   if (form.credential_required || form.requires_real_credentials) {
-    const missingCredential = credentialFields.find(([field]) => !String(form[field] ?? "").trim());
-    if (missingCredential) {
-      return missingCredential[1];
-    }
+    credentialFields.forEach(([errorField, formField, message]) => {
+      if (!String(form[formField] ?? "").trim()) {
+        fieldErrors[errorField] = message;
+      }
+    });
   }
 
-  return "";
+  if (form.live_delivery_enabled && !form.real_provider_route) {
+    fieldErrors.real_provider_route = "Live delivery requires a real provider route.";
+  }
+
+  return fieldErrors;
+}
+
+function FieldError({ message }: { message?: string }) {
+  return message ? <span className="field-error-text" role="alert">{message}</span> : null;
 }
 
 export function ProviderConnectionEditor({ connection, providerKinds, connectionStatuses }: Props) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [formValue, setFormValue] = useState(() => initialValue(connection));
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<ProviderConnectionField>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const modalTitleId = useMemo(() => `provider-connection-editor-${connection.id}`, [connection.id]);
@@ -187,6 +216,7 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
 
   function openEditor() {
     setFormValue(initialValue(connection));
+    setFieldErrors({});
     setNotice("");
     setIsOpen(true);
   }
@@ -194,25 +224,21 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
   async function save() {
     setIsSaving(true);
     setNotice("");
-    const missingField = firstMissingField(formValue);
-    if (missingField) {
-      setIsSaving(false);
-      setNotice(`${missingField} is required before this provider setup can be saved.`);
-      return;
-    }
-    if (formValue.live_delivery_enabled && !formValue.real_provider_route) {
-      setIsSaving(false);
-      setNotice("Live delivery requires a real provider route.");
-      return;
-    }
+    const nextFieldErrors = validateProviderConnection(formValue);
     let config: Record<string, unknown>;
     try {
       config = configRecord(JSON.parse(formValue.config_snapshot || "{}"));
     } catch {
+      nextFieldErrors.config_snapshot = "Config JSON is invalid.";
+      config = {};
+    }
+    if (Object.keys(nextFieldErrors).length) {
       setIsSaving(false);
-      setNotice("Config JSON is invalid.");
+      setFieldErrors(nextFieldErrors);
+      setNotice("Fix the highlighted provider fields before saving.");
       return;
     }
+    setFieldErrors({});
 
     const configSnapshot: Record<string, unknown> = {
       ...config,
@@ -285,11 +311,13 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
             <div className="provider-connection-form-grid">
               <label className="form-field">
                 <span>Provider name</span>
-                <input className="input-control" value={formValue.provider_name} onChange={(event) => update("provider_name", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.provider_name)} className="input-control" value={formValue.provider_name} onChange={(event) => update("provider_name", event.target.value)} />
+                <FieldError message={fieldErrors.provider_name} />
               </label>
               <label className="form-field">
                 <span>Provider ref</span>
-                <input className="input-control" value={formValue.provider_ref} onChange={(event) => update("provider_ref", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.provider_ref)} className="input-control" value={formValue.provider_ref} onChange={(event) => update("provider_ref", event.target.value)} />
+                <FieldError message={fieldErrors.provider_ref} />
               </label>
               <label className="form-field">
                 <span>Provider kind</span>
@@ -299,17 +327,20 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
               </label>
               <label className="form-field">
                 <span>Environment</span>
-                <input className="input-control" value={formValue.environment_ref} onChange={(event) => update("environment_ref", event.target.value)} placeholder="sandbox / staging / production" />
+                <input aria-invalid={Boolean(fieldErrors.environment_ref)} className="input-control" value={formValue.environment_ref} onChange={(event) => update("environment_ref", event.target.value)} placeholder="sandbox / staging / production" />
+                <FieldError message={fieldErrors.environment_ref} />
               </label>
               <label className="form-field">
                 <span>Status</span>
-                <select className="input-control" value={formValue.status} onChange={(event) => update("status", event.target.value)}>
+                <select aria-invalid={Boolean(fieldErrors.status)} className="input-control" value={formValue.status} onChange={(event) => update("status", event.target.value)}>
                   {connectionStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
+                <FieldError message={fieldErrors.status} />
               </label>
               <label className="form-field">
                 <span>Adapter ref</span>
-                <input className="input-control" value={formValue.adapter_ref} onChange={(event) => update("adapter_ref", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.adapter_ref)} className="input-control" value={formValue.adapter_ref} onChange={(event) => update("adapter_ref", event.target.value)} />
+                <FieldError message={fieldErrors.adapter_ref} />
               </label>
               <label className="form-field">
                 <span>Sandbox adapter ref</span>
@@ -317,31 +348,38 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
               </label>
               <label className="form-field">
                 <span>Channel ref</span>
-                <input className="input-control" value={formValue.channel_ref} onChange={(event) => update("channel_ref", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.channel_ref)} className="input-control" value={formValue.channel_ref} onChange={(event) => update("channel_ref", event.target.value)} />
+                <FieldError message={fieldErrors.channel_ref} />
               </label>
               <label className="form-field">
                 <span>Credential ref</span>
-                <input className="input-control" value={formValue.credential_ref} onChange={(event) => update("credential_ref", event.target.value)} placeholder="secret-manager://..." />
+                <input aria-invalid={Boolean(fieldErrors.credential_ref)} className="input-control" value={formValue.credential_ref} onChange={(event) => update("credential_ref", event.target.value)} placeholder="secret-manager://..." />
+                <FieldError message={fieldErrors.credential_ref} />
               </label>
               <label className="form-field">
                 <span>Credential profile</span>
-                <input className="input-control" value={formValue.credential_profile_ref} onChange={(event) => update("credential_profile_ref", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.credential_profile_ref)} className="input-control" value={formValue.credential_profile_ref} onChange={(event) => update("credential_profile_ref", event.target.value)} />
+                <FieldError message={fieldErrors.credential_profile_ref} />
               </label>
               <label className="form-field">
                 <span>Callback profile</span>
-                <input className="input-control" value={formValue.callback_profile_ref} onChange={(event) => update("callback_profile_ref", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.callback_profile_ref)} className="input-control" value={formValue.callback_profile_ref} onChange={(event) => update("callback_profile_ref", event.target.value)} />
+                <FieldError message={fieldErrors.callback_profile_ref} />
               </label>
               <label className="form-field">
                 <span>Callback verification</span>
-                <input className="input-control" value={formValue.callback_verification_ref} onChange={(event) => update("callback_verification_ref", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.callback_verification_ref)} className="input-control" value={formValue.callback_verification_ref} onChange={(event) => update("callback_verification_ref", event.target.value)} />
+                <FieldError message={fieldErrors.callback_verification_ref} />
               </label>
               <label className="form-field">
                 <span>Retry policy</span>
-                <input className="input-control" value={formValue.retry_policy_ref} onChange={(event) => update("retry_policy_ref", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.retry_policy_ref)} className="input-control" value={formValue.retry_policy_ref} onChange={(event) => update("retry_policy_ref", event.target.value)} />
+                <FieldError message={fieldErrors.retry_policy_ref} />
               </label>
               <label className="form-field">
                 <span>Certification profile</span>
-                <input className="input-control" value={formValue.certification_profile_ref} onChange={(event) => update("certification_profile_ref", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.certification_profile_ref)} className="input-control" value={formValue.certification_profile_ref} onChange={(event) => update("certification_profile_ref", event.target.value)} />
+                <FieldError message={fieldErrors.certification_profile_ref} />
               </label>
               <label className="toggle-inline">
                 <input type="checkbox" checked={formValue.credential_required} onChange={(event) => update("credential_required", event.target.checked)} />
@@ -350,6 +388,7 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
               <label className="toggle-inline">
                 <input type="checkbox" checked={formValue.real_provider_route} onChange={(event) => update("real_provider_route", event.target.checked)} />
                 Real provider route
+                <FieldError message={fieldErrors.real_provider_route} />
               </label>
               <label className="toggle-inline">
                 <input type="checkbox" checked={formValue.live_delivery_enabled} onChange={(event) => update("live_delivery_enabled", event.target.checked)} />
@@ -361,14 +400,15 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
               </label>
               <label className="form-field form-field--full">
                 <span>Advanced config JSON</span>
-                <textarea className="input-control provider-connection-config-textarea" rows={10} value={formValue.config_snapshot} onChange={(event) => update("config_snapshot", event.target.value)} />
+                <textarea aria-invalid={Boolean(fieldErrors.config_snapshot)} className="input-control provider-connection-config-textarea" rows={10} value={formValue.config_snapshot} onChange={(event) => update("config_snapshot", event.target.value)} />
+                <FieldError message={fieldErrors.config_snapshot} />
               </label>
             </div>
 
             <div className="provider-connection-modal-footer">
               <div>
                 <strong>{connection.provider_name}</strong>
-                <span>{notice || "Saving recomputes provider readiness immediately."}</span>
+                <span role={notice ? "alert" : undefined}>{notice || "Saving recomputes provider readiness immediately."}</span>
               </div>
               <button className="button button--secondary" type="button" onClick={() => setIsOpen(false)} disabled={isSaving}>
                 Cancel

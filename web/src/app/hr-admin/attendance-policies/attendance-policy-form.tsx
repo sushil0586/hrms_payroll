@@ -7,6 +7,7 @@ import { FormSection } from "@/components/patterns/form-section";
 import { PlatformGovernanceFormBanner } from "@/components/patterns/platform-governance-form-banner";
 import { GovernanceLockHint, isGovernanceFieldLocked } from "@/components/patterns/platform-governance-locks";
 import type { HrAdminAttendancePolicy, HrAdminAttendancePolicyPreview, HrAdminAttendancePolicyWriteInput, HrAdminPolicyOptions } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireText } from "@/lib/ui/validation";
 
 type Props = {
   initialValue: HrAdminAttendancePolicyWriteInput;
@@ -15,6 +16,15 @@ type Props = {
   itemId?: string;
   item?: HrAdminAttendancePolicy;
 };
+
+type AttendancePolicyField =
+  | "code"
+  | "name"
+  | "full_day_min_hours"
+  | "half_day_min_hours"
+  | "late_mark_after_minutes"
+  | "max_late_marks_in_period"
+  | "overtime_threshold_minutes";
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save attendance policy.";
@@ -41,6 +51,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<AttendancePolicyField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [previewEmployeeId, setPreviewEmployeeId] = useState(options.employees[0]?.id ?? "");
   const [previewDate, setPreviewDate] = useState("");
@@ -74,6 +85,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
 
   function update<Key extends keyof HrAdminAttendancePolicyWriteInput>(key: Key, value: HrAdminAttendancePolicyWriteInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => ({ ...current, [key as AttendancePolicyField]: undefined }));
   }
 
   function updateDerivation<Key extends keyof HrAdminAttendancePolicyWriteInput["config_snapshot"]["derivation"]>(
@@ -104,7 +116,29 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
       return;
     }
     setError("");
+    setFieldErrors({});
     setIsSubmitting(true);
+    const fullDayHours = Number(formValue.full_day_min_hours);
+    const halfDayHours = Number(formValue.half_day_min_hours);
+    const nextErrors: FieldErrors<AttendancePolicyField> = {
+      code: requireText(formValue.code, "Enter a unique attendance policy code."),
+      name: requireText(formValue.name, "Enter the attendance policy name."),
+      full_day_min_hours: !Number.isFinite(fullDayHours) || fullDayHours <= 0 ? "Enter full day minimum hours greater than zero." : undefined,
+      half_day_min_hours: !Number.isFinite(halfDayHours) || halfDayHours <= 0 ? "Enter half day minimum hours greater than zero." : undefined,
+      late_mark_after_minutes: formValue.late_mark_after_minutes < 0 ? "Late mark minutes cannot be negative." : undefined,
+      max_late_marks_in_period: formValue.max_late_marks_in_period < 0 ? "Max late marks cannot be negative." : undefined,
+      overtime_threshold_minutes: formValue.overtime_threshold_minutes < 0 ? "Overtime threshold cannot be negative." : undefined,
+    };
+    if (Number.isFinite(fullDayHours) && Number.isFinite(halfDayHours) && halfDayHours > fullDayHours) {
+      nextErrors.half_day_min_hours = "Half day minimum hours cannot be greater than full day minimum hours.";
+    }
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted attendance policy fields and try again.");
+      setIsSubmitting(false);
+      submittingRef.current = false;
+      return;
+    }
     let response: Response;
     try {
       response = await fetch(mode === "create" ? "/api/hr-admin/attendance-policies" : `/api/hr-admin/attendance-policies/${itemId}`, {
@@ -188,7 +222,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -205,8 +239,8 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
           {mode === "edit" && item ? <PlatformGovernanceFormBanner detachPath={`/api/hr-admin/attendance-policies/${itemId}/detach`} item={item} /> : null}
           <FormSection title="Identity and mapping" description="Set the policy identity and the base references that support operational attendance treatment.">
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Code</span><input className="input-control" disabled={codeLocked} required value={formValue.code} onChange={(e) => update("code", e.target.value)} /><GovernanceLockHint fieldPath="code" item={item} /></label>
-              <label className="form-field"><span className="muted">Name</span><input className="input-control" disabled={nameLocked} required value={formValue.name} onChange={(e) => update("name", e.target.value)} /><GovernanceLockHint fieldPath="name" item={item} /></label>
+              <label className="form-field"><span className="muted">Code</span><input aria-invalid={Boolean(fieldErrors.code)} className="input-control" disabled={codeLocked} required value={formValue.code} onChange={(e) => update("code", e.target.value)} />{fieldErrors.code ? <span className="field-error-text">{fieldErrors.code}</span> : null}<GovernanceLockHint fieldPath="code" item={item} /></label>
+              <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors.name)} className="input-control" disabled={nameLocked} required value={formValue.name} onChange={(e) => update("name", e.target.value)} />{fieldErrors.name ? <span className="field-error-text">{fieldErrors.name}</span> : null}<GovernanceLockHint fieldPath="name" item={item} /></label>
               <label className="form-field"><span className="muted">Status</span><select className="input-control" disabled={statusLocked} value={formValue.status} onChange={(e) => update("status", e.target.value)}>{options.attendance_policy_statuses.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select><GovernanceLockHint fieldPath="status" item={item} /></label>
               <label className="form-field"><span className="muted">Attendance unit</span><select className="input-control" disabled={attendanceUnitLocked} value={formValue.attendance_unit} onChange={(e) => update("attendance_unit", e.target.value)}>{options.attendance_units.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select><GovernanceLockHint fieldPath="attendance_unit" item={item} /></label>
               <label className="form-field"><span className="muted">Default shift</span><select className="input-control" disabled={defaultShiftLocked} value={formValue.default_shift_id ?? ""} onChange={(e) => update("default_shift_id", e.target.value || null)}>{selectOptions(options.shifts)}</select><GovernanceLockHint fieldPath="default_shift_id" item={item} /></label>
@@ -216,11 +250,11 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
 
           <FormSection title="Thresholds and limits" description="These values shape how the policy interprets full day, half day, lateness, and overtime.">
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Full day min hours</span><input className="input-control" disabled={fullDayMinHoursLocked} value={formValue.full_day_min_hours} onChange={(e) => update("full_day_min_hours", e.target.value)} /><GovernanceLockHint fieldPath="full_day_min_hours" item={item} /></label>
-              <label className="form-field"><span className="muted">Half day min hours</span><input className="input-control" disabled={halfDayMinHoursLocked} value={formValue.half_day_min_hours} onChange={(e) => update("half_day_min_hours", e.target.value)} /><GovernanceLockHint fieldPath="half_day_min_hours" item={item} /></label>
-              <label className="form-field"><span className="muted">Late mark after minutes</span><input className="input-control" disabled={lateMarkLocked} type="number" value={formValue.late_mark_after_minutes} onChange={(e) => update("late_mark_after_minutes", Number(e.target.value))} /><GovernanceLockHint fieldPath="late_mark_after_minutes" item={item} /></label>
-              <label className="form-field"><span className="muted">Max late marks in period</span><input className="input-control" disabled={maxLateMarksLocked} type="number" value={formValue.max_late_marks_in_period} onChange={(e) => update("max_late_marks_in_period", Number(e.target.value))} /><GovernanceLockHint fieldPath="max_late_marks_in_period" item={item} /></label>
-              <label className="form-field"><span className="muted">Overtime threshold minutes</span><input className="input-control" disabled={overtimeThresholdLocked} type="number" value={formValue.overtime_threshold_minutes} onChange={(e) => update("overtime_threshold_minutes", Number(e.target.value))} /><GovernanceLockHint fieldPath="overtime_threshold_minutes" item={item} /></label>
+              <label className="form-field"><span className="muted">Full day min hours</span><input aria-invalid={Boolean(fieldErrors.full_day_min_hours)} className="input-control" disabled={fullDayMinHoursLocked} value={formValue.full_day_min_hours} onChange={(e) => update("full_day_min_hours", e.target.value)} />{fieldErrors.full_day_min_hours ? <span className="field-error-text">{fieldErrors.full_day_min_hours}</span> : null}<GovernanceLockHint fieldPath="full_day_min_hours" item={item} /></label>
+              <label className="form-field"><span className="muted">Half day min hours</span><input aria-invalid={Boolean(fieldErrors.half_day_min_hours)} className="input-control" disabled={halfDayMinHoursLocked} value={formValue.half_day_min_hours} onChange={(e) => update("half_day_min_hours", e.target.value)} />{fieldErrors.half_day_min_hours ? <span className="field-error-text">{fieldErrors.half_day_min_hours}</span> : null}<GovernanceLockHint fieldPath="half_day_min_hours" item={item} /></label>
+              <label className="form-field"><span className="muted">Late mark after minutes</span><input aria-invalid={Boolean(fieldErrors.late_mark_after_minutes)} className="input-control" disabled={lateMarkLocked} type="number" value={formValue.late_mark_after_minutes} onChange={(e) => update("late_mark_after_minutes", Number(e.target.value))} />{fieldErrors.late_mark_after_minutes ? <span className="field-error-text">{fieldErrors.late_mark_after_minutes}</span> : null}<GovernanceLockHint fieldPath="late_mark_after_minutes" item={item} /></label>
+              <label className="form-field"><span className="muted">Max late marks in period</span><input aria-invalid={Boolean(fieldErrors.max_late_marks_in_period)} className="input-control" disabled={maxLateMarksLocked} type="number" value={formValue.max_late_marks_in_period} onChange={(e) => update("max_late_marks_in_period", Number(e.target.value))} />{fieldErrors.max_late_marks_in_period ? <span className="field-error-text">{fieldErrors.max_late_marks_in_period}</span> : null}<GovernanceLockHint fieldPath="max_late_marks_in_period" item={item} /></label>
+              <label className="form-field"><span className="muted">Overtime threshold minutes</span><input aria-invalid={Boolean(fieldErrors.overtime_threshold_minutes)} className="input-control" disabled={overtimeThresholdLocked} type="number" value={formValue.overtime_threshold_minutes} onChange={(e) => update("overtime_threshold_minutes", Number(e.target.value))} />{fieldErrors.overtime_threshold_minutes ? <span className="field-error-text">{fieldErrors.overtime_threshold_minutes}</span> : null}<GovernanceLockHint fieldPath="overtime_threshold_minutes" item={item} /></label>
             </div>
           </FormSection>
 
@@ -397,7 +431,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
           </FormSection>
         </div>
 
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Policy changes save back into the attendance policy catalog and stay ready for scoped assignments.</span>
           <div className="form-actions-bar__buttons">

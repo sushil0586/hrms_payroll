@@ -114,7 +114,7 @@ export function AttendanceRecordForm({ initialValue, options, itemId }: Props) {
             </div>
           </FormSection>
         </div>
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Changes go straight back into the attendance record queue and affect downstream review state immediately.</span>
           <div className="form-actions-bar__buttons">

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import type { FieldErrors } from "@/lib/ui/validation";
 import type { HrAdminPayrollRuleDefinition, HrAdminPayrollRuleVersion, HrAdminPayrollRulesSetupResponse } from "@/lib/types";
 
 import { SetupRecordList } from "../payroll-shared/setup-record-list";
@@ -11,6 +12,18 @@ type Feedback = {
   tone: "success" | "error";
   message: string;
 } | null;
+type PayrollRuleField =
+  | "definition.code"
+  | "definition.name"
+  | "definition.tags"
+  | "version.rule_id"
+  | "version.version"
+  | "version.expression"
+  | "version.effective_from"
+  | "version.effective_to"
+  | "version.input_schema"
+  | "version.output_schema"
+  | "version.config_snapshot";
 
 function getErrorMessage(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object") return fallback;
@@ -36,17 +49,20 @@ function TextField({
   onChange,
   required,
   type = "text",
+  error,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
   type?: string;
+  error?: string;
 }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <input className="input-control" required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <input aria-invalid={Boolean(error)} className="input-control" required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      {error ? <span className="field-error-text" role="alert">{error}</span> : null}
     </label>
   );
 }
@@ -57,28 +73,32 @@ function SelectField({
   options,
   onChange,
   required,
+  error,
 }: {
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
   required?: boolean;
+  error?: string;
 }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <select className="input-control" required={required} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select aria-invalid={Boolean(error)} className="input-control" required={required} value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => <option key={`${label}-${option.value}`} value={option.value}>{option.label}</option>)}
       </select>
+      {error ? <span className="field-error-text" role="alert">{error}</span> : null}
     </label>
   );
 }
 
-function JsonField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function JsonField({ label, value, onChange, error }: { label: string; value: string; onChange: (value: string) => void; error?: string }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <textarea className="input-control" rows={3} value={value} onChange={(event) => onChange(event.target.value)} />
+      <textarea aria-invalid={Boolean(error)} className="input-control" rows={3} value={value} onChange={(event) => onChange(event.target.value)} />
+      {error ? <span className="field-error-text" role="alert">{error}</span> : null}
     </label>
   );
 }
@@ -178,6 +198,7 @@ export function PayrollRuleOperationsPanel({
   const [definitionForm, setDefinitionForm] = useState(() => definitionToForm(selectedRule, initialSetup));
   const [versionForm, setVersionForm] = useState(() => versionToForm(selectedVersion, selectedRule?.id ?? initialSetup.rules[0]?.id ?? "", initialSetup));
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<PayrollRuleField>>({});
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [recordPages, setRecordPages] = useState<Record<PayrollRuleActionTab, number>>({
     definition: 1,
@@ -202,17 +223,42 @@ export function PayrollRuleOperationsPanel({
     setRecordPages((current) => ({ ...current, [tab]: Math.max(1, page) }));
   }
 
+  function isIsoDate(value: string) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00`));
+  }
+
+  function isWholeNumberAtLeast(value: string, min: number) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= min;
+  }
+
+  function parseJsonField(field: PayrollRuleField, value: string, fallback: Record<string, unknown> | string[], nextFieldErrors: FieldErrors<PayrollRuleField>, message: string) {
+    try {
+      return parseJson(value, fallback);
+    } catch {
+      nextFieldErrors[field] = message;
+      return fallback;
+    }
+  }
+
   async function saveDefinition() {
     setSubmitting("definition");
     setFeedback(null);
-    let tags: Record<string, unknown> | string[];
-    try {
-      tags = parseJson(definitionForm.tags, []);
-    } catch {
+    const nextFieldErrors: FieldErrors<PayrollRuleField> = {};
+    if (!definitionForm.code.trim()) {
+      nextFieldErrors["definition.code"] = "Enter a unique payroll rule code.";
+    }
+    if (!definitionForm.name.trim()) {
+      nextFieldErrors["definition.name"] = "Enter the payroll rule name.";
+    }
+    const tags = parseJsonField("definition.tags", definitionForm.tags, [], nextFieldErrors, "Rule tags must be valid JSON.");
+    if (Object.keys(nextFieldErrors).length) {
       setSubmitting(null);
-      setFeedback({ tone: "error", message: "Rule tags JSON is invalid." });
+      setFieldErrors(nextFieldErrors);
+      setFeedback({ tone: "error", message: "Fix the highlighted rule definition fields before saving." });
       return;
     }
+    setFieldErrors({});
     const response = await fetch(definitionForm.id ? `/api/hr-admin/payroll-rule-definitions/${definitionForm.id}` : "/api/hr-admin/payroll-rule-definitions", {
       method: definitionForm.id ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -242,18 +288,34 @@ export function PayrollRuleOperationsPanel({
   async function saveVersion() {
     setSubmitting("version");
     setFeedback(null);
-    let inputSchema: Record<string, unknown> | string[];
-    let outputSchema: Record<string, unknown> | string[];
-    let configSnapshot: Record<string, unknown> | string[];
-    try {
-      inputSchema = parseJson(versionForm.input_schema, {});
-      outputSchema = parseJson(versionForm.output_schema, {});
-      configSnapshot = parseJson(versionForm.config_snapshot, {});
-    } catch {
+    const nextFieldErrors: FieldErrors<PayrollRuleField> = {};
+    if (!versionForm.rule_id) {
+      nextFieldErrors["version.rule_id"] = "Select a payroll rule before creating a version.";
+    }
+    if (!isWholeNumberAtLeast(versionForm.version, 1)) {
+      nextFieldErrors["version.version"] = "Version must be a whole number greater than or equal to 1.";
+    }
+    if (!versionForm.expression.trim()) {
+      nextFieldErrors["version.expression"] = "Enter the payroll rule expression.";
+    }
+    if (!isIsoDate(versionForm.effective_from)) {
+      nextFieldErrors["version.effective_from"] = "Effective from must be a valid date.";
+    }
+    if (versionForm.effective_to && !isIsoDate(versionForm.effective_to)) {
+      nextFieldErrors["version.effective_to"] = "Effective to must be a valid date.";
+    } else if (versionForm.effective_to && versionForm.effective_to < versionForm.effective_from) {
+      nextFieldErrors["version.effective_to"] = "Effective to must be the same as or after effective from.";
+    }
+    const inputSchema = parseJsonField("version.input_schema", versionForm.input_schema, {}, nextFieldErrors, "Input schema must be valid JSON.");
+    const outputSchema = parseJsonField("version.output_schema", versionForm.output_schema, {}, nextFieldErrors, "Output schema must be valid JSON.");
+    const configSnapshot = parseJsonField("version.config_snapshot", versionForm.config_snapshot, {}, nextFieldErrors, "Config snapshot must be valid JSON.");
+    if (Object.keys(nextFieldErrors).length) {
       setSubmitting(null);
-      setFeedback({ tone: "error", message: "Rule version JSON is invalid." });
+      setFieldErrors(nextFieldErrors);
+      setFeedback({ tone: "error", message: "Fix the highlighted rule version fields before saving." });
       return;
     }
+    setFieldErrors({});
     const response = await fetch(versionForm.id ? `/api/hr-admin/payroll-rule-versions/${versionForm.id}` : "/api/hr-admin/payroll-rule-versions", {
       method: versionForm.id ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -295,8 +357,8 @@ export function PayrollRuleOperationsPanel({
       </div>
 
       {feedback ? (
-        <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""}`} role={feedback.tone === "success" ? "status" : "alert"}>
-          <strong>{feedback.tone === "success" ? "Saved." : "Save failed."}</strong>
+        <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"}`} role={feedback.tone === "success" ? "status" : "alert"}>
+          <strong>{feedback.tone === "success" ? "Saved successfully." : "Save failed."}</strong>
           <span className="muted">{feedback.message}</span>
         </div>
       ) : null}
@@ -315,6 +377,7 @@ export function PayrollRuleOperationsPanel({
           aria-label="Payroll rule definition form"
           className="salary-crud-form"
           data-testid="payroll-rule-definition-form"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             void saveDefinition();
@@ -325,11 +388,11 @@ export function PayrollRuleOperationsPanel({
             <button className="button button--secondary button--compact" type="button" onClick={() => setDefinitionForm(definitionToForm(null, setup))}>New</button>
           </div>
           <div className="form-grid salary-crud-form-grid">
-            <TextField label="Code" required value={definitionForm.code} onChange={(value) => setDefinitionForm((current) => ({ ...current, code: value }))} />
-            <TextField label="Name" required value={definitionForm.name} onChange={(value) => setDefinitionForm((current) => ({ ...current, name: value }))} />
+            <TextField label="Code" required error={fieldErrors["definition.code"]} value={definitionForm.code} onChange={(value) => setDefinitionForm((current) => ({ ...current, code: value }))} />
+            <TextField label="Name" required error={fieldErrors["definition.name"]} value={definitionForm.name} onChange={(value) => setDefinitionForm((current) => ({ ...current, name: value }))} />
             <SelectField label="Rule type" required value={definitionForm.rule_type} options={ruleTypeOptions} onChange={(value) => setDefinitionForm((current) => ({ ...current, rule_type: value }))} />
             <TextField label="Description" value={definitionForm.description} onChange={(value) => setDefinitionForm((current) => ({ ...current, description: value }))} />
-            <JsonField label="Tags JSON" value={definitionForm.tags} onChange={(value) => setDefinitionForm((current) => ({ ...current, tags: value }))} />
+            <JsonField label="Tags JSON" error={fieldErrors["definition.tags"]} value={definitionForm.tags} onChange={(value) => setDefinitionForm((current) => ({ ...current, tags: value }))} />
             <TextField label="Config profile reference" value={definitionForm.config_profile_ref} onChange={(value) => setDefinitionForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
           <SetupRecordList
@@ -360,6 +423,7 @@ export function PayrollRuleOperationsPanel({
           aria-label="Payroll rule version form"
           className="salary-crud-form"
           data-testid="payroll-rule-version-form"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             void saveVersion();
@@ -370,17 +434,17 @@ export function PayrollRuleOperationsPanel({
             <button className="button button--secondary button--compact" type="button" onClick={() => setVersionForm(versionToForm(null, definitionForm.id ?? setup.rules[0]?.id ?? "", setup))}>New</button>
           </div>
           <div className="form-grid salary-crud-form-grid">
-            <SelectField label="Rule" required value={versionForm.rule_id} options={ruleOptions} onChange={(value) => setVersionForm((current) => ({ ...current, rule_id: value }))} />
-            <TextField label="Version" required type="number" value={versionForm.version} onChange={(value) => setVersionForm((current) => ({ ...current, version: value }))} />
+            <SelectField label="Rule" required error={fieldErrors["version.rule_id"]} value={versionForm.rule_id} options={ruleOptions} onChange={(value) => setVersionForm((current) => ({ ...current, rule_id: value }))} />
+            <TextField label="Version" required error={fieldErrors["version.version"]} type="number" value={versionForm.version} onChange={(value) => setVersionForm((current) => ({ ...current, version: value }))} />
             <SelectField label="Status" required value={versionForm.status} options={statusOptions} onChange={(value) => setVersionForm((current) => ({ ...current, status: value }))} />
             <SelectField label="Expression language" required value={versionForm.expression_language} options={languageOptions} onChange={(value) => setVersionForm((current) => ({ ...current, expression_language: value }))} />
-            <TextField label="Expression" required value={versionForm.expression} onChange={(value) => setVersionForm((current) => ({ ...current, expression: value }))} />
-            <TextField label="Effective from" required type="date" value={versionForm.effective_from} onChange={(value) => setVersionForm((current) => ({ ...current, effective_from: value }))} />
-            <TextField label="Effective to" type="date" value={versionForm.effective_to} onChange={(value) => setVersionForm((current) => ({ ...current, effective_to: value }))} />
+            <TextField label="Expression" required error={fieldErrors["version.expression"]} value={versionForm.expression} onChange={(value) => setVersionForm((current) => ({ ...current, expression: value }))} />
+            <TextField label="Effective from" required error={fieldErrors["version.effective_from"]} type="date" value={versionForm.effective_from} onChange={(value) => setVersionForm((current) => ({ ...current, effective_from: value }))} />
+            <TextField label="Effective to" error={fieldErrors["version.effective_to"]} type="date" value={versionForm.effective_to} onChange={(value) => setVersionForm((current) => ({ ...current, effective_to: value }))} />
             <TextField label="Rounding rule reference" value={versionForm.rounding_rule_ref} onChange={(value) => setVersionForm((current) => ({ ...current, rounding_rule_ref: value }))} />
-            <JsonField label="Input schema JSON" value={versionForm.input_schema} onChange={(value) => setVersionForm((current) => ({ ...current, input_schema: value }))} />
-            <JsonField label="Output schema JSON" value={versionForm.output_schema} onChange={(value) => setVersionForm((current) => ({ ...current, output_schema: value }))} />
-            <JsonField label="Config snapshot JSON" value={versionForm.config_snapshot} onChange={(value) => setVersionForm((current) => ({ ...current, config_snapshot: value }))} />
+            <JsonField label="Input schema JSON" error={fieldErrors["version.input_schema"]} value={versionForm.input_schema} onChange={(value) => setVersionForm((current) => ({ ...current, input_schema: value }))} />
+            <JsonField label="Output schema JSON" error={fieldErrors["version.output_schema"]} value={versionForm.output_schema} onChange={(value) => setVersionForm((current) => ({ ...current, output_schema: value }))} />
+            <JsonField label="Config snapshot JSON" error={fieldErrors["version.config_snapshot"]} value={versionForm.config_snapshot} onChange={(value) => setVersionForm((current) => ({ ...current, config_snapshot: value }))} />
           </div>
           <SetupRecordList
             activeId={versionForm.id}

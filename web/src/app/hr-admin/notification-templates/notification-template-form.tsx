@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { NotificationPreviewPanel } from "@/app/hr-admin/notifications/notification-preview-panel";
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminNotificationOptions, HrAdminNotificationTemplateWriteInput } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireText } from "@/lib/ui/validation";
 
 type Props = {
   initialValue: HrAdminNotificationTemplateWriteInput;
@@ -14,6 +15,8 @@ type Props = {
   options: HrAdminNotificationOptions;
   itemId?: string;
 };
+
+type NotificationTemplateField = "code" | "name" | "body_template" | "metadata_template";
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save notification template.";
@@ -39,6 +42,7 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<NotificationTemplateField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const channelHints = useMemo(
     () => Object.fromEntries(options.notification_catalog_authoring.template_channel_hints.map((item) => [item.channel, item])),
@@ -51,6 +55,7 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
     value: HrAdminNotificationTemplateWriteInput[Key],
   ) {
     setFormValue((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => ({ ...current, [key as NotificationTemplateField]: undefined }));
   }
 
   function getMetadataFieldValue(fieldKey: string, defaultValue: string | number) {
@@ -91,13 +96,24 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setFieldErrors({});
     setIsSubmitting(true);
+
+    const nextErrors: FieldErrors<NotificationTemplateField> = {
+      code: requireText(formValue.code, "Enter a unique notification template code."),
+      name: requireText(formValue.name, "Enter the notification template name."),
+      body_template: requireText(formValue.body_template, "Enter the notification body template."),
+    };
 
     let metadataTemplate: Record<string, unknown> = {};
     try {
       metadataTemplate = parseJsonObject(formValue.metadata_template);
     } catch {
-      setError("Metadata template must be valid JSON.");
+      nextErrors.metadata_template = "Metadata template must be a valid JSON object.";
+    }
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted notification template fields and try again.");
       setIsSubmitting(false);
       return;
     }
@@ -123,7 +139,7 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -147,11 +163,13 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Code</span>
-                <input className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.code)} className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />
+                {fieldErrors.code ? <span className="field-error-text">{fieldErrors.code}</span> : null}
               </label>
               <label className="form-field">
                 <span className="muted">Name</span>
-                <input className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.name)} className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />
+                {fieldErrors.name ? <span className="field-error-text">{fieldErrors.name}</span> : null}
               </label>
               <label className="form-field">
                 <span className="muted">Channel</span>
@@ -228,12 +246,14 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
               <label className="form-field" style={{ gridColumn: "1 / -1" }}>
                 <span className="muted">Body template</span>
                 <textarea
+                  aria-invalid={Boolean(fieldErrors.body_template)}
                   className="input-control"
                   placeholder={channelHint?.body_placeholder}
                   rows={6}
                   value={formValue.body_template}
                   onChange={(e) => update("body_template", e.target.value)}
                 />
+                {fieldErrors.body_template ? <span className="field-error-text">{fieldErrors.body_template}</span> : null}
               </label>
               {channelHint?.metadata_fields.map((field) => (
                 <label className="form-field" key={`${formValue.channel}-${field.key}`}>
@@ -253,11 +273,13 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
               <label className="form-field" style={{ gridColumn: "1 / -1" }}>
                 <span className="muted">Metadata template JSON</span>
                 <textarea
+                  aria-invalid={Boolean(fieldErrors.metadata_template)}
                   className="input-control"
                   rows={5}
                   value={formValue.metadata_template}
                   onChange={(e) => update("metadata_template", e.target.value)}
                 />
+                {fieldErrors.metadata_template ? <span className="field-error-text">{fieldErrors.metadata_template}</span> : null}
                 <span className="field-help-text">
                   Guided metadata fields above update this JSON automatically. Keep extra channel-specific keys here only when needed.
                 </span>
@@ -276,7 +298,7 @@ export function NotificationTemplateForm({ initialValue, mode, options, itemId }
         </div>
 
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Save failed.</strong>
             <span className="muted">{error}</span>
           </div>

@@ -316,8 +316,8 @@ function SnapshotDetail({ snapshot }: { snapshot: HrAdminPayrollInputSnapshot | 
 
 export default async function HrAdminPayrollInputsPage({ searchParams }: PageProps) {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["payroll.inputs.view", "payroll.inputs.manage"], fallbackPath: "/hr-admin" });
-  const canManageInputs = sessionHasPermission(sessionUser, "payroll.inputs.manage");
-  const canLockInputs = sessionHasPermission(sessionUser, "payroll.lock");
+  const canManageInputs = !sessionUser || sessionHasPermission(sessionUser, "payroll.inputs.manage");
+  const canLockInputs = !sessionUser || sessionHasPermission(sessionUser, "payroll.lock");
   const currentParams = (await searchParams) ?? {};
   const selectedRunId = normalizeParam(currentParams.runId);
   const selectedSnapshotId = normalizeParam(currentParams.snapshotId);

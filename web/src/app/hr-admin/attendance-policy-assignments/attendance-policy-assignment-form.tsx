@@ -10,6 +10,7 @@ import type {
   HrAdminOptionItem,
   HrAdminPolicyOptions,
 } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireValue } from "@/lib/ui/validation";
 
 type Props = {
   initialValue: HrAdminAttendancePolicyAssignmentWriteInput;
@@ -17,6 +18,8 @@ type Props = {
   options: HrAdminPolicyOptions;
   itemId?: string;
 };
+
+type AttendancePolicyAssignmentField = "attendance_policy_id" | "priority";
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save attendance policy assignment.";
@@ -53,6 +56,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<AttendancePolicyAssignmentField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminAttendancePolicyAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
@@ -78,6 +82,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
   function update<Key extends keyof HrAdminAttendancePolicyAssignmentWriteInput>(key: Key, value: HrAdminAttendancePolicyAssignmentWriteInput[Key]) {
     setConflictCheck(null);
     setIsCheckingConflicts(false);
+    setFieldErrors((current) => ({ ...current, [key as AttendancePolicyAssignmentField]: undefined }));
     setFormValue((current) => {
       const nextValue = { ...current, [key]: value };
       if (key === "employee_id" && value) {
@@ -148,6 +153,17 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
       return;
     }
     submittingRef.current = true;
+    setFieldErrors({});
+    const nextErrors: FieldErrors<AttendancePolicyAssignmentField> = {
+      attendance_policy_id: requireValue(formValue.attendance_policy_id, "Select the attendance policy for this assignment."),
+      priority: formValue.priority < 0 ? "Priority cannot be negative." : undefined,
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted attendance policy assignment fields and try again.");
+      submittingRef.current = false;
+      return;
+    }
     if (conflictCheck?.has_blocking_conflict) {
       setError(conflictCheck.summary);
       submittingRef.current = false;
@@ -180,7 +196,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -196,7 +212,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
         <div className="form-shell-card__grid">
           <FormSection title="Policy and scope" description="Choose the policy first, then narrow where it should apply.">
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Attendance policy</span><select className="input-control" value={formValue.attendance_policy_id ?? ""} onChange={(e) => update("attendance_policy_id", e.target.value || null)}>{selectOptions(options.attendance_policies ?? [])}</select></label>
+              <label className="form-field"><span className="muted">Attendance policy</span><select aria-invalid={Boolean(fieldErrors.attendance_policy_id)} className="input-control" value={formValue.attendance_policy_id ?? ""} onChange={(e) => update("attendance_policy_id", e.target.value || null)}>{selectOptions(options.attendance_policies ?? [])}</select>{fieldErrors.attendance_policy_id ? <span className="field-error-text">{fieldErrors.attendance_policy_id}</span> : null}</label>
               <label className="form-field"><span className="muted">Legal entity</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.legal_entity_id ?? ""} onChange={(e) => update("legal_entity_id", e.target.value || null)}>{selectOptions(options.legal_entities)}</select><FieldHint>{hasEmployeeOverride ? "Employee override ignores organization filters." : "Branch options narrow to the selected legal entity."}</FieldHint></label>
               <label className="form-field"><span className="muted">Branch</span><select className="input-control" disabled={hasEmployeeOverride || Boolean(branchWarning)} value={hasEmployeeOverride ? "" : formValue.branch_id ?? ""} onChange={(e) => update("branch_id", e.target.value || null)}>{selectOptions(filteredBranches)}</select><FieldHint tone={branchWarning ? "warning" : "default"}>{hasEmployeeOverride ? "Employee override ignores branch scope." : branchWarning ?? "Branch scope is optional unless the policy should apply only to a branch."}</FieldHint></label>
               <label className="form-field"><span className="muted">Location</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.location_id ?? ""} onChange={(e) => update("location_id", e.target.value || null)}>{selectOptions(filteredLocations)}</select><FieldHint tone={locationWarning ? "warning" : "default"}>{hasEmployeeOverride ? "Employee override ignores location scope." : locationWarning ?? "Location follows the selected branch when a branch location exists."}</FieldHint></label>
@@ -204,7 +220,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
               <label className="form-field"><span className="muted">Grade</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.grade_id ?? ""} onChange={(e) => update("grade_id", e.target.value || null)}>{selectOptions(options.grades)}</select></label>
               <label className="form-field"><span className="muted">Employment type</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.employment_type_id ?? ""} onChange={(e) => update("employment_type_id", e.target.value || null)}>{selectOptions(options.employment_types)}</select></label>
               <label className="form-field"><span className="muted">Employee override</span><select className="input-control" value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
-              <label className="form-field"><span className="muted">Priority</span><input className="input-control" type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value))} /></label>
+              <label className="form-field"><span className="muted">Priority</span><input aria-invalid={Boolean(fieldErrors.priority)} className="input-control" type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value))} />{fieldErrors.priority ? <span className="field-error-text">{fieldErrors.priority}</span> : null}</label>
             </div>
             {formValue.is_active ? (
               <div className="notice">
@@ -262,7 +278,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
           </FormSection>
         </div>
 
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Assignment changes apply to the rollout layer immediately.</span>
           <div className="form-actions-bar__buttons">

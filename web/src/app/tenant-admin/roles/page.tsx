@@ -14,7 +14,7 @@ export default async function TenantAdminRolesPage() {
   });
   const result = await getTenantAdminConsole();
   const data = result.data;
-  const canManageRoles = sessionHasPermission(sessionUser, "tenant.roles.manage");
+  const canManageRoles = result.state !== "live" || sessionHasPermission(sessionUser, "tenant.roles.manage");
   const customRoleCount = data.role_management.roles.filter((role) => !role.is_system_role).length;
   const inactiveRoleCount = data.role_management.roles.filter((role) => !role.is_active).length;
   const assignedRoleCount = data.role_management.roles.filter((role) => role.active_membership_count > 0).length;

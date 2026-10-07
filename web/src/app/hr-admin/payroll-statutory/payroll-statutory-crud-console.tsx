@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import type { FieldErrors } from "@/lib/ui/validation";
 import type {
   HrAdminEmployeeStatutoryDeclaration,
   HrAdminEmployeeStatutoryDeclarationItem,
@@ -30,6 +31,28 @@ type ApiItem =
   | HrAdminEmployeeStatutoryDeclarationItem;
 
 type Feedback = { tone: "success" | "error"; message: string } | null;
+type StatutoryField =
+  | "slab.slab_order"
+  | "slab.effective_to"
+  | "slab.min_amount"
+  | "slab.max_amount"
+  | "slab.employee_rate_percent"
+  | "slab.employer_rate_percent"
+  | "slab.fixed_employee_amount"
+  | "slab.fixed_employer_amount"
+  | "slab.wage_ceiling_amount"
+  | "filing.period_end"
+  | "filing.due_date"
+  | "filing.grace_due_date"
+  | "filing.filing_window_end"
+  | "profile.effective_to"
+  | "profile.pan_number"
+  | "profile.uan_number"
+  | "profile.esi_number"
+  | "profile.previous_employment_income"
+  | "profile.previous_employment_tax_deducted"
+  | "item.declared_amount"
+  | "item.verified_amount";
 
 const actionTabs: Array<{ key: StatutoryActionTab; label: string; detail: string; anchors: string[] }> = [
   { key: "import", label: "Import", detail: "Bulk employee statutory profiles", anchors: ["statutory-profile-import-workbench"] },
@@ -282,6 +305,27 @@ function nullable(value: string) {
 
 function decimal(value: string, fallback = "0") {
   return value.trim() || fallback;
+}
+
+function isWholeNumberAtLeast(value: string, min: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= min;
+}
+
+function isNumberAtLeast(value: string, min: number) {
+  if (!value.trim()) return false;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= min;
+}
+
+function isOptionalNumberAtLeast(value: string, min: number) {
+  return !value.trim() || isNumberAtLeast(value, min);
+}
+
+function isPercent(value: string) {
+  if (!value.trim()) return false;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100;
 }
 
 function options(items: { id: string; name: string }[], emptyLabel?: string) {
@@ -804,11 +848,16 @@ function itemToForm(item: HrAdminEmployeeStatutoryDeclarationItem): ItemForm {
   };
 }
 
-function TextField({ label, value, onChange, required, type = "text" }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string }) {
+function FieldError({ message }: { message?: string }) {
+  return message ? <span className="field-error-text" role="alert">{message}</span> : null;
+}
+
+function TextField({ label, value, onChange, required, type = "text", error }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string; error?: string }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <input className="input-control" required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <input aria-invalid={Boolean(error)} className="input-control" required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <FieldError message={error} />
     </label>
   );
 }
@@ -960,7 +1009,7 @@ function StatutoryProfileImportWorkbench({ setup }: { setup: HrAdminPayrollStatu
           </div>
         </div>
 
-        {message ? <div className="notice">{message}</div> : null}
+        {message ? <div className="notice notice--success" role="status"><strong>Statutory setup update completed.</strong><span>{message}</span></div> : null}
 
         {rows.length ? (
           <div className="table-scroll">
@@ -1020,6 +1069,7 @@ export function PayrollStatutoryCrudConsole({
   const [declarationForm, setDeclarationForm] = useState<DeclarationForm>(() => emptyDeclaration(initialSetup));
   const [itemForm, setItemForm] = useState<ItemForm>(() => emptyItem(initialSetup));
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<StatutoryField>>({});
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [recordPages, setRecordPages] = useState<Record<Family, number>>({
     pack: 1,
@@ -1056,6 +1106,7 @@ export function PayrollStatutoryCrudConsole({
   async function save<Item extends ApiItem>(family: Family, path: string, itemId: string | undefined, body: Record<string, unknown>, apply: (item: Item) => void) {
     setSubmitting(family);
     setFeedback(null);
+    setFieldErrors({});
     const response = await fetch(itemId ? `/api/hr-admin/${path}/${itemId}` : `/api/hr-admin/${path}`, {
       method: itemId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -1075,6 +1126,7 @@ export function PayrollStatutoryCrudConsole({
   async function postAction<Item extends ApiItem>(label: string, path: string, body: Record<string, unknown>, apply: (item: Item) => void) {
     setSubmitting(label);
     setFeedback(null);
+    setFieldErrors({});
     const response = await fetch(`/api/hr-admin/${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1152,6 +1204,117 @@ export function PayrollStatutoryCrudConsole({
     }));
   }
 
+  function reportValidation(message: string, nextFieldErrors: FieldErrors<StatutoryField>) {
+    setFieldErrors(nextFieldErrors);
+    setFeedback({ tone: "error", message });
+    return false;
+  }
+
+  function validateSlab() {
+    const nextFieldErrors: FieldErrors<StatutoryField> = {};
+    if (!isWholeNumberAtLeast(slabForm.slab_order, 1)) {
+      nextFieldErrors["slab.slab_order"] = "Slab order must be a whole number greater than or equal to 1.";
+    }
+    if (slabForm.effective_to && slabForm.effective_to < slabForm.effective_from) {
+      nextFieldErrors["slab.effective_to"] = "Effective to must be the same as or after effective from.";
+    }
+    if (!isNumberAtLeast(slabForm.min_amount, 0)) {
+      nextFieldErrors["slab.min_amount"] = "Minimum amount must be zero or a positive amount.";
+    }
+    if (slabForm.max_amount && (!isNumberAtLeast(slabForm.max_amount, 0) || Number(slabForm.max_amount) < Number(slabForm.min_amount))) {
+      nextFieldErrors["slab.max_amount"] = "Maximum amount must be greater than or equal to minimum amount.";
+    }
+    if (!isPercent(slabForm.employee_rate_percent)) {
+      nextFieldErrors["slab.employee_rate_percent"] = "Employee rate percent must be between 0 and 100.";
+    }
+    if (!isPercent(slabForm.employer_rate_percent)) {
+      nextFieldErrors["slab.employer_rate_percent"] = "Employer rate percent must be between 0 and 100.";
+    }
+    if (!isNumberAtLeast(slabForm.fixed_employee_amount, 0)) {
+      nextFieldErrors["slab.fixed_employee_amount"] = "Fixed employee amount must be zero or a positive amount.";
+    }
+    if (!isNumberAtLeast(slabForm.fixed_employer_amount, 0)) {
+      nextFieldErrors["slab.fixed_employer_amount"] = "Fixed employer amount must be zero or a positive amount.";
+    }
+    if (!isOptionalNumberAtLeast(slabForm.wage_ceiling_amount, 0)) {
+      nextFieldErrors["slab.wage_ceiling_amount"] = "Wage ceiling amount must be zero or a positive amount.";
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      return reportValidation("Fix the highlighted statutory slab fields before saving.", nextFieldErrors);
+    }
+    setFieldErrors({});
+    return true;
+  }
+
+  function validateFiling() {
+    const nextFieldErrors: FieldErrors<StatutoryField> = {};
+    if (filingForm.period_end < filingForm.period_start) {
+      nextFieldErrors["filing.period_end"] = "Period end must be the same as or after period start.";
+    }
+    if (filingForm.due_date < filingForm.period_end) {
+      nextFieldErrors["filing.due_date"] = "Due date must be the same as or after period end.";
+    }
+    if (filingForm.grace_due_date && filingForm.grace_due_date < filingForm.due_date) {
+      nextFieldErrors["filing.grace_due_date"] = "Grace due date must be the same as or after due date.";
+    }
+    if (filingForm.filing_window_start && filingForm.filing_window_end && filingForm.filing_window_end < filingForm.filing_window_start) {
+      nextFieldErrors["filing.filing_window_end"] = "Filing window end must be the same as or after filing window start.";
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      return reportValidation("Fix the highlighted statutory filing fields before saving.", nextFieldErrors);
+    }
+    setFieldErrors({});
+    return true;
+  }
+
+  function validateProfile() {
+    const nextFieldErrors: FieldErrors<StatutoryField> = {};
+    if (profileForm.effective_to && profileForm.effective_to < profileForm.effective_from) {
+      nextFieldErrors["profile.effective_to"] = "Effective to must be the same as or after effective from.";
+    }
+    if (profileForm.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(profileForm.pan_number)) {
+      nextFieldErrors["profile.pan_number"] = "PAN number must use the 10-character PAN format.";
+    }
+    if (profileForm.uan_number && !/^[0-9]{12}$/.test(profileForm.uan_number)) {
+      nextFieldErrors["profile.uan_number"] = "UAN number must be 12 digits.";
+    }
+    if (profileForm.pf_applicable && !profileForm.uan_number.trim()) {
+      nextFieldErrors["profile.uan_number"] = "UAN number is required when PF is applicable.";
+    }
+    if (profileForm.esi_applicable && !profileForm.esi_number.trim()) {
+      nextFieldErrors["profile.esi_number"] = "ESI number is required when ESI is applicable.";
+    }
+    if (!isOptionalNumberAtLeast(profileForm.previous_employment_income, 0)) {
+      nextFieldErrors["profile.previous_employment_income"] = "Previous employment income must be zero or a positive amount.";
+    }
+    if (!isOptionalNumberAtLeast(profileForm.previous_employment_tax_deducted, 0)) {
+      nextFieldErrors["profile.previous_employment_tax_deducted"] = "Previous employment tax deducted must be zero or a positive amount.";
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      return reportValidation("Fix the highlighted statutory profile fields before saving.", nextFieldErrors);
+    }
+    setFieldErrors({});
+    return true;
+  }
+
+  function validateItem() {
+    const nextFieldErrors: FieldErrors<StatutoryField> = {};
+    if (!isNumberAtLeast(itemForm.declared_amount, 0)) {
+      nextFieldErrors["item.declared_amount"] = "Declared amount must be zero or a positive amount.";
+    }
+    if (!isOptionalNumberAtLeast(itemForm.verified_amount, 0)) {
+      nextFieldErrors["item.verified_amount"] = "Verified amount must be zero or a positive amount.";
+    }
+    if (itemForm.verified_amount && Number(itemForm.verified_amount) > Number(itemForm.declared_amount)) {
+      nextFieldErrors["item.verified_amount"] = "Verified amount cannot exceed declared amount.";
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      return reportValidation("Fix the highlighted declaration item fields before saving.", nextFieldErrors);
+    }
+    setFieldErrors({});
+    return true;
+  }
+
   if (!canManageSetup && !canManageDeclarations) {
     return (
       <section className="section section--tight salary-crud-console payroll-statutory-crud-console" aria-labelledby="statutory-crud-console-title">
@@ -1182,8 +1345,8 @@ export function PayrollStatutoryCrudConsole({
       </div>
 
       {feedback ? (
-        <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""}`} role="status">
-          <strong>{feedback.tone === "success" ? "Saved." : "Save failed."}</strong>
+        <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"}`} role={feedback.tone === "success" ? "status" : "alert"}>
+          <strong>{feedback.tone === "success" ? "Saved successfully." : "Save failed."}</strong>
           <span className="muted">{feedback.message}</span>
         </div>
       ) : null}
@@ -1302,8 +1465,9 @@ export function PayrollStatutoryCrudConsole({
           </div>
         </form> : null}
 
-        {canManageSetup ? <form aria-label="Statutory slab form" className="salary-crud-form" data-action-group="catalog" data-testid="statutory-slab-form" id="statutory-slab-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Statutory slab form" className="salary-crud-form" data-action-group="catalog" data-testid="statutory-slab-form" id="statutory-slab-form" noValidate onSubmit={(event) => {
           event.preventDefault();
+          if (!validateSlab()) return;
           void save<HrAdminPayrollStatutorySlab>("slab", "payroll-statutory-slabs", slabForm.id, {
             statutory_component_id: slabForm.statutory_component_id,
             code: slabForm.code,
@@ -1329,16 +1493,16 @@ export function PayrollStatutoryCrudConsole({
             <SelectField label="Statutory component" required value={slabForm.statutory_component_id} options={componentOptions} onChange={(value) => setSlabForm((current) => ({ ...current, statutory_component_id: value }))} />
             <TextField label="Code" required value={slabForm.code} onChange={(value) => setSlabForm((current) => ({ ...current, code: value }))} />
             <TextField label="Name" required value={slabForm.name} onChange={(value) => setSlabForm((current) => ({ ...current, name: value }))} />
-            <TextField label="Slab order" type="number" value={slabForm.slab_order} onChange={(value) => setSlabForm((current) => ({ ...current, slab_order: value }))} />
+            <TextField label="Slab order" error={fieldErrors["slab.slab_order"]} type="number" value={slabForm.slab_order} onChange={(value) => setSlabForm((current) => ({ ...current, slab_order: value }))} />
             <TextField label="Effective from" required type="date" value={slabForm.effective_from} onChange={(value) => setSlabForm((current) => ({ ...current, effective_from: value }))} />
-            <TextField label="Effective to" type="date" value={slabForm.effective_to} onChange={(value) => setSlabForm((current) => ({ ...current, effective_to: value }))} />
-            <TextField label="Minimum amount" type="number" value={slabForm.min_amount} onChange={(value) => setSlabForm((current) => ({ ...current, min_amount: value }))} />
-            <TextField label="Maximum amount" type="number" value={slabForm.max_amount} onChange={(value) => setSlabForm((current) => ({ ...current, max_amount: value }))} />
-            <TextField label="Employee rate percent" type="number" value={slabForm.employee_rate_percent} onChange={(value) => setSlabForm((current) => ({ ...current, employee_rate_percent: value }))} />
-            <TextField label="Employer rate percent" type="number" value={slabForm.employer_rate_percent} onChange={(value) => setSlabForm((current) => ({ ...current, employer_rate_percent: value }))} />
-            <TextField label="Fixed employee amount" type="number" value={slabForm.fixed_employee_amount} onChange={(value) => setSlabForm((current) => ({ ...current, fixed_employee_amount: value }))} />
-            <TextField label="Fixed employer amount" type="number" value={slabForm.fixed_employer_amount} onChange={(value) => setSlabForm((current) => ({ ...current, fixed_employer_amount: value }))} />
-            <TextField label="Wage ceiling amount" type="number" value={slabForm.wage_ceiling_amount} onChange={(value) => setSlabForm((current) => ({ ...current, wage_ceiling_amount: value }))} />
+            <TextField label="Effective to" error={fieldErrors["slab.effective_to"]} type="date" value={slabForm.effective_to} onChange={(value) => setSlabForm((current) => ({ ...current, effective_to: value }))} />
+            <TextField label="Minimum amount" error={fieldErrors["slab.min_amount"]} type="number" value={slabForm.min_amount} onChange={(value) => setSlabForm((current) => ({ ...current, min_amount: value }))} />
+            <TextField label="Maximum amount" error={fieldErrors["slab.max_amount"]} type="number" value={slabForm.max_amount} onChange={(value) => setSlabForm((current) => ({ ...current, max_amount: value }))} />
+            <TextField label="Employee rate percent" error={fieldErrors["slab.employee_rate_percent"]} type="number" value={slabForm.employee_rate_percent} onChange={(value) => setSlabForm((current) => ({ ...current, employee_rate_percent: value }))} />
+            <TextField label="Employer rate percent" error={fieldErrors["slab.employer_rate_percent"]} type="number" value={slabForm.employer_rate_percent} onChange={(value) => setSlabForm((current) => ({ ...current, employer_rate_percent: value }))} />
+            <TextField label="Fixed employee amount" error={fieldErrors["slab.fixed_employee_amount"]} type="number" value={slabForm.fixed_employee_amount} onChange={(value) => setSlabForm((current) => ({ ...current, fixed_employee_amount: value }))} />
+            <TextField label="Fixed employer amount" error={fieldErrors["slab.fixed_employer_amount"]} type="number" value={slabForm.fixed_employer_amount} onChange={(value) => setSlabForm((current) => ({ ...current, fixed_employer_amount: value }))} />
+            <TextField label="Wage ceiling amount" error={fieldErrors["slab.wage_ceiling_amount"]} type="number" value={slabForm.wage_ceiling_amount} onChange={(value) => setSlabForm((current) => ({ ...current, wage_ceiling_amount: value }))} />
             <TextField label="State code" value={slabForm.state_code} onChange={(value) => setSlabForm((current) => ({ ...current, state_code: value.toUpperCase() }))} />
             <TextField label="Applicability profile reference" value={slabForm.applicability_profile_ref} onChange={(value) => setSlabForm((current) => ({ ...current, applicability_profile_ref: value }))} />
             <SelectField label="Status" value={slabForm.status} options={enumOptions(setup.options.config_statuses)} onChange={(value) => setSlabForm((current) => ({ ...current, status: value }))} />
@@ -1420,8 +1584,9 @@ export function PayrollStatutoryCrudConsole({
           </div>
         </form> : null}
 
-        {canManageSetup ? <form aria-label="Statutory filing calendar form" className="salary-crud-form" data-action-group="compliance" data-testid="statutory-filing-form" id="statutory-filing-form" onSubmit={(event) => {
+        {canManageSetup ? <form aria-label="Statutory filing calendar form" className="salary-crud-form" data-action-group="compliance" data-testid="statutory-filing-form" id="statutory-filing-form" noValidate onSubmit={(event) => {
           event.preventDefault();
+          if (!validateFiling()) return;
           void save<HrAdminPayrollStatutoryFilingCalendar>("filing", "payroll-statutory-filing-calendars", filingForm.id, {
             statutory_pack_id: filingForm.statutory_pack_id,
             statutory_component_id: nullable(filingForm.statutory_component_id),
@@ -1454,11 +1619,11 @@ export function PayrollStatutoryCrudConsole({
             <TextField label="Filing type reference" required value={filingForm.filing_type_ref} onChange={(value) => setFilingForm((current) => ({ ...current, filing_type_ref: value }))} />
             <SelectField label="Filing frequency" value={filingForm.filing_frequency} options={enumOptions(setup.options.payroll_frequencies)} onChange={(value) => setFilingForm((current) => ({ ...current, filing_frequency: value }))} />
             <TextField label="Period start" required type="date" value={filingForm.period_start} onChange={(value) => setFilingForm((current) => ({ ...current, period_start: value }))} />
-            <TextField label="Period end" required type="date" value={filingForm.period_end} onChange={(value) => setFilingForm((current) => ({ ...current, period_end: value }))} />
-            <TextField label="Due date" required type="date" value={filingForm.due_date} onChange={(value) => setFilingForm((current) => ({ ...current, due_date: value }))} />
-            <TextField label="Grace due date" type="date" value={filingForm.grace_due_date} onChange={(value) => setFilingForm((current) => ({ ...current, grace_due_date: value }))} />
+            <TextField label="Period end" required error={fieldErrors["filing.period_end"]} type="date" value={filingForm.period_end} onChange={(value) => setFilingForm((current) => ({ ...current, period_end: value }))} />
+            <TextField label="Due date" required error={fieldErrors["filing.due_date"]} type="date" value={filingForm.due_date} onChange={(value) => setFilingForm((current) => ({ ...current, due_date: value }))} />
+            <TextField label="Grace due date" error={fieldErrors["filing.grace_due_date"]} type="date" value={filingForm.grace_due_date} onChange={(value) => setFilingForm((current) => ({ ...current, grace_due_date: value }))} />
             <TextField label="Filing window start" type="date" value={filingForm.filing_window_start} onChange={(value) => setFilingForm((current) => ({ ...current, filing_window_start: value }))} />
-            <TextField label="Filing window end" type="date" value={filingForm.filing_window_end} onChange={(value) => setFilingForm((current) => ({ ...current, filing_window_end: value }))} />
+            <TextField label="Filing window end" error={fieldErrors["filing.filing_window_end"]} type="date" value={filingForm.filing_window_end} onChange={(value) => setFilingForm((current) => ({ ...current, filing_window_end: value }))} />
             <SelectField label="Status" value={filingForm.status} options={enumOptions(setup.options.statutory_filing_statuses)} onChange={(value) => setFilingForm((current) => ({ ...current, status: value }))} />
             <TextField label="Filing authority reference" value={filingForm.filing_authority_ref} onChange={(value) => setFilingForm((current) => ({ ...current, filing_authority_ref: value }))} />
             <TextField label="Provider reference" value={filingForm.provider_ref} onChange={(value) => setFilingForm((current) => ({ ...current, provider_ref: value }))} />
@@ -1482,8 +1647,9 @@ export function PayrollStatutoryCrudConsole({
           </div>
         </form> : null}
 
-        {canManageDeclarations ? <form aria-label="Employee statutory profile form" className="salary-crud-form" data-action-group="profiles" data-testid="statutory-profile-form" id="statutory-profile-form" onSubmit={(event) => {
+        {canManageDeclarations ? <form aria-label="Employee statutory profile form" className="salary-crud-form" data-action-group="profiles" data-testid="statutory-profile-form" id="statutory-profile-form" noValidate onSubmit={(event) => {
           event.preventDefault();
+          if (!validateProfile()) return;
           void save<HrAdminEmployeeStatutoryProfile>("profile", "employee-statutory-profiles", profileForm.id, {
             employee_id: profileForm.employee_id,
             statutory_pack_id: nullable(profileForm.statutory_pack_id),
@@ -1513,18 +1679,18 @@ export function PayrollStatutoryCrudConsole({
             <SelectField label="Statutory pack" value={profileForm.statutory_pack_id} options={[{ value: "", label: "No pack" }, ...packOptions]} onChange={(value) => setProfileForm((current) => ({ ...current, statutory_pack_id: value }))} />
             <TextField label="Profile reference" value={profileForm.profile_ref} onChange={(value) => setProfileForm((current) => ({ ...current, profile_ref: value }))} />
             <TextField label="Effective from" required type="date" value={profileForm.effective_from} onChange={(value) => setProfileForm((current) => ({ ...current, effective_from: value }))} />
-            <TextField label="Effective to" type="date" value={profileForm.effective_to} onChange={(value) => setProfileForm((current) => ({ ...current, effective_to: value }))} />
+            <TextField label="Effective to" error={fieldErrors["profile.effective_to"]} type="date" value={profileForm.effective_to} onChange={(value) => setProfileForm((current) => ({ ...current, effective_to: value }))} />
             <SelectField label="Status" value={profileForm.status} options={enumOptions(setup.options.config_statuses)} onChange={(value) => setProfileForm((current) => ({ ...current, status: value }))} />
-            <TextField label="PAN number" value={profileForm.pan_number} onChange={(value) => setProfileForm((current) => ({ ...current, pan_number: value.toUpperCase().slice(0, 10) }))} />
-            <TextField label="UAN number" value={profileForm.uan_number} onChange={(value) => setProfileForm((current) => ({ ...current, uan_number: value.slice(0, 12) }))} />
+            <TextField label="PAN number" error={fieldErrors["profile.pan_number"]} value={profileForm.pan_number} onChange={(value) => setProfileForm((current) => ({ ...current, pan_number: value.toUpperCase().slice(0, 10) }))} />
+            <TextField label="UAN number" error={fieldErrors["profile.uan_number"]} value={profileForm.uan_number} onChange={(value) => setProfileForm((current) => ({ ...current, uan_number: value.slice(0, 12) }))} />
             <TextField label="PF number" value={profileForm.pf_number} onChange={(value) => setProfileForm((current) => ({ ...current, pf_number: value }))} />
-            <TextField label="ESI number" value={profileForm.esi_number} onChange={(value) => setProfileForm((current) => ({ ...current, esi_number: value }))} />
+            <TextField label="ESI number" error={fieldErrors["profile.esi_number"]} value={profileForm.esi_number} onChange={(value) => setProfileForm((current) => ({ ...current, esi_number: value }))} />
             <TextField label="Professional tax state" value={profileForm.professional_tax_state} onChange={(value) => setProfileForm((current) => ({ ...current, professional_tax_state: value.toUpperCase() }))} />
             <TextField label="LWF state" value={profileForm.lwf_state} onChange={(value) => setProfileForm((current) => ({ ...current, lwf_state: value.toUpperCase() }))} />
             <SelectField label="Tax regime" value={profileForm.tax_regime} options={enumOptions(setup.options.tax_regimes)} onChange={(value) => setProfileForm((current) => ({ ...current, tax_regime: value }))} />
             <SelectField label="Declaration status" value={profileForm.declaration_status} options={enumOptions(setup.options.declaration_statuses)} onChange={(value) => setProfileForm((current) => ({ ...current, declaration_status: value }))} />
-            <TextField label="Previous employment income" type="number" value={profileForm.previous_employment_income} onChange={(value) => setProfileForm((current) => ({ ...current, previous_employment_income: value }))} />
-            <TextField label="Previous employment tax deducted" type="number" value={profileForm.previous_employment_tax_deducted} onChange={(value) => setProfileForm((current) => ({ ...current, previous_employment_tax_deducted: value }))} />
+            <TextField label="Previous employment income" error={fieldErrors["profile.previous_employment_income"]} type="number" value={profileForm.previous_employment_income} onChange={(value) => setProfileForm((current) => ({ ...current, previous_employment_income: value }))} />
+            <TextField label="Previous employment tax deducted" error={fieldErrors["profile.previous_employment_tax_deducted"]} type="number" value={profileForm.previous_employment_tax_deducted} onChange={(value) => setProfileForm((current) => ({ ...current, previous_employment_tax_deducted: value }))} />
             <TextField label="Source reference" value={profileForm.source_ref} onChange={(value) => setProfileForm((current) => ({ ...current, source_ref: value }))} />
             <TextField label="Config profile reference" value={profileForm.config_profile_ref} onChange={(value) => setProfileForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
@@ -1604,8 +1770,9 @@ export function PayrollStatutoryCrudConsole({
           </div>
         </form> : null}
 
-        {canManageDeclarations ? <form aria-label="Employee statutory declaration item form" className="salary-crud-form" data-action-group="declarations" data-testid="statutory-declaration-item-form" id="statutory-declaration-item-form" onSubmit={(event) => {
+        {canManageDeclarations ? <form aria-label="Employee statutory declaration item form" className="salary-crud-form" data-action-group="declarations" data-testid="statutory-declaration-item-form" id="statutory-declaration-item-form" noValidate onSubmit={(event) => {
           event.preventDefault();
+          if (!validateItem()) return;
           const path = itemForm.id ? "employee-statutory-declaration-items" : `employee-statutory-declarations/${itemForm.declaration_id}/items`;
           void save<HrAdminEmployeeStatutoryDeclarationItem>("item", path, itemForm.id, {
             item_kind: itemForm.item_kind,
@@ -1628,8 +1795,8 @@ export function PayrollStatutoryCrudConsole({
             <TextField label="Section code" required value={itemForm.section_code} onChange={(value) => setItemForm((current) => ({ ...current, section_code: value.toUpperCase() }))} />
             <TextField label="Component code" value={itemForm.component_code} onChange={(value) => setItemForm((current) => ({ ...current, component_code: value.toUpperCase() }))} />
             <TextField label="Name" required value={itemForm.name} onChange={(value) => setItemForm((current) => ({ ...current, name: value }))} />
-            <TextField label="Declared amount" required type="number" value={itemForm.declared_amount} onChange={(value) => setItemForm((current) => ({ ...current, declared_amount: value }))} />
-            <TextField label="Verified amount" type="number" value={itemForm.verified_amount} onChange={(value) => setItemForm((current) => ({ ...current, verified_amount: value }))} />
+            <TextField label="Declared amount" required error={fieldErrors["item.declared_amount"]} type="number" value={itemForm.declared_amount} onChange={(value) => setItemForm((current) => ({ ...current, declared_amount: value }))} />
+            <TextField label="Verified amount" error={fieldErrors["item.verified_amount"]} type="number" value={itemForm.verified_amount} onChange={(value) => setItemForm((current) => ({ ...current, verified_amount: value }))} />
             <SelectField label="Proof status" value={itemForm.proof_status} options={enumOptions(setup.options.statutory_proof_statuses)} onChange={(value) => setItemForm((current) => ({ ...current, proof_status: value }))} />
             <TextField label="Proof document reference" value={itemForm.proof_document_ref} onChange={(value) => setItemForm((current) => ({ ...current, proof_document_ref: value }))} />
             <TextField label="Proof artifact key" value={itemForm.proof_artifact_key} onChange={(value) => setItemForm((current) => ({ ...current, proof_artifact_key: value }))} />

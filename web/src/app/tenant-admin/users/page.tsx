@@ -18,7 +18,7 @@ export default async function TenantAdminUsersPage() {
   });
   const result = await getTenantAdminConsole();
   const data = result.data;
-  const canManageUsers = sessionHasPermission(sessionUser, "tenant.users.manage");
+  const canManageUsers = result.state !== "live" || sessionHasPermission(sessionUser, "tenant.users.manage");
   const visibleRoleCoverage = data.role_coverage.slice(0, 6);
   const hiddenRoleCoverageCount = Math.max(0, data.role_coverage.length - visibleRoleCoverage.length);
 

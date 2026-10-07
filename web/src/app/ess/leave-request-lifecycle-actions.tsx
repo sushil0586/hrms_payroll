@@ -133,7 +133,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo }: Props) {
       </div>
 
       {error ? (
-        <div className="notice">
+        <div className="notice notice--error" role="alert">
           <strong>Action failed.</strong>
           <span className="muted">{error}</span>
         </div>

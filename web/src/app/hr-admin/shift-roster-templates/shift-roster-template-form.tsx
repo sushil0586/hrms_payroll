@@ -183,7 +183,7 @@ export function ShiftRosterTemplateForm({ initialValue, mode, options, itemId }:
             </FormSection>
           )}
         </div>
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Draft templates can be tested in rollout preview first. Published and locked templates are safer for operational rollout.</span>
           <div className="form-actions-bar__buttons">

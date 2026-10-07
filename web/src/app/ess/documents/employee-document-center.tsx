@@ -7,6 +7,16 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type { EssDocumentCenterResponse, EssDocumentRequirementItem, HrAdminEmployeeDocument } from "@/lib/types";
+import {
+  hasFieldErrors,
+  requireText,
+  requireValue,
+  validateDateNotFuture,
+  validateDateNotPast,
+  validateDateOrder,
+  validateUploadFile,
+  type FieldErrors,
+} from "@/lib/ui/validation";
 
 type Props = {
   data: EssDocumentCenterResponse;
@@ -33,6 +43,8 @@ type UploadFeedback = {
   tone: "success" | "error";
   message: string;
 };
+
+type UploadFieldErrors = FieldErrors<keyof UploadFormValue>;
 
 const INITIAL_UPLOAD_VALUE: UploadFormValue = {
   category_id: "",
@@ -89,6 +101,29 @@ function extractError(payload: unknown) {
     }
   }
   return "Unable to upload employee document.";
+}
+
+function validateUploadForm(
+  formValue: UploadFormValue,
+  selectedRequirement: EssDocumentRequirementItem | undefined,
+  maxUploadSizeBytes: number,
+) {
+  const errors: UploadFieldErrors = {};
+  errors.category_id = requireValue(formValue.category_id, "Select the document category before uploading.");
+  errors.title = requireText(formValue.title, "Enter a clear document title.");
+  errors.file = validateUploadFile(formValue.file, {
+    blockedTypeMessage: "Executable or script files are not allowed. Upload a PDF, image, or document file.",
+    maxSizeBytes: maxUploadSizeBytes,
+    maxSizeMessage: `File is too large. Maximum upload size is ${formatFileSize(maxUploadSizeBytes)}.`,
+    requiredMessage: "Attach the file HR needs.",
+  });
+  errors.expires_on =
+    (selectedRequirement?.requires_expiry_date ? requireValue(formValue.expires_on, "Enter the expiry date for this document category.") : undefined) ??
+    validateDateOrder(formValue.issued_on, formValue.expires_on, "Expiry date cannot be earlier than issued on date.") ??
+    validateDateNotPast(formValue.expires_on, "Expiry date cannot be in the past for a fresh upload.");
+  errors.issued_on = validateDateNotFuture(formValue.issued_on, "Issued on date cannot be in the future.");
+
+  return errors;
 }
 
 function useEscapeClose(onClose: () => void) {
@@ -229,6 +264,7 @@ function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument;
 function UploadDocumentModal({
   data,
   feedback,
+  fieldErrors,
   formValue,
   isSubmitting,
   onClose,
@@ -238,6 +274,7 @@ function UploadDocumentModal({
 }: {
   data: EssDocumentCenterResponse;
   feedback: UploadFeedback | null;
+  fieldErrors: UploadFieldErrors;
   formValue: UploadFormValue;
   isSubmitting: boolean;
   onClose: () => void;
@@ -272,16 +309,33 @@ function UploadDocumentModal({
         <form className="ess-document-modal-form" onSubmit={onSubmit}>
           <label className="form-field">
             <span className="muted">Category</span>
-            <select className="input-control" disabled={data.uploadable_categories.length === 0 || isSubmitting} required value={formValue.category_id} onChange={(event) => onFieldChange("category_id", event.target.value)}>
+            <select
+              aria-invalid={Boolean(fieldErrors.category_id)}
+              className="input-control"
+              disabled={data.uploadable_categories.length === 0 || isSubmitting}
+              required
+              value={formValue.category_id}
+              onChange={(event) => onFieldChange("category_id", event.target.value)}
+            >
               <option value="">Select category</option>
               {data.uploadable_categories.map((category) => (
                 <option key={category.id} value={category.id}>{category.name}</option>
               ))}
             </select>
+            {fieldErrors.category_id ? <span className="field-error-text" role="alert">{fieldErrors.category_id}</span> : null}
           </label>
           <label className="form-field">
             <span className="muted">Title</span>
-            <input className="input-control" disabled={isSubmitting} placeholder="Aadhaar card, PAN card, bank proof..." required value={formValue.title} onChange={(event) => onFieldChange("title", event.target.value)} />
+            <input
+              aria-invalid={Boolean(fieldErrors.title)}
+              className="input-control"
+              disabled={isSubmitting}
+              placeholder="Aadhaar card, PAN card, bank proof..."
+              required
+              value={formValue.title}
+              onChange={(event) => onFieldChange("title", event.target.value)}
+            />
+            {fieldErrors.title ? <span className="field-error-text" role="alert">{fieldErrors.title}</span> : null}
           </label>
           <label className="form-field">
             <span className="muted">Document number</span>
@@ -289,20 +343,45 @@ function UploadDocumentModal({
           </label>
           <label className="form-field">
             <span className="muted">Issued on</span>
-            <input className="input-control" disabled={isSubmitting} type="date" value={formValue.issued_on} onChange={(event) => onFieldChange("issued_on", event.target.value)} />
+            <input
+              aria-invalid={Boolean(fieldErrors.issued_on)}
+              className="input-control"
+              disabled={isSubmitting}
+              type="date"
+              value={formValue.issued_on}
+              onChange={(event) => onFieldChange("issued_on", event.target.value)}
+            />
+            {fieldErrors.issued_on ? <span className="field-error-text" role="alert">{fieldErrors.issued_on}</span> : null}
           </label>
           <label className="form-field">
             <span className="muted">Expires on</span>
-            <input className="input-control" disabled={isSubmitting} type="date" value={formValue.expires_on} onChange={(event) => onFieldChange("expires_on", event.target.value)} />
+            <input
+              aria-invalid={Boolean(fieldErrors.expires_on)}
+              className="input-control"
+              disabled={isSubmitting}
+              type="date"
+              value={formValue.expires_on}
+              onChange={(event) => onFieldChange("expires_on", event.target.value)}
+            />
+            {fieldErrors.expires_on ? <span className="field-error-text" role="alert">{fieldErrors.expires_on}</span> : null}
           </label>
           <label className="form-field form-field--full">
             <span className="muted">File</span>
-            <input className="input-control" disabled={isSubmitting || data.uploadable_categories.length === 0} required type="file" onChange={(event) => onFieldChange("file", event.target.files?.[0] ?? null)} />
-            <span className="muted">Maximum upload size: {formatFileSize(data.max_upload_size_bytes)}.</span>
+            <input
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv"
+              aria-invalid={Boolean(fieldErrors.file)}
+              className="input-control"
+              disabled={isSubmitting || data.uploadable_categories.length === 0}
+              required
+              type="file"
+              onChange={(event) => onFieldChange("file", event.target.files?.[0] ?? null)}
+            />
+            <span className="muted">Maximum upload size: {formatFileSize(data.max_upload_size_bytes)}. Upload PDF, image, spreadsheet, text, or document files only.</span>
+            {fieldErrors.file ? <span className="field-error-text" role="alert">{fieldErrors.file}</span> : null}
           </label>
 
           {feedback ? (
-            <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""}`}>
+            <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"}`} role={feedback.tone === "success" ? "status" : "alert"}>
               <strong>{feedback.tone === "success" ? "Upload submitted." : "Upload failed."}</strong>
               <span className="muted">{feedback.message}</span>
             </div>
@@ -428,6 +507,8 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<UploadFeedback | null>(null);
+  const [pageFeedback, setPageFeedback] = useState<UploadFeedback | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<UploadFieldErrors>({});
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<HrAdminEmployeeDocument | null>(null);
   const [selectedRequirementDetail, setSelectedRequirementDetail] = useState<EssDocumentRequirementItem | null>(null);
@@ -440,6 +521,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
             <UploadDocumentModal
               data={data}
               feedback={feedback}
+              fieldErrors={fieldErrors}
               formValue={formValue}
               isSubmitting={isSubmitting}
               onClose={() => setIsUploadOpen(false)}
@@ -473,6 +555,8 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
 
   function openUpload(requirement?: EssDocumentRequirementItem) {
     setFeedback(null);
+    setPageFeedback(null);
+    setFieldErrors({});
     setFormValue({
       ...INITIAL_UPLOAD_VALUE,
       category_id: requirement?.category_id ?? data.uploadable_categories[0]?.id ?? "",
@@ -493,12 +577,23 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   }
 
   function updateUploadField<Key extends keyof UploadFormValue>(key: Key, value: UploadFormValue[Key]) {
+    setFeedback(null);
+    setFieldErrors((current) => ({ ...current, [key]: undefined }));
     setFormValue((current) => ({ ...current, [key]: value }));
   }
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback(null);
+    setPageFeedback(null);
+
+    const nextFieldErrors = validateUploadForm(formValue, selectedRequirement, data.max_upload_size_bytes);
+    if (hasFieldErrors(nextFieldErrors)) {
+      setFieldErrors(nextFieldErrors);
+      return;
+    }
+
+    setFieldErrors({});
     setIsSubmitting(true);
 
     const body = new FormData();
@@ -536,7 +631,8 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
     });
     setIsSubmitting(false);
     setIsUploadOpen(false);
-    setFeedback({ tone: "success", message: "Your document has been sent to HR for verification." });
+    setFeedback(null);
+    setPageFeedback({ tone: "success", message: "Your document has been sent to HR for verification." });
     router.refresh();
   }
 
@@ -549,10 +645,18 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
             <p>Current compliance, upload, and renewal focus from your mapped HR document rules.</p>
           </div>
           <div className="ess-documents-status-actions">
-            <span className="queue-summary-chip"><strong>{data.summary.total_documents}</strong> uploaded</span>
+            <span className="queue-summary-chip"><strong>{data.summary.total_documents}</strong> uploaded documents</span>
+            <span className="queue-summary-chip"><strong>{data.summary.pending_documents}</strong> pending review</span>
+            <span className="queue-summary-chip"><strong>{data.summary.verified_documents}</strong> verified</span>
             <button className="button button--primary" disabled={data.uploadable_categories.length === 0} onClick={() => openUpload()} type="button">Upload document</button>
           </div>
         </div>
+        {pageFeedback ? (
+          <div className={`notice ${pageFeedback.tone === "success" ? "notice--success" : "notice--error"}`} role={pageFeedback.tone === "success" ? "status" : "alert"}>
+            <strong>{pageFeedback.tone === "success" ? "Document uploaded successfully." : "Document upload failed."}</strong>
+            <span className="muted">{pageFeedback.message}</span>
+          </div>
+        ) : null}
         <div className="workspace-summary-grid metric-grid-modern">
           <article className="workspace-summary-card metric-tile metric-tile-soft">
             <div><span className="workspace-summary-card__icon" aria-hidden="true">RD</span><h3>Required</h3></div>
@@ -587,7 +691,8 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
                 <p>Use the row actions to inspect a requirement or upload the correct file.</p>
               </div>
               <div className="ess-documents-panel-actions">
-                <span className="queue-summary-chip"><strong>{data.requirement_items.length}</strong> items</span>
+                <span className="queue-summary-chip"><strong>{data.summary.required_document_count}</strong> required documents</span>
+                <span className="queue-summary-chip"><strong>{data.summary.missing_required_document_count}</strong> missing now</span>
               </div>
             </div>
             <div className="ess-documents-checklist ess-documents-checklist--inline" aria-label="Upload checklist">
@@ -657,8 +762,8 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               <p>Search submitted files, download a copy, and review HR comments.</p>
             </div>
             <div className="queue-toolbar__meta">
-              <span className="queue-summary-chip"><strong>{data.total_count}</strong> total records</span>
-              <span className="queue-summary-chip"><strong>{data.items.length}</strong> on this page</span>
+              <span className="queue-summary-chip"><strong>{data.total_count}</strong> document records</span>
+              <span className="queue-summary-chip"><strong>{data.items.length}</strong> shown on this page</span>
             </div>
           </div>
           <details className="workspace-filter-disclosure" open>

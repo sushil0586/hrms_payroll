@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { hasFieldErrors, requireText, type FieldErrors } from "@/lib/ui/validation";
+
+type ResetPasswordField = "password" | "passwordConfirm";
+
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to reset password.";
   const detail = (payload as Record<string, unknown>).detail;
@@ -22,6 +26,7 @@ export function ResetPasswordForm() {
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<ResetPasswordField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const linkMissing = !uid || !token;
 
@@ -29,10 +34,19 @@ export function ResetPasswordForm() {
     event.preventDefault();
     setError("");
     setNotice("");
-    if (password !== passwordConfirm) {
-      setError("Passwords do not match.");
+    const nextFieldErrors: FieldErrors<ResetPasswordField> = {
+      password: requireText(password, "Enter a new password."),
+      passwordConfirm: requireText(passwordConfirm, "Confirm the new password."),
+    };
+    if (!nextFieldErrors.password && !nextFieldErrors.passwordConfirm && password !== passwordConfirm) {
+      nextFieldErrors.passwordConfirm = "Passwords do not match.";
+    }
+    if (hasFieldErrors(nextFieldErrors)) {
+      setFieldErrors(nextFieldErrors);
       return;
     }
+    setFieldErrors({});
+
     setIsSubmitting(true);
     const response = await fetch("/api/auth/password-reset/confirm", {
       method: "POST",
@@ -55,7 +69,7 @@ export function ResetPasswordForm() {
   }
 
   return (
-    <form className="form-shell-card auth-form-shell" onSubmit={handleSubmit}>
+    <form className="form-shell-card auth-form-shell" noValidate onSubmit={handleSubmit}>
       <div className="form-shell-card__intro">
         <h2 className="section-heading-soft">Set new password</h2>
         <p className="section-copy section-copy-soft">Choose a password for your Accerio HRMS account.</p>
@@ -75,10 +89,15 @@ export function ResetPasswordForm() {
           disabled={linkMissing || Boolean(notice)}
           type="password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          aria-invalid={Boolean(fieldErrors.password)}
+          onChange={(event) => {
+            setPassword(event.target.value);
+            setFieldErrors((current) => ({ ...current, password: undefined }));
+          }}
           className="auth-input"
           placeholder="Enter a new password"
         />
+        {fieldErrors.password ? <span className="field-error-text" role="alert">{fieldErrors.password}</span> : null}
       </label>
 
       <label className="auth-field">
@@ -88,14 +107,19 @@ export function ResetPasswordForm() {
           disabled={linkMissing || Boolean(notice)}
           type="password"
           value={passwordConfirm}
-          onChange={(event) => setPasswordConfirm(event.target.value)}
+          aria-invalid={Boolean(fieldErrors.passwordConfirm)}
+          onChange={(event) => {
+            setPasswordConfirm(event.target.value);
+            setFieldErrors((current) => ({ ...current, passwordConfirm: undefined }));
+          }}
           className="auth-input"
           placeholder="Re-enter the new password"
         />
+        {fieldErrors.passwordConfirm ? <span className="field-error-text" role="alert">{fieldErrors.passwordConfirm}</span> : null}
       </label>
 
-      {notice ? <div className="notice notice--success"><span>{notice}</span></div> : null}
-      {error ? <div className="notice"><span className="muted">{error}</span></div> : null}
+      {notice ? <div className="notice notice--success" role="status"><span>{notice}</span></div> : null}
+      {error ? <div className="notice notice--error" role="alert"><span className="muted">{error}</span></div> : null}
 
       <div className="form-actions-bar auth-form-shell__actions">
         <Link className="auth-recovery-link" href={notice ? "/login" : "/forgot-password"}>

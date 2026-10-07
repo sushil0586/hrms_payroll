@@ -10,6 +10,7 @@ import type {
   HrAdminOptionItem,
   HrAdminPolicyOptions,
 } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireValue } from "@/lib/ui/validation";
 
 type Props = {
   initialValue: HrAdminLeavePolicyAssignmentWriteInput;
@@ -17,6 +18,8 @@ type Props = {
   options: HrAdminPolicyOptions;
   itemId?: string;
 };
+
+type LeavePolicyAssignmentField = "leave_policy_id" | "priority";
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save leave policy assignment.";
@@ -53,6 +56,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeavePolicyAssignmentField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminLeavePolicyAssignmentConflictCheck | null>(null);
@@ -67,6 +71,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
   function update<Key extends keyof HrAdminLeavePolicyAssignmentWriteInput>(key: Key, value: HrAdminLeavePolicyAssignmentWriteInput[Key]) {
     setConflictCheck(null);
     setIsCheckingConflicts(false);
+    setFieldErrors((current) => ({ ...current, [key as LeavePolicyAssignmentField]: undefined }));
     setFormValue((current) => {
       const nextValue = { ...current, [key]: value };
       if (key === "employee_id" && value) {
@@ -139,6 +144,18 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError("");
+    setFieldErrors({});
+    const nextErrors: FieldErrors<LeavePolicyAssignmentField> = {
+      leave_policy_id: requireValue(formValue.leave_policy_id, "Select the leave policy for this assignment."),
+      priority: formValue.priority < 0 ? "Priority cannot be negative." : undefined,
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted leave policy assignment fields and try again.");
+      setIsSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
     let response: Response;
     try {
       response = await fetch(mode === "create" ? "/api/hr-admin/leave-policy-assignments" : `/api/hr-admin/leave-policy-assignments/${itemId}`, {
@@ -164,7 +181,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -180,14 +197,14 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
         <div className="form-shell-card__grid">
           <FormSection title="Policy and scope" description="Choose the target policy first, then narrow the structure or employee slice it should govern.">
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Leave policy</span><select className="input-control" value={formValue.leave_policy_id ?? ""} onChange={(e) => update("leave_policy_id", e.target.value || null)}>{selectOptions(options.leave_policies ?? [])}</select></label>
+              <label className="form-field"><span className="muted">Leave policy</span><select aria-invalid={Boolean(fieldErrors.leave_policy_id)} className="input-control" value={formValue.leave_policy_id ?? ""} onChange={(e) => update("leave_policy_id", e.target.value || null)}>{selectOptions(options.leave_policies ?? [])}</select>{fieldErrors.leave_policy_id ? <span className="field-error-text">{fieldErrors.leave_policy_id}</span> : null}</label>
               <label className="form-field"><span className="muted">Legal entity</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.legal_entity_id ?? ""} onChange={(e) => update("legal_entity_id", e.target.value || null)}>{selectOptions(options.legal_entities)}</select><FieldHint>{hasEmployeeOverride ? "Employee override ignores organization filters." : "Branch options narrow to the selected legal entity."}</FieldHint></label>
               <label className="form-field"><span className="muted">Branch</span><select className="input-control" disabled={hasEmployeeOverride || Boolean(branchWarning)} value={hasEmployeeOverride ? "" : formValue.branch_id ?? ""} onChange={(e) => update("branch_id", e.target.value || null)}>{selectOptions(filteredBranches)}</select><FieldHint tone={branchWarning ? "warning" : "default"}>{hasEmployeeOverride ? "Employee override ignores branch scope." : branchWarning ?? "Branch scope is optional unless the leave policy should apply only to a branch."}</FieldHint></label>
               <label className="form-field"><span className="muted">Department</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.department_id ?? ""} onChange={(e) => update("department_id", e.target.value || null)}>{selectOptions(options.departments)}</select></label>
               <label className="form-field"><span className="muted">Grade</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.grade_id ?? ""} onChange={(e) => update("grade_id", e.target.value || null)}>{selectOptions(options.grades)}</select></label>
               <label className="form-field"><span className="muted">Employment type</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.employment_type_id ?? ""} onChange={(e) => update("employment_type_id", e.target.value || null)}>{selectOptions(options.employment_types)}</select></label>
               <label className="form-field"><span className="muted">Employee override</span><select className="input-control" value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
-              <label className="form-field"><span className="muted">Priority</span><input className="input-control" type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value))} /></label>
+              <label className="form-field"><span className="muted">Priority</span><input aria-invalid={Boolean(fieldErrors.priority)} className="input-control" type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value))} />{fieldErrors.priority ? <span className="field-error-text">{fieldErrors.priority}</span> : null}</label>
             </div>
             {formValue.is_active ? (
               <div className="notice">
@@ -245,7 +262,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
           </FormSection>
         </div>
 
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Assignment changes go back into the leave policy rollout layer immediately.</span>
           <div className="form-actions-bar__buttons">

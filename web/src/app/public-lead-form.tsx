@@ -2,11 +2,15 @@
 
 import { useState } from "react";
 
+import { hasFieldErrors, requireText, validateEmail, type FieldErrors } from "@/lib/ui/validation";
+
 type Props = {
   intent: "signup" | "contact";
   submitLabel: string;
   compact?: boolean;
 };
+
+type LeadField = "company_name" | "contact_name" | "work_email" | "employee_count" | "country_code";
 
 function readMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to submit request.";
@@ -17,11 +21,39 @@ function readMessage(payload: unknown) {
 export function PublicLeadForm({ intent, submitLabel, compact = false }: Props) {
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeadField>>({});
+
+  function clearFieldError(field: LeadField) {
+    setFieldErrors((current) => ({ ...current, [field]: undefined }));
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const companyName = String(formData.get("company_name") ?? "").trim();
+    const contactName = String(formData.get("contact_name") ?? "").trim();
+    const workEmail = String(formData.get("work_email") ?? "").trim();
+    const employeeCountValue = String(formData.get("employee_count") ?? "").trim();
+    const countryCode = String(formData.get("country_code") ?? "IN").trim() || "IN";
+    const nextFieldErrors: FieldErrors<LeadField> = {
+      company_name: requireText(companyName, "Enter your company name."),
+      contact_name: requireText(contactName, "Enter your name."),
+      work_email: requireText(workEmail, "Enter your work email.") ?? validateEmail(workEmail, "Enter a valid work email."),
+      employee_count:
+        employeeCountValue && Number(employeeCountValue) < 1
+          ? "Employee count must be at least 1."
+          : undefined,
+      country_code: /^[A-Za-z]{2}$/.test(countryCode) ? undefined : "Use a 2-letter country code.",
+    };
+    if (hasFieldErrors(nextFieldErrors)) {
+      setFieldErrors(nextFieldErrors);
+      setStatus("idle");
+      setMessage("");
+      return;
+    }
+
+    setFieldErrors({});
     setStatus("submitting");
     setMessage("");
 
@@ -30,13 +62,13 @@ export function PublicLeadForm({ intent, submitLabel, compact = false }: Props) 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         intent,
-        company_name: String(formData.get("company_name") ?? "").trim(),
-        contact_name: String(formData.get("contact_name") ?? "").trim(),
-        work_email: String(formData.get("work_email") ?? "").trim(),
+        company_name: companyName,
+        contact_name: contactName,
+        work_email: workEmail,
         phone_number: String(formData.get("phone_number") ?? "").trim(),
-        employee_count: Number(formData.get("employee_count") || 0) || null,
+        employee_count: Number(employeeCountValue || 0) || null,
         industry: String(formData.get("industry") ?? "").trim(),
-        country_code: String(formData.get("country_code") ?? "IN").trim() || "IN",
+        country_code: countryCode.toUpperCase(),
         preferred_plan: String(formData.get("preferred_plan") ?? "").trim(),
         message: String(formData.get("message") ?? "").trim(),
         source_path: window.location.pathname,
@@ -55,19 +87,22 @@ export function PublicLeadForm({ intent, submitLabel, compact = false }: Props) 
   }
 
   return (
-    <form className={`public-lead-form${compact ? " public-lead-form--compact" : ""}`} onSubmit={handleSubmit}>
+    <form className={`public-lead-form${compact ? " public-lead-form--compact" : ""}`} noValidate onSubmit={handleSubmit}>
       <input aria-hidden="true" autoComplete="off" className="public-lead-form__honeypot" name="website" tabIndex={-1} />
       <label className="form-field">
         <span className="muted">Company name</span>
-        <input className="input-control" name="company_name" required placeholder="Acme Services Pvt Ltd" />
+        <input aria-invalid={Boolean(fieldErrors.company_name)} className="input-control" name="company_name" required placeholder="Acme Services Pvt Ltd" onChange={() => clearFieldError("company_name")} />
+        {fieldErrors.company_name ? <span className="field-error-text" role="alert">{fieldErrors.company_name}</span> : null}
       </label>
       <label className="form-field">
         <span className="muted">Your name</span>
-        <input className="input-control" name="contact_name" required placeholder="Priya Sharma" />
+        <input aria-invalid={Boolean(fieldErrors.contact_name)} className="input-control" name="contact_name" required placeholder="Priya Sharma" onChange={() => clearFieldError("contact_name")} />
+        {fieldErrors.contact_name ? <span className="field-error-text" role="alert">{fieldErrors.contact_name}</span> : null}
       </label>
       <label className="form-field">
         <span className="muted">Work email</span>
-        <input className="input-control" name="work_email" required type="email" placeholder="priya@company.com" />
+        <input aria-invalid={Boolean(fieldErrors.work_email)} className="input-control" name="work_email" required type="email" placeholder="priya@company.com" onChange={() => clearFieldError("work_email")} />
+        {fieldErrors.work_email ? <span className="field-error-text" role="alert">{fieldErrors.work_email}</span> : null}
       </label>
       <label className="form-field">
         <span className="muted">Phone</span>
@@ -75,7 +110,8 @@ export function PublicLeadForm({ intent, submitLabel, compact = false }: Props) 
       </label>
       <label className="form-field">
         <span className="muted">Employees</span>
-        <input className="input-control" min={1} name="employee_count" placeholder="100" type="number" />
+        <input aria-invalid={Boolean(fieldErrors.employee_count)} className="input-control" min={1} name="employee_count" placeholder="100" type="number" onChange={() => clearFieldError("employee_count")} />
+        {fieldErrors.employee_count ? <span className="field-error-text" role="alert">{fieldErrors.employee_count}</span> : null}
       </label>
       <label className="form-field">
         <span className="muted">Preferred plan</span>
@@ -93,7 +129,8 @@ export function PublicLeadForm({ intent, submitLabel, compact = false }: Props) 
       </label>
       <label className="form-field">
         <span className="muted">Country</span>
-        <input className="input-control" maxLength={2} name="country_code" defaultValue="IN" />
+        <input aria-invalid={Boolean(fieldErrors.country_code)} className="input-control" maxLength={2} name="country_code" defaultValue="IN" onChange={() => clearFieldError("country_code")} />
+        {fieldErrors.country_code ? <span className="field-error-text" role="alert">{fieldErrors.country_code}</span> : null}
       </label>
       <label className="form-field public-lead-form__message">
         <span className="muted">Message</span>
@@ -106,8 +143,12 @@ export function PublicLeadForm({ intent, submitLabel, compact = false }: Props) 
         </button>
       </div>
       {message ? (
-        <div className={`notice notice--compact ${status === "success" ? "notice--success" : ""}`} role="status">
-          <strong>{message}</strong>
+        <div
+          className={`notice notice--compact ${status === "success" ? "notice--success" : "notice--error"}`}
+          role={status === "success" ? "status" : "alert"}
+        >
+          <strong>{status === "success" ? "Lead request submitted successfully." : "Lead request submission failed."}</strong>
+          <span>{message}</span>
         </div>
       ) : null}
     </form>

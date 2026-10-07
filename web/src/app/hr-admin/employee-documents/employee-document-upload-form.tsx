@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminDocumentOptions, HrAdminEmployeeListItem } from "@/lib/types";
+import { hasFieldErrors, requireText, requireValue, validateDateNotFuture, validateDateOrder, validateUploadFile } from "@/lib/ui/validation";
 
 type Props = {
   employees: HrAdminEmployeeListItem[];
@@ -89,6 +90,24 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
     event.preventDefault();
     setError("");
     setFieldErrors({});
+    const nextErrors: FieldErrors = {
+      employee_id: requireValue(formValue.employee_id, "Select the employee before uploading."),
+      category_id: requireValue(formValue.category_id, "Select the document category."),
+      title: requireText(formValue.title, "Enter a document title."),
+      issued_on: validateDateNotFuture(formValue.issued_on, "Issued on date cannot be in the future."),
+      expires_on: validateDateOrder(formValue.issued_on, formValue.expires_on, "Expiry date cannot be earlier than issued on date."),
+      file: validateUploadFile(formValue.file, {
+        blockedTypeMessage: "Executable or script files are not allowed. Upload a PDF, image, or document file.",
+        maxSizeBytes: options.max_upload_size_bytes,
+        maxSizeMessage: `File is too large. Maximum upload size is ${formatFileSize(options.max_upload_size_bytes)}.`,
+        requiredMessage: "Attach the employee document file.",
+      }),
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted document fields and try again.");
+      return;
+    }
     setIsSubmitting(true);
 
     const body = new FormData();
@@ -126,7 +145,7 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
   }
 
   return (
-    <form className="section form-layout-modern document-child-form" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern document-child-form" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>Employee document upload</h2>
@@ -140,7 +159,7 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
           <div className="form-grid">
             <label className="form-field">
               <span className="muted">Employee</span>
-              <select className="input-control" required value={formValue.employee_id} onChange={(event) => update("employee_id", event.target.value)}>
+              <select aria-invalid={Boolean(fieldErrors.employee_id)} className="input-control" required value={formValue.employee_id} onChange={(event) => update("employee_id", event.target.value)}>
                 <option value="">Select employee</option>
                 {sortedEmployees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
@@ -148,12 +167,12 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
                   </option>
                 ))}
               </select>
-              {fieldErrors.employee_id ? <span className="muted">{fieldErrors.employee_id}</span> : null}
+              {fieldErrors.employee_id ? <span className="field-error-text" role="alert">{fieldErrors.employee_id}</span> : null}
             </label>
 
             <label className="form-field">
               <span className="muted">Category</span>
-              <select className="input-control" required value={formValue.category_id} onChange={(event) => update("category_id", event.target.value)}>
+              <select aria-invalid={Boolean(fieldErrors.category_id)} className="input-control" required value={formValue.category_id} onChange={(event) => update("category_id", event.target.value)}>
                 <option value="">Select category</option>
                 {options.categories.map((category) => (
                   <option key={category.id} value={category.id}>
@@ -161,31 +180,31 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
                   </option>
                 ))}
               </select>
-              {fieldErrors.category_id ? <span className="muted">{fieldErrors.category_id}</span> : null}
+              {fieldErrors.category_id ? <span className="field-error-text" role="alert">{fieldErrors.category_id}</span> : null}
             </label>
 
             <label className="form-field">
               <span className="muted">Title</span>
-              <input className="input-control" required value={formValue.title} onChange={(event) => update("title", event.target.value)} />
-              {fieldErrors.title ? <span className="muted">{fieldErrors.title}</span> : null}
+              <input aria-invalid={Boolean(fieldErrors.title)} className="input-control" required value={formValue.title} onChange={(event) => update("title", event.target.value)} />
+              {fieldErrors.title ? <span className="field-error-text" role="alert">{fieldErrors.title}</span> : null}
             </label>
 
             <label className="form-field">
               <span className="muted">Document number</span>
               <input className="input-control" value={formValue.document_number} onChange={(event) => update("document_number", event.target.value)} />
-              {fieldErrors.document_number ? <span className="muted">{fieldErrors.document_number}</span> : null}
+              {fieldErrors.document_number ? <span className="field-error-text" role="alert">{fieldErrors.document_number}</span> : null}
             </label>
 
             <label className="form-field">
               <span className="muted">Issued on</span>
-              <input className="input-control" type="date" value={formValue.issued_on} onChange={(event) => update("issued_on", event.target.value)} />
-              {fieldErrors.issued_on ? <span className="muted">{fieldErrors.issued_on}</span> : null}
+              <input aria-invalid={Boolean(fieldErrors.issued_on)} className="input-control" type="date" value={formValue.issued_on} onChange={(event) => update("issued_on", event.target.value)} />
+              {fieldErrors.issued_on ? <span className="field-error-text" role="alert">{fieldErrors.issued_on}</span> : null}
             </label>
 
             <label className="form-field">
               <span className="muted">Expires on</span>
-              <input className="input-control" type="date" value={formValue.expires_on} onChange={(event) => update("expires_on", event.target.value)} />
-              {fieldErrors.expires_on ? <span className="muted">{fieldErrors.expires_on}</span> : null}
+              <input aria-invalid={Boolean(fieldErrors.expires_on)} className="input-control" type="date" value={formValue.expires_on} onChange={(event) => update("expires_on", event.target.value)} />
+              {fieldErrors.expires_on ? <span className="field-error-text" role="alert">{fieldErrors.expires_on}</span> : null}
             </label>
 
             <label className="form-field form-field--full">
@@ -194,16 +213,17 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
                 className="input-control"
                 required
                 type="file"
+                aria-invalid={Boolean(fieldErrors.file)}
                 onChange={(event) => update("file", event.target.files?.[0] ?? null)}
               />
               <span className="muted">Supported validation comes from the category and backend storage policy.</span>
-              {fieldErrors.file ? <span className="muted">{fieldErrors.file}</span> : null}
+              {fieldErrors.file ? <span className="field-error-text" role="alert">{fieldErrors.file}</span> : null}
             </label>
           </div>
         </FormSection>
 
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Upload failed.</strong>
             <span className="muted">{error}</span>
           </div>

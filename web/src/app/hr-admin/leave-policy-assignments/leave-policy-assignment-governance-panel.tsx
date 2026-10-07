@@ -89,7 +89,7 @@ export function LeavePolicyAssignmentGovernancePanel({ employees, leaveTypes }: 
           </div>
         </form>
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Inspector unavailable.</strong>
             <span className="muted">{error}</span>
           </div>

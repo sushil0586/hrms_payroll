@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { hasFieldErrors, requireText, validateEmail, type FieldErrors } from "@/lib/ui/validation";
+
+type ForgotPasswordField = "identifier";
+
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to send password setup email.";
   const detail = (payload as Record<string, unknown>).detail;
@@ -17,17 +21,30 @@ export function ForgotPasswordForm() {
   const [identifier, setIdentifier] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<ForgotPasswordField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const trimmedIdentifier = identifier.trim();
+    const nextFieldErrors: FieldErrors<ForgotPasswordField> = {
+      identifier: requireText(trimmedIdentifier, "Enter your username or email.") ?? (trimmedIdentifier.includes("@") ? validateEmail(trimmedIdentifier) : undefined),
+    };
+    if (hasFieldErrors(nextFieldErrors)) {
+      setFieldErrors(nextFieldErrors);
+      setError("");
+      setNotice("");
+      return;
+    }
+
+    setFieldErrors({});
     setError("");
     setNotice("");
     setIsSubmitting(true);
     const response = await fetch("/api/auth/password-reset/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier }),
+      body: JSON.stringify({ identifier: trimmedIdentifier }),
     }).catch(() => null);
     setIsSubmitting(false);
     if (!response) {
@@ -43,7 +60,7 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <form className="form-shell-card auth-form-shell" onSubmit={handleSubmit}>
+    <form className="form-shell-card auth-form-shell" noValidate onSubmit={handleSubmit}>
       <div className="form-shell-card__intro">
         <h2 className="section-heading-soft">Reset password</h2>
         <p className="section-copy section-copy-soft">Enter your username or email. If it matches an active account, we will send a secure setup link.</p>
@@ -54,14 +71,29 @@ export function ForgotPasswordForm() {
         <input
           required
           value={identifier}
-          onChange={(event) => setIdentifier(event.target.value)}
+          aria-invalid={Boolean(fieldErrors.identifier)}
+          onChange={(event) => {
+            setIdentifier(event.target.value);
+            setFieldErrors((current) => ({ ...current, identifier: undefined }));
+          }}
           className="auth-input"
           placeholder="riya.sharma@company.com"
         />
+        {fieldErrors.identifier ? <span className="field-error-text" role="alert">{fieldErrors.identifier}</span> : null}
       </label>
 
-      {notice ? <div className="notice notice--success"><span>{notice}</span></div> : null}
-      {error ? <div className="notice"><span className="muted">{error}</span></div> : null}
+      {notice ? (
+        <div className="notice notice--success" role="status">
+          <strong>Password setup email requested.</strong>
+          <span>{notice}</span>
+        </div>
+      ) : null}
+      {error ? (
+        <div className="notice notice--error" role="alert">
+          <strong>Password setup email could not be sent.</strong>
+          <span className="muted">{error}</span>
+        </div>
+      ) : null}
 
       <div className="form-actions-bar auth-form-shell__actions">
         <Link className="auth-recovery-link" href="/login">

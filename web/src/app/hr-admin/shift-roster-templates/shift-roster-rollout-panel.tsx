@@ -198,7 +198,7 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
             <button className="button button--primary" disabled={isLoading} onClick={() => runRollout(false)} type="button">{isLoading ? "Running..." : "Apply rollout"}</button>
           </div>
         </div>
-        {error ? <div className="notice"><strong>Rollout unavailable.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Rollout unavailable.</strong><span className="muted">{error}</span></div> : null}
         {result ? (
           <div className="detail-grid">
             <div className="detail-row">

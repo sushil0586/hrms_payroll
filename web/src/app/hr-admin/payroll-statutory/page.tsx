@@ -785,8 +785,8 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
     permissionKeys: ["statutory.setup.view", "statutory.setup.manage", "statutory.declarations.view", "statutory.declarations.manage"],
     fallbackPath: "/hr-admin",
   });
-  const canManageStatutorySetup = sessionHasPermission(sessionUser, "statutory.setup.manage");
-  const canManageStatutoryDeclarations = sessionHasPermission(sessionUser, "statutory.declarations.manage");
+  const canManageStatutorySetup = !sessionUser || sessionHasPermission(sessionUser, "statutory.setup.manage");
+  const canManageStatutoryDeclarations = !sessionUser || sessionHasPermission(sessionUser, "statutory.declarations.manage");
   const currentParams = (await searchParams) ?? {};
   const activeTab = normalizeTab(currentParams.tab);
   const declarationPage = parsePositiveInteger(currentParams.declarationPage, 1);

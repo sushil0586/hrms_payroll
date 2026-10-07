@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminDocumentCategoryWriteInput, HrAdminDocumentOptions } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireText } from "@/lib/ui/validation";
 
 type Props = {
   initialValue: HrAdminDocumentCategoryWriteInput;
@@ -12,6 +13,8 @@ type Props = {
   options: HrAdminDocumentOptions;
   itemId?: string;
 };
+
+type DocumentCategoryField = "code" | "name" | "visibility_rules";
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save document category.";
@@ -35,22 +38,34 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Pr
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<DocumentCategoryField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function update<Key extends keyof HrAdminDocumentCategoryWriteInput>(key: Key, value: HrAdminDocumentCategoryWriteInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => ({ ...current, [key as DocumentCategoryField]: undefined }));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setFieldErrors({});
     setIsSubmitting(true);
+
+    const nextErrors: FieldErrors<DocumentCategoryField> = {
+      code: requireText(formValue.code, "Enter a unique document category code."),
+      name: requireText(formValue.name, "Enter the document category name."),
+    };
 
     let parsedVisibilityRules: Record<string, unknown> = {};
     try {
       parsedVisibilityRules = formValue.visibility_rules.trim() ? JSON.parse(formValue.visibility_rules) : {};
     } catch {
-      setError("Visibility rules must be valid JSON.");
+      nextErrors.visibility_rules = "Visibility rules must be valid JSON.";
+    }
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted document category fields and try again.");
       setIsSubmitting(false);
       return;
     }
@@ -79,7 +94,7 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Pr
   }
 
   return (
-    <form className="section form-layout-modern document-child-form" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern document-child-form" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>{mode === "create" ? "Create document category" : "Edit document category"}</h2>
@@ -88,11 +103,11 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Pr
 
         <FormSection description="Set the category identity and any visibility rules that control where it appears." title="Category setup">
           <div className="form-grid">
-            <label className="form-field"><span className="muted">Code</span><input className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} /></label>
-            <label className="form-field"><span className="muted">Name</span><input className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} /></label>
+            <label className="form-field"><span className="muted">Code</span><input aria-invalid={Boolean(fieldErrors.code)} className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />{fieldErrors.code ? <span className="field-error-text">{fieldErrors.code}</span> : null}</label>
+            <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors.name)} className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />{fieldErrors.name ? <span className="field-error-text">{fieldErrors.name}</span> : null}</label>
             <label className="form-field"><span className="muted">Category type</span><select className="input-control" value={formValue.category_type} onChange={(e) => update("category_type", e.target.value)}>{options.document_category_types.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label className="form-field"><span className="muted">Description</span><input className="input-control" value={formValue.description} onChange={(e) => update("description", e.target.value)} /></label>
-            <label className="form-field form-field--full"><span className="muted">Visibility rules JSON</span><textarea className="input-control" rows={5} value={formValue.visibility_rules} onChange={(e) => update("visibility_rules", e.target.value)} /></label>
+            <label className="form-field form-field--full"><span className="muted">Visibility rules JSON</span><textarea aria-invalid={Boolean(fieldErrors.visibility_rules)} className="input-control" rows={5} value={formValue.visibility_rules} onChange={(e) => update("visibility_rules", e.target.value)} />{fieldErrors.visibility_rules ? <span className="field-error-text">{fieldErrors.visibility_rules}</span> : null}</label>
           </div>
           <div className="document-decision-effect">
             <strong>Category impact</strong>
@@ -123,7 +138,7 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Pr
         </FormSection>
 
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Save failed.</strong>
             <span className="muted">{error}</span>
           </div>

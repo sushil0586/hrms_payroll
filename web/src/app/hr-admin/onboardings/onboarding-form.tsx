@@ -247,7 +247,7 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
             <span className="muted">{readinessPreview.completionWarning}</span>
           </div>
         ) : null}
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Changes save back into the onboarding queue and readiness checks immediately.</span>
           <div className="form-actions-bar__buttons">

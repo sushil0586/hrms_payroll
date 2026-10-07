@@ -69,7 +69,7 @@ function insertAfterHref(items: WorkspaceNavItem[], item: WorkspaceNavItem, afte
 export default async function PlatformAdminLayout({ children }: { children: React.ReactNode }) {
   const sessionUser = await requirePlatformAdminAccess();
   const userLabel =
-    sessionUser.display_name || sessionUser.first_name || sessionUser.username || null;
+    sessionUser?.display_name || sessionUser?.first_name || sessionUser?.username || null;
   const rawMenuSource = await getWorkspaceMenuSource({
     workspace: "platform-admin",
     sessionUser,

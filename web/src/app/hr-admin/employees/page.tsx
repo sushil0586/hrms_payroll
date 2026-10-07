@@ -673,11 +673,6 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                       Access
                     </Link>
                   ) : null}
-                  {canEditEmployees ? (
-                    <Link className="button button--ghost button--compact" href={`/hr-admin/employees/${detail.id}/bank-accounts`}>
-                      Bank
-                    </Link>
-                  ) : null}
                 </div>
                 <ActionMenu
                   label="Actions"

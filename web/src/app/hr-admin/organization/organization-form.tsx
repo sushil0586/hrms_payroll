@@ -121,7 +121,7 @@ function selectOptions(items: Array<{ id: string; name: string }>) {
 }
 
 function FieldError({ message }: { message?: string }) {
-  return message ? <span className="muted">{message}</span> : null;
+  return message ? <span className="field-error-text" role="alert">{message}</span> : null;
 }
 
 export function OrganizationForm({ initialValue, mode, section, options, itemId, currentItem }: OrganizationFormProps) {
@@ -426,7 +426,7 @@ export function OrganizationForm({ initialValue, mode, section, options, itemId,
         </div>
 
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Save failed.</strong>
             <span className="muted">{error}</span>
           </div>

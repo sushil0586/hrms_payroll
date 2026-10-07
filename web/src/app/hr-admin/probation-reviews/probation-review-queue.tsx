@@ -260,7 +260,7 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
           <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> shared state</span>
           <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
         </div>
-        {error ? <div className="notice"><strong>Bulk action failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Bulk action failed.</strong><span className="muted">{error}</span></div> : null}
       </section>
 
       <div className="queue-list lifecycle-record-list">

@@ -396,7 +396,7 @@ export function OrganizationGuidedSetup({ snapshot }: GuidedSetupProps) {
           </div>
         ) : null}
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Setup could not be completed.</strong>
             <span className="muted">{error}</span>
           </div>

@@ -41,6 +41,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
   );
   const [profileRefs, setProfileRefs] = useState<Record<string, string>>(initialRefs);
   const [comments, setComments] = useState<Record<string, string>>(initialComments);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -51,8 +52,22 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
       setError(action.disabledReason || "This action is not available for your current role.");
       return;
     }
+    const nextFieldErrors: Record<string, string> = {};
+    if (action.profileField && !profileRefs[action.id]?.trim()) {
+      nextFieldErrors[`${action.id}:profile`] = `${action.profileLabel ?? "Profile ref"} is required before running ${action.label}.`;
+    }
+    if (action.commentField && !comments[action.id]?.trim()) {
+      nextFieldErrors[`${action.id}:comment`] = `${action.commentLabel ?? "Comment"} is required before running ${action.label}.`;
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setMessage("");
+      setError("Fix the highlighted payroll action fields before continuing.");
+      return;
+    }
     setMessage("");
     setError("");
+    setFieldErrors({});
     setBusyAction(action.id);
     const body = {
       ...(action.profileField && profileRefs[action.id] ? { [action.profileField]: profileRefs[action.id] } : {}),
@@ -102,6 +117,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
                 <label className="form-field" htmlFor={`${action.id}-profile-ref`}>
                   <span className="muted">{action.profileLabel ?? "Profile ref"}</span>
                   <input
+                    aria-invalid={Boolean(fieldErrors[`${action.id}:profile`])}
                     className="input-control"
                     disabled={Boolean(action.disabled)}
                     id={`${action.id}-profile-ref`}
@@ -111,6 +127,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
                     type="text"
                     value={profileRefs[action.id] ?? ""}
                   />
+                  {fieldErrors[`${action.id}:profile`] ? <span className="field-error-text" role="alert">{fieldErrors[`${action.id}:profile`]}</span> : null}
                 </label>
               ) : (
                 <p className="section-copy section-copy-soft">{action.disabledReason ?? "Uses the selected payroll record and tenant configuration."}</p>
@@ -119,6 +136,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
                 <label className="form-field" htmlFor={`${action.id}-comment`}>
                   <span className="muted">{action.commentLabel ?? "Comment"}</span>
                   <textarea
+                    aria-invalid={Boolean(fieldErrors[`${action.id}:comment`])}
                     className="input-control"
                     disabled={Boolean(action.disabled)}
                     id={`${action.id}-comment`}
@@ -128,6 +146,7 @@ export function PayrollCloseActionsPanel({ title, eyebrow, description, actions 
                     rows={3}
                     value={comments[action.id] ?? ""}
                   />
+                  {fieldErrors[`${action.id}:comment`] ? <span className="field-error-text" role="alert">{fieldErrors[`${action.id}:comment`]}</span> : null}
                 </label>
               ) : null}
               <button

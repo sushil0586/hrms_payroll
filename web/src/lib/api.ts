@@ -13669,6 +13669,54 @@ function getDemoData<T>(path: string): T {
       return demoHrAdminOrganizationSnapshot as T;
     case "/me/dashboard/":
       return demoDashboard as T;
+    case "/me/leave-types/":
+      return [
+        {
+          id: "leave-type-casual",
+          code: "casual-leave",
+          name: "Casual Leave",
+          short_code: "CL",
+          category: "paid",
+          unit: "day",
+          requires_attachment: false,
+          allow_negative_balance: false,
+        },
+        {
+          id: "leave-type-sick",
+          code: "sick-leave",
+          name: "Sick Leave",
+          short_code: "SL",
+          category: "paid",
+          unit: "day",
+          requires_attachment: true,
+          allow_negative_balance: false,
+        },
+      ] as T;
+    case "/me/attendance-records/":
+      return [
+        {
+          id: "attendance-record-demo-1",
+          attendance_date: "2026-10-07",
+          status: "present",
+          shift: "General Shift",
+          check_in_at: "2026-10-07T09:14:00+05:30",
+          check_out_at: null,
+          is_regularized: false,
+          is_locked: false,
+          late_minutes: 4,
+        },
+        {
+          id: "attendance-record-demo-2",
+          attendance_date: "2026-10-06",
+          status: "late",
+          shift: "General Shift",
+          check_in_at: "2026-10-06T10:02:00+05:30",
+          check_out_at: "2026-10-06T18:35:00+05:30",
+          is_regularized: false,
+          is_locked: false,
+          late_minutes: 52,
+        },
+      ] as T;
     case "/me/statutory-declarations/":
       return buildDemoEssStatutoryDeclarations() as T;
     case "/me/payroll-payslips/":
@@ -13952,6 +14000,24 @@ function getDemoData<T>(path: string): T {
     default:
       if (pathname !== "/hr-admin/employees/" && pathname.startsWith("/hr-admin/employees/")) {
         const employeePath = pathname.replace("/hr-admin/employees/", "").replace(/\/$/, "");
+        if (employeePath.endsWith("/bank-accounts")) {
+          const employeeId = employeePath.replace(/\/bank-accounts$/, "");
+          const employee = demoHrAdminEmployeeDetails[employeeId] ?? demoHrAdminEmployeeDetails["emp-0001"];
+          return [
+            {
+              id: "bank-demo-1",
+              employee_id: employee.id,
+              account_holder_name: employee.full_name,
+              bank_name: "HDFC Bank",
+              account_number: "50100123456789",
+              ifsc_code: "HDFC0001234",
+              branch_name: "Bengaluru MG Road",
+              is_primary: true,
+              created_at: "2026-09-01T10:00:00+05:30",
+              updated_at: "2026-09-01T10:00:00+05:30",
+            },
+          ] as T;
+        }
         if (employeePath.endsWith("/access")) {
           const employeeId = employeePath.replace(/\/access$/, "");
           return (demoHrAdminEmployeeAccessDetails[employeeId] ??

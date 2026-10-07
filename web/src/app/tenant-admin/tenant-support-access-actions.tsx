@@ -60,6 +60,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
   const [grantPageIndex, setGrantPageIndex] = useState(0);
   const [busyRef, setBusyRef] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"success" | "error">("success");
 
   const actionLabels = useMemo(
     () => Object.fromEntries(data.support_access_management.action_options.map((action) => [action.value, action.label])),
@@ -127,6 +128,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
     setNotice("");
     if (!canSubmitSupportAccessRequest) {
       setBusyRef("");
+      setNoticeTone("error");
       setNotice(
         !canRequestSupportAccess
           ? "Your role can view support access but cannot request a new grant."
@@ -147,10 +149,12 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
     const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminSupportAccessGrantMutationResult>;
     setBusyRef("");
     if (!response.ok) {
+      setNoticeTone("error");
       setNotice(apiErrorMessage(result, "Support access request could not be saved."));
       return;
     }
-    setNotice("Support access requested.");
+    setNoticeTone("success");
+    setNotice("Support access request submitted successfully. The grant is now awaiting review.");
     if (result.support_access_grant) {
       upsertGrant(result.support_access_grant);
     } else {
@@ -177,10 +181,12 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
     const result = (await response.json().catch(() => ({}))) as Partial<TenantAdminSupportAccessGrantMutationResult>;
     setBusyRef("");
     if (!response.ok) {
+      setNoticeTone("error");
       setNotice(apiErrorMessage(result, "Support access action could not be saved."));
       return;
     }
-    setNotice(`${actionLabels[action] ?? titleCase(action)} saved.`);
+    setNoticeTone("success");
+    setNotice(`${actionLabels[action] ?? titleCase(action)} saved successfully.`);
     if (result.support_access_grant) {
       upsertGrant(result.support_access_grant);
     }
@@ -276,7 +282,7 @@ export function TenantSupportAccessActions({ canApproveSupportAccess, canRequest
         >
           {busyRef === "request" ? "Requesting" : "Request access"}
         </button>
-        {notice ? <span role="status">{notice}</span> : null}
+        {notice ? <span className={`tenant-inline-notice tenant-inline-notice--${noticeTone}`} role={noticeTone === "success" ? "status" : "alert"}>{notice}</span> : null}
       </div>
 
       <div className="tenant-membership-toolbar tenant-membership-toolbar--compact">

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import type { FieldErrors } from "@/lib/ui/validation";
 import type { HrAdminPayrollInputSnapshot, HrAdminPayrollInputSnapshotSetupResponse, HrAdminPayrollRun } from "@/lib/types";
 
 type Feedback = {
@@ -11,6 +12,20 @@ type Feedback = {
 } | null;
 
 type OperationTab = "run" | "snapshot" | "lock";
+type PayrollInputField =
+  | "run.period_id"
+  | "run.code"
+  | "run.name"
+  | "run.input_profile_ref"
+  | "run.snapshot_schema_ref"
+  | "snapshot.payroll_run_id"
+  | "snapshot.employee_id"
+  | "snapshot.input_profile_ref"
+  | "snapshot.employee_snapshot"
+  | "snapshot.organization_snapshot"
+  | "snapshot.salary_snapshot"
+  | "snapshot.attendance_snapshot"
+  | "snapshot.validation_snapshot";
 
 const operationTabs: Array<{ value: OperationTab; label: string; detail: string }> = [
   { value: "run", label: "Payroll run", detail: "Period and pay group scope" },
@@ -38,17 +53,20 @@ function TextField({
   onChange,
   required,
   disabled,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
   disabled?: boolean;
+  error?: string;
 }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <input className="input-control" disabled={disabled} required={required} type="text" value={value} onChange={(event) => onChange(event.target.value)} />
+      <input aria-invalid={Boolean(error)} className="input-control" disabled={disabled} required={required} type="text" value={value} onChange={(event) => onChange(event.target.value)} />
+      {error ? <span className="field-error-text" role="alert">{error}</span> : null}
     </label>
   );
 }
@@ -66,6 +84,7 @@ function SelectField({
   disabled,
   hint,
   tone = "muted",
+  error,
 }: {
   label: string;
   value: string;
@@ -75,25 +94,28 @@ function SelectField({
   disabled?: boolean;
   hint?: string;
   tone?: "muted" | "warning";
+  error?: string;
 }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <select className="input-control" disabled={disabled} required={required} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select aria-invalid={Boolean(error)} className="input-control" disabled={disabled} required={required} value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={`${label}-${option.value || "empty"}`} value={option.value}>{option.label}</option>
         ))}
       </select>
+      {error ? <span className="field-error-text" role="alert">{error}</span> : null}
       {hint ? <FieldHint tone={tone}>{hint}</FieldHint> : null}
     </label>
   );
 }
 
-function JsonField({ label, value, onChange, disabled }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {
+function JsonField({ label, value, onChange, disabled, error }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean; error?: string }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <textarea className="input-control" disabled={disabled} rows={3} value={value} onChange={(event) => onChange(event.target.value)} />
+      <textarea aria-invalid={Boolean(error)} className="input-control" disabled={disabled} rows={3} value={value} onChange={(event) => onChange(event.target.value)} />
+      {error ? <span className="field-error-text" role="alert">{error}</span> : null}
     </label>
   );
 }
@@ -158,6 +180,7 @@ export function PayrollInputOperationsPanel({
   const [runForm, setRunForm] = useState(() => selectedRun ? runToForm(selectedRun) : emptyRunForm(initialSetup));
   const [snapshotForm, setSnapshotForm] = useState(() => snapshotToForm(selectedSnapshot, selectedRun?.id ?? "", firstValue(initialSetup.options.employees)));
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<PayrollInputField>>({});
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [activeOperation, setActiveOperation] = useState<OperationTab>("run");
 
@@ -228,9 +251,80 @@ export function PayrollInputOperationsPanel({
     });
   }
 
+  function validateRun() {
+    const nextFieldErrors: FieldErrors<PayrollInputField> = {};
+    if (!runForm.period_id) {
+      nextFieldErrors["run.period_id"] = "Select a payroll period before creating a run.";
+    }
+    if (!runForm.code.trim()) {
+      nextFieldErrors["run.code"] = "Enter a unique payroll run code.";
+    }
+    if (!runForm.name.trim()) {
+      nextFieldErrors["run.name"] = "Enter the payroll run name.";
+    }
+    if (!runForm.input_profile_ref.trim()) {
+      nextFieldErrors["run.input_profile_ref"] = "Enter the input profile reference.";
+    }
+    if (!runForm.snapshot_schema_ref.trim()) {
+      nextFieldErrors["run.snapshot_schema_ref"] = "Enter the snapshot schema reference.";
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setFeedback({ tone: "error", message: "Fix the highlighted payroll run fields before saving." });
+      return false;
+    }
+    setFieldErrors({});
+    return true;
+  }
+
+  function parseSnapshotJson(field: PayrollInputField, value: string, nextFieldErrors: FieldErrors<PayrollInputField>, message: string) {
+    try {
+      return parseJson(value, {});
+    } catch {
+      nextFieldErrors[field] = message;
+      return {};
+    }
+  }
+
+  function buildSnapshotBody() {
+    const nextFieldErrors: FieldErrors<PayrollInputField> = {};
+    if (!snapshotForm.payroll_run_id) {
+      nextFieldErrors["snapshot.payroll_run_id"] = "Select a payroll run before saving a snapshot.";
+    }
+    if (!snapshotForm.employee_id) {
+      nextFieldErrors["snapshot.employee_id"] = "Select an employee before saving a snapshot.";
+    }
+    if (!snapshotForm.input_profile_ref.trim()) {
+      nextFieldErrors["snapshot.input_profile_ref"] = "Enter the input profile reference.";
+    }
+    const body = {
+      payroll_run_id: snapshotForm.payroll_run_id,
+      employee_id: snapshotForm.employee_id,
+      snapshot_status: snapshotForm.snapshot_status,
+      input_profile_ref: snapshotForm.input_profile_ref,
+      employee_snapshot: parseSnapshotJson("snapshot.employee_snapshot", snapshotForm.employee_snapshot, nextFieldErrors, "Employee snapshot must be valid JSON."),
+      organization_snapshot: parseSnapshotJson("snapshot.organization_snapshot", snapshotForm.organization_snapshot, nextFieldErrors, "Organization snapshot must be valid JSON."),
+      salary_snapshot: parseSnapshotJson("snapshot.salary_snapshot", snapshotForm.salary_snapshot, nextFieldErrors, "Salary snapshot must be valid JSON."),
+      attendance_snapshot: parseSnapshotJson("snapshot.attendance_snapshot", snapshotForm.attendance_snapshot, nextFieldErrors, "Attendance snapshot must be valid JSON."),
+      validation_snapshot: parseSnapshotJson("snapshot.validation_snapshot", snapshotForm.validation_snapshot, nextFieldErrors, "Validation snapshot must be valid JSON."),
+      config_snapshot: snapshotForm.config_profile_ref ? { profile_ref: snapshotForm.config_profile_ref } : {},
+    };
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setFeedback({ tone: "error", message: "Fix the highlighted payroll snapshot fields before saving." });
+      return null;
+    }
+    setFieldErrors({});
+    return body;
+  }
+
   async function saveRun() {
+    if (!validateRun()) {
+      return;
+    }
     setSubmitting("run");
     setFeedback(null);
+    setFieldErrors({});
     const response = await fetch(runForm.id ? `/api/hr-admin/payroll-runs/${runForm.id}` : "/api/hr-admin/payroll-runs", {
       method: runForm.id ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -264,27 +358,13 @@ export function PayrollInputOperationsPanel({
   }
 
   async function saveSnapshot() {
-    setSubmitting("snapshot");
-    setFeedback(null);
-    let body: Record<string, unknown>;
-    try {
-      body = {
-        payroll_run_id: snapshotForm.payroll_run_id,
-        employee_id: snapshotForm.employee_id,
-        snapshot_status: snapshotForm.snapshot_status,
-        input_profile_ref: snapshotForm.input_profile_ref,
-        employee_snapshot: parseJson(snapshotForm.employee_snapshot, {}),
-        organization_snapshot: parseJson(snapshotForm.organization_snapshot, {}),
-        salary_snapshot: parseJson(snapshotForm.salary_snapshot, {}),
-        attendance_snapshot: parseJson(snapshotForm.attendance_snapshot, {}),
-        validation_snapshot: parseJson(snapshotForm.validation_snapshot, {}),
-        config_snapshot: snapshotForm.config_profile_ref ? { profile_ref: snapshotForm.config_profile_ref } : {},
-      };
-    } catch {
-      setSubmitting(null);
-      setFeedback({ tone: "error", message: "Snapshot JSON is invalid." });
+    const body = buildSnapshotBody();
+    if (!body) {
       return;
     }
+    setSubmitting("snapshot");
+    setFeedback(null);
+    setFieldErrors({});
 
     const response = await fetch(snapshotForm.id ? `/api/hr-admin/payroll-input-snapshots/${snapshotForm.id}` : "/api/hr-admin/payroll-input-snapshots", {
       method: snapshotForm.id ? "PATCH" : "POST",
@@ -360,8 +440,8 @@ export function PayrollInputOperationsPanel({
       </nav>
 
       {feedback ? (
-        <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""}`} role={feedback.tone === "success" ? "status" : "alert"}>
-          <strong>{feedback.tone === "success" ? "Saved." : "Save failed."}</strong>
+        <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"}`} role={feedback.tone === "success" ? "status" : "alert"}>
+          <strong>{feedback.tone === "success" ? "Saved successfully." : "Save failed."}</strong>
           <span className="muted">{feedback.message}</span>
         </div>
       ) : null}
@@ -372,6 +452,7 @@ export function PayrollInputOperationsPanel({
           className={`salary-crud-form ${activeOperation === "run" ? "is-active" : ""}`}
           data-testid="payroll-run-form"
           data-operation-panel="run"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             void saveRun();
@@ -385,6 +466,7 @@ export function PayrollInputOperationsPanel({
             <SelectField
               label="Period"
               required
+              error={fieldErrors["run.period_id"]}
               value={runForm.period_id}
               options={periodOptions}
               disabled={!periodOptions.length || !canManageInputs}
@@ -401,11 +483,11 @@ export function PayrollInputOperationsPanel({
               tone={!canManageInputs || selectedPayGroupWarning || noCompatiblePayGroupWarning ? "warning" : "muted"}
               onChange={(value) => setRunForm((current) => ({ ...current, pay_group_id: value }))}
             />
-            <TextField disabled={!canManageInputs} label="Code" required value={runForm.code} onChange={(value) => setRunForm((current) => ({ ...current, code: value }))} />
-            <TextField disabled={!canManageInputs} label="Name" required value={runForm.name} onChange={(value) => setRunForm((current) => ({ ...current, name: value }))} />
+            <TextField disabled={!canManageInputs} label="Code" required error={fieldErrors["run.code"]} value={runForm.code} onChange={(value) => setRunForm((current) => ({ ...current, code: value }))} />
+            <TextField disabled={!canManageInputs} label="Name" required error={fieldErrors["run.name"]} value={runForm.name} onChange={(value) => setRunForm((current) => ({ ...current, name: value }))} />
             <SelectField disabled={!canManageInputs} hint={!canManageInputs ? manageDisabledReason : ""} tone="warning" label="Status" required value={runForm.status} options={runStatusOptions} onChange={(value) => setRunForm((current) => ({ ...current, status: value }))} />
-            <TextField disabled={!canManageInputs} label="Input profile ref" required value={runForm.input_profile_ref} onChange={(value) => setRunForm((current) => ({ ...current, input_profile_ref: value }))} />
-            <TextField disabled={!canManageInputs} label="Snapshot schema ref" required value={runForm.snapshot_schema_ref} onChange={(value) => setRunForm((current) => ({ ...current, snapshot_schema_ref: value }))} />
+            <TextField disabled={!canManageInputs} label="Input profile ref" required error={fieldErrors["run.input_profile_ref"]} value={runForm.input_profile_ref} onChange={(value) => setRunForm((current) => ({ ...current, input_profile_ref: value }))} />
+            <TextField disabled={!canManageInputs} label="Snapshot schema ref" required error={fieldErrors["run.snapshot_schema_ref"]} value={runForm.snapshot_schema_ref} onChange={(value) => setRunForm((current) => ({ ...current, snapshot_schema_ref: value }))} />
             <TextField disabled={!canManageInputs} label="Config profile reference" value={runForm.config_profile_ref} onChange={(value) => setRunForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
           <div className="salary-crud-list" aria-label="Payroll run records">
@@ -430,6 +512,7 @@ export function PayrollInputOperationsPanel({
           className={`salary-crud-form ${activeOperation === "snapshot" ? "is-active" : ""}`}
           data-testid="payroll-input-snapshot-form"
           data-operation-panel="snapshot"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             void saveSnapshot();
@@ -440,18 +523,18 @@ export function PayrollInputOperationsPanel({
             <button className="button button--secondary button--compact" disabled={!canManageInputs} type="button" onClick={() => setSnapshotForm(snapshotToForm(null, runForm.id ?? firstValue(setup.runs), firstValue(setup.options.employees)))}>New</button>
           </div>
           <div className="form-grid salary-crud-form-grid">
-            <SelectField disabled={!canManageInputs} hint={!canManageInputs ? manageDisabledReason : ""} tone="warning" label="Payroll run" required value={snapshotForm.payroll_run_id} options={runOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, payroll_run_id: value }))} />
-            <SelectField disabled={!canManageInputs} label="Employee" required value={snapshotForm.employee_id} options={employeeOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, employee_id: value }))} />
+            <SelectField disabled={!canManageInputs} hint={!canManageInputs ? manageDisabledReason : ""} tone="warning" label="Payroll run" required error={fieldErrors["snapshot.payroll_run_id"]} value={snapshotForm.payroll_run_id} options={runOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, payroll_run_id: value }))} />
+            <SelectField disabled={!canManageInputs} label="Employee" required error={fieldErrors["snapshot.employee_id"]} value={snapshotForm.employee_id} options={employeeOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, employee_id: value }))} />
             <SelectField disabled={!canManageInputs} label="Snapshot status" required value={snapshotForm.snapshot_status} options={snapshotStatusOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, snapshot_status: value }))} />
-            <TextField disabled={!canManageInputs} label="Input profile ref" required value={snapshotForm.input_profile_ref} onChange={(value) => setSnapshotForm((current) => ({ ...current, input_profile_ref: value }))} />
+            <TextField disabled={!canManageInputs} label="Input profile ref" required error={fieldErrors["snapshot.input_profile_ref"]} value={snapshotForm.input_profile_ref} onChange={(value) => setSnapshotForm((current) => ({ ...current, input_profile_ref: value }))} />
             <TextField disabled={!canManageInputs} label="Config profile reference" value={snapshotForm.config_profile_ref} onChange={(value) => setSnapshotForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
           <div className="form-grid salary-crud-form-grid">
-            <JsonField disabled={!canManageInputs} label="Employee snapshot JSON" value={snapshotForm.employee_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, employee_snapshot: value }))} />
-            <JsonField disabled={!canManageInputs} label="Organization snapshot JSON" value={snapshotForm.organization_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, organization_snapshot: value }))} />
-            <JsonField disabled={!canManageInputs} label="Salary snapshot JSON" value={snapshotForm.salary_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, salary_snapshot: value }))} />
-            <JsonField disabled={!canManageInputs} label="Attendance snapshot JSON" value={snapshotForm.attendance_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, attendance_snapshot: value }))} />
-            <JsonField disabled={!canManageInputs} label="Validation snapshot JSON" value={snapshotForm.validation_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, validation_snapshot: value }))} />
+            <JsonField disabled={!canManageInputs} label="Employee snapshot JSON" error={fieldErrors["snapshot.employee_snapshot"]} value={snapshotForm.employee_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, employee_snapshot: value }))} />
+            <JsonField disabled={!canManageInputs} label="Organization snapshot JSON" error={fieldErrors["snapshot.organization_snapshot"]} value={snapshotForm.organization_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, organization_snapshot: value }))} />
+            <JsonField disabled={!canManageInputs} label="Salary snapshot JSON" error={fieldErrors["snapshot.salary_snapshot"]} value={snapshotForm.salary_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, salary_snapshot: value }))} />
+            <JsonField disabled={!canManageInputs} label="Attendance snapshot JSON" error={fieldErrors["snapshot.attendance_snapshot"]} value={snapshotForm.attendance_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, attendance_snapshot: value }))} />
+            <JsonField disabled={!canManageInputs} label="Validation snapshot JSON" error={fieldErrors["snapshot.validation_snapshot"]} value={snapshotForm.validation_snapshot} onChange={(value) => setSnapshotForm((current) => ({ ...current, validation_snapshot: value }))} />
           </div>
           <div className="salary-crud-list" aria-label="Payroll input snapshot records">
             {setup.snapshots.slice(0, 6).map((item) => (

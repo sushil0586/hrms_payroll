@@ -4,8 +4,10 @@ import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminLifecycleOptions, HrAdminMovementWriteInput } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireText, requireValue } from "@/lib/ui/validation";
 
 type Props = { initialValue: HrAdminMovementWriteInput; mode: "create" | "edit"; options: HrAdminLifecycleOptions; itemId?: string };
+type MovementField = "employee_id" | "effective_date" | "reason" | "owner_value" | "current_snapshot";
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save movement.";
@@ -27,21 +29,34 @@ export function MovementForm({ initialValue, mode, options, itemId }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<MovementField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function update<Key extends keyof HrAdminMovementWriteInput>(key: Key, value: HrAdminMovementWriteInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => ({ ...current, [key as MovementField]: undefined }));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
     setError("");
+    setFieldErrors({});
+    const nextErrors: FieldErrors<MovementField> = {
+      employee_id: requireValue(formValue.employee_id, "Select the employee for this movement."),
+      effective_date: requireValue(formValue.effective_date, "Select the movement effective date."),
+      reason: requireText(formValue.reason, "Enter the reason for this movement."),
+      owner_value: requireText(formValue.owner_value, "Select the owner who will manage this movement."),
+    };
     let currentSnapshot: Record<string, unknown> = {};
     try {
       currentSnapshot = formValue.current_snapshot.trim() ? JSON.parse(formValue.current_snapshot) : {};
     } catch {
-      setError("Current snapshot must be valid JSON.");
+      nextErrors.current_snapshot = "Current snapshot must be valid JSON.";
+    }
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted movement fields and try again.");
       setIsSubmitting(false);
       return;
     }
@@ -61,7 +76,7 @@ export function MovementForm({ initialValue, mode, options, itemId }: Props) {
   }
 
   return (
-    <form aria-label="Movement event form" className="section form-layout-modern lifecycle-child-form" data-testid="movement-event-form" onSubmit={handleSubmit}>
+    <form aria-label="Movement event form" className="section form-layout-modern lifecycle-child-form" data-testid="movement-event-form" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -80,11 +95,11 @@ export function MovementForm({ initialValue, mode, options, itemId }: Props) {
             title="Movement context"
           >
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Employee</span><select className="input-control" required value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
+              <label className="form-field"><span className="muted">Employee</span><select aria-invalid={Boolean(fieldErrors.employee_id)} className="input-control" required value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select>{fieldErrors.employee_id ? <span className="field-error-text">{fieldErrors.employee_id}</span> : null}</label>
               <label className="form-field"><span className="muted">Movement type</span><select className="input-control" value={formValue.movement_type} onChange={(e) => update("movement_type", e.target.value)}>{options.movement_types.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
               <label className="form-field"><span className="muted">Status</span><select className="input-control" value={formValue.status} onChange={(e) => update("status", e.target.value)}>{options.lifecycle_event_statuses.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
-              <label className="form-field"><span className="muted">Effective date</span><input className="input-control" required type="date" value={formValue.effective_date ?? ""} onChange={(e) => update("effective_date", e.target.value || null)} /></label>
-              <label className="form-field"><span className="muted">Reason</span><input className="input-control" value={formValue.reason} onChange={(e) => update("reason", e.target.value)} /></label>
+              <label className="form-field"><span className="muted">Effective date</span><input aria-invalid={Boolean(fieldErrors.effective_date)} className="input-control" required type="date" value={formValue.effective_date ?? ""} onChange={(e) => update("effective_date", e.target.value || null)} />{fieldErrors.effective_date ? <span className="field-error-text">{fieldErrors.effective_date}</span> : null}</label>
+              <label className="form-field"><span className="muted">Reason</span><input aria-invalid={Boolean(fieldErrors.reason)} className="input-control" value={formValue.reason} onChange={(e) => update("reason", e.target.value)} />{fieldErrors.reason ? <span className="field-error-text">{fieldErrors.reason}</span> : null}</label>
               <label className="form-field"><span className="muted">Workflow reference</span><input className="input-control" value={formValue.workflow_reference} onChange={(e) => update("workflow_reference", e.target.value)} /></label>
             </div>
           </FormSection>
@@ -107,7 +122,7 @@ export function MovementForm({ initialValue, mode, options, itemId }: Props) {
           >
             <div className="form-grid">
               <label className="form-field"><span className="muted">From manager</span><select className="input-control" value={formValue.from_manager_id ?? ""} onChange={(e) => update("from_manager_id", e.target.value || null)}>{selectOptions(options.managers)}</select></label>
-              <label className="form-field"><span className="muted">To manager</span><select className="input-control" value={formValue.owner_value} onChange={(e) => update("owner_value", e.target.value)}>{ownerOptions(options.lifecycle_owners)}</select></label>
+              <label className="form-field"><span className="muted">To manager</span><select aria-invalid={Boolean(fieldErrors.owner_value)} className="input-control" value={formValue.owner_value} onChange={(e) => update("owner_value", e.target.value)}>{ownerOptions(options.lifecycle_owners)}</select>{fieldErrors.owner_value ? <span className="field-error-text">{fieldErrors.owner_value}</span> : null}</label>
             </div>
           </FormSection>
 
@@ -118,12 +133,13 @@ export function MovementForm({ initialValue, mode, options, itemId }: Props) {
           >
             <label className="form-field">
               <span className="muted">Current snapshot JSON</span>
-              <textarea className="input-control" rows={6} value={formValue.current_snapshot} onChange={(e) => update("current_snapshot", e.target.value)} />
+              <textarea aria-invalid={Boolean(fieldErrors.current_snapshot)} className="input-control" rows={6} value={formValue.current_snapshot} onChange={(e) => update("current_snapshot", e.target.value)} />
+              {fieldErrors.current_snapshot ? <span className="field-error-text">{fieldErrors.current_snapshot}</span> : null}
             </label>
           </FormSection>
         </div>
 
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">This movement will immediately update the specialist queue and the unified lifecycle inbox.</span>
           <div className="form-actions-bar__buttons">

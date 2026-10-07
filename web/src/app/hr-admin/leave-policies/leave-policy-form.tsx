@@ -14,6 +14,7 @@ import type {
   HrAdminLeavePolicyWriteInput,
   HrAdminPolicyOptions,
 } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder } from "@/lib/ui/validation";
 
 type Props = {
   initialValue: HrAdminLeavePolicyWriteInput;
@@ -22,6 +23,18 @@ type Props = {
   itemId?: string;
   item?: HrAdminLeavePolicy;
 };
+
+type LeavePolicyField =
+  | "leave_type_id"
+  | "code"
+  | "name"
+  | "effective_to"
+  | "annual_entitlement"
+  | "max_carry_forward"
+  | "max_consecutive_days"
+  | "min_days_per_request"
+  | "notice_days_required"
+  | "minimum_service_days";
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save leave policy.";
@@ -75,6 +88,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeavePolicyField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const [previewEmployeeId, setPreviewEmployeeId] = useState(options.employees[0]?.id ?? "");
@@ -106,6 +120,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
 
   function update<Key extends keyof HrAdminLeavePolicyWriteInput>(key: Key, value: HrAdminLeavePolicyWriteInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => ({ ...current, [key as LeavePolicyField]: undefined }));
   }
 
   function updateAdvanced(value: HrAdminLeavePolicyAdvancedConfig) {
@@ -202,6 +217,33 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError("");
+    setFieldErrors({});
+    const annualEntitlement = Number(formValue.annual_entitlement);
+    const maxCarryForward = Number(formValue.max_carry_forward);
+    const maxConsecutiveDays = formValue.max_consecutive_days ? Number(formValue.max_consecutive_days) : null;
+    const minDaysPerRequest = Number(formValue.min_days_per_request);
+    const nextErrors: FieldErrors<LeavePolicyField> = {
+      leave_type_id: requireValue(formValue.leave_type_id, "Select the leave type for this policy."),
+      code: requireText(formValue.code, "Enter a unique leave policy code."),
+      name: requireText(formValue.name, "Enter the leave policy name."),
+      effective_to: validateDateOrder(formValue.effective_from ?? "", formValue.effective_to ?? "", "Effective to must be the same as or after effective from."),
+      annual_entitlement: !Number.isFinite(annualEntitlement) || annualEntitlement < 0 ? "Annual entitlement cannot be negative." : undefined,
+      max_carry_forward: !Number.isFinite(maxCarryForward) || maxCarryForward < 0 ? "Max carry forward cannot be negative." : undefined,
+      max_consecutive_days: maxConsecutiveDays !== null && (!Number.isFinite(maxConsecutiveDays) || maxConsecutiveDays <= 0) ? "Max consecutive days must be greater than zero." : undefined,
+      min_days_per_request: !Number.isFinite(minDaysPerRequest) || minDaysPerRequest <= 0 ? "Minimum days per request must be greater than zero." : undefined,
+      notice_days_required: formValue.notice_days_required < 0 ? "Notice days cannot be negative." : undefined,
+      minimum_service_days: formValue.minimum_service_days < 0 ? "Minimum service days cannot be negative." : undefined,
+    };
+    if (maxConsecutiveDays !== null && Number.isFinite(maxConsecutiveDays) && Number.isFinite(minDaysPerRequest) && minDaysPerRequest > maxConsecutiveDays) {
+      nextErrors.min_days_per_request = "Minimum days per request cannot exceed max consecutive days.";
+    }
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted leave policy fields and try again.");
+      setIsSubmitting(false);
+      isSubmittingRef.current = false;
+      return;
+    }
     let response: Response;
     try {
       response = await fetch(mode === "create" ? "/api/hr-admin/leave-policies" : `/api/hr-admin/leave-policies/${itemId}`, {
@@ -267,7 +309,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -284,23 +326,23 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           {mode === "edit" && item ? <PlatformGovernanceFormBanner detachPath={`/api/hr-admin/leave-policies/${itemId}/detach`} item={item} /> : null}
           <FormSection title="Identity and timing" description="Start with the linked leave type, policy identity, and effective dates.">
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Leave type</span><select className="input-control" disabled={leaveTypeLocked} value={formValue.leave_type_id ?? ""} onChange={(e) => update("leave_type_id", e.target.value || null)}>{selectOptions(options.leave_types)}</select><GovernanceLockHint fieldPath="leave_type_id" item={item} /></label>
-              <label className="form-field"><span className="muted">Code</span><input className="input-control" disabled={codeLocked} required value={formValue.code} onChange={(e) => update("code", e.target.value)} /><GovernanceLockHint fieldPath="code" item={item} /></label>
-              <label className="form-field"><span className="muted">Name</span><input className="input-control" disabled={nameLocked} required value={formValue.name} onChange={(e) => update("name", e.target.value)} /><GovernanceLockHint fieldPath="name" item={item} /></label>
+              <label className="form-field"><span className="muted">Leave type</span><select aria-invalid={Boolean(fieldErrors.leave_type_id)} className="input-control" disabled={leaveTypeLocked} value={formValue.leave_type_id ?? ""} onChange={(e) => update("leave_type_id", e.target.value || null)}>{selectOptions(options.leave_types)}</select>{fieldErrors.leave_type_id ? <span className="field-error-text">{fieldErrors.leave_type_id}</span> : null}<GovernanceLockHint fieldPath="leave_type_id" item={item} /></label>
+              <label className="form-field"><span className="muted">Code</span><input aria-invalid={Boolean(fieldErrors.code)} className="input-control" disabled={codeLocked} required value={formValue.code} onChange={(e) => update("code", e.target.value)} />{fieldErrors.code ? <span className="field-error-text">{fieldErrors.code}</span> : null}<GovernanceLockHint fieldPath="code" item={item} /></label>
+              <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors.name)} className="input-control" disabled={nameLocked} required value={formValue.name} onChange={(e) => update("name", e.target.value)} />{fieldErrors.name ? <span className="field-error-text">{fieldErrors.name}</span> : null}<GovernanceLockHint fieldPath="name" item={item} /></label>
               <label className="form-field"><span className="muted">Status</span><select className="input-control" disabled={statusLocked} value={formValue.status} onChange={(e) => update("status", e.target.value)}>{options.leave_policy_statuses.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select><GovernanceLockHint fieldPath="status" item={item} /></label>
               <label className="form-field"><span className="muted">Effective from</span><input className="input-control" disabled={effectiveFromLocked} type="date" value={formValue.effective_from ?? ""} onChange={(e) => update("effective_from", e.target.value || null)} /><GovernanceLockHint fieldPath="effective_from" item={item} /></label>
-              <label className="form-field"><span className="muted">Effective to</span><input className="input-control" disabled={effectiveToLocked} type="date" value={formValue.effective_to ?? ""} onChange={(e) => update("effective_to", e.target.value || null)} /><GovernanceLockHint fieldPath="effective_to" item={item} /></label>
+              <label className="form-field"><span className="muted">Effective to</span><input aria-invalid={Boolean(fieldErrors.effective_to)} className="input-control" disabled={effectiveToLocked} type="date" value={formValue.effective_to ?? ""} onChange={(e) => update("effective_to", e.target.value || null)} />{fieldErrors.effective_to ? <span className="field-error-text">{fieldErrors.effective_to}</span> : null}<GovernanceLockHint fieldPath="effective_to" item={item} /></label>
             </div>
           </FormSection>
 
           <FormSection title="Entitlement and request limits" description="Set the core numerical behavior that shapes accrual, usage, and request bounds.">
             <div className="form-grid">
               <label className="form-field"><span className="muted">Accrual frequency</span><select className="input-control" disabled={accrualFrequencyLocked} value={formValue.accrual_frequency} onChange={(e) => update("accrual_frequency", e.target.value)}>{options.accrual_frequencies.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select><GovernanceLockHint fieldPath="accrual_frequency" item={item} /></label>
-              <label className="form-field"><span className="muted">Annual entitlement</span><input className="input-control" disabled={annualEntitlementLocked} value={formValue.annual_entitlement} onChange={(e) => update("annual_entitlement", e.target.value)} /><GovernanceLockHint fieldPath="annual_entitlement" item={item} /></label>
-              <label className="form-field"><span className="muted">Max carry forward</span><input className="input-control" disabled={maxCarryForwardLocked} value={formValue.max_carry_forward} onChange={(e) => update("max_carry_forward", e.target.value)} /><GovernanceLockHint fieldPath="max_carry_forward" item={item} /></label>
-              <label className="form-field"><span className="muted">Max consecutive days</span><input className="input-control" disabled={maxConsecutiveDaysLocked} value={formValue.max_consecutive_days ?? ""} onChange={(e) => update("max_consecutive_days", e.target.value || null)} /><GovernanceLockHint fieldPath="max_consecutive_days" item={item} /></label>
-              <label className="form-field"><span className="muted">Min days per request</span><input className="input-control" disabled={minDaysPerRequestLocked} value={formValue.min_days_per_request} onChange={(e) => update("min_days_per_request", e.target.value)} /><GovernanceLockHint fieldPath="min_days_per_request" item={item} /></label>
-              <label className="form-field"><span className="muted">Notice days required</span><input className="input-control" disabled={noticeDaysLocked} type="number" value={formValue.notice_days_required} onChange={(e) => update("notice_days_required", Number(e.target.value))} /><GovernanceLockHint fieldPath="notice_days_required" item={item} /></label>
+              <label className="form-field"><span className="muted">Annual entitlement</span><input aria-invalid={Boolean(fieldErrors.annual_entitlement)} className="input-control" disabled={annualEntitlementLocked} value={formValue.annual_entitlement} onChange={(e) => update("annual_entitlement", e.target.value)} />{fieldErrors.annual_entitlement ? <span className="field-error-text">{fieldErrors.annual_entitlement}</span> : null}<GovernanceLockHint fieldPath="annual_entitlement" item={item} /></label>
+              <label className="form-field"><span className="muted">Max carry forward</span><input aria-invalid={Boolean(fieldErrors.max_carry_forward)} className="input-control" disabled={maxCarryForwardLocked} value={formValue.max_carry_forward} onChange={(e) => update("max_carry_forward", e.target.value)} />{fieldErrors.max_carry_forward ? <span className="field-error-text">{fieldErrors.max_carry_forward}</span> : null}<GovernanceLockHint fieldPath="max_carry_forward" item={item} /></label>
+              <label className="form-field"><span className="muted">Max consecutive days</span><input aria-invalid={Boolean(fieldErrors.max_consecutive_days)} className="input-control" disabled={maxConsecutiveDaysLocked} value={formValue.max_consecutive_days ?? ""} onChange={(e) => update("max_consecutive_days", e.target.value || null)} />{fieldErrors.max_consecutive_days ? <span className="field-error-text">{fieldErrors.max_consecutive_days}</span> : null}<GovernanceLockHint fieldPath="max_consecutive_days" item={item} /></label>
+              <label className="form-field"><span className="muted">Min days per request</span><input aria-invalid={Boolean(fieldErrors.min_days_per_request)} className="input-control" disabled={minDaysPerRequestLocked} value={formValue.min_days_per_request} onChange={(e) => update("min_days_per_request", e.target.value)} />{fieldErrors.min_days_per_request ? <span className="field-error-text">{fieldErrors.min_days_per_request}</span> : null}<GovernanceLockHint fieldPath="min_days_per_request" item={item} /></label>
+              <label className="form-field"><span className="muted">Notice days required</span><input aria-invalid={Boolean(fieldErrors.notice_days_required)} className="input-control" disabled={noticeDaysLocked} type="number" value={formValue.notice_days_required} onChange={(e) => update("notice_days_required", Number(e.target.value))} />{fieldErrors.notice_days_required ? <span className="field-error-text">{fieldErrors.notice_days_required}</span> : null}<GovernanceLockHint fieldPath="notice_days_required" item={item} /></label>
             </div>
           </FormSection>
 
@@ -308,7 +350,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
             <div className="form-grid">
               <label className="form-field"><span className="muted">Gender restriction</span><input className="input-control" disabled={genderRestrictionLocked} value={formValue.gender_restriction} onChange={(e) => update("gender_restriction", e.target.value)} /><GovernanceLockHint fieldPath="gender_restriction" item={item} /></label>
               <label className="form-field"><span className="muted">Marital status restriction</span><input className="input-control" disabled={maritalStatusRestrictionLocked} value={formValue.marital_status_restriction} onChange={(e) => update("marital_status_restriction", e.target.value)} /><GovernanceLockHint fieldPath="marital_status_restriction" item={item} /></label>
-              <label className="form-field"><span className="muted">Minimum service days</span><input className="input-control" disabled={minimumServiceDaysLocked} type="number" value={formValue.minimum_service_days} onChange={(e) => update("minimum_service_days", Number(e.target.value))} /><GovernanceLockHint fieldPath="minimum_service_days" item={item} /></label>
+              <label className="form-field"><span className="muted">Minimum service days</span><input aria-invalid={Boolean(fieldErrors.minimum_service_days)} className="input-control" disabled={minimumServiceDaysLocked} type="number" value={formValue.minimum_service_days} onChange={(e) => update("minimum_service_days", Number(e.target.value))} />{fieldErrors.minimum_service_days ? <span className="field-error-text">{fieldErrors.minimum_service_days}</span> : null}<GovernanceLockHint fieldPath="minimum_service_days" item={item} /></label>
             </div>
           </FormSection>
 
@@ -1012,7 +1054,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           </FormSection>
         </div>
 
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Policy changes save back into the leave policy catalog and stay ready for scoped assignments.</span>
           <div className="form-actions-bar__buttons">

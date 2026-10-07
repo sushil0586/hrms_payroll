@@ -55,6 +55,7 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
   const [form, setForm] = useState<FormState | null>(null);
   const [notice, setNotice] = useState("");
   const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (editing) labelRef.current?.focus();
@@ -73,6 +74,7 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
     setEditing(permission);
     setForm(buildFormState(permission));
     setFormError("");
+    setFieldErrors({});
     setNotice("");
   }
 
@@ -80,6 +82,7 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
     setEditing(null);
     setForm(null);
     setFormError("");
+    setFieldErrors({});
     setBusy(false);
   }
 
@@ -89,14 +92,19 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
 
   async function savePermission() {
     if (!editing || !form) return;
+    const nextFieldErrors: Record<string, string> = {};
     if (!form.label.trim()) {
-      setFormError("Permission label is required.");
-      return;
+      nextFieldErrors.label = "Permission label is required.";
     }
     if (!form.module.trim()) {
-      setFormError("Module is required.");
+      nextFieldErrors.module = "Module is required.";
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setFormError("Fix the highlighted permission fields before continuing.");
       return;
     }
+    setFieldErrors({});
     setBusy(true);
     setFormError("");
     const response = await fetch(`/api/platform/permission-catalog/${encodeURIComponent(editing.key)}`, {
@@ -151,16 +159,42 @@ export function PermissionCatalogActions({ permission, moduleOptions }: Props) {
             <div className="tenant-membership-form-grid tenant-membership-form-grid--dialog">
               <label>
                 Label
-                <input ref={labelRef} value={form.label} onChange={(event) => updateForm("label", event.target.value)} />
+                <input
+                  aria-invalid={Boolean(fieldErrors.label)}
+                  ref={labelRef}
+                  value={form.label}
+                  onChange={(event) => {
+                    updateForm("label", event.target.value);
+                    setFieldErrors((current) => {
+                      const { label: _removed, ...rest } = current;
+                      void _removed;
+                      return rest;
+                    });
+                  }}
+                />
+                {fieldErrors.label ? <span className="field-error-text" role="alert">{fieldErrors.label}</span> : null}
               </label>
               <label>
                 Module
-                <input list="permission-module-options" value={form.module} onChange={(event) => updateForm("module", event.target.value)} />
+                <input
+                  aria-invalid={Boolean(fieldErrors.module)}
+                  list="permission-module-options"
+                  value={form.module}
+                  onChange={(event) => {
+                    updateForm("module", event.target.value);
+                    setFieldErrors((current) => {
+                      const { module: _removed, ...rest } = current;
+                      void _removed;
+                      return rest;
+                    });
+                  }}
+                />
                 <datalist id="permission-module-options">
                   {moduleOptions.map((module) => (
                     <option key={module} value={module} />
                   ))}
                 </datalist>
+                {fieldErrors.module ? <span className="field-error-text" role="alert">{fieldErrors.module}</span> : null}
               </label>
               <label>
                 Risk

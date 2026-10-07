@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import type { FieldErrors } from "@/lib/ui/validation";
 import type {
   HrAdminPayGroup,
   HrAdminPayGroupAssignment,
@@ -17,6 +18,20 @@ type SaveMode = "create" | "edit";
 type ConfigFamily = "calendar" | "period" | "payGroup" | "assignment";
 type PayrollActionTab = ConfigFamily;
 type ApiItem = HrAdminPayrollCalendar | HrAdminPayrollPeriod | HrAdminPayGroup | HrAdminPayGroupAssignment;
+type PayrollSetupField =
+  | "calendar.currency_code"
+  | "calendar.period_start_day"
+  | "period.calendar_id"
+  | "period.start_date"
+  | "period.end_date"
+  | "period.pay_date"
+  | "payGroup.calendar_id"
+  | "payGroup.default_currency_code"
+  | "payGroup.branch_id"
+  | "assignment.pay_group_id"
+  | "assignment.employee_id"
+  | "assignment.effective_from"
+  | "assignment.effective_to";
 
 type CalendarForm = {
   id?: string;
@@ -229,6 +244,10 @@ function FieldHint({ children, tone = "muted" }: { children: string; tone?: "mut
   return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
 }
 
+function FieldError({ message }: { message?: string }) {
+  return message ? <span className="field-error-text" role="alert">{message}</span> : null;
+}
+
 function replaceOrAppend<Item extends { id: string }>(items: Item[], next: Item) {
   return items.some((item) => item.id === next.id)
     ? items.map((item) => (item.id === next.id ? next : item))
@@ -351,17 +370,20 @@ function TextField({
   onChange,
   required,
   type = "text",
+  error,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
   type?: string;
+  error?: string;
 }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <input className="input-control" required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <input aria-invalid={Boolean(error)} className="input-control" required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <FieldError message={error} />
     </label>
   );
 }
@@ -375,6 +397,7 @@ function SelectField({
   disabled,
   hint,
   tone = "muted",
+  error,
 }: {
   label: string;
   value: string;
@@ -384,17 +407,19 @@ function SelectField({
   disabled?: boolean;
   hint?: string;
   tone?: "muted" | "warning";
+  error?: string;
 }) {
   return (
     <label className="form-field">
       <span className="muted">{label}</span>
-      <select className="input-control" disabled={disabled} required={required} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select aria-invalid={Boolean(error)} className="input-control" disabled={disabled} required={required} value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={`${label}-${option.value || "empty"}`} value={option.value}>
             {option.label}
           </option>
         ))}
       </select>
+      <FieldError message={error} />
       {hint ? <FieldHint tone={tone}>{hint}</FieldHint> : null}
     </label>
   );
@@ -525,6 +550,7 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
   const [payGroupForm, setPayGroupForm] = useState<PayGroupForm>(() => emptyPayGroupForm(initialSetup));
   const [assignmentForm, setAssignmentForm] = useState<AssignmentForm>(() => emptyAssignmentForm(initialSetup));
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<PayrollSetupField>>({});
   const [submitting, setSubmitting] = useState<ConfigFamily | null>(null);
   const [recordPages, setRecordPages] = useState<Record<PayrollActionTab, number>>({
     calendar: 1,
@@ -588,62 +614,85 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
     setRecordPages((current) => ({ ...current, [tab]: Math.max(1, page) }));
   }
 
-  function reportValidation(family: ConfigFamily, message: string) {
+  function reportValidation(family: ConfigFamily, message: string, nextFieldErrors: FieldErrors<PayrollSetupField>) {
     setFeedback({ family, tone: "error", message });
+    setFieldErrors(nextFieldErrors);
     return false;
   }
 
   function validateCalendar() {
+    const nextFieldErrors: FieldErrors<PayrollSetupField> = {};
     if (!isCurrencyCode(calendarForm.currency_code)) {
-      return reportValidation("calendar", "Currency code must be a 3-letter ISO code such as INR.");
+      nextFieldErrors["calendar.currency_code"] = "Currency code must be a 3-letter ISO code such as INR.";
     }
     if (!isWholeNumberInRange(calendarForm.period_start_day, 1, 31)) {
-      return reportValidation("calendar", "Period start day must be a whole number between 1 and 31.");
+      nextFieldErrors["calendar.period_start_day"] = "Period start day must be a whole number between 1 and 31.";
     }
+    if (Object.keys(nextFieldErrors).length) {
+      return reportValidation("calendar", "Fix the highlighted calendar fields before saving.", nextFieldErrors);
+    }
+    setFieldErrors({});
     return true;
   }
 
   function validatePeriod() {
+    const nextFieldErrors: FieldErrors<PayrollSetupField> = {};
     if (!periodForm.calendar_id) {
-      return reportValidation("period", "Select a payroll calendar before creating a period.");
+      nextFieldErrors["period.calendar_id"] = "Select a payroll calendar before creating a period.";
     }
     const dateError = validateDateWindow(periodForm.start_date, periodForm.end_date, "Payroll period");
     if (dateError) {
-      return reportValidation("period", dateError);
+      nextFieldErrors[dateError.includes("start date") ? "period.start_date" : "period.end_date"] = dateError;
     }
     if (!isIsoDate(periodForm.pay_date)) {
-      return reportValidation("period", "Pay date must be a valid date.");
+      nextFieldErrors["period.pay_date"] = "Pay date must be a valid date.";
+    } else if (periodForm.start_date && periodForm.pay_date < periodForm.start_date) {
+      nextFieldErrors["period.pay_date"] = "Pay date cannot be earlier than the period start date.";
     }
-    if (periodForm.pay_date < periodForm.start_date) {
-      return reportValidation("period", "Pay date cannot be earlier than the period start date.");
+    if (Object.keys(nextFieldErrors).length) {
+      return reportValidation("period", "Fix the highlighted period fields before saving.", nextFieldErrors);
     }
+    setFieldErrors({});
     return true;
   }
 
   function validatePayGroup() {
+    const nextFieldErrors: FieldErrors<PayrollSetupField> = {};
     if (!payGroupForm.calendar_id) {
-      return reportValidation("payGroup", "Select a payroll calendar before creating a pay group.");
+      nextFieldErrors["payGroup.calendar_id"] = "Select a payroll calendar before creating a pay group.";
     }
     if (!isCurrencyCode(payGroupForm.default_currency_code)) {
-      return reportValidation("payGroup", "Default currency code must be a 3-letter ISO code such as INR.");
+      nextFieldErrors["payGroup.default_currency_code"] = "Default currency code must be a 3-letter ISO code such as INR.";
     }
     if (payGroupForm.legal_entity_id && payGroupForm.branch_id) {
       const branch = setup.options.branches.find((item) => item.id === payGroupForm.branch_id);
       if (branch?.legal_entity_id !== payGroupForm.legal_entity_id) {
-        return reportValidation("payGroup", "Selected branch must belong to the selected legal entity.");
+        nextFieldErrors["payGroup.branch_id"] = "Selected branch must belong to the selected legal entity.";
       }
     }
+    if (Object.keys(nextFieldErrors).length) {
+      return reportValidation("payGroup", "Fix the highlighted pay group fields before saving.", nextFieldErrors);
+    }
+    setFieldErrors({});
     return true;
   }
 
   function validateAssignment() {
-    if (!assignmentForm.pay_group_id || !assignmentForm.employee_id) {
-      return reportValidation("assignment", "Select both a pay group and an employee before saving the assignment.");
+    const nextFieldErrors: FieldErrors<PayrollSetupField> = {};
+    if (!assignmentForm.pay_group_id) {
+      nextFieldErrors["assignment.pay_group_id"] = "Select a pay group before saving the assignment.";
+    }
+    if (!assignmentForm.employee_id) {
+      nextFieldErrors["assignment.employee_id"] = "Select an employee before saving the assignment.";
     }
     const dateError = validateDateWindow(assignmentForm.effective_from, assignmentForm.effective_to, "Assignment");
     if (dateError) {
-      return reportValidation("assignment", dateError);
+      nextFieldErrors[dateError.includes("start date") ? "assignment.effective_from" : "assignment.effective_to"] = dateError;
     }
+    if (Object.keys(nextFieldErrors).length) {
+      return reportValidation("assignment", "Fix the highlighted assignment fields before saving.", nextFieldErrors);
+    }
+    setFieldErrors({});
     return true;
   }
 
@@ -680,6 +729,7 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
   ) {
     setSubmitting(family);
     setFeedback(null);
+    setFieldErrors({});
 
     let response: Response;
     try {
@@ -786,8 +836,8 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
       </div>
 
       {feedback ? (
-        <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""}`} role="status">
-          <strong>{feedback.tone === "success" ? "Saved." : "Save failed."}</strong>
+        <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"}`} role={feedback.tone === "success" ? "status" : "alert"}>
+          <strong>{feedback.tone === "success" ? "Saved successfully." : "Save failed."}</strong>
           <span className="muted">{feedback.message}</span>
         </div>
       ) : null}
@@ -810,6 +860,7 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           className="salary-crud-form"
           data-testid="payroll-calendar-form"
           id="payroll-calendar-form"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             if (!validateCalendar()) {
@@ -833,8 +884,8 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
             <TextField label="Name" required value={calendarForm.name} onChange={(value) => setCalendarForm((current) => ({ ...current, name: value }))} />
             <SelectField label="Frequency" required value={calendarForm.frequency} options={frequencyOptions} onChange={(value) => setCalendarForm((current) => ({ ...current, frequency: value }))} />
             <TextField label="Timezone" required value={calendarForm.timezone} onChange={(value) => setCalendarForm((current) => ({ ...current, timezone: value }))} />
-            <TextField label="Currency code" required value={calendarForm.currency_code} onChange={(value) => setCalendarForm((current) => ({ ...current, currency_code: value.toUpperCase().slice(0, 3) }))} />
-            <TextField label="Period start day" required type="number" value={calendarForm.period_start_day} onChange={(value) => setCalendarForm((current) => ({ ...current, period_start_day: value }))} />
+            <TextField label="Currency code" required error={fieldErrors["calendar.currency_code"]} value={calendarForm.currency_code} onChange={(value) => setCalendarForm((current) => ({ ...current, currency_code: value.toUpperCase().slice(0, 3) }))} />
+            <TextField label="Period start day" required error={fieldErrors["calendar.period_start_day"]} type="number" value={calendarForm.period_start_day} onChange={(value) => setCalendarForm((current) => ({ ...current, period_start_day: value }))} />
             <TextField label="Config profile reference" value={calendarForm.config_profile_ref} onChange={(value) => setCalendarForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
           <div className="toggle-field-list salary-crud-toggle-list">
@@ -865,6 +916,7 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           className="salary-crud-form"
           data-testid="payroll-period-form"
           id="payroll-period-form"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             if (!validatePeriod()) {
@@ -885,12 +937,12 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           <FormHeader mode={periodForm.id ? "edit" : "create"} title="Period" onReset={() => setPeriodForm(emptyPeriodForm(setup))} />
           {!calendarOptions.length ? <DependencyNotice>Create a payroll calendar before adding periods.</DependencyNotice> : null}
           <div className="form-grid salary-crud-form-grid">
-            <SelectField label="Calendar" required value={periodForm.calendar_id} options={calendarOptions} onChange={(value) => setPeriodForm((current) => ({ ...current, calendar_id: value }))} />
+            <SelectField label="Calendar" required error={fieldErrors["period.calendar_id"]} value={periodForm.calendar_id} options={calendarOptions} onChange={(value) => setPeriodForm((current) => ({ ...current, calendar_id: value }))} />
             <TextField label="Code" required value={periodForm.code} onChange={(value) => setPeriodForm((current) => ({ ...current, code: value }))} />
             <TextField label="Name" required value={periodForm.name} onChange={(value) => setPeriodForm((current) => ({ ...current, name: value }))} />
-            <TextField label="Start date" required type="date" value={periodForm.start_date} onChange={(value) => setPeriodForm((current) => ({ ...current, start_date: value }))} />
-            <TextField label="End date" required type="date" value={periodForm.end_date} onChange={(value) => setPeriodForm((current) => ({ ...current, end_date: value }))} />
-            <TextField label="Pay date" required type="date" value={periodForm.pay_date} onChange={(value) => setPeriodForm((current) => ({ ...current, pay_date: value }))} />
+            <TextField label="Start date" required error={fieldErrors["period.start_date"]} type="date" value={periodForm.start_date} onChange={(value) => setPeriodForm((current) => ({ ...current, start_date: value }))} />
+            <TextField label="End date" required error={fieldErrors["period.end_date"]} type="date" value={periodForm.end_date} onChange={(value) => setPeriodForm((current) => ({ ...current, end_date: value }))} />
+            <TextField label="Pay date" required error={fieldErrors["period.pay_date"]} type="date" value={periodForm.pay_date} onChange={(value) => setPeriodForm((current) => ({ ...current, pay_date: value }))} />
             <SelectField label="Status" required value={periodForm.status} options={periodStatusOptions} onChange={(value) => setPeriodForm((current) => ({ ...current, status: value }))} />
             <TextField label="Config profile reference" value={periodForm.config_profile_ref} onChange={(value) => setPeriodForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>
@@ -919,6 +971,7 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           className="salary-crud-form"
           data-testid="pay-group-form"
           id="pay-group-form"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             if (!validatePayGroup()) {
@@ -942,11 +995,11 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           <FormHeader mode={payGroupForm.id ? "edit" : "create"} title="Pay group" onReset={() => setPayGroupForm(emptyPayGroupForm(setup))} />
           {!calendarOptions.length ? <DependencyNotice>Create a payroll calendar before adding pay groups.</DependencyNotice> : null}
           <div className="form-grid salary-crud-form-grid">
-            <SelectField label="Calendar" required value={payGroupForm.calendar_id} options={calendarOptions} onChange={(value) => setPayGroupForm((current) => ({ ...current, calendar_id: value }))} />
+            <SelectField label="Calendar" required error={fieldErrors["payGroup.calendar_id"]} value={payGroupForm.calendar_id} options={calendarOptions} onChange={(value) => setPayGroupForm((current) => ({ ...current, calendar_id: value }))} />
             <TextField label="Code" required value={payGroupForm.code} onChange={(value) => setPayGroupForm((current) => ({ ...current, code: value }))} />
             <TextField label="Name" required value={payGroupForm.name} onChange={(value) => setPayGroupForm((current) => ({ ...current, name: value }))} />
             <SelectField label="Status" required value={payGroupForm.status} options={payGroupStatusOptions} onChange={(value) => setPayGroupForm((current) => ({ ...current, status: value }))} />
-            <TextField label="Default currency code" required value={payGroupForm.default_currency_code} onChange={(value) => setPayGroupForm((current) => ({ ...current, default_currency_code: value.toUpperCase().slice(0, 3) }))} />
+            <TextField label="Default currency code" required error={fieldErrors["payGroup.default_currency_code"]} value={payGroupForm.default_currency_code} onChange={(value) => setPayGroupForm((current) => ({ ...current, default_currency_code: value.toUpperCase().slice(0, 3) }))} />
             <SelectField label="Legal entity" value={payGroupForm.legal_entity_id} options={optionItems(setup.options.legal_entities, "All legal entities")} onChange={updatePayGroupLegalEntity} />
             <SelectField
               label="Branch"
@@ -955,6 +1008,7 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
               disabled={Boolean(payGroupForm.legal_entity_id && scopedBranches.length === 0)}
               hint={payGroupBranchWarning}
               tone={payGroupBranchWarning ? "warning" : "muted"}
+              error={fieldErrors["payGroup.branch_id"]}
               onChange={updatePayGroupBranch}
             />
             <SelectField
@@ -994,6 +1048,7 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           className="salary-crud-form"
           data-testid="pay-group-assignment-form"
           id="pay-group-assignment-form"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             if (!validateAssignment()) {
@@ -1013,10 +1068,10 @@ export function PayrollSetupCrudConsole({ initialSetup }: { initialSetup: HrAdmi
           {!payGroupOptions.length ? <DependencyNotice>Create at least one pay group before assigning employees.</DependencyNotice> : null}
           {payGroupOptions.length && !employeeOptions.length ? <DependencyNotice>Add active employees before creating pay group assignments.</DependencyNotice> : null}
           <div className="form-grid salary-crud-form-grid">
-            <SelectField label="Pay group" required value={assignmentForm.pay_group_id} options={payGroupOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, pay_group_id: value }))} />
-            <SelectField label="Employee" required value={assignmentForm.employee_id} options={employeeOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, employee_id: value }))} />
-            <TextField label="Effective from" required type="date" value={assignmentForm.effective_from} onChange={(value) => setAssignmentForm((current) => ({ ...current, effective_from: value }))} />
-            <TextField label="Effective to" type="date" value={assignmentForm.effective_to} onChange={(value) => setAssignmentForm((current) => ({ ...current, effective_to: value }))} />
+            <SelectField label="Pay group" required error={fieldErrors["assignment.pay_group_id"]} value={assignmentForm.pay_group_id} options={payGroupOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, pay_group_id: value }))} />
+            <SelectField label="Employee" required error={fieldErrors["assignment.employee_id"]} value={assignmentForm.employee_id} options={employeeOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, employee_id: value }))} />
+            <TextField label="Effective from" required error={fieldErrors["assignment.effective_from"]} type="date" value={assignmentForm.effective_from} onChange={(value) => setAssignmentForm((current) => ({ ...current, effective_from: value }))} />
+            <TextField label="Effective to" error={fieldErrors["assignment.effective_to"]} type="date" value={assignmentForm.effective_to} onChange={(value) => setAssignmentForm((current) => ({ ...current, effective_to: value }))} />
             <SelectField label="Status" required value={assignmentForm.status} options={payGroupStatusOptions} onChange={(value) => setAssignmentForm((current) => ({ ...current, status: value }))} />
             <TextField label="Config profile reference" value={assignmentForm.config_profile_ref} onChange={(value) => setAssignmentForm((current) => ({ ...current, config_profile_ref: value }))} />
           </div>

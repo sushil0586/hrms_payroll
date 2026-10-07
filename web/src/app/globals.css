@@ -441,6 +441,20 @@ textarea.input-control:disabled {
   background: linear-gradient(180deg, rgba(248, 250, 255, 0.94), rgba(244, 247, 251, 0.88));
 }
 
+.notice--error,
+.notice--danger,
+.notice[role="alert"] {
+  border-color: rgba(220, 38, 38, 0.34);
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.notice--error .muted,
+.notice--danger .muted,
+.notice[role="alert"] .muted {
+  color: #b42318;
+}
+
 .manager-decision-panel {
   display: grid;
   gap: 12px;
@@ -13601,6 +13615,25 @@ select.input-control {
   font-weight: 700;
 }
 
+.field-error-text,
+.form-field > .field-error-text {
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.55;
+  text-transform: none;
+}
+
+.input-control[aria-invalid="true"],
+.auth-input[aria-invalid="true"],
+.form-field input[aria-invalid="true"],
+.form-field select[aria-invalid="true"],
+.form-field textarea[aria-invalid="true"] {
+  border-color: rgba(220, 38, 38, 0.72);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
 .inline-form-row {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(92px, 110px) auto;
@@ -13618,6 +13651,26 @@ select.input-control {
   background:
     linear-gradient(180deg, rgba(239, 246, 255, 0.96), rgba(248, 250, 252, 0.96)),
     linear-gradient(135deg, rgb(var(--workspace-accent-rgb, 37 99 235) / 0.04), transparent 46%);
+}
+
+.form-shell-card .notice--success {
+  border-color: rgba(5, 150, 105, 0.34);
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.form-shell-card .notice--error,
+.form-shell-card .notice--danger,
+.form-shell-card .notice[role="alert"] {
+  border-color: rgba(220, 38, 38, 0.34);
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.form-shell-card .notice--error .muted,
+.form-shell-card .notice--danger .muted,
+.form-shell-card .notice[role="alert"] .muted {
+  color: #b42318;
 }
 
 .form-shell-card .detail-grid {
@@ -15470,8 +15523,39 @@ select.input-control {
 }
 
 .notice--success {
-  border-color: rgba(16, 185, 129, 0.2);
+  border-color: rgba(5, 150, 105, 0.34);
   background: #ecfdf5;
+  color: #065f46;
+}
+
+.notice--success .muted {
+  color: #047857;
+}
+
+.form-status {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.86);
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 8px 10px;
+}
+
+.form-status--success {
+  border-color: rgba(5, 150, 105, 0.32);
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.form-status--error {
+  border-color: rgba(220, 38, 38, 0.32);
+  background: #fef2f2;
+  color: #991b1b;
 }
 
 .shell--payroll-setup {
@@ -20567,6 +20651,18 @@ a.payroll-setup-mini-card {
   color: #475569;
 }
 
+.tenant-inline-notice--success {
+  border-color: rgba(5, 150, 105, 0.32);
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.tenant-inline-notice--error {
+  border-color: rgba(220, 38, 38, 0.32);
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 .tenant-directory-table {
   display: grid;
   min-width: 0;
@@ -21472,6 +21568,12 @@ a.payroll-setup-mini-card {
   font-size: 13px;
   line-height: 1.45;
   padding: 10px 12px;
+}
+
+.tenant-modal__validation[role="alert"] {
+  border-color: rgba(220, 38, 38, 0.32);
+  background: #fef2f2;
+  color: #991b1b;
 }
 
 .tenant-modal__member-summary {

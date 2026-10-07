@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder } from "@/lib/ui/validation";
 import type {
   AttendanceRegularizationItem,
   EmployeeDashboard,
@@ -28,6 +29,8 @@ type Feedback = {
   tone: "success" | "error";
   message: string;
 };
+
+type AttendanceRegularizationField = "attendance_record_id" | "requested_check_out_at" | "reason";
 
 function formatDate(value: string | null) {
   if (!value) return "Not available";
@@ -205,11 +208,15 @@ function AttendanceRegularizationModal({
   const [checkOut, setCheckOut] = useState("");
   const [reason, setReason] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<AttendanceRegularizationField>>({});
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const selectedRecord = attendanceRecords.find((record) => record.id === selectedRecordId) ?? null;
   const hasTimeOrderRisk = Boolean(checkIn && checkOut && new Date(checkOut) < new Date(checkIn));
-  const canSubmit = Boolean(selectedRecord && !selectedRecord.is_locked && !hasTimeOrderRisk && reason.trim());
+
+  function clearFieldError(field: AttendanceRegularizationField) {
+    setFieldErrors((current) => ({ ...current, [field]: undefined }));
+  }
 
   async function submitRegularization(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -219,14 +226,20 @@ function AttendanceRegularizationModal({
     }
     submittingRef.current = true;
     setFeedback(null);
-    if (!canSubmit) {
+    setFieldErrors({});
+    const nextErrors: FieldErrors<AttendanceRegularizationField> = {
+      attendance_record_id: requireValue(selectedRecordId, "Select the attendance day that needs correction."),
+      requested_check_out_at: validateDateOrder(checkIn, checkOut, "Requested check-out cannot be earlier than requested check-in."),
+      reason: requireText(reason, "Enter the reason for this attendance correction."),
+    };
+    if (selectedRecord?.is_locked) {
+      nextErrors.attendance_record_id = "This attendance record is locked. Contact HR before payroll close.";
+    }
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
       setFeedback({
         tone: "error",
-        message: selectedRecord?.is_locked
-          ? "This attendance record is locked. Contact HR before payroll close."
-          : hasTimeOrderRisk
-            ? "Requested check-out cannot be earlier than requested check-in."
-            : "Add a clear reason before submitting the correction.",
+        message: "Review the highlighted attendance fields and try again.",
       });
       submittingRef.current = false;
       return;
@@ -281,16 +294,17 @@ function AttendanceRegularizationModal({
           </div>
           <button aria-label="Close regularize attendance dialog" className="button button--secondary" onClick={onClose} type="button">Close</button>
         </div>
-        <form className="attendance-regularize-layout" onSubmit={submitRegularization}>
+        <form className="attendance-regularize-layout" noValidate onSubmit={submitRegularization}>
           <div className="form-grid attendance-regularize-form">
             <label className="form-field form-field--full">
               <span className="muted">Attendance record</span>
-              <select className="input-control" name="attendance_record_id" onChange={(event) => setSelectedRecordId(event.target.value)} required value={selectedRecordId}>
+              <select aria-invalid={Boolean(fieldErrors.attendance_record_id)} className="input-control" name="attendance_record_id" onChange={(event) => { setSelectedRecordId(event.target.value); clearFieldError("attendance_record_id"); }} required value={selectedRecordId}>
                 {!attendanceRecords.length ? <option value="">No days available for correction</option> : null}
                 {attendanceRecords.map((record) => (
                   <option disabled={record.is_locked} key={record.id} value={record.id}>{formatRecordLabel(record)}</option>
                 ))}
               </select>
+              {fieldErrors.attendance_record_id ? <span className="field-error-text" role="alert">{fieldErrors.attendance_record_id}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Requested status</span>
@@ -304,19 +318,21 @@ function AttendanceRegularizationModal({
             </label>
             <label className="form-field">
               <span className="muted">Requested check-in</span>
-              <input className="input-control" name="requested_check_in_at" onChange={(event) => setCheckIn(event.target.value)} type="datetime-local" value={checkIn} />
+              <input className="input-control" name="requested_check_in_at" onChange={(event) => { setCheckIn(event.target.value); clearFieldError("requested_check_out_at"); }} type="datetime-local" value={checkIn} />
             </label>
             <label className="form-field">
               <span className="muted">Requested check-out</span>
-              <input className="input-control" name="requested_check_out_at" onChange={(event) => setCheckOut(event.target.value)} type="datetime-local" value={checkOut} />
+              <input aria-invalid={Boolean(fieldErrors.requested_check_out_at)} className="input-control" name="requested_check_out_at" onChange={(event) => { setCheckOut(event.target.value); clearFieldError("requested_check_out_at"); }} type="datetime-local" value={checkOut} />
+              {fieldErrors.requested_check_out_at ? <span className="field-error-text" role="alert">{fieldErrors.requested_check_out_at}</span> : null}
             </label>
             <label className="form-field form-field--full">
               <span className="muted">Reason</span>
-              <textarea className="input-control" name="reason" onChange={(event) => setReason(event.target.value)} required rows={3} value={reason} />
+              <textarea aria-invalid={Boolean(fieldErrors.reason)} className="input-control" name="reason" onChange={(event) => { setReason(event.target.value); clearFieldError("reason"); }} required rows={3} value={reason} />
+              {fieldErrors.reason ? <span className="field-error-text" role="alert">{fieldErrors.reason}</span> : null}
             </label>
             {feedback ? (
-              <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""} form-field--full`} role="status">
-                <strong>{feedback.tone === "success" ? "Submitted." : "Submission failed."}</strong>
+              <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"} form-field--full`} role={feedback.tone === "success" ? "status" : "alert"}>
+                <strong>{feedback.tone === "success" ? "Submitted successfully." : "Submission failed."}</strong>
                 <span className="muted">{feedback.message}</span>
               </div>
             ) : null}
@@ -340,7 +356,7 @@ function AttendanceRegularizationModal({
             ) : null}
             <div className="form-actions-bar form-field--full">
               <span className="muted">After you submit, your manager receives this correction for approval.</span>
-              <button className="button button--primary" disabled={submitting || !canSubmit} type="submit">
+              <button className="button button--primary" disabled={submitting || !attendanceRecords.length || Boolean(selectedRecord?.is_locked)} type="submit">
                 {submitting ? "Submitting..." : "Submit correction"}
               </button>
             </div>

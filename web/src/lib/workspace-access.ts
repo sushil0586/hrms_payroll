@@ -118,6 +118,10 @@ export async function requirePlatformAdminAccess({
 } = {}) {
   const sessionUser = await getSessionUser();
 
+  if (!sessionUser && DEMO_DATA_ENABLED && !API_BASE_URL) {
+    return null;
+  }
+
   if (!sessionUser) {
     redirect(loginPath);
   }

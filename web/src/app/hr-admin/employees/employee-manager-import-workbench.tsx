@@ -298,7 +298,7 @@ export function EmployeeManagerImportWorkbench({ employees, options }: EmployeeM
           </div>
         </div>
 
-        {message ? <div className="notice">{message}</div> : null}
+        {message ? <div className="notice notice--success" role="status"><strong>Manager import update completed.</strong><span>{message}</span></div> : null}
 
         {rows.length ? (
           <div className="table-scroll">

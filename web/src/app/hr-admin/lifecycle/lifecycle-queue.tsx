@@ -396,7 +396,7 @@ export function LifecycleQueue({
           <span className="queue-summary-chip"><strong>{selectedKeys.length}</strong> selected</span>
         </div>
         {feedback ? <div className="notice"><strong>{feedback}</strong><span className="muted">The lifecycle inbox has been refreshed with the latest queue state.</span></div> : null}
-        {error ? <div className="notice"><strong>Lifecycle bulk action failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Lifecycle bulk action failed.</strong><span className="muted">{error}</span></div> : null}
       </section>
 
       <div className="queue-list lifecycle-record-list">

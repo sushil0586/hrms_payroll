@@ -139,7 +139,7 @@ export function ShiftForm({ initialValue, mode, itemId, item }: Props) {
             </div>
           </FormSection>
         </div>
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Shift changes save back into attendance operations immediately.</span>
           <div className="form-actions-bar__buttons">

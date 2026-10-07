@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
 import { employeeAccessDetailToFormValue } from "@/app/hr-admin/employees/[employeeId]/access/form-values";
+import { hasFieldErrors, requireText, validateEmail } from "@/lib/ui/validation";
 import type {
   HrAdminEmployeeAccessDetail,
   HrAdminEmployeeAccessOptions,
@@ -50,7 +51,7 @@ function extractErrors(payload: unknown): { message: string; fieldErrors: Access
 }
 
 function FieldError({ message }: { message?: string }) {
-  return message ? <span className="muted">{message}</span> : null;
+  return message ? <span className="field-error-text" role="alert">{message}</span> : null;
 }
 
 export function EmployeeAccessForm({ employeeId, initialValue, options, existingAccess, employeeStatus }: AccessFormProps) {
@@ -100,6 +101,22 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
     isSubmittingRef.current = true;
     setError("");
     setSuccessNotice("");
+    setFieldErrors({});
+    const nextErrors: AccessFieldErrors = {
+      username: requireText(formValue.username, "Enter the username."),
+      email: requireText(formValue.email, "Enter the email address.") ?? validateEmail(formValue.email, "Enter a valid email address."),
+      role_ids: formValue.role_ids.length ? undefined : "Select at least one tenant role.",
+      membership_status:
+        employeeBlocksActiveAccess && hasActiveAccessSelection
+          ? `Set membership to ${offboardingMembershipStatus} and turn user access off for this employee status.`
+          : undefined,
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted access fields and try again.");
+      isSubmittingRef.current = false;
+      return;
+    }
     setIsSubmitting(true);
 
     let response: Response;
@@ -140,7 +157,7 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
   }
 
   return (
-    <form className="section form-layout-modern employee-child-form" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern employee-child-form" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -167,12 +184,12 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Username</span>
-                <input className="input-control" required value={formValue.username} onChange={(event) => updateField("username", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.username)} className="input-control" required value={formValue.username} onChange={(event) => updateField("username", event.target.value)} />
                 <FieldError message={fieldErrors.username} />
               </label>
               <label className="form-field">
                 <span className="muted">Email</span>
-                <input className="input-control" required type="email" value={formValue.email} onChange={(event) => updateField("email", event.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.email)} className="input-control" required type="email" value={formValue.email} onChange={(event) => updateField("email", event.target.value)} />
                 <FieldError message={fieldErrors.email} />
               </label>
               <label className="form-field">
@@ -193,7 +210,7 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
               </label>
               <label className="form-field">
                 <span className="muted">Membership status</span>
-                <select className="input-control" value={formValue.membership_status} onChange={(event) => updateField("membership_status", event.target.value)}>
+                <select aria-invalid={Boolean(fieldErrors.membership_status)} className="input-control" value={formValue.membership_status} onChange={(event) => updateField("membership_status", event.target.value)}>
                   {options.membership_statuses.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -264,11 +281,12 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
                 </label>
               ))}
             </div>
+            <FieldError message={fieldErrors.role_ids} />
           </FormSection>
         </div>
 
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Save failed.</strong>
             <span className="muted">{error}</span>
           </div>
@@ -300,7 +318,7 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
         <div className="form-actions-bar">
           <span className="muted">Provisioning updates immediately refresh the employee access view and keep the account aligned with role routing.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--primary" disabled={isSubmitting || !hasSelectedRoles || (employeeBlocksActiveAccess && hasActiveAccessSelection)} type="submit">
+            <button className="button button--primary" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : existingAccess ? "Update access" : "Create access"}
             </button>
             <button className="button button--secondary" onClick={() => router.back()} type="button">

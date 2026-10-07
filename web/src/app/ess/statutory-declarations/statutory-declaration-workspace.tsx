@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateUploadFile } from "@/lib/ui/validation";
 import type {
   EssStatutoryDeclaration,
   EssStatutoryDeclarationItem,
@@ -27,6 +28,9 @@ type Props = {
 };
 
 type ModalState = "declaration" | "proof" | "submit" | "proofDetail" | null;
+type NoticeTone = "success" | "error" | "info";
+type DeclarationField = "financial_year_code" | "tax_regime";
+type ProofField = "name" | "declared_amount" | "proof_category_id" | "proof_file";
 
 const indianTaxSections = [
   {
@@ -476,6 +480,9 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
   const [activeModal, setActiveModal] = useState<ModalState>(null);
   const [selectedProof, setSelectedProof] = useState<EssStatutoryDeclarationItem | null>(null);
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState<NoticeTone>("info");
+  const [declarationFieldErrors, setDeclarationFieldErrors] = useState<FieldErrors<DeclarationField>>({});
+  const [proofFieldErrors, setProofFieldErrors] = useState<FieldErrors<ProofField>>({});
   const [isSavingDeclaration, setIsSavingDeclaration] = useState(false);
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -532,10 +539,33 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     setActiveModal("proofDetail");
   }
 
+  function setNoticeMessage(message: string, tone: NoticeTone = "info") {
+    setNotice(message);
+    setNoticeTone(tone);
+  }
+
+  function clearDeclarationFieldError(field: DeclarationField) {
+    setDeclarationFieldErrors((current) => ({ ...current, [field]: undefined }));
+  }
+
+  function clearProofFieldError(field: ProofField) {
+    setProofFieldErrors((current) => ({ ...current, [field]: undefined }));
+  }
+
   async function handleDeclarationSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setDeclarationFieldErrors({});
+    const nextErrors: FieldErrors<DeclarationField> = {
+      financial_year_code: requireText(financialYearCode, "Enter the financial year for this declaration."),
+      tax_regime: requireValue(taxRegime, "Select the tax regime for this declaration."),
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setDeclarationFieldErrors(nextErrors);
+      setNoticeMessage("Review the highlighted declaration fields and try again.", "error");
+      return;
+    }
     setIsSavingDeclaration(true);
-    setNotice("");
+    setNoticeMessage("");
     const payload: Record<string, unknown> = {
       employee_statutory_profile_id: data.profile?.id,
       financial_year_code: financialYearCode,
@@ -559,26 +589,41 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     const result = await response.json().catch(() => ({}));
     setIsSavingDeclaration(false);
     if (!response.ok) {
-      setNotice(apiErrorMessage(result, "Declaration could not be saved."));
+      setNoticeMessage(apiErrorMessage(result, "Declaration could not be saved."), "error");
       return;
     }
-    setNotice("Declaration saved.");
+    setNoticeMessage("Declaration saved.", "success");
     setActiveModal(null);
     router.refresh();
   }
 
   async function handleItemSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setProofFieldErrors({});
     if (!editableDeclaration) {
-      setNotice("Select a draft or rejected declaration first.");
+      setNoticeMessage("Select a draft or rejected declaration first.", "error");
+      return;
+    }
+    const amount = Number(declaredAmount);
+    const nextErrors: FieldErrors<ProofField> = {
+      name: requireText(itemName, "Enter a clear proof item name."),
+      declared_amount: requireText(declaredAmount, "Enter the declared amount for this proof item.") ?? (!Number.isFinite(amount) || amount <= 0 ? "Enter a declared amount greater than zero." : undefined),
+      proof_category_id: proofFile ? requireValue(proofCategoryId, "Select the upload category before attaching proof.") : undefined,
+      proof_file: validateUploadFile(proofFile, {
+        blockedTypeMessage: "This proof file type is not allowed. Upload a PDF, image, or document file.",
+      }),
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setProofFieldErrors(nextErrors);
+      setNoticeMessage("Review the highlighted proof fields and try again.", "error");
       return;
     }
     setIsSavingItem(true);
-    setNotice("");
+    setNoticeMessage("");
     let response: Response;
     if (proofFile) {
       if (!proofCategoryId) {
-        setNotice("Select a proof upload category.");
+        setNoticeMessage("Select a proof upload category.", "error");
         setIsSavingItem(false);
         return;
       }
@@ -616,7 +661,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     const result = await response.json().catch(() => ({}));
     setIsSavingItem(false);
     if (!response.ok) {
-      setNotice(apiErrorMessage(result, "Proof item could not be saved."));
+      setNoticeMessage(apiErrorMessage(result, "Proof item could not be saved."), "error");
       return;
     }
     setItemName("");
@@ -624,7 +669,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     setProofDocumentRef("");
     setProofFile(null);
     setProofFileInputKey((current) => current + 1);
-    setNotice(proofFile ? "Proof file uploaded and linked." : "Proof item saved.");
+    setNoticeMessage(proofFile ? "Proof file uploaded and linked." : "Proof item saved.", "success");
     setActiveModal(null);
     router.refresh();
   }
@@ -634,17 +679,17 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
       return;
     }
     setIsSubmitting(true);
-    setNotice("");
+    setNoticeMessage("");
     const response = await fetch(`/api/me/statutory-declarations/${editableDeclaration.id}/submit`, {
       method: "POST",
     });
     const result = await response.json().catch(() => ({}));
     setIsSubmitting(false);
     if (!response.ok) {
-      setNotice(apiErrorMessage(result, "Declaration could not be submitted."));
+      setNoticeMessage(apiErrorMessage(result, "Declaration could not be submitted."), "error");
       return;
     }
-    setNotice("Declaration submitted.");
+    setNoticeMessage("Declaration submitted.", "success");
     setActiveModal(null);
     router.refresh();
   }
@@ -737,7 +782,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
                   </button>
                 </form>
               </details>
-              {notice ? <div className="notice notice--info">{notice}</div> : null}
+              {notice ? <div className={`notice notice--${noticeTone}`}>{notice}</div> : null}
             </div>
 
             <div className="ess-tax-summary-grid">
@@ -777,20 +822,22 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
               Close
             </button>
           </div>
-          <form className="ess-tax-modal-form" onSubmit={handleDeclarationSubmit}>
+          <form className="ess-tax-modal-form" noValidate onSubmit={handleDeclarationSubmit}>
             <label className="form-field">
               <span>Financial year</span>
-              <input className="input-control" onChange={(event) => setFinancialYearCode(event.target.value)} placeholder="FY2027-28" required value={financialYearCode} />
+              <input aria-invalid={Boolean(declarationFieldErrors.financial_year_code)} className="input-control" onChange={(event) => { setFinancialYearCode(event.target.value); clearDeclarationFieldError("financial_year_code"); }} placeholder="FY2027-28" required value={financialYearCode} />
+              {declarationFieldErrors.financial_year_code ? <span className="field-error-text" role="alert">{declarationFieldErrors.financial_year_code}</span> : null}
             </label>
             <label className="form-field">
               <span>Tax regime</span>
-              <select className="input-control" onChange={(event) => setTaxRegime(event.target.value)} value={taxRegime}>
+              <select aria-invalid={Boolean(declarationFieldErrors.tax_regime)} className="input-control" onChange={(event) => { setTaxRegime(event.target.value); clearDeclarationFieldError("tax_regime"); }} value={taxRegime}>
                 {data.options.tax_regimes.map((option) => (
                   <option value={option.value} key={option.value}>
                     {option.label}
                   </option>
                 ))}
               </select>
+              {declarationFieldErrors.tax_regime ? <span className="field-error-text" role="alert">{declarationFieldErrors.tax_regime}</span> : null}
             </label>
             <label className="form-field">
               <span>Declaration profile</span>
@@ -809,7 +856,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
               </span>
             </div>
             <div className="ess-tax-modal-actions">
-              <span className="notice">{notice}</span>
+              <span className={`notice notice--${noticeTone}`}>{notice}</span>
               <button className="button button--primary" disabled={!data.profile || isSavingDeclaration} type="submit">
                 {isSavingDeclaration ? "Saving" : editableDeclaration ? "Update declaration" : "Create declaration"}
               </button>
@@ -829,7 +876,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
               Close
             </button>
           </div>
-          <form className="ess-tax-modal-form ess-tax-modal-form--wide" onSubmit={handleItemSubmit}>
+          <form className="ess-tax-modal-form ess-tax-modal-form--wide" noValidate onSubmit={handleItemSubmit}>
             <label className="form-field">
               <span>Section</span>
               <select className="input-control" disabled={!editableDeclaration} onChange={(event) => setSectionCode(event.target.value)} value={sectionCode}>
@@ -857,11 +904,13 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
             </label>
             <label className="form-field">
               <span>Item name</span>
-              <input className="input-control" disabled={!editableDeclaration} onChange={(event) => setItemName(event.target.value)} placeholder="Bengaluru rent receipts" required value={itemName} />
+              <input aria-invalid={Boolean(proofFieldErrors.name)} className="input-control" disabled={!editableDeclaration} onChange={(event) => { setItemName(event.target.value); clearProofFieldError("name"); }} placeholder="Bengaluru rent receipts" required value={itemName} />
+              {proofFieldErrors.name ? <span className="field-error-text" role="alert">{proofFieldErrors.name}</span> : null}
             </label>
             <label className="form-field">
               <span>Amount</span>
-              <input className="input-control" disabled={!editableDeclaration} inputMode="decimal" onChange={(event) => setDeclaredAmount(event.target.value)} placeholder="0.00" required value={declaredAmount} />
+              <input aria-invalid={Boolean(proofFieldErrors.declared_amount)} className="input-control" disabled={!editableDeclaration} inputMode="decimal" onChange={(event) => { setDeclaredAmount(event.target.value); clearProofFieldError("declared_amount"); }} placeholder="0.00" required value={declaredAmount} />
+              {proofFieldErrors.declared_amount ? <span className="field-error-text" role="alert">{proofFieldErrors.declared_amount}</span> : null}
             </label>
             <label className="form-field">
               <span>Proof reference</span>
@@ -869,7 +918,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
             </label>
             <label className="form-field">
               <span>Upload category</span>
-              <select className="input-control" disabled={!editableDeclaration || data.options.proof_upload_categories.length === 0} onChange={(event) => setProofCategoryId(event.target.value)} value={proofCategoryId}>
+              <select aria-invalid={Boolean(proofFieldErrors.proof_category_id)} className="input-control" disabled={!editableDeclaration || data.options.proof_upload_categories.length === 0} onChange={(event) => { setProofCategoryId(event.target.value); clearProofFieldError("proof_category_id"); }} value={proofCategoryId}>
                 <option value="">Select category</option>
                 {data.options.proof_upload_categories.map((option) => (
                   <option value={option.id} key={option.id}>
@@ -877,17 +926,19 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
                   </option>
                 ))}
               </select>
+              {proofFieldErrors.proof_category_id ? <span className="field-error-text" role="alert">{proofFieldErrors.proof_category_id}</span> : null}
             </label>
             <label className="form-field">
               <span>Proof file</span>
-              <input className="input-control" disabled={!editableDeclaration || data.options.proof_upload_categories.length === 0} key={proofFileInputKey} onChange={(event) => setProofFile(event.target.files?.[0] ?? null)} type="file" />
+              <input accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx" aria-invalid={Boolean(proofFieldErrors.proof_file)} className="input-control" disabled={!editableDeclaration || data.options.proof_upload_categories.length === 0} key={proofFileInputKey} onChange={(event) => { setProofFile(event.target.files?.[0] ?? null); clearProofFieldError("proof_file"); clearProofFieldError("proof_category_id"); }} type="file" />
+              {proofFieldErrors.proof_file ? <span className="field-error-text" role="alert">{proofFieldErrors.proof_file}</span> : null}
             </label>
             <div className="ess-tax-helper-card ess-tax-helper-card--wide">
               <strong>Proof quality check</strong>
               <span>Use clear files with employee name, financial year, amount, and issuer details visible. HR may reject incomplete or unreadable evidence.</span>
             </div>
             <div className="ess-tax-modal-actions">
-              <span className="notice">{notice || (editableDeclaration ? `${editableDeclaration.financial_year_code} accepts draft proof rows.` : "Create or select a draft declaration first.")}</span>
+              <span className={`notice notice--${notice ? noticeTone : "info"}`}>{notice || (editableDeclaration ? `${editableDeclaration.financial_year_code} accepts draft proof rows.` : "Create or select a draft declaration first.")}</span>
               <button className="button button--primary" disabled={!editableDeclaration || isSavingItem} type="submit">
                 {isSavingItem ? "Saving" : proofFile ? "Upload proof" : "Add proof"}
               </button>
@@ -914,7 +965,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
             <DetailRow label="Rejected rows" value={editableDeclaration?.rejected_item_count ?? 0} />
           </div>
           <div className="ess-tax-modal-actions">
-            <span className="notice">{notice || "Confirm only after proof rows are correct."}</span>
+            <span className={`notice notice--${notice ? noticeTone : "info"}`}>{notice || "Confirm only after proof rows are correct."}</span>
             <button className="button button--primary" disabled={!editableDeclaration || isSubmitting} onClick={handleSubmitDeclaration} type="button">
               {isSubmitting ? "Submitting" : "Submit declaration"}
             </button>

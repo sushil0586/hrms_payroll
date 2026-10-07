@@ -16,6 +16,11 @@ type Notice = {
   message: string;
 };
 
+function isNumberAtLeast(value: string, min: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= min;
+}
+
 async function readPayload(response: Response) {
   return (await response.json().catch(() => ({}))) as { detail?: string; id?: string; status?: string; component_name?: string };
 }
@@ -31,6 +36,7 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
   const [amount, setAmount] = useState("12500");
   const [sourceRef, setSourceRef] = useState("pilot-adjustment-manual");
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState("");
 
   async function postJson(url: string, body: Record<string, unknown> = {}, successMessage: string) {
@@ -60,6 +66,19 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
       setNotice({ tone: "error", message: "Select a run with locked employee snapshots before creating an adjustment." });
       return;
     }
+    const nextFieldErrors: Record<string, string> = {};
+    if (!isNumberAtLeast(amount.trim(), 0)) {
+      nextFieldErrors.amount = "Adjustment amount must be zero or a positive amount.";
+    }
+    if (!sourceRef.trim()) {
+      nextFieldErrors.sourceRef = "Adjustment source reference is required.";
+    }
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setNotice({ tone: "error", message: "Fix the highlighted adjustment fields before continuing." });
+      return;
+    }
+    setFieldErrors({});
     const payload = await postJson(
       "/api/hr-admin/payroll-adjustments",
       {
@@ -122,11 +141,13 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
         </label>
         <label>
           <span>Adjustment amount</span>
-          <input aria-label="Adjustment amount" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} />
+          <input aria-invalid={Boolean(fieldErrors.amount)} aria-label="Adjustment amount" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} />
+          {fieldErrors.amount ? <span className="field-error-text" role="alert">{fieldErrors.amount}</span> : null}
         </label>
         <label>
           <span>Source reference</span>
-          <input aria-label="Adjustment source reference" value={sourceRef} onChange={(event) => setSourceRef(event.target.value)} />
+          <input aria-invalid={Boolean(fieldErrors.sourceRef)} aria-label="Adjustment source reference" value={sourceRef} onChange={(event) => setSourceRef(event.target.value)} />
+          {fieldErrors.sourceRef ? <span className="field-error-text" role="alert">{fieldErrors.sourceRef}</span> : null}
         </label>
       </div>
       <div className="payroll-close-action-row">

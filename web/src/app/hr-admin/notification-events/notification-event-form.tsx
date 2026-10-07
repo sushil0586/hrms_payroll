@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { NotificationPreviewPanel } from "@/app/hr-admin/notifications/notification-preview-panel";
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminNotificationEventDefinitionWriteInput, HrAdminNotificationOptions } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireText } from "@/lib/ui/validation";
 
 type Props = {
   initialValue: HrAdminNotificationEventDefinitionWriteInput;
@@ -14,6 +15,8 @@ type Props = {
   options: HrAdminNotificationOptions;
   itemId?: string;
 };
+
+type NotificationEventField = "code" | "name" | "trigger_key" | "delivery_delay_minutes" | "recipient_snapshot";
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save notification event.";
@@ -52,6 +55,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<NotificationEventField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const moduleHints = useMemo(
     () => Object.fromEntries(options.notification_catalog_authoring.event_module_hints.map((item) => [item.module, item])),
@@ -70,6 +74,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
     value: HrAdminNotificationEventDefinitionWriteInput[Key],
   ) {
     setFormValue((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => ({ ...current, [key as NotificationEventField]: undefined }));
   }
 
   function updateChannel(nextChannel: string) {
@@ -123,13 +128,25 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setFieldErrors({});
     setIsSubmitting(true);
+
+    const nextErrors: FieldErrors<NotificationEventField> = {
+      code: requireText(formValue.code, "Enter a unique notification event code."),
+      name: requireText(formValue.name, "Enter the notification event name."),
+      trigger_key: requireText(formValue.trigger_key, "Enter the trigger key for this event."),
+      delivery_delay_minutes: formValue.delivery_delay_minutes < 0 ? "Delay minutes cannot be negative." : undefined,
+    };
 
     let recipientSnapshot: Record<string, unknown> = {};
     try {
       recipientSnapshot = parseJsonObject(formValue.recipient_snapshot);
     } catch {
-      setError("Recipient snapshot must be valid JSON.");
+      nextErrors.recipient_snapshot = "Recipient snapshot must be a valid JSON object.";
+    }
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setError("Review the highlighted notification event fields and try again.");
       setIsSubmitting(false);
       return;
     }
@@ -155,7 +172,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -179,11 +196,13 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Code</span>
-                <input className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.code)} className="input-control" required value={formValue.code} onChange={(e) => update("code", e.target.value)} />
+                {fieldErrors.code ? <span className="field-error-text">{fieldErrors.code}</span> : null}
               </label>
               <label className="form-field">
                 <span className="muted">Name</span>
-                <input className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.name)} className="input-control" required value={formValue.name} onChange={(e) => update("name", e.target.value)} />
+                {fieldErrors.name ? <span className="field-error-text">{fieldErrors.name}</span> : null}
               </label>
               <label className="form-field">
                 <span className="muted">Module</span>
@@ -204,7 +223,8 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
               </label>
               <label className="form-field">
                 <span className="muted">Trigger key</span>
-                <input className="input-control" required value={formValue.trigger_key} onChange={(e) => update("trigger_key", e.target.value)} />
+                <input aria-invalid={Boolean(fieldErrors.trigger_key)} className="input-control" required value={formValue.trigger_key} onChange={(e) => update("trigger_key", e.target.value)} />
+                {fieldErrors.trigger_key ? <span className="field-error-text">{fieldErrors.trigger_key}</span> : null}
               </label>
             </div>
             {currentModuleHint ? (
@@ -278,11 +298,13 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
                 <span className="muted">Delay minutes</span>
                 <input
                   className="input-control"
+                  aria-invalid={Boolean(fieldErrors.delivery_delay_minutes)}
                   min={0}
                   type="number"
                   value={formValue.delivery_delay_minutes}
                   onChange={(e) => update("delivery_delay_minutes", Number(e.target.value) || 0)}
                 />
+                {fieldErrors.delivery_delay_minutes ? <span className="field-error-text">{fieldErrors.delivery_delay_minutes}</span> : null}
               </label>
             </div>
             {currentAudienceHint ? (
@@ -344,11 +366,13 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
               <label className="form-field" style={{ gridColumn: "1 / -1" }}>
                 <span className="muted">Recipient snapshot JSON</span>
                 <textarea
+                  aria-invalid={Boolean(fieldErrors.recipient_snapshot)}
                   className="input-control"
                   rows={5}
                   value={formValue.recipient_snapshot}
                   onChange={(e) => update("recipient_snapshot", e.target.value)}
                 />
+                {fieldErrors.recipient_snapshot ? <span className="field-error-text">{fieldErrors.recipient_snapshot}</span> : null}
                 <span className="field-help-text">
                   Guided routing fields above update this JSON automatically. Example:{" "}
                   {JSON.stringify(currentAudienceHint?.recipient_snapshot_example ?? {}, null, 0)}
@@ -368,7 +392,7 @@ export function NotificationEventForm({ initialValue, mode, options, itemId }: P
         </div>
 
         {error ? (
-          <div className="notice">
+          <div className="notice notice--error" role="alert">
             <strong>Save failed.</strong>
             <span className="muted">{error}</span>
           </div>

@@ -260,8 +260,8 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
 
 export default async function HrAdminPayrollOutputsPage({ searchParams }: PageProps) {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["payroll.outputs.view", "payroll.publish"], fallbackPath: "/hr-admin" });
-  const canPublishOutputs = sessionHasPermission(sessionUser, "payroll.publish");
-  const canGenerateHandoff = sessionHasPermission(sessionUser, "finance.handoff.create");
+  const canPublishOutputs = !sessionUser || sessionHasPermission(sessionUser, "payroll.publish");
+  const canGenerateHandoff = !sessionUser || sessionHasPermission(sessionUser, "finance.handoff.create");
   const currentParams = (await searchParams) ?? {};
   const selectedBatchId = normalizeParam(currentParams.batchId);
   const selectedArtifactId = normalizeParam(currentParams.artifactId);

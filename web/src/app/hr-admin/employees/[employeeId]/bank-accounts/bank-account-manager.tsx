@@ -4,11 +4,14 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { HrAdminEmployeeBankAccount, HrAdminEmployeeBankAccountWriteInput } from "@/lib/types";
+import { type FieldErrors, hasFieldErrors, requireText } from "@/lib/ui/validation";
 
 type Feedback = {
   tone: "success" | "error";
   message: string;
 } | null;
+
+type BankAccountField = "account_holder_name" | "bank_name" | "account_number" | "ifsc_code";
 
 function emptyForm(employeeName: string): HrAdminEmployeeBankAccountWriteInput {
   return {
@@ -63,9 +66,11 @@ export function BankAccountManager({
   const selected = useMemo(() => accounts.find((item) => item.id === selectedId) ?? null, [accounts, selectedId]);
   const [formValue, setFormValue] = useState<HrAdminEmployeeBankAccountWriteInput>(() => selected ? toForm(selected) : emptyForm(employeeName));
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<BankAccountField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function update<Key extends keyof HrAdminEmployeeBankAccountWriteInput>(key: Key, value: HrAdminEmployeeBankAccountWriteInput[Key]) {
+    setFieldErrors((current) => ({ ...current, [key]: undefined }));
     setFormValue((current) => ({ ...current, [key]: value }));
   }
 
@@ -83,8 +88,21 @@ export function BankAccountManager({
 
   async function saveAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsSubmitting(true);
     setFeedback(null);
+    setFieldErrors({});
+    const normalizedIfsc = formValue.ifsc_code.trim().toUpperCase();
+    const nextErrors: FieldErrors<BankAccountField> = {
+      account_holder_name: requireText(formValue.account_holder_name, "Enter the account holder name."),
+      bank_name: requireText(formValue.bank_name, "Enter the bank name."),
+      account_number: requireText(formValue.account_number, "Enter the account number."),
+      ifsc_code: normalizedIfsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(normalizedIfsc) ? "Enter a valid IFSC code." : undefined,
+    };
+    if (hasFieldErrors(nextErrors)) {
+      setFieldErrors(nextErrors);
+      setFeedback({ tone: "error", message: "Review the highlighted bank account fields and try again." });
+      return;
+    }
+    setIsSubmitting(true);
     const response = await fetch(
       selected
         ? `/api/hr-admin/employees/${employeeId}/bank-accounts/${selected.id}`
@@ -92,7 +110,7 @@ export function BankAccountManager({
       {
         method: selected ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formValue),
+        body: JSON.stringify({ ...formValue, ifsc_code: normalizedIfsc }),
       },
     );
     const payload = await response.json().catch(() => ({}));
@@ -154,7 +172,7 @@ export function BankAccountManager({
         </div>
       </article>
 
-      <form className="form-layout-modern employee-child-form employee-bank-account-form" onSubmit={saveAccount}>
+      <form className="form-layout-modern employee-child-form employee-bank-account-form" noValidate onSubmit={saveAccount}>
         <section className="form-shell-card">
           <div className="form-shell-card__header">
             <div>
@@ -169,19 +187,23 @@ export function BankAccountManager({
           <div className="form-grid">
             <label className="form-field">
               <span className="muted">Account holder name</span>
-              <input className="input-control" required value={formValue.account_holder_name} onChange={(event) => update("account_holder_name", event.target.value)} />
+              <input aria-invalid={Boolean(fieldErrors.account_holder_name)} className="input-control" required value={formValue.account_holder_name} onChange={(event) => update("account_holder_name", event.target.value)} />
+              {fieldErrors.account_holder_name ? <span className="field-error-text" role="alert">{fieldErrors.account_holder_name}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Bank name</span>
-              <input className="input-control" required value={formValue.bank_name} onChange={(event) => update("bank_name", event.target.value)} />
+              <input aria-invalid={Boolean(fieldErrors.bank_name)} className="input-control" required value={formValue.bank_name} onChange={(event) => update("bank_name", event.target.value)} />
+              {fieldErrors.bank_name ? <span className="field-error-text" role="alert">{fieldErrors.bank_name}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Account number</span>
-              <input className="input-control" required value={formValue.account_number} onChange={(event) => update("account_number", event.target.value)} />
+              <input aria-invalid={Boolean(fieldErrors.account_number)} className="input-control" required value={formValue.account_number} onChange={(event) => update("account_number", event.target.value)} />
+              {fieldErrors.account_number ? <span className="field-error-text" role="alert">{fieldErrors.account_number}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">IFSC code</span>
-              <input className="input-control" value={formValue.ifsc_code} onChange={(event) => update("ifsc_code", event.target.value)} />
+              <input aria-invalid={Boolean(fieldErrors.ifsc_code)} className="input-control" value={formValue.ifsc_code} onChange={(event) => update("ifsc_code", event.target.value)} />
+              {fieldErrors.ifsc_code ? <span className="field-error-text" role="alert">{fieldErrors.ifsc_code}</span> : null}
             </label>
             <label className="form-field">
               <span className="muted">Branch name</span>
@@ -197,8 +219,8 @@ export function BankAccountManager({
           </div>
 
           {feedback ? (
-            <div className={`notice ${feedback.tone === "success" ? "notice--success" : ""}`} role={feedback.tone === "success" ? "status" : "alert"}>
-              <strong>{feedback.tone === "success" ? "Saved." : "Save failed."}</strong>
+            <div className={`notice ${feedback.tone === "success" ? "notice--success" : "notice--error"}`} role={feedback.tone === "success" ? "status" : "alert"}>
+              <strong>{feedback.tone === "success" ? "Saved successfully." : "Save failed."}</strong>
               <span className="muted">{feedback.message}</span>
             </div>
           ) : null}

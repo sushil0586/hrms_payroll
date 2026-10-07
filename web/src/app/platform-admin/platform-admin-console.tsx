@@ -137,6 +137,15 @@ function formValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
+function emailLooksValid(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isWholeNumberAtLeast(value: string, min: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= min;
+}
+
 function apiErrorMessage(payload: unknown, fallback: string) {
   const friendly = (message: string) => {
     if (/Primary tenant admin must be provisioned/i.test(message)) return "Create login access for the primary tenant admin before marking this customer ready.";
@@ -535,6 +544,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   const [busyRef, setBusyRef] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [leadQuery, setLeadQuery] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState("active");
@@ -822,6 +832,18 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   async function handleTenantCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const nextFieldErrors: Record<string, string> = {};
+    if (!formValue(formData, "code")) nextFieldErrors.createTenantCode = "Tenant code is required.";
+    if (!formValue(formData, "name")) nextFieldErrors.createTenantName = "Tenant name is required.";
+    const primaryEmail = formValue(formData, "primary_email");
+    if (primaryEmail && !emailLooksValid(primaryEmail)) nextFieldErrors.createTenantEmail = "Primary email must be a valid email address.";
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setError("Fix the highlighted platform tenant fields before continuing.");
+      setMessage("");
+      return;
+    }
+    setFieldErrors({});
     try {
       const payload = await mutate<PlatformTenantListItem>(
         "/api/platform/tenants",
@@ -873,6 +895,13 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   async function handleLeadConvert(event: React.FormEvent<HTMLFormElement>, leadId: string) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    if (!formValue(formData, "code")) {
+      setFieldErrors({ [`leadConvertCode:${leadId}`]: "Tenant code is required before converting a lead." });
+      setError("Fix the highlighted lead conversion fields before continuing.");
+      setMessage("");
+      return;
+    }
+    setFieldErrors({});
     try {
       const payload = await mutate<{ tenant?: PlatformTenantListItem }>(
         `/api/platform/leads/${leadId}/convert`,
@@ -904,6 +933,17 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     event.preventDefault();
     if (!selectedTenant) return;
     const formData = new FormData(event.currentTarget);
+    const nextFieldErrors: Record<string, string> = {};
+    if (!formValue(formData, "name")) nextFieldErrors.tenantSetupName = "Tenant name is required.";
+    const primaryEmail = formValue(formData, "primary_email");
+    if (primaryEmail && !emailLooksValid(primaryEmail)) nextFieldErrors.tenantSetupEmail = "Primary email must be a valid email address.";
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setError("Fix the highlighted tenant setup fields before continuing.");
+      setMessage("");
+      return;
+    }
+    setFieldErrors({});
     try {
       await mutate(
         `/api/platform/tenants/${selectedTenant.id}`,
@@ -932,6 +972,16 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     event.preventDefault();
     if (!selectedTenant) return;
     const formData = new FormData(event.currentTarget);
+    const nextFieldErrors: Record<string, string> = {};
+    if (!formValue(formData, "country_context")) nextFieldErrors.onboardingCountry = "Country context is required.";
+    if (!formValue(formData, "industry_context")) nextFieldErrors.onboardingIndustry = "Industry context is required.";
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setError("Fix the highlighted onboarding metadata fields before continuing.");
+      setMessage("");
+      return;
+    }
+    setFieldErrors({});
     try {
       await mutate(
         `/api/platform/tenants/${selectedTenant.id}/onboarding`,
@@ -959,6 +1009,18 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     if (!selectedTenant) return;
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const nextFieldErrors: Record<string, string> = {};
+    if (!formValue(formData, "full_name")) nextFieldErrors.addContactName = "Admin contact full name is required.";
+    const email = formValue(formData, "email");
+    if (!email) nextFieldErrors.addContactEmail = "Admin contact email is required.";
+    else if (!emailLooksValid(email)) nextFieldErrors.addContactEmail = "Admin contact email must be valid.";
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setError("Fix the highlighted admin contact fields before continuing.");
+      setMessage("");
+      return;
+    }
+    setFieldErrors({});
     try {
       await mutate(
         `/api/platform/tenants/${selectedTenant.id}/admin-contacts`,
@@ -983,6 +1045,18 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
   async function handleContactPatch(event: React.FormEvent<HTMLFormElement>, contactId: string) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const nextFieldErrors: Record<string, string> = {};
+    if (!formValue(formData, "full_name")) nextFieldErrors[`editContactName:${contactId}`] = "Admin contact full name is required.";
+    const email = formValue(formData, "email");
+    if (!email) nextFieldErrors[`editContactEmail:${contactId}`] = "Admin contact email is required.";
+    else if (!emailLooksValid(email)) nextFieldErrors[`editContactEmail:${contactId}`] = "Admin contact email must be valid.";
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setError("Fix the highlighted admin contact fields before continuing.");
+      setMessage("");
+      return;
+    }
+    setFieldErrors({});
     try {
       await mutate(
         `/api/platform/admin-contacts/${contactId}`,
@@ -1007,7 +1081,16 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const contactId = formValue(formData, "contact_id");
-    if (!contactId) return;
+    const nextFieldErrors: Record<string, string> = {};
+    if (!contactId) nextFieldErrors.provisionContact = "Contact is required.";
+    if (!formValue(formData, "username")) nextFieldErrors.provisionUsername = "Username is required.";
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setError("Fix the highlighted tenant admin login fields before continuing.");
+      setMessage("");
+      return;
+    }
+    setFieldErrors({});
     try {
       const payload = await mutate<{ generated_password?: string }>(
         `/api/platform/admin-contacts/${contactId}/provision-user`,
@@ -1035,6 +1118,17 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const nextFieldErrors: Record<string, string> = {};
+    if (!formValue(formData, "code")) nextFieldErrors.policyPackCode = "Template code is required.";
+    if (!formValue(formData, "name")) nextFieldErrors.policyPackName = "Template name is required.";
+    if (!isWholeNumberAtLeast(formValue(formData, "version") || "1", 1)) nextFieldErrors.policyPackVersion = "Template version must be a whole number greater than or equal to 1.";
+    if (Object.keys(nextFieldErrors).length) {
+      setFieldErrors(nextFieldErrors);
+      setError("Fix the highlighted setup template fields before continuing.");
+      setMessage("");
+      return;
+    }
+    setFieldErrors({});
     try {
       await mutate(
         "/api/platform-policy-packs",
@@ -1677,7 +1771,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                     </Link>
                   </div>
                 ) : (
-                  <form className="platform-lead-convert-form" onSubmit={(event) => handleLeadConvert(event, lead.id)}>
+                  <form className="platform-lead-convert-form" noValidate onSubmit={(event) => handleLeadConvert(event, lead.id)}>
                     <div className="record-card__title">
                       <h3>Convert to tenant</h3>
                       <span className="record-chip">Approval controlled</span>
@@ -1687,7 +1781,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                       <span className="muted">Confirm commercial approval, choose a unique tenant code, and keep sandbox on for trials.</span>
                     </div>
                     <div className="form-grid platform-lead-convert-form__grid">
-                      <label className="form-field"><span className="muted">Tenant code</span><input className="input-control" name="code" required defaultValue={leadCodeSuggestion(lead)} /><ValidationNote>Required and must be unique. Use lowercase letters, numbers, or hyphens.</ValidationNote></label>
+                      <label className="form-field"><span className="muted">Tenant code</span><input aria-invalid={Boolean(fieldErrors[`leadConvertCode:${lead.id}`])} className="input-control" name="code" required defaultValue={leadCodeSuggestion(lead)} /><ValidationNote>Required and must be unique. Use lowercase letters, numbers, or hyphens.</ValidationNote>{fieldErrors[`leadConvertCode:${lead.id}`] ? <span className="field-error-text" role="alert">{fieldErrors[`leadConvertCode:${lead.id}`]}</span> : null}</label>
                       <label className="form-field"><span className="muted">Primary domain</span><input className="input-control" name="primary_domain" defaultValue={leadDomainSuggestion(lead)} placeholder="customer.example.com" /><ValidationNote>Optional during trial; add the real customer domain before production activation.</ValidationNote></label>
                       <label className="form-field"><span className="muted">Plan</span><select className="input-control" name="subscription_plan" defaultValue={lead.preferred_plan === "business" ? "enterprise" : lead.preferred_plan || "growth"}><option value="starter">Starter</option><option value="growth">Growth</option><option value="enterprise">Enterprise</option></select></label>
                       <label className="form-field"><span className="muted">Seed pack</span><select className="input-control" name="seed_pack" defaultValue="standard_office"><option value="standard_office">Standard Office</option><option value="shift_based">Shift Based Operations</option><option value="retail_field">Retail or Field Workforce</option><option value="professional_services">Professional Services</option></select></label>
@@ -1995,17 +2089,17 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 </div>
                 <p className="section-copy">Update tenant account fields and primary domain.</p>
               </div>
-              <form className="form-grid platform-tenant-setup-form" onSubmit={handleTenantPatch}>
+              <form className="form-grid platform-tenant-setup-form" noValidate onSubmit={handleTenantPatch}>
                 <div className="notice notice--compact platform-validation-strip">
                   <strong>Tenant setup validation</strong>
                   <span className="muted">Save setup changes before confirming setup or marking the customer ready so the audit trail has the final customer context.</span>
                 </div>
-                <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required defaultValue={selectedTenant.name} /><ValidationNote>Required. This appears in platform lists and customer setup screens.</ValidationNote></label>
+                <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors.tenantSetupName)} className="input-control" name="name" required defaultValue={selectedTenant.name} /><ValidationNote>Required. This appears in platform lists and customer setup screens.</ValidationNote>{fieldErrors.tenantSetupName ? <span className="field-error-text" role="alert">{fieldErrors.tenantSetupName}</span> : null}</label>
                 <label className="form-field"><span className="muted">Legal name</span><input className="input-control" name="legal_name" defaultValue={selectedTenant.legal_name} /></label>
                 <label className="form-field"><span className="muted">Status</span><select className="input-control" name="status" defaultValue={selectedTenant.status}><option value="draft">Draft</option><option value="active">Active</option><option value="suspended">Suspended</option></select></label>
                 <label className="form-field"><span className="muted">Plan</span><select className="input-control" name="subscription_plan" defaultValue={selectedTenant.subscription_plan}><option value="starter">Starter</option><option value="growth">Growth</option><option value="enterprise">Enterprise</option></select></label>
                 <label className="form-field"><span className="muted">Seed pack</span><select className="input-control" name="seed_pack" defaultValue={selectedTenant.seed_pack}><option value="standard_office">Standard Office</option><option value="shift_based">Shift Based Operations</option><option value="retail_field">Retail or Field Workforce</option><option value="professional_services">Professional Services</option></select></label>
-                <label className="form-field"><span className="muted">Primary email</span><input className="input-control" name="primary_email" type="email" defaultValue={selectedTenant.primary_email} /></label>
+                <label className="form-field"><span className="muted">Primary email</span><input aria-invalid={Boolean(fieldErrors.tenantSetupEmail)} className="input-control" name="primary_email" type="email" defaultValue={selectedTenant.primary_email} />{fieldErrors.tenantSetupEmail ? <span className="field-error-text" role="alert">{fieldErrors.tenantSetupEmail}</span> : null}</label>
                 <label className="form-field"><span className="muted">Primary phone</span><input className="input-control" name="primary_phone" defaultValue={selectedTenant.primary_phone} /></label>
                 <label className="form-field"><span className="muted">Primary domain</span><input className="input-control" name="primary_domain" defaultValue={selectedTenant.primary_domain} /></label>
                 <label className="form-field"><span className="muted">Timezone</span><input className="input-control" name="timezone" defaultValue={selectedTenant.timezone} /></label>
@@ -2083,7 +2177,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 </div>
                 <p className="section-copy">Implementation model, setup style, data approach, and policy control posture.</p>
               </div>
-              <form className="form-grid platform-onboarding-metadata-form" onSubmit={handleOnboardingPatch}>
+              <form className="form-grid platform-onboarding-metadata-form" noValidate onSubmit={handleOnboardingPatch}>
                 <div className="notice notice--compact platform-validation-strip">
                   <strong>Onboarding validation</strong>
                   <span className="muted">Choose who owns setup, how data enters the tenant, and whether policies are locked or delegated before the customer is marked ready.</span>
@@ -2092,8 +2186,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 <label className="form-field"><span className="muted">Setup style</span><select className="input-control" name="setup_style" defaultValue={onboarding.setup_style}><option value="platform_assisted">Platform Assisted</option><option value="shared">Shared</option><option value="customer_led">Customer Led</option></select></label>
                 <label className="form-field"><span className="muted">Data setup</span><select className="input-control" name="data_setup_style" defaultValue={onboarding.data_setup_style}><option value="manual">Manual</option><option value="import_led">Import Led</option><option value="seeded_demo">Seeded Demo</option></select></label>
                 <label className="form-field"><span className="muted">Policy control</span><select className="input-control" name="policy_control_style" defaultValue={onboarding.policy_control_style}><option value="mostly_locked">Mostly Locked</option><option value="mostly_delegated">Mostly Delegated</option><option value="mixed">Mixed</option></select></label>
-                <label className="form-field"><span className="muted">Country context</span><input className="input-control" name="country_context" defaultValue={onboarding.country_context} maxLength={2} /></label>
-                <label className="form-field"><span className="muted">Industry</span><input className="input-control" name="industry_context" defaultValue={onboarding.industry_context} /></label>
+                <label className="form-field"><span className="muted">Country context</span><input aria-invalid={Boolean(fieldErrors.onboardingCountry)} className="input-control" name="country_context" defaultValue={onboarding.country_context} maxLength={2} />{fieldErrors.onboardingCountry ? <span className="field-error-text" role="alert">{fieldErrors.onboardingCountry}</span> : null}</label>
+                <label className="form-field"><span className="muted">Industry</span><input aria-invalid={Boolean(fieldErrors.onboardingIndustry)} className="input-control" name="industry_context" defaultValue={onboarding.industry_context} />{fieldErrors.onboardingIndustry ? <span className="field-error-text" role="alert">{fieldErrors.onboardingIndustry}</span> : null}</label>
                 <label className="form-field platform-form-field--tall"><span className="muted">Notes</span><textarea className="input-control" name="notes" defaultValue={onboarding.notes} /></label>
                 <label className="form-field platform-form-field--tall"><span className="muted">Internal readiness notes</span><textarea className="input-control" name="internal_handoff_notes" defaultValue={onboarding.internal_handoff_notes} /></label>
                 <label className="form-field platform-form-field--tall"><span className="muted">Customer readiness notes</span><textarea className="input-control" name="customer_handoff_notes" defaultValue={onboarding.customer_handoff_notes} /></label>
@@ -2120,13 +2214,13 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 {onboarding.admin_contacts.map((contact: PlatformOnboardingAdminContact) => (
                   <div className="tenant-support-access-row tenant-support-access-row--stacked" key={contact.id}>
                     {editingContactId === contact.id ? (
-                      <form className="form-grid platform-contact-edit-form" onSubmit={(event) => handleContactPatch(event, contact.id)}>
+                      <form className="form-grid platform-contact-edit-form" noValidate onSubmit={(event) => handleContactPatch(event, contact.id)}>
                         <div className="notice notice--compact platform-validation-strip">
                           <strong>Edit contact validation</strong>
                           <span className="muted">This updates onboarding contact details. It does not reset the provisioned user password or role.</span>
                         </div>
-                        <label className="form-field"><span className="muted">Full name</span><input className="input-control" name="full_name" required defaultValue={contact.full_name} /><ValidationNote>Required. Use the current customer-side admin owner.</ValidationNote></label>
-                        <label className="form-field"><span className="muted">Email</span><input className="input-control" name="email" required type="email" defaultValue={contact.email} /><ValidationNote>Required. For provisioned contacts, coordinate any login identity changes separately.</ValidationNote></label>
+                        <label className="form-field"><span className="muted">Full name</span><input aria-invalid={Boolean(fieldErrors[`editContactName:${contact.id}`])} className="input-control" name="full_name" required defaultValue={contact.full_name} /><ValidationNote>Required. Use the current customer-side admin owner.</ValidationNote>{fieldErrors[`editContactName:${contact.id}`] ? <span className="field-error-text" role="alert">{fieldErrors[`editContactName:${contact.id}`]}</span> : null}</label>
+                        <label className="form-field"><span className="muted">Email</span><input aria-invalid={Boolean(fieldErrors[`editContactEmail:${contact.id}`])} className="input-control" name="email" required type="email" defaultValue={contact.email} /><ValidationNote>Required. For provisioned contacts, coordinate any login identity changes separately.</ValidationNote>{fieldErrors[`editContactEmail:${contact.id}`] ? <span className="field-error-text" role="alert">{fieldErrors[`editContactEmail:${contact.id}`]}</span> : null}</label>
                         <label className="form-field"><span className="muted">Phone</span><input className="input-control" name="phone_number" defaultValue={contact.phone_number} /></label>
                         <label className="form-field"><span className="muted">Job title</span><input className="input-control" name="job_title" defaultValue={contact.job_title} /></label>
                         <label className="form-field"><span className="muted">Primary</span><input name="is_primary" type="checkbox" defaultChecked={contact.is_primary} /></label>
@@ -2168,7 +2262,7 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 </div>
                 <p className="section-copy">Create the tenant-scoped login and membership from a contact.</p>
               </div>
-              <form className="form-grid" onSubmit={handleProvision}>
+              <form className="form-grid platform-admin-provision-form" noValidate onSubmit={handleProvision}>
                 {!provisionableContacts.length ? (
                   <div className="notice notice--compact platform-validation-strip">
                     <strong>No contacts are ready for login access.</strong>
@@ -2180,8 +2274,8 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                     <span className="muted">Select the primary contact, choose the tenant role, and enter a password only if you do not want the system to generate one.</span>
                   </div>
                 )}
-                <label className="form-field"><span className="muted">Contact</span><select className="input-control" name="contact_id" defaultValue={primaryContact?.membership_id ? provisionableContacts[0]?.id ?? "" : primaryContact?.id ?? ""} required><option value="">Select contact</option>{provisionableContacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.full_name} - {contact.email}</option>)}</select></label>
-                <label className="form-field"><span className="muted">Username</span><input className="input-control" name="username" required placeholder="tenant01.admin" /><ValidationNote>Required and must be unique across logins.</ValidationNote></label>
+                <label className="form-field"><span className="muted">Contact</span><select aria-invalid={Boolean(fieldErrors.provisionContact)} className="input-control" name="contact_id" defaultValue={primaryContact?.membership_id ? provisionableContacts[0]?.id ?? "" : primaryContact?.id ?? ""} required><option value="">Select contact</option>{provisionableContacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.full_name} - {contact.email}</option>)}</select>{fieldErrors.provisionContact ? <span className="field-error-text" role="alert">{fieldErrors.provisionContact}</span> : null}</label>
+                <label className="form-field"><span className="muted">Username</span><input aria-invalid={Boolean(fieldErrors.provisionUsername)} className="input-control" name="username" required placeholder="tenant01.admin" /><ValidationNote>Required and must be unique across logins.</ValidationNote>{fieldErrors.provisionUsername ? <span className="field-error-text" role="alert">{fieldErrors.provisionUsername}</span> : null}</label>
                 <label className="form-field"><span className="muted">Role</span><select className="input-control" name="role_code" defaultValue="hr-admin"><option value="hr-admin">HR Admin</option><option value="tenant-admin">Tenant Admin</option></select></label>
                 <label className="form-field"><span className="muted">Role name</span><input className="input-control" name="role_name" placeholder="HR Admin" /></label>
                 <label className="form-field"><span className="muted">Password</span><input className="input-control" name="password" type="password" placeholder="Leave blank to generate" /></label>
@@ -2323,16 +2417,16 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
                 pageSize={PAGE_SIZE}
                 totalCount={filteredPolicyPacks.length}
               />
-              <form className="form-grid platform-template-create-form" onSubmit={handlePolicyPackCreate}>
+              <form className="form-grid platform-template-create-form" noValidate onSubmit={handlePolicyPackCreate}>
                 <div className="notice notice--compact platform-validation-strip">
                   <strong>Template validation</strong>
                   <span className="muted">Create as draft while the setup is still changing. Only published templates can be applied to tenants.</span>
                 </div>
-                <label className="form-field"><span className="muted">Code</span><input className="input-control" name="code" required placeholder="qa-setup-template" /><ValidationNote>Required and unique. Use a stable code because it appears in setup evidence.</ValidationNote></label>
-                <label className="form-field"><span className="muted">Name</span><input className="input-control" name="name" required placeholder="QA Setup Template" /><ValidationNote>Required. Use a name operators can recognize during tenant onboarding.</ValidationNote></label>
+                <label className="form-field"><span className="muted">Code</span><input aria-invalid={Boolean(fieldErrors.policyPackCode)} className="input-control" name="code" required placeholder="qa-setup-template" /><ValidationNote>Required and unique. Use a stable code because it appears in setup evidence.</ValidationNote>{fieldErrors.policyPackCode ? <span className="field-error-text" role="alert">{fieldErrors.policyPackCode}</span> : null}</label>
+                <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors.policyPackName)} className="input-control" name="name" required placeholder="QA Setup Template" /><ValidationNote>Required. Use a name operators can recognize during tenant onboarding.</ValidationNote>{fieldErrors.policyPackName ? <span className="field-error-text" role="alert">{fieldErrors.policyPackName}</span> : null}</label>
                 <label className="form-field"><span className="muted">Domain</span><select className="input-control" name="domain" defaultValue="leave"><option value="leave">Leave</option><option value="attendance">Attendance</option><option value="workflow">Workflow</option><option value="document">Document</option></select></label>
                 <label className="form-field"><span className="muted">Status</span><select className="input-control" name="status" defaultValue="draft"><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
-                <label className="form-field"><span className="muted">Version</span><input className="input-control" name="version" defaultValue="1" min={1} type="number" /></label>
+                <label className="form-field"><span className="muted">Version</span><input aria-invalid={Boolean(fieldErrors.policyPackVersion)} className="input-control" name="version" defaultValue="1" min={1} type="number" />{fieldErrors.policyPackVersion ? <span className="field-error-text" role="alert">{fieldErrors.policyPackVersion}</span> : null}</label>
                 <label className="form-field"><span className="muted">Country</span><input className="input-control" name="country_code" defaultValue="IN" maxLength={2} /></label>
                 <label className="form-field"><span className="muted">Industry</span><input className="input-control" name="industry_tag" placeholder="technology" /></label>
                 <label className="form-field platform-form-field--wide"><span className="muted">Description</span><textarea className="input-control" name="description" /></label>
@@ -2733,16 +2827,16 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               </div>
               <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowCreateTenantModal(false)}>Close</button>
             </div>
-            <form className="form-grid tenant-membership-form-grid--dialog" onSubmit={handleTenantCreate}>
+            <form className="form-grid tenant-membership-form-grid--dialog" noValidate onSubmit={handleTenantCreate}>
               <div className="notice notice--compact platform-validation-strip form-field--full" id="create-platform-tenant-description">
                 <strong>Before creating</strong>
                 <span className="muted">Code and name are mandatory. Email, phone, and domain can be completed later, but activation still needs tenant admin login access and readiness signoff.</span>
               </div>
-              <label className="form-field"><span className="muted">Code</span><input aria-label="Code" className="input-control" name="code" ref={createTenantFirstFieldRef} required placeholder="qa-pa-tenant-01" /><ValidationNote>Required and unique. This becomes the tenant identifier in audit evidence.</ValidationNote></label>
-              <label className="form-field"><span className="muted">Name</span><input aria-label="Name" className="input-control" name="name" required placeholder="QA Platform Tenant 01" /><ValidationNote>Required. Use the customer-facing organization name.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Code</span><input aria-invalid={Boolean(fieldErrors.createTenantCode)} aria-label="Code" className="input-control" name="code" ref={createTenantFirstFieldRef} required placeholder="qa-pa-tenant-01" /><ValidationNote>Required and unique. This becomes the tenant identifier in audit evidence.</ValidationNote>{fieldErrors.createTenantCode ? <span className="field-error-text" role="alert">{fieldErrors.createTenantCode}</span> : null}</label>
+              <label className="form-field"><span className="muted">Name</span><input aria-invalid={Boolean(fieldErrors.createTenantName)} aria-label="Name" className="input-control" name="name" required placeholder="QA Platform Tenant 01" /><ValidationNote>Required. Use the customer-facing organization name.</ValidationNote>{fieldErrors.createTenantName ? <span className="field-error-text" role="alert">{fieldErrors.createTenantName}</span> : null}</label>
               <label className="form-field"><span className="muted">Legal name</span><input aria-label="Legal name" className="input-control" name="legal_name" placeholder="QA Platform Tenant Pvt Ltd" /></label>
               <label className="form-field"><span className="muted">Primary domain</span><input aria-label="Primary domain" className="input-control" name="primary_domain" placeholder="qa-pa-tenant-01.example.test" /><ValidationNote>Optional for setup; should be final before live customer activation.</ValidationNote></label>
-              <label className="form-field"><span className="muted">Primary email</span><input aria-label="Primary email" className="input-control" name="primary_email" type="email" placeholder="ops@example.test" /><ValidationNote>Use a monitored customer or implementation mailbox.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Primary email</span><input aria-invalid={Boolean(fieldErrors.createTenantEmail)} aria-label="Primary email" className="input-control" name="primary_email" type="email" placeholder="ops@example.test" /><ValidationNote>Use a monitored customer or implementation mailbox.</ValidationNote>{fieldErrors.createTenantEmail ? <span className="field-error-text" role="alert">{fieldErrors.createTenantEmail}</span> : null}</label>
               <label className="form-field"><span className="muted">Primary phone</span><input aria-label="Primary phone" className="input-control" name="primary_phone" placeholder="+91 90000 00001" /></label>
               <label className="form-field"><span className="muted">Plan</span><select aria-label="Plan" className="input-control" name="subscription_plan" defaultValue="starter"><option value="starter">Starter</option><option value="growth">Growth</option><option value="enterprise">Enterprise</option></select></label>
               <label className="form-field"><span className="muted">Seed pack</span><select aria-label="Seed pack" className="input-control" name="seed_pack" defaultValue="standard_office"><option value="standard_office">Standard Office</option><option value="shift_based">Shift Based Operations</option><option value="retail_field">Retail or Field Workforce</option><option value="professional_services">Professional Services</option></select></label>
@@ -2783,13 +2877,13 @@ export function PlatformAdminConsole({ initialPanel, leads, tenants, selectedTen
               </div>
               <button className="button button--secondary" disabled={Boolean(busyRef)} type="button" onClick={() => setShowAddContactModal(false)}>Close</button>
             </div>
-            <form className="form-grid tenant-membership-form-grid--dialog" onSubmit={handleContactCreate}>
+            <form className="form-grid tenant-membership-form-grid--dialog" noValidate onSubmit={handleContactCreate}>
               <div className="notice notice--compact platform-validation-strip form-field--full" id="add-platform-admin-contact-description">
                 <strong>Contact validation</strong>
                 <span className="muted">A primary contact is required before the customer can be marked ready. Make sure the email belongs to the real tenant admin.</span>
               </div>
-              <label className="form-field"><span className="muted">Full name</span><input className="input-control" name="full_name" ref={addContactFirstFieldRef} required placeholder="Ava Patel" /><ValidationNote>Required. This person becomes the customer-side owner for onboarding.</ValidationNote></label>
-              <label className="form-field"><span className="muted">Email</span><input className="input-control" name="email" required type="email" placeholder="ava.patel@example.test" /><ValidationNote>Required and used for the provisioned login identity.</ValidationNote></label>
+              <label className="form-field"><span className="muted">Full name</span><input aria-invalid={Boolean(fieldErrors.addContactName)} className="input-control" name="full_name" ref={addContactFirstFieldRef} required placeholder="Ava Patel" /><ValidationNote>Required. This person becomes the customer-side owner for onboarding.</ValidationNote>{fieldErrors.addContactName ? <span className="field-error-text" role="alert">{fieldErrors.addContactName}</span> : null}</label>
+              <label className="form-field"><span className="muted">Email</span><input aria-invalid={Boolean(fieldErrors.addContactEmail)} className="input-control" name="email" required type="email" placeholder="ava.patel@example.test" /><ValidationNote>Required and used for the provisioned login identity.</ValidationNote>{fieldErrors.addContactEmail ? <span className="field-error-text" role="alert">{fieldErrors.addContactEmail}</span> : null}</label>
               <label className="form-field"><span className="muted">Phone</span><input className="input-control" name="phone_number" placeholder="+91 90000 00002" /></label>
               <label className="form-field"><span className="muted">Job title</span><input className="input-control" name="job_title" placeholder="Head of People" /></label>
               <label className="form-field"><span className="muted">Primary</span><input name="is_primary" type="checkbox" defaultChecked /></label>

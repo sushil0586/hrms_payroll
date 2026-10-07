@@ -162,7 +162,7 @@ export function HolidayCalendarForm({ initialValue, mode, options, itemId, item 
           </FormSection>
         </div>
 
-        {error ? <div className="notice"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
+        {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Calendar changes save directly back into attendance operations and policy references.</span>
           <div className="form-actions-bar__buttons">
