@@ -1,8 +1,9 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from apps.common.selectors import evaluate_saas_commercial_access
 from apps.employees.models import Employee, EmploymentStatus
-from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMembership, User
+from apps.iam.models import MembershipRole, MembershipStatus, Role, RolePermission, TenantMembership, User
 from apps.organizations.models import Branch, BusinessUnit, Department, LegalEntity, Location
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
 
@@ -107,3 +108,37 @@ class HrAdminOptionMetadataTests(TestCase):
 
     def test_document_options_include_branch_parent_metadata(self):
         self._assert_branch_metadata("/api/v1/hr-admin/document-options/")
+
+    def test_payroll_setup_viewer_can_load_finance_handoff_context_for_provider_workspace(self):
+        role = self.membership.membership_roles.get(role__code="hr-admin").role
+        RolePermission.objects.create(
+            role=role,
+            permission_key="payroll.setup.view",
+            description="Provider workspace read permission.",
+        )
+
+        response = self.client.get("/api/v1/hr-admin/payroll-finance-handoff-setup/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("handoffs", response.json())
+
+    def test_payroll_provider_routes_use_provider_commercial_scope(self):
+        provider_access = evaluate_saas_commercial_access(
+            self.tenant,
+            request_path="/api/v1/hr-admin/payroll-provider-connection-setup/",
+            method="GET",
+        )
+        finance_access = evaluate_saas_commercial_access(
+            self.tenant,
+            request_path="/api/v1/hr-admin/payroll-finance-handoff-setup/",
+            method="GET",
+        )
+        payroll_access = evaluate_saas_commercial_access(
+            self.tenant,
+            request_path="/api/v1/hr-admin/payroll-setup/",
+            method="GET",
+        )
+
+        self.assertEqual([scope["scope_ref"] for scope in provider_access["matched_scopes"]], ["payroll_provider_integrations"])
+        self.assertEqual([scope["scope_ref"] for scope in finance_access["matched_scopes"]], ["payroll_provider_integrations"])
+        self.assertEqual([scope["scope_ref"] for scope in payroll_access["matched_scopes"]], ["payroll_core"])

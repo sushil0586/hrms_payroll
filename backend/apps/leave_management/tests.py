@@ -11,8 +11,9 @@ from apps.common.api_views import save_hr_admin_leave_policy_assignment
 from apps.common.selectors import get_employee_leave_requests, get_manager_pending_leave_requests
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipStatus, TenantMembership, User
-from apps.leave_management.models import LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveType, LeaveRequestStatus
-from apps.leave_management.services import preview_leave_policy_assignment_conflicts, preview_leave_policy_assignment_resolution, resolve_leave_request, submit_leave_request
+from apps.leave_management.models import LeaveBalance, LeaveBalanceTransaction, LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveType, LeaveRequestStatus
+from apps.leave_management.services import apply_leave_balance_admin_action, cancel_leave_request, ensure_employee_leave_balances, preview_leave_policy_assignment_conflicts, preview_leave_policy_assignment_resolution, preview_leave_policy_configuration, resolve_leave_request, review_leave_balance_transaction, submit_leave_request, withdraw_leave_request
+from apps.notifications.models import Notification
 from apps.organizations.models import Department, EmploymentType, Grade
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
 from apps.workflows.models import WorkflowAssignment
@@ -470,6 +471,319 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
 
         self.assertEqual(leave_request.requested_units, 4)
 
+    def test_sandwich_rule_counts_weekly_off_between_leave_dates(self):
+        friday = _next_weekday(4)
+        self.leave_policy.sandwich_rule_enabled = True
+        self.leave_policy.save(update_fields=["sandwich_rule_enabled", "updated_at"])
+
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=friday,
+            end_date=friday + timedelta(days=3),
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Long weekend travel",
+        )
+
+        self.assertEqual(leave_request.requested_units, 4)
+
+    def test_leave_entitlement_uses_service_tier_after_three_years(self):
+        self.employee.date_of_joining = date(2023, 4, 1)
+        self.employee.save(update_fields=["date_of_joining", "updated_at"])
+        self.leave_policy.annual_entitlement = "20.00"
+        self.leave_policy.accrual_frequency = "yearly"
+        self.leave_policy.config_snapshot = {
+            "entitlement": {
+                "grant_mode": "upfront",
+                "service_tiers": [
+                    {"min_service_years": 3, "annual_entitlement": "22.00", "label": "3+ years"},
+                ],
+            }
+        }
+        self.leave_policy.save(update_fields=["annual_entitlement", "accrual_frequency", "config_snapshot", "updated_at"])
+
+        before_anniversary_balance = ensure_employee_leave_balances(self.employee, as_of=date(2026, 3, 31))[0]
+        self.assertEqual(before_anniversary_balance.accrued_amount, 20)
+
+        after_anniversary_balance = ensure_employee_leave_balances(self.employee, as_of=date(2026, 4, 1))[0]
+        self.assertEqual(after_anniversary_balance.accrued_amount, 22)
+
+    def test_template_shaped_service_tier_policy_reserves_against_resolved_entitlement(self):
+        self.employee.date_of_joining = date(2023, 4, 1)
+        self.employee.save(update_fields=["date_of_joining", "updated_at"])
+        self.leave_policy.annual_entitlement = "20.00"
+        self.leave_policy.accrual_frequency = "yearly"
+        self.leave_policy.notice_days_required = 0
+        self.leave_policy.max_consecutive_days = "15.00"
+        self.leave_policy.config_snapshot = {
+            "approval": {
+                "default_route": "manager_only",
+                "escalation_route": "manager_then_hr",
+                "escalate_when_units_gte": "10.00",
+            },
+            "entitlement": {
+                "grant_mode": "upfront",
+                "proration_mode": "by_join_month",
+                "service_tiers": [
+                    {"min_service_months": 36, "annual_entitlement": "22.00", "label": "3+ years"},
+                    {"min_service_months": 60, "annual_entitlement": "25.00", "label": "5+ years"},
+                ],
+                "carry_forward_mode": "limited",
+                "carry_forward_cap": "10.00",
+                "encashment_allowed": True,
+                "encashment_cap": "5.00",
+                "probation_accrual_mode": "accrue",
+            },
+        }
+        self.leave_policy.save(
+            update_fields=[
+                "annual_entitlement",
+                "accrual_frequency",
+                "notice_days_required",
+                "max_consecutive_days",
+                "config_snapshot",
+                "updated_at",
+            ]
+        )
+        request_date = timezone.localdate() + timedelta(days=14)
+
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=request_date,
+            end_date=request_date,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Template tier runtime check",
+        )
+
+        balance = ensure_employee_leave_balances(self.employee, as_of=request_date)[0]
+        self.assertEqual(leave_request.requested_units, 1)
+        self.assertEqual(balance.accrued_amount, 22)
+        self.assertEqual(balance.reserved_amount, 1)
+        self.assertEqual(balance.closing_balance, 21)
+
+    def test_carry_forward_is_capped_from_previous_policy_period(self):
+        self.leave_policy.annual_entitlement = "20.00"
+        self.leave_policy.accrual_frequency = "yearly"
+        self.leave_policy.max_carry_forward = "10.00"
+        self.leave_policy.config_snapshot = {
+            "entitlement": {
+                "grant_mode": "upfront",
+                "carry_forward_mode": "limited",
+                "carry_forward_cap": "5.00",
+            }
+        }
+        self.leave_policy.save(update_fields=["annual_entitlement", "accrual_frequency", "max_carry_forward", "config_snapshot", "updated_at"])
+        LeaveBalance.objects.create(
+            tenant=self.tenant,
+            employee=self.employee,
+            leave_policy=self.leave_policy,
+            period_year=2025,
+            accrued_amount="20.00",
+            closing_balance="12.00",
+        )
+
+        balance = ensure_employee_leave_balances(self.employee, as_of=date(2026, 1, 1))[0]
+
+        self.assertEqual(balance.accrued_amount, 20)
+        self.assertEqual(balance.carry_forward_amount, 5)
+        self.assertEqual(balance.closing_balance, 25)
+
+    def test_carry_forward_can_be_disabled_even_when_previous_balance_exists(self):
+        self.leave_policy.annual_entitlement = "20.00"
+        self.leave_policy.accrual_frequency = "yearly"
+        self.leave_policy.max_carry_forward = "10.00"
+        self.leave_policy.config_snapshot = {
+            "entitlement": {
+                "grant_mode": "upfront",
+                "carry_forward_mode": "none",
+                "carry_forward_cap": "10.00",
+            }
+        }
+        self.leave_policy.save(update_fields=["annual_entitlement", "accrual_frequency", "max_carry_forward", "config_snapshot", "updated_at"])
+        LeaveBalance.objects.create(
+            tenant=self.tenant,
+            employee=self.employee,
+            leave_policy=self.leave_policy,
+            period_year=2025,
+            accrued_amount="20.00",
+            closing_balance="12.00",
+        )
+
+        balance = ensure_employee_leave_balances(self.employee, as_of=date(2026, 1, 1))[0]
+
+        self.assertEqual(balance.carry_forward_amount, 0)
+        self.assertEqual(balance.closing_balance, 20)
+
+    def test_encashment_is_blocked_when_policy_disallows_it(self):
+        balance = ensure_employee_leave_balances(self.employee, as_of=date(2026, 1, 1))[0]
+
+        with self.assertRaises(ValidationError) as error:
+            apply_leave_balance_admin_action(
+                actor=self.manager,
+                employee=self.employee,
+                leave_policy=self.leave_policy,
+                action="encashment",
+                units=1,
+                effective_date=date(2026, 1, 1),
+                reason="Policy disallows encashment",
+            )
+
+        self.assertIn("Encashment is not allowed", str(error.exception))
+        balance.refresh_from_db()
+        self.assertEqual(balance.encashed_amount, 0)
+
+    def test_encashment_cap_is_enforced_before_balance_mutation(self):
+        self.leave_policy.annual_entitlement = "20.00"
+        self.leave_policy.accrual_frequency = "yearly"
+        self.leave_policy.config_snapshot = {
+            "entitlement": {
+                "grant_mode": "upfront",
+                "encashment_allowed": True,
+                "encashment_cap": "5.00",
+            }
+        }
+        self.leave_policy.save(update_fields=["annual_entitlement", "accrual_frequency", "config_snapshot", "updated_at"])
+        balance = ensure_employee_leave_balances(self.employee, as_of=date(2026, 1, 1))[0]
+
+        with self.assertRaises(ValidationError) as error:
+            apply_leave_balance_admin_action(
+                actor=self.manager,
+                employee=self.employee,
+                leave_policy=self.leave_policy,
+                action="encashment",
+                units=6,
+                effective_date=date(2026, 1, 1),
+                reason="Too much encashment",
+            )
+
+        self.assertIn("configured cap of 5.00", str(error.exception))
+        balance.refresh_from_db()
+        self.assertEqual(balance.encashed_amount, 0)
+        self.assertEqual(balance.closing_balance, 20)
+
+    def test_encashment_requiring_approval_stays_pending_until_reviewer_approves(self):
+        self.leave_policy.annual_entitlement = "20.00"
+        self.leave_policy.accrual_frequency = "yearly"
+        self.leave_policy.config_snapshot = {
+            "entitlement": {
+                "grant_mode": "upfront",
+                "encashment_allowed": True,
+                "encashment_cap": "5.00",
+            },
+            "operations": {
+                "reviewer_employee_id": str(self.second_manager.id),
+                "approval_required_for_encashment": True,
+                "encashment_requires_approval_over_units": "1.00",
+            },
+        }
+        self.leave_policy.save(update_fields=["annual_entitlement", "accrual_frequency", "config_snapshot", "updated_at"])
+
+        result = apply_leave_balance_admin_action(
+            actor=self.manager,
+            employee=self.employee,
+            leave_policy=self.leave_policy,
+            action="encashment",
+            units=2,
+            effective_date=date(2026, 1, 1),
+            reason="Annual encashment",
+        )
+
+        self.assertFalse(result["applied"])
+        self.assertTrue(result["requires_review"])
+        self.assertEqual(result["transaction"].status, LeaveBalanceTransaction.Status.PENDING)
+        result["balance"].refresh_from_db()
+        self.assertEqual(result["balance"].encashed_amount, 0)
+        self.assertEqual(result["balance"].closing_balance, 20)
+
+        reviewed = review_leave_balance_transaction(
+            actor=self.second_manager,
+            transaction_item=result["transaction"],
+            decision="approve",
+        )
+
+        self.assertTrue(reviewed["applied"])
+        self.assertEqual(reviewed["transaction"].status, LeaveBalanceTransaction.Status.APPLIED)
+        self.assertEqual(reviewed["balance"].encashed_amount, 2)
+        self.assertEqual(reviewed["balance"].closing_balance, 18)
+
+    def test_balance_operation_review_notifies_reviewer_and_employee(self):
+        self.leave_policy.annual_entitlement = "20.00"
+        self.leave_policy.accrual_frequency = "yearly"
+        self.leave_policy.config_snapshot = {
+            "entitlement": {
+                "grant_mode": "upfront",
+                "encashment_allowed": True,
+                "encashment_cap": "5.00",
+            },
+            "operations": {
+                "reviewer_employee_id": str(self.second_manager.id),
+                "approval_required_for_encashment": True,
+            },
+        }
+        self.leave_policy.save(update_fields=["annual_entitlement", "accrual_frequency", "config_snapshot", "updated_at"])
+
+        result = apply_leave_balance_admin_action(
+            actor=self.manager,
+            employee=self.employee,
+            leave_policy=self.leave_policy,
+            action="encashment",
+            units=2,
+            effective_date=date(2026, 1, 1),
+            reason="Annual encashment",
+        )
+
+        reviewer_notification = Notification.objects.get(
+            tenant=self.tenant,
+            subject_type="leave_balance_transaction",
+            subject_identifier=str(result["transaction"].id),
+            recipient_membership=self.second_manager_membership,
+        )
+        self.assertEqual(reviewer_notification.payload["action"], "encashment")
+        self.assertIn("pending review", reviewer_notification.title.lower())
+
+        review_leave_balance_transaction(
+            actor=self.second_manager,
+            transaction_item=result["transaction"],
+            decision="approve",
+        )
+
+        employee_notification = Notification.objects.filter(
+            tenant=self.tenant,
+            subject_type="leave_balance_transaction",
+            subject_identifier=str(result["transaction"].id),
+            recipient_membership=self.employee_membership,
+        ).latest("created_at")
+        self.assertEqual(employee_notification.payload["status"], LeaveBalanceTransaction.Status.APPLIED)
+        self.assertIn("approved", employee_notification.title.lower())
+
+    def test_leave_policy_preview_explains_matched_service_tier(self):
+        self.employee.date_of_joining = date(2023, 4, 1)
+        self.employee.save(update_fields=["date_of_joining", "updated_at"])
+
+        preview = preview_leave_policy_configuration(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            requested_units=1,
+            annual_entitlement=20,
+            config_snapshot={
+                "entitlement": {
+                    "grant_mode": "upfront",
+                    "service_tiers": [
+                        {"min_service_months": 36, "annual_entitlement": "22.00", "label": "3+ years"},
+                    ],
+                }
+            },
+        )
+
+        resolution = preview["entitlement_preview"]["entitlement_resolution"]
+        self.assertEqual(resolution["base_annual_entitlement"], "20.00")
+        self.assertEqual(resolution["resolved_annual_entitlement"], "22.00")
+        self.assertEqual(resolution["matched_service_tier"]["label"], "3+ years")
+        self.assertGreaterEqual(resolution["service_months"], 36)
+
     def test_partially_approved_leave_moves_to_second_level_mss_queue_with_track(self):
         monday = _next_weekday(0)
         leave_request = submit_leave_request(
@@ -555,3 +869,73 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
 
         self.assertEqual(employee_history[0]["approval_steps"][0]["manager_name"], "Meera Manager")
         self.assertTrue(employee_history[0]["approval_steps"][0]["is_current"])
+
+    def test_withdraw_leave_request_notifies_manager(self):
+        monday = _next_weekday(0)
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday,
+            end_date=monday,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Plans changed",
+        )
+
+        withdrawn = withdraw_leave_request(
+            leave_request=leave_request,
+            actor_employee=self.employee,
+            reason="No longer needed",
+        )
+
+        notification = Notification.objects.get(
+            tenant=self.tenant,
+            subject_type="leave_request",
+            subject_identifier=str(withdrawn.id),
+            recipient_membership=self.manager_membership,
+            title="Leave request withdrawn",
+        )
+        self.assertEqual(notification.payload["status"], LeaveRequestStatus.WITHDRAWN)
+
+    def test_immediate_approved_leave_cancellation_notifies_manager(self):
+        self.leave_policy.config_snapshot = {
+            "approval": {
+                "default_route": "manager_only",
+            },
+            "lifecycle": {
+                "allow_employee_cancel_approved": True,
+                "cancel_approved_requires_reapproval": False,
+            },
+        }
+        self.leave_policy.save(update_fields=["config_snapshot", "updated_at"])
+        monday = _next_weekday(0)
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=monday,
+            end_date=monday,
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Personal work",
+        )
+        approved = resolve_leave_request(
+            leave_request=leave_request,
+            actor_employee=self.manager,
+            approve=True,
+            comment="Approved",
+        )
+
+        cancelled = cancel_leave_request(
+            leave_request=approved,
+            actor_employee=self.employee,
+            reason="Plans changed",
+        )
+
+        notification = Notification.objects.get(
+            tenant=self.tenant,
+            subject_type="leave_request",
+            subject_identifier=str(cancelled.id),
+            recipient_membership=self.manager_membership,
+            title="Approved leave cancelled",
+        )
+        self.assertEqual(notification.payload["status"], LeaveRequestStatus.CANCELLED)

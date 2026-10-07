@@ -228,6 +228,7 @@ function LeaveReviewModal({
             employeeReason={item.reason}
             itemId={item.id}
             kind="leave"
+            onCompleted={onClose}
             requestAction={item.request_action}
             state={state}
             status={item.status}
@@ -308,6 +309,7 @@ function AttendanceReviewModal({
             employeeReason={item.reason}
             itemId={item.id}
             kind="attendance"
+            onCompleted={onClose}
             state={state}
             status={item.status}
             title="Regularization decision"

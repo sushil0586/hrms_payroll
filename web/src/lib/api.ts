@@ -2153,6 +2153,7 @@ function getDemoData<T>(path: string): T {
           proration_mode: "by_join_month",
           policy_year_start_month: 4,
           policy_year_start_day: 1,
+          service_tiers: [],
           carry_forward_mode: "limited",
           carry_forward_cap: "3.00",
           encashment_allowed: false,

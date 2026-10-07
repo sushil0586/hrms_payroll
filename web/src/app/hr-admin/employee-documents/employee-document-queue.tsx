@@ -101,6 +101,7 @@ export function EmployeeDocumentQueue({
   const [isSubmittingReminder, setIsSubmittingReminder] = useState(false);
   const [actionError, setActionError] = useState("");
   const [actionNotice, setActionNotice] = useState("");
+  const [completedReviewIds, setCompletedReviewIds] = useState<string[]>([]);
 
   const actionableItems = items.filter((item) => item.is_expired || item.is_expiring_soon || item.expiry_state === "no_expiry");
   const actionableIds = actionableItems.map((item) => item.id);
@@ -307,7 +308,16 @@ export function EmployeeDocumentQueue({
               <div className="detail-row"><span className="detail-label">Review steps</span><span className="detail-value">{item.review_history.length}</span></div>
             </div>
             {item.rejection_reason ? <div className="notice"><strong>Latest review note.</strong><span className="muted">{item.rejection_reason}</span></div> : null}
-            {canVerifyDocuments ? <EmployeeDocumentInlineReview item={item} verificationStatusOptions={verificationStatusOptions} /> : null}
+            {canVerifyDocuments && !completedReviewIds.includes(item.id) ? (
+              <EmployeeDocumentInlineReview
+                item={item}
+                onSaved={(message) => {
+                  setCompletedReviewIds((current) => [...new Set([...current, item.id])]);
+                  setActionNotice(message);
+                }}
+                verificationStatusOptions={verificationStatusOptions}
+              />
+            ) : null}
           </article>
         ))}
         {items.length === 0 ? (

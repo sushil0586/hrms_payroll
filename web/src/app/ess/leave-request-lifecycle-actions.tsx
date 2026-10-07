@@ -8,6 +8,7 @@ import type { LeaveRequestItem } from "@/lib/types";
 type Props = {
   item: LeaveRequestItem;
   isDemo: boolean;
+  onCompleted?: () => void;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -18,7 +19,7 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to update leave request.");
 }
 
-export function LeaveRequestLifecycleActions({ item, isDemo }: Props) {
+export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Props) {
   const router = useRouter();
   const [reason, setReason] = useState("");
   const [attachmentReference, setAttachmentReference] = useState("");
@@ -66,6 +67,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo }: Props) {
     }
     setIsSubmitting(null);
     isSubmittingRef.current = false;
+    onCompleted?.();
     router.refresh();
   }
 

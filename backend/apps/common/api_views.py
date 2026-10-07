@@ -3026,6 +3026,7 @@ def save_hr_admin_employee_document(actor, validated_data, *, item: EmployeeDocu
             actor_identifier=actor.employee_code,
             comment=validated_data.get("rejection_reason", ""),
         )
+        _notify_document_verification_updated(document=item)
 
     if item.reupload_requested and not previous_reupload_requested:
         _notify_document_reupload_requested(document=item)
@@ -3804,6 +3805,50 @@ def _notify_document_reupload_requested(*, document: EmployeeDocument):
             "verification_status": document.verification_status,
             "reupload_requested": document.reupload_requested,
             "reupload_requested_by_identifier": document.reupload_requested_by_identifier,
+        },
+    )
+
+
+def _notify_document_verification_updated(*, document: EmployeeDocument):
+    employee_membership = document.employee.membership
+    recipient_identifier = ""
+    if employee_membership and employee_membership.user_id:
+        recipient_identifier = employee_membership.user.username
+    elif document.employee.work_email:
+        recipient_identifier = document.employee.work_email
+
+    if document.verification_status == VerificationStatus.VERIFIED:
+        title = f"Document verified: {document.category.name}"
+        body = f"Your {document.category.name} document for {document.employee.employee_code} has been verified."
+    elif document.verification_status == VerificationStatus.REJECTED:
+        title = f"Document rejected: {document.category.name}"
+        body = (
+            f"Your {document.category.name} document for {document.employee.employee_code} was rejected."
+            f" {document.rejection_reason or 'Please review and upload a fresh copy if requested.'}"
+        )
+    else:
+        return
+
+    trigger_notification_event(
+        tenant=document.tenant,
+        module="documents",
+        trigger_key="documents.employee.verification_updated",
+        subject_type="employee_document",
+        subject_identifier=str(document.id),
+        recipient_membership=employee_membership,
+        recipient_identifier=recipient_identifier,
+        fallback_title=title,
+        fallback_body=body,
+        payload={
+            "employee_id": str(document.employee_id),
+            "employee_code": document.employee.employee_code,
+            "document_id": str(document.id),
+            "category_id": str(document.category_id),
+            "category_name": document.category.name,
+            "verification_status": document.verification_status,
+            "reupload_requested": document.reupload_requested,
+            "rejection_reason": document.rejection_reason,
+            "verified_by_identifier": document.verified_by_identifier,
         },
     )
 
@@ -12399,7 +12444,7 @@ class HrAdminPayrollFinanceHandoffSetupView(HrAdminContextMixin, APIView):
         employee = self.get_employee()
         if not employee:
             return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
-        self.require_any_tenant_permission(employee.tenant, "finance.handoff.view", "finance.handoff.create")
+        self.require_any_tenant_permission(employee.tenant, "finance.handoff.view", "finance.handoff.create", "payroll.setup.view")
         return response.Response(HrAdminPayrollFinanceHandoffSetupSerializer(get_hr_admin_payroll_finance_handoff_setup_payload(employee)).data)
 
 
@@ -15343,6 +15388,7 @@ class HrAdminLeavePolicyPreviewView(HrAdminContextMixin, APIView):
             leave_type=leave_type,
             requested_units=serializer.validated_data["requested_units"],
             config_snapshot=serializer.validated_data.get("config_snapshot", {}),
+            annual_entitlement=serializer.validated_data.get("annual_entitlement"),
             policy_id=str(serializer.validated_data["policy_id"]) if serializer.validated_data.get("policy_id") else None,
         )
         return response.Response(HrAdminLeavePolicyPreviewSerializer(payload).data)

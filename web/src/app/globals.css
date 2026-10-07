@@ -4888,9 +4888,17 @@ select.input-control {
 }
 
 .user-notification-filter-disclosure .queue-toolbar__grid {
-  grid-template-columns: minmax(220px, 1.2fr) repeat(4, minmax(150px, 0.72fr)) minmax(120px, 0.5fr) auto;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   padding: 12px 16px 16px;
+}
+
+.user-notification-filter-disclosure .queue-toolbar__actions {
+  align-self: end;
+}
+
+.user-notification-filter-disclosure .queue-toolbar__actions .button {
+  min-width: 0;
 }
 
 .user-notification-grid {
@@ -5938,12 +5946,18 @@ select.input-control {
 
   .user-notification-inline-guidance {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
 
+  .user-notification-inline-guidance strong,
   .user-notification-inline-guidance span,
   .user-notification-inline-guidance .button {
     grid-column: auto;
     grid-row: auto;
+  }
+
+  .user-notification-inline-guidance .button {
+    width: 100%;
   }
 
   .user-notification-list__actions .button,
@@ -13542,6 +13556,64 @@ select.input-control {
 
 .form-section-card__header h2 {
   margin: 0;
+}
+
+.form-section-card--collapsible {
+  align-content: start;
+}
+
+.form-section-card__summary {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.78);
+  cursor: pointer;
+  list-style: none;
+}
+
+.form-section-card__summary::-webkit-details-marker {
+  display: none;
+}
+
+.form-section-card__summary::after {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 18px;
+  line-height: 1;
+  content: "+";
+}
+
+.form-section-card--collapsible[open] > .form-section-card__summary::after {
+  content: "-";
+}
+
+.form-section-card__summary h2 {
+  margin: 0;
+}
+
+.form-section-card__summary p {
+  margin: 4px 0 0;
+}
+
+.form-section-card__summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.form-section-card__body {
+  display: grid;
+  gap: 14px;
+}
+
+.form-section-card--collapsible:not([open]) > .form-section-card__body {
+  display: none;
 }
 
 .form-actions-bar {

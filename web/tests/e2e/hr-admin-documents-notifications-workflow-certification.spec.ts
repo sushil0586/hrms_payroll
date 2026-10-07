@@ -89,6 +89,7 @@ test.describe("HR Admin documents and notifications workflow certification", () 
         "Document review service is temporarily unavailable.",
         "Document review updated.",
       );
+      await expect(documentCard.getByRole("heading", { name: "Quick review" })).toHaveCount(0);
 
       const selectPage = page.getByRole("button", { name: /Select page|Clear selection/ }).first();
       if (await selectPage.isEnabled().catch(() => false)) {

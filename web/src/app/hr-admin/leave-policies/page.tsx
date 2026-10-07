@@ -2,9 +2,9 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
 import { getHrAdminLeavePolicies } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
+import { LeavePolicyList } from "./leave-policy-list";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminLeavePoliciesPage() {
@@ -52,46 +52,7 @@ export default async function HrAdminLeavePoliciesPage() {
         </div>
       </section>
 
-      <section className="section queue-layout">
-        <div className="queue-list">
-          {result.data.map((item) => (
-            <article className="record-card" key={item.id}>
-              <div className="record-card__header">
-                <div className="record-card__title-wrap">
-                  <div className="record-card__title">
-                    <h2>{item.name}</h2>
-                  </div>
-                  <div className="record-card__eyebrow">
-                    <span className="record-chip record-chip--accent">{item.leave_type}</span>
-                    <span className="record-chip">{item.status}</span>
-                    <span className="record-chip">{item.accrual_frequency}</span>
-                    <PlatformGovernanceCard item={item} />
-                  </div>
-                  <p className="section-copy">{item.code}</p>
-                </div>
-                <div className="record-card__actions">
-                  {canManagePolicies ? (
-                    <Link className="button button--secondary" href={`/hr-admin/leave-policies/${item.id}/edit`}>
-                      Edit
-                    </Link>
-                  ) : null}
-                </div>
-              </div>
-              <div className="detail-grid">
-                <div className="detail-row">
-                  <span className="detail-label">Annual entitlement</span>
-                  <span className="detail-value">{item.annual_entitlement} units</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Accrual frequency</span>
-                  <span className="detail-value">{item.accrual_frequency}</span>
-                </div>
-              </div>
-              <PlatformGovernanceNotice item={item} />
-            </article>
-          ))}
-        </div>
-      </section>
+      <LeavePolicyList canManagePolicies={canManagePolicies} policies={result.data} />
     </main>
   );
 }

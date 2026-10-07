@@ -111,9 +111,8 @@ async function exerciseManagerDecision(
   await expectDialogStable(page, options.dialogName);
 
   await approveButton.click();
-  await expect(dialog.getByText("Action saved.")).toBeVisible();
-  await expect(dialog.getByText(/Request approved|Cancellation request approved/).first()).toBeVisible();
-  await expectDialogStable(page, options.dialogName);
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "Review" }).first()).toBeVisible();
   await page.unroute(options.approveRoute);
 }
 

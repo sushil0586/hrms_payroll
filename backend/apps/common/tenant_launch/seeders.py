@@ -34,7 +34,7 @@ from apps.leave_management.models import (
     LeaveType,
     LeaveUnit,
 )
-from apps.leave_management.services import ensure_employee_leave_balances
+from apps.leave_management.services import ensure_employee_leave_balances, normalize_leave_policy_config
 from apps.notifications.models import (
     NotificationAudienceType,
     NotificationChannel,
@@ -330,6 +330,27 @@ LEAVE_TYPE_DEFINITIONS = (
         "accrual_frequency": AccrualFrequency.MONTHLY,
         "allow_half_day": True,
         "notice_days_required": 7,
+        "config_snapshot": {
+            "entitlement": {
+                "grant_mode": "scheduled",
+                "proration_mode": "by_join_month",
+                "policy_year_start_month": 1,
+                "policy_year_start_day": 1,
+                "service_tiers": [
+                    {"min_service_years": 3, "annual_entitlement": "22.00", "label": "3+ years"},
+                    {"min_service_years": 5, "annual_entitlement": "25.00", "label": "5+ years"},
+                ],
+                "carry_forward_mode": "limited",
+                "carry_forward_cap": "30.00",
+                "encashment_allowed": True,
+                "encashment_cap": "15.00",
+                "probation_accrual_mode": "defer",
+            },
+            "operations": {
+                "approval_required_for_encashment": True,
+                "encashment_requires_approval_over_units": "1.00",
+            },
+        },
     },
     {
         "code": "loss-of-pay",
@@ -344,6 +365,13 @@ LEAVE_TYPE_DEFINITIONS = (
         "allow_half_day": True,
         "notice_days_required": 0,
         "allow_negative_balance": True,
+        "config_snapshot": {
+            "entitlement": {
+                "grant_mode": "upfront",
+                "carry_forward_mode": "none",
+                "probation_accrual_mode": "accrue",
+            }
+        },
     },
 )
 
@@ -363,6 +391,25 @@ OPTIONAL_LEAVE_TYPE_DEFINITIONS = (
         "allow_half_day": False,
         "notice_days_required": 0,
         "requires_attachment": True,
+        "gender_restriction": "female",
+        "config_snapshot": {
+            "evidence": {
+                "attachment_required": True,
+                "attachment_label": "medical certificate or expected delivery evidence",
+                "approval_route_when_evidence_required": "manager_then_hr",
+            },
+            "entitlement": {
+                "grant_mode": "upfront",
+                "carry_forward_mode": "none",
+                "probation_accrual_mode": "accrue",
+            },
+            "lifecycle": {
+                "allow_employee_cancel_approved": True,
+                "cancel_approved_requires_reapproval": True,
+                "cancel_requires_attachment": True,
+                "cancel_attachment_label": "medical certificate",
+            },
+        },
     },
     {
         "input_key": "enable_paternity_leave",
@@ -378,6 +425,18 @@ OPTIONAL_LEAVE_TYPE_DEFINITIONS = (
         "allow_half_day": False,
         "notice_days_required": 0,
         "requires_attachment": True,
+        "config_snapshot": {
+            "evidence": {
+                "attachment_required": True,
+                "attachment_label": "birth or adoption evidence",
+                "approval_route_when_evidence_required": "manager_then_hr",
+            },
+            "entitlement": {
+                "grant_mode": "upfront",
+                "carry_forward_mode": "none",
+                "probation_accrual_mode": "accrue",
+            },
+        },
     },
     {
         "input_key": "enable_bereavement_leave",
@@ -392,6 +451,13 @@ OPTIONAL_LEAVE_TYPE_DEFINITIONS = (
         "accrual_frequency": AccrualFrequency.YEARLY,
         "allow_half_day": False,
         "notice_days_required": 0,
+        "config_snapshot": {
+            "entitlement": {
+                "grant_mode": "upfront",
+                "carry_forward_mode": "none",
+                "probation_accrual_mode": "accrue",
+            }
+        },
     },
     {
         "input_key": "enable_marriage_leave",
@@ -407,6 +473,18 @@ OPTIONAL_LEAVE_TYPE_DEFINITIONS = (
         "allow_half_day": False,
         "notice_days_required": 0,
         "requires_attachment": True,
+        "marital_status_restriction": "unmarried",
+        "config_snapshot": {
+            "evidence": {
+                "attachment_required": True,
+                "attachment_label": "marriage invitation or certificate",
+            },
+            "entitlement": {
+                "grant_mode": "upfront",
+                "carry_forward_mode": "none",
+                "probation_accrual_mode": "accrue",
+            },
+        },
     },
     {
         "input_key": "enable_comp_off_leave",
@@ -421,6 +499,14 @@ OPTIONAL_LEAVE_TYPE_DEFINITIONS = (
         "accrual_frequency": AccrualFrequency.NONE,
         "allow_half_day": False,
         "notice_days_required": 0,
+        "config_snapshot": {
+            "entitlement": {
+                "grant_mode": "upfront",
+                "carry_forward_mode": "limited",
+                "carry_forward_cap": "5.00",
+                "probation_accrual_mode": "accrue",
+            }
+        },
     },
     {
         "input_key": "enable_jury_duty_leave",
@@ -436,6 +522,44 @@ OPTIONAL_LEAVE_TYPE_DEFINITIONS = (
         "allow_half_day": False,
         "notice_days_required": 0,
         "requires_attachment": True,
+        "config_snapshot": {
+            "evidence": {
+                "attachment_required": True,
+                "attachment_label": "court summons or statutory notice",
+                "approval_route_when_evidence_required": "manager_then_hr",
+            },
+            "entitlement": {
+                "grant_mode": "upfront",
+                "carry_forward_mode": "none",
+                "probation_accrual_mode": "accrue",
+            },
+        },
+    },
+    {
+        "input_key": "enable_study_leave",
+        "code": "study-leave",
+        "name": "Study Leave",
+        "short_code": "ST",
+        "category": LeaveCategory.SPECIAL,
+        "description": "Study or examination leave template for certification and education support.",
+        "policy_code": "study-leave-policy",
+        "annual_entitlement": Decimal("5.00"),
+        "max_carry_forward": Decimal("0.00"),
+        "accrual_frequency": AccrualFrequency.YEARLY,
+        "allow_half_day": False,
+        "notice_days_required": 7,
+        "requires_attachment": True,
+        "config_snapshot": {
+            "evidence": {
+                "attachment_required": True,
+                "attachment_label": "exam schedule or enrollment evidence",
+            },
+            "entitlement": {
+                "grant_mode": "upfront",
+                "carry_forward_mode": "none",
+                "probation_accrual_mode": "defer",
+            },
+        },
     },
 )
 
@@ -1470,6 +1594,15 @@ def seed_leave_attendance(onboarding: TenantOnboarding, input_payload: dict | No
 
     leave_policies = []
     for definition in (*LEAVE_TYPE_DEFINITIONS, *selected_optional_definitions):
+        config_snapshot = normalize_leave_policy_config(definition.get("config_snapshot", {}))
+        config_snapshot.update(
+            {
+                "source": "tenant_launch",
+                "country_code": "IN",
+                "review_required": True,
+                "template_code": definition["policy_code"],
+            }
+        )
         leave_type, was_created = LeaveType.objects.get_or_create(
             tenant=tenant,
             code=definition["code"],
@@ -1504,12 +1637,10 @@ def seed_leave_attendance(onboarding: TenantOnboarding, input_payload: dict | No
                 "notice_days_required": definition["notice_days_required"],
                 "allow_half_day": definition["allow_half_day"],
                 "allow_backdated_application": True,
+                "gender_restriction": definition.get("gender_restriction", ""),
+                "marital_status_restriction": definition.get("marital_status_restriction", ""),
                 "is_probation_eligible": True,
-                "config_snapshot": {
-                    "source": "tenant_launch",
-                    "country_code": "IN",
-                    "review_required": True,
-                },
+                "config_snapshot": config_snapshot,
                 "source_kind": PolicySourceKind.TENANT_NATIVE,
                 "delegation_mode": DelegationMode.TENANT_EDITABLE,
             },

@@ -355,8 +355,6 @@ function LeaveApplyModal({
     [endDate, endPortion, startDate, startPortion],
   );
   const balanceAvailable = parseNumeric(matchingBalance?.closing_balance);
-  const balanceAfter = selectedLeaveType?.allow_negative_balance ? balanceAvailable - requestEstimate.days : Math.max(0, balanceAvailable - requestEstimate.days);
-  const hasBalanceRisk = Boolean(selectedLeaveType && !selectedLeaveType.allow_negative_balance && requestEstimate.valid && requestEstimate.days > balanceAvailable);
   const overlappingRequest = useMemo(
     () => leaveRequests.find((request) => (
       ["approved", "pending", "partially_approved"].includes(request.status)
@@ -549,11 +547,11 @@ function LeaveApplyModal({
             <div>
               <span className="detail-label">Request summary</span>
               <h3>{selectedLeaveType?.name ?? "Choose leave type"}</h3>
-              <p>{requestEstimate.valid ? `${formatUnits(requestEstimate.days)} calendar estimate` : "Select a valid date range"}</p>
+              <p>{requestEstimate.valid ? `${formatUnits(requestEstimate.calendarDays)} calendar days selected` : "Select a valid date range"}</p>
             </div>
             <div className="leave-summary-metrics">
               <DetailRow label="Available" value={matchingBalance ? formatUnits(balanceAvailable) : "Not mapped"} />
-              <DetailRow label="Balance after request" value={matchingBalance && requestEstimate.valid ? formatUnits(balanceAfter) : "Pending"} />
+              <DetailRow label="Balance after request" value={matchingBalance && requestEstimate.valid ? "Checked on submit" : "Pending"} />
               <DetailRow label="Calendar days" value={requestEstimate.valid ? String(requestEstimate.calendarDays) : "Pending"} />
               <DetailRow label="Evidence" value={attachmentRequired ? "Required" : "Optional"} />
             </div>
@@ -567,12 +565,6 @@ function LeaveApplyModal({
               <div className="notice">
                 <strong>Check dates.</strong>
                 <span className="muted">End date must be the same as or after the start date.</span>
-              </div>
-            ) : null}
-            {hasBalanceRisk ? (
-              <div className="notice">
-                <strong>Balance may be low.</strong>
-                <span className="muted">The request is above the current balance and may be blocked or rejected.</span>
               </div>
             ) : null}
             {overlappingRequest ? (
@@ -625,7 +617,7 @@ function LeaveDetailModal({ isDemo, item, onClose }: { isDemo: boolean; item: Le
           <h3 className="section-heading-soft">Evidence</h3>
           <LeaveEvidence item={item} />
         </section>
-        <LeaveRequestLifecycleActions isDemo={isDemo} item={item} />
+        <LeaveRequestLifecycleActions isDemo={isDemo} item={item} onCompleted={onClose} />
       </div>
     </div>
   );

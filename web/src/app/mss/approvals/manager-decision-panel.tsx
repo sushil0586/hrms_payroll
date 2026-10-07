@@ -15,6 +15,7 @@ type Props = {
   employeeReason?: string | null;
   requestAction?: string;
   canDecide?: boolean;
+  onCompleted?: () => void;
 };
 
 function getErrorMessage(payload: unknown, fallback: string) {
@@ -46,6 +47,7 @@ export function ManagerDecisionPanel({
   employeeReason,
   requestAction,
   canDecide = true,
+  onCompleted,
 }: Props) {
   const router = useRouter();
   const [comment, setComment] = useState("");
@@ -130,6 +132,7 @@ export function ManagerDecisionPanel({
     setComment("");
     setIsSubmitting(false);
     isSubmittingRef.current = false;
+    onCompleted?.();
     router.refresh();
   }
 

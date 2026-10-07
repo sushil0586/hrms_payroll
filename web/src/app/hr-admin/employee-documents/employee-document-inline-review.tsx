@@ -9,6 +9,7 @@ import type { HrAdminEmployeeDocument, HrAdminEnumOption } from "@/lib/types";
 type Props = {
   item: HrAdminEmployeeDocument;
   verificationStatusOptions: HrAdminEnumOption[];
+  onSaved?: (message: string) => void;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -41,7 +42,7 @@ function nextOutcomeText(status: string, reuploadRequested: boolean) {
   return "Document stays in the HR verification queue.";
 }
 
-export function EmployeeDocumentInlineReview({ item, verificationStatusOptions }: Props) {
+export function EmployeeDocumentInlineReview({ item, verificationStatusOptions, onSaved }: Props) {
   const router = useRouter();
   const [verificationStatus, setVerificationStatus] = useState(item.verification_status);
   const [reviewNote, setReviewNote] = useState(item.rejection_reason || "");
@@ -80,8 +81,10 @@ export function EmployeeDocumentInlineReview({ item, verificationStatusOptions }
     }
     setVerificationStatus(nextVerificationStatus);
     setReuploadRequested(nextReuploadRequested);
-    setSuccessMessage("Document review updated.");
+    const message = "Document review updated.";
+    setSuccessMessage(message);
     setIsSubmitting(false);
+    onSaved?.(message);
     router.refresh();
   }
 

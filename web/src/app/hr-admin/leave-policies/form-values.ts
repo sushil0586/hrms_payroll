@@ -97,6 +97,7 @@ export function createEmptyLeavePolicyValue(defaultStatus: string, defaultAccrua
         proration_mode: "none",
         policy_year_start_month: 1,
         policy_year_start_day: 1,
+        service_tiers: [],
         carry_forward_mode: "limited",
         carry_forward_cap: null,
         encashment_allowed: false,

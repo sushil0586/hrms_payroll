@@ -762,6 +762,11 @@ export type HrAdminLeavePolicyEntitlementConfig = {
   proration_mode: "none" | "by_join_month";
   policy_year_start_month: number;
   policy_year_start_day: number;
+  service_tiers: Array<{
+    min_service_months: number;
+    annual_entitlement: string;
+    label: string;
+  }>;
   carry_forward_mode: "none" | "limited";
   carry_forward_cap: string | null;
   encashment_allowed: boolean;
@@ -814,6 +819,17 @@ export type HrAdminLeavePolicyEntitlementPreview = {
   policy_period_year: number;
   policy_year_start: string;
   policy_year_end: string;
+  entitlement_resolution?: {
+    base_annual_entitlement: string;
+    resolved_annual_entitlement: string;
+    service_months: number;
+    matched_service_tier: {
+      min_service_months: number;
+      annual_entitlement: string;
+      label: string;
+    } | null;
+    summary: string;
+  };
   prorated_entitlement: string;
   projected_accrued_amount: string;
   projected_carry_forward_amount: string;

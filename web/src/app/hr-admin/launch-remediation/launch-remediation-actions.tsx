@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 function apiErrorMessage(payload: unknown, fallback: string) {
@@ -33,6 +33,21 @@ function toDateTimeLocal(value: string | null) {
   return date.toISOString().slice(0, 16);
 }
 
+function useEscapeClose(isOpen: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+}
+
 export function LaunchRemediationActions({
   assignmentId,
   defaultOwnerRoleRef,
@@ -49,6 +64,11 @@ export function LaunchRemediationActions({
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  useEscapeClose(isOpen, () => {
+    if (!isSaving) {
+      setIsOpen(false);
+    }
+  });
 
   async function submitAction(action: "acknowledge" | "assign" | "set_due_date" | "send_reminder" | "escalate" | "ignore") {
     setIsSaving(true);

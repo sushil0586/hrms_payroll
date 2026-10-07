@@ -3712,6 +3712,7 @@ class HrAdminLeaveEntitlementConfigSerializer(serializers.Serializer):
     proration_mode = serializers.ChoiceField(choices=["none", "by_join_month"], required=False)
     policy_year_start_month = serializers.IntegerField(min_value=1, max_value=12, required=False)
     policy_year_start_day = serializers.IntegerField(min_value=1, max_value=28, required=False)
+    service_tiers = serializers.ListField(child=serializers.DictField(), required=False, allow_empty=True)
     carry_forward_mode = serializers.ChoiceField(choices=["none", "limited"], required=False)
     carry_forward_cap = serializers.DecimalField(max_digits=8, decimal_places=2, allow_null=True, required=False)
     encashment_allowed = serializers.BooleanField(required=False)
@@ -3792,6 +3793,7 @@ class HrAdminLeavePolicyPreviewRequestSerializer(serializers.Serializer):
     employee_id = serializers.UUIDField()
     leave_type_id = serializers.UUIDField()
     requested_units = serializers.DecimalField(max_digits=8, decimal_places=2)
+    annual_entitlement = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, default=0)
     policy_id = serializers.UUIDField(required=False, allow_null=True)
     config_snapshot = HrAdminLeavePolicyAdvancedConfigSerializer(required=False, default=dict)
 

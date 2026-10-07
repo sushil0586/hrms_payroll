@@ -188,6 +188,15 @@ INPUT_DEFINITIONS = {
         owner_role="HR Admin",
         required=False,
     ),
+    "enable_study_leave": LaunchInputDefinition(
+        key="enable_study_leave",
+        label="Study leave",
+        group="Leave Add-ons",
+        field_type="checkbox",
+        help_text="Add study or examination leave with evidence-ready configuration.",
+        owner_role="HR Admin",
+        required=False,
+    ),
     "shift_patterns": LaunchInputDefinition(
         key="shift_patterns",
         label="Shift patterns",

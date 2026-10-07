@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { HrAdminPayrollProviderSchemaMappingPack } from "@/lib/types";
@@ -128,6 +128,21 @@ function compactValidationRule(rule: ValidationRule): Record<string, unknown> {
     required: rule.required,
     gate_ref: rule.gate_ref.trim(),
   };
+}
+
+function useEscapeClose(isOpen: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -390,6 +405,11 @@ export function MappingPackRuleBuilder({ pack }: Props) {
   const [notice, setNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  useEscapeClose(open, () => {
+    if (!isSaving && !isSimulating) {
+      setOpen(false);
+    }
+  });
 
   const canEdit = pack.status !== "active" && pack.status !== "archived";
   const invalidRuleCount = useMemo(

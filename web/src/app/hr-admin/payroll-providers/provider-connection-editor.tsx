@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { FieldErrors } from "@/lib/ui/validation";
@@ -201,6 +201,21 @@ function FieldError({ message }: { message?: string }) {
   return message ? <span className="field-error-text" role="alert">{message}</span> : null;
 }
 
+function useEscapeClose(isOpen: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+}
+
 export function ProviderConnectionEditor({ connection, providerKinds, connectionStatuses }: Props) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -208,6 +223,11 @@ export function ProviderConnectionEditor({ connection, providerKinds, connection
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<ProviderConnectionField>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  useEscapeClose(isOpen, () => {
+    if (!isSaving) {
+      setIsOpen(false);
+    }
+  });
   const modalTitleId = useMemo(() => `provider-connection-editor-${connection.id}`, [connection.id]);
 
   function update<Key extends keyof FormValue>(key: Key, value: FormValue[Key]) {

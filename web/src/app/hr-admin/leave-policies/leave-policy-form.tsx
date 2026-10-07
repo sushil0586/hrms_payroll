@@ -84,10 +84,284 @@ const probationAccrualModeOptions = [
   { value: "defer", label: "Defer until confirmation" },
 ] as const;
 
+const genderRestrictionOptions = [
+  { value: "", label: "No gender restriction" },
+  { value: "female", label: "Female employees only" },
+  { value: "male", label: "Male employees only" },
+  { value: "other", label: "Other gender identity only" },
+] as const;
+
+const maritalStatusRestrictionOptions = [
+  { value: "", label: "No marital-status restriction" },
+  { value: "unmarried", label: "Unmarried employees only" },
+  { value: "married", label: "Married employees only" },
+] as const;
+
+type LeavePolicyTemplatePatch = Partial<Omit<HrAdminLeavePolicyWriteInput, "config_snapshot">> & {
+  leaveTypeName: string;
+  config_snapshot: Partial<{
+    [Key in keyof HrAdminLeavePolicyAdvancedConfig]: Partial<HrAdminLeavePolicyAdvancedConfig[Key]>;
+  }>;
+};
+
+type LeavePolicyTemplate = {
+  key: string;
+  label: string;
+  summary: string;
+  bestFor: string;
+  patch: LeavePolicyTemplatePatch;
+};
+
+const leavePolicyTemplates: LeavePolicyTemplate[] = [
+  {
+    key: "india-earned-leave",
+    label: "India earned / annual leave",
+    summary: "20 days below 3 years, then 22 days at 3+ years and 25 days at 5+ years, with joining-month proration and controlled carry-forward.",
+    bestFor: "Annual paid leave policies where tenure changes entitlement.",
+    patch: {
+      leaveTypeName: "Earned Leave",
+      code: "EL_STANDARD",
+      name: "Earned Leave Standard",
+      accrual_frequency: "monthly",
+      annual_entitlement: "20.00",
+      max_carry_forward: "10.00",
+      max_consecutive_days: "15.00",
+      min_days_per_request: "0.50",
+      notice_days_required: 7,
+      allow_half_day: true,
+      allow_backdated_application: false,
+      allow_weekend_holiday_overlap: false,
+      sandwich_rule_enabled: false,
+      is_probation_eligible: true,
+      gender_restriction: "",
+      marital_status_restriction: "",
+      minimum_service_days: 0,
+      config_snapshot: {
+        approval: { default_route: "manager_only", escalation_route: "manager_then_hr", escalate_when_units_gte: "10.00" },
+        evidence: { attachment_required: false, attachment_label: "travel or supporting document", required_when_units_gte: "5.00" },
+        entitlement: {
+          grant_mode: "scheduled",
+          proration_mode: "by_join_month",
+          service_tiers: [
+            { min_service_months: 36, annual_entitlement: "22.00", label: "3+ years" },
+            { min_service_months: 60, annual_entitlement: "25.00", label: "5+ years" },
+          ],
+          carry_forward_mode: "limited",
+          carry_forward_cap: "10.00",
+          encashment_allowed: true,
+          encashment_cap: "5.00",
+          probation_accrual_mode: "accrue",
+        },
+        operations: { approval_required_for_encashment: true, encashment_requires_approval_over_units: "1.00" },
+        lifecycle: { allow_employee_withdraw_pending: true, allow_employee_cancel_approved: true, cancel_approved_requires_reapproval: true },
+      },
+    },
+  },
+  {
+    key: "sick-leave",
+    label: "Sick leave",
+    summary: "Short-notice medical leave with half-day support, medical certificate after 2 days, and no carry-forward or encashment by default.",
+    bestFor: "Medical absence where evidence rules matter more than tenure.",
+    patch: {
+      leaveTypeName: "Sick Leave",
+      code: "SL_STANDARD",
+      name: "Sick Leave Standard",
+      accrual_frequency: "monthly",
+      annual_entitlement: "6.00",
+      max_carry_forward: "0.00",
+      max_consecutive_days: "7.00",
+      min_days_per_request: "0.50",
+      notice_days_required: 0,
+      allow_half_day: true,
+      allow_backdated_application: true,
+      allow_weekend_holiday_overlap: false,
+      sandwich_rule_enabled: false,
+      is_probation_eligible: true,
+      minimum_service_days: 0,
+      config_snapshot: {
+        approval: { default_route: "manager_only", escalation_route: "manager_then_hr", escalate_when_units_gte: "5.00" },
+        evidence: {
+          attachment_required: false,
+          attachment_label: "medical certificate",
+          required_when_units_gte: "2.00",
+          medical_certificate_when_units_gte: "2.00",
+          approval_route_when_evidence_required: "manager_then_hr",
+        },
+        entitlement: { grant_mode: "scheduled", proration_mode: "none", service_tiers: [], carry_forward_mode: "none", carry_forward_cap: null, encashment_allowed: false, encashment_cap: null },
+      },
+    },
+  },
+  {
+    key: "maternity-leave",
+    label: "Maternity leave",
+    summary: "Female-only long-duration leave with service eligibility, required evidence, and HR-inclusive approval routing.",
+    bestFor: "Statutory or company maternity policies.",
+    patch: {
+      leaveTypeName: "Maternity Leave",
+      code: "ML_STANDARD",
+      name: "Maternity Leave Standard",
+      accrual_frequency: "yearly",
+      annual_entitlement: "182.00",
+      max_carry_forward: "0.00",
+      max_consecutive_days: "182.00",
+      min_days_per_request: "1.00",
+      notice_days_required: 30,
+      allow_half_day: false,
+      allow_backdated_application: false,
+      allow_weekend_holiday_overlap: true,
+      sandwich_rule_enabled: false,
+      is_probation_eligible: false,
+      gender_restriction: "female",
+      marital_status_restriction: "",
+      minimum_service_days: 80,
+      config_snapshot: {
+        approval: { default_route: "manager_then_hr", escalation_route: "manager_second_level_hr", escalate_when_units_gte: "30.00" },
+        evidence: { attachment_required: true, attachment_label: "medical certificate", approval_route_when_evidence_required: "manager_then_hr" },
+        entitlement: { grant_mode: "upfront", proration_mode: "none", service_tiers: [], carry_forward_mode: "none", carry_forward_cap: null, encashment_allowed: false, encashment_cap: null },
+      },
+    },
+  },
+  {
+    key: "paternity-leave",
+    label: "Paternity leave",
+    summary: "Male-only short family leave with birth/adoption evidence and manager approval.",
+    bestFor: "Company paternity or co-parent leave rules.",
+    patch: {
+      leaveTypeName: "Paternity Leave",
+      code: "PL_STANDARD",
+      name: "Paternity Leave Standard",
+      accrual_frequency: "yearly",
+      annual_entitlement: "5.00",
+      max_carry_forward: "0.00",
+      max_consecutive_days: "5.00",
+      min_days_per_request: "1.00",
+      notice_days_required: 15,
+      allow_half_day: false,
+      allow_backdated_application: false,
+      allow_weekend_holiday_overlap: true,
+      sandwich_rule_enabled: false,
+      is_probation_eligible: true,
+      gender_restriction: "male",
+      marital_status_restriction: "",
+      minimum_service_days: 0,
+      config_snapshot: {
+        approval: { default_route: "manager_only", escalation_route: "manager_then_hr", escalate_when_units_gte: "5.00" },
+        evidence: { attachment_required: true, attachment_label: "birth or adoption proof" },
+        entitlement: { grant_mode: "upfront", proration_mode: "none", service_tiers: [], carry_forward_mode: "none", carry_forward_cap: null, encashment_allowed: false, encashment_cap: null },
+      },
+    },
+  },
+  {
+    key: "bereavement-leave",
+    label: "Bereavement leave",
+    summary: "Immediate compassionate leave with optional evidence, backdated application, and no balance carry-forward.",
+    bestFor: "Compassionate absence where fast submission matters.",
+    patch: {
+      leaveTypeName: "Bereavement Leave",
+      code: "BL_STANDARD",
+      name: "Bereavement Leave Standard",
+      accrual_frequency: "yearly",
+      annual_entitlement: "5.00",
+      max_carry_forward: "0.00",
+      max_consecutive_days: "5.00",
+      min_days_per_request: "1.00",
+      notice_days_required: 0,
+      allow_half_day: false,
+      allow_backdated_application: true,
+      allow_weekend_holiday_overlap: true,
+      sandwich_rule_enabled: false,
+      is_probation_eligible: true,
+      minimum_service_days: 0,
+      config_snapshot: {
+        approval: { default_route: "manager_only", escalation_route: "manager_then_hr", escalate_when_units_gte: "3.00" },
+        evidence: { attachment_required: false, attachment_label: "supporting document", required_when_units_gte: null },
+        entitlement: { grant_mode: "upfront", proration_mode: "none", service_tiers: [], carry_forward_mode: "none", carry_forward_cap: null, encashment_allowed: false, encashment_cap: null },
+      },
+    },
+  },
+  {
+    key: "comp-off",
+    label: "Comp-off",
+    summary: "Time-off-in-lieu policy with manager approval, no annual carry-forward, and balance governance for manual credits.",
+    bestFor: "Overtime or holiday-work compensatory leave.",
+    patch: {
+      leaveTypeName: "Comp Off",
+      code: "COMP_OFF",
+      name: "Comp-off Standard",
+      accrual_frequency: "monthly",
+      annual_entitlement: "0.00",
+      max_carry_forward: "0.00",
+      max_consecutive_days: "3.00",
+      min_days_per_request: "0.50",
+      notice_days_required: 2,
+      allow_half_day: true,
+      allow_backdated_application: false,
+      allow_weekend_holiday_overlap: false,
+      sandwich_rule_enabled: false,
+      is_probation_eligible: true,
+      minimum_service_days: 0,
+      config_snapshot: {
+        approval: { default_route: "manager_only", escalation_route: "manager_then_hr", escalate_when_units_gte: "3.00" },
+        evidence: { attachment_required: false, attachment_label: "work proof", required_when_units_gte: null },
+        entitlement: { grant_mode: "scheduled", proration_mode: "none", service_tiers: [], carry_forward_mode: "none", carry_forward_cap: null, encashment_allowed: false, encashment_cap: null },
+        operations: { approval_required_for_debit_adjustment: true, credit_adjustment_requires_approval_over_units: "1.00" },
+      },
+    },
+  },
+  {
+    key: "study-leave",
+    label: "Study / exam leave",
+    summary: "Education leave with advance notice, evidence requirement, and manager-to-HR routing.",
+    bestFor: "Certification, exam, or sponsored learning policies.",
+    patch: {
+      leaveTypeName: "Study Leave",
+      code: "STUDY_LEAVE",
+      name: "Study Leave Standard",
+      accrual_frequency: "yearly",
+      annual_entitlement: "5.00",
+      max_carry_forward: "0.00",
+      max_consecutive_days: "5.00",
+      min_days_per_request: "1.00",
+      notice_days_required: 15,
+      allow_half_day: false,
+      allow_backdated_application: false,
+      allow_weekend_holiday_overlap: false,
+      sandwich_rule_enabled: false,
+      is_probation_eligible: false,
+      minimum_service_days: 180,
+      config_snapshot: {
+        approval: { default_route: "manager_then_hr", escalation_route: "manager_second_level_hr", escalate_when_units_gte: "3.00" },
+        evidence: { attachment_required: true, attachment_label: "exam schedule or enrollment proof", approval_route_when_evidence_required: "manager_then_hr" },
+        entitlement: { grant_mode: "upfront", proration_mode: "none", service_tiers: [], carry_forward_mode: "none", carry_forward_cap: null, encashment_allowed: false, encashment_cap: null },
+      },
+    },
+  },
+];
+
+function mergeAdvancedConfig(
+  current: HrAdminLeavePolicyAdvancedConfig,
+  patch: LeavePolicyTemplatePatch["config_snapshot"],
+): HrAdminLeavePolicyAdvancedConfig {
+  return {
+    ...current,
+    approval: { ...current.approval, ...patch.approval },
+    evidence: { ...current.evidence, ...patch.evidence },
+    entitlement: { ...current.entitlement, ...patch.entitlement },
+    operations: { ...current.operations, ...patch.operations },
+    lifecycle: { ...current.lifecycle, ...patch.lifecycle },
+    holiday_governance: { ...current.holiday_governance, ...patch.holiday_governance },
+  };
+}
+
+function normalizedLabel(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
 export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeavePolicyField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -96,6 +370,8 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
   const [previewError, setPreviewError] = useState("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewResult, setPreviewResult] = useState<HrAdminLeavePolicyPreview | null>(null);
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState("");
+  const selectedTemplate = leavePolicyTemplates.find((template) => template.key === selectedTemplateKey) ?? null;
   const leaveTypeLocked = isGovernanceFieldLocked(item, "leave_type_id");
   const codeLocked = isGovernanceFieldLocked(item, "code");
   const nameLocked = isGovernanceFieldLocked(item, "name");
@@ -166,6 +442,30 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
     });
   }
 
+  function updateServiceTier(
+    index: number,
+    key: keyof HrAdminLeavePolicyAdvancedConfig["entitlement"]["service_tiers"][number],
+    value: string | number,
+  ) {
+    const tiers = [...formValue.config_snapshot.entitlement.service_tiers];
+    tiers[index] = {
+      ...tiers[index],
+      [key]: value,
+    };
+    updateEntitlement("service_tiers", tiers);
+  }
+
+  function addServiceTier() {
+    updateEntitlement("service_tiers", [
+      ...formValue.config_snapshot.entitlement.service_tiers,
+      { min_service_months: 36, annual_entitlement: formValue.annual_entitlement, label: "3+ years" },
+    ]);
+  }
+
+  function removeServiceTier(index: number) {
+    updateEntitlement("service_tiers", formValue.config_snapshot.entitlement.service_tiers.filter((_, tierIndex) => tierIndex !== index));
+  }
+
   function updateOperations<Key extends keyof HrAdminLeavePolicyAdvancedConfig["operations"]>(
     key: Key,
     value: HrAdminLeavePolicyAdvancedConfig["operations"][Key],
@@ -205,6 +505,31 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
     });
   }
 
+  function findTemplateLeaveTypeId(leaveTypeName: string) {
+    const target = normalizedLabel(leaveTypeName);
+    const match = options.leave_types.find((leaveType) => {
+      const candidate = normalizedLabel(leaveType.name);
+      return candidate === target || candidate.includes(target) || target.includes(candidate);
+    });
+    return match?.id ?? formValue.leave_type_id;
+  }
+
+  function applySelectedTemplate() {
+    if (!selectedTemplate || configSnapshotLocked) {
+      return;
+    }
+    const { config_snapshot: configPatch, leaveTypeName, ...fieldPatch } = selectedTemplate.patch;
+    const nextLeaveTypeId = leaveTypeLocked ? formValue.leave_type_id : findTemplateLeaveTypeId(leaveTypeName);
+    setFormValue((current) => ({
+      ...current,
+      ...fieldPatch,
+      leave_type_id: nextLeaveTypeId,
+      config_snapshot: mergeAdvancedConfig(current.config_snapshot, configPatch),
+    }));
+    setFieldErrors({});
+    setError("");
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmittingRef.current) {
@@ -217,6 +542,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError("");
+    setSuccessMessage("");
     setFieldErrors({});
     const annualEntitlement = Number(formValue.annual_entitlement);
     const maxCarryForward = Number(formValue.max_carry_forward);
@@ -264,8 +590,13 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
       isSubmittingRef.current = false;
       return;
     }
-    router.push("/hr-admin/leave-policies");
-    router.refresh();
+    setSuccessMessage(mode === "create" ? "Leave policy created. Returning to the policy list." : "Leave policy saved. Returning to the policy list.");
+    setIsSubmitting(false);
+    isSubmittingRef.current = false;
+    window.setTimeout(() => {
+      router.push("/hr-admin/leave-policies");
+      router.refresh();
+    }, 700);
   }
 
   async function handlePreview() {
@@ -289,6 +620,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           employee_id: previewEmployeeId,
           leave_type_id: formValue.leave_type_id,
           requested_units: previewUnits,
+          annual_entitlement: formValue.annual_entitlement,
           policy_id: itemId ?? null,
           config_snapshot: formValue.config_snapshot,
         }),
@@ -324,6 +656,55 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
 
         <div className="form-shell-card__grid">
           {mode === "edit" && item ? <PlatformGovernanceFormBanner detachPath={`/api/hr-admin/leave-policies/${itemId}/detach`} item={item} /> : null}
+          <FormSection
+            fullWidth
+            title="Policy template starter"
+            description="Pick a common leave policy baseline, review the intent, then apply it. HR can still edit every field after the template fills the form."
+          >
+            <div className="form-grid">
+              <label className="form-field">
+                <span className="muted">Template</span>
+                <select
+                  className="input-control"
+                  disabled={configSnapshotLocked}
+                  value={selectedTemplateKey}
+                  onChange={(e) => setSelectedTemplateKey(e.target.value)}
+                >
+                  <option value="">Choose a policy starter</option>
+                  {leavePolicyTemplates.map((template) => (
+                    <option key={template.key} value={template.key}>
+                      {template.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="notice">
+                <strong>{selectedTemplate ? selectedTemplate.bestFor : "Use templates for faster SaaS rollout"}</strong>
+                <span className="muted">
+                  {selectedTemplate
+                    ? selectedTemplate.summary
+                    : "Templates cover entitlement, service tiers, evidence, lifecycle, carry-forward, encashment, and approval defaults for common global scenarios."}
+                </span>
+              </div>
+            </div>
+            <div className="form-actions-bar">
+              <span className="muted">
+                {selectedTemplate
+                  ? `Applying this will set ${selectedTemplate.patch.annual_entitlement} annual units and ${selectedTemplate.patch.max_carry_forward} carry-forward units as a starting point.`
+                  : "Select a template to see the starter assumptions before applying."}
+              </span>
+              <button
+                className="button button--secondary"
+                disabled={!selectedTemplate || configSnapshotLocked}
+                onClick={applySelectedTemplate}
+                type="button"
+              >
+                Apply template
+              </button>
+            </div>
+            <GovernanceLockHint fieldPath="config_snapshot" item={item} />
+          </FormSection>
+
           <FormSection title="Identity and timing" description="Start with the linked leave type, policy identity, and effective dates.">
             <div className="form-grid">
               <label className="form-field"><span className="muted">Leave type</span><select aria-invalid={Boolean(fieldErrors.leave_type_id)} className="input-control" disabled={leaveTypeLocked} value={formValue.leave_type_id ?? ""} onChange={(e) => update("leave_type_id", e.target.value || null)}>{selectOptions(options.leave_types)}</select>{fieldErrors.leave_type_id ? <span className="field-error-text">{fieldErrors.leave_type_id}</span> : null}<GovernanceLockHint fieldPath="leave_type_id" item={item} /></label>
@@ -348,8 +729,8 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
 
           <FormSection title="Eligibility filters" description="Optional restrictions help scope the policy to the correct employee populations.">
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Gender restriction</span><input className="input-control" disabled={genderRestrictionLocked} value={formValue.gender_restriction} onChange={(e) => update("gender_restriction", e.target.value)} /><GovernanceLockHint fieldPath="gender_restriction" item={item} /></label>
-              <label className="form-field"><span className="muted">Marital status restriction</span><input className="input-control" disabled={maritalStatusRestrictionLocked} value={formValue.marital_status_restriction} onChange={(e) => update("marital_status_restriction", e.target.value)} /><GovernanceLockHint fieldPath="marital_status_restriction" item={item} /></label>
+              <label className="form-field"><span className="muted">Gender restriction</span><select className="input-control" disabled={genderRestrictionLocked} value={formValue.gender_restriction} onChange={(e) => update("gender_restriction", e.target.value)}>{genderRestrictionOptions.map((option) => <option key={option.value || "none"} value={option.value}>{option.label}</option>)}</select><GovernanceLockHint fieldPath="gender_restriction" item={item} /></label>
+              <label className="form-field"><span className="muted">Marital status restriction</span><select className="input-control" disabled={maritalStatusRestrictionLocked} value={formValue.marital_status_restriction} onChange={(e) => update("marital_status_restriction", e.target.value)}>{maritalStatusRestrictionOptions.map((option) => <option key={option.value || "none"} value={option.value}>{option.label}</option>)}</select><GovernanceLockHint fieldPath="marital_status_restriction" item={item} /></label>
               <label className="form-field"><span className="muted">Minimum service days</span><input aria-invalid={Boolean(fieldErrors.minimum_service_days)} className="input-control" disabled={minimumServiceDaysLocked} type="number" value={formValue.minimum_service_days} onChange={(e) => update("minimum_service_days", Number(e.target.value))} />{fieldErrors.minimum_service_days ? <span className="field-error-text">{fieldErrors.minimum_service_days}</span> : null}<GovernanceLockHint fieldPath="minimum_service_days" item={item} /></label>
             </div>
           </FormSection>
@@ -397,9 +778,12 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           </FormSection>
 
           <FormSection
+            collapsible
+            defaultOpen={false}
             fullWidth
             title="Advanced routing and evidence rules"
             description="These settings are stored in JSON behind the scenes, but managed here as normal policy controls so every entity can configure its own approval and document rules."
+            summaryMeta={<span className="queue-summary-chip"><strong>{formValue.config_snapshot.approval.default_route.replaceAll("_", " ")}</strong> route</span>}
           >
             <GovernanceLockHint fieldPath="config_snapshot" item={item} />
             <fieldset disabled={configSnapshotLocked} style={{ border: 0, margin: 0, padding: 0 }}>
@@ -543,9 +927,12 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           </FormSection>
 
           <FormSection
+            collapsible
+            defaultOpen={false}
             fullWidth
             title="Advanced entitlement and carry-forward rules"
-            description="Configure how balances accrue across the policy year, how joining-date proration behaves, and whether probation or carry-forward rules change the credited balance."
+            description="Configure how balances accrue, how joining-date proration behaves, and how service tenure changes annual entitlement."
+            summaryMeta={<span className="queue-summary-chip"><strong>{formValue.config_snapshot.entitlement.service_tiers.length}</strong> service tiers</span>}
           >
             <GovernanceLockHint fieldPath="config_snapshot" item={item} />
             <fieldset disabled={configSnapshotLocked} style={{ border: 0, margin: 0, padding: 0 }}>
@@ -648,6 +1035,57 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
               </label>
             </div>
 
+            <div className="notice">
+              <strong>Service-based entitlement tiers</strong>
+              <span className="muted">Use these rows for global policies where entitlement increases with completed service, such as 20 days below 3 years and 22 days after 3 years.</span>
+            </div>
+
+            <div className="form-grid">
+              {formValue.config_snapshot.entitlement.service_tiers.map((tier, index) => (
+                <div className="notice" key={`${tier.min_service_months}-${index}`}>
+                  <div className="form-grid">
+                    <label className="form-field">
+                      <span className="muted">Tier label</span>
+                      <input
+                        className="input-control"
+                        placeholder="e.g. 3+ years"
+                        value={tier.label}
+                        onChange={(e) => updateServiceTier(index, "label", e.target.value)}
+                      />
+                    </label>
+                    <label className="form-field">
+                      <span className="muted">Minimum completed service months</span>
+                      <input
+                        className="input-control"
+                        min={0}
+                        type="number"
+                        value={tier.min_service_months}
+                        onChange={(e) => updateServiceTier(index, "min_service_months", Number(e.target.value || 0))}
+                      />
+                    </label>
+                    <label className="form-field">
+                      <span className="muted">Annual entitlement from this tier</span>
+                      <input
+                        className="input-control"
+                        placeholder="e.g. 22.00"
+                        value={tier.annual_entitlement}
+                        onChange={(e) => updateServiceTier(index, "annual_entitlement", e.target.value)}
+                      />
+                    </label>
+                    <div className="form-actions-bar">
+                      <span className="muted">Tier applies once the employee completes the service months above.</span>
+                      <button className="button button--secondary" onClick={() => removeServiceTier(index)} type="button">Remove</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="form-actions-bar">
+              <span className="muted">Add multiple tiers for rules like 3+ years, 5+ years, and 10+ years.</span>
+              <button className="button button--secondary" onClick={addServiceTier} type="button">Add service tier</button>
+            </div>
+
             <div className="toggle-field-list">
               <label className="toggle-field">
                 <div>
@@ -665,9 +1103,12 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           </FormSection>
 
           <FormSection
+            collapsible
+            defaultOpen={false}
             fullWidth
             title="Balance operation governance"
             description="Configure maker-checker controls for encashment and manual balance mutations so every entity can enforce its own audit posture."
+            summaryMeta={<span className="queue-summary-chip"><strong>{formValue.config_snapshot.entitlement.encashment_allowed ? "On" : "Off"}</strong> encashment</span>}
           >
             <GovernanceLockHint fieldPath="config_snapshot" item={item} />
             <fieldset disabled={configSnapshotLocked} style={{ border: 0, margin: 0, padding: 0 }}>
@@ -744,9 +1185,12 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           </FormSection>
 
           <FormSection
+            collapsible
+            defaultOpen={false}
             fullWidth
             title="Request lifecycle governance"
             description="Control whether employees can withdraw pending leave, cancel approved leave, and whether stage-specific evidence is required."
+            summaryMeta={<span className="queue-summary-chip"><strong>{formValue.config_snapshot.lifecycle.allow_employee_cancel_approved ? "Cancel on" : "Cancel off"}</strong> lifecycle</span>}
           >
             <GovernanceLockHint fieldPath="config_snapshot" item={item} />
             <fieldset disabled={configSnapshotLocked} style={{ border: 0, margin: 0, padding: 0 }}>
@@ -863,9 +1307,12 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           </FormSection>
 
           <FormSection
+            collapsible
+            defaultOpen={false}
             fullWidth
             title="Holiday-linked leave governance"
             description="Use this when a leave policy should only be booked on specific holiday types such as RH, and when paid usage needs a configurable cap."
+            summaryMeta={<span className="queue-summary-chip"><strong>{formValue.config_snapshot.holiday_governance.enabled ? "On" : "Off"}</strong> holiday rules</span>}
           >
             <GovernanceLockHint fieldPath="config_snapshot" item={item} />
             <fieldset disabled={configSnapshotLocked} style={{ border: 0, margin: 0, padding: 0 }}>
@@ -943,9 +1390,12 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           </FormSection>
 
           <FormSection
+            collapsible
+            defaultOpen={false}
             fullWidth
             title="Workflow preview"
             description="Pick an employee and request size to test the exact approval chain this policy will produce before a real leave request is submitted."
+            summaryMeta={<span className="queue-summary-chip"><strong>Test</strong> route</span>}
           >
             <div className="form-grid">
               <label className="form-field">
@@ -983,6 +1433,18 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
 
             {previewResult ? (
               <div className="detail-grid">
+                <div className="notice notice--success detail-row--full">
+                  <strong>Preview summary</strong>
+                  <span className="muted">
+                    For this employee and request size, the policy resolves to {previewResult.entitlement_preview.projected_accrued_amount} accrued units in the selected policy year and routes through {previewResult.approval_route.replaceAll("_", " ")}.
+                  </span>
+                </div>
+                <div className="notice detail-row--full">
+                  <strong>How to read this preview</strong>
+                  <span className="muted">
+                    This does not submit leave. It checks the same entitlement, service-tier, assignment, evidence, and approval-routing logic that will run when an employee applies.
+                  </span>
+                </div>
                 <div className="detail-row">
                   <span className="detail-row__label">Current active policy</span>
                   <span className="detail-row__value">{previewResult.current_resolved_policy_name || "No active policy currently resolves for this employee."}</span>
@@ -1006,7 +1468,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
                   <span className="detail-row__value">
                     {previewResult.draft_policy_matches_current_resolution
                       ? "Yes, this draft is already the resolved policy for this employee."
-                      : "No, another active policy currently resolves first."}
+                      : "No, another active policy currently resolves first. Save and assign this policy if HR expects it to apply."}
                   </span>
                 </div>
                 <div className="detail-row">
@@ -1015,7 +1477,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
                 </div>
                 <div className="detail-row">
                   <span className="detail-row__label">Attachment rule</span>
-                  <span className="detail-row__value">{previewResult.required_attachment_reason || "No attachment required for this scenario."}</span>
+                  <span className="detail-row__value">{previewResult.required_attachment_reason || "No attachment is required for this request size and leave type."}</span>
                 </div>
                 <div className="detail-row">
                   <span className="detail-row__label">Policy period</span>
@@ -1024,16 +1486,30 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
                   </span>
                 </div>
                 <div className="detail-row">
+                  <span className="detail-row__label">Entitlement resolution</span>
+                  <span className="detail-row__value">
+                    {previewResult.entitlement_preview.entitlement_resolution
+                      ? `${previewResult.entitlement_preview.entitlement_resolution.resolved_annual_entitlement} annual units. ${previewResult.entitlement_preview.entitlement_resolution.summary}`
+                      : "Using configured annual entitlement."}
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-row__label">Service months</span>
+                  <span className="detail-row__value">
+                    {previewResult.entitlement_preview.entitlement_resolution?.service_months ?? "Not available"}
+                  </span>
+                </div>
+                <div className="detail-row">
                   <span className="detail-row__label">Prorated entitlement</span>
-                  <span className="detail-row__value">{previewResult.entitlement_preview.prorated_entitlement} units</span>
+                  <span className="detail-row__value">{previewResult.entitlement_preview.prorated_entitlement} units after joining-date and probation rules.</span>
                 </div>
                 <div className="detail-row">
                   <span className="detail-row__label">Projected accrued amount</span>
-                  <span className="detail-row__value">{previewResult.entitlement_preview.projected_accrued_amount} units</span>
+                  <span className="detail-row__value">{previewResult.entitlement_preview.projected_accrued_amount} units available from the accrual schedule as of today.</span>
                 </div>
                 <div className="detail-row">
                   <span className="detail-row__label">Projected carry forward</span>
-                  <span className="detail-row__value">{previewResult.entitlement_preview.projected_carry_forward_amount} units</span>
+                  <span className="detail-row__value">{previewResult.entitlement_preview.projected_carry_forward_amount} units expected from the previous policy year, capped by this policy.</span>
                 </div>
                 <div className="detail-row detail-row--full">
                   <span className="detail-row__label">Approval steps</span>
@@ -1054,6 +1530,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           </FormSection>
         </div>
 
+        {successMessage ? <div className="notice notice--success" role="status"><strong>Save complete.</strong><span className="muted">{successMessage}</span></div> : null}
         {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
           <span className="muted">Policy changes save back into the leave policy catalog and stay ready for scoped assignments.</span>

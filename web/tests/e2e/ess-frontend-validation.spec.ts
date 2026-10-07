@@ -47,6 +47,26 @@ test.describe("ESS frontend validation", () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test("leave request preview does not deduct calendar days before policy submit checks", async ({ page }) => {
+    await gotoEssDemo(page, "/ess/leave");
+    await suppressBrowserTestNoise(page);
+    await expectPageReady(page, "Leave");
+
+    await page.getByRole("button", { name: "Apply leave" }).click();
+    const dialog = page.getByRole("dialog", { name: "Apply leave" });
+    await expect(dialog).toBeVisible();
+
+    await field(dialog, "Start date").fill("2026-10-16");
+    await field(dialog, "End date").fill("2026-10-19");
+
+    await expect(dialog.getByText("4 calendar days selected")).toBeVisible();
+    const balanceAfter = dialog.locator(".detail-row").filter({ hasText: "Balance after request" });
+    await expect(balanceAfter).toContainText("Checked on submit");
+    await expect(balanceAfter).not.toContainText("1");
+    await expectNoAppError(page);
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("attendance regularization blocks frontend errors before calling the API", async ({ page }) => {
     let regularizationCalls = 0;
     await page.route("**/api/me/attendance-regularizations", async (route) => {

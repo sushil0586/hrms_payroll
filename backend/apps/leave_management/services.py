@@ -54,6 +54,7 @@ DEFAULT_LEAVE_POLICY_CONFIG = {
         "proration_mode": "none",
         "policy_year_start_month": 1,
         "policy_year_start_day": 1,
+        "service_tiers": [],
         "carry_forward_mode": "limited",
         "carry_forward_cap": None,
         "encashment_allowed": False,
@@ -122,6 +123,35 @@ def _parse_decimal(value) -> Decimal | None:
     if normalized is None:
         return None
     return Decimal(normalized)
+
+
+def _normalize_service_entitlement_tiers(value) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    tiers: list[dict] = []
+    for raw_tier in value:
+        if not isinstance(raw_tier, dict):
+            continue
+        annual_entitlement = _normalize_decimal_string(raw_tier.get("annual_entitlement"))
+        if annual_entitlement is None:
+            continue
+        try:
+            min_service_months = int(raw_tier.get("min_service_months", 0) or 0)
+        except (TypeError, ValueError):
+            min_service_months = 0
+        try:
+            min_service_years = int(raw_tier.get("min_service_years", 0) or 0)
+        except (TypeError, ValueError):
+            min_service_years = 0
+        min_service_months = max(min_service_months, max(min_service_years, 0) * 12)
+        tiers.append(
+            {
+                "min_service_months": min_service_months,
+                "annual_entitlement": annual_entitlement,
+                "label": str(raw_tier.get("label") or "").strip(),
+            }
+        )
+    return sorted(tiers, key=lambda tier: tier["min_service_months"])
 
 
 def normalize_leave_policy_config(snapshot) -> dict:
@@ -208,6 +238,7 @@ def normalize_leave_policy_config(snapshot) -> dict:
             "proration_mode": proration_mode,
             "policy_year_start_month": policy_year_start_month,
             "policy_year_start_day": policy_year_start_day,
+            "service_tiers": _normalize_service_entitlement_tiers(entitlement_raw.get("service_tiers")),
             "carry_forward_mode": carry_forward_mode,
             "carry_forward_cap": _normalize_decimal_string(entitlement_raw.get("carry_forward_cap")),
             "encashment_allowed": bool(entitlement_raw.get("encashment_allowed", False)),
@@ -317,8 +348,64 @@ def get_leave_policy_period_year(*, leave_policy: LeavePolicy, as_of: date) -> i
     return _get_policy_period_year(normalize_leave_policy_config(leave_policy.config_snapshot), as_of=as_of)
 
 
-def _calculate_prorated_entitlement(*, employee, leave_policy: LeavePolicy, as_of: date, policy_config: dict) -> Decimal:
+def _employee_service_months(employee, *, as_of: date) -> int:
+    if not employee.date_of_joining or employee.date_of_joining > as_of:
+        return 0
+    months = (as_of.year - employee.date_of_joining.year) * 12 + (as_of.month - employee.date_of_joining.month)
+    if as_of.day < employee.date_of_joining.day:
+        months -= 1
+    return max(months, 0)
+
+
+def _resolve_annual_entitlement(*, employee, leave_policy: LeavePolicy, as_of: date, policy_config: dict) -> Decimal:
     annual_entitlement = Decimal(leave_policy.annual_entitlement or 0)
+    service_tiers = policy_config.get("entitlement", {}).get("service_tiers") or []
+    if not service_tiers:
+        return annual_entitlement
+    service_months = _employee_service_months(employee, as_of=as_of)
+    resolved_entitlement = annual_entitlement
+    for tier in service_tiers:
+        if service_months < int(tier.get("min_service_months") or 0):
+            continue
+        tier_entitlement = _parse_decimal(tier.get("annual_entitlement"))
+        if tier_entitlement is not None:
+            resolved_entitlement = tier_entitlement
+    return resolved_entitlement
+
+
+def _build_entitlement_resolution_evidence(*, employee, leave_policy: LeavePolicy, as_of: date, policy_config: dict) -> dict:
+    base_entitlement = Decimal(leave_policy.annual_entitlement or 0)
+    service_months = _employee_service_months(employee, as_of=as_of)
+    matched_tier = None
+    resolved_entitlement = base_entitlement
+    for tier in policy_config.get("entitlement", {}).get("service_tiers") or []:
+        if service_months < int(tier.get("min_service_months") or 0):
+            continue
+        tier_entitlement = _parse_decimal(tier.get("annual_entitlement"))
+        if tier_entitlement is None:
+            continue
+        matched_tier = tier
+        resolved_entitlement = tier_entitlement
+    return {
+        "base_annual_entitlement": f"{base_entitlement:.2f}",
+        "resolved_annual_entitlement": f"{resolved_entitlement:.2f}",
+        "service_months": service_months,
+        "matched_service_tier": matched_tier,
+        "summary": (
+            f"Matched service tier {matched_tier.get('label') or matched_tier.get('min_service_months')}."
+            if matched_tier
+            else "No service tier matched; using base annual entitlement."
+        ),
+    }
+
+
+def _calculate_prorated_entitlement(*, employee, leave_policy: LeavePolicy, as_of: date, policy_config: dict) -> Decimal:
+    annual_entitlement = _resolve_annual_entitlement(
+        employee=employee,
+        leave_policy=leave_policy,
+        as_of=as_of,
+        policy_config=policy_config,
+    )
     if annual_entitlement <= 0:
         return Decimal("0.00")
     if policy_config["entitlement"]["probation_accrual_mode"] == "defer" and _is_employee_on_probation(employee, as_of=as_of):
@@ -707,6 +794,12 @@ def _build_leave_entitlement_preview(*, employee, leave_policy: LeavePolicy, as_
         "policy_period_year": policy_period_year,
         "policy_year_start": policy_year_start.isoformat(),
         "policy_year_end": policy_year_end.isoformat(),
+        "entitlement_resolution": _build_entitlement_resolution_evidence(
+            employee=employee,
+            leave_policy=leave_policy,
+            as_of=as_of,
+            policy_config=policy_config,
+        ),
         "prorated_entitlement": f"{prorated_entitlement:.2f}",
         "projected_accrued_amount": f"{scheduled_accrual:.2f}",
         "projected_carry_forward_amount": f"{carry_forward_amount:.2f}",
@@ -834,9 +927,15 @@ def preview_leave_policy_configuration(
     leave_type,
     requested_units: Decimal,
     config_snapshot,
+    annual_entitlement: Decimal | None = None,
     policy_id: str | None = None,
 ) -> dict:
-    policy_stub = LeavePolicy(tenant=employee.tenant, leave_type=leave_type, config_snapshot=config_snapshot or {})
+    policy_stub = LeavePolicy(
+        tenant=employee.tenant,
+        leave_type=leave_type,
+        annual_entitlement=annual_entitlement or Decimal("0.00"),
+        config_snapshot=config_snapshot or {},
+    )
     current_assignment = _find_matching_leave_policy_assignment(employee, leave_type)
     policy_runtime = _build_leave_request_policy_runtime(
         leave_type=leave_type,
@@ -1013,6 +1112,15 @@ def _calculate_requested_units(
 ) -> Decimal:
     total_days = (end_date - start_date).days + 1
     if employee and leave_policy and not leave_policy.allow_weekend_holiday_overlap:
+        if leave_policy.sandwich_rule_enabled:
+            units = Decimal(total_days)
+            if total_days == 1 and start_day_portion != LeaveDayPortion.FULL_DAY and end_day_portion != LeaveDayPortion.FULL_DAY:
+                return Decimal("0.5")
+            if start_day_portion != LeaveDayPortion.FULL_DAY:
+                units -= Decimal("0.5")
+            if end_day_portion != LeaveDayPortion.FULL_DAY:
+                units -= Decimal("0.5")
+            return max(units, Decimal("0.5")).quantize(Decimal("0.01"))
         counted_dates = [
             start_date + timedelta(days=offset)
             for offset in range(total_days)
@@ -1690,6 +1798,24 @@ def apply_leave_balance_admin_action(
         },
     )
     if is_pending:
+        if reviewer and reviewer.membership:
+            trigger_notification_event(
+                tenant=employee.tenant,
+                module=WorkflowModule.LEAVE,
+                trigger_key="leave.balance.review_pending",
+                recipient_membership=reviewer.membership,
+                recipient_identifier=str(reviewer.membership.user_id),
+                subject_type="leave_balance_transaction",
+                subject_identifier=str(transaction_item.id),
+                fallback_title="Leave balance operation pending review",
+                fallback_body=f"{employee.first_name}'s {action.replace('_', ' ')} request for {units:.2f} units needs review.",
+                payload={
+                    "leave_balance_transaction_id": str(transaction_item.id),
+                    "employee_id": str(employee.id),
+                    "action": action,
+                    "units": f"{units:.2f}",
+                },
+            )
         return {
             "balance": balance,
             "transaction": transaction_item,
@@ -1743,6 +1869,24 @@ def review_leave_balance_transaction(*, actor, transaction_item: LeaveBalanceTra
         locked_transaction.reviewed_at = timezone.now()
         locked_transaction.rejection_reason = rejection_reason.strip()
         locked_transaction.save(update_fields=["status", "reviewed_by", "reviewed_at", "rejection_reason", "updated_at"])
+        if locked_transaction.employee.membership:
+            trigger_notification_event(
+                tenant=locked_transaction.tenant,
+                module=WorkflowModule.LEAVE,
+                trigger_key="leave.balance.employee_updated",
+                recipient_membership=locked_transaction.employee.membership,
+                recipient_identifier=str(locked_transaction.employee.membership.user_id),
+                subject_type="leave_balance_transaction",
+                subject_identifier=str(locked_transaction.id),
+                fallback_title="Leave balance operation rejected",
+                fallback_body=f"Your {locked_transaction.action.replace('_', ' ')} request for {locked_transaction.units:.2f} units was rejected.",
+                payload={
+                    "leave_balance_transaction_id": str(locked_transaction.id),
+                    "status": locked_transaction.status,
+                    "action": locked_transaction.action,
+                    "units": f"{Decimal(locked_transaction.units or 0):.2f}",
+                },
+            )
         return {
             "balance": balance,
             "transaction": locked_transaction,
@@ -1779,6 +1923,24 @@ def review_leave_balance_transaction(*, actor, transaction_item: LeaveBalanceTra
             "updated_at",
         ]
     )
+    if locked_transaction.employee.membership:
+        trigger_notification_event(
+            tenant=locked_transaction.tenant,
+            module=WorkflowModule.LEAVE,
+            trigger_key="leave.balance.employee_updated",
+            recipient_membership=locked_transaction.employee.membership,
+            recipient_identifier=str(locked_transaction.employee.membership.user_id),
+            subject_type="leave_balance_transaction",
+            subject_identifier=str(locked_transaction.id),
+            fallback_title="Leave balance operation approved",
+            fallback_body=f"Your {locked_transaction.action.replace('_', ' ')} request for {locked_transaction.units:.2f} units was approved.",
+            payload={
+                "leave_balance_transaction_id": str(locked_transaction.id),
+                "status": locked_transaction.status,
+                "action": locked_transaction.action,
+                "units": f"{Decimal(locked_transaction.units or 0):.2f}",
+            },
+        )
     return {
         "balance": balance,
         "transaction": locked_transaction,
@@ -1821,6 +1983,20 @@ def withdraw_leave_request(*, leave_request: LeaveRequest, actor_employee, reaso
         },
     }
     leave_request.save(update_fields=["status", "manager_comment", "rejection_reason", "cancelled_at", "metadata", "updated_at"])
+    manager_membership = leave_request.employee.reporting_manager.membership if leave_request.employee.reporting_manager and leave_request.employee.reporting_manager.membership else None
+    if manager_membership:
+        trigger_notification_event(
+            tenant=leave_request.tenant,
+            module=WorkflowModule.LEAVE,
+            trigger_key="leave.request.withdrawn",
+            recipient_membership=manager_membership,
+            recipient_identifier=str(manager_membership.user_id),
+            subject_type="leave_request",
+            subject_identifier=str(leave_request.id),
+            fallback_title="Leave request withdrawn",
+            fallback_body=f"{actor_employee.first_name} withdrew leave from {leave_request.start_date} to {leave_request.end_date}.",
+            payload={"leave_request_id": str(leave_request.id), "status": leave_request.status},
+        )
     return leave_request
 
 
@@ -1921,6 +2097,20 @@ def cancel_leave_request(*, leave_request: LeaveRequest, actor_employee, reason:
         },
     }
     leave_request.save(update_fields=["status", "manager_comment", "rejection_reason", "cancelled_at", "metadata", "updated_at"])
+    manager_membership = leave_request.employee.reporting_manager.membership if leave_request.employee.reporting_manager and leave_request.employee.reporting_manager.membership else None
+    if manager_membership:
+        trigger_notification_event(
+            tenant=leave_request.tenant,
+            module=WorkflowModule.LEAVE,
+            trigger_key="leave.request.cancelled",
+            recipient_membership=manager_membership,
+            recipient_identifier=str(manager_membership.user_id),
+            subject_type="leave_request",
+            subject_identifier=str(leave_request.id),
+            fallback_title="Approved leave cancelled",
+            fallback_body=f"{actor_employee.first_name} cancelled approved leave from {leave_request.start_date} to {leave_request.end_date}.",
+            payload={"leave_request_id": str(leave_request.id), "status": leave_request.status},
+        )
     return leave_request
 
 

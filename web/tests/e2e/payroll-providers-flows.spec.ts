@@ -67,8 +67,28 @@ test.describe("HR admin payroll provider connection flows", () => {
     await page.getByRole("button", { name: "Save provider" }).click();
     await expect(page.getByText("Config JSON is invalid.")).toBeVisible();
 
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Configure provider connection" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Configure provider" }).click();
+    await expect(page.getByRole("dialog", { name: "Configure provider connection" })).toBeVisible();
     await page.getByRole("button", { name: "Close" }).click();
     await expect(page.getByRole("dialog", { name: "Configure provider connection" })).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("provider mapping rule builder closes with Escape", async ({ page }) => {
+    await gotoAuthenticated(page, "/hr-admin/payroll-providers?tab=mapping");
+    await expectPageReady(page, "Payroll Providers");
+
+    const editRulesButton = page.getByRole("button", { name: "Edit rules" }).first();
+    test.skip(await editRulesButton.count() === 0, "No editable mapping pack exists in this tenant.");
+
+    await editRulesButton.click();
+    await expect(page.getByRole("dialog", { name: /rule builder/i })).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: /rule builder/i })).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
   });
 
