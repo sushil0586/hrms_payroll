@@ -106,6 +106,7 @@ LEAVE_CARRY_FORWARD_MODES = {"none", "limited"}
 LEAVE_PROBATION_ACCRUAL_MODES = {"accrue", "defer"}
 LEAVE_BALANCE_ADMIN_ACTIONS = {"credit_adjustment", "debit_adjustment", "encashment"}
 LEAVE_HOLIDAY_CAP_ACTIONS = {"block"}
+DEFAULT_WEEKLY_OFF_DAYS = {"saturday", "sunday"}
 
 
 def _normalize_decimal_string(value) -> str | None:
@@ -1097,7 +1098,7 @@ def _is_working_leave_date(*, employee, target_date: date) -> bool:
         attendance_date=target_date,
         fallback_shift=getattr(attendance_policy, "default_shift", None),
     )
-    weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])}
+    weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])} or DEFAULT_WEEKLY_OFF_DAYS
     return target_date.strftime("%A").lower() not in weekly_off_days
 
 
@@ -1177,7 +1178,7 @@ def calculate_leave_request_unit_breakdown(
             attendance_date=target_date,
             fallback_shift=getattr(attendance_policy, "default_shift", None),
         ) if employee else None
-        weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])}
+        weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])} or DEFAULT_WEEKLY_OFF_DAYS
         is_weekly_off = target_date.strftime("%A").lower() in weekly_off_days
 
         if count_calendar_days:

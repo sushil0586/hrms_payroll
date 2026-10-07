@@ -497,6 +497,31 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
             ],
         )
 
+    def test_weekend_exclusion_uses_standard_weekend_when_attendance_policy_is_missing(self):
+        AttendancePolicyAssignment.objects.filter(employee=self.employee).delete()
+
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=date(2026, 10, 23),
+            end_date=date(2026, 10, 25),
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Weekend fallback",
+        )
+
+        self.assertEqual(leave_request.requested_units, 1)
+        breakdown = leave_request.metadata["unit_breakdown"]
+        self.assertEqual(breakdown["requested_units"], "1.00")
+        self.assertEqual(
+            [(item["date"], item["counted"], item["reason"], item["units"]) for item in breakdown["days"]],
+            [
+                ("2026-10-23", True, "working_day", "1.00"),
+                ("2026-10-24", False, "weekly_off", "0.00"),
+                ("2026-10-25", False, "weekly_off", "0.00"),
+            ],
+        )
+
     def test_sandwich_rule_counts_weekly_off_between_leave_dates(self):
         friday = _next_weekday(4)
         self.leave_policy.sandwich_rule_enabled = True
