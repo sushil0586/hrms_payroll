@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
+import { ActionToast } from "@/components/patterns/action-toast";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
-import type { HrAdminLeavePolicy } from "@/lib/types";
+import type { HrAdminLeavePolicy, HrAdminLeavePolicyImpact } from "@/lib/types";
 
 type Props = {
   canManagePolicies: boolean;
@@ -20,10 +22,18 @@ function uniqueValues(items: string[]) {
 }
 
 export function LeavePolicyList({ canManagePolicies, policies }: Props) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [leaveType, setLeaveType] = useState("");
   const [accrualFrequency, setAccrualFrequency] = useState("");
+  const [selectedPolicy, setSelectedPolicy] = useState<HrAdminLeavePolicy | null>(null);
+  const [impact, setImpact] = useState<HrAdminLeavePolicyImpact | null>(null);
+  const [isImpactLoading, setIsImpactLoading] = useState(false);
+  const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
 
   const statusOptions = useMemo(() => uniqueValues(policies.map((item) => item.status)), [policies]);
   const leaveTypeOptions = useMemo(() => uniqueValues(policies.map((item) => item.leave_type)), [policies]);
@@ -47,8 +57,81 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
     setAccrualFrequency("");
   }
 
+  async function openRemoveDialog(policy: HrAdminLeavePolicy) {
+    setSelectedPolicy(policy);
+    setImpact(null);
+    setActionError("");
+    setSuccessMessage("");
+    setIsImpactLoading(true);
+    const response = await fetch(`/api/hr-admin/leave-policies/${policy.id}/impact`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = String(payload.detail || "Unable to load policy impact.");
+      setActionError(message);
+      setToast({ title: "Action failed.", message, tone: "error" });
+      setIsImpactLoading(false);
+      return;
+    }
+    setImpact(payload as HrAdminLeavePolicyImpact);
+    setIsImpactLoading(false);
+  }
+
+  function closeRemoveDialog() {
+    if (isActionSubmitting) return;
+    setSelectedPolicy(null);
+    setImpact(null);
+    setActionError("");
+  }
+
+  useEffect(() => {
+    if (!selectedPolicy) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        if (!isActionSubmitting) {
+          setSelectedPolicy(null);
+          setImpact(null);
+          setActionError("");
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedPolicy, isActionSubmitting]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  async function submitPolicyRemoval(action: "archive" | "delete") {
+    if (!selectedPolicy) return;
+    setIsActionSubmitting(true);
+    setActionError("");
+    const response = await fetch(`/api/hr-admin/leave-policies/${selectedPolicy.id}/${action}`, {
+      method: action === "delete" ? "DELETE" : "POST",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = String(payload.detail || payload.summary || "Unable to update this policy.");
+      setImpact((payload as { impact?: HrAdminLeavePolicyImpact }).impact ?? (payload as HrAdminLeavePolicyImpact));
+      setActionError(message);
+      setToast({ title: "Action failed.", message, tone: "error" });
+      setIsActionSubmitting(false);
+      return;
+    }
+    const message = action === "delete" ? "Leave policy deleted." : "Leave policy archived.";
+    setSuccessMessage(message);
+    setToast({ title: "Policy updated.", message, tone: "success" });
+    setIsActionSubmitting(false);
+    setSelectedPolicy(null);
+    setImpact(null);
+    window.setTimeout(() => router.refresh(), 900);
+  }
+
   return (
     <section className="section queue-layout">
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <div className="queue-toolbar panel-card-soft">
         <div className="queue-toolbar__header">
           <div>
@@ -93,6 +176,12 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
       </div>
 
       <div className="queue-list">
+        {successMessage ? (
+          <div className="notice notice--success" role="status">
+            <strong>Policy updated.</strong>
+            <span className="muted">{successMessage}</span>
+          </div>
+        ) : null}
         {filteredPolicies.map((item) => (
           <article className="record-card" key={item.id}>
             <div className="record-card__header">
@@ -110,9 +199,14 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
               </div>
               <div className="record-card__actions">
                 {canManagePolicies ? (
-                  <Link className="button button--secondary" href={`/hr-admin/leave-policies/${item.id}/edit`}>
-                    Edit
-                  </Link>
+                  <>
+                    <Link className="button button--secondary" href={`/hr-admin/leave-policies/${item.id}/edit`}>
+                      Edit
+                    </Link>
+                    <button className="button button--ghost" onClick={() => openRemoveDialog(item)} type="button">
+                      Remove
+                    </button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -136,6 +230,68 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
           </div>
         ) : null}
       </div>
+
+      {selectedPolicy ? (
+        <div className="modal-backdrop" role="presentation">
+          <section aria-modal="true" className="modal-panel modal-panel--wide" role="dialog" aria-label={`Remove ${selectedPolicy.name}`}>
+            <div className="modal-panel__header">
+              <div>
+                <p className="section-eyebrow">Policy removal check</p>
+                <h2 className="section-heading-soft">{selectedPolicy.name}</h2>
+                <p className="section-copy section-copy-soft">The system checks usage before allowing permanent deletion. Used policies should be archived for audit history.</p>
+              </div>
+              <button className="button button--secondary" disabled={isActionSubmitting} onClick={closeRemoveDialog} type="button">Close</button>
+            </div>
+
+            {isImpactLoading ? (
+              <div className="notice">
+                <strong>Checking impact.</strong>
+                <span className="muted">Reviewing assignments, balances, requests, and transactions.</span>
+              </div>
+            ) : null}
+
+            {impact ? (
+              <div className="detail-grid">
+                <div className={`notice detail-row--full ${impact.can_delete ? "notice--success" : ""}`}>
+                  <strong>{impact.can_delete ? "Permanent delete is available" : "Archive is recommended"}</strong>
+                  <span className="muted">{impact.summary}</span>
+                </div>
+                <div className="detail-row"><span className="detail-label">Active assignments</span><span className="detail-value">{impact.active_assignment_count}</span></div>
+                <div className="detail-row"><span className="detail-label">Total assignments</span><span className="detail-value">{impact.assignment_count}</span></div>
+                <div className="detail-row"><span className="detail-label">Balances</span><span className="detail-value">{impact.balance_count}</span></div>
+                <div className="detail-row"><span className="detail-label">Leave requests</span><span className="detail-value">{impact.leave_request_count}</span></div>
+                <div className="detail-row"><span className="detail-label">Pending/draft requests</span><span className="detail-value">{impact.pending_request_count}</span></div>
+                <div className="detail-row"><span className="detail-label">Ledger transactions</span><span className="detail-value">{impact.transaction_count}</span></div>
+                {impact.warnings.length ? (
+                  <div className="notice detail-row--full">
+                    <strong>Important notes</strong>
+                    <span className="muted">{impact.warnings.join(" ")}</span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {actionError ? (
+              <div className="notice notice--error" role="alert">
+                <strong>Action failed.</strong>
+                <span className="muted">{actionError}</span>
+              </div>
+            ) : null}
+
+            <div className="form-actions-bar">
+              <span className="muted">Archive removes the policy from active use while preserving audit links. Delete is only available for unused policies.</span>
+              <div className="form-actions-bar__buttons">
+                <button className="button button--secondary" disabled={isActionSubmitting || !impact?.can_archive} onClick={() => submitPolicyRemoval("archive")} type="button">
+                  {isActionSubmitting ? "Working..." : "Archive policy"}
+                </button>
+                <button className="button button--primary" disabled={isActionSubmitting || !impact?.can_delete} onClick={() => submitPolicyRemoval("delete")} type="button">
+                  Delete permanently
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }

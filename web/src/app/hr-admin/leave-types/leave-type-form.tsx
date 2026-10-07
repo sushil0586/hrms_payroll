@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ActionToast } from "@/components/patterns/action-toast";
 import { FormSection } from "@/components/patterns/form-section";
 import { PlatformGovernanceFormBanner } from "@/components/patterns/platform-governance-form-banner";
 import { GovernanceLockHint, isGovernanceFieldLocked } from "@/components/patterns/platform-governance-locks";
@@ -35,6 +36,7 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Pro
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeaveTypeField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -61,7 +63,9 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Pro
       return;
     }
     if (mode === "edit" && item && item.can_edit_directly === false) {
-      setError("This record cannot be edited directly in its current governance state.");
+      const message = "This record cannot be edited directly in its current governance state.";
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       return;
     }
     isSubmittingRef.current = true;
@@ -76,7 +80,9 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Pro
     };
     if (hasFieldErrors(nextErrors)) {
       setFieldErrors(nextErrors);
-      setError("Review the highlighted leave type fields and try again.");
+      const message = "Review the highlighted leave type fields and try again.";
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -90,7 +96,9 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Pro
         body: JSON.stringify(formValue),
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -98,18 +106,37 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Pro
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload));
+      const message = getErrorMessage(payload);
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
 
-    router.push("/hr-admin/leave-types");
-    router.refresh();
+    setToast({
+      title: "Save complete.",
+      message: mode === "create" ? "Leave type created. Returning to the type list." : "Leave type saved. Returning to the type list.",
+      tone: "success",
+    });
+    setIsSubmitting(false);
+    isSubmittingRef.current = false;
+    window.setTimeout(() => {
+      router.push("/hr-admin/leave-types");
+      router.refresh();
+    }, 700);
   }
 
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
   return (
-    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+    <>
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
+      <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -188,6 +215,7 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Pro
           </div>
         </div>
       </section>
-    </form>
+      </form>
+    </>
   );
 }

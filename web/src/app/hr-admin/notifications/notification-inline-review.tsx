@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { NotificationRetryAction } from "@/app/hr-admin/notifications/notification-retry-action";
+import { ActionToast } from "@/components/patterns/action-toast";
 import type { HrAdminEnumOption, HrAdminNotification } from "@/lib/types";
 
 type Props = {
@@ -34,6 +35,7 @@ export function NotificationInlineReview({
   const [readState, setReadState] = useState<ReadState>("keep");
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSave() {
@@ -58,24 +60,37 @@ export function NotificationInlineReview({
         body: JSON.stringify(payload),
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       return;
     }
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(result));
+      const message = getErrorMessage(result);
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       return;
     }
-    setSuccessMessage("Notification review updated.");
+    const message = "Notification review updated.";
+    setSuccessMessage(message);
+    setToast({ title: "Action saved.", message, tone: "success" });
     setReadState("keep");
     setIsSubmitting(false);
-    router.refresh();
+    window.setTimeout(() => router.refresh(), 900);
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   return (
     <div className="inline-review-panel">
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <div className="inline-review-panel__header">
         <div>
           <h3>Quick review</h3>

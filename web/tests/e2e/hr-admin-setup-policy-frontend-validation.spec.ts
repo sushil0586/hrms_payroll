@@ -65,6 +65,22 @@ test.describe("HR Admin setup and policy frontend validation", () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test("leave type remove dialog is browser-visible and closes with Escape", async ({ page }) => {
+    await gotoHrAdminDemo(page, "/hr-admin/leave-types");
+    await suppressBrowserTestNoise(page);
+    await expectPageReady(page, "Leave types");
+
+    const removeButton = page.getByRole("button", { name: "Remove" }).first();
+    await expect(removeButton).toBeVisible();
+    await removeButton.click();
+    await expect(page.getByRole("dialog", { name: /Remove / })).toBeVisible();
+    await expect(page.getByText("Leave type removal check")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: /Remove / })).toHaveCount(0);
+    await expectNoAppError(page);
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("leave policy advanced sections stay collapsible and service tiers are HR-readable", async ({ page }) => {
     await gotoHrAdminDemo(page, "/hr-admin/leave-policies/new");
     await suppressBrowserTestNoise(page);
@@ -90,6 +106,12 @@ test.describe("HR Admin setup and policy frontend validation", () => {
     await field(form, "Marital status restriction").selectOption("unmarried");
     await expect(field(form, "Gender restriction")).toHaveValue("female");
     await expect(field(form, "Marital status restriction")).toHaveValue("unmarried");
+
+    await form.getByRole("button", { name: "Preview policy" }).click();
+    await expect(page.getByRole("dialog", { name: "Preview leave policy" })).toBeVisible();
+    await expect(page.getByText("Test entitlement, service tiers, evidence rules, and approval routing")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Preview leave policy" })).toHaveCount(0);
 
     await entitlementSection.getByText("Advanced entitlement and carry-forward rules").click();
     await expect(entitlementSection).toHaveAttribute("open", "");
@@ -126,6 +148,23 @@ test.describe("HR Admin setup and policy frontend validation", () => {
 
     await filters.getByRole("button", { name: "Clear filters" }).click();
     await expect(page.getByText("No leave policies match the current filters.")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Remove" }).first()).toBeVisible();
+    await expectNoAppError(page);
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("leave assignment remove dialog is browser-visible and closes with Escape", async ({ page }) => {
+    await gotoHrAdminDemo(page, "/hr-admin/leave-policy-assignments");
+    await suppressBrowserTestNoise(page);
+    await expectPageReady(page, "Leave assignments");
+
+    const removeButton = page.getByRole("button", { name: "Remove" }).first();
+    await expect(removeButton).toBeVisible();
+    await removeButton.click();
+    await expect(page.getByRole("dialog", { name: /Remove .* assignment/ })).toBeVisible();
+    await expect(page.getByText("Assignment removal")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: /Remove .* assignment/ })).toHaveCount(0);
     await expectNoAppError(page);
     await expectNoHorizontalOverflow(page);
   });

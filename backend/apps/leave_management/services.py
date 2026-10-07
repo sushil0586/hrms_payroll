@@ -1145,6 +1145,89 @@ def _calculate_requested_units(
     return max(units, Decimal("0.5")).quantize(Decimal("0.01"))
 
 
+def calculate_leave_request_unit_breakdown(
+    *,
+    employee,
+    leave_policy: LeavePolicy | None,
+    start_date: date,
+    end_date: date,
+    start_day_portion: str,
+    end_day_portion: str,
+) -> dict:
+    """Returns the auditable day-count basis used for leave-unit calculation."""
+
+    from apps.attendance.services import (
+        _resolve_holiday_for_employee,
+        _resolve_shift_for_employee,
+        resolve_attendance_policy_for_employee,
+    )
+
+    total_days = (end_date - start_date).days + 1
+    count_calendar_days = not (employee and leave_policy and not leave_policy.allow_weekend_holiday_overlap)
+    sandwich_rule_applied = bool(employee and leave_policy and not leave_policy.allow_weekend_holiday_overlap and leave_policy.sandwich_rule_enabled)
+    rows: list[dict] = []
+    requested_units = Decimal("0.00")
+
+    for offset in range(total_days):
+        target_date = start_date + timedelta(days=offset)
+        attendance_policy = resolve_attendance_policy_for_employee(employee, as_of=target_date) if employee else None
+        holiday = _resolve_holiday_for_employee(employee, attendance_date=target_date, policy=attendance_policy) if employee else None
+        shift = _resolve_shift_for_employee(
+            employee,
+            attendance_date=target_date,
+            fallback_shift=getattr(attendance_policy, "default_shift", None),
+        ) if employee else None
+        weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])}
+        is_weekly_off = target_date.strftime("%A").lower() in weekly_off_days
+
+        if count_calendar_days:
+            counted = True
+            reason = "calendar_day"
+        elif sandwich_rule_applied:
+            counted = True
+            reason = "sandwich_rule"
+        elif holiday:
+            counted = False
+            reason = "holiday"
+        elif is_weekly_off:
+            counted = False
+            reason = "weekly_off"
+        else:
+            counted = True
+            reason = "working_day"
+
+        units = Decimal("1.00") if counted else Decimal("0.00")
+        if counted and target_date == start_date and start_day_portion != LeaveDayPortion.FULL_DAY:
+            units -= Decimal("0.50")
+        if counted and target_date == end_date and end_day_portion != LeaveDayPortion.FULL_DAY:
+            units -= Decimal("0.50")
+        units = max(units, Decimal("0.00"))
+        requested_units += units
+        rows.append(
+            {
+                "date": target_date.isoformat(),
+                "day": target_date.strftime("%A"),
+                "counted": counted,
+                "units": f"{units.quantize(Decimal('0.01')):.2f}",
+                "reason": reason,
+                "holiday_name": holiday.name if holiday else None,
+                "shift_name": shift.name if shift else None,
+                "attendance_policy_name": attendance_policy.name if attendance_policy else None,
+            }
+        )
+
+    if requested_units <= 0 and rows:
+        requested_units = Decimal("0.00")
+    return {
+        "calendar_days": total_days,
+        "requested_units": f"{requested_units.quantize(Decimal('0.01')):.2f}",
+        "count_basis": "calendar_days" if count_calendar_days else "sandwich_rule" if sandwich_rule_applied else "working_days",
+        "allow_weekend_holiday_overlap": bool(leave_policy.allow_weekend_holiday_overlap) if leave_policy else True,
+        "sandwich_rule_enabled": bool(leave_policy.sandwich_rule_enabled) if leave_policy else False,
+        "days": rows,
+    }
+
+
 def _find_overlapping_active_leave_request(*, employee, start_date: date, end_date: date) -> LeaveRequest | None:
     return (
         LeaveRequest.objects.filter(
@@ -2137,6 +2220,14 @@ def submit_leave_request(
         employee=employee,
         leave_policy=leave_policy,
     )
+    unit_breakdown = calculate_leave_request_unit_breakdown(
+        employee=employee,
+        leave_policy=leave_policy,
+        start_date=start_date,
+        end_date=end_date,
+        start_day_portion=start_day_portion,
+        end_day_portion=end_day_portion,
+    )
     policy_runtime = _validate_leave_request(
         employee=employee,
         leave_type=leave_type,
@@ -2170,6 +2261,7 @@ def submit_leave_request(
                 "config_snapshot": policy_runtime["config"],
             },
             "holiday_booking": policy_runtime.get("holiday_booking", {}),
+            "unit_breakdown": unit_breakdown,
             "lifecycle_rules": _get_leave_request_lifecycle_runtime(
                 leave_request=LeaveRequest(
                     employee=employee,

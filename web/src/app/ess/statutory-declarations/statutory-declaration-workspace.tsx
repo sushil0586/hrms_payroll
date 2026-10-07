@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
+import { ActionToast } from "@/components/patterns/action-toast";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateUploadFile } from "@/lib/ui/validation";
 import type {
@@ -481,6 +482,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
   const [selectedProof, setSelectedProof] = useState<EssStatutoryDeclarationItem | null>(null);
   const [notice, setNotice] = useState("");
   const [noticeTone, setNoticeTone] = useState<NoticeTone>("info");
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [declarationFieldErrors, setDeclarationFieldErrors] = useState<FieldErrors<DeclarationField>>({});
   const [proofFieldErrors, setProofFieldErrors] = useState<FieldErrors<ProofField>>({});
   const [isSavingDeclaration, setIsSavingDeclaration] = useState(false);
@@ -542,6 +544,9 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
   function setNoticeMessage(message: string, tone: NoticeTone = "info") {
     setNotice(message);
     setNoticeTone(tone);
+    if (tone === "success" || tone === "error") {
+      setToast({ title: tone === "success" ? "Action saved." : "Action failed.", message, tone });
+    }
   }
 
   function clearDeclarationFieldError(field: DeclarationField) {
@@ -594,7 +599,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     }
     setNoticeMessage("Declaration saved.", "success");
     setActiveModal(null);
-    router.refresh();
+    window.setTimeout(() => router.refresh(), 900);
   }
 
   async function handleItemSubmit(event: FormEvent<HTMLFormElement>) {
@@ -671,7 +676,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     setProofFileInputKey((current) => current + 1);
     setNoticeMessage(proofFile ? "Proof file uploaded and linked." : "Proof item saved.", "success");
     setActiveModal(null);
-    router.refresh();
+    window.setTimeout(() => router.refresh(), 900);
   }
 
   async function handleSubmitDeclaration() {
@@ -691,11 +696,18 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     }
     setNoticeMessage("Declaration submitted.", "success");
     setActiveModal(null);
-    router.refresh();
+    window.setTimeout(() => router.refresh(), 900);
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   return (
     <main className="shell shell--workspace shell--ess-tax">
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <header className="workspace-control-header">
         <div className="workspace-control-header__copy">
           <span className="workspace-control-header__eyebrow">{isDemo ? "Demo employee tax" : "Live employee tax"}</span>

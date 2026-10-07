@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { NotificationInlineReview } from "@/app/hr-admin/notifications/notification-inline-review";
+import { ActionToast } from "@/components/patterns/action-toast";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { formatNotificationDateTime } from "@/lib/notification-observability";
 import type { HrAdminEnumOption, HrAdminNotification } from "@/lib/types";
@@ -68,6 +69,7 @@ export function NotificationQueue({
   const actionableItems = items.filter((item) => item.can_retry);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
   const [search, setSearch] = useState(currentFilters.q);
   const [status, setStatus] = useState(currentFilters.status || "all");
@@ -118,7 +120,9 @@ export function NotificationQueue({
         body: JSON.stringify({ notification_ids: actionableSelectedIds, process_now: true }),
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setError(message);
+      setToast({ title: "Bulk retry failed.", message, tone: "error" });
       setIsSubmittingBulk(false);
       return;
     }
@@ -127,16 +131,28 @@ export function NotificationQueue({
       const detail =
         payload && typeof payload === "object" && "detail" in payload ? String((payload as Record<string, unknown>).detail) : "Unable to retry selected notifications.";
       setError(detail);
+      setToast({ title: "Bulk retry failed.", message: detail, tone: "error" });
       setIsSubmittingBulk(false);
       return;
     }
     setSelectedIds([]);
     setIsSubmittingBulk(false);
-    router.refresh();
+    const retryCount = Number((payload as { retry_count?: unknown }).retry_count ?? actionableSelectedIds.length);
+    const skippedCount = Number((payload as { skipped_count?: unknown }).skipped_count ?? 0);
+    const message = `${retryCount} notification(s) queued for retry${skippedCount ? `, ${skippedCount} skipped` : ""}.`;
+    setToast({ title: "Action saved.", message, tone: "success" });
+    window.setTimeout(() => router.refresh(), 900);
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   return (
     <section className="section queue-layout">
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <section aria-label="Notification queue toolbar" className="card panel queue-toolbar panel-card-soft" data-testid="notification-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>

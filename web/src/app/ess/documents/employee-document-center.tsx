@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
+import { ActionToast } from "@/components/patterns/action-toast";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type { EssDocumentCenterResponse, EssDocumentRequirementItem, HrAdminEmployeeDocument } from "@/lib/types";
 import {
@@ -508,6 +509,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<UploadFeedback | null>(null);
   const [pageFeedback, setPageFeedback] = useState<UploadFeedback | null>(null);
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<UploadFieldErrors>({});
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<HrAdminEmployeeDocument | null>(null);
@@ -589,7 +591,10 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
 
     const nextFieldErrors = validateUploadForm(formValue, selectedRequirement, data.max_upload_size_bytes);
     if (hasFieldErrors(nextFieldErrors)) {
+      const message = "Review the highlighted document fields and try again.";
       setFieldErrors(nextFieldErrors);
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Upload failed.", message, tone: "error" });
       return;
     }
 
@@ -614,13 +619,17 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
         body,
       });
     } catch {
-      setFeedback({ tone: "error", message: "Unable to reach the server. Check your connection and try again." });
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Upload failed.", message, tone: "error" });
       setIsSubmitting(false);
       return;
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setFeedback({ tone: "error", message: extractError(payload) });
+      const message = extractError(payload);
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Upload failed.", message, tone: "error" });
       setIsSubmitting(false);
       return;
     }
@@ -632,12 +641,21 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
     setIsSubmitting(false);
     setIsUploadOpen(false);
     setFeedback(null);
-    setPageFeedback({ tone: "success", message: "Your document has been sent to HR for verification." });
-    router.refresh();
+    const message = "Your document has been sent to HR for verification.";
+    setPageFeedback({ tone: "success", message });
+    setToast({ title: "Document uploaded successfully.", message, tone: "success" });
+    window.setTimeout(() => router.refresh(), 900);
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   return (
     <div className="stack ess-documents-center">
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <section className="workspace-section ess-documents-status-section">
         <div className="workspace-section__header">
           <div>

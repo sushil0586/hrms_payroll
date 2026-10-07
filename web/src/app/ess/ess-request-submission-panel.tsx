@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ActionToast } from "@/components/patterns/action-toast";
 import type { EssAttendanceRecordOption, EssLeaveTypeOption } from "@/lib/types";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder } from "@/lib/ui/validation";
 
@@ -36,6 +37,7 @@ function formatRecordLabel(record: EssAttendanceRecordOption) {
 export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDemo, mode = "all" }: Props) {
   const router = useRouter();
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [leaveFieldErrors, setLeaveFieldErrors] = useState<FieldErrors<LeaveField>>({});
   const [attendanceFieldErrors, setAttendanceFieldErrors] = useState<FieldErrors<AttendanceField>>({});
   const [submitting, setSubmitting] = useState<"leave" | "attendance" | null>(null);
@@ -63,7 +65,9 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
     setFeedback(null);
     setLeaveFieldErrors({});
     if (isDemo) {
-      setFeedback({ tone: "error", message: "Leave requests are only available in live mode." });
+      const message = "Leave requests are only available in live mode.";
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = null;
       return;
     }
@@ -77,8 +81,10 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
       reason: requireText(String(formData.get("reason") ?? ""), "Enter the reason for this leave request."),
     };
     if (hasFieldErrors(nextErrors)) {
+      const message = "Review the highlighted leave fields and try again.";
       setLeaveFieldErrors(nextErrors);
-      setFeedback({ tone: "error", message: "Review the highlighted leave fields and try again." });
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = null;
       return;
     }
@@ -101,20 +107,26 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
     } catch {
       setSubmitting(null);
       submittingRef.current = null;
-      setFeedback({ tone: "error", message: "Unable to reach the server. Check your connection and try again." });
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       return;
     }
     const payload = await response.json().catch(() => ({}));
     setSubmitting(null);
     if (!response.ok) {
-      setFeedback({ tone: "error", message: getErrorMessage(payload, "Unable to submit leave request.") });
+      const message = getErrorMessage(payload, "Unable to submit leave request.");
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = null;
       return;
     }
     event.currentTarget.reset();
-    setFeedback({ tone: "success", message: "Leave request submitted." });
+    const message = "Leave request submitted.";
+    setFeedback({ tone: "success", message });
+    setToast({ title: "Submitted successfully.", message, tone: "success" });
     submittingRef.current = null;
-    router.refresh();
+    window.setTimeout(() => router.refresh(), 900);
   }
 
   async function submitRegularization(event: React.FormEvent<HTMLFormElement>) {
@@ -126,7 +138,9 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
     setFeedback(null);
     setAttendanceFieldErrors({});
     if (isDemo) {
-      setFeedback({ tone: "error", message: "Attendance regularizations are only available in live mode." });
+      const message = "Attendance regularizations are only available in live mode.";
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = null;
       return;
     }
@@ -139,8 +153,10 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
       reason: requireText(String(formData.get("reason") ?? ""), "Enter the reason for this attendance correction."),
     };
     if (hasFieldErrors(nextErrors)) {
+      const message = "Review the highlighted attendance fields and try again.";
       setAttendanceFieldErrors(nextErrors);
-      setFeedback({ tone: "error", message: "Review the highlighted attendance fields and try again." });
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = null;
       return;
     }
@@ -161,24 +177,37 @@ export function EssRequestSubmissionPanel({ leaveTypes, attendanceRecords, isDem
     } catch {
       setSubmitting(null);
       submittingRef.current = null;
-      setFeedback({ tone: "error", message: "Unable to reach the server. Check your connection and try again." });
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       return;
     }
     const payload = await response.json().catch(() => ({}));
     setSubmitting(null);
     if (!response.ok) {
-      setFeedback({ tone: "error", message: getErrorMessage(payload, "Unable to submit attendance regularization.") });
+      const message = getErrorMessage(payload, "Unable to submit attendance regularization.");
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = null;
       return;
     }
     event.currentTarget.reset();
-    setFeedback({ tone: "success", message: "Attendance regularization submitted." });
+    const message = "Attendance regularization submitted.";
+    setFeedback({ tone: "success", message });
+    setToast({ title: "Submitted successfully.", message, tone: "success" });
     submittingRef.current = null;
-    router.refresh();
+    window.setTimeout(() => router.refresh(), 900);
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   return (
     <section className={`section request-submission-grid request-submission-grid--${mode}`}>
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       {showLeaveForm ? (
         <article className="record-card panel-card-soft">
           <div className="section-header">

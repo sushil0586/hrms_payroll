@@ -749,6 +749,22 @@ export type HrAdminLeavePolicyApprovalConfig = {
   hr_owner_employee_id: string | null;
 };
 
+export type HrAdminLeaveTypeImpact = {
+  action: string;
+  recommended_action: "delete" | "deactivate" | string;
+  can_delete: boolean;
+  can_deactivate: boolean;
+  is_blocked: boolean;
+  blocking_reason: string;
+  policy_count: number;
+  active_policy_count: number;
+  leave_request_count: number;
+  balance_count: number;
+  transaction_count: number;
+  summary: string;
+  warnings: string[];
+};
+
 export type HrAdminLeavePolicyEvidenceConfig = {
   attachment_required: boolean;
   attachment_label: string;
@@ -882,6 +898,23 @@ export type HrAdminLeavePolicy = HrAdminGovernanceFields & {
   marital_status_restriction: string;
   minimum_service_days: number;
   config_snapshot: HrAdminLeavePolicyAdvancedConfig;
+};
+
+export type HrAdminLeavePolicyImpact = {
+  action: string;
+  recommended_action: "delete" | "archive" | string;
+  can_delete: boolean;
+  can_archive: boolean;
+  is_blocked: boolean;
+  blocking_reason: string;
+  active_assignment_count: number;
+  assignment_count: number;
+  balance_count: number;
+  leave_request_count: number;
+  pending_request_count: number;
+  transaction_count: number;
+  summary: string;
+  warnings: string[];
 };
 
 export type HrAdminLeavePolicyWriteInput = {
@@ -5235,6 +5268,23 @@ export type LeaveRequestItem = {
   end_day_portion: string;
   requested_units: string;
   approved_units: string;
+  unit_breakdown?: {
+    calendar_days?: number;
+    requested_units?: string;
+    count_basis?: string;
+    allow_weekend_holiday_overlap?: boolean;
+    sandwich_rule_enabled?: boolean;
+    days?: Array<{
+      date: string;
+      day: string;
+      counted: boolean;
+      units: string;
+      reason: string;
+      holiday_name?: string | null;
+      shift_name?: string | null;
+      attendance_policy_name?: string | null;
+    }>;
+  };
   reason: string;
   attachment_reference?: string;
   attachments?: Array<{

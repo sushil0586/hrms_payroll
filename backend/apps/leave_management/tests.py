@@ -470,6 +470,32 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
         )
 
         self.assertEqual(leave_request.requested_units, 4)
+        self.assertEqual(leave_request.metadata["unit_breakdown"]["count_basis"], "working_days")
+        self.assertEqual(leave_request.metadata["unit_breakdown"]["requested_units"], "4.00")
+
+    def test_friday_to_monday_excludes_weekend_when_policy_disallows_overlap(self):
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=date(2026, 10, 9),
+            end_date=date(2026, 10, 12),
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Long weekend without sandwich rule",
+        )
+
+        self.assertEqual(leave_request.requested_units, 2)
+        breakdown = leave_request.metadata["unit_breakdown"]
+        self.assertEqual(breakdown["count_basis"], "working_days")
+        self.assertEqual(
+            [(item["date"], item["counted"], item["reason"], item["units"]) for item in breakdown["days"]],
+            [
+                ("2026-10-09", True, "working_day", "1.00"),
+                ("2026-10-10", False, "weekly_off", "0.00"),
+                ("2026-10-11", False, "weekly_off", "0.00"),
+                ("2026-10-12", True, "working_day", "1.00"),
+            ],
+        )
 
     def test_sandwich_rule_counts_weekly_off_between_leave_dates(self):
         friday = _next_weekday(4)

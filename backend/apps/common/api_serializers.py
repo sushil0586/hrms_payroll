@@ -3456,6 +3456,22 @@ class HrAdminLeaveTypeSerializer(serializers.Serializer):
     lineage_summary = serializers.CharField(required=False)
 
 
+class HrAdminLeaveTypeImpactSerializer(serializers.Serializer):
+    action = serializers.CharField()
+    recommended_action = serializers.CharField()
+    can_delete = serializers.BooleanField()
+    can_deactivate = serializers.BooleanField()
+    is_blocked = serializers.BooleanField()
+    blocking_reason = serializers.CharField(allow_blank=True)
+    policy_count = serializers.IntegerField()
+    active_policy_count = serializers.IntegerField()
+    leave_request_count = serializers.IntegerField()
+    balance_count = serializers.IntegerField()
+    transaction_count = serializers.IntegerField()
+    summary = serializers.CharField()
+    warnings = serializers.ListField(child=serializers.CharField())
+
+
 class HrAdminLeaveTypeWriteSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=50, required=False)
     name = serializers.CharField(max_length=255, required=False)
@@ -3649,6 +3665,23 @@ class HrAdminLeavePolicySerializer(serializers.Serializer):
     is_detached_clone = serializers.BooleanField(required=False)
     locked_field_count = serializers.IntegerField(required=False)
     lineage_summary = serializers.CharField(required=False)
+
+
+class HrAdminLeavePolicyImpactSerializer(serializers.Serializer):
+    action = serializers.CharField()
+    recommended_action = serializers.CharField()
+    can_delete = serializers.BooleanField()
+    can_archive = serializers.BooleanField()
+    is_blocked = serializers.BooleanField()
+    blocking_reason = serializers.CharField(allow_blank=True)
+    active_assignment_count = serializers.IntegerField()
+    assignment_count = serializers.IntegerField()
+    balance_count = serializers.IntegerField()
+    leave_request_count = serializers.IntegerField()
+    pending_request_count = serializers.IntegerField()
+    transaction_count = serializers.IntegerField()
+    summary = serializers.CharField()
+    warnings = serializers.ListField(child=serializers.CharField())
 
 
 class HrAdminLeaveApprovalConfigSerializer(serializers.Serializer):
@@ -5630,6 +5663,7 @@ class LeaveRequestHistoryItemSerializer(serializers.Serializer):
     end_day_portion = serializers.CharField()
     requested_units = serializers.DecimalField(max_digits=8, decimal_places=2)
     approved_units = serializers.DecimalField(max_digits=8, decimal_places=2)
+    unit_breakdown = serializers.JSONField(required=False)
     reason = serializers.CharField(allow_blank=True)
     attachment_reference = serializers.CharField(allow_blank=True)
     attachments = serializers.ListField(child=serializers.DictField(), required=False)
@@ -5833,6 +5867,7 @@ class ManagerLeaveApprovalItemSerializer(serializers.Serializer):
     end_day_portion = serializers.CharField()
     requested_units = serializers.DecimalField(max_digits=8, decimal_places=2)
     approved_units = serializers.DecimalField(max_digits=8, decimal_places=2)
+    unit_breakdown = serializers.JSONField(required=False)
     reason = serializers.CharField(allow_blank=True)
     attachment_reference = serializers.CharField(required=False, allow_blank=True)
     attachments = serializers.ListField(child=serializers.DictField(), required=False)

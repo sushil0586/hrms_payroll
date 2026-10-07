@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { LeavePolicyAssignmentActions } from "@/app/hr-admin/leave-policy-assignments/leave-policy-assignment-actions";
 import { LeavePolicyAssignmentGovernancePanel } from "@/app/hr-admin/leave-policy-assignments/leave-policy-assignment-governance-panel";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
@@ -85,9 +86,12 @@ export default async function HrAdminLeavePolicyAssignmentsPage() {
                 </div>
                 <div className="record-card__actions">
                   {canManagePolicies ? (
-                    <Link className="button button--secondary" href={`/hr-admin/leave-policy-assignments/${item.id}/edit`}>
-                      Edit
-                    </Link>
+                    <>
+                      <Link className="button button--secondary" href={`/hr-admin/leave-policy-assignments/${item.id}/edit`}>
+                        Edit
+                      </Link>
+                      <LeavePolicyAssignmentActions assignmentId={item.id} isActive={item.is_active} policyName={item.policy_name} />
+                    </>
                   ) : null}
                 </div>
               </div>

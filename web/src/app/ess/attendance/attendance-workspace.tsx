@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
+import { ActionToast } from "@/components/patterns/action-toast";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder } from "@/lib/ui/validation";
 import type {
@@ -208,11 +209,13 @@ function AttendanceRegularizationModal({
   const [checkOut, setCheckOut] = useState("");
   const [reason, setReason] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<AttendanceRegularizationField>>({});
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const selectedRecord = attendanceRecords.find((record) => record.id === selectedRecordId) ?? null;
   const hasTimeOrderRisk = Boolean(checkIn && checkOut && new Date(checkOut) < new Date(checkIn));
+  const isSubmitBlocked = submitting || !attendanceRecords.length || Boolean(selectedRecord?.is_locked) || !reason.trim() || hasTimeOrderRisk;
 
   function clearFieldError(field: AttendanceRegularizationField) {
     setFieldErrors((current) => ({ ...current, [field]: undefined }));
@@ -236,16 +239,17 @@ function AttendanceRegularizationModal({
       nextErrors.attendance_record_id = "This attendance record is locked. Contact HR before payroll close.";
     }
     if (hasFieldErrors(nextErrors)) {
+      const message = "Review the highlighted attendance fields and try again.";
       setFieldErrors(nextErrors);
-      setFeedback({
-        tone: "error",
-        message: "Review the highlighted attendance fields and try again.",
-      });
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
     if (isDemo) {
-      setFeedback({ tone: "error", message: "Attendance regularizations are only available in live mode." });
+      const message = "Attendance regularizations are only available in live mode.";
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
@@ -265,7 +269,9 @@ function AttendanceRegularizationModal({
         }),
       });
     } catch {
-      setFeedback({ tone: "error", message: "Unable to reach the server. Check your connection and try again." });
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       setSubmitting(false);
       submittingRef.current = false;
       return;
@@ -273,19 +279,32 @@ function AttendanceRegularizationModal({
     const payload = await response.json().catch(() => ({}));
     setSubmitting(false);
     if (!response.ok) {
-      setFeedback({ tone: "error", message: getErrorMessage(payload) });
+      const message = getErrorMessage(payload);
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
-    setFeedback({ tone: "success", message: "Attendance regularization submitted." });
+    const message = "Attendance regularization submitted.";
+    setFeedback({ tone: "success", message });
+    setToast({ title: "Submitted successfully.", message, tone: "success" });
     form.reset();
     submittingRef.current = false;
-    onClose();
-    router.refresh();
+    window.setTimeout(() => {
+      onClose();
+      router.refresh();
+    }, 900);
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   return (
     <div className="modal-shell" role="presentation">
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <div aria-label="Regularize attendance" aria-modal="true" className="modal ess-attendance-modal" role="dialog">
         <div className="modal__header">
           <div>
@@ -356,7 +375,7 @@ function AttendanceRegularizationModal({
             ) : null}
             <div className="form-actions-bar form-field--full">
               <span className="muted">After you submit, your manager receives this correction for approval.</span>
-              <button className="button button--primary" disabled={submitting || !attendanceRecords.length || Boolean(selectedRecord?.is_locked)} type="submit">
+              <button className="button button--primary" disabled={isSubmitBlocked} type="submit">
                 {submitting ? "Submitting..." : "Submit correction"}
               </button>
             </div>

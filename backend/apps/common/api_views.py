@@ -78,6 +78,7 @@ from apps.common.api_serializers import (
     HrAdminLeavePolicyAssignmentResolutionRequestSerializer,
     HrAdminLeavePolicyAssignmentResolutionSerializer,
     HrAdminLeavePolicySerializer,
+    HrAdminLeavePolicyImpactSerializer,
     HrAdminLeavePolicyPreviewRequestSerializer,
     HrAdminLeavePolicyPreviewSerializer,
     HrAdminLeavePolicyWriteSerializer,
@@ -87,6 +88,7 @@ from apps.common.api_serializers import (
     HrAdminLeaveBalanceActionResultSerializer,
     HrAdminLeaveBalanceTransactionReviewSerializer,
     HrAdminLeaveTypeSerializer,
+    HrAdminLeaveTypeImpactSerializer,
     HrAdminLeaveTypeWriteSerializer,
     HrAdminOrganizationFormOptionsSerializer,
     HrAdminOrganizationItemSerializer,
@@ -15122,6 +15124,125 @@ class HrAdminLeaveTypeDetailView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminLeaveTypeSerializer(build_hr_admin_leave_type_payload(item)).data)
 
 
+def build_hr_admin_leave_type_impact_payload(item: LeaveType, *, action: str = "review") -> dict:
+    policies = LeavePolicy.objects.filter(tenant=item.tenant, leave_type=item)
+    policy_count = policies.count()
+    active_policy_count = policies.filter(status=LeavePolicyStatus.ACTIVE).count()
+    leave_request_count = LeaveRequest.objects.filter(tenant=item.tenant, leave_type=item).count()
+    balances = LeaveBalance.objects.filter(tenant=item.tenant, leave_policy__leave_type=item)
+    balance_count = balances.count()
+    transaction_count = LeaveBalanceTransaction.objects.filter(tenant=item.tenant, leave_policy__leave_type=item).count()
+    has_usage = bool(policy_count or leave_request_count or balance_count or transaction_count)
+    can_delete = not has_usage
+    can_deactivate = item.is_active
+    is_blocked = action == "delete" and not can_delete
+    warnings = []
+    if active_policy_count:
+        warnings.append(f"{active_policy_count} active leave policy/policies use this leave type.")
+    if leave_request_count:
+        warnings.append(f"{leave_request_count} leave request(s) reference this leave type.")
+    if balance_count or transaction_count:
+        warnings.append("Balances or leave ledger transactions exist through policies under this type.")
+    if not item.is_active:
+        warnings.append("This leave type is already inactive.")
+    if can_delete:
+        summary = "This leave type has no policies, requests, balances, or transactions. It can be permanently deleted."
+    elif item.is_active:
+        summary = "This leave type has operational or historical usage. Deactivate it to hide it from new setup while preserving history."
+    else:
+        summary = "This leave type is inactive and retained because it has policy or leave history."
+    return {
+        "action": action,
+        "recommended_action": "delete" if can_delete else "deactivate",
+        "can_delete": can_delete,
+        "can_deactivate": can_deactivate,
+        "is_blocked": is_blocked,
+        "blocking_reason": "Leave type has linked policies, requests, balances, or transactions." if is_blocked else "",
+        "policy_count": policy_count,
+        "active_policy_count": active_policy_count,
+        "leave_request_count": leave_request_count,
+        "balance_count": balance_count,
+        "transaction_count": transaction_count,
+        "summary": summary,
+        "warnings": warnings,
+    }
+
+
+class HrAdminLeaveTypeImpactView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
+        item = LeaveType.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminLeaveTypeImpactSerializer(build_hr_admin_leave_type_impact_payload(item)).data)
+
+
+class HrAdminLeaveTypeDeactivateView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
+        item = LeaveType.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
+        if item.is_active:
+            item.is_active = False
+            item.save(update_fields=["is_active", "updated_at"])
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="leave_type_deactivated",
+                source_ref="hrms.rbac.leave_setup.audit.v1",
+                event_snapshot={
+                    "leave_type_id": str(item.id),
+                    "leave_type_code": item.code,
+                    "leave_type_name": item.name,
+                    "action": "deactivated",
+                    "permission": "leave.policies.manage",
+                    "impact": build_hr_admin_leave_type_impact_payload(item, action="deactivate"),
+                },
+            )
+        return response.Response(
+            {
+                "leave_type": HrAdminLeaveTypeSerializer(build_hr_admin_leave_type_payload(item)).data,
+                "impact": HrAdminLeaveTypeImpactSerializer(build_hr_admin_leave_type_impact_payload(item, action="deactivate")).data,
+            }
+        )
+
+
+class HrAdminLeaveTypeDeleteView(HrAdminContextMixin, APIView):
+    def delete(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
+        item = LeaveType.objects.filter(tenant=employee.tenant, id=item_id).first()
+        if not item:
+            return response.Response({"detail": "Leave type not found."}, status=status.HTTP_404_NOT_FOUND)
+        impact = build_hr_admin_leave_type_impact_payload(item, action="delete")
+        if not impact["can_delete"]:
+            return response.Response(HrAdminLeaveTypeImpactSerializer(impact).data, status=status.HTTP_409_CONFLICT)
+        audit_snapshot = {
+            "leave_type_id": str(item.id),
+            "leave_type_code": item.code,
+            "leave_type_name": item.name,
+            "action": "deleted",
+            "permission": "leave.policies.manage",
+            "impact": impact,
+        }
+        item.delete()
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="leave_type_deleted",
+            source_ref="hrms.rbac.leave_setup.audit.v1",
+            event_snapshot=audit_snapshot,
+        )
+        return response.Response({"detail": "Leave type deleted.", "impact": HrAdminLeaveTypeImpactSerializer(impact).data})
+
+
 class HrAdminLeaveTypeDetachView(HrAdminContextMixin, APIView):
     def post(self, request, item_id):
         employee = self.get_employee()
@@ -15353,6 +15474,53 @@ class HrAdminLeavePolicyDetailView(HrAdminContextMixin, APIView):
         return response.Response(HrAdminLeavePolicySerializer(build_hr_admin_leave_policy_payload(item)).data)
 
 
+def build_hr_admin_leave_policy_impact_payload(item: LeavePolicy, *, action: str = "review") -> dict:
+    assignments = LeavePolicyAssignment.objects.filter(tenant=item.tenant, leave_policy=item)
+    active_assignment_count = assignments.filter(is_active=True).count()
+    assignment_count = assignments.count()
+    balance_count = LeaveBalance.objects.filter(tenant=item.tenant, leave_policy=item).count()
+    leave_requests = LeaveRequest.objects.filter(tenant=item.tenant, leave_policy=item)
+    leave_request_count = leave_requests.count()
+    pending_request_count = leave_requests.filter(status__in=[LeaveRequestStatus.DRAFT, LeaveRequestStatus.PENDING, LeaveRequestStatus.PARTIALLY_APPROVED]).count()
+    transaction_count = LeaveBalanceTransaction.objects.filter(tenant=item.tenant, leave_policy=item).count()
+    has_history = bool(assignment_count or balance_count or leave_request_count or transaction_count)
+    can_delete = not has_history
+    can_archive = item.status != LeavePolicyStatus.ARCHIVED
+    is_blocked = action == "delete" and not can_delete
+    recommended_action = "delete" if can_delete else "archive"
+    warnings = []
+    if active_assignment_count:
+        warnings.append(f"{active_assignment_count} active assignment(s) still point to this policy.")
+    if pending_request_count:
+        warnings.append(f"{pending_request_count} draft, pending, or partially approved leave request(s) still reference this policy.")
+    if balance_count or transaction_count or leave_request_count:
+        warnings.append("Historical balances, requests, or ledger transactions require audit-safe archiving instead of permanent deletion.")
+    if item.status == LeavePolicyStatus.ARCHIVED:
+        warnings.append("This policy is already archived.")
+    if can_delete:
+        summary = "This policy has no assignments, balances, requests, or transactions. It can be permanently deleted."
+    elif item.status == LeavePolicyStatus.ARCHIVED:
+        summary = "This policy is archived and retained for historical audit references."
+    else:
+        summary = "This policy has operational or historical usage. Archive it to remove it from active use while preserving audit history."
+    return {
+        "action": action,
+        "recommended_action": recommended_action,
+        "can_delete": can_delete,
+        "can_archive": can_archive,
+        "is_blocked": is_blocked,
+        "blocking_reason": "Policy has assignments, balances, requests, or transactions." if is_blocked else "",
+        "active_assignment_count": active_assignment_count,
+        "assignment_count": assignment_count,
+        "balance_count": balance_count,
+        "leave_request_count": leave_request_count,
+        "pending_request_count": pending_request_count,
+        "transaction_count": transaction_count,
+        "summary": summary,
+        "warnings": warnings,
+    }
+
+
 class HrAdminLeavePolicyDetachView(HrAdminContextMixin, APIView):
     def post(self, request, item_id):
         employee = self.get_employee()
@@ -15367,6 +15535,85 @@ class HrAdminLeavePolicyDetachView(HrAdminContextMixin, APIView):
             actor_identifier=employee.employee_code,
         )
         return response.Response(HrAdminLeavePolicySerializer(build_hr_admin_leave_policy_payload(item)).data)
+
+
+class HrAdminLeavePolicyImpactView(HrAdminContextMixin, APIView):
+    def get(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
+        item = LeavePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
+        if not item:
+            return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response(HrAdminLeavePolicyImpactSerializer(build_hr_admin_leave_policy_impact_payload(item)).data)
+
+
+class HrAdminLeavePolicyArchiveView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
+        item = LeavePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
+        if not item:
+            return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
+        if item.status != LeavePolicyStatus.ARCHIVED:
+            previous_status = item.status
+            item.status = LeavePolicyStatus.ARCHIVED
+            item.effective_to = item.effective_to or timezone.localdate()
+            item.save(update_fields=["status", "effective_to", "updated_at"])
+            _record_hr_admin_setup_audit_event(
+                employee,
+                event_type="leave_policy_archived",
+                source_ref="hrms.rbac.leave_setup.audit.v1",
+                event_snapshot={
+                    "leave_policy_id": str(item.id),
+                    "leave_policy_code": item.code,
+                    "leave_policy_name": item.name,
+                    "action": "archived",
+                    "previous_status": previous_status,
+                    "permission": "leave.policies.manage",
+                    "impact": build_hr_admin_leave_policy_impact_payload(item, action="archive"),
+                },
+            )
+        return response.Response(
+            {
+                "policy": HrAdminLeavePolicySerializer(build_hr_admin_leave_policy_payload(item)).data,
+                "impact": HrAdminLeavePolicyImpactSerializer(build_hr_admin_leave_policy_impact_payload(item, action="archive")).data,
+            }
+        )
+
+
+class HrAdminLeavePolicyDeleteView(HrAdminContextMixin, APIView):
+    def delete(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
+        item = LeavePolicy.objects.filter(tenant=employee.tenant, id=item_id).select_related("leave_type").first()
+        if not item:
+            return response.Response({"detail": "Leave policy not found."}, status=status.HTTP_404_NOT_FOUND)
+        impact = build_hr_admin_leave_policy_impact_payload(item, action="delete")
+        if not impact["can_delete"]:
+            return response.Response(HrAdminLeavePolicyImpactSerializer(impact).data, status=status.HTTP_409_CONFLICT)
+        audit_snapshot = {
+            "leave_policy_id": str(item.id),
+            "leave_policy_code": item.code,
+            "leave_policy_name": item.name,
+            "leave_type_id": str(item.leave_type_id),
+            "action": "deleted",
+            "permission": "leave.policies.manage",
+            "impact": impact,
+        }
+        item.delete()
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="leave_policy_deleted",
+            source_ref="hrms.rbac.leave_setup.audit.v1",
+            event_snapshot=audit_snapshot,
+        )
+        return response.Response({"detail": "Leave policy deleted.", "impact": HrAdminLeavePolicyImpactSerializer(impact).data})
 
 
 class HrAdminLeavePolicyPreviewView(HrAdminContextMixin, APIView):
@@ -15520,6 +15767,32 @@ class HrAdminLeavePolicyAssignmentDetailView(HrAdminContextMixin, APIView):
         payload["policy_name"] = item.leave_policy.name
         payload.update(build_hr_admin_leave_assignment_governance_payload(tenant=employee.tenant, item=item))
         return response.Response(HrAdminScopedAssignmentSerializer(payload).data)
+
+    def delete(self, request, item_id):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "leave.policies.manage")
+        item = LeavePolicyAssignment.objects.filter(tenant=employee.tenant, id=item_id).select_related("leave_policy").first()
+        if not item:
+            return response.Response({"detail": "Leave policy assignment not found."}, status=status.HTTP_404_NOT_FOUND)
+        audit_snapshot = {
+            "leave_policy_assignment_id": str(item.id),
+            "leave_policy_id": str(item.leave_policy_id),
+            "leave_policy_name": item.leave_policy.name,
+            "is_active": item.is_active,
+            "priority": item.priority,
+            "action": "deleted",
+            "permission": "leave.policies.manage",
+        }
+        item.delete()
+        _record_hr_admin_setup_audit_event(
+            employee,
+            event_type="leave_policy_assignment_deleted",
+            source_ref="hrms.rbac.leave_setup.audit.v1",
+            event_snapshot=audit_snapshot,
+        )
+        return response.Response({"detail": "Leave policy assignment removed."})
 
     def patch(self, request, item_id):
         employee = self.get_employee()

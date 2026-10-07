@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ActionToast } from "@/components/patterns/action-toast";
 import { requireText } from "@/lib/ui/validation";
 
 type Props = {
@@ -54,6 +55,7 @@ export function ManagerDecisionPanel({
   const [error, setError] = useState("");
   const [commentError, setCommentError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
 
@@ -73,23 +75,28 @@ export function ManagerDecisionPanel({
     const nextCommentError = action === "reject" ? requireText(comment, "Enter a decision note before rejecting this request.") : undefined;
     if (nextCommentError) {
       setCommentError(nextCommentError);
-      setError("Review the highlighted decision note and try again.");
+      const message = "Review the highlighted decision note and try again.";
+      setError(message);
+      setToast({ title: "Action failed.", message, tone: "error" });
       isSubmittingRef.current = false;
       return;
     }
 
     if (!canDecide) {
-      setError(kind === "leave" ? "Leave approval permission is required." : "Attendance review permission is required.");
+      const message = kind === "leave" ? "Leave approval permission is required." : "Attendance review permission is required.";
+      setError(message);
+      setToast({ title: "Action failed.", message, tone: "error" });
       isSubmittingRef.current = false;
       return;
     }
 
     if (state === "demo") {
-      setSuccessMessage(
+      const message =
         action === "approve"
           ? "Demo approval captured. Live workflow updates will run once this page is connected to a signed-in manager."
-          : "Demo rejection captured. Live workflow updates will run once this page is connected to a signed-in manager.",
-      );
+          : "Demo rejection captured. Live workflow updates will run once this page is connected to a signed-in manager.";
+      setSuccessMessage(message);
+      setToast({ title: "Action saved.", message, tone: "success" });
       isSubmittingRef.current = false;
       return;
     }
@@ -103,41 +110,51 @@ export function ManagerDecisionPanel({
         body: JSON.stringify({ comment }),
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setError(message);
+      setToast({ title: "Action failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(
-        getErrorMessage(
-          payload,
-          kind === "leave" ? "Unable to update leave request." : "Unable to update attendance regularization.",
-        ),
+      const message = getErrorMessage(
+        payload,
+        kind === "leave" ? "Unable to update leave request." : "Unable to update attendance regularization.",
       );
+      setError(message);
+      setToast({ title: "Action failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
-    setSuccessMessage(
+    const message =
       action === "approve"
         ? isCancellationRequest
           ? "Cancellation request approved."
           : "Request approved."
         : isCancellationRequest
           ? "Cancellation request rejected."
-          : "Request rejected.",
-    );
+          : "Request rejected.";
+    setSuccessMessage(message);
+    setToast({ title: "Action saved.", message, tone: "success" });
     setComment("");
     setIsSubmitting(false);
     isSubmittingRef.current = false;
     onCompleted?.();
-    router.refresh();
+    window.setTimeout(() => router.refresh(), 900);
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   return (
     <div className="manager-decision-panel">
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <div className="manager-decision-panel__header">
         <div>
           <h3>{title}</h3>

@@ -133,7 +133,7 @@ test.describe("ESS Leave launch certification", () => {
     await expect(dialog.getByRole("button", { name: "Submit leave" })).toBeDisabled();
 
     await field(dialog, "End date").fill(isoDateFromToday(20));
-    await expect(dialog.getByText("Checked on submit")).toBeVisible();
+    await expect(dialog.locator(".notice--success").getByText("Checked on submit")).toBeVisible();
     await expectDialogStable(page, "Apply leave");
     await expectNoHorizontalOverflow(page);
   });

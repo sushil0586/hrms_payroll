@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
+import { ActionToast } from "@/components/patterns/action-toast";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type { EssLeaveRequestListResponse, EssLeaveTypeOption, LeaveBalance, LeaveRequestItem } from "@/lib/types";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder, validateUploadFile } from "@/lib/ui/validation";
@@ -181,6 +182,58 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatUnitReason(value: string) {
+  return value.replaceAll("_", " ");
+}
+
+function getUnitBreakdownSummary(item: LeaveRequestItem) {
+  const breakdown = item.unit_breakdown;
+  if (!breakdown?.days?.length) {
+    return "Unit calculation details were not captured for this request.";
+  }
+  const counted = breakdown.days.filter((day) => day.counted).length;
+  const excluded = breakdown.days.length - counted;
+  if (breakdown.count_basis === "calendar_days") {
+    return "This policy counts calendar days, so weekends and holidays remain chargeable.";
+  }
+  if (breakdown.count_basis === "sandwich_rule") {
+    return "Sandwich rule is enabled, so weekly offs or holidays inside the selected range remain chargeable.";
+  }
+  return `${counted} working day${counted === 1 ? "" : "s"} counted, ${excluded} non-working day${excluded === 1 ? "" : "s"} excluded.`;
+}
+
+function LeaveUnitBreakdown({ item }: { item: LeaveRequestItem }) {
+  const days = item.unit_breakdown?.days ?? [];
+  return (
+    <section className="ess-modal-section">
+      <h3 className="section-heading-soft">Unit calculation</h3>
+      <div className="notice">
+        <strong>{item.unit_breakdown?.requested_units ?? item.requested_units} units requested</strong>
+        <span className="muted">{getUnitBreakdownSummary(item)}</span>
+      </div>
+      {days.length ? (
+        <div className="leave-unit-breakdown" aria-label="Leave unit calculation by date">
+          {days.map((day) => (
+            <div className={`leave-unit-breakdown__row ${day.counted ? "leave-unit-breakdown__row--counted" : "leave-unit-breakdown__row--excluded"}`} key={day.date}>
+              <span>
+                <strong>{formatDate(day.date)}</strong>
+                <small>{day.day}</small>
+              </span>
+              <span>
+                <strong>{day.units} units</strong>
+                <small>{day.holiday_name || formatUnitReason(day.reason)}</small>
+              </span>
+              <span className={day.counted ? "status status--approved" : "status status--cancelled"}>
+                {day.counted ? "Counted" : "Excluded"}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function useEscapeClose(onClose: () => void) {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -336,6 +389,7 @@ function LeaveApplyModal({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [evidenceReference, setEvidenceReference] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeaveApplyField>>({});
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
@@ -395,13 +449,17 @@ function LeaveApplyModal({
       nextErrors.end_date = "Choose dates outside the existing leave request.";
     }
     if (hasFieldErrors(nextErrors)) {
+      const message = "Review the highlighted leave fields and try again.";
       setFieldErrors(nextErrors);
-      setFeedback({ tone: "error", message: "Review the highlighted leave fields and try again." });
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
     if (isDemo) {
-      setFeedback({ tone: "error", message: "Leave requests are only available in live mode." });
+      const message = "Leave requests are only available in live mode.";
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
@@ -413,7 +471,9 @@ function LeaveApplyModal({
         body: formData,
       });
     } catch {
-      setFeedback({ tone: "error", message: "Unable to reach the server. Check your connection and try again." });
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       setSubmitting(false);
       submittingRef.current = false;
       return;
@@ -421,19 +481,32 @@ function LeaveApplyModal({
     const payload = await response.json().catch(() => ({}));
     setSubmitting(false);
     if (!response.ok) {
-      setFeedback({ tone: "error", message: getErrorMessage(payload) });
+      const message = getErrorMessage(payload);
+      setFeedback({ tone: "error", message });
+      setToast({ title: "Submission failed.", message, tone: "error" });
       submittingRef.current = false;
       return;
     }
-    setFeedback({ tone: "success", message: "Leave request submitted. Refreshing your history." });
+    const message = "Leave request submitted. Refreshing your history.";
+    setFeedback({ tone: "success", message });
+    setToast({ title: "Submitted successfully.", message, tone: "success" });
     form.reset();
     submittingRef.current = false;
-    onClose();
-    router.refresh();
+    window.setTimeout(() => {
+      onClose();
+      router.refresh();
+    }, 900);
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   return (
     <div className="modal-shell" role="presentation">
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <div aria-label="Apply leave" aria-modal="true" className="modal ess-leave-modal" role="dialog">
         <div className="modal__header">
           <div>
@@ -613,6 +686,7 @@ function LeaveDetailModal({ isDemo, item, onClose }: { isDemo: boolean; item: Le
             <DetailRow label="Workflow" value={item.workflow_reference || "Not available"} />
           </div>
         </section>
+        <LeaveUnitBreakdown item={item} />
         <section className="ess-modal-section">
           <h3 className="section-heading-soft">Evidence</h3>
           <LeaveEvidence item={item} />

@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { ActionToast } from "@/components/patterns/action-toast";
 import type { LeaveRequestItem } from "@/lib/types";
 
 type Props = {
@@ -25,6 +26,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
   const [attachmentReference, setAttachmentReference] = useState("");
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<"withdraw" | "cancel" | null>(null);
   const isSubmittingRef = useRef(false);
 
@@ -35,7 +37,9 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
     isSubmittingRef.current = true;
     setError("");
     if (isDemo) {
-      setError("Lifecycle actions are only available in live mode.");
+      const message = "Lifecycle actions are only available in live mode.";
+      setError(message);
+      setToast({ title: "Action failed.", message, tone: "error" });
       isSubmittingRef.current = false;
       return;
     }
@@ -53,23 +57,38 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
         body,
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setError(message);
+      setToast({ title: "Action failed.", message, tone: "error" });
       setIsSubmitting(null);
       isSubmittingRef.current = false;
       return;
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload));
+      const message = getErrorMessage(payload);
+      setError(message);
+      setToast({ title: "Action failed.", message, tone: "error" });
       setIsSubmitting(null);
       isSubmittingRef.current = false;
       return;
     }
+    setToast({
+      title: "Action saved.",
+      message: action === "withdraw" ? "Leave request withdrawn." : item.cancel_requires_reapproval ? "Cancellation request submitted." : "Approved leave cancelled.",
+      tone: "success",
+    });
     setIsSubmitting(null);
     isSubmittingRef.current = false;
     onCompleted?.();
-    router.refresh();
+    window.setTimeout(() => router.refresh(), 900);
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   const showWithdraw = item.can_withdraw || item.withdraw_block_reason;
   const showCancel = item.can_cancel || item.cancel_block_reason;
@@ -82,6 +101,7 @@ export function LeaveRequestLifecycleActions({ item, isDemo, onCompleted }: Prop
 
   return (
     <section className="ess-modal-section leave-lifecycle-panel">
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <h3 className="section-heading-soft">Lifecycle actions</h3>
       <p className="section-copy section-copy-soft">Use the policy-governed lifecycle actions below when this request needs to be pulled back or cancelled.</p>
 

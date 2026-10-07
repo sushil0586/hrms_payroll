@@ -609,6 +609,47 @@ textarea.input-control:disabled {
   color: #1e293b;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.modal-panel {
+  display: grid;
+  gap: 16px;
+  width: min(680px, 100%);
+  max-height: min(86vh, 900px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.22);
+}
+
+.modal-panel--wide {
+  width: min(920px, 100%);
+}
+
+.modal-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.modal-panel__header > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
 .split {
   display: grid;
   gap: 18px;
@@ -15604,6 +15645,55 @@ select.input-control {
   color: #047857;
 }
 
+.action-toast {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 12px;
+  box-shadow: 0 24px 55px rgba(15, 23, 42, 0.18);
+  color: #0f172a;
+  display: grid;
+  gap: 4px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 14px 16px;
+  position: fixed;
+  right: 24px;
+  top: 24px;
+  z-index: 1200;
+}
+
+.action-toast span {
+  color: #475569;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.action-toast--success {
+  border-color: rgba(34, 197, 94, 0.42);
+  box-shadow: 0 24px 55px rgba(22, 101, 52, 0.2);
+}
+
+.action-toast--success strong {
+  color: #166534;
+}
+
+.action-toast--error {
+  border-color: rgba(248, 113, 113, 0.5);
+  box-shadow: 0 24px 55px rgba(127, 29, 29, 0.18);
+}
+
+.action-toast--error strong {
+  color: #991b1b;
+}
+
+@media (max-width: 640px) {
+  .action-toast {
+    left: 16px;
+    right: 16px;
+    top: 16px;
+  }
+}
+
 .form-status {
   display: inline-flex;
   width: fit-content;
@@ -25185,6 +25275,45 @@ a.payroll-setup-mini-card {
   cursor: default;
 }
 
+.leave-unit-breakdown {
+  display: grid;
+  gap: 8px;
+}
+
+.leave-unit-breakdown__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(220, 228, 240, 0.92);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.leave-unit-breakdown__row--excluded {
+  background: #f8fafc;
+}
+
+.leave-unit-breakdown__row span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.leave-unit-breakdown__row strong {
+  color: #172033;
+  font-size: var(--type-size-sm);
+  line-height: var(--type-line-tight);
+}
+
+.leave-unit-breakdown__row small {
+  color: #64748b;
+  font-size: var(--type-size-xs);
+  line-height: var(--type-line-normal);
+  text-transform: capitalize;
+}
+
 .ess-attendance-modal {
   width: min(1040px, calc(100vw - 32px));
 }
@@ -25401,6 +25530,10 @@ a.payroll-setup-mini-card {
   .leave-evidence-item {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .leave-unit-breakdown__row {
+    grid-template-columns: 1fr;
   }
 }
 

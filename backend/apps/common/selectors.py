@@ -38,7 +38,12 @@ from apps.iam.models import MembershipRole, MembershipStatus, Role, TenantMember
 from apps.iam.permission_catalog import get_permission_catalog, get_tenant_assignable_permission_keys
 from apps.iam.permission_checks import get_role_permission_keys
 from apps.leave_management.models import LeaveBalance, LeavePolicy, LeavePolicyStatus, LeaveRequest, LeaveRequestStatus, LeaveType
-from apps.leave_management.services import _get_leave_request_lifecycle_runtime, ensure_employee_leave_balances, get_leave_policy_period_year
+from apps.leave_management.services import (
+    _get_leave_request_lifecycle_runtime,
+    calculate_leave_request_unit_breakdown,
+    ensure_employee_leave_balances,
+    get_leave_policy_period_year,
+)
 from apps.notifications.models import Notification, NotificationEventDefinition, NotificationStatus, NotificationTemplate, NotificationTemplateStatus
 from apps.notifications.services import trigger_notification_event
 from apps.organizations.models import Branch, BusinessUnit, CostCenter, Department, Designation, EmploymentType, Grade, LegalEntity, Location
@@ -5879,6 +5884,21 @@ def _leave_request_approval_track_payloads(request: LeaveRequest) -> list[dict]:
     return _workflow_approval_track_payloads(request.workflow_reference) or _legacy_leave_approval_track_payloads(request)
 
 
+def _leave_request_unit_breakdown_payload(request: LeaveRequest) -> dict:
+    metadata = request.metadata or {}
+    stored_breakdown = metadata.get("unit_breakdown")
+    if isinstance(stored_breakdown, dict) and stored_breakdown.get("days"):
+        return stored_breakdown
+    return calculate_leave_request_unit_breakdown(
+        employee=request.employee,
+        leave_policy=request.leave_policy,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        start_day_portion=request.start_day_portion,
+        end_day_portion=request.end_day_portion,
+    )
+
+
 def _legacy_attendance_approval_track_payloads(regularization: AttendanceRegularization) -> list[dict]:
     if regularization.status != RegularizationStatus.PENDING:
         return []
@@ -5940,6 +5960,7 @@ def get_employee_leave_requests(employee: Employee, *, limit: int | None = None)
             "end_day_portion": request.end_day_portion,
             "requested_units": request.requested_units,
             "approved_units": request.approved_units,
+            "unit_breakdown": _leave_request_unit_breakdown_payload(request),
             "reason": request.reason,
             "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
             "attachments": _leave_request_attachment_payloads(request),
@@ -5993,6 +6014,7 @@ def get_employee_leave_request_detail(employee: Employee, request_id) -> dict | 
         "end_day_portion": request.end_day_portion,
         "requested_units": request.requested_units,
         "approved_units": request.approved_units,
+        "unit_breakdown": _leave_request_unit_breakdown_payload(request),
         "reason": request.reason,
         "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
         "attachments": _leave_request_attachment_payloads(request),
@@ -6129,6 +6151,7 @@ def get_manager_pending_leave_requests(manager: Employee, *, limit: int | None =
             "end_day_portion": request.end_day_portion,
             "requested_units": request.requested_units,
             "approved_units": request.approved_units,
+            "unit_breakdown": _leave_request_unit_breakdown_payload(request),
             "reason": request.reason,
             "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
             "attachments": _leave_request_attachment_payloads(request),
@@ -6190,6 +6213,7 @@ def get_manager_leave_request_detail(manager: Employee, request_id) -> dict | No
         "end_day_portion": request.end_day_portion,
         "requested_units": request.requested_units,
         "approved_units": request.approved_units,
+        "unit_breakdown": _leave_request_unit_breakdown_payload(request),
         "reason": request.reason,
         "attachment_reference": str(request.metadata.get("attachment_reference", "") or ""),
         "attachments": _leave_request_attachment_payloads(request),

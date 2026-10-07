@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ActionToast } from "@/components/patterns/action-toast";
 import { FormSection } from "@/components/patterns/form-section";
 import type {
   HrAdminLeavePolicyAssignmentConflictCheck,
@@ -56,6 +57,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeavePolicyAssignmentField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -139,6 +141,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
     }
     if (conflictCheck?.has_blocking_conflict) {
       setError(conflictCheck.summary);
+      setToast({ title: "Save failed.", message: conflictCheck.summary, tone: "error" });
       return;
     }
     isSubmittingRef.current = true;
@@ -151,7 +154,9 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
     };
     if (hasFieldErrors(nextErrors)) {
       setFieldErrors(nextErrors);
-      setError("Review the highlighted leave policy assignment fields and try again.");
+      const message = "Review the highlighted leave policy assignment fields and try again.";
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -164,24 +169,45 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
         body: JSON.stringify(formValue),
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload));
+      const message = getErrorMessage(payload);
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
-    router.push("/hr-admin/leave-policy-assignments");
-    router.refresh();
+    setToast({
+      title: "Save complete.",
+      message: mode === "create" ? "Leave assignment created. Returning to the assignment list." : "Leave assignment saved. Returning to the assignment list.",
+      tone: "success",
+    });
+    setIsSubmitting(false);
+    isSubmittingRef.current = false;
+    window.setTimeout(() => {
+      router.push("/hr-admin/leave-policy-assignments");
+      router.refresh();
+    }, 700);
   }
 
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
   return (
-    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+    <>
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
+      <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -271,6 +297,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId 
           </div>
         </div>
       </section>
-    </form>
+      </form>
+    </>
   );
 }

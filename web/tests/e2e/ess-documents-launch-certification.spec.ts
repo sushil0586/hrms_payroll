@@ -104,8 +104,8 @@ test.describe("ESS Documents launch certification", () => {
     await expectDialogStable(page, "Upload document");
     await dialog.getByRole("button", { name: "Submit for review" }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByRole("status").filter({ hasText: "Document uploaded successfully." })).toBeVisible();
-    await expect(page.getByText("Your document has been sent to HR for verification.")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("status").filter({ hasText: "Document uploaded successfully." })).toBeVisible();
+    await expect(page.getByRole("main").getByText("Your document has been sent to HR for verification.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Upload document" }).first()).toBeVisible();
   });
 

@@ -1,7 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { ActionToast } from "@/components/patterns/action-toast";
 
 type Props = {
   itemId: string;
@@ -23,6 +25,7 @@ export function NotificationRetryAction({ itemId, canRetry = true, retryLimitRea
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
 
   async function handleRetry() {
     if (!canRetry) {
@@ -39,23 +42,36 @@ export function NotificationRetryAction({ itemId, canRetry = true, retryLimitRea
         body: JSON.stringify({ process_now: true }),
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setError(message);
+      setToast({ title: "Retry failed.", message, tone: "error" });
       setIsSubmitting(false);
       return;
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload));
+      const message = getErrorMessage(payload);
+      setError(message);
+      setToast({ title: "Retry failed.", message, tone: "error" });
       setIsSubmitting(false);
       return;
     }
-    setSuccessMessage("Notification delivery retried.");
+    const message = "Notification delivery retried.";
+    setSuccessMessage(message);
+    setToast({ title: "Action saved.", message, tone: "success" });
     setIsSubmitting(false);
-    router.refresh();
+    window.setTimeout(() => router.refresh(), 900);
   }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   return (
     <div className={compact ? "inline-retry-action" : "stack-list"}>
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
       <button className="button button--secondary" disabled={isSubmitting || !canRetry} onClick={handleRetry} type="button">
         {isSubmitting ? "Retrying..." : retryLimitReached ? "Retry limit reached" : "Retry delivery"}
       </button>

@@ -6,6 +6,7 @@ import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/p
 import { getHrAdminLeaveTypes } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
+import { LeaveTypeActions } from "./leave-type-actions";
 
 export default async function HrAdminLeaveTypesPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view", "leave.policies.manage"], fallbackPath: "/hr-admin" });
@@ -73,9 +74,12 @@ export default async function HrAdminLeaveTypesPage() {
                 </div>
                 <div className="record-card__actions">
                   {canManagePolicies ? (
-                    <Link className="button button--secondary" href={`/hr-admin/leave-types/${item.id}/edit`}>
-                      Edit
-                    </Link>
+                    <>
+                      <Link className="button button--secondary" href={`/hr-admin/leave-types/${item.id}/edit`}>
+                        Edit
+                      </Link>
+                      <LeaveTypeActions isActive={item.is_active} leaveTypeId={item.id} leaveTypeName={item.name} />
+                    </>
                   ) : null}
                 </div>
               </div>

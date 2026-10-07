@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ActionToast } from "@/components/patterns/action-toast";
 import { FormSection } from "@/components/patterns/form-section";
 import { PlatformGovernanceFormBanner } from "@/components/patterns/platform-governance-form-banner";
 import { GovernanceLockHint, isGovernanceFieldLocked } from "@/components/patterns/platform-governance-locks";
@@ -362,6 +363,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [toast, setToast] = useState<{ message: string; title: string; tone: "success" | "error" } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<LeavePolicyField>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
@@ -370,6 +372,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
   const [previewError, setPreviewError] = useState("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewResult, setPreviewResult] = useState<HrAdminLeavePolicyPreview | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [selectedTemplateKey, setSelectedTemplateKey] = useState("");
   const selectedTemplate = leavePolicyTemplates.find((template) => template.key === selectedTemplateKey) ?? null;
   const leaveTypeLocked = isGovernanceFieldLocked(item, "leave_type_id");
@@ -536,7 +539,9 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
       return;
     }
     if (mode === "edit" && item && item.can_edit_directly === false) {
-      setError("This record cannot be edited directly in its current governance state.");
+      const message = "This record cannot be edited directly in its current governance state.";
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       return;
     }
     isSubmittingRef.current = true;
@@ -565,7 +570,9 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
     }
     if (hasFieldErrors(nextErrors)) {
       setFieldErrors(nextErrors);
-      setError("Review the highlighted leave policy fields and try again.");
+      const message = "Review the highlighted leave policy fields and try again.";
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -578,19 +585,25 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
         body: JSON.stringify(formValue),
       });
     } catch {
-      setError("Unable to reach the server. Check your connection and try again.");
+      const message = "Unable to reach the server. Check your connection and try again.";
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(getErrorMessage(payload));
+      const message = getErrorMessage(payload);
+      setError(message);
+      setToast({ title: "Save failed.", message, tone: "error" });
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
     }
-    setSuccessMessage(mode === "create" ? "Leave policy created. Returning to the policy list." : "Leave policy saved. Returning to the policy list.");
+    const message = mode === "create" ? "Leave policy created. Returning to the policy list." : "Leave policy saved. Returning to the policy list.";
+    setSuccessMessage(message);
+    setToast({ title: "Save complete.", message, tone: "success" });
     setIsSubmitting(false);
     isSubmittingRef.current = false;
     window.setTimeout(() => {
@@ -640,8 +653,39 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
     setIsPreviewLoading(false);
   }
 
+  function openPreviewDialog() {
+    setIsPreviewOpen(true);
+    setPreviewError("");
+  }
+
+  function closePreviewDialog() {
+    if (isPreviewLoading) return;
+    setIsPreviewOpen(false);
+  }
+
+  useEffect(() => {
+    if (!isPreviewOpen) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        if (!isPreviewLoading) {
+          setIsPreviewOpen(false);
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPreviewOpen, isPreviewLoading]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
   return (
-    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+    <>
+      {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
+      <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -649,6 +693,9 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
             <p className="section-copy section-copy-soft">Define entitlement, timing, eligibility, and request behavior.</p>
           </div>
           <div className="form-shell-card__meta">
+            <button className="button button--secondary" onClick={openPreviewDialog} type="button">
+              Preview policy
+            </button>
             <span className="queue-summary-chip"><strong>{formValue.status}</strong> status</span>
             <span className="queue-summary-chip"><strong>{formValue.accrual_frequency}</strong> accrual</span>
           </div>
@@ -1530,6 +1577,119 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           </FormSection>
         </div>
 
+        {isPreviewOpen ? (
+          <div className="modal-backdrop" role="presentation">
+            <section aria-modal="true" className="modal-panel modal-panel--wide" role="dialog" aria-label="Preview leave policy">
+              <div className="modal-panel__header">
+                <div>
+                  <p className="section-eyebrow">Policy preview</p>
+                  <h2 className="section-heading-soft">{formValue.name || "Draft leave policy"}</h2>
+                  <p className="section-copy section-copy-soft">Test entitlement, service tiers, evidence rules, and approval routing before HR saves or assigns this policy.</p>
+                </div>
+                <button className="button button--secondary" disabled={isPreviewLoading} onClick={closePreviewDialog} type="button">Close</button>
+              </div>
+
+              <div className="form-grid">
+                <label className="form-field">
+                  <span className="muted">Employee</span>
+                  <select className="input-control" value={previewEmployeeId} onChange={(e) => setPreviewEmployeeId(e.target.value)}>
+                    <option value="">Select an employee</option>
+                    {options.employees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="form-field">
+                  <span className="muted">Requested units</span>
+                  <input className="input-control" value={previewUnits} onChange={(e) => setPreviewUnits(e.target.value)} />
+                </label>
+              </div>
+
+              <div className="form-actions-bar">
+                <span className="muted">This preview does not submit leave. It uses the same backend policy resolver as real requests.</span>
+                <div className="form-actions-bar__buttons">
+                  <button className="button button--primary" disabled={isPreviewLoading} onClick={handlePreview} type="button">
+                    {isPreviewLoading ? "Previewing..." : "Run preview"}
+                  </button>
+                </div>
+              </div>
+
+              {previewError ? (
+                <div className="notice notice--error">
+                  <strong>Preview failed.</strong>
+                  <span className="muted">{previewError}</span>
+                </div>
+              ) : null}
+
+              {previewResult ? (
+                <div className="detail-grid">
+                  <div className="notice notice--success detail-row--full">
+                    <strong>Preview summary</strong>
+                    <span className="muted">
+                      This policy resolves to {previewResult.entitlement_preview.projected_accrued_amount} accrued units for the selected employee and routes through {previewResult.approval_route.replaceAll("_", " ")}.
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-row__label">Current active policy</span>
+                    <span className="detail-row__value">{previewResult.current_resolved_policy_name || "No active policy currently resolves for this employee."}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-row__label">Draft matches current resolution</span>
+                    <span className="detail-row__value">
+                      {previewResult.draft_policy_matches_current_resolution ? "Yes" : "No. Save and assign this policy if HR expects it to apply."}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-row__label">Entitlement</span>
+                    <span className="detail-row__value">
+                      {previewResult.entitlement_preview.entitlement_resolution
+                        ? `${previewResult.entitlement_preview.entitlement_resolution.resolved_annual_entitlement} annual units. ${previewResult.entitlement_preview.entitlement_resolution.summary}`
+                        : `${formValue.annual_entitlement} configured annual units.`}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-row__label">Service months</span>
+                    <span className="detail-row__value">{previewResult.entitlement_preview.entitlement_resolution?.service_months ?? "Not available"}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-row__label">Prorated entitlement</span>
+                    <span className="detail-row__value">{previewResult.entitlement_preview.prorated_entitlement} units</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-row__label">Carry forward</span>
+                    <span className="detail-row__value">{previewResult.entitlement_preview.projected_carry_forward_amount} units</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-row__label">Evidence</span>
+                    <span className="detail-row__value">{previewResult.required_attachment_reason || "No attachment is required for this request size and leave type."}</span>
+                  </div>
+                  <div className="detail-row detail-row--full">
+                    <span className="detail-row__label">Approval steps</span>
+                    <div className="detail-row__value">
+                      {previewResult.steps.length ? (
+                        previewResult.steps.map((step) => (
+                          <div key={`${step.step_order}-${step.actor_identifier || step.name}`}>
+                            {step.step_order}. {step.name}: {step.actor_name || step.actor_identifier || "Unresolved approver"}
+                          </div>
+                        ))
+                      ) : (
+                        <span>No approvers resolved for this preview.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="notice">
+                  <strong>Ready to preview.</strong>
+                  <span className="muted">Select an employee and run preview to see entitlement, carry-forward, evidence, and approval behavior.</span>
+                </div>
+              )}
+            </section>
+          </div>
+        ) : null}
+
         {successMessage ? <div className="notice notice--success" role="status"><strong>Save complete.</strong><span className="muted">{successMessage}</span></div> : null}
         {error ? <div className="notice notice--error" role="alert"><strong>Save failed.</strong><span className="muted">{error}</span></div> : null}
         <div className="form-actions-bar">
@@ -1540,6 +1700,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           </div>
         </div>
       </section>
-    </form>
+      </form>
+    </>
   );
 }
