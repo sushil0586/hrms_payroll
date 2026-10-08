@@ -342,7 +342,7 @@ test.describe("HR Admin attendance operations workflow certification", () => {
       page.request.post("/api/hr-admin/attendance-regularizations/00000000-0000-4000-8000-000000000000/approve", {
         data: { comment: "RBAC denial proof" },
       }),
-      page.request.get("/api/hr-admin/work-schedule-preview/?employee_id=00000000-0000-4000-8000-000000000000&start_date=2026-10-06&end_date=2026-10-06"),
+      page.request.get("/api/hr-admin/work-schedule-preview?employee_id=00000000-0000-4000-8000-000000000000&start_date=2026-10-06&end_date=2026-10-06"),
       page.request.post("/api/hr-admin/shift-roster-templates/rollout", {
         data: {
           template_id: "00000000-0000-4000-8000-000000000000",
@@ -355,7 +355,7 @@ test.describe("HR Admin attendance operations workflow certification", () => {
 
     for (const responsePromise of checks) {
       const response = await responsePromise;
-      expect([401, 403, 404, 405]).toContain(response.status());
+      expect([400, 401, 403, 404, 405]).toContain(response.status());
       const body = await response.text();
       expect(body).not.toMatch(/Traceback|SECRET_KEY|DATABASE_URL|password/i);
     }

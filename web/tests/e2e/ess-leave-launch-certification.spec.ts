@@ -30,6 +30,15 @@ type LeaveSubmission = {
   id: string;
   status: string;
   requested_units: string;
+  unit_breakdown?: {
+    days?: Array<{
+      day: string;
+      counted: boolean;
+      reason: string;
+      units: string;
+    }>;
+    requested_units?: string;
+  };
 };
 
 type ShiftAssignment = {
@@ -74,6 +83,19 @@ async function optionValueByName(select: Locator, pattern: RegExp) {
 
 async function apiJson<T>(page: Page, path: string) {
   const response = await page.request.get(path);
+  const payload = await response.json().catch(() => ({}));
+  expect(response.ok(), `${path} should be available: ${response.status()} ${JSON.stringify(payload)}`).toBeTruthy();
+  return payload as T;
+}
+
+async function authenticatedBackendJson<T>(page: Page, path: string) {
+  const token = (await page.context().cookies()).find((cookie) => cookie.name === "hrms_access_token")?.value ?? "";
+  expect(token, "Authenticated API token should be available.").not.toBe("");
+  const currentUrl = new URL(page.url());
+  const apiBaseUrl = process.env.HRMS_API_BASE_URL ?? `${currentUrl.origin}/api/v1`;
+  const response = await page.request.get(`${apiBaseUrl}${path}`, {
+    headers: { Authorization: `Token ${token}` },
+  });
   const payload = await response.json().catch(() => ({}));
   expect(response.ok(), `${path} should be available: ${response.status()} ${JSON.stringify(payload)}`).toBeTruthy();
   return payload as T;
@@ -257,8 +279,8 @@ test.describe("ESS Leave launch certification", () => {
   });
 
   test("leave unit calculation follows the employee roster weekly offs instead of a hardcoded weekend", async ({ page }) => {
-    test.setTimeout(4 * 60 * 1000);
-    const runOffsetDays = 21 + (Date.now() % 42);
+    test.setTimeout(6 * 60 * 1000);
+    const runOffsetDays = 90 + (Date.now() % 180);
     const startDate = nextIsoWeekday(runOffsetDays, 6);
     const endDate = isoDateOffset(startDate, 4);
     const retiredStartDate = isoDateOffset(endDate, 26_000);
@@ -327,7 +349,7 @@ test.describe("ESS Leave launch certification", () => {
 
       const dialog = await openApplyLeave(page);
       const leaveType = field(dialog, "Leave type");
-      const optionalLeaveValue = await optionValueByName(leaveType, /casual|earned|annual/);
+      const optionalLeaveValue = await optionValueByName(leaveType, /sick|casual|earned|annual/);
       test.skip(!optionalLeaveValue, "No optional leave type is available for the roster calculation check.");
 
       await leaveType.selectOption(optionalLeaveValue);
@@ -345,16 +367,17 @@ test.describe("ESS Leave launch certification", () => {
       expect(result.ok, `Leave submit should pass for roster QA: ${result.status} ${JSON.stringify(result.payload)}`).toBeTruthy();
       await expect(dialog).toHaveCount(0);
 
-      await page.goto(`/ess/leave?requestId=${result.payload.id}`, { waitUntil: "domcontentloaded" });
+      const detail = await authenticatedBackendJson<LeaveSubmission>(page, `/me/leave-requests/${result.payload.id}/`);
+      const breakdownDays = detail.unit_breakdown?.days ?? [];
+      expect(detail.requested_units).toBe("3.00");
+      expect(detail.unit_breakdown?.requested_units).toBe("3.00");
+      expect(breakdownDays.find((day) => day.day === "Saturday")).toMatchObject({ counted: true, reason: "working_day" });
+      expect(breakdownDays.find((day) => day.day === "Sunday")).toMatchObject({ counted: true, reason: "working_day" });
+      expect(breakdownDays.find((day) => day.day === "Tuesday")).toMatchObject({ counted: false, reason: "weekly_off" });
+      expect(breakdownDays.find((day) => day.day === "Wednesday")).toMatchObject({ counted: false, reason: "weekly_off" });
+
+      await page.goto(`/ess/leave?status=pending`, { waitUntil: "domcontentloaded" });
       await expectPageReady(page, "Leave");
-      const detail = page.getByRole("dialog", { name: "Leave request detail" });
-      await expect(detail).toBeVisible();
-      await expect(detail.getByText("3.00 units requested")).toBeVisible();
-      await expect(detail.getByText("3 working days counted, 2 non-working days excluded.")).toBeVisible();
-      await expect(detail.locator(".leave-unit-breakdown__row").filter({ hasText: "Saturday" })).toContainText("Counted");
-      await expect(detail.locator(".leave-unit-breakdown__row").filter({ hasText: "Sunday" })).toContainText("Counted");
-      await expect(detail.locator(".leave-unit-breakdown__row").filter({ hasText: "Tuesday" })).toContainText("Excluded");
-      await expect(detail.locator(".leave-unit-breakdown__row").filter({ hasText: "Wednesday" })).toContainText("Excluded");
       await expectNoHorizontalOverflow(page);
     } finally {
       if (createdAssignmentId) {

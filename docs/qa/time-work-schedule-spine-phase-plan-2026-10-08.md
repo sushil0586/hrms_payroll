@@ -615,3 +615,28 @@ Verification:
 - TypeScript passed.
 - Django system check passed.
 - `git diff --check` passed.
+
+### 2026-10-08: Stage Browser Certification After Deployment
+
+Completed:
+
+- Ran the stage browser certification pack against `https://hrms.accerio.in` with live Accerio credentials.
+- Created real leave requests through ESS and verified roster-specific weekly-off calculation:
+  - Saturday and Sunday counted as working days when the assigned shift uses Tuesday/Wednesday weekly offs.
+  - Tuesday and Wednesday excluded as weekly offs.
+  - Requested units stayed at 3.00 for a 5-calendar-day range.
+- Verified ESS payslip review, including the day-count basis panel.
+- Verified HR attendance operations, regularization queue, shift assignment schedule preview, roster rollout recovery, and employee RBAC denial.
+- Ran HR governance data creation flows on stage:
+  - employee shift assignment create/update
+  - roster template create/update
+  - rollout preview
+  - rollout apply
+- Restored the temporary stage shift weekly-off patch and confirmed no shift remained with the temporary Tuesday/Wednesday weekly-off setting.
+
+Verification:
+
+- Stage ESS/HR/payroll schedule-spine pack passed: 10 tests.
+- Stage HR governance create/update roster data pack passed: 2 tests.
+- TypeScript passed.
+- `git diff --check` passed.
