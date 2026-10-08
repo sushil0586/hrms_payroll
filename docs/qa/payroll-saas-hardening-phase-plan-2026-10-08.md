@@ -451,3 +451,39 @@ Stage finding:
 
 - The new Playwright test reached a published live artifact, but staging was still serving the old backend behavior: the artifact advertised `application/pdf` while keeping a `.json` filename/body path, and the HR artifact payload did not include `render_model`.
 - This is expected until the latest backend changes in this branch are deployed to staging. After deployment, rerun `payroll-output-artifact-certification.spec.ts` with the `PDF payslip output carries tax-sheet evidence` grep.
+
+### 2026-10-08: P3 Stage Certification Passed After Deployment
+
+Completed:
+
+- Reran the focused PDF/tax-sheet Playwright gate after staging deployment.
+- Fixed strict Playwright download-link scoping in the ESS payslip modal.
+- Made all payroll output artifact certification tests select the live signed-in ESS employee dynamically instead of relying on stale seed code `EMP-0042`.
+- Reran the full payroll output artifact certification suite against staging.
+
+Verification:
+
+- Focused gate passed: `PDF payslip output carries tax-sheet evidence in HR and ESS browser flows`.
+- Full suite passed: `payroll-output-artifact-certification.spec.ts` had 3 passed tests in Chromium against staging.
+
+### 2026-10-08: P4 Professional Payslip PDF Layout Started
+
+Completed:
+
+- Upgraded the dependency-free PDF renderer from a plain text listing to a structured payslip layout.
+- Added header, employee details, net pay summary, payslip detail tables, tax-sheet block, source hash, and confidentiality footer.
+- Strengthened backend PDF tests to assert professional section labels and tax-sheet content.
+- Strengthened the browser PDF gate to assert the new PDF layout markers after deployment.
+
+Verification:
+
+- `./.venv/bin/python manage.py test apps.payroll.tests --keepdb` passed: 4 tests.
+- `./.venv/bin/python manage.py check` passed.
+- `pnpm --dir web exec tsc --noEmit` passed.
+- `git diff --check` passed.
+
+Remaining in P4:
+
+- Deploy the professional PDF renderer to staging.
+- Rerun the focused PDF/tax-sheet browser gate and full payroll output artifact certification suite.
+- Add visual PDF render inspection if Poppler/reportlab tooling is introduced for richer multi-page rendering.

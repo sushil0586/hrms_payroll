@@ -131,8 +131,13 @@ class PayrollPayslipRenderModelTests(SimpleTestCase):
 
         self.assertEqual(_artifact_extension("application/pdf"), "pdf")
         self.assertTrue(payload.startswith("%PDF-1.4"))
+        self.assertIn("PAYSLIP", payload)
         self.assertIn("September 2026 Payslip", payload)
+        self.assertIn("Employee details", payload)
+        self.assertIn("Net pay summary", payload)
         self.assertIn("Net pay: 87500.00", payload)
+        self.assertIn("Payslip detail", payload)
         self.assertIn("Tax sheet", payload)
         self.assertIn("Tax regime: new_regime", payload)
         self.assertIn("Tax Deducted at Source", payload)
+        self.assertIn("HRMS Payroll - employee confidential", payload)

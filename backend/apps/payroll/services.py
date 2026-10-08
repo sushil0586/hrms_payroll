@@ -5126,17 +5126,47 @@ def _pdf_text_line(y: int, text: str, *, size: int = 10, x: int = 48) -> str:
     return f"BT /F1 {size} Tf {x} {y} Td ({_pdf_escape(text)}) Tj ET"
 
 
-def _minimal_pdf_payload(lines: list[str]) -> str:
-    content_lines: list[str] = []
-    y = 800
-    for index, line in enumerate(lines):
-        if y < 48:
-            content_lines.append(_pdf_text_line(48, "Continued on next generated tax sheet page in full renderer.", size=9))
-            break
-        content_lines.append(_pdf_text_line(y, line[:110], size=14 if index == 0 else 9))
-        y -= 16 if index else 24
+def _pdf_rect(x: int, y: int, width: int, height: int, *, fill: bool = False, shade: str = "0.95") -> str:
+    if fill:
+        return f"{shade} g {x} {y} {width} {height} re f 0 g"
+    return f"{x} {y} {width} {height} re S"
 
-    stream = "\n".join(content_lines)
+
+def _pdf_line(x1: int, y1: int, x2: int, y2: int) -> str:
+    return f"{x1} {y1} m {x2} {y2} l S"
+
+
+def _pdf_table(
+    *,
+    x: int,
+    y: int,
+    width: int,
+    headers: list[str],
+    rows: list[list[str]],
+    col_widths: list[int],
+    row_height: int = 18,
+    max_rows: int = 10,
+) -> tuple[list[str], int]:
+    commands = [_pdf_rect(x, y - row_height, width, row_height, fill=True, shade="0.92")]
+    cursor_x = x + 6
+    for index, header in enumerate(headers):
+        commands.append(_pdf_text_line(y - 12, header[:24], size=8, x=cursor_x))
+        cursor_x += col_widths[index]
+    y -= row_height
+    commands.append(_pdf_line(x, y, x + width, y))
+    for row in rows[:max_rows]:
+        cursor_x = x + 6
+        for index, value in enumerate(row):
+            commands.append(_pdf_text_line(y - 12, str(value)[:32], size=8, x=cursor_x))
+            cursor_x += col_widths[index]
+        y -= row_height
+        commands.append(_pdf_line(x, y, x + width, y))
+    commands.append(_pdf_rect(x, y, width, row_height * (min(len(rows), max_rows) + 1)))
+    return commands, y - 10
+
+
+def _professional_pdf_payload(commands: list[str]) -> str:
+    stream = "\n".join(commands)
     objects = [
         "<< /Type /Catalog /Pages 2 0 R >>",
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -5181,32 +5211,66 @@ def _pdf_payslip_payload(
         "payroll_run": type("PayslipRenderRun", (), {"code": "", "name": payroll_run_name, "period": None})(),
     })()
     model = build_payroll_payslip_render_model(artifact)
-    pdf_lines = [
-        title,
-        f"Employee: {employee_name} / {employee_code}",
-        f"Payroll run: {payroll_run_name}",
-        f"Gross earnings: {model['totals']['gross_earnings']}",
-        f"Employee deductions: {model['totals']['employee_deductions']}",
-        f"Employer contributions: {model['totals']['employer_contributions']}",
-        f"Net pay: {model['totals']['net_pay']}",
-        "Payslip detail",
+    commands: list[str] = [
+        _pdf_rect(32, 780, 531, 34, fill=True, shade="0.88"),
+        _pdf_text_line(800, "PAYSLIP", size=16, x=48),
+        _pdf_text_line(800, title, size=10, x=130),
+        _pdf_text_line(785, "Confidential payroll document", size=8, x=48),
+        _pdf_text_line(785, f"Template: {model['template_ref']}", size=8, x=330),
+        _pdf_text_line(760, "Employee details", size=11, x=48),
+        _pdf_rect(48, 682, 240, 66),
+        _pdf_text_line(732, f"Employee: {employee_name}", size=9, x=60),
+        _pdf_text_line(716, f"Code: {employee_code}", size=9, x=60),
+        _pdf_text_line(700, f"Payroll run: {payroll_run_name}", size=9, x=60),
+        _pdf_text_line(684, f"Pay date: {model['period']['pay_date'] or 'Not available'}", size=9, x=60),
+        _pdf_text_line(760, "Net pay summary", size=11, x=330),
+        _pdf_rect(330, 682, 210, 66),
+        _pdf_text_line(732, f"Gross earnings: {model['totals']['gross_earnings']}", size=9, x=342),
+        _pdf_text_line(716, f"Employee deductions: {model['totals']['employee_deductions']}", size=9, x=342),
+        _pdf_text_line(700, f"Employer contributions: {model['totals']['employer_contributions']}", size=9, x=342),
+        _pdf_text_line(684, f"Net pay: {model['totals']['net_pay']}", size=10, x=342),
+        _pdf_text_line(654, "Payslip detail", size=12, x=48),
     ]
+    table_y = 634
     for section in model["sections"]:
         if section["lines"]:
-            pdf_lines.append(f"{section['label']}: {section['total']}")
-            for line in section["lines"][:12]:
-                pdf_lines.append(f"- {line['component_name']}: {line['amount']} {line['currency_code']}")
+            if table_y < 250:
+                break
+            commands.append(_pdf_text_line(table_y, f"{section['label']} - total {section['total']}", size=10, x=48))
+            rows = [
+                [
+                    line["component_code"],
+                    line["component_name"],
+                    line["line_type"],
+                    f"{line['amount']} {line['currency_code']}",
+                ]
+                for line in section["lines"]
+            ]
+            table_commands, table_y = _pdf_table(
+                x=48,
+                y=table_y - 8,
+                width=492,
+                headers=["Code", "Component", "Type", "Amount"],
+                rows=rows,
+                col_widths=[82, 210, 95, 95],
+                max_rows=5,
+            )
+            commands.extend(table_commands)
     tax_sheet = model["tax_sheet"]
-    pdf_lines.extend([
-        "Tax sheet",
-        f"Tax regime: {tax_sheet['tax_regime']}",
-        f"Current period tax: {tax_sheet['current_period_tax']}",
-        f"YTD tax: {tax_sheet['ytd_tax']}",
-        f"Statutory lines: {tax_sheet['statutory_line_count']}",
-        f"Template: {model['template_ref']}",
-        "Confidential payroll document generated from locked payroll output.",
+    commands.extend([
+        _pdf_text_line(178, "Tax sheet", size=12, x=48),
+        _pdf_rect(48, 96, 492, 68),
+        _pdf_text_line(146, f"Tax regime: {tax_sheet['tax_regime']}", size=9, x=60),
+        _pdf_text_line(130, f"Current period tax: {tax_sheet['current_period_tax']}", size=9, x=60),
+        _pdf_text_line(114, f"YTD tax: {tax_sheet['ytd_tax']}", size=9, x=60),
+        _pdf_text_line(146, f"Statutory lines: {tax_sheet['statutory_line_count']}", size=9, x=310),
+        _pdf_text_line(130, f"Hidden lines excluded: {model['quality']['hidden_line_count']}", size=9, x=310),
+        _pdf_text_line(76, f"Source hash: {model['source_hash'][:24] or 'Not available'}", size=8, x=48),
+        _pdf_text_line(60, "Generated from locked payroll output. Validate totals against payroll register and tax reports.", size=8, x=48),
+        _pdf_line(48, 50, 540, 50),
+        _pdf_text_line(36, "HRMS Payroll - employee confidential", size=8, x=48),
     ])
-    return _minimal_pdf_payload(pdf_lines)
+    return _professional_pdf_payload(commands)
 
 
 def _artifact_file_payload(
