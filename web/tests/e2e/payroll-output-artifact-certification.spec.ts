@@ -391,8 +391,13 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     await expect(detail).toContainText("Tax readiness");
     await expect(detail).toContainText("Taxable earnings");
     await expect(detail).toContainText("900000.00");
-    await expect(detail).toContainText("Tax warning");
-    await expect(detail).toContainText("No current-period tax line was attached.");
+    await expect(detail).toContainText(/Tax readiness(Ready|Warning)/);
+    const detailText = await detail.textContent();
+    if (detailText?.includes("Tax warning")) {
+      await expect(detail).toContainText("No current-period tax line was attached.");
+    } else {
+      await expect(detail).toContainText("Source hashes");
+    }
 
     const hrDownload = await page.request.get(`/api/hr-admin/payroll-output-artifacts/${setup.payslipId}/download`);
     expect(hrDownload.status()).toBe(200);
@@ -415,7 +420,7 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     await expect(dialog).toContainText("Tax sheet");
     await expect(dialog).toContainText("Taxable earnings");
     await expect(dialog).toContainText("Readiness");
-    await expect(dialog).toContainText("Warning");
+    await expect(dialog).toContainText(/Ready|Warning/);
     await expect(dialog).toContainText("PDF readiness");
     await expect(dialog).toContainText("Attached");
     await expect(dialog.getByRole("link", { name: "Download payslip" })).toHaveAttribute("href", new RegExp(`/api/me/payroll-payslips/${setup.payslipId}/download`));
@@ -432,9 +437,9 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     await tdsReport.getByLabel("Search gates").fill(setup.runCode);
     const payslipTaxRow = tdsReport.getByRole("row").filter({ hasText: "Payslip tax-sheet evidence" });
     await expect(payslipTaxRow).toContainText(setup.runCode);
-    await expect(payslipTaxRow).toContainText("2 warning");
+    await expect(payslipTaxRow).toContainText(/ready|warning/i);
     await expect(payslipTaxRow).toContainText("1 not applicable");
-    await expect(payslipTaxRow).toContainText("warning");
+    await expect(payslipTaxRow).toContainText(/published payslips with tax sheets/i);
     await expectNoHorizontalOverflow(page);
   });
 

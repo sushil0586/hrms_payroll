@@ -1376,6 +1376,10 @@ select.input-control {
   display: none;
 }
 
+.mobile-workspace-nav:not([open]) .mobile-workspace-nav__panel {
+  display: none;
+}
+
 .mobile-workspace-nav__panel {
   position: absolute;
   top: calc(100% + 8px);
@@ -4058,6 +4062,8 @@ select.input-control {
 
 .ess-payslip-action-band > div:first-child {
   display: grid;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   gap: 5px;
 }
@@ -4067,6 +4073,15 @@ select.input-control {
   color: #111827;
   font-size: 20px;
   line-height: 1.2;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ess-payslip-action-band :is(.workspace-card__eyebrow, .section-copy) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ess-payslip-action-band__actions {
@@ -12141,6 +12156,41 @@ select.input-control {
 }
 
 @media (max-width: 980px) {
+  .app-shell--workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell--workspace .app-sidebar--workspace {
+    display: none;
+  }
+
+  .app-shell--workspace .app-content--workspace {
+    min-width: 0;
+    padding: 18px 14px 36px;
+  }
+
+  .app-shell--workspace .app-topbar--workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 0 16px;
+  }
+
+  .app-shell--workspace .topbar-context,
+  .app-shell--workspace .workspace-search,
+  .app-shell--workspace .topbar-actions--workspace,
+  .app-shell--workspace .user-chip--workspace {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app-shell--workspace .workspace-search {
+    width: 100%;
+  }
+
+  .app-shell--workspace .topbar-actions--workspace {
+    justify-content: flex-start;
+  }
+
   .workspace-tone--hr.app-shell--workspace {
     grid-template-columns: 1fr;
   }
@@ -16078,6 +16128,28 @@ a.payroll-setup-mini-card {
 
 .payroll-table-scroll--compact .payroll-readiness-table {
   min-width: 640px;
+}
+
+@media (max-width: 720px) {
+  .shell--ess-payslips .payroll-table-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .shell--ess-payslips .ess-payslip-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .shell--ess-payslips .ess-payslip-table th,
+  .shell--ess-payslips .ess-payslip-table td {
+    padding-inline: 8px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }
 
 .payroll-setup-pagination {
