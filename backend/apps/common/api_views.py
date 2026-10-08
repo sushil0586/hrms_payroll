@@ -556,6 +556,7 @@ from apps.payroll.services import (
     generate_payroll_provider_audit_pack,
     generate_payroll_outputs,
     build_payroll_payslip_render_model,
+    build_payroll_output_artifact_reconciliation_summary,
     build_payroll_provider_schema_mapping_simulation_payload,
     ensure_default_payroll_provider_connections,
     ingest_payroll_provider_callback,
@@ -11418,6 +11419,7 @@ def build_hr_admin_payroll_output_artifact_payload(item: PayrollOutputArtifact, 
         "totals_snapshot": item.totals_snapshot,
         "line_snapshot": item.line_snapshot if include_detail else [],
         "render_model": build_payroll_payslip_render_model(item) if include_detail and item.kind == PayrollOutputArtifactKind.PAYSLIP else None,
+        "reconciliation_summary": build_payroll_output_artifact_reconciliation_summary(item) if include_detail else None,
         "access_summary": _payroll_artifact_access_summary(item),
         "access_events": [_payroll_access_event_payload(event) for event in recent_events],
         "source_hash": item.source_hash,
@@ -12357,6 +12359,18 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
         "input_snapshot",
         "published_by",
     ).order_by("kind", "artifact_key")[:200]
+    payslip_artifacts = PayrollOutputArtifact.objects.filter(
+        tenant=tenant,
+        kind=PayrollOutputArtifactKind.PAYSLIP,
+        status=PayrollOutputArtifactStatus.PUBLISHED,
+    ).select_related(
+        "output_batch",
+        "payroll_run",
+        "review",
+        "employee",
+        "input_snapshot",
+        "published_by",
+    ).order_by("-published_at", "-created_at")[:200]
     delivery_queryset = PayrollProviderDelivery.objects.filter(tenant=tenant)
     deliveries = delivery_queryset.select_related(
         "handoff",
@@ -12422,11 +12436,17 @@ def get_hr_admin_payroll_finance_handoff_setup_payload(actor) -> dict:
                 tenant=tenant,
                 kind=PayrollOutputArtifactKind.PROVIDER_AUDIT_PACK,
             ).count(),
+            "published_payslip_artifact_count": PayrollOutputArtifact.objects.filter(
+                tenant=tenant,
+                kind=PayrollOutputArtifactKind.PAYSLIP,
+                status=PayrollOutputArtifactStatus.PUBLISHED,
+            ).count(),
             "latest_net_pay": latest_handoff.totals_snapshot.get("net_pay") if latest_handoff else "0.00",
         },
         "output_batches": [build_hr_admin_payroll_output_batch_payload(item) for item in batches[:50]],
         "handoffs": [build_hr_admin_payroll_finance_handoff_payload(item) for item in handoffs[:50]],
         "artifacts": [build_hr_admin_payroll_output_artifact_payload(item) for item in artifacts],
+        "payslip_artifacts": [build_hr_admin_payroll_output_artifact_payload(item) for item in payslip_artifacts],
         "deliveries": [build_hr_admin_payroll_provider_delivery_payload(item) for item in deliveries],
         "callback_events": [build_hr_admin_payroll_provider_callback_event_payload(item) for item in callback_events],
         "retry_events": [build_hr_admin_payroll_provider_retry_event_payload(item) for item in retry_events],

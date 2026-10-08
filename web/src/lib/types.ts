@@ -4466,8 +4466,16 @@ export type PayrollPayslipTaxSheet = {
   tax_regime: string;
   current_period_tax: string;
   ytd_tax: string;
+  taxable_earnings: string;
+  taxable_deductions: string;
+  projected_annual_tax: string;
+  remaining_annual_tax: string;
   statutory_line_count: number;
   proof_status_summary: Record<string, unknown>;
+  readiness_status: string;
+  readiness_warnings: string[];
+  source_hash_count: number;
+  source_hashes: string[];
   lines: PayrollPayslipRenderLine[];
   statutory_lines: PayrollPayslipRenderLine[];
 };
@@ -4499,6 +4507,28 @@ export type PayrollPayslipRenderModel = {
     visible_line_count: number;
     has_tax_sheet: boolean;
   };
+};
+
+export type PayrollOutputReconciliationMismatch = {
+  employee_code: string;
+  employee_name: string;
+  field: string;
+  payslip_amount: string;
+  register_amount: string;
+  difference: string;
+  severity: string;
+};
+
+export type PayrollOutputReconciliationSummary = {
+  status: string;
+  matched_employee_count?: number;
+  payslip_count?: number;
+  register_row_count?: number;
+  missing_register_row_count?: number;
+  mismatch_count: number;
+  mismatches: PayrollOutputReconciliationMismatch[];
+  checked_fields: string[];
+  employee_code?: string;
 };
 
 export type HrAdminPayrollOutputArtifact = {
@@ -4536,6 +4566,7 @@ export type HrAdminPayrollOutputArtifact = {
   totals_snapshot: Record<string, unknown>;
   line_snapshot: Record<string, unknown>[];
   render_model?: PayrollPayslipRenderModel | null;
+  reconciliation_summary?: PayrollOutputReconciliationSummary | null;
   access_summary: {
     published_event_count: number;
     notification_count: number;
@@ -4787,11 +4818,13 @@ export type HrAdminPayrollFinanceHandoffSetupResponse = {
     heartbeat_provider_job_count?: number;
     stale_provider_job_count?: number;
     provider_audit_pack_count?: number;
+    published_payslip_artifact_count?: number;
     latest_net_pay: string;
   };
   output_batches: HrAdminPayrollOutputBatch[];
   handoffs: HrAdminPayrollFinanceHandoff[];
   artifacts: HrAdminPayrollOutputArtifact[];
+  payslip_artifacts: HrAdminPayrollOutputArtifact[];
   deliveries: HrAdminPayrollProviderDelivery[];
   callback_events: HrAdminPayrollProviderCallbackEvent[];
   retry_events: HrAdminPayrollProviderRetryEvent[];

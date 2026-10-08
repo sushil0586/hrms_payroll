@@ -177,6 +177,7 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
   const renderModel = artifact.render_model;
   const taxSheet = renderModel?.tax_sheet;
   const visibleLineCount = renderModel?.quality.visible_line_count ?? artifact.line_snapshot.length;
+  const reconciliation = artifact.reconciliation_summary;
 
   return (
     <aside className="payroll-setup-detail-panel payroll-output-detail-panel" aria-label={`${artifact.title} output artifact`}>
@@ -214,6 +215,30 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
         </div>
       </section>
 
+      {reconciliation ? (
+        <section className="payroll-rule-source-card">
+          <span className="workspace-card__eyebrow">Register reconciliation</span>
+          <div className="detail-grid">
+            <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{titleCase(reconciliation.status)}</span></div>
+            <div className="detail-row"><span className="detail-label">Mismatches</span><span className="detail-value">{reconciliation.mismatch_count}</span></div>
+            <div className="detail-row"><span className="detail-label">Matched employees</span><span className="detail-value">{reconciliation.matched_employee_count ?? (reconciliation.status === "passed" ? 1 : 0)}</span></div>
+            <div className="detail-row"><span className="detail-label">Checked fields</span><span className="detail-value">{reconciliation.checked_fields.map(titleCase).join(", ")}</span></div>
+          </div>
+          {reconciliation.mismatches.length ? (
+            <div className="payroll-rule-snapshot-list">
+              {reconciliation.mismatches.slice(0, 3).map((item) => (
+                <div className="detail-row" key={`${item.employee_code}-${item.field}`}>
+                  <span className="detail-label">{item.employee_code} / {titleCase(item.field)}</span>
+                  <span className="detail-value">{item.payslip_amount || "Missing"} vs {item.register_amount || "Missing"}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="section-copy section-copy-soft">Payslip totals match the payroll register for the checked fields.</p>
+          )}
+        </section>
+      ) : null}
+
       {renderModel ? (
         <section className="payroll-rule-source-card">
           <span className="workspace-card__eyebrow">Payslip PDF readiness</span>
@@ -224,7 +249,20 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
             <div className="detail-row"><span className="detail-label">Tax sheet</span><span className="detail-value">{taxSheet?.available ? "Included" : "Not included"}</span></div>
             <div className="detail-row"><span className="detail-label">Tax regime</span><span className="detail-value">{taxSheet?.tax_regime || "Not captured"}</span></div>
             <div className="detail-row"><span className="detail-label">Period tax</span><span className="detail-value">{taxSheet?.current_period_tax ?? formatMoney(0)}</span></div>
+            <div className="detail-row"><span className="detail-label">Tax readiness</span><span className="detail-value">{titleCase(taxSheet?.readiness_status ?? "pending")}</span></div>
+            <div className="detail-row"><span className="detail-label">Taxable earnings</span><span className="detail-value">{taxSheet?.taxable_earnings ?? formatMoney(0)}</span></div>
+            <div className="detail-row"><span className="detail-label">Source hashes</span><span className="detail-value">{taxSheet?.source_hash_count ?? 0}</span></div>
           </div>
+          {taxSheet?.readiness_warnings?.length ? (
+            <div className="payroll-rule-snapshot-list">
+              {taxSheet.readiness_warnings.slice(0, 3).map((warning) => (
+                <div className="detail-row" key={warning}>
+                  <span className="detail-label">Tax warning</span>
+                  <span className="detail-value">{warning}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <p className="section-copy section-copy-soft">
             This model is the source used for employee payslip PDF rendering and tax-sheet evidence.
           </p>
@@ -304,8 +342,16 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
   const selectedArtifact = visibleArtifacts.find((item) => item.id === selectedArtifactId) ?? pagedArtifacts[0] ?? visibleArtifacts[0] ?? null;
   const totals = selectedBatch?.totals_snapshot ?? {};
   const summary = selectedBatch?.artifact_summary_snapshot ?? {};
+  const reconciliation = (summary.reconciliation && typeof summary.reconciliation === "object" ? summary.reconciliation : null) as {
+    status?: string;
+    matched_employee_count?: number;
+    mismatch_count?: number;
+    payslip_count?: number;
+    register_row_count?: number;
+  } | null;
   const canPublishSelectedBatch = Boolean(selectedBatch && selectedBatch.status === "generated");
   const canGenerateSelectedHandoff = Boolean(selectedBatch && selectedBatch.status === "published");
+  const reconciliationBlocksAction = Boolean(selectedBatch && reconciliation?.status === "failed");
   const handoffReadinessStatus = !selectedBatch ? "blocked" : canGenerateSelectedHandoff ? "ready" : selectedBatch.status;
 
   return (
@@ -406,6 +452,10 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                 <span>Published</span>
                 <strong>{String(summary.published_count ?? selectedBatch?.published_artifact_count ?? 0)}</strong>
               </article>
+              <article>
+                <span>Reconciliation</span>
+                <strong>{titleCase(reconciliation?.status ?? "Pending")}</strong>
+              </article>
             </div>
 
             <div className="payroll-review-lock-strip payroll-output-publish-strip">
@@ -424,6 +474,11 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                 <strong>{selectedBatch?.output_profile_ref ?? "No profile"}</strong>
                 <span>{selectedBatch?.artifact_count ?? 0} artifacts</span>
               </div>
+              <div>
+                <span className="workspace-card__eyebrow">Register match</span>
+                <strong>{reconciliation?.mismatch_count ?? 0} mismatches</strong>
+                <span>{reconciliation?.matched_employee_count ?? 0}/{reconciliation?.payslip_count ?? 0} payslips checked</span>
+              </div>
             </div>
 
             <PayrollCloseActionsPanel
@@ -435,12 +490,14 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   id: "publish-outputs",
                   label: "Publish outputs",
                   endpoint: selectedBatch ? `/api/hr-admin/payroll-output-batches/${selectedBatch.id}/publish` : "",
-                  disabled: !canPublishOutputs || !canPublishSelectedBatch,
+                  disabled: !canPublishOutputs || !canPublishSelectedBatch || reconciliationBlocksAction,
                   disabledReason: !canPublishOutputs
                     ? "Requires payroll.publish."
                     : !selectedBatch
                       ? "Select an output batch first."
-                      : `Batch status is ${titleCase(selectedBatch.status)}; only generated batches can be published.`,
+                      : reconciliationBlocksAction
+                        ? "Register reconciliation failed. Resolve mismatches before publishing outputs."
+                        : `Batch status is ${titleCase(selectedBatch.status)}; only generated batches can be published.`,
                 },
                 {
                   id: "generate-finance-handoff",
@@ -449,12 +506,14 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   profileField: "handoff_profile_ref",
                   profileLabel: "Handoff profile ref",
                   defaultProfileRef: "tenant.payroll.finance.handoff.v1",
-                  disabled: !canGenerateHandoff || !canGenerateSelectedHandoff,
+                  disabled: !canGenerateHandoff || !canGenerateSelectedHandoff || reconciliationBlocksAction,
                   disabledReason: !canGenerateHandoff
                     ? "Requires finance.handoff.create."
                     : !selectedBatch
                       ? "Select an output batch first."
-                      : `Batch status is ${titleCase(selectedBatch.status)}; publish outputs before finance handoff.`,
+                      : reconciliationBlocksAction
+                        ? "Register reconciliation failed. Resolve mismatches before finance handoff."
+                        : `Batch status is ${titleCase(selectedBatch.status)}; publish outputs before finance handoff.`,
                 },
               ]}
             />

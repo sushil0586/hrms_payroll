@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, gotoAuthenticated, type Persona } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated, hrAdmin, type Persona } from "../helpers/staging-auth";
 import { createPayrollLifecycleOperator } from "../helpers/tenant-rbac";
 
 function uniqueCode(prefix: string) {
@@ -64,10 +64,38 @@ async function getSignedInEssEmployee(page: Page) {
   };
 }
 
+async function createDisposablePayrollEmployee(page: Page, suffix: string, label: string) {
+  await gotoAuthenticated(page, "/hr-admin", hrAdmin);
+  const employeeCode = `QA-TAX-${label}-${suffix}`.slice(0, 32);
+  const response = await page.request.post("/api/hr-admin/employees", {
+    data: {
+      employee_code: employeeCode,
+      employment_status: "active",
+      first_name: "QA",
+      last_name: `Tax ${label}`,
+      work_email: `${employeeCode.toLowerCase()}@example.com`,
+      date_of_joining: "2026-04-01",
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const payload = (await response.json()) as { id: string; employee_code?: string; full_name?: string };
+  return {
+    id: payload.id,
+    employeeCode,
+    employeeOptionText: employeeCode,
+  };
+}
+
 async function createLockedReview(
   page: Page,
   payrollOperator: Persona,
-  options: { employeeOptionText?: string; expectedEmployeeCode?: string; runConfigSnapshot?: Record<string, unknown>; outputProfileRef?: string } = {},
+  options: {
+    employeeOptionText?: string;
+    expectedEmployeeCode?: string;
+    additionalEmployees?: Array<{ id: string; employeeCode: string }>;
+    runConfigSnapshot?: Record<string, unknown>;
+    outputProfileRef?: string;
+  } = {},
 ) {
   await gotoAuthenticated(page, "/hr-admin/payroll-inputs", payrollOperator);
   await expectPageReady(page, "Payroll Inputs");
@@ -110,6 +138,24 @@ async function createLockedReview(
     await snapshotForm.getByRole("button", { name: "Create snapshot" }).click();
   });
   expect(snapshot.ok, `Payroll snapshot create failed with ${snapshot.status}: ${JSON.stringify(snapshot.payload)}`).toBeTruthy();
+
+  for (const item of options.additionalEmployees ?? []) {
+    const additionalSnapshot = await page.request.post("/api/hr-admin/payroll-input-snapshots", {
+      data: {
+        payroll_run_id: run.payload.id,
+        employee_id: item.id,
+        status: "ready",
+        input_profile_ref: "tenant.payroll.input.phase5p.v1",
+        config_profile_ref: "tenant.payroll.snapshot.phase5p.v1",
+        employee_snapshot: { source: "browser", employment_status: "active" },
+        organization_snapshot: { source: "browser", legal_entity: "Phase 5P", cost_center: "QA-CC" },
+        salary_snapshot: { source: "browser", annual_ctc: 960000, monthly_gross: 80000, currency_code: "INR" },
+        attendance_snapshot: { working_days: 22, present_days: 22, lop_days: 0 },
+        validation_snapshot: { blockers: [], warnings: [] },
+      },
+    });
+    expect(additionalSnapshot.ok(), `Additional payroll snapshot failed for ${item.employeeCode}: ${await additionalSnapshot.text()}`).toBeTruthy();
+  }
 
   await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${run.payload.id}&snapshotId=${snapshot.payload.id}`, payrollOperator);
   await expectPageReady(page, "Payroll Inputs");
@@ -171,6 +217,7 @@ async function createLockedReview(
     ))?.id ?? "",
     registerId: outputs.payload.artifacts.find((artifact) => artifact.kind === "register")?.id ?? "",
     employeeCode: outputs.payload.artifacts.find((artifact) => artifact.kind === "payslip")?.employee_code ?? "",
+    payslipIds: outputs.payload.artifacts.filter((artifact) => artifact.kind === "payslip").map((artifact) => artifact.id),
     runCode,
   };
 }
@@ -199,6 +246,8 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     await expect(page.locator(".payroll-output-artifact-table tr.is-selected")).toContainText(setup.employeeCode || "Payslip");
     await expect(page.locator("aside[aria-label$='output artifact']")).toContainText("Storage governance");
     await expect(page.locator("aside[aria-label$='output artifact']")).toContainText("Access governance");
+    await expect(page.locator("aside[aria-label$='output artifact']")).toContainText("Register reconciliation");
+    await expect(page.locator("aside[aria-label$='output artifact']")).toContainText("Payslip totals match the payroll register");
     await expect(page.locator("aside[aria-label$='output artifact']")).toContainText("tenant.payroll.outputs.phase5p.v1");
 
     const controls = page.getByLabel("Output controls");
@@ -266,12 +315,19 @@ test.describe("Phase 5P payroll output artifact certification", () => {
   test("PDF payslip output carries tax-sheet evidence in HR and ESS browser flows", async ({ page }) => {
     test.setTimeout(6 * 60 * 1000);
     const essEmployee = await getSignedInEssEmployee(page);
+    const suffix = String(Date.now()).slice(-10);
+    const noTaxEmployee = await createDisposablePayrollEmployee(page, suffix, "NO");
+    const oldRegimeEmployee = await createDisposablePayrollEmployee(page, suffix, "OLD");
 
     const payrollOperator = await createPayrollLifecycleOperator(page);
     const outputProfileRef = "tenant.payroll.outputs.pdf-tax-sheet.v1";
     const setup = await createLockedReview(page, payrollOperator, {
       employeeOptionText: essEmployee.employeeOptionText,
       expectedEmployeeCode: essEmployee.employeeCode || undefined,
+      additionalEmployees: [
+        { id: noTaxEmployee.id, employeeCode: noTaxEmployee.employeeCode },
+        { id: oldRegimeEmployee.id, employeeCode: oldRegimeEmployee.employeeCode },
+      ],
       outputProfileRef,
       runConfigSnapshot: {
         profile_ref: "tenant.payroll.run.pdf-tax-sheet.v1",
@@ -281,11 +337,33 @@ test.describe("Phase 5P payroll output artifact certification", () => {
           mime_types: { payslip: "application/pdf" },
           tax_sheet_profile: { enabled: true, country: "IN" },
           tax_regime: "new_regime",
+          taxable_earnings: "900000.00",
+          taxable_deductions: "150000.00",
+          projected_annual_tax: "120000.00",
+          remaining_annual_tax: "75000.00",
           proof_status_summary: { verified: 1, pending: 0, rejected: 0 },
+          per_employee_tax_sheet_profiles: {
+            [noTaxEmployee.employeeCode]: {
+              tax_sheet_profile: null,
+              tax_regime: "new_regime",
+              taxable_earnings: "0.00",
+              proof_status_summary: { verified: 0, pending: 0, rejected: 0 },
+            },
+            [oldRegimeEmployee.employeeCode]: {
+              tax_sheet_profile: { enabled: true, country: "IN" },
+              tax_regime: "old_regime",
+              taxable_earnings: "500000.00",
+              taxable_deductions: "150000.00",
+              projected_annual_tax: "60000.00",
+              remaining_annual_tax: "60000.00",
+              proof_status_summary: { verified: 2, pending: 0, rejected: 0 },
+            },
+          },
         },
       },
     });
     expect(setup.payslipId).toBeTruthy();
+    expect(setup.payslipIds.length).toBeGreaterThanOrEqual(3);
 
     await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}&artifactId=${setup.payslipId}`, payrollOperator);
     await expectPageReady(page, "Payroll Outputs");
@@ -304,10 +382,17 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     await expectPageReady(page, "Payroll Outputs");
     const detail = page.locator("aside[aria-label$='output artifact']");
     await expect(detail).toContainText("Payslip PDF readiness");
+    await expect(detail).toContainText("Register reconciliation");
+    await expect(detail).toContainText("Payslip totals match the payroll register");
     await expect(detail).toContainText("tenant.payslip.pdf.tax-sheet.v1");
     await expect(detail).toContainText("Tax sheet");
     await expect(detail).toContainText("Included");
     await expect(detail).toContainText("new_regime");
+    await expect(detail).toContainText("Tax readiness");
+    await expect(detail).toContainText("Taxable earnings");
+    await expect(detail).toContainText("900000.00");
+    await expect(detail).toContainText("Tax warning");
+    await expect(detail).toContainText("No current-period tax line was attached.");
 
     const hrDownload = await page.request.get(`/api/hr-admin/payroll-output-artifacts/${setup.payslipId}/download`);
     expect(hrDownload.status()).toBe(200);
@@ -320,12 +405,17 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     expect(hrPdf).toContain("Net pay summary");
     expect(hrPdf).toContain("Tax sheet");
     expect(hrPdf).toContain("Tax regime: new_regime");
+    expect(hrPdf).toContain("Taxable earnings: 900000.00");
+    expect(hrPdf).toContain("Readiness:");
 
     await gotoAuthenticated(page, `/ess/payslips?q=${setup.runCode}`, employee);
     await expectPageReady(page, "Payslips");
     await page.getByRole("button", { name: "Review payslip" }).first().click();
     const dialog = page.getByRole("dialog", { name: /Payslip detail/ });
     await expect(dialog).toContainText("Tax sheet");
+    await expect(dialog).toContainText("Taxable earnings");
+    await expect(dialog).toContainText("Readiness");
+    await expect(dialog).toContainText("Warning");
     await expect(dialog).toContainText("PDF readiness");
     await expect(dialog).toContainText("Attached");
     await expect(dialog.getByRole("link", { name: "Download payslip" })).toHaveAttribute("href", new RegExp(`/api/me/payroll-payslips/${setup.payslipId}/download`));
@@ -335,6 +425,16 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     const essPdf = await essDownload.text();
     expect(essPdf).toContain("PAYSLIP");
     expect(essPdf).toContain("Tax sheet");
+
+    await gotoAuthenticated(page, `/hr-admin/reports/tds-efile-readiness`, hrAdmin);
+    await expectPageReady(page, "TDS E-file Readiness");
+    const tdsReport = page.getByTestId("tds-efile-readiness-report");
+    await tdsReport.getByLabel("Search gates").fill(setup.runCode);
+    const payslipTaxRow = tdsReport.getByRole("row").filter({ hasText: "Payslip tax-sheet evidence" });
+    await expect(payslipTaxRow).toContainText(setup.runCode);
+    await expect(payslipTaxRow).toContainText("2 warning");
+    await expect(payslipTaxRow).toContainText("1 not applicable");
+    await expect(payslipTaxRow).toContainText("warning");
     await expectNoHorizontalOverflow(page);
   });
 

@@ -46,6 +46,15 @@ function sourceHashFrom(items: Array<{ source_hash?: string }>) {
   return items.find((item) => item.source_hash)?.source_hash ?? "source_hash.pending";
 }
 
+function payslipSourceHashFrom(items: HrAdminPayrollOutputArtifact[]) {
+  for (const item of items) {
+    const taxSheet = item.render_model?.tax_sheet;
+    const hash = taxSheet?.source_hashes?.[0] || item.source_hash;
+    if (hash) return hash;
+  }
+  return "source_hash.pending";
+}
+
 function textIncludesTds(value: unknown) {
   return typeof value === "string" && /tds|24q|tax_deducted_at_source|income_tax/i.test(value);
 }
@@ -59,10 +68,12 @@ function artifactLooksTds(artifact: HrAdminPayrollOutputArtifact) {
 function buildRows({
   artifacts,
   deliveries,
+  payslipArtifacts,
   statutory,
 }: {
   artifacts: HrAdminPayrollOutputArtifact[];
   deliveries: HrAdminPayrollProviderDelivery[];
+  payslipArtifacts: HrAdminPayrollOutputArtifact[];
   statutory: HrAdminPayrollStatutorySetupResponse;
 }): ReadinessRow[] {
   const tdsComponents = statutory.statutory_components.filter((component) => component.statutory_type === tdsType);
@@ -76,6 +87,13 @@ function buildRows({
   const lockedDeclarations = statutory.declarations.filter((declaration) => declaration.status === "locked");
   const verifiedDeclarationItems = statutory.declaration_items.filter((item) => item.proof_status === "verified");
   const publishedArtifacts = tdsArtifacts.filter((artifact) => artifact.status === "published");
+  const latestPayslipBatchId = payslipArtifacts.find((artifact) => artifact.status === "published")?.output_batch_id ?? "";
+  const publishedPayslips = payslipArtifacts.filter((artifact) => artifact.status === "published" && (!latestPayslipBatchId || artifact.output_batch_id === latestPayslipBatchId));
+  const payslipsWithTaxSheets = publishedPayslips.filter((artifact) => artifact.render_model?.tax_sheet?.available);
+  const payslipTaxReady = payslipsWithTaxSheets.filter((artifact) => artifact.render_model?.tax_sheet?.readiness_status === "ready");
+  const payslipTaxWarnings = payslipsWithTaxSheets.filter((artifact) => artifact.render_model?.tax_sheet?.readiness_status === "warning");
+  const payslipTaxNotApplicable = publishedPayslips.filter((artifact) => artifact.render_model?.tax_sheet?.readiness_status === "not_applicable");
+  const latestPayslipTaxArtifact = payslipsWithTaxSheets[0] || publishedPayslips[0];
   const acknowledgedDeliveries = tdsDeliveries.filter((delivery) => ["acknowledged", "reconciled"].includes(delivery.status));
   const dueCalendars = tdsCalendars.filter((calendar) => calendar.is_due || calendar.is_overdue);
   const acknowledgedCalendars = tdsCalendars.filter((calendar) => ["acknowledged", "filed"].includes(calendar.status));
@@ -148,6 +166,19 @@ function buildRows({
       actionHref: "/hr-admin/reports/challan-reconciliation",
     },
     {
+      id: "payslip-tax-sheet",
+      gate: "Payslip tax-sheet evidence",
+      area: "Payslip evidence",
+      status: gateStatus(publishedPayslips.length > 0 && payslipsWithTaxSheets.length === publishedPayslips.length && payslipTaxWarnings.length === 0, payslipsWithTaxSheets.length > 0),
+      owner: "Payroll Finance",
+      signal: `${payslipsWithTaxSheets.length}/${publishedPayslips.length} published payslips with tax sheets`,
+      evidence: latestPayslipTaxArtifact
+        ? `${latestPayslipTaxArtifact.render_model?.period.payroll_run_code || latestPayslipTaxArtifact.title}: ${payslipTaxReady.length} ready, ${payslipTaxWarnings.length} warning, ${payslipTaxNotApplicable.length} not applicable`
+        : "Publish payslips with tax-sheet render evidence",
+      sourceHash: payslipSourceHashFrom(publishedPayslips),
+      actionHref: "/hr-admin/payroll-outputs",
+    },
+    {
       id: "provider-route",
       gate: "Provider filing route",
       area: "Provider",
@@ -164,10 +195,12 @@ function buildRows({
 export function TdsEfileReadinessWorkspace({
   artifacts,
   deliveries,
+  payslipArtifacts,
   statutory,
 }: {
   artifacts: HrAdminPayrollFinanceHandoffSetupResponse["artifacts"];
   deliveries: HrAdminPayrollFinanceHandoffSetupResponse["deliveries"];
+  payslipArtifacts: HrAdminPayrollFinanceHandoffSetupResponse["payslip_artifacts"];
   statutory: HrAdminPayrollStatutorySetupResponse;
 }) {
   const [query, setQuery] = useState("");
@@ -175,7 +208,7 @@ export function TdsEfileReadinessWorkspace({
   const [area, setArea] = useState("All");
   const [page, setPage] = useState(1);
 
-  const rows = useMemo(() => buildRows({ artifacts, deliveries, statutory }), [artifacts, deliveries, statutory]);
+  const rows = useMemo(() => buildRows({ artifacts, deliveries, payslipArtifacts, statutory }), [artifacts, deliveries, payslipArtifacts, statutory]);
   const areas = useMemo(() => ["All", ...Array.from(new Set(rows.map((row) => row.area))).sort()], [rows]);
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase();

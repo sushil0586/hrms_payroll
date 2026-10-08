@@ -29,7 +29,9 @@ test.describe("ESS Payslips launch certification", () => {
       await expect(dialog.getByText("Payment summary")).toBeVisible();
       await expect(dialog.getByText("Access trail")).toBeVisible();
       await expect(dialog.getByText("Storage governance")).toBeVisible();
-      await expect(dialog.getByText("Calculation lines")).toBeVisible();
+      await expect(dialog.getByText("Payslip lines")).toBeVisible();
+      await expect(dialog.getByText("Tax sheet").first()).toBeVisible();
+      await expect(dialog.getByText("PDF readiness")).toBeVisible();
       await expectDialogStable(page, "Payslip detail");
       await page.keyboard.press("Escape");
       await expect(dialog).toHaveCount(0);

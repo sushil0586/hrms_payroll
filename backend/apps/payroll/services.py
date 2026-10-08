@@ -4904,6 +4904,36 @@ def _sum_render_lines(lines: list[dict[str, Any]]) -> str:
     return str(total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+def _sum_render_line_field(lines: list[dict[str, Any]], field: str) -> str:
+    total = Decimal("0.00")
+    for line in lines:
+        value = line.get(field)
+        if value in {None, ""}:
+            continue
+        total += Decimal(_money_string(value))
+    return str(total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _tax_sheet_money_from_config(config: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = config.get(key)
+        if value not in {None, ""}:
+            return _money_string(value)
+    tax_sheet_profile = config.get("tax_sheet_profile") if isinstance(config.get("tax_sheet_profile"), dict) else {}
+    for key in keys:
+        value = tax_sheet_profile.get(key)
+        if value not in {None, ""}:
+            return _money_string(value)
+    return "0.00"
+
+
+def _proof_summary_value(summary: dict[str, Any], key: str) -> int:
+    try:
+        return int(summary.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def build_payroll_payslip_render_model(artifact: PayrollOutputArtifact) -> dict[str, Any]:
     """Build a deterministic payslip/tax render model from a locked output artifact snapshot."""
 
@@ -4934,19 +4964,47 @@ def build_payroll_payslip_render_model(artifact: PayrollOutputArtifact) -> dict[
         section["total"] = _sum_render_lines(section["lines"])
 
     tax_lines = sections["tax"]["lines"]
+    tax_sheet_profile_cleared = "tax_sheet_profile" in config and not config.get("tax_sheet_profile")
     statutory_lines = [
         line
         for key in ("tax", "deductions", "employer_contributions")
         for line in sections[key]["lines"]
-        if line.get("statutory_type") or line.get("statutory_treatment_ref")
+        if not tax_sheet_profile_cleared and (line.get("statutory_type") or line.get("statutory_treatment_ref"))
     ]
+    proof_status_summary = config.get("proof_status_summary") if isinstance(config.get("proof_status_summary"), dict) else {}
+    ytd_tax = _sum_render_line_field(tax_lines, "ytd_amount")
+    current_period_tax = sections["tax"]["total"]
+    tax_source_hashes = sorted({
+        line["source_hash"]
+        for line in tax_lines + statutory_lines
+        if line.get("source_hash")
+    })
+    readiness_warnings: list[str] = []
+    if config.get("tax_sheet_profile") and not tax_lines:
+        readiness_warnings.append("No current-period tax line was attached.")
+    if proof_status_summary and _proof_summary_value(proof_status_summary, "pending") > 0:
+        readiness_warnings.append("Some tax proofs are still pending verification.")
+    if proof_status_summary and _proof_summary_value(proof_status_summary, "rejected") > 0:
+        readiness_warnings.append("Some tax proofs were rejected.")
+    if tax_lines and not tax_source_hashes:
+        readiness_warnings.append("Tax line source hash is missing.")
+    tax_sheet_available = bool(not tax_sheet_profile_cleared and (tax_lines or statutory_lines or config.get("tax_sheet_profile")))
+    readiness_status = "not_applicable" if not tax_sheet_available else ("ready" if not readiness_warnings else "warning")
     tax_sheet = {
-        "available": bool(tax_lines or statutory_lines or config.get("tax_sheet_profile")),
+        "available": tax_sheet_available,
         "tax_regime": str(config.get("tax_regime") or template_profile.get("tax_regime") or "not_available"),
-        "current_period_tax": sections["tax"]["total"],
-        "ytd_tax": _sum_render_lines([line for line in tax_lines if line.get("ytd_amount")]),
+        "current_period_tax": current_period_tax,
+        "ytd_tax": ytd_tax,
+        "taxable_earnings": _tax_sheet_money_from_config(config, "taxable_earnings", "taxable_income", "taxable_salary"),
+        "taxable_deductions": _tax_sheet_money_from_config(config, "taxable_deductions", "tax_deductions", "deductions_under_chapter_vi_a"),
+        "projected_annual_tax": _tax_sheet_money_from_config(config, "projected_annual_tax", "annual_tax_liability"),
+        "remaining_annual_tax": _tax_sheet_money_from_config(config, "remaining_annual_tax", "remaining_tax_liability"),
         "statutory_line_count": len(statutory_lines),
-        "proof_status_summary": config.get("proof_status_summary") if isinstance(config.get("proof_status_summary"), dict) else {},
+        "proof_status_summary": proof_status_summary,
+        "readiness_status": readiness_status,
+        "readiness_warnings": readiness_warnings,
+        "source_hash_count": len(tax_source_hashes),
+        "source_hashes": tax_source_hashes[:10],
         "lines": tax_lines,
         "statutory_lines": statutory_lines,
     }
@@ -5263,8 +5321,11 @@ def _pdf_payslip_payload(
         _pdf_text_line(146, f"Tax regime: {tax_sheet['tax_regime']}", size=9, x=60),
         _pdf_text_line(130, f"Current period tax: {tax_sheet['current_period_tax']}", size=9, x=60),
         _pdf_text_line(114, f"YTD tax: {tax_sheet['ytd_tax']}", size=9, x=60),
-        _pdf_text_line(146, f"Statutory lines: {tax_sheet['statutory_line_count']}", size=9, x=310),
-        _pdf_text_line(130, f"Hidden lines excluded: {model['quality']['hidden_line_count']}", size=9, x=310),
+        _pdf_text_line(98, f"Taxable earnings: {tax_sheet['taxable_earnings']}", size=9, x=60),
+        _pdf_text_line(146, f"Readiness: {tax_sheet['readiness_status']}", size=9, x=310),
+        _pdf_text_line(130, f"Statutory lines: {tax_sheet['statutory_line_count']}", size=9, x=310),
+        _pdf_text_line(114, f"Source hashes: {tax_sheet['source_hash_count']}", size=9, x=310),
+        _pdf_text_line(98, f"Hidden lines excluded: {model['quality']['hidden_line_count']}", size=9, x=310),
         _pdf_text_line(76, f"Source hash: {model['source_hash'][:24] or 'Not available'}", size=8, x=48),
         _pdf_text_line(60, "Generated from locked payroll output. Validate totals against payroll register and tax reports.", size=8, x=48),
         _pdf_line(48, 50, 540, 50),
@@ -5367,6 +5428,134 @@ def _artifact_file_kwargs(
     }
 
 
+PAYROLL_RECONCILIATION_TOTAL_FIELDS = [
+    "gross_earnings",
+    "employee_deductions",
+    "employer_contributions",
+    "net_pay",
+]
+
+
+def _reconciliation_money(value: Any) -> Decimal:
+    try:
+        return Decimal(_money_string(value))
+    except (InvalidOperation, ValueError):
+        return Decimal("0.00")
+
+
+def _reconciliation_row_by_employee(batch: PayrollOutputBatch) -> dict[str, dict[str, Any]]:
+    register = batch.artifacts.filter(kind=PayrollOutputArtifactKind.REGISTER).order_by("-created_at").first()
+    if not register or not isinstance(register.line_snapshot, list):
+        return {}
+    rows: dict[str, dict[str, Any]] = {}
+    for row in register.line_snapshot:
+        if isinstance(row, dict) and row.get("employee_code"):
+            rows[str(row["employee_code"])] = row
+    return rows
+
+
+def build_payroll_output_reconciliation_summary(batch: PayrollOutputBatch) -> dict[str, Any]:
+    """Compare employee payslip totals with payroll register rows for an output batch."""
+
+    register_rows = _reconciliation_row_by_employee(batch)
+    payslips = batch.artifacts.filter(kind=PayrollOutputArtifactKind.PAYSLIP).select_related("employee").order_by("employee__employee_code")
+    mismatches: list[dict[str, Any]] = []
+    matched_count = 0
+    missing_register_rows = 0
+    matched_employee_codes: set[str] = set()
+
+    for payslip in payslips:
+        employee_code = payslip.employee.employee_code if payslip.employee_id else ""
+        register_row = register_rows.get(employee_code)
+        if not register_row:
+            missing_register_rows += 1
+            mismatches.append({
+                "employee_code": employee_code,
+                "employee_name": str(payslip.employee) if payslip.employee_id else payslip.title,
+                "field": "register_row",
+                "payslip_amount": "",
+                "register_amount": "",
+                "difference": "",
+                "severity": "blocker",
+            })
+            continue
+        matched_employee_codes.add(employee_code)
+        matched_count += 1
+        totals = payslip.totals_snapshot if isinstance(payslip.totals_snapshot, dict) else {}
+        for field in PAYROLL_RECONCILIATION_TOTAL_FIELDS:
+            payslip_amount = _reconciliation_money(totals.get(field))
+            register_amount = _reconciliation_money(register_row.get(field))
+            difference = payslip_amount - register_amount
+            if difference != Decimal("0.00"):
+                mismatches.append({
+                    "employee_code": employee_code,
+                    "employee_name": str(payslip.employee) if payslip.employee_id else payslip.title,
+                    "field": field,
+                    "payslip_amount": str(payslip_amount.quantize(Decimal("0.01"))),
+                    "register_amount": str(register_amount.quantize(Decimal("0.01"))),
+                    "difference": str(difference.quantize(Decimal("0.01"))),
+                    "severity": "blocker",
+                })
+
+    for employee_code in sorted(set(register_rows) - matched_employee_codes):
+        row = register_rows[employee_code]
+        mismatches.append({
+            "employee_code": employee_code,
+            "employee_name": str(row.get("employee_name") or employee_code),
+            "field": "payslip_artifact",
+            "payslip_amount": "",
+            "register_amount": str(row.get("net_pay") or ""),
+            "difference": "",
+            "severity": "blocker",
+        })
+
+    status_value = "passed" if not mismatches and payslips.count() > 0 and len(register_rows) >= payslips.count() else "failed"
+    return {
+        "status": status_value,
+        "matched_employee_count": matched_count,
+        "payslip_count": payslips.count(),
+        "register_row_count": len(register_rows),
+        "missing_register_row_count": missing_register_rows,
+        "mismatch_count": len(mismatches),
+        "mismatches": mismatches[:25],
+        "checked_fields": PAYROLL_RECONCILIATION_TOTAL_FIELDS,
+    }
+
+
+def build_payroll_output_artifact_reconciliation_summary(artifact: PayrollOutputArtifact) -> dict[str, Any] | None:
+    if not artifact.output_batch_id:
+        return None
+    batch_summary = build_payroll_output_reconciliation_summary(artifact.output_batch)
+    if artifact.kind == PayrollOutputArtifactKind.REGISTER:
+        return batch_summary
+    if artifact.kind != PayrollOutputArtifactKind.PAYSLIP:
+        return None
+    employee_code = artifact.employee.employee_code if artifact.employee_id else ""
+    mismatches = [
+        item for item in batch_summary["mismatches"]
+        if item.get("employee_code") == employee_code
+    ]
+    return {
+        "status": "passed" if not mismatches and batch_summary["status"] == "passed" else "failed",
+        "employee_code": employee_code,
+        "mismatch_count": len(mismatches),
+        "mismatches": mismatches,
+        "checked_fields": batch_summary["checked_fields"],
+    }
+
+
+def _assert_output_batch_reconciliation_passed(batch: PayrollOutputBatch, *, action_label: str) -> dict[str, Any]:
+    reconciliation = build_payroll_output_reconciliation_summary(batch)
+    if reconciliation["status"] != "passed":
+        mismatch_count = reconciliation["mismatch_count"]
+        missing_count = reconciliation["missing_register_row_count"]
+        raise PayrollOutputError(
+            f"Payroll output reconciliation failed; {action_label} is blocked until "
+            f"{mismatch_count} mismatch(es) and {missing_count} missing register row(s) are resolved."
+        )
+    return reconciliation
+
+
 def _sync_output_batch_summary(batch: PayrollOutputBatch) -> PayrollOutputBatch:
     artifacts = batch.artifacts.all()
     batch.artifact_summary_snapshot = {
@@ -5375,6 +5564,7 @@ def _sync_output_batch_summary(batch: PayrollOutputBatch) -> PayrollOutputBatch:
         "register_count": artifacts.filter(kind=PayrollOutputArtifactKind.REGISTER).count(),
         "published_count": artifacts.filter(status=PayrollOutputArtifactStatus.PUBLISHED).count(),
         "voided_count": artifacts.filter(status=PayrollOutputArtifactStatus.VOIDED).count(),
+        "reconciliation": build_payroll_output_reconciliation_summary(batch),
     }
     batch.save()
     return batch
@@ -5860,12 +6050,31 @@ def generate_payroll_outputs(
             artifact_key = f"payslip:{employee_code}"
             payslip_title = f"Payslip - {first_line.employee}"
             payslip_file_name = f"{review.payroll_run.code}-{employee_code}-payslip.{_artifact_extension(_artifact_mime_type(PayrollOutputArtifactKind.PAYSLIP, profile))}"
+            per_employee_tax_profiles = profile.get("per_employee_tax_sheet_profiles") if isinstance(profile.get("per_employee_tax_sheet_profiles"), dict) else {}
+            employee_tax_profile = per_employee_tax_profiles.get(employee_code) if isinstance(per_employee_tax_profiles.get(employee_code), dict) else {}
             payslip_config = {
                 "artifact_template_ref": profile.get("payslip_template_ref", "payroll.payslip.template.default.v1"),
                 "source_hashes": sorted({line.source_hash for line in employee_lines if line.source_hash}),
             }
-            for profile_key in ["payslip_template_profile", "tax_sheet_profile", "tax_regime", "proof_status_summary"]:
-                if profile_key in profile:
+            for profile_key in [
+                "payslip_template_profile",
+                "tax_sheet_profile",
+                "tax_regime",
+                "proof_status_summary",
+                "taxable_earnings",
+                "taxable_income",
+                "taxable_salary",
+                "taxable_deductions",
+                "tax_deductions",
+                "deductions_under_chapter_vi_a",
+                "projected_annual_tax",
+                "annual_tax_liability",
+                "remaining_annual_tax",
+                "remaining_tax_liability",
+            ]:
+                if profile_key in employee_tax_profile:
+                    payslip_config[profile_key] = employee_tax_profile[profile_key]
+                elif profile_key in profile:
                     payslip_config[profile_key] = profile[profile_key]
             payslip_config = _artifact_config_with_storage(payslip_config, profile)
             PayrollOutputArtifact.objects.create(
@@ -5949,6 +6158,7 @@ def publish_payroll_output_batch(batch: PayrollOutputBatch, *, published_by=None
         raise PayrollOutputError("Only generated payroll output batches can be published.")
     if batch.review.status != PayrollReviewStatus.LOCKED or batch.payroll_run.status != PayrollRunStatus.LOCKED:
         raise PayrollOutputError("Payroll outputs can only be published for final-locked payroll.")
+    _assert_output_batch_reconciliation_passed(batch, action_label="publish")
     publish_time = timezone.now()
     with transaction.atomic():
         for artifact in batch.artifacts.filter(status=PayrollOutputArtifactStatus.GENERATED):
@@ -9312,6 +9522,10 @@ def generate_payroll_finance_handoff(
 
     if batch.status != PayrollOutputBatchStatus.PUBLISHED:
         raise PayrollFinanceHandoffError("Payroll finance handoff requires a published payroll output batch.")
+    try:
+        _assert_output_batch_reconciliation_passed(batch, action_label="finance handoff")
+    except PayrollOutputError as exc:
+        raise PayrollFinanceHandoffError(str(exc)) from exc
 
     profile = _finance_handoff_profile(batch)
     profile_ref = handoff_profile_ref or profile.get("handoff_profile_ref") or "payroll.finance_handoff.profile.default.v1"

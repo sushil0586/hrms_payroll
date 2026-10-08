@@ -178,6 +178,9 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
                     <DetailRow label="Tax regime" value={taxSheet.tax_regime || "As per payroll setup"} />
                     <DetailRow label="This period" value={taxSheet.current_period_tax} />
                     <DetailRow label="Year to date" value={taxSheet.ytd_tax} />
+                    <DetailRow label="Taxable earnings" value={taxSheet.taxable_earnings} />
+                    <DetailRow label="Readiness" value={titleCase(taxSheet.readiness_status || "pending")} />
+                    <DetailRow label="Source hashes" value={String(taxSheet.source_hash_count ?? 0)} />
                     <DetailRow label="Proofs" value={proofSummary || "No proof summary attached"} />
                   </div>
                 ) : (

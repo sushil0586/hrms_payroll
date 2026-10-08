@@ -43,6 +43,7 @@ export default async function TdsEfileReadinessReportPage() {
       <TdsEfileReadinessWorkspace
         artifacts={handoffResult.data.artifacts}
         deliveries={handoffResult.data.deliveries}
+        payslipArtifacts={handoffResult.data.payslip_artifacts}
         statutory={statutoryResult.data}
       />
     </main>

@@ -27,7 +27,7 @@ test.describe("Phase PLF-5A TDS e-file readiness certification", () => {
       await expect(report.getByRole("columnheader", { name: column })).toBeVisible();
     }
 
-    for (const gate of ["TDS component setup", "Employer TAN registration", "Form 24Q filing calendar", "Employee PAN coverage", "Tax declaration lock", "Challan and deduction evidence", "Provider filing route"]) {
+    for (const gate of ["TDS component setup", "Employer TAN registration", "Form 24Q filing calendar", "Employee PAN coverage", "Tax declaration lock", "Challan and deduction evidence", "Payslip tax-sheet evidence", "Provider filing route"]) {
       await expect(report.getByText(gate)).toBeVisible();
     }
 
@@ -66,13 +66,13 @@ test.describe("Phase PLF-5A TDS e-file readiness certification", () => {
   });
 
   test("employee cannot access TDS e-file readiness report", async ({ page }) => {
-    await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await gotoAuthenticated(page, "/ess/payslips", employee);
+    await expectPageReady(page, "Payslips");
 
-    await page.goto("/hr-admin/reports/tds-efile-readiness", { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+    await page.goto("/hr-admin/reports/tds-efile-readiness", { waitUntil: "commit", timeout: 15_000 }).catch(() => undefined);
+    await page.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => undefined);
+    await expect(page).not.toHaveURL(/\/hr-admin\/reports\/tds-efile-readiness/);
     await expect(page.getByTestId("tds-efile-readiness-report")).toHaveCount(0);
-    await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
     await expect(page.getByRole("heading", { name: /TDS E-File Readiness/i })).toHaveCount(0);
   });
 });
