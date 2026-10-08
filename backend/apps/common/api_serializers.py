@@ -4177,6 +4177,21 @@ class HrAdminEmployeeShiftAssignmentResolutionSerializer(serializers.Serializer)
     summary = serializers.CharField()
 
 
+class HrAdminWorkSchedulePreviewRequestSerializer(serializers.Serializer):
+    employee_id = serializers.UUIDField(required=True)
+    start_date = serializers.DateField(required=True)
+    end_date = serializers.DateField(required=True)
+
+    def validate(self, attrs):
+        start_date = attrs.get("start_date")
+        end_date = attrs.get("end_date")
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError({"end_date": "End date must be on or after start date."})
+        if start_date and end_date and (end_date - start_date).days > 92:
+            raise serializers.ValidationError({"end_date": "Schedule previews are limited to 93 calendar days."})
+        return attrs
+
+
 class HrAdminShiftRosterTemplateSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     code = serializers.CharField()

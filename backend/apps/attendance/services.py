@@ -919,6 +919,110 @@ def _resolve_shift_for_employee(employee, *, attendance_date, fallback_shift=Non
     return fallback_shift
 
 
+def resolve_employee_work_day(*, employee, work_date: date, policy: AttendancePolicy | None = None) -> dict:
+    """Resolve the expected schedule context for one employee/date.
+
+    This is the shared schedule-spine contract consumed by leave, attendance,
+    roster preview, and payroll hardening phases. Existing module behavior can
+    migrate to this function incrementally.
+    """
+
+    policy = policy or resolve_attendance_policy_for_employee(employee, as_of=work_date)
+    assignment = _find_matching_employee_shift_assignment(employee=employee, attendance_date=work_date)
+    resolved_assignment = _resolve_shift_from_assignment(assignment, attendance_date=work_date) if assignment else None
+    shift = resolved_assignment["shift"] if resolved_assignment else getattr(policy, "default_shift", None)
+    holiday = _resolve_holiday_for_employee(employee, attendance_date=work_date, policy=policy)
+    weekday_name = work_date.strftime("%A").lower()
+    shift_weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])}
+    default_weekly_off_days = {"saturday", "sunday"}
+    effective_weekly_off_days = shift_weekly_off_days or default_weekly_off_days
+    is_weekly_off = weekday_name in effective_weekly_off_days
+    expected_start_at = None
+    expected_end_at = None
+    expected_hours = "0.00"
+    warnings: list[str] = []
+
+    if shift:
+        start_at, end_at = _shift_window_datetimes(attendance_date=work_date, shift=shift, tz=timezone.get_current_timezone())
+        expected_start_at = start_at.isoformat()
+        expected_end_at = end_at.isoformat()
+        expected_hours = f"{_quantize_hours(getattr(shift, 'working_hours', 0)):.2f}"
+        if not getattr(shift, "is_active", True):
+            warnings.append("Resolved shift is inactive.")
+    else:
+        warnings.append("No shift assignment or attendance-policy default shift resolved.")
+
+    if holiday:
+        day_type = "holiday"
+    elif is_weekly_off:
+        day_type = "weekly_off"
+    elif shift:
+        day_type = "working_day"
+    else:
+        day_type = "unassigned"
+
+    if assignment:
+        resolution_source = f"{assignment.assignment_kind.replace('_', ' ')} shift assignment"
+        weekly_off_source = "shift_assignment"
+    elif shift:
+        resolution_source = "attendance policy default shift"
+        weekly_off_source = "attendance_policy_default_shift"
+    else:
+        resolution_source = "tenant default weekend fallback"
+        weekly_off_source = "default_weekend"
+
+    return {
+        "employee_id": str(employee.id),
+        "employee_code": employee.employee_code,
+        "date": work_date.isoformat(),
+        "day": work_date.strftime("%A"),
+        "day_type": day_type,
+        "shift_id": str(shift.id) if shift else None,
+        "shift_name": shift.name if shift else None,
+        "expected_start_at": expected_start_at,
+        "expected_end_at": expected_end_at,
+        "expected_hours": expected_hours,
+        "weekly_off_source": weekly_off_source,
+        "weekly_off_days": sorted(effective_weekly_off_days),
+        "holiday_id": str(holiday.id) if holiday else None,
+        "holiday_name": holiday.name if holiday else None,
+        "attendance_policy_id": str(policy.id) if policy else None,
+        "attendance_policy_name": policy.name if policy else None,
+        "roster_assignment_id": str(assignment.id) if assignment else None,
+        "roster_pattern_id": None,
+        "assignment_kind": assignment.assignment_kind if assignment else None,
+        "sequence_summary": resolved_assignment["sequence_summary"] if resolved_assignment else (shift.name if shift else None),
+        "override_id": str(assignment.id) if assignment and assignment.assignment_kind == EmployeeShiftAssignmentKind.TEMPORARY_OVERRIDE else None,
+        "leave_request_id": None,
+        "resolution_source": resolution_source,
+        "warnings": warnings,
+    }
+
+
+def resolve_employee_work_schedule(*, employee, start_date: date, end_date: date, policy: AttendancePolicy | None = None) -> dict:
+    """Resolve a date-range schedule for one employee using the shared work-day contract."""
+
+    if end_date < start_date:
+        raise ValueError("end_date must be on or after start_date")
+    days = []
+    pointer = start_date
+    while pointer <= end_date:
+        days.append(resolve_employee_work_day(employee=employee, work_date=pointer, policy=policy))
+        pointer += timedelta(days=1)
+    return {
+        "employee_id": str(employee.id),
+        "employee_code": employee.employee_code,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "day_count": len(days),
+        "working_day_count": sum(1 for item in days if item["day_type"] == "working_day"),
+        "weekly_off_count": sum(1 for item in days if item["day_type"] == "weekly_off"),
+        "holiday_count": sum(1 for item in days if item["day_type"] == "holiday"),
+        "unassigned_count": sum(1 for item in days if item["day_type"] == "unassigned"),
+        "days": days,
+    }
+
+
 def _resolve_holiday_calendar_for_employee(employee, *, attendance_date, policy: AttendancePolicy | None):
     if policy and policy.holiday_calendar_id and policy.holiday_calendar and policy.holiday_calendar.year == attendance_date.year:
         return policy.holiday_calendar

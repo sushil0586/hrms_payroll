@@ -4934,6 +4934,57 @@ def _proof_summary_value(summary: dict[str, Any], key: str) -> int:
         return 0
 
 
+def _payslip_schedule_spine_from_input_snapshot(artifact: PayrollOutputArtifact) -> dict[str, Any]:
+    input_snapshot = getattr(artifact, "input_snapshot", None)
+    attendance_snapshot = getattr(input_snapshot, "attendance_snapshot", None) if input_snapshot else None
+    leave_snapshot = getattr(input_snapshot, "leave_snapshot", None) if input_snapshot else None
+    attendance_spine = attendance_snapshot.get("schedule_spine") if isinstance(attendance_snapshot, dict) else None
+    leave_spine = leave_snapshot.get("schedule_spine") if isinstance(leave_snapshot, dict) else None
+    config = getattr(artifact, "config_snapshot", None)
+    config = config if isinstance(config, dict) else {}
+    if not isinstance(attendance_spine, dict):
+        config_basis = config.get("day_count_basis") if isinstance(config.get("day_count_basis"), dict) else None
+        attendance_spine = config_basis.get("attendance_schedule_spine") if isinstance(config_basis, dict) else config.get("attendance_schedule_spine")
+        leave_spine = config_basis.get("leave_schedule_spine") if isinstance(config_basis, dict) else config.get("leave_schedule_spine")
+
+    if not isinstance(attendance_spine, dict):
+        return {
+            "available": False,
+            "readiness_status": "not_available",
+            "readiness_warnings": ["Payroll input snapshot does not include schedule-spine day-count evidence."],
+            "source": "not_available",
+            "schema_ref": "",
+            "calendar_days": 0,
+            "working_days": 0,
+            "weekly_off_days": 0,
+            "holiday_days": 0,
+            "non_working_days": 0,
+            "payable_schedule_days": 0,
+            "leave_working_days": 0,
+            "leave_non_working_days": 0,
+            "days": [],
+        }
+
+    warnings = [str(item) for item in attendance_spine.get("warnings", []) if item]
+    days = attendance_spine.get("days") if isinstance(attendance_spine.get("days"), list) else []
+    return {
+        "available": True,
+        "readiness_status": "ready" if not warnings else "warning",
+        "readiness_warnings": warnings,
+        "source": str(attendance_spine.get("source") or "schedule_spine"),
+        "schema_ref": str(attendance_spine.get("schema_ref") or ""),
+        "calendar_days": int(attendance_spine.get("calendar_days") or 0),
+        "working_days": int(attendance_spine.get("working_days") or 0),
+        "weekly_off_days": int(attendance_spine.get("weekly_off_days") or 0),
+        "holiday_days": int(attendance_spine.get("holiday_days") or 0),
+        "non_working_days": int(attendance_spine.get("non_working_days") or 0),
+        "payable_schedule_days": int(attendance_spine.get("payable_schedule_days") or attendance_spine.get("working_days") or 0),
+        "leave_working_days": int(leave_spine.get("working_days") or 0) if isinstance(leave_spine, dict) else 0,
+        "leave_non_working_days": int(leave_spine.get("non_working_days") or 0) if isinstance(leave_spine, dict) else 0,
+        "days": [day for day in days[:31] if isinstance(day, dict)],
+    }
+
+
 def build_payroll_payslip_render_model(artifact: PayrollOutputArtifact) -> dict[str, Any]:
     """Build a deterministic payslip/tax render model from a locked output artifact snapshot."""
 
@@ -5008,6 +5059,7 @@ def build_payroll_payslip_render_model(artifact: PayrollOutputArtifact) -> dict[
         "lines": tax_lines,
         "statutory_lines": statutory_lines,
     }
+    day_count_basis = _payslip_schedule_spine_from_input_snapshot(artifact)
 
     employee = getattr(artifact, "employee", None)
     payroll_run = getattr(artifact, "payroll_run", None)
@@ -5039,10 +5091,12 @@ def build_payroll_payslip_render_model(artifact: PayrollOutputArtifact) -> dict[
         },
         "sections": [sections[key] for key in PAYSLIP_RENDER_SECTION_ORDER],
         "tax_sheet": tax_sheet,
+        "day_count_basis": day_count_basis,
         "quality": {
             "hidden_line_count": hidden_line_count,
             "visible_line_count": sum(len(section["lines"]) for section in sections.values()),
             "has_tax_sheet": tax_sheet["available"],
+            "has_day_count_basis": day_count_basis["available"],
         },
     }
 
@@ -5315,6 +5369,7 @@ def _pdf_payslip_payload(
             )
             commands.extend(table_commands)
     tax_sheet = model["tax_sheet"]
+    day_count_basis = model["day_count_basis"]
     commands.extend([
         _pdf_text_line(178, "Tax sheet", size=12, x=48),
         _pdf_rect(48, 96, 492, 68),
@@ -5326,6 +5381,8 @@ def _pdf_payslip_payload(
         _pdf_text_line(130, f"Statutory lines: {tax_sheet['statutory_line_count']}", size=9, x=310),
         _pdf_text_line(114, f"Source hashes: {tax_sheet['source_hash_count']}", size=9, x=310),
         _pdf_text_line(98, f"Hidden lines excluded: {model['quality']['hidden_line_count']}", size=9, x=310),
+        _pdf_text_line(82, f"Day-count basis: {day_count_basis['source']}", size=8, x=60),
+        _pdf_text_line(82, f"Working/weekly off/holiday: {day_count_basis['working_days']}/{day_count_basis['weekly_off_days']}/{day_count_basis['holiday_days']}", size=8, x=310),
         _pdf_text_line(76, f"Source hash: {model['source_hash'][:24] or 'Not available'}", size=8, x=48),
         _pdf_text_line(60, "Generated from locked payroll output. Validate totals against payroll register and tax reports.", size=8, x=48),
         _pdf_line(48, 50, 540, 50),
@@ -6056,6 +6113,22 @@ def generate_payroll_outputs(
                 "artifact_template_ref": profile.get("payslip_template_ref", "payroll.payslip.template.default.v1"),
                 "source_hashes": sorted({line.source_hash for line in employee_lines if line.source_hash}),
             }
+            if first_line.input_snapshot_id:
+                attendance_spine = (
+                    first_line.input_snapshot.attendance_snapshot.get("schedule_spine")
+                    if isinstance(first_line.input_snapshot.attendance_snapshot, dict)
+                    else None
+                )
+                leave_spine = (
+                    first_line.input_snapshot.leave_snapshot.get("schedule_spine")
+                    if isinstance(first_line.input_snapshot.leave_snapshot, dict)
+                    else None
+                )
+                if isinstance(attendance_spine, dict):
+                    payslip_config["day_count_basis"] = {
+                        "attendance_schedule_spine": attendance_spine,
+                        "leave_schedule_spine": leave_spine if isinstance(leave_spine, dict) else {},
+                    }
             for profile_key in [
                 "payslip_template_profile",
                 "tax_sheet_profile",

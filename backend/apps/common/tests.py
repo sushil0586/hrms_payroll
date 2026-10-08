@@ -1,11 +1,15 @@
+from datetime import date
+
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from apps.attendance.models import AttendancePolicy, AttendancePolicyAssignment, AttendancePolicyStatus, EmployeeShiftAssignment, Shift
 from apps.common.selectors import evaluate_saas_commercial_access
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipRole, MembershipStatus, Role, RolePermission, TenantMembership, User
 from apps.leave_management.models import AccrualFrequency, LeaveBalance, LeavePolicy, LeavePolicyAssignment, LeavePolicyStatus, LeaveType
 from apps.organizations.models import Branch, BusinessUnit, Department, LegalEntity, Location
+from apps.payroll.models import PayrollCalendar, PayrollInputSnapshot, PayrollPeriod, PayrollRun
 from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
 
 
@@ -109,6 +113,124 @@ class HrAdminOptionMetadataTests(TestCase):
 
     def test_document_options_include_branch_parent_metadata(self):
         self._assert_branch_metadata("/api/v1/hr-admin/document-options/")
+
+    def test_work_schedule_preview_resolves_roster_weekly_off_and_policy_holiday_context(self):
+        employee = Employee.objects.get(employee_code="EMP-0001")
+        shift = Shift.objects.create(
+            tenant=self.tenant,
+            code="retail-shift",
+            name="Retail Shift",
+            start_time="10:00",
+            end_time="19:00",
+            working_hours="8.00",
+            weekly_off_days=["wednesday", "thursday"],
+        )
+        policy = AttendancePolicy.objects.create(
+            tenant=self.tenant,
+            code="resolver-policy",
+            name="Resolver Policy",
+            status=AttendancePolicyStatus.ACTIVE,
+            default_shift=shift,
+        )
+        AttendancePolicyAssignment.objects.create(tenant=self.tenant, attendance_policy=policy, employee=employee, priority=10)
+        EmployeeShiftAssignment.objects.create(
+            tenant=self.tenant,
+            employee=employee,
+            shift=shift,
+            effective_from=date(2026, 10, 1),
+            is_primary=True,
+        )
+
+        response = self.client.get(
+            "/api/v1/hr-admin/work-schedule-preview/",
+            {"employee_id": str(employee.id), "start_date": "2026-10-07", "end_date": "2026-10-09"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["day_count"], 3)
+        self.assertEqual(payload["weekly_off_count"], 2)
+        self.assertEqual(payload["working_day_count"], 1)
+        self.assertEqual([day["day_type"] for day in payload["days"]], ["weekly_off", "weekly_off", "working_day"])
+        self.assertEqual(payload["days"][0]["weekly_off_source"], "shift_assignment")
+        self.assertEqual(payload["days"][2]["shift_name"], "Retail Shift")
+
+    def test_payroll_input_snapshot_carries_schedule_spine_counts_from_employee_roster(self):
+        role = self.membership.membership_roles.get(role__code="hr-admin").role
+        RolePermission.objects.create(
+            role=role,
+            permission_key="payroll.inputs.manage",
+            description="Payroll input snapshot write permission.",
+        )
+        employee = Employee.objects.get(employee_code="EMP-0001")
+        shift = Shift.objects.create(
+            tenant=self.tenant,
+            code="payroll-roster-shift",
+            name="Payroll Roster Shift",
+            start_time="10:00",
+            end_time="19:00",
+            working_hours="8.00",
+            weekly_off_days=["monday", "tuesday"],
+        )
+        EmployeeShiftAssignment.objects.create(
+            tenant=self.tenant,
+            employee=employee,
+            shift=shift,
+            effective_from=date(2026, 10, 1),
+            is_primary=True,
+        )
+        calendar = PayrollCalendar.objects.create(
+            tenant=self.tenant,
+            code="monthly-payroll",
+            name="Monthly Payroll",
+            period_start_day=1,
+        )
+        period = PayrollPeriod.objects.create(
+            tenant=self.tenant,
+            calendar=calendar,
+            code="nov-2026",
+            name="November 2026",
+            start_date=date(2026, 10, 31),
+            end_date=date(2026, 11, 3),
+            pay_date=date(2026, 11, 30),
+        )
+        payroll_run = PayrollRun.objects.create(
+            tenant=self.tenant,
+            period=period,
+            code="nov-2026-run",
+            name="November 2026 Run",
+        )
+
+        response = self.client.post(
+            "/api/v1/hr-admin/payroll-input-snapshots/",
+            {
+                "payroll_run_id": str(payroll_run.id),
+                "employee_id": str(employee.id),
+                "snapshot_status": "ready",
+                "attendance_snapshot": {"source": "manual"},
+                "leave_snapshot": {"source": "manual"},
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        snapshot = PayrollInputSnapshot.objects.get(id=response.json()["id"])
+        attendance_spine = snapshot.attendance_snapshot["schedule_spine"]
+        leave_spine = snapshot.leave_snapshot["schedule_spine"]
+        self.assertEqual(attendance_spine["calendar_days"], 4)
+        self.assertEqual(attendance_spine["working_days"], 2)
+        self.assertEqual(attendance_spine["weekly_off_days"], 2)
+        self.assertEqual(attendance_spine["non_working_days"], 2)
+        self.assertEqual(leave_spine["working_days"], 2)
+        self.assertEqual(
+            [(item["date"], item["day_type"], item["shift_name"], item["weekly_off_source"]) for item in attendance_spine["days"]],
+            [
+                ("2026-10-31", "working_day", "Payroll Roster Shift", "shift_assignment"),
+                ("2026-11-01", "working_day", "Payroll Roster Shift", "shift_assignment"),
+                ("2026-11-02", "weekly_off", "Payroll Roster Shift", "shift_assignment"),
+                ("2026-11-03", "weekly_off", "Payroll Roster Shift", "shift_assignment"),
+            ],
+        )
 
     def test_payroll_setup_viewer_can_load_finance_handoff_context_for_provider_workspace(self):
         role = self.membership.membership_roles.get(role__code="hr-admin").role

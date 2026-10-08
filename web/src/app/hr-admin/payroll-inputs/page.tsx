@@ -79,6 +79,42 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
 }
 
+type PayrollScheduleSpineDay = {
+  date?: string;
+  day?: string;
+  day_type?: string;
+  shift_name?: string | null;
+  resolution_source?: string | null;
+};
+
+type PayrollScheduleSpine = {
+  schema_ref?: string;
+  source?: string;
+  calendar_days?: number;
+  working_days?: number;
+  weekly_off_days?: number;
+  holiday_days?: number;
+  unassigned_days?: number;
+  non_working_days?: number;
+  payable_schedule_days?: number;
+  days?: PayrollScheduleSpineDay[];
+};
+
+function getScheduleSpine(snapshot: Record<string, unknown>): PayrollScheduleSpine | null {
+  const spine = snapshot.schedule_spine;
+  if (!spine || typeof spine !== "object" || Array.isArray(spine)) {
+    return null;
+  }
+  return spine as PayrollScheduleSpine;
+}
+
+function metricValue(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return "0";
+  }
+  return String(value);
+}
+
 function PaginationControls({
   ariaLabel,
   currentParams,
@@ -122,7 +158,7 @@ function PaginationControls({
 }
 
 function CompactSnapshotRows({ snapshot }: { snapshot: Record<string, unknown> }) {
-  const entries = Object.entries(snapshot).slice(0, 4);
+  const entries = Object.entries(snapshot).filter(([key]) => key !== "schedule_spine").slice(0, 4);
   if (!entries.length) {
     return <span className="muted">Empty snapshot</span>;
   }
@@ -209,6 +245,9 @@ function SnapshotCard({
   snapshot: HrAdminPayrollInputSnapshot;
 }) {
   const issueCount = snapshot.blockers.length + snapshot.warnings.length;
+  const scheduleSpine = getScheduleSpine(snapshot.attendance_snapshot);
+  const workingDays = scheduleSpine?.working_days ?? snapshot.attendance_snapshot.working_days ?? 0;
+  const presentDays = snapshot.attendance_snapshot.present_days ?? workingDays;
 
   return (
     <article className={`payroll-input-snapshot-card ${selected ? "is-selected" : ""}`}>
@@ -221,7 +260,8 @@ function SnapshotCard({
       </div>
       <div className="payroll-input-snapshot-card__meta">
         <span><strong>Salary</strong>{snapshot.salary_structure_name || "Missing"}</span>
-        <span><strong>Attendance</strong>{String(snapshot.attendance_snapshot.present_days ?? 0)}/{String(snapshot.attendance_snapshot.working_days ?? 0)}</span>
+        <span><strong>Attendance</strong>{String(presentDays)}/{String(workingDays)}</span>
+        {scheduleSpine ? <span><strong>Weekly offs</strong>{metricValue(scheduleSpine.weekly_off_days)}</span> : null}
         <span><strong>Issues</strong>{issueCount}</span>
       </div>
       <div className="payroll-input-snapshot-card__footer">
@@ -252,6 +292,8 @@ function SnapshotDetail({ snapshot }: { snapshot: HrAdminPayrollInputSnapshot | 
   }
 
   const issueList = [...snapshot.blockers, ...snapshot.warnings];
+  const attendanceSpine = getScheduleSpine(snapshot.attendance_snapshot);
+  const leaveSpine = getScheduleSpine(snapshot.leave_snapshot);
   const sourceFamilies = [
     { label: "Employee", snapshot: snapshot.employee_snapshot },
     { label: "Organization", snapshot: snapshot.organization_snapshot },
@@ -285,6 +327,43 @@ function SnapshotDetail({ snapshot }: { snapshot: HrAdminPayrollInputSnapshot | 
         <span className="workspace-card__eyebrow">Source hash</span>
         <code>{snapshot.source_hash}</code>
       </div>
+
+      {attendanceSpine ? (
+        <section className="workspace-card workspace-card--compact">
+          <div className="workspace-card__header">
+            <div>
+              <span className="workspace-card__eyebrow">Schedule spine</span>
+              <h3 className="section-heading-soft">Payroll day-count basis</h3>
+              <p className="section-copy section-copy-soft">These counts come from the same roster, holiday, and shift resolver used by leave and attendance.</p>
+            </div>
+          </div>
+          <div className="metric-grid metric-grid--compact">
+            <div className="metric-card"><span className="metric-label">Calendar days</span><strong>{metricValue(attendanceSpine.calendar_days)}</strong><span className="metric-trend">Payroll period</span></div>
+            <div className="metric-card"><span className="metric-label">Working days</span><strong>{metricValue(attendanceSpine.working_days)}</strong><span className="metric-trend">Formula-ready</span></div>
+            <div className="metric-card"><span className="metric-label">Weekly offs</span><strong>{metricValue(attendanceSpine.weekly_off_days)}</strong><span className="metric-trend">Roster resolved</span></div>
+            <div className="metric-card"><span className="metric-label">Holidays</span><strong>{metricValue(attendanceSpine.holiday_days)}</strong><span className="metric-trend">Policy calendar</span></div>
+          </div>
+          <div className="detail-grid">
+            <div className="detail-row"><span className="detail-label">Non-working days</span><span className="detail-value">{metricValue(attendanceSpine.non_working_days)}</span></div>
+            <div className="detail-row"><span className="detail-label">Payable schedule days</span><span className="detail-value">{metricValue(attendanceSpine.payable_schedule_days ?? attendanceSpine.working_days)}</span></div>
+            <div className="detail-row"><span className="detail-label">Leave summary</span><span className="detail-value">{leaveSpine ? `${metricValue(leaveSpine.working_days)} working / ${metricValue(leaveSpine.non_working_days)} non-working` : "Not captured"}</span></div>
+            <div className="detail-row"><span className="detail-label">Source</span><span className="detail-value">{attendanceSpine.source || "schedule resolver"}</span></div>
+          </div>
+          {attendanceSpine.days?.length ? (
+            <details className="policy-advanced-section">
+              <summary>Daily schedule evidence</summary>
+              <div className="detail-grid">
+                {attendanceSpine.days.slice(0, 31).map((day) => (
+                  <div className="detail-row" key={day.date}>
+                    <span className="detail-label">{day.date} / {day.day}</span>
+                    <span className="detail-value">{titleCase(day.day_type || "unknown")} / {day.shift_name || "No shift"} / {day.resolution_source || "No source"}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="payroll-issue-stack">
         {issueList.length ? (

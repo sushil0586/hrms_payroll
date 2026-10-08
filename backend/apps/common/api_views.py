@@ -40,6 +40,7 @@ from apps.common.api_serializers import (
     HrAdminEmployeeShiftAssignmentConflictSerializer,
     HrAdminEmployeeShiftAssignmentResolutionRequestSerializer,
     HrAdminEmployeeShiftAssignmentResolutionSerializer,
+    HrAdminWorkSchedulePreviewRequestSerializer,
     HrAdminShiftRosterTemplateSerializer,
     HrAdminShiftRosterTemplateWriteSerializer,
     HrAdminShiftRosterTemplateRolloutRequestSerializer,
@@ -519,6 +520,7 @@ from apps.attendance.services import (
     refresh_attendance_records_for_employee,
     refresh_attendance_records_for_tenant,
     get_shift_roster_rollout_employee_queryset,
+    resolve_employee_work_schedule,
     resolve_regularization,
     submit_regularization,
 )
@@ -10222,6 +10224,42 @@ def save_hr_admin_payroll_run(actor, validated_data, *, item=None):
     return item
 
 
+def build_payroll_schedule_spine_snapshot(*, employee: Employee, period_start: date, period_end: date) -> dict:
+    schedule = resolve_employee_work_schedule(employee=employee, start_date=period_start, end_date=period_end)
+    days = schedule["days"]
+    return {
+        "schema_ref": "payroll.schedule_spine.v1",
+        "source": "attendance.resolve_employee_work_schedule",
+        "period_start": schedule["start_date"],
+        "period_end": schedule["end_date"],
+        "calendar_days": schedule["day_count"],
+        "working_days": schedule["working_day_count"],
+        "weekly_off_days": schedule["weekly_off_count"],
+        "holiday_days": schedule["holiday_count"],
+        "unassigned_days": schedule["unassigned_count"],
+        "payable_schedule_days": schedule["working_day_count"],
+        "non_working_days": schedule["weekly_off_count"] + schedule["holiday_count"],
+        "days": [
+            {
+                "date": item["date"],
+                "day": item["day"],
+                "day_type": item["day_type"],
+                "shift_id": item["shift_id"],
+                "shift_name": item["shift_name"],
+                "attendance_policy_id": item["attendance_policy_id"],
+                "attendance_policy_name": item["attendance_policy_name"],
+                "holiday_id": item["holiday_id"],
+                "holiday_name": item["holiday_name"],
+                "weekly_off_source": item["weekly_off_source"],
+                "assignment_kind": item["assignment_kind"],
+                "roster_assignment_id": item["roster_assignment_id"],
+                "resolution_source": item["resolution_source"],
+            }
+            for item in days
+        ],
+    }
+
+
 def save_hr_admin_payroll_input_snapshot(actor, validated_data, *, item=None):
     if item is None:
         item = PayrollInputSnapshot(tenant=actor.tenant)
@@ -10268,6 +10306,31 @@ def save_hr_admin_payroll_input_snapshot(actor, validated_data, *, item=None):
         raise serializers.ValidationError({"payroll_run_id": "This field is required."})
     if item.employee_id is None:
         raise serializers.ValidationError({"employee_id": "This field is required."})
+    if item.payroll_run_id and item.employee_id:
+        schedule_spine = build_payroll_schedule_spine_snapshot(
+            employee=item.employee,
+            period_start=item.payroll_run.period.start_date,
+            period_end=item.payroll_run.period.end_date,
+        )
+        item.attendance_snapshot = {
+            **(item.attendance_snapshot if isinstance(item.attendance_snapshot, dict) else {}),
+            "schedule_spine": schedule_spine,
+        }
+        item.leave_snapshot = {
+            **(item.leave_snapshot if isinstance(item.leave_snapshot, dict) else {}),
+            "schedule_spine": {
+                "schema_ref": schedule_spine["schema_ref"],
+                "source": schedule_spine["source"],
+                "period_start": schedule_spine["period_start"],
+                "period_end": schedule_spine["period_end"],
+                "calendar_days": schedule_spine["calendar_days"],
+                "working_days": schedule_spine["working_days"],
+                "weekly_off_days": schedule_spine["weekly_off_days"],
+                "holiday_days": schedule_spine["holiday_days"],
+                "unassigned_days": schedule_spine["unassigned_days"],
+                "non_working_days": schedule_spine["non_working_days"],
+            },
+        }
     item.save()
     return item
 
@@ -16250,6 +16313,25 @@ class HrAdminEmployeeShiftAssignmentResolutionView(HrAdminContextMixin, APIView)
             end_date=serializer.validated_data.get("end_date"),
         )
         return response.Response(HrAdminEmployeeShiftAssignmentResolutionSerializer(payload).data)
+
+
+class HrAdminWorkSchedulePreviewView(HrAdminContextMixin, APIView):
+    def get(self, request):
+        employee = self.get_employee()
+        if not employee:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(employee.tenant, "attendance.view")
+        serializer = HrAdminWorkSchedulePreviewRequestSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        target_employee = Employee.objects.filter(tenant=employee.tenant, id=serializer.validated_data["employee_id"]).first()
+        if not target_employee:
+            return response.Response({"employee_id": ["Employee not found."]}, status=status.HTTP_400_BAD_REQUEST)
+        payload = resolve_employee_work_schedule(
+            employee=target_employee,
+            start_date=serializer.validated_data["start_date"],
+            end_date=serializer.validated_data["end_date"],
+        )
+        return response.Response(payload)
 
 
 class HrAdminShiftRosterTemplateListCreateView(HrAdminContextMixin, APIView):

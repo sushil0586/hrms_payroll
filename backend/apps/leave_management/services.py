@@ -1083,23 +1083,20 @@ def _find_leave_policy_from_employee_balance(employee, leave_type, *, as_of: dat
 
 
 def _is_working_leave_date(*, employee, target_date: date) -> bool:
-    from apps.attendance.services import (
-        _resolve_holiday_for_employee,
-        _resolve_shift_for_employee,
-        resolve_attendance_policy_for_employee,
-    )
+    from apps.attendance.services import resolve_employee_work_day
 
-    attendance_policy = resolve_attendance_policy_for_employee(employee, as_of=target_date)
-    holiday = _resolve_holiday_for_employee(employee, attendance_date=target_date, policy=attendance_policy)
-    if holiday:
+    schedule_day = resolve_employee_work_day(employee=employee, work_date=target_date)
+    return _is_schedule_day_working_for_leave(schedule_day)
+
+
+def _is_schedule_day_working_for_leave(schedule_day: dict) -> bool:
+    if schedule_day.get("day_type") == "working_day":
+        return True
+    if schedule_day.get("day_type") != "unassigned":
         return False
-    shift = _resolve_shift_for_employee(
-        employee,
-        attendance_date=target_date,
-        fallback_shift=getattr(attendance_policy, "default_shift", None),
-    )
-    weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])} or DEFAULT_WEEKLY_OFF_DAYS
-    return target_date.strftime("%A").lower() not in weekly_off_days
+    day_name = str(schedule_day.get("day") or "").lower()
+    weekly_off_days = {str(day).lower() for day in (schedule_day.get("weekly_off_days") or DEFAULT_WEEKLY_OFF_DAYS)}
+    return day_name not in weekly_off_days
 
 
 def _calculate_requested_units(
@@ -1122,11 +1119,10 @@ def _calculate_requested_units(
             if end_day_portion != LeaveDayPortion.FULL_DAY:
                 units -= Decimal("0.5")
             return max(units, Decimal("0.5")).quantize(Decimal("0.01"))
-        counted_dates = [
-            start_date + timedelta(days=offset)
-            for offset in range(total_days)
-            if _is_working_leave_date(employee=employee, target_date=start_date + timedelta(days=offset))
-        ]
+        from apps.attendance.services import resolve_employee_work_schedule
+
+        schedule = resolve_employee_work_schedule(employee=employee, start_date=start_date, end_date=end_date)
+        counted_dates = [date.fromisoformat(item["date"]) for item in schedule["days"] if _is_schedule_day_working_for_leave(item)]
         if not counted_dates:
             return Decimal("0.00")
         units = Decimal(len(counted_dates))
@@ -1157,29 +1153,21 @@ def calculate_leave_request_unit_breakdown(
 ) -> dict:
     """Returns the auditable day-count basis used for leave-unit calculation."""
 
-    from apps.attendance.services import (
-        _resolve_holiday_for_employee,
-        _resolve_shift_for_employee,
-        resolve_attendance_policy_for_employee,
-    )
-
     total_days = (end_date - start_date).days + 1
     count_calendar_days = not (employee and leave_policy and not leave_policy.allow_weekend_holiday_overlap)
     sandwich_rule_applied = bool(employee and leave_policy and not leave_policy.allow_weekend_holiday_overlap and leave_policy.sandwich_rule_enabled)
     rows: list[dict] = []
     requested_units = Decimal("0.00")
+    schedule_by_date: dict[str, dict] = {}
+    if employee:
+        from apps.attendance.services import resolve_employee_work_schedule
+
+        schedule = resolve_employee_work_schedule(employee=employee, start_date=start_date, end_date=end_date)
+        schedule_by_date = {item["date"]: item for item in schedule["days"]}
 
     for offset in range(total_days):
         target_date = start_date + timedelta(days=offset)
-        attendance_policy = resolve_attendance_policy_for_employee(employee, as_of=target_date) if employee else None
-        holiday = _resolve_holiday_for_employee(employee, attendance_date=target_date, policy=attendance_policy) if employee else None
-        shift = _resolve_shift_for_employee(
-            employee,
-            attendance_date=target_date,
-            fallback_shift=getattr(attendance_policy, "default_shift", None),
-        ) if employee else None
-        weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])} or DEFAULT_WEEKLY_OFF_DAYS
-        is_weekly_off = target_date.strftime("%A").lower() in weekly_off_days
+        schedule_day = schedule_by_date.get(target_date.isoformat(), {})
 
         if count_calendar_days:
             counted = True
@@ -1187,15 +1175,18 @@ def calculate_leave_request_unit_breakdown(
         elif sandwich_rule_applied:
             counted = True
             reason = "sandwich_rule"
-        elif holiday:
+        elif schedule_day.get("day_type") == "holiday":
             counted = False
             reason = "holiday"
-        elif is_weekly_off:
+        elif schedule_day.get("day_type") == "weekly_off":
             counted = False
             reason = "weekly_off"
-        else:
+        elif _is_schedule_day_working_for_leave(schedule_day):
             counted = True
             reason = "working_day"
+        else:
+            counted = False
+            reason = "unassigned"
 
         units = Decimal("1.00") if counted else Decimal("0.00")
         if counted and target_date == start_date and start_day_portion != LeaveDayPortion.FULL_DAY:
@@ -1211,9 +1202,12 @@ def calculate_leave_request_unit_breakdown(
                 "counted": counted,
                 "units": f"{units.quantize(Decimal('0.01')):.2f}",
                 "reason": reason,
-                "holiday_name": holiday.name if holiday else None,
-                "shift_name": shift.name if shift else None,
-                "attendance_policy_name": attendance_policy.name if attendance_policy else None,
+                "holiday_name": schedule_day.get("holiday_name"),
+                "shift_name": schedule_day.get("shift_name"),
+                "attendance_policy_name": schedule_day.get("attendance_policy_name"),
+                "resolution_source": schedule_day.get("resolution_source"),
+                "weekly_off_source": schedule_day.get("weekly_off_source"),
+                "assignment_kind": schedule_day.get("assignment_kind"),
             }
         )
 

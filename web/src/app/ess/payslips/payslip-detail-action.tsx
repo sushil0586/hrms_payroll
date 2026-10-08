@@ -90,6 +90,7 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
   useEscapeClose(isOpen, () => setIsOpen(false));
   const renderModel = payslip.render_model;
   const taxSheet = renderModel?.tax_sheet;
+  const dayCountBasis = renderModel?.day_count_basis;
   const visibleSections = renderModel?.sections.filter((section) => section.lines.length) ?? [];
   const proofSummary = taxSheet?.proof_status_summary ? Object.entries(taxSheet.proof_status_summary)
     .map(([key, value]) => `${titleCase(key)} ${String(value)}`)
@@ -219,6 +220,22 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
                     <p className="section-copy section-copy-soft">No calculation lines were attached to this payslip.</p>
                   )}
                 </div>
+              </section>
+
+              <section className="ess-payslip-detail-section">
+                <span className="workspace-card__eyebrow">Day-count basis</span>
+                {dayCountBasis?.available ? (
+                  <div className="detail-grid">
+                    <DetailRow label="Source" value={titleCase(dayCountBasis.source || "schedule_spine")} />
+                    <DetailRow label="Calendar days" value={String(dayCountBasis.calendar_days)} />
+                    <DetailRow label="Working days" value={String(dayCountBasis.working_days)} />
+                    <DetailRow label="Weekly offs" value={String(dayCountBasis.weekly_off_days)} />
+                    <DetailRow label="Holidays" value={String(dayCountBasis.holiday_days)} />
+                    <DetailRow label="Readiness" value={titleCase(dayCountBasis.readiness_status || "ready")} />
+                  </div>
+                ) : (
+                  <p className="section-copy section-copy-soft">Payroll has not attached roster and holiday day-count evidence to this payslip yet.</p>
+                )}
               </section>
 
               {renderModel ? (

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import type { HrAdminEmployeeShiftAssignmentResolution, HrAdminOptionItem } from "@/lib/types";
+import type { HrAdminOptionItem, HrAdminWorkScheduleDay, HrAdminWorkSchedulePreview } from "@/lib/types";
 
 type Props = {
   employees: HrAdminOptionItem[];
@@ -27,7 +27,7 @@ export function EmployeeShiftAssignmentGovernancePanel({ employees }: Props) {
   const [endDate, setEndDate] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<HrAdminEmployeeShiftAssignmentResolution | null>(null);
+  const [result, setResult] = useState<HrAdminWorkSchedulePreview | null>(null);
 
   async function handleInspect(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,18 +39,15 @@ export function EmployeeShiftAssignmentGovernancePanel({ employees }: Props) {
     }
     setIsLoading(true);
     try {
-      const response = await fetch("/api/hr-admin/employee-shift-assignments/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employee_id: employeeId,
-          attendance_date: attendanceDate,
-          end_date: endDate || null,
-        }),
+      const query = new URLSearchParams({
+        employee_id: employeeId,
+        start_date: attendanceDate,
+        end_date: endDate || attendanceDate,
       });
-      const payload = (await response.json().catch(() => null)) as HrAdminEmployeeShiftAssignmentResolution | { detail?: string } | null;
-      if (!response.ok || !payload || !("has_resolution" in payload)) {
-        setError((payload && "detail" in payload && payload.detail) || "Unable to inspect shift resolution.");
+      const response = await fetch(`/api/hr-admin/work-schedule-preview?${query.toString()}`, { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as HrAdminWorkSchedulePreview | { detail?: string } | null;
+      if (!response.ok || !payload || !("days" in payload)) {
+        setError((payload && "detail" in payload && payload.detail) || "Unable to inspect work schedule.");
         return;
       }
       setResult(payload);
@@ -61,13 +58,30 @@ export function EmployeeShiftAssignmentGovernancePanel({ employees }: Props) {
     }
   }
 
+  function renderDayLabel(item: HrAdminWorkScheduleDay) {
+    if (item.day_type === "holiday") return `Holiday${item.holiday_name ? `: ${item.holiday_name}` : ""}`;
+    if (item.day_type === "weekly_off") return "Weekly off";
+    if (item.day_type === "working_day") return item.shift_name || "Working day";
+    return "Unassigned";
+  }
+
+  function renderDayDetail(item: HrAdminWorkScheduleDay) {
+    const parts = [
+      item.shift_name,
+      item.assignment_kind ? item.assignment_kind.replace("_", " ") : null,
+      item.attendance_policy_name,
+      item.resolution_source,
+    ].filter(Boolean);
+    return parts.join(" • ") || "No shift, roster, or attendance policy resolved.";
+  }
+
   return (
     <section className="section">
       <div className="workspace-card workspace-card--compact">
         <div className="workspace-card__header">
           <div>
             <h2 className="section-heading-soft">Shift inspector</h2>
-            <p className="section-copy section-copy-soft">Test which shift or rotation resolves for an employee across a date range.</p>
+            <p className="section-copy section-copy-soft">Preview saved roster, weekly-off, holiday, shift, and attendance-policy resolution across a date range.</p>
           </div>
         </div>
         <form className="queue-toolbar panel-card-soft" onSubmit={handleInspect}>
@@ -87,7 +101,7 @@ export function EmployeeShiftAssignmentGovernancePanel({ employees }: Props) {
           </label>
           <div className="queue-toolbar__actions">
             <button className="button button--primary" disabled={isLoading} type="submit">
-              {isLoading ? "Inspecting..." : "Inspect resolution"}
+              {isLoading ? "Inspecting..." : "Preview schedule"}
             </button>
           </div>
         </form>
@@ -98,42 +112,26 @@ export function EmployeeShiftAssignmentGovernancePanel({ employees }: Props) {
           </div>
         ) : null}
         {result ? (
-          <div className="detail-grid">
-            <div className="detail-row">
-              <span className="detail-label">Resolved shift</span>
-              <span className="detail-value">{result.shift_name || "No shift resolved"}</span>
+          <>
+            <div className="metric-grid metric-grid--compact">
+              <div className="metric-card"><span className="metric-label">Calendar days</span><strong>{result.day_count}</strong><span className="metric-trend">{result.start_date} to {result.end_date}</span></div>
+              <div className="metric-card"><span className="metric-label">Working days</span><strong>{result.working_day_count}</strong><span className="metric-trend">Counted for attendance</span></div>
+              <div className="metric-card"><span className="metric-label">Weekly offs</span><strong>{result.weekly_off_count}</strong><span className="metric-trend">From resolved shift/roster</span></div>
+              <div className="metric-card"><span className="metric-label">Holidays</span><strong>{result.holiday_count}</strong><span className="metric-trend">From attendance policy calendar</span></div>
             </div>
-            <div className="detail-row">
-              <span className="detail-label">Winning assignment mode</span>
-              <span className="detail-value">{result.assignment_kind ? result.assignment_kind.replace("_", " ") : "No matched assignment"}</span>
+            <div className="detail-grid">
+              {result.days.map((item) => (
+                <div className="detail-row" key={item.date}>
+                  <span className="detail-label">{item.date} • {item.day}</span>
+                  <span className="detail-value">
+                    <strong>{renderDayLabel(item)}</strong>
+                    <span className="muted"> {renderDayDetail(item)}</span>
+                    {item.warnings.length ? <span className="field-help-text field-help-text--warning">{item.warnings.join(" ")}</span> : null}
+                  </span>
+                </div>
+              ))}
             </div>
-            <div className="detail-row">
-              <span className="detail-label">Coverage window</span>
-              <span className="detail-value">{result.end_date ? `${result.attendance_date} to ${result.end_date}` : result.attendance_date}</span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">Winning scope</span>
-              <span className="detail-value">{result.scope_labels.length ? result.scope_labels.join(" • ") : "No matched shift assignment"}</span>
-            </div>
-            {result.sequence_summary ? (
-              <div className="detail-row">
-                <span className="detail-label">Sequence summary</span>
-                <span className="detail-value">{result.sequence_summary}</span>
-              </div>
-            ) : null}
-            <div className="detail-row">
-              <span className="detail-label">Summary</span>
-              <span className="detail-value">{result.summary}</span>
-            </div>
-            {result.sequence?.length ? (
-              <div className="detail-row">
-                <span className="detail-label">Range preview</span>
-                <span className="detail-value">
-                  {result.sequence.map((item) => `${item.attendance_date}: ${item.shift_name || "No shift"} (${item.assignment_kind?.replace("_", " ") || "none"})`).join(" • ")}
-                </span>
-              </div>
-            ) : null}
-          </div>
+          </>
         ) : null}
       </div>
     </section>

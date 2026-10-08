@@ -212,7 +212,7 @@ test.describe("HR Admin attendance operations workflow certification", () => {
     await expectPageReady(page, "Shift assignments");
     await expect(page.getByRole("heading", { name: "Shift inspector" })).toBeVisible();
 
-    await page.getByRole("button", { name: "Inspect resolution" }).click();
+    await page.getByRole("button", { name: "Preview schedule" }).click();
     await expect(page.getByText("Choose both an employee and a start date to inspect resolved shift coverage.")).toBeVisible();
 
     const employeeId = await selectFirstAvailableOption(field(page, "Employee"));
@@ -220,29 +220,58 @@ test.describe("HR Admin attendance operations workflow certification", () => {
     await field(page, "Start date").fill("2026-10-06");
     await expectActionFailureThenSuccess(
       page,
-      "**/api/hr-admin/employee-shift-assignments/resolve",
+      "**/api/hr-admin/work-schedule-preview?**",
       async () => {
-        await page.getByRole("button", { name: "Inspect resolution" }).click();
+        await page.getByRole("button", { name: "Preview schedule" }).click();
       },
-      "Shift resolution service is temporarily unavailable.",
+      "Work schedule preview service is temporarily unavailable.",
       async () => {
-        await expect(page.getByText("Playwright Shift")).toBeVisible();
-        await expect(page.getByText("Resolved by Playwright.")).toBeVisible();
+        await expect(page.getByText("Calendar days")).toBeVisible();
+        await expect(page.getByText("Working days")).toBeVisible();
+        await expect(page.getByText("Weekly offs")).toBeVisible();
+        await expect(page.getByText("Holidays")).toBeVisible();
+        await expect(page.getByText("Playwright Shift", { exact: true })).toBeVisible();
+        await expect(page.getByText(/Playwright Attendance Policy/)).toBeVisible();
+        await expect(page.getByText(/weekly rotation shift assignment/)).toBeVisible();
       },
       {
-        has_resolution: true,
         employee_id: employeeId,
-        employee_name: "Playwright Employee",
-        attendance_date: "2026-10-06",
-        end_date: null,
-        shift_id: "playwright-shift",
-        shift_name: "Playwright Shift",
-        assignment_id: "playwright-assignment",
-        assignment_kind: "employee_override",
-        scope_labels: ["Employee override"],
-        sequence_summary: null,
-        sequence: [],
-        summary: "Resolved by Playwright.",
+        employee_code: "PW-001",
+        start_date: "2026-10-06",
+        end_date: "2026-10-06",
+        day_count: 1,
+        working_day_count: 1,
+        weekly_off_count: 0,
+        holiday_count: 0,
+        unassigned_count: 0,
+        days: [
+          {
+            employee_id: employeeId,
+            employee_code: "PW-001",
+            date: "2026-10-06",
+            day: "Tuesday",
+            day_type: "working_day",
+            shift_id: "playwright-shift",
+            shift_name: "Playwright Shift",
+            expected_start_at: "2026-10-06T09:00:00+05:30",
+            expected_end_at: "2026-10-06T18:00:00+05:30",
+            expected_hours: "8.00",
+            weekly_off_source: "shift_assignment",
+            weekly_off_days: ["saturday", "sunday"],
+            holiday_id: null,
+            holiday_name: null,
+            attendance_policy_id: "playwright-policy",
+            attendance_policy_name: "Playwright Attendance Policy",
+            roster_assignment_id: "playwright-assignment",
+            roster_pattern_id: null,
+            assignment_kind: "weekly_rotation",
+            sequence_summary: "Playwright Shift",
+            override_id: null,
+            leave_request_id: null,
+            resolution_source: "weekly rotation shift assignment",
+            warnings: [],
+          },
+        ],
       },
     );
 
@@ -313,9 +342,7 @@ test.describe("HR Admin attendance operations workflow certification", () => {
       page.request.post("/api/hr-admin/attendance-regularizations/00000000-0000-4000-8000-000000000000/approve", {
         data: { comment: "RBAC denial proof" },
       }),
-      page.request.post("/api/hr-admin/employee-shift-assignments/resolve", {
-        data: { employee_id: "00000000-0000-4000-8000-000000000000", attendance_date: "2026-10-06" },
-      }),
+      page.request.get("/api/hr-admin/work-schedule-preview/?employee_id=00000000-0000-4000-8000-000000000000&start_date=2026-10-06&end_date=2026-10-06"),
       page.request.post("/api/hr-admin/shift-roster-templates/rollout", {
         data: {
           template_id: "00000000-0000-4000-8000-000000000000",

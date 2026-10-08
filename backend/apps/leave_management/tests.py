@@ -6,7 +6,17 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.attendance.models import AttendancePolicy, AttendancePolicyAssignment, AttendancePolicyStatus, Holiday, HolidayCalendar, HolidayType, Shift
+from apps.attendance.models import (
+    AttendancePolicy,
+    AttendancePolicyAssignment,
+    AttendancePolicyStatus,
+    EmployeeShiftAssignment,
+    EmployeeShiftAssignmentKind,
+    Holiday,
+    HolidayCalendar,
+    HolidayType,
+    Shift,
+)
 from apps.common.api_views import save_hr_admin_leave_policy_assignment
 from apps.common.selectors import get_employee_leave_requests, get_manager_pending_leave_requests
 from apps.employees.models import Employee, EmploymentStatus
@@ -547,6 +557,59 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
                 ("2026-11-02", "Monday", True, "working_day", "1.00"),
                 ("2026-11-03", "Tuesday", False, "weekly_off", "0.00"),
                 ("2026-11-04", "Wednesday", False, "weekly_off", "0.00"),
+            ],
+        )
+
+    def test_leave_units_follow_employee_shift_assignment_over_policy_default_shift(self):
+        roster_shift = Shift.objects.create(
+            tenant=self.tenant,
+            code="employee-roster-shift",
+            name="Employee Roster Shift",
+            start_time=time(10, 0),
+            end_time=time(19, 0),
+            working_hours="8.00",
+            weekly_off_days=["monday", "tuesday"],
+        )
+        EmployeeShiftAssignment.objects.create(
+            tenant=self.tenant,
+            employee=self.employee,
+            shift=roster_shift,
+            assignment_kind=EmployeeShiftAssignmentKind.FIXED,
+            effective_from=date(2026, 10, 1),
+            is_primary=True,
+        )
+
+        leave_request = submit_leave_request(
+            employee=self.employee,
+            leave_type=self.leave_type,
+            start_date=date(2026, 10, 31),
+            end_date=date(2026, 11, 3),
+            start_day_portion="full_day",
+            end_day_portion="full_day",
+            reason="Employee-specific roster",
+        )
+
+        self.assertEqual(leave_request.requested_units, 2)
+        breakdown = leave_request.metadata["unit_breakdown"]
+        self.assertEqual(breakdown["requested_units"], "2.00")
+        self.assertEqual(
+            [
+                (
+                    item["date"],
+                    item["day"],
+                    item["counted"],
+                    item["reason"],
+                    item["shift_name"],
+                    item["weekly_off_source"],
+                    item["assignment_kind"],
+                )
+                for item in breakdown["days"]
+            ],
+            [
+                ("2026-10-31", "Saturday", True, "working_day", "Employee Roster Shift", "shift_assignment", "fixed"),
+                ("2026-11-01", "Sunday", True, "working_day", "Employee Roster Shift", "shift_assignment", "fixed"),
+                ("2026-11-02", "Monday", False, "weekly_off", "Employee Roster Shift", "shift_assignment", "fixed"),
+                ("2026-11-03", "Tuesday", False, "weekly_off", "Employee Roster Shift", "shift_assignment", "fixed"),
             ],
         )
 

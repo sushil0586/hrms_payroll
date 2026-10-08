@@ -12,6 +12,8 @@ from apps.attendance.models import (
     AttendanceRecord,
     AttendanceSource,
     AttendanceStatus,
+    EmployeeShiftAssignment,
+    EmployeeShiftAssignmentKind,
     Holiday,
     HolidayCalendar,
     HolidayType,
@@ -22,6 +24,8 @@ from apps.attendance.services import (
     evaluate_attendance_runtime,
     preview_attendance_policy_assignment_conflicts,
     preview_attendance_policy_assignment_resolution,
+    resolve_employee_work_day,
+    resolve_employee_work_schedule,
     submit_regularization,
 )
 from apps.common.selectors import get_employee_attendance_regularizations, get_manager_pending_attendance_regularizations
@@ -433,6 +437,127 @@ class AttendancePolicyAssignmentConflictTests(TestCase):
         self.assertEqual(runtime["early_exit_minutes"], 0)
         self.assertEqual(runtime["work_duration_hours"], Decimal("8.67"))
         self.assertEqual(runtime["overtime_hours"], Decimal("0.17"))
+
+    def test_work_day_resolver_uses_policy_default_shift_and_custom_weekly_off(self):
+        shift = Shift.objects.create(
+            tenant=self.tenant,
+            code="retail",
+            name="Retail Shift",
+            start_time=time(11, 0),
+            end_time=time(20, 0),
+            working_hours=Decimal("8.00"),
+            weekly_off_days=["tuesday"],
+            is_active=True,
+        )
+        self.default_policy.default_shift = shift
+        self.default_policy.save(update_fields=["default_shift", "updated_at"])
+        AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.default_policy,
+            priority=100,
+            is_active=True,
+        )
+
+        sunday = resolve_employee_work_day(employee=self.employee, work_date=date(2027, 1, 3))
+        tuesday = resolve_employee_work_day(employee=self.employee, work_date=date(2027, 1, 5))
+
+        self.assertEqual(sunday["day_type"], "working_day")
+        self.assertEqual(sunday["shift_name"], "Retail Shift")
+        self.assertEqual(sunday["resolution_source"], "attendance policy default shift")
+        self.assertEqual(tuesday["day_type"], "weekly_off")
+        self.assertEqual(tuesday["weekly_off_source"], "attendance_policy_default_shift")
+
+    def test_work_schedule_resolver_follows_weekly_rotation_assignment(self):
+        morning = Shift.objects.create(
+            tenant=self.tenant,
+            code="morning",
+            name="Morning Shift",
+            start_time=time(6, 0),
+            end_time=time(14, 0),
+            working_hours=Decimal("8.00"),
+            weekly_off_days=[],
+            is_active=True,
+        )
+        evening = Shift.objects.create(
+            tenant=self.tenant,
+            code="evening",
+            name="Evening Shift",
+            start_time=time(14, 0),
+            end_time=time(22, 0),
+            working_hours=Decimal("8.00"),
+            weekly_off_days=[],
+            is_active=True,
+        )
+        assignment = EmployeeShiftAssignment.objects.create(
+            tenant=self.tenant,
+            employee=self.employee,
+            shift=morning,
+            assignment_kind=EmployeeShiftAssignmentKind.WEEKLY_ROTATION,
+            effective_from=date(2027, 1, 4),
+            is_primary=True,
+            config_snapshot={
+                "rotation": {
+                    "anchor_date": "2027-01-04",
+                    "entries": [
+                        {"shift_id": str(morning.id), "span_days": 2},
+                        {"shift_id": str(evening.id), "span_days": 2},
+                    ],
+                }
+            },
+        )
+
+        schedule = resolve_employee_work_schedule(
+            employee=self.employee,
+            start_date=date(2027, 1, 4),
+            end_date=date(2027, 1, 7),
+        )
+
+        self.assertEqual(schedule["working_day_count"], 4)
+        self.assertEqual([item["shift_name"] for item in schedule["days"]], ["Morning Shift", "Morning Shift", "Evening Shift", "Evening Shift"])
+        self.assertEqual(schedule["days"][2]["roster_assignment_id"], str(assignment.id))
+        self.assertEqual(schedule["days"][2]["assignment_kind"], EmployeeShiftAssignmentKind.WEEKLY_ROTATION)
+        self.assertIn("Morning Shift (2d) -> Evening Shift (2d)", schedule["days"][2]["sequence_summary"])
+
+    def test_work_day_resolver_marks_holiday_before_shift_working_day(self):
+        shift = Shift.objects.create(
+            tenant=self.tenant,
+            code="general-resolver",
+            name="General Resolver Shift",
+            start_time=time(10, 0),
+            end_time=time(18, 0),
+            working_hours=Decimal("8.00"),
+            weekly_off_days=["sunday"],
+            is_active=True,
+        )
+        calendar = HolidayCalendar.objects.create(
+            tenant=self.tenant,
+            code="resolver-holidays",
+            name="Resolver Holidays",
+            year=2027,
+            is_active=True,
+        )
+        holiday = Holiday.objects.create(
+            calendar=calendar,
+            date=date(2027, 1, 4),
+            name="Factory Holiday",
+            holiday_type=HolidayType.COMPULSORY,
+        )
+        self.default_policy.default_shift = shift
+        self.default_policy.holiday_calendar = calendar
+        self.default_policy.save(update_fields=["default_shift", "holiday_calendar", "updated_at"])
+        AttendancePolicyAssignment.objects.create(
+            tenant=self.tenant,
+            attendance_policy=self.default_policy,
+            priority=100,
+            is_active=True,
+        )
+
+        resolved = resolve_employee_work_day(employee=self.employee, work_date=date(2027, 1, 4))
+
+        self.assertEqual(resolved["day_type"], "holiday")
+        self.assertEqual(resolved["holiday_id"], str(holiday.id))
+        self.assertEqual(resolved["shift_name"], "General Resolver Shift")
+        self.assertEqual(resolved["expected_hours"], "8.00")
 
 
 class AttendanceRegularizationApprovalTrackTests(TestCase):

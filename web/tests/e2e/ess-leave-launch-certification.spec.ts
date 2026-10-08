@@ -19,10 +19,11 @@ type ShiftItem = {
   weekly_off_days: string[];
 };
 
-type ShiftResolution = {
-  has_resolution: boolean;
-  shift_id: string | null;
-  shift_name: string | null;
+type WorkSchedulePreview = {
+  days: Array<{
+    shift_id: string | null;
+    shift_name: string | null;
+  }>;
 };
 
 type LeaveSubmission = {
@@ -272,21 +273,18 @@ test.describe("ESS Leave launch certification", () => {
       return;
     }
 
-    const resolutionResponse = await page.request.post("/api/hr-admin/employee-shift-assignments/resolve", {
-      data: {
-        employee_id: employeeRecord.id,
-        attendance_date: startDate,
-        end_date: endDate,
-      },
-    });
-    const resolution = (await resolutionResponse.json().catch(() => ({}))) as ShiftResolution;
+    const resolutionResponse = await page.request.get(
+      `/api/hr-admin/work-schedule-preview/?employee_id=${employeeRecord.id}&start_date=${startDate}&end_date=${endDate}`,
+    );
+    const resolution = (await resolutionResponse.json().catch(() => ({}))) as WorkSchedulePreview;
     expect(
       resolutionResponse.ok(),
-      `Shift resolution should be available: ${resolutionResponse.status()} ${JSON.stringify(resolution)}`,
+      `Work schedule preview should be available: ${resolutionResponse.status()} ${JSON.stringify(resolution)}`,
     ).toBeTruthy();
 
     const shifts = await apiJson<ShiftItem[]>(page, "/api/hr-admin/shifts");
-    const originalShift = shifts.find((item) => item.id === resolution.shift_id) ?? shifts[0];
+    const resolvedShiftId = resolution.days?.find((item) => item.shift_id)?.shift_id ?? null;
+    const originalShift = shifts.find((item) => item.id === resolvedShiftId) ?? shifts[0];
     test.skip(!originalShift, "No shift is available for the roster calculation check.");
     if (!originalShift) {
       return;
@@ -304,7 +302,7 @@ test.describe("ESS Leave launch certification", () => {
         `Shift weekly offs should be patched for roster QA: ${patchResponse.status()} ${JSON.stringify(patchPayload)}`,
       ).toBeTruthy();
 
-      if (!resolution.shift_id) {
+      if (!resolvedShiftId) {
         const assignmentResponse = await page.request.post("/api/hr-admin/employee-shift-assignments", {
           data: {
             employee_id: employeeRecord.id,

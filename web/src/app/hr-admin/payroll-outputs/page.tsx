@@ -176,6 +176,7 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
 
   const renderModel = artifact.render_model;
   const taxSheet = renderModel?.tax_sheet;
+  const dayCountBasis = renderModel?.day_count_basis;
   const visibleLineCount = renderModel?.quality.visible_line_count ?? artifact.line_snapshot.length;
   const reconciliation = artifact.reconciliation_summary;
 
@@ -252,7 +253,21 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
             <div className="detail-row"><span className="detail-label">Tax readiness</span><span className="detail-value">{titleCase(taxSheet?.readiness_status ?? "pending")}</span></div>
             <div className="detail-row"><span className="detail-label">Taxable earnings</span><span className="detail-value">{taxSheet?.taxable_earnings ?? formatMoney(0)}</span></div>
             <div className="detail-row"><span className="detail-label">Source hashes</span><span className="detail-value">{taxSheet?.source_hash_count ?? 0}</span></div>
+            <div className="detail-row"><span className="detail-label">Day-count basis</span><span className="detail-value">{dayCountBasis?.available ? titleCase(dayCountBasis.source) : "Not attached"}</span></div>
+            <div className="detail-row"><span className="detail-label">Working days</span><span className="detail-value">{dayCountBasis?.available ? dayCountBasis.working_days : "Not captured"}</span></div>
+            <div className="detail-row"><span className="detail-label">Weekly offs</span><span className="detail-value">{dayCountBasis?.available ? dayCountBasis.weekly_off_days : "Not captured"}</span></div>
+            <div className="detail-row"><span className="detail-label">Holidays</span><span className="detail-value">{dayCountBasis?.available ? dayCountBasis.holiday_days : "Not captured"}</span></div>
           </div>
+          {dayCountBasis?.readiness_warnings?.length ? (
+            <div className="payroll-rule-snapshot-list">
+              {dayCountBasis.readiness_warnings.slice(0, 3).map((warning) => (
+                <div className="detail-row" key={warning}>
+                  <span className="detail-label">Day-count warning</span>
+                  <span className="detail-value">{warning}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {taxSheet?.readiness_warnings?.length ? (
             <div className="payroll-rule-snapshot-list">
               {taxSheet.readiness_warnings.slice(0, 3).map((warning) => (

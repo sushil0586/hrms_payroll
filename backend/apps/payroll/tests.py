@@ -1,18 +1,184 @@
 from types import SimpleNamespace
+from datetime import date
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
-from apps.payroll.models import PayrollOutputArtifactKind, PayrollOutputBatchStatus, PayrollReviewStatus, PayrollRunStatus
+from apps.employees.models import Employee, EmploymentStatus
+from apps.payroll.models import (
+    PayrollCalendar,
+    PayrollCalculationLine,
+    PayrollCalculationLineStatus,
+    PayrollCalculationStatus,
+    PayrollFrequency,
+    PayrollInputSnapshot,
+    PayrollInputSnapshotStatus,
+    PayrollOutputArtifactKind,
+    PayrollOutputBatchStatus,
+    PayrollPeriod,
+    PayrollPeriodStatus,
+    PayrollReviewStatus,
+    PayrollRuleDefinition,
+    PayrollRuleType,
+    PayrollRuleVersion,
+    PayrollRuleVersionStatus,
+    PayrollRun,
+    PayrollRunStatus,
+)
 from apps.payroll.services import (
     _artifact_extension,
     _artifact_file_payload,
+    build_payroll_rule_context_from_snapshot,
     build_payroll_output_reconciliation_summary,
     build_payroll_payslip_render_model,
+    calculate_draft_payroll_run,
+    evaluate_payroll_rule_version,
     generate_payroll_finance_handoff,
     publish_payroll_output_batch,
     PayrollFinanceHandoffError,
     PayrollOutputError,
 )
+from apps.tenants.models import SubscriptionPlan, Tenant, TenantStatus
+
+
+class PayrollScheduleSpineRuleContextTests(SimpleTestCase):
+    def test_payroll_rule_can_consume_schedule_spine_working_day_counts(self):
+        snapshot = SimpleNamespace(
+            employee_snapshot={},
+            organization_snapshot={},
+            salary_snapshot={"monthly_gross": "60000.00"},
+            attendance_snapshot={
+                "schedule_spine": {
+                    "calendar_days": 30,
+                    "working_days": 22,
+                    "weekly_off_days": 8,
+                    "holiday_days": 0,
+                    "payable_schedule_days": 22,
+                }
+            },
+            leave_snapshot={
+                "schedule_spine": {
+                    "working_days": 22,
+                    "non_working_days": 8,
+                }
+            },
+            lifecycle_snapshot={},
+            document_snapshot={},
+            banking_snapshot={},
+            validation_snapshot={},
+            config_snapshot={},
+        )
+        rule_version = SimpleNamespace(
+            expression="round_decimal(salary.monthly_gross / attendance.schedule_spine.working_days * leave.schedule_spine.non_working_days, 2)"
+        )
+
+        context = build_payroll_rule_context_from_snapshot(snapshot)
+        result = evaluate_payroll_rule_version(rule_version, context=context)
+
+        self.assertEqual(str(result.result), "21818.18")
+        self.assertIn("attendance.schedule_spine.working_days", result.dependencies)
+        self.assertIn("leave.schedule_spine.non_working_days", result.dependencies)
+
+
+class PayrollScheduleSpineCalculationTests(TestCase):
+    def setUp(self):
+        self.tenant = Tenant.objects.create(
+            code="payroll-spine-co",
+            name="Payroll Spine Co",
+            legal_name="Payroll Spine Co Pvt Ltd",
+            status=TenantStatus.ACTIVE,
+            subscription_plan=SubscriptionPlan.ENTERPRISE,
+            country_code="IN",
+            timezone="Asia/Kolkata",
+        )
+        self.employee = Employee.objects.create(
+            tenant=self.tenant,
+            employee_code="EMP-PAY-001",
+            first_name="Aditi",
+            last_name="Payroll",
+            employment_status=EmploymentStatus.ACTIVE,
+        )
+        calendar = PayrollCalendar.objects.create(
+            tenant=self.tenant,
+            code="monthly",
+            name="Monthly",
+            frequency=PayrollFrequency.MONTHLY,
+        )
+        period = PayrollPeriod.objects.create(
+            tenant=self.tenant,
+            calendar=calendar,
+            code="oct-2026",
+            name="October 2026",
+            start_date=date(2026, 10, 1),
+            end_date=date(2026, 10, 31),
+            pay_date=date(2026, 11, 1),
+            status=PayrollPeriodStatus.OPEN,
+        )
+        self.payroll_run = PayrollRun.objects.create(
+            tenant=self.tenant,
+            period=period,
+            code="oct-2026-run",
+            name="October 2026 Run",
+            status=PayrollRunStatus.INPUTS_LOCKED,
+            config_snapshot={"calculation_profile": {"rule_codes": ["schedule-spine-lwp"]}},
+        )
+        self.snapshot = PayrollInputSnapshot.objects.create(
+            tenant=self.tenant,
+            payroll_run=self.payroll_run,
+            employee=self.employee,
+            snapshot_status=PayrollInputSnapshotStatus.LOCKED,
+            salary_snapshot={"annual_ctc": "744000.00", "monthly_gross": "62000.00"},
+            attendance_snapshot={
+                "schedule_spine": {
+                    "calendar_days": 31,
+                    "working_days": 23,
+                    "weekly_off_days": 8,
+                    "holiday_days": 0,
+                    "payable_schedule_days": 23,
+                }
+            },
+            leave_snapshot={
+                "schedule_spine": {
+                    "working_days": 23,
+                    "non_working_days": 8,
+                }
+            },
+            validation_snapshot={"blockers": [], "warnings": []},
+        )
+        rule = PayrollRuleDefinition.objects.create(
+            tenant=self.tenant,
+            code="schedule-spine-lwp",
+            name="Schedule Spine LWP",
+            rule_type=PayrollRuleType.FORMULA,
+            config_snapshot={
+                "component_code": "LWP_SCHEDULE",
+                "component_name": "Schedule Spine LWP",
+                "line_type": "deduction",
+                "calculation_order": 40,
+            },
+        )
+        self.rule_version = PayrollRuleVersion.objects.create(
+            tenant=self.tenant,
+            rule=rule,
+            version=1,
+            status=PayrollRuleVersionStatus.ACTIVE,
+            expression="round_decimal(salary.monthly_gross / attendance.schedule_spine.working_days * leave.schedule_spine.non_working_days, 2)",
+            effective_from=date(2026, 10, 1),
+            config_snapshot=rule.config_snapshot,
+        )
+
+    def test_draft_calculation_uses_schedule_spine_context_from_locked_snapshot(self):
+        calculation = calculate_draft_payroll_run(self.payroll_run)
+
+        self.assertEqual(calculation.status, PayrollCalculationStatus.COMPLETED)
+        line = PayrollCalculationLine.objects.get(calculation=calculation, rule_version=self.rule_version)
+        self.assertEqual(line.status, PayrollCalculationLineStatus.CALCULATED)
+        self.assertEqual(str(line.amount), "21565.22")
+        self.assertEqual(line.component_code, "LWP_SCHEDULE")
+        self.assertIn("attendance.schedule_spine.working_days", line.trace_snapshot["dependencies"])
+        self.assertIn("leave.schedule_spine.non_working_days", line.trace_snapshot["dependencies"])
+        self.assertEqual(line.context_snapshot["attendance"]["schedule_spine"]["working_days"], 23)
+        self.payroll_run.refresh_from_db()
+        self.assertEqual(self.payroll_run.status, PayrollRunStatus.CALCULATED)
 
 
 class FakeArtifactQuerySet(list):
@@ -39,7 +205,7 @@ class FakeArtifactQuerySet(list):
 
 
 class PayrollPayslipRenderModelTests(SimpleTestCase):
-    def artifact(self, *, line_snapshot, totals_snapshot=None, config_snapshot=None):
+    def artifact(self, *, line_snapshot, totals_snapshot=None, config_snapshot=None, input_snapshot=None):
         return SimpleNamespace(
             id="artifact-1",
             title="September 2026 Payslip",
@@ -55,6 +221,7 @@ class PayrollPayslipRenderModelTests(SimpleTestCase):
             },
             line_snapshot=line_snapshot,
             config_snapshot=config_snapshot or {},
+            input_snapshot=input_snapshot,
             employee=SimpleNamespace(employee_code="E001", __str__=lambda self: "Anika Rao"),
             payroll_run=SimpleNamespace(code="PAY-SEP-2026", name="September Payroll", period=None),
         )
@@ -83,6 +250,60 @@ class PayrollPayslipRenderModelTests(SimpleTestCase):
         self.assertEqual(self.section(model, "employer_contributions")["total"], "12000.00")
         self.assertEqual(model["totals"]["net_pay"], "87500.00")
         self.assertEqual(model["quality"]["visible_line_count"], 5)
+
+    def test_carries_schedule_spine_day_count_basis_from_input_snapshot(self):
+        artifact = self.artifact(
+            line_snapshot=[
+                {"component_code": "BASIC", "component_name": "Basic", "line_type": "earning", "amount": "60000.00"},
+            ],
+            input_snapshot=SimpleNamespace(
+                attendance_snapshot={
+                    "schedule_spine": {
+                        "schema_ref": "payroll.schedule_spine.v1",
+                        "source": "employee_roster",
+                        "calendar_days": 30,
+                        "working_days": 22,
+                        "weekly_off_days": 6,
+                        "holiday_days": 2,
+                        "non_working_days": 8,
+                        "payable_schedule_days": 22,
+                        "days": [
+                            {
+                                "date": "2026-09-01",
+                                "day_type": "working_day",
+                                "is_working_day": True,
+                                "shift_code": "DAY",
+                                "resolution_source": "employee_shift_assignment",
+                            },
+                            {
+                                "date": "2026-09-06",
+                                "day_type": "weekly_off",
+                                "is_working_day": False,
+                                "weekly_off_source": "employee_shift_assignment",
+                            },
+                        ],
+                    }
+                },
+                leave_snapshot={
+                    "schedule_spine": {
+                        "working_days": 22,
+                        "non_working_days": 8,
+                    }
+                },
+            ),
+        )
+
+        model = build_payroll_payslip_render_model(artifact)
+
+        self.assertTrue(model["day_count_basis"]["available"])
+        self.assertEqual(model["day_count_basis"]["source"], "employee_roster")
+        self.assertEqual(model["day_count_basis"]["working_days"], 22)
+        self.assertEqual(model["day_count_basis"]["weekly_off_days"], 6)
+        self.assertEqual(model["day_count_basis"]["holiday_days"], 2)
+        self.assertEqual(model["day_count_basis"]["leave_non_working_days"], 8)
+        self.assertEqual(model["day_count_basis"]["days"][0]["resolution_source"], "employee_shift_assignment")
+        self.assertEqual(model["day_count_basis"]["readiness_status"], "ready")
+        self.assertTrue(model["quality"]["has_day_count_basis"])
 
     def test_hidden_payslip_lines_are_excluded_from_render_sections(self):
         artifact = self.artifact(
@@ -251,7 +472,19 @@ class PayrollPayslipRenderModelTests(SimpleTestCase):
                     "config_snapshot": {"statutory_type": "tax_deducted_at_source"},
                 },
             ],
-            config_snapshot={"artifact_template_ref": "tenant.payslip.pdf.v1", "tax_regime": "new_regime"},
+            config_snapshot={
+                "artifact_template_ref": "tenant.payslip.pdf.v1",
+                "tax_regime": "new_regime",
+                "day_count_basis": {
+                    "attendance_schedule_spine": {
+                        "source": "employee_roster",
+                        "working_days": 22,
+                        "weekly_off_days": 6,
+                        "holiday_days": 2,
+                    },
+                    "leave_schedule_spine": {"working_days": 22, "non_working_days": 8},
+                },
+            },
             mime_type="application/pdf",
             employee_name="Anika Rao",
             employee_code="E001",
@@ -271,6 +504,8 @@ class PayrollPayslipRenderModelTests(SimpleTestCase):
         self.assertIn("Readiness: warning", payload)
         self.assertIn("Taxable earnings: 0.00", payload)
         self.assertIn("Source hashes: 0", payload)
+        self.assertIn("Day-count basis: employee_roster", payload)
+        self.assertIn("Working/weekly off/holiday: 22/6/2", payload)
         self.assertIn("Tax Deducted at Source", payload)
         self.assertIn("HRMS Payroll - employee confidential", payload)
 

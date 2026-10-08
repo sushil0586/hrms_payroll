@@ -543,6 +543,46 @@ export type HrAdminEmployeeShiftAssignmentResolution = {
   summary: string;
 };
 
+export type HrAdminWorkScheduleDay = {
+  employee_id: string;
+  employee_code: string;
+  date: string;
+  day: string;
+  day_type: "working_day" | "weekly_off" | "holiday" | "unassigned" | string;
+  shift_id: string | null;
+  shift_name: string | null;
+  expected_start_at: string | null;
+  expected_end_at: string | null;
+  expected_hours: string;
+  weekly_off_source: string;
+  weekly_off_days: string[];
+  holiday_id: string | null;
+  holiday_name: string | null;
+  attendance_policy_id: string | null;
+  attendance_policy_name: string | null;
+  roster_assignment_id: string | null;
+  roster_pattern_id: string | null;
+  assignment_kind: string | null;
+  sequence_summary: string | null;
+  override_id: string | null;
+  leave_request_id: string | null;
+  resolution_source: string;
+  warnings: string[];
+};
+
+export type HrAdminWorkSchedulePreview = {
+  employee_id: string;
+  employee_code: string;
+  start_date: string;
+  end_date: string;
+  day_count: number;
+  working_day_count: number;
+  weekly_off_count: number;
+  holiday_count: number;
+  unassigned_count: number;
+  days: HrAdminWorkScheduleDay[];
+};
+
 export type HrAdminShiftRosterTemplate = {
   id: string;
   code: string;
@@ -4480,6 +4520,23 @@ export type PayrollPayslipTaxSheet = {
   statutory_lines: PayrollPayslipRenderLine[];
 };
 
+export type PayrollPayslipDayCountBasis = {
+  available: boolean;
+  readiness_status: string;
+  readiness_warnings: string[];
+  source: string;
+  schema_ref: string;
+  calendar_days: number;
+  working_days: number;
+  weekly_off_days: number;
+  holiday_days: number;
+  non_working_days: number;
+  payable_schedule_days: number;
+  leave_working_days: number;
+  leave_non_working_days: number;
+  days: Record<string, unknown>[];
+};
+
 export type PayrollPayslipRenderModel = {
   artifact_id: string;
   title: string;
@@ -4502,10 +4559,12 @@ export type PayrollPayslipRenderModel = {
   totals: Record<string, string>;
   sections: PayrollPayslipRenderSection[];
   tax_sheet: PayrollPayslipTaxSheet;
+  day_count_basis?: PayrollPayslipDayCountBasis;
   quality: {
     hidden_line_count: number;
     visible_line_count: number;
     has_tax_sheet: boolean;
+    has_day_count_basis?: boolean;
   };
 };
 
