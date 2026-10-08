@@ -80,6 +80,10 @@ async function apiJson<T>(page: Page, path: string) {
 
 function findConfiguredEmployee(employees: EmployeeListItem[]) {
   const configuredLogin = employee.username.toLowerCase();
+  const exactEmail = employees.find((item) => item.work_email.toLowerCase() === configuredLogin);
+  if (exactEmail) {
+    return exactEmail;
+  }
   return employees.find((item) =>
     [item.work_email, item.employee_code, item.full_name].some((value) => {
       const label = value.toLowerCase();
@@ -253,7 +257,7 @@ test.describe("ESS Leave launch certification", () => {
 
   test("leave unit calculation follows the employee roster weekly offs instead of a hardcoded weekend", async ({ page }) => {
     test.setTimeout(4 * 60 * 1000);
-    const runOffsetDays = 540 + (Date.now() % 180);
+    const runOffsetDays = 21 + (Date.now() % 42);
     const startDate = nextIsoWeekday(runOffsetDays, 6);
     const endDate = isoDateOffset(startDate, 4);
     const retiredStartDate = isoDateOffset(endDate, 26_000);

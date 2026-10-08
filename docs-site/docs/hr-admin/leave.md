@@ -67,8 +67,9 @@ Follow this order for a new tenant or when introducing a new leave category:
 5. Create the leave policy assignment.
 6. Add opening balances or import migrated balances.
 7. Test one employee leave request from ESS.
-8. Test manager approval from MSS.
-9. Confirm Payroll Control does not show leave blockers.
+8. Test one roster-sensitive leave request if the employee does not work a standard Monday-to-Friday week.
+9. Test manager approval from MSS.
+10. Confirm Payroll Control does not show leave blockers.
 
 Do not start with balance corrections if the leave type, policy, or assignment is missing. Repeated manual corrections usually mean the setup layer is wrong.
 
@@ -139,6 +140,25 @@ Use this example when sick leave may need a medical certificate.
 | Approval required | On |
 
 Recommended approach: keep attachment off at leave-type level and configure medical certificate threshold in the leave policy. This allows short sick leave without attachment and longer sick leave with evidence.
+
+## Roster-sensitive leave calculation
+
+Leave policies decide whether non-working days can be excluded, but attendance setup decides which weekdays are non-working for the employee.
+
+| HR setup | Runtime result |
+| --- | --- |
+| Employee has a shift or roster assignment with weekly offs such as Tuesday and Wednesday | Leave request unit calculation excludes Tuesday and Wednesday. Saturday and Sunday can be counted as working days. |
+| Employee has no resolved shift assignment for the requested dates | Leave calculation falls back to standard Saturday/Sunday weekly offs. |
+| Attendance policy has a holiday calendar | Holidays can be excluded when `Allow weekend or holiday overlap` is off. |
+| Leave policy counts calendar days or sandwich rule is enabled | Weekly offs and holidays may still count according to that leave policy. |
+
+Use **HR Admin > Employee Shift Assignments** to preview the employee's shift resolution for the requested date range. After submission, open the leave request detail and review **Unit calculation**. It shows each date, weekday, whether it was counted, the reason, and the resolved shift/calendar context when available.
+
+Good practice:
+
+- Configure shift assignments before employees submit leave in a non-standard roster.
+- Avoid fixing roster mistakes with manual balance corrections; correct the assignment and ask the employee to resubmit when needed.
+- For standard office employees, keep a resolved shift assignment where possible. If none exists, the fallback is Saturday/Sunday.
 
 ## Leave Policy Setup
 

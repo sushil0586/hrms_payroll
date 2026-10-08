@@ -55,6 +55,10 @@ Notifications are the employee inbox for HRMS events. They help employees unders
 | Inbox list | Employee-scoped notification rows. |
 | Notification detail | Selected notification summary. |
 | Review notification | Focused modal with full message and delivery state. |
+| Message | Message sections can appear in both the summary area and detail rows; both refer to the same notification body. |
+| Delivery | Delivery timestamps and channel status for the selected notification. |
+| Source workflow | Context and link back to the related ESS workflow when available. |
+| Provider logs | Delivery-provider context for failed, retrying, or diagnostic notifications. |
 | Mark read / Mark unread | Read-state action for the selected notification. |
 | Open source | Route to the linked ESS workflow when available. |
 
@@ -137,7 +141,7 @@ The ESS Notifications launch certification covers:
 
 - Inbox metrics and filters.
 - Status, channel, priority, source type, and search behavior.
-- Review dialog with message, delivery state, provider context, and source workflow.
+- Review dialog with message, delivery state, provider context, source workflow, and repeated section labels handled without blocking review.
 - Mark-read behavior.
 - Failed and retry-capped notification handling.
 - Empty result state, pagination, and no horizontal overflow.

@@ -317,7 +317,7 @@ Avoid:
 | Send reminder | Reminds employee to upload or correct proof. | Employee has not acted or proof is pending too long. |
 | Download | Opens or downloads submitted file when permission allows. | Use only for approved business purpose. |
 | Add requirement | Creates a required document rule. | Requirement scope must be understood first. |
-| Save | Saves category or requirement changes. | Confirm active/scope before saving. |
+| Save | Saves category, requirement, or review changes and returns to the queue with a confirmation where applicable. | Confirm active/scope before saving. |
 
 Do not download and share employee documents outside approved secure channels.
 
@@ -475,6 +475,7 @@ Use this routine during onboarding or payroll close week:
 | Requirements | Active, scoped, and understandable. |
 | Employee visibility | Sample employee can see the correct request in ESS. |
 | Upload flow | Employee can upload supported file. |
+| Dialog behavior | Upload/detail dialogs close with **Esc**, success actions return to the expected page, and failure messages remain visible for retry. |
 | Pending backlog | Reviewed or assigned. |
 | Verified decisions | Correct proof accepted with reviewer trail. |
 | Rejections | Clear employee-facing reasons. |

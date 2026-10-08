@@ -59,6 +59,18 @@ Use **Attendance** to review attendance records and regularization requests.
 
 Review attendance exceptions daily or weekly instead of waiting for payroll close. Prioritize pending regularizations, shift gaps, and missing punches because these are the items most likely to change payable days.
 
+### Roster and weekly-off impact
+
+Shift assignments and roster templates also affect leave unit calculation. Weekly offs are resolved from the employee's shift assignment when a leave request is submitted.
+
+| Setup state | Leave behavior |
+| --- | --- |
+| Employee has a resolved shift or roster assignment | Leave excludes the weekly-off days configured on that shift. Saturday/Sunday are counted if they are working days for that roster. |
+| Employee has no resolved shift assignment | Leave falls back to standard Saturday/Sunday weekly offs. |
+| Holiday calendar is mapped through attendance policy | Holidays can be excluded when the leave policy does not count holiday overlap. |
+
+When an employee reports that leave units look wrong, first check **Employee Shift Assignments** for the leave date range, then check the leave request **Unit calculation** in ESS/HR detail.
+
 ## Leave
 
 ### Purpose
@@ -126,6 +138,7 @@ Use **Policies** to manage leave rules, attendance rules, and employee assignmen
 | Why are balances wrong for many employees? | Policies and policy assignments. |
 | Why can an employee not request leave? | Leave policy assignment, employee status, ESS access. |
 | Why is attendance showing absent on a holiday? | Holiday calendar, shift assignment, attendance policy. |
+| Why did leave count Saturday or Sunday? | Employee shift assignment or roster may treat those days as working days. |
 
 ## Practical examples
 
@@ -169,6 +182,7 @@ Expected result: payroll inputs do not lock while attendance decisions are pendi
 | Policy effective date is wrong. | Leave type appears unavailable or balance is zero. | Correct effective date and recheck assignment. |
 | Manager is missing. | Leave or attendance approval cannot route. | Fix Employee Master manager mapping. |
 | Holiday calendar is wrong. | Leave units or attendance days calculate incorrectly. | Fix calendar before payroll lock. |
+| Employee roster is missing or wrong. | Leave may fall back to standard Saturday/Sunday weekly offs or exclude the wrong days. | Fix shift assignment/roster before asking the employee to resubmit. |
 | Manual correction repeats monthly. | Policy setup is probably wrong. | Fix policy instead of repeated balance edits. |
 
 ## Troubleshooting
@@ -176,7 +190,7 @@ Expected result: payroll inputs do not lock while attendance decisions are pendi
 | Problem | Likely reason | Fix |
 | --- | --- | --- |
 | Employee cannot apply leave | No policy, no balance, inactive employee, or missing ESS access. | Check policy assignment, employee status, and access. |
-| Leave units look wrong | Weekend/holiday/calendar/half-day rule mismatch. | Review calendar and leave policy. |
+| Leave units look wrong | Roster weekly-off, holiday calendar, leave policy, or half-day rule mismatch. | Review employee shift assignment, attendance policy calendar, leave policy, and the request Unit calculation. |
 | Manager cannot approve | Manager lacks MSS access or mapping is wrong. | Fix manager profile/access. |
 | Balance import rows fail | Employee/policy code mismatch or invalid transaction status. | Correct CSV and preview again. |
 | Payroll still blocked | Pending leave/attendance request remains. | Open Payroll Control action list and resolve source item. |

@@ -563,6 +563,8 @@ Use quick review for low-risk triage.
 
 Use full review instead of quick review when the notification affects access, payroll, compliance, launch, or repeated failures.
 
+Retry and review actions require the correct HR Admin notification permission. Employee and manager sessions should fail closed if they call HR Admin notification APIs directly.
+
 ## Page 6: Notification Review
 
 Open from **Review** on a queue record.

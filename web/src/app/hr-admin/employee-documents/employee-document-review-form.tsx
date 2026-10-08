@@ -104,7 +104,7 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
       setIsSubmitting(false);
       return;
     }
-    router.push("/hr-admin/employee-documents");
+    router.push("/hr-admin/employee-documents?review_saved=1");
     router.refresh();
   }
 

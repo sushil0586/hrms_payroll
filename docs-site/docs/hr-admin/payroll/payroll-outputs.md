@@ -64,6 +64,8 @@ Never publish payslips from a draft, rejected, or unapproved run.
 | Variance report | Comparison against previous period or previous calculation. |
 | Exception report | Accepted warnings, rejected items, and review decisions. |
 
+SaaS-ready payslip output should be treated as a PDF artifact, not just a screen summary. The PDF should include the employee identity, pay period, earnings, deductions, employer contributions, net pay, source evidence, and a tax sheet when the tenant tax/statutory setup supports it.
+
 ## Output ownership
 
 | Output | Primary owner | Sensitive? |
@@ -106,10 +108,11 @@ Never publish payslips from a draft, rejected, or unapproved run.
 1. Confirm payroll review is approved.
 2. Generate outputs.
 3. Review artifact register.
-4. Publish payslips only when ready.
-5. Confirm ESS payslip visibility.
-6. Download finance files if required.
-7. Keep access audit evidence.
+4. Confirm PDF/tax-sheet readiness for payslip artifacts.
+5. Publish payslips only when ready.
+6. Confirm ESS payslip visibility.
+7. Download finance files if required.
+8. Keep access audit evidence.
 
 ## Example: Generate September payroll outputs
 
@@ -128,13 +131,15 @@ Steps:
 4. Click **Generate outputs**.
 5. Wait for output batch completion.
 6. Check artifact register for payslips, payroll register, bank advice, statutory files, and audit pack.
-7. Download payroll register and compare totals with Payroll Review.
-8. Publish payslips only after finance confirms final payroll.
+7. Confirm payslip PDF and tax-sheet readiness where enabled.
+8. Download payroll register and compare totals with Payroll Review.
+9. Publish payslips only after finance confirms final payroll.
 
 Expected result:
 
 - Output batch shows generated artifacts.
 - Payslip count matches eligible employees.
+- Payslip artifacts use the configured PDF/template profile where enabled.
 - Payroll register totals match approved review totals.
 - ESS payslip visibility remains controlled until publication.
 
@@ -145,16 +150,19 @@ Use this only after final payroll approval.
 Steps:
 
 1. Confirm payslip artifacts are generated.
-2. Confirm no replacement output batch is pending.
-3. Confirm finance has accepted payment totals.
-4. Click **Publish**.
-5. Verify one employee can see the payslip in ESS.
-6. Confirm payslip publication notification, if enabled.
+2. Confirm payslip PDF content and tax sheet content pass the configured readiness checks.
+3. Confirm no replacement output batch is pending.
+4. Confirm finance has accepted payment totals.
+5. Click **Publish**.
+6. Verify one employee can see the payslip in ESS.
+7. Confirm payslip publication notification, if enabled.
 
 Expected result:
 
 - Employees with workspace access can open ESS Payslips.
 - Payslip period and net pay match the final run.
+- PDF download opens and matches the payroll output totals.
+- Tax sheet values match the payroll/statutory calculation where configured.
 - Published timestamp is available for audit.
 
 ## Example: Export payroll register for finance

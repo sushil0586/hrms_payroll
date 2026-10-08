@@ -151,6 +151,7 @@ The ESS Documents launch certification covers:
 - Summary metrics and document readiness band.
 - Required document cards and upload/replacement actions.
 - Upload modal validation for category, title, and file.
+- Upload and detail dialogs close with **Esc** or their close action without leaving the page in a stuck state.
 - Document history search, filters, pagination, and detail modal.
 - Accepted, pending, rejected, expiring, and missing-upload states.
 - No horizontal overflow and no inline form crowding.

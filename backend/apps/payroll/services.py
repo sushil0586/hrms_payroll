@@ -256,6 +256,7 @@ ARTIFACT_MIME_TYPES = {
 }
 
 ARTIFACT_FILE_EXTENSIONS = {
+    "application/pdf": "pdf",
     "application/json": "json",
     "text/csv": "csv",
     "text/html": "html",
@@ -4818,6 +4819,176 @@ def _employee_totals(lines: list[PayrollCalculationLine]) -> dict[str, Any]:
     return {key: str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)) for key, value in totals.items()}
 
 
+PAYSLIP_RENDER_SECTION_ORDER = [
+    "earnings",
+    "deductions",
+    "tax",
+    "employer_contributions",
+    "reimbursements",
+    "informational",
+]
+
+PAYSLIP_RENDER_SECTION_LABELS = {
+    "earnings": "Earnings",
+    "deductions": "Deductions",
+    "tax": "Tax",
+    "employer_contributions": "Employer Contributions",
+    "reimbursements": "Reimbursements",
+    "informational": "Information",
+}
+
+
+def _money_string(value: Any) -> str:
+    try:
+        return str(_round_decimal(value or "0.00", 2).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    except (PayrollRuleEvaluationError, ValueError, InvalidOperation):
+        return "0.00"
+
+
+def _line_visibility(line: dict[str, Any], template_profile: dict[str, Any]) -> str:
+    config = line.get("config_snapshot") if isinstance(line.get("config_snapshot"), dict) else {}
+    visibility = str(
+        config.get("payslip_visibility")
+        or line.get("payslip_visibility")
+        or template_profile.get("default_line_visibility")
+        or "visible"
+    ).strip().lower()
+    hidden_values = template_profile.get("hidden_visibility_values")
+    if isinstance(hidden_values, list):
+        hidden = {str(item).strip().lower() for item in hidden_values}
+    else:
+        hidden = {"hidden", "internal", "none", "false"}
+    return "hidden" if visibility in hidden else "visible"
+
+
+def _payslip_section_for_line(line: dict[str, Any]) -> str:
+    line_type = str(line.get("line_type") or "").strip().lower()
+    component_type = str(line.get("component_type") or "").strip().lower()
+    config = line.get("config_snapshot") if isinstance(line.get("config_snapshot"), dict) else {}
+    statutory_type = str(config.get("statutory_type") or line.get("statutory_type") or "").strip().lower()
+    statutory_treatment_ref = str(config.get("statutory_treatment_ref") or line.get("statutory_treatment_ref") or "").strip().lower()
+
+    if line_type == "earning" or component_type == "earning":
+        return "earnings"
+    if line_type == "employer_contribution" or component_type == "employer_contribution":
+        return "employer_contributions"
+    if line_type == "reimbursement" or component_type == "reimbursement":
+        return "reimbursements"
+    if line_type == "informational" or component_type == "informational":
+        return "informational"
+    if line_type == "tax" or component_type == "tax" or "tax" in statutory_type or "tds" in statutory_treatment_ref:
+        return "tax"
+    return "deductions"
+
+
+def _render_line_payload(line: dict[str, Any]) -> dict[str, Any]:
+    config = line.get("config_snapshot") if isinstance(line.get("config_snapshot"), dict) else {}
+    return {
+        "component_code": str(line.get("component_code") or ""),
+        "component_name": str(line.get("component_name") or line.get("component_code") or "Payroll line"),
+        "line_type": str(line.get("line_type") or ""),
+        "amount": _money_string(line.get("amount")),
+        "currency_code": str(line.get("currency_code") or "INR"),
+        "source_hash": str(line.get("source_hash") or ""),
+        "statutory_type": str(config.get("statutory_type") or line.get("statutory_type") or ""),
+        "statutory_treatment_ref": str(config.get("statutory_treatment_ref") or line.get("statutory_treatment_ref") or ""),
+        "tax_regime": str(config.get("tax_regime") or line.get("tax_regime") or ""),
+        "ytd_amount": _money_string(line.get("ytd_amount")) if line.get("ytd_amount") not in {None, ""} else "",
+    }
+
+
+def _sum_render_lines(lines: list[dict[str, Any]]) -> str:
+    total = Decimal("0.00")
+    for line in lines:
+        total += Decimal(_money_string(line.get("amount")))
+    return str(total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def build_payroll_payslip_render_model(artifact: PayrollOutputArtifact) -> dict[str, Any]:
+    """Build a deterministic payslip/tax render model from a locked output artifact snapshot."""
+
+    config = artifact.config_snapshot if isinstance(artifact.config_snapshot, dict) else {}
+    template_profile = config.get("payslip_template_profile") if isinstance(config.get("payslip_template_profile"), dict) else {}
+    lines = artifact.line_snapshot if isinstance(artifact.line_snapshot, list) else []
+    sections = {
+        key: {
+            "key": key,
+            "label": PAYSLIP_RENDER_SECTION_LABELS[key],
+            "lines": [],
+            "total": "0.00",
+        }
+        for key in PAYSLIP_RENDER_SECTION_ORDER
+    }
+    hidden_line_count = 0
+
+    for raw_line in lines:
+        if not isinstance(raw_line, dict):
+            continue
+        if _line_visibility(raw_line, template_profile) == "hidden":
+            hidden_line_count += 1
+            continue
+        section_key = _payslip_section_for_line(raw_line)
+        sections[section_key]["lines"].append(_render_line_payload(raw_line))
+
+    for section in sections.values():
+        section["total"] = _sum_render_lines(section["lines"])
+
+    tax_lines = sections["tax"]["lines"]
+    statutory_lines = [
+        line
+        for key in ("tax", "deductions", "employer_contributions")
+        for line in sections[key]["lines"]
+        if line.get("statutory_type") or line.get("statutory_treatment_ref")
+    ]
+    tax_sheet = {
+        "available": bool(tax_lines or statutory_lines or config.get("tax_sheet_profile")),
+        "tax_regime": str(config.get("tax_regime") or template_profile.get("tax_regime") or "not_available"),
+        "current_period_tax": sections["tax"]["total"],
+        "ytd_tax": _sum_render_lines([line for line in tax_lines if line.get("ytd_amount")]),
+        "statutory_line_count": len(statutory_lines),
+        "proof_status_summary": config.get("proof_status_summary") if isinstance(config.get("proof_status_summary"), dict) else {},
+        "lines": tax_lines,
+        "statutory_lines": statutory_lines,
+    }
+
+    employee = getattr(artifact, "employee", None)
+    payroll_run = getattr(artifact, "payroll_run", None)
+    period = getattr(payroll_run, "period", None) if payroll_run else None
+    return {
+        "artifact_id": str(getattr(artifact, "id", "") or ""),
+        "title": artifact.title,
+        "file_name": artifact.file_name,
+        "template_ref": config.get("artifact_template_ref") or template_profile.get("template_ref") or "payroll.payslip.template.default.v1",
+        "source_hash": artifact.source_hash,
+        "checksum_sha256": artifact.checksum_sha256,
+        "employee": {
+            "name": str(employee) if employee else "",
+            "code": getattr(employee, "employee_code", "") if employee else "",
+        },
+        "period": {
+            "name": getattr(period, "name", "") if period else "",
+            "payroll_run_name": getattr(payroll_run, "name", "") if payroll_run else "",
+            "payroll_run_code": getattr(payroll_run, "code", "") if payroll_run else "",
+            "start_date": getattr(period, "start_date", None).isoformat() if period and getattr(period, "start_date", None) else "",
+            "end_date": getattr(period, "end_date", None).isoformat() if period and getattr(period, "end_date", None) else "",
+            "pay_date": getattr(period, "pay_date", None).isoformat() if period and getattr(period, "pay_date", None) else "",
+        },
+        "totals": {
+            "gross_earnings": _money_string(artifact.totals_snapshot.get("gross_earnings") if isinstance(artifact.totals_snapshot, dict) else "0.00"),
+            "employee_deductions": _money_string(artifact.totals_snapshot.get("employee_deductions") if isinstance(artifact.totals_snapshot, dict) else "0.00"),
+            "employer_contributions": _money_string(artifact.totals_snapshot.get("employer_contributions") if isinstance(artifact.totals_snapshot, dict) else "0.00"),
+            "net_pay": _money_string(artifact.totals_snapshot.get("net_pay") if isinstance(artifact.totals_snapshot, dict) else "0.00"),
+        },
+        "sections": [sections[key] for key in PAYSLIP_RENDER_SECTION_ORDER],
+        "tax_sheet": tax_sheet,
+        "quality": {
+            "hidden_line_count": hidden_line_count,
+            "visible_line_count": sum(len(section["lines"]) for section in sections.values()),
+            "has_tax_sheet": tax_sheet["available"],
+        },
+    }
+
+
 def _artifact_mime_type(kind: str, profile: dict[str, Any]) -> str:
     mime_types = profile.get("mime_types") if isinstance(profile, dict) else {}
     configured = mime_types.get(kind) if isinstance(mime_types, dict) else None
@@ -4947,6 +5118,97 @@ def _html_payslip_payload(
     )
 
 
+def _pdf_escape(value: Any) -> str:
+    return str(value or "").replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _pdf_text_line(y: int, text: str, *, size: int = 10, x: int = 48) -> str:
+    return f"BT /F1 {size} Tf {x} {y} Td ({_pdf_escape(text)}) Tj ET"
+
+
+def _minimal_pdf_payload(lines: list[str]) -> str:
+    content_lines: list[str] = []
+    y = 800
+    for index, line in enumerate(lines):
+        if y < 48:
+            content_lines.append(_pdf_text_line(48, "Continued on next generated tax sheet page in full renderer.", size=9))
+            break
+        content_lines.append(_pdf_text_line(y, line[:110], size=14 if index == 0 else 9))
+        y -= 16 if index else 24
+
+    stream = "\n".join(content_lines)
+    objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        f"<< /Length {len(stream.encode('ascii', errors='ignore'))} >>\nstream\n{stream}\nendstream",
+    ]
+    pdf = "%PDF-1.4\n% payroll\n"
+    offsets = [0]
+    for object_number, body in enumerate(objects, start=1):
+        offsets.append(len(pdf.encode("latin-1")))
+        pdf += f"{object_number} 0 obj\n{body}\nendobj\n"
+    xref_offset = len(pdf.encode("latin-1"))
+    pdf += f"xref\n0 {len(objects) + 1}\n"
+    pdf += "0000000000 65535 f \n"
+    for offset in offsets[1:]:
+        pdf += f"{offset:010d} 00000 n \n"
+    pdf += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n"
+    return pdf
+
+
+def _pdf_payslip_payload(
+    *,
+    title: str,
+    employee_name: str,
+    employee_code: str,
+    payroll_run_name: str,
+    totals_snapshot: dict[str, Any],
+    line_snapshot: list[dict[str, Any]],
+    config_snapshot: dict[str, Any],
+) -> str:
+    artifact = type("PayslipRenderArtifact", (), {
+        "id": "",
+        "title": title,
+        "file_name": "",
+        "source_hash": "",
+        "checksum_sha256": "",
+        "totals_snapshot": totals_snapshot,
+        "line_snapshot": line_snapshot,
+        "config_snapshot": config_snapshot,
+        "employee": type("PayslipRenderEmployee", (), {"employee_code": employee_code, "__str__": lambda self: employee_name})(),
+        "payroll_run": type("PayslipRenderRun", (), {"code": "", "name": payroll_run_name, "period": None})(),
+    })()
+    model = build_payroll_payslip_render_model(artifact)
+    pdf_lines = [
+        title,
+        f"Employee: {employee_name} / {employee_code}",
+        f"Payroll run: {payroll_run_name}",
+        f"Gross earnings: {model['totals']['gross_earnings']}",
+        f"Employee deductions: {model['totals']['employee_deductions']}",
+        f"Employer contributions: {model['totals']['employer_contributions']}",
+        f"Net pay: {model['totals']['net_pay']}",
+        "Payslip detail",
+    ]
+    for section in model["sections"]:
+        if section["lines"]:
+            pdf_lines.append(f"{section['label']}: {section['total']}")
+            for line in section["lines"][:12]:
+                pdf_lines.append(f"- {line['component_name']}: {line['amount']} {line['currency_code']}")
+    tax_sheet = model["tax_sheet"]
+    pdf_lines.extend([
+        "Tax sheet",
+        f"Tax regime: {tax_sheet['tax_regime']}",
+        f"Current period tax: {tax_sheet['current_period_tax']}",
+        f"YTD tax: {tax_sheet['ytd_tax']}",
+        f"Statutory lines: {tax_sheet['statutory_line_count']}",
+        f"Template: {model['template_ref']}",
+        "Confidential payroll document generated from locked payroll output.",
+    ])
+    return _minimal_pdf_payload(pdf_lines)
+
+
 def _artifact_file_payload(
     *,
     kind: str,
@@ -4967,6 +5229,16 @@ def _artifact_file_payload(
             payroll_run_name=payroll_run_name,
             totals_snapshot=totals_snapshot,
             line_snapshot=line_snapshot,
+        )
+    if kind == PayrollOutputArtifactKind.PAYSLIP and mime_type == "application/pdf":
+        return _pdf_payslip_payload(
+            title=title,
+            employee_name=employee_name,
+            employee_code=employee_code,
+            payroll_run_name=payroll_run_name,
+            totals_snapshot=totals_snapshot,
+            line_snapshot=line_snapshot,
+            config_snapshot=config_snapshot,
         )
     if mime_type == "text/csv":
         return _csv_payload(line_snapshot)
@@ -5528,6 +5800,9 @@ def generate_payroll_outputs(
                 "artifact_template_ref": profile.get("payslip_template_ref", "payroll.payslip.template.default.v1"),
                 "source_hashes": sorted({line.source_hash for line in employee_lines if line.source_hash}),
             }
+            for profile_key in ["payslip_template_profile", "tax_sheet_profile", "tax_regime", "proof_status_summary"]:
+                if profile_key in profile:
+                    payslip_config[profile_key] = profile[profile_key]
             payslip_config = _artifact_config_with_storage(payslip_config, profile)
             PayrollOutputArtifact.objects.create(
                 tenant=review.tenant,

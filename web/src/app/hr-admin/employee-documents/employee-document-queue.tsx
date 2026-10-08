@@ -32,6 +32,8 @@ type Props = {
   canVerifyDocuments: boolean;
   canExportDocuments: boolean;
   canManageDocuments: boolean;
+  initialActionNotice?: string;
+  initialActionNoticeTitle?: string;
 };
 
 function formatFileSize(fileSizeBytes: number) {
@@ -88,6 +90,8 @@ export function EmployeeDocumentQueue({
   canVerifyDocuments,
   canExportDocuments,
   canManageDocuments,
+  initialActionNotice = "",
+  initialActionNoticeTitle = "Action complete.",
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -100,7 +104,8 @@ export function EmployeeDocumentQueue({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSubmittingReminder, setIsSubmittingReminder] = useState(false);
   const [actionError, setActionError] = useState("");
-  const [actionNotice, setActionNotice] = useState("");
+  const [actionNotice, setActionNotice] = useState(initialActionNotice);
+  const [actionNoticeTitle, setActionNoticeTitle] = useState(initialActionNoticeTitle);
   const [completedReviewIds, setCompletedReviewIds] = useState<string[]>([]);
 
   const actionableItems = items.filter((item) => item.is_expired || item.is_expiring_soon || item.expiry_state === "no_expiry");
@@ -159,6 +164,7 @@ export function EmployeeDocumentQueue({
     setActionNotice(
       `${payload.reminder_count || 0} reminder${payload.reminder_count === 1 ? "" : "s"} sent, ${payload.skipped_count || 0} skipped.`,
     );
+    setActionNoticeTitle("Reminder action complete.");
     setSelectedIds([]);
     setIsSubmittingReminder(false);
     router.refresh();
@@ -232,6 +238,7 @@ export function EmployeeDocumentQueue({
             setSelectedIds([]);
             setActionError("");
             setActionNotice("");
+            setActionNoticeTitle("Action complete.");
             router.push(pathname);
           }} type="button">Clear filters</button>
           {canManageDocuments ? (
@@ -252,7 +259,7 @@ export function EmployeeDocumentQueue({
           <span className="queue-summary-chip"><strong>{selectedIds.length}</strong> selected</span>
         </div>
         {!canManageDocuments ? <div className="notice"><strong>Read-only document queue.</strong><span className="muted">Reminder actions require documents.manage.</span></div> : null}
-        {actionNotice ? <div className="notice"><strong>Reminder action complete.</strong><span className="muted">{actionNotice}</span></div> : null}
+        {actionNotice ? <div className="notice"><strong>{actionNoticeTitle}</strong><span className="muted">{actionNotice}</span></div> : null}
         {actionError ? <div className="notice notice--error" role="alert"><strong>Reminder action failed.</strong><span className="muted">{actionError}</span></div> : null}
       </section>
 
@@ -314,6 +321,7 @@ export function EmployeeDocumentQueue({
                 onSaved={(message) => {
                   setCompletedReviewIds((current) => [...new Set([...current, item.id])]);
                   setActionNotice(message);
+                  setActionNoticeTitle("Review action complete.");
                 }}
                 verificationStatusOptions={verificationStatusOptions}
               />

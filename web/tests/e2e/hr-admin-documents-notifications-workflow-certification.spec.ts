@@ -114,7 +114,7 @@ test.describe("HR Admin documents and notifications workflow certification", () 
     await expectNoHorizontalOverflow(page);
   });
 
-  test("document full review page handles save failure clearly and remains usable", async ({ page }) => {
+  test("document full review page handles save failure, retry success, and queue confirmation", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/employee-documents", hrAdmin);
     await expectPageReady(page, /Employee document review/);
 
@@ -127,19 +127,34 @@ test.describe("HR Admin documents and notifications workflow certification", () 
     await expect(page.getByRole("heading", { name: "Review details" })).toBeVisible();
     await expect(page.getByText("Employee-facing status")).toBeVisible();
     await expect(page.getByText("Decision effect")).toBeVisible();
-    await expect(page.getByText(/employee will see|document stays in the HR verification queue/i).first()).toBeVisible();
+    await expect(page.getByText(/employee will see|document remains in the HR verification queue/i).first()).toBeVisible();
     await field(page, /Rejection reason or review note/i).fill(`Playwright full review ${Date.now()}`);
 
+    let saveAttempt = 0;
     await page.route("**/api/hr-admin/employee-documents/*", async (route) => {
+      saveAttempt += 1;
+      if (saveAttempt === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Full document review save is temporarily unavailable." }),
+        });
+        return;
+      }
       await route.fulfill({
-        status: 503,
+        status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ detail: "Full document review save is temporarily unavailable." }),
+        body: JSON.stringify({ id: "playwright-reviewed-document", verification_status: "pending" }),
       });
     });
     await page.getByRole("button", { name: "Save review" }).click();
     await expect(page.getByText("Save failed.")).toBeVisible();
     await expect(page.getByText("Full document review save is temporarily unavailable.")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await page.getByRole("button", { name: "Save review" }).click();
+    await expect(page).toHaveURL(/\/hr-admin\/employee-documents\?review_saved=1$/);
+    await expect(page.getByText("Review action complete.")).toBeVisible();
+    await expect(page.getByText("Document review updated.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await page.unroute("**/api/hr-admin/employee-documents/*");
   });

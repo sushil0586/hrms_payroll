@@ -37,7 +37,26 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
   };
 }
 
-async function createLockedReview(page: Page, payrollOperator: Persona) {
+async function authToken(page: Page) {
+  const token = (await page.context().cookies()).find((cookie) => cookie.name === "hrms_access_token")?.value;
+  expect(token, "Expected authenticated browser session token.").toBeTruthy();
+  return token!;
+}
+
+async function backendApiGet<T>(page: Page, path: string) {
+  const apiBase = process.env.HRMS_API_BASE_URL ?? "http://127.0.0.1:8012/api/v1";
+  const response = await page.request.get(`${apiBase}${path}`, {
+    headers: { Authorization: `Token ${await authToken(page)}` },
+  });
+  expect(response.status(), `${path} should return 200 from backend API`).toBe(200);
+  return (await response.json()) as T;
+}
+
+async function createLockedReview(
+  page: Page,
+  payrollOperator: Persona,
+  options: { employeeOptionText?: string; expectedEmployeeCode?: string; runConfigSnapshot?: Record<string, unknown>; outputProfileRef?: string } = {},
+) {
   await gotoAuthenticated(page, "/hr-admin/payroll-inputs", payrollOperator);
   await expectPageReady(page, "Payroll Inputs");
   const runForm = form(page, "payroll-run-form");
@@ -49,18 +68,25 @@ async function createLockedReview(page: Page, payrollOperator: Persona) {
   const run = await submitAndCapture<{ id: string; code: string }>(page, /\/api\/hr-admin\/payroll-runs$/, "POST", async () => {
     await field(runForm, "Code").fill(runCode);
     await field(runForm, "Name").fill(`Output certification ${runCode}`);
+    await field(runForm, "Pay group").selectOption("").catch(() => undefined);
     await field(runForm, "Status").selectOption("collecting_inputs");
     await field(runForm, "Input profile ref").fill("tenant.payroll.input.phase5p.v1");
     await field(runForm, "Snapshot schema ref").fill("tenant.payroll.snapshot.phase5p.v1");
     await field(runForm, "Config profile reference").fill("tenant.payroll.run.phase5p.v1");
     await runForm.getByRole("button", { name: "Create run" }).click();
   });
-  expect(run.ok).toBeTruthy();
+  expect(run.ok, `Payroll run create failed with ${run.status}: ${JSON.stringify(run.payload)}`).toBeTruthy();
+  if (options.runConfigSnapshot) {
+    const runConfigResponse = await page.request.patch(`/api/hr-admin/payroll-runs/${run.payload.id}`, {
+      data: { config_snapshot: options.runConfigSnapshot },
+    });
+    expect(runConfigResponse.status(), `Payroll run config patch failed: ${await runConfigResponse.text()}`).toBe(200);
+  }
 
   await snapshotForm.getByRole("button", { name: "New" }).click();
   const snapshot = await submitAndCapture<{ id: string }>(page, /\/api\/hr-admin\/payroll-input-snapshots$/, "POST", async () => {
     await field(snapshotForm, "Payroll run").selectOption(run.payload.id);
-    await selectOptionContaining(field(snapshotForm, "Employee"), "EMP-0042");
+    await selectOptionContaining(field(snapshotForm, "Employee"), options.employeeOptionText ?? "EMP-0042");
     await field(snapshotForm, "Snapshot status").selectOption("ready");
     await field(snapshotForm, "Input profile ref").fill("tenant.payroll.input.phase5p.v1");
     await field(snapshotForm, "Config profile reference").fill("tenant.payroll.snapshot.phase5p.v1");
@@ -71,14 +97,14 @@ async function createLockedReview(page: Page, payrollOperator: Persona) {
     await field(snapshotForm, "Validation snapshot JSON").fill(JSON.stringify({ blockers: [], warnings: [] }));
     await snapshotForm.getByRole("button", { name: "Create snapshot" }).click();
   });
-  expect(snapshot.ok).toBeTruthy();
+  expect(snapshot.ok, `Payroll snapshot create failed with ${snapshot.status}: ${JSON.stringify(snapshot.payload)}`).toBeTruthy();
 
   await gotoAuthenticated(page, `/hr-admin/payroll-inputs?runId=${run.payload.id}&snapshotId=${snapshot.payload.id}`, payrollOperator);
   await expectPageReady(page, "Payroll Inputs");
   const lockInputs = await submitAndCapture<{ locked_count: number }>(page, new RegExp(`/api/hr-admin/payroll-runs/${run.payload.id}/lock-inputs$`), "POST", async () => {
     await lockForm.getByRole("button", { name: "Lock selected run inputs" }).click();
   });
-  expect(lockInputs.ok).toBeTruthy();
+  expect(lockInputs.ok, `Payroll input lock failed with ${lockInputs.status}: ${JSON.stringify(lockInputs.payload)}`).toBeTruthy();
 
   await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${run.payload.id}`, payrollOperator);
   await expectPageReady(page, "Payroll Calculations");
@@ -87,13 +113,13 @@ async function createLockedReview(page: Page, payrollOperator: Persona) {
     await calculationPanel.getByLabel("Calculation profile ref").fill("tenant.payroll.calc.phase5p.v1");
     await calculationPanel.getByRole("button", { name: "Calculate draft" }).click();
   });
-  expect(calculation.ok).toBeTruthy();
+  expect(calculation.ok, `Payroll calculation failed with ${calculation.status}: ${JSON.stringify(calculation.payload)}`).toBeTruthy();
 
   const review = await submitAndCapture<{ review: { id: string } }>(page, new RegExp(`/api/hr-admin/payroll-runs/${run.payload.id}/open-review$`), "POST", async () => {
     await calculationPanel.getByLabel("Review profile ref").fill("tenant.payroll.review.phase5p.v1");
     await calculationPanel.getByRole("button", { name: "Open review" }).click();
   });
-  expect(review.ok).toBeTruthy();
+  expect(review.ok, `Payroll review open failed with ${review.status}: ${JSON.stringify(review.payload)}`).toBeTruthy();
 
   await gotoAuthenticated(page, `/hr-admin/payroll-review?reviewId=${review.payload.review.id}`, payrollOperator);
   await expectPageReady(page, "Payroll Review");
@@ -101,34 +127,38 @@ async function createLockedReview(page: Page, payrollOperator: Persona) {
   const submitted = await submitAndCapture<{ review: { status: string } }>(page, new RegExp(`/api/hr-admin/payroll-reviews/${review.payload.review.id}/submit$`), "POST", async () => {
     await controls.getByRole("button", { name: "Submit review" }).click();
   });
-  expect(submitted.ok).toBeTruthy();
+  expect(submitted.ok, `Payroll review submit failed with ${submitted.status}: ${JSON.stringify(submitted.payload)}`).toBeTruthy();
 
   await controls.getByLabel("Approval profile ref").fill("tenant.payroll.approval.phase5p.v1");
   await controls.getByLabel("Approval comment").fill("Approved for output artifact certification.");
   const approved = await submitAndCapture<{ review: { status: string } }>(page, new RegExp(`/api/hr-admin/payroll-reviews/${review.payload.review.id}/approve$`), "POST", async () => {
     await controls.getByRole("button", { name: "Approve review" }).click();
   });
-  expect(approved.ok).toBeTruthy();
+  expect(approved.ok, `Payroll review approve failed with ${approved.status}: ${JSON.stringify(approved.payload)}`).toBeTruthy();
 
   const locked = await submitAndCapture<{ review: { status: string } }>(page, new RegExp(`/api/hr-admin/payroll-reviews/${review.payload.review.id}/lock$`), "POST", async () => {
     await controls.getByRole("button", { name: "Final lock" }).click();
   });
-  expect(locked.ok).toBeTruthy();
+  expect(locked.ok, `Payroll review lock failed with ${locked.status}: ${JSON.stringify(locked.payload)}`).toBeTruthy();
 
-  await controls.getByLabel("Output profile ref").fill("tenant.payroll.outputs.phase5p.v1");
+  await controls.getByLabel("Output profile ref").fill(options.outputProfileRef ?? "tenant.payroll.outputs.phase5p.v1");
   const outputs = await submitAndCapture<{
     output_batch: { id: string; status: string; artifact_count: number; payslip_count: number; register_count: number };
     artifacts: Array<{ id: string; kind: string; status: string; employee_code: string | null }>;
   }>(page, new RegExp(`/api/hr-admin/payroll-reviews/${review.payload.review.id}/generate-outputs$`), "POST", async () => {
     await controls.getByRole("button", { name: "Generate outputs" }).click();
   });
-  expect(outputs.ok).toBeTruthy();
+  expect(outputs.ok, `Payroll output generation failed with ${outputs.status}: ${JSON.stringify(outputs.payload)}`).toBeTruthy();
   expect(outputs.payload.output_batch.artifact_count).toBeGreaterThanOrEqual(2);
 
   return {
     batchId: outputs.payload.output_batch.id,
-    payslipId: outputs.payload.artifacts.find((artifact) => artifact.kind === "payslip" && artifact.employee_code === "EMP-0042")?.id ?? "",
+    payslipId: outputs.payload.artifacts.find((artifact) => (
+      artifact.kind === "payslip" &&
+      (!options.expectedEmployeeCode || artifact.employee_code === options.expectedEmployeeCode)
+    ))?.id ?? "",
     registerId: outputs.payload.artifacts.find((artifact) => artifact.kind === "register")?.id ?? "",
+    employeeCode: outputs.payload.artifacts.find((artifact) => artifact.kind === "payslip")?.employee_code ?? "",
     runCode,
   };
 }
@@ -150,7 +180,7 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     await expect(page.locator(".pagination-bar__summary").filter({ hasText: "Page 1" })).toHaveCount(2);
     await expect(page.getByRole("link", { name: "Next" }).first()).toBeVisible();
     await expect(page.locator(".payroll-output-card.is-selected")).toContainText(setup.runCode);
-    await expect(page.locator(".payroll-output-artifact-table tr.is-selected")).toContainText("EMP-0042");
+    await expect(page.locator(".payroll-output-artifact-table tr.is-selected")).toContainText(setup.employeeCode || "Payslip");
     await expect(page.locator("aside[aria-label$='output artifact']")).toContainText("Storage governance");
     await expect(page.locator("aside[aria-label$='output artifact']")).toContainText("Access governance");
     await expect(page.locator("aside[aria-label$='output artifact']")).toContainText("tenant.payroll.outputs.phase5p.v1");
@@ -214,6 +244,80 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     expect(registerFromEss.status()).toBe(404);
     const hrRouteFromEss = await page.request.get(`/api/hr-admin/payroll-output-artifacts/${setup.payslipId}/download`);
     expect([403, 404]).toContain(hrRouteFromEss.status());
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("PDF payslip output carries tax-sheet evidence in HR and ESS browser flows", async ({ page }) => {
+    test.setTimeout(6 * 60 * 1000);
+    await gotoAuthenticated(page, "/ess", employee);
+    const dashboard = await backendApiGet<{ profile?: { employee_code?: string; full_name?: string } }>(page, "/me/dashboard/");
+    const employeeCode = dashboard.profile?.employee_code ?? "";
+    const employeeName = dashboard.profile?.full_name ?? "";
+    expect(employeeCode || employeeName).toBeTruthy();
+
+    const payrollOperator = await createPayrollLifecycleOperator(page);
+    const outputProfileRef = "tenant.payroll.outputs.pdf-tax-sheet.v1";
+    const setup = await createLockedReview(page, payrollOperator, {
+      employeeOptionText: employeeCode || employeeName,
+      expectedEmployeeCode: employeeCode || undefined,
+      outputProfileRef,
+      runConfigSnapshot: {
+        profile_ref: "tenant.payroll.run.pdf-tax-sheet.v1",
+        output_profile: {
+          output_profile_ref: outputProfileRef,
+          payslip_template_ref: "tenant.payslip.pdf.tax-sheet.v1",
+          mime_types: { payslip: "application/pdf" },
+          tax_sheet_profile: { enabled: true, country: "IN" },
+          tax_regime: "new_regime",
+          proof_status_summary: { verified: 1, pending: 0, rejected: 0 },
+        },
+      },
+    });
+    expect(setup.payslipId).toBeTruthy();
+
+    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}&artifactId=${setup.payslipId}`, payrollOperator);
+    await expectPageReady(page, "Payroll Outputs");
+    const controls = page.getByLabel("Output controls");
+    const published = await submitAndCapture<{ output_batch: { status: string } }>(
+      page,
+      new RegExp(`/api/hr-admin/payroll-output-batches/${setup.batchId}/publish$`),
+      "POST",
+      async () => {
+        await controls.getByRole("button", { name: "Publish outputs" }).click();
+      },
+    );
+    expect(published.ok).toBeTruthy();
+
+    await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${setup.batchId}&artifactId=${setup.payslipId}`, payrollOperator);
+    await expectPageReady(page, "Payroll Outputs");
+    const detail = page.locator("aside[aria-label$='output artifact']");
+    await expect(detail).toContainText("Payslip PDF readiness");
+    await expect(detail).toContainText("tenant.payslip.pdf.tax-sheet.v1");
+    await expect(detail).toContainText("Tax sheet");
+    await expect(detail).toContainText("Included");
+    await expect(detail).toContainText("new_regime");
+
+    const hrDownload = await page.request.get(`/api/hr-admin/payroll-output-artifacts/${setup.payslipId}/download`);
+    expect(hrDownload.status()).toBe(200);
+    expect(hrDownload.headers()["content-type"]).toContain("application/pdf");
+    expect(hrDownload.headers()["content-disposition"] ?? "").toContain(".pdf");
+    const hrPdf = await hrDownload.text();
+    expect(hrPdf).toContain("%PDF-1.4");
+    expect(hrPdf).toContain("Tax sheet");
+    expect(hrPdf).toContain("Tax regime: new_regime");
+
+    await gotoAuthenticated(page, `/ess/payslips?q=${setup.runCode}`, employee);
+    await expectPageReady(page, "Payslips");
+    await page.getByRole("button", { name: "Review payslip" }).first().click();
+    const dialog = page.getByRole("dialog", { name: /Payslip detail/ });
+    await expect(dialog).toContainText("Tax sheet");
+    await expect(dialog).toContainText("PDF readiness");
+    await expect(dialog).toContainText("Attached");
+    await expect(page.getByRole("link", { name: "Download payslip" })).toHaveAttribute("href", new RegExp(`/api/me/payroll-payslips/${setup.payslipId}/download`));
+    const essDownload = await page.request.get(`/api/me/payroll-payslips/${setup.payslipId}/download`);
+    expect(essDownload.status()).toBe(200);
+    expect(essDownload.headers()["content-type"]).toContain("application/pdf");
+    expect(await essDownload.text()).toContain("Tax sheet");
     await expectNoHorizontalOverflow(page);
   });
 

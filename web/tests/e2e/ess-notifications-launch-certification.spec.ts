@@ -50,10 +50,10 @@ test.describe("ESS Notifications launch certification", () => {
       await review.click();
       const dialog = page.getByRole("dialog", { name: /Notification detail/i });
       await expect(dialog).toBeVisible();
-      await expect(dialog.getByText("Message", { exact: true })).toBeVisible();
-      await expect(dialog.getByText("Delivery", { exact: true })).toBeVisible();
-      await expect(dialog.getByText("Source workflow", { exact: true })).toBeVisible();
-      await expect(dialog.getByText("Provider logs", { exact: true })).toBeVisible();
+      await expect(dialog.getByText("Message", { exact: true }).first()).toBeVisible();
+      await expect(dialog.getByText("Delivery", { exact: true }).first()).toBeVisible();
+      await expect(dialog.getByText("Source workflow", { exact: true }).first()).toBeVisible();
+      await expect(dialog.getByText("Provider logs", { exact: true }).first()).toBeVisible();
       const readToggle = dialog.getByRole("button", { name: /Mark read|Mark unread/ }).first();
       await expect(readToggle).toBeVisible();
       let readAttempt = 0;

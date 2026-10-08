@@ -174,6 +174,10 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
     );
   }
 
+  const renderModel = artifact.render_model;
+  const taxSheet = renderModel?.tax_sheet;
+  const visibleLineCount = renderModel?.quality.visible_line_count ?? artifact.line_snapshot.length;
+
   return (
     <aside className="payroll-setup-detail-panel payroll-output-detail-panel" aria-label={`${artifact.title} output artifact`}>
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -209,6 +213,23 @@ function ArtifactDetail({ artifact }: { artifact: HrAdminPayrollOutputArtifact |
           <div className="detail-row"><span className="detail-label">Published</span><span className="detail-value">{formatDate(artifact.published_at)}</span></div>
         </div>
       </section>
+
+      {renderModel ? (
+        <section className="payroll-rule-source-card">
+          <span className="workspace-card__eyebrow">Payslip PDF readiness</span>
+          <div className="detail-grid">
+            <div className="detail-row"><span className="detail-label">Template</span><span className="detail-value">{renderModel.template_ref || "Default payslip template"}</span></div>
+            <div className="detail-row"><span className="detail-label">Visible lines</span><span className="detail-value">{visibleLineCount}</span></div>
+            <div className="detail-row"><span className="detail-label">Hidden lines</span><span className="detail-value">{renderModel.quality.hidden_line_count}</span></div>
+            <div className="detail-row"><span className="detail-label">Tax sheet</span><span className="detail-value">{taxSheet?.available ? "Included" : "Not included"}</span></div>
+            <div className="detail-row"><span className="detail-label">Tax regime</span><span className="detail-value">{taxSheet?.tax_regime || "Not captured"}</span></div>
+            <div className="detail-row"><span className="detail-label">Period tax</span><span className="detail-value">{taxSheet?.current_period_tax ?? formatMoney(0)}</span></div>
+          </div>
+          <p className="section-copy section-copy-soft">
+            This model is the source used for employee payslip PDF rendering and tax-sheet evidence.
+          </p>
+        </section>
+      ) : null}
 
       <section className="payroll-rule-source-card">
         <span className="workspace-card__eyebrow">Storage governance</span>

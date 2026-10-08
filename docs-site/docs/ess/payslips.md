@@ -45,6 +45,8 @@ The page keeps salary history in one place so employees do not need to ask HR fo
 | Published payslips | Searchable list of all visible payslips. | Filter by year or search value, then choose **Review payslip** or **Download**. |
 | Payslip checklist | Employee reminders before downloading or sharing salary proof. | Use it to avoid checking the wrong month or sharing an unverified file. |
 | Review dialog | Gross pay, deductions, net pay, payment summary, access trail, storage governance, calculation lines, and source hash. | Open only when you need detailed evidence. |
+| Payslip PDF | Downloadable payroll document generated from the locked payroll output. | Use for employee records, bank requests, or salary proof after verifying the period and totals. |
+| Tax sheet | Tax/TDS and statutory explanation attached to the payslip when configured. | Review tax regime, current-period tax, YTD tax, and proof/declaration status before raising payroll queries. |
 
 ## Screen Labels To Recognize
 
@@ -76,6 +78,7 @@ Check:
 - Period/month is correct.
 - Payslip status is published or available.
 - Gross earnings, deductions, and net pay look reasonable.
+- Tax sheet values, such as tax regime and TDS, look reasonable where your tenant publishes them.
 - Employee name and pay period match your record.
 - Employee name and code are yours.
 - You are comfortable sharing the file wherever you plan to use it.
@@ -86,7 +89,9 @@ Check:
 | --- | --- |
 | Payroll run status | Payslips should appear only after payroll output is published. |
 | Payslip file generation | Controls whether a downloadable file exists. |
+| Payslip PDF template | Controls the layout, employer details, earning/deduction grouping, footer, and tax sheet sections. |
 | Employee pay result | Drives gross earnings, deductions, net pay, and payment summary. |
+| Tax/statutory setup | Drives tax regime, TDS, professional tax, PF/ESI/LWF, and tax sheet values where configured. |
 | Access/read governance | Controls read receipts, download trail, and audit evidence. |
 | Storage policy | Controls file availability and retention. |
 | Employee scope | Ensures employees can see only their own payslips. |
@@ -97,8 +102,9 @@ Check:
 2. Check the **Latest payslip** band for the period and net pay.
 3. Select **Review payslip**.
 4. Confirm gross earnings, deductions, net pay, pay date, and file name.
-5. Select **Mark as read** if you have reviewed it.
-6. Select **Download payslip**.
+5. Review the tax sheet if it is available.
+6. Select **Mark as read** if you have reviewed it.
+7. Select **Download payslip**.
 
 Expected result: the file downloads through the authenticated app route and the access trail can show read/download evidence.
 
@@ -129,6 +135,7 @@ Expected result: only your own published payslips are visible. Draft payroll out
 | --- | --- |
 | Latest payslip is published | The latest band shows the period, net pay, review, and download actions. |
 | Employee opens review | A dialog shows totals, payment summary, access trail, storage governance, calculation lines, and source hash. |
+| Tenant publishes PDF payslips | Download returns a PDF payslip generated from locked payroll output, with tax sheet content where configured. |
 | Employee marks as read | The system records the read receipt and refreshes the page. |
 | Employee filters by an empty year/search | The list shows a clear no-results message. |
 | File is not downloadable | Download action is hidden or blocked; employee should contact HR/payroll. |
@@ -141,6 +148,7 @@ The ESS Payslips launch certification covers:
 - Latest payslip band and published payslip list.
 - Search, year filter, page size, and pagination.
 - Review dialog with totals, payment summary, access trail, storage governance, calculation lines, and source hash.
+- PDF/tax-sheet hardening tracks generated PDF content, tax sheet values, and output reconciliation as part of the payroll SaaS hardening plan.
 - Read receipt action.
 - Download action visibility and authenticated route behavior.
 - Empty filtered state and no horizontal overflow.

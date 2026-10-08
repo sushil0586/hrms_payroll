@@ -31,6 +31,7 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
   const status = normalizeParam(currentParams.status) ?? "";
   const categoryId = normalizeParam(currentParams.category_id) ?? "";
   const expiryFilter = normalizeParam(currentParams.expiry_filter) ?? "";
+  const reviewSaved = normalizeParam(currentParams.review_saved) === "1";
 
   const [result, optionsResult] = await Promise.all([
     getHrAdminEmployeeDocuments({
@@ -98,6 +99,8 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
         canExportDocuments={canExportDocuments}
         canManageDocuments={canManageDocuments}
         canVerifyDocuments={canVerifyDocuments}
+        initialActionNotice={reviewSaved ? "Document review updated." : ""}
+        initialActionNoticeTitle="Review action complete."
       />
     </main>
   );

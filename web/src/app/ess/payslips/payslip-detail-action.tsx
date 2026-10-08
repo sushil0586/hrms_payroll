@@ -88,6 +88,12 @@ function useEscapeClose(isOpen: boolean, onClose: () => void) {
 export function PayslipDetailAction({ payslip, variant = "secondary" }: { payslip: EssPayrollPayslip; variant?: "primary" | "secondary" }) {
   const [isOpen, setIsOpen] = useState(false);
   useEscapeClose(isOpen, () => setIsOpen(false));
+  const renderModel = payslip.render_model;
+  const taxSheet = renderModel?.tax_sheet;
+  const visibleSections = renderModel?.sections.filter((section) => section.lines.length) ?? [];
+  const proofSummary = taxSheet?.proof_status_summary ? Object.entries(taxSheet.proof_status_summary)
+    .map(([key, value]) => `${titleCase(key)} ${String(value)}`)
+    .join(", ") : "";
   const modal = isOpen && typeof document !== "undefined"
     ? createPortal(
         <div className="modal-shell" role="presentation">
@@ -166,9 +172,38 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
               </section>
 
               <section className="ess-payslip-detail-section">
-                <span className="workspace-card__eyebrow">Calculation lines</span>
+                <span className="workspace-card__eyebrow">Tax sheet</span>
+                {taxSheet?.available ? (
+                  <div className="detail-grid">
+                    <DetailRow label="Tax regime" value={taxSheet.tax_regime || "As per payroll setup"} />
+                    <DetailRow label="This period" value={taxSheet.current_period_tax} />
+                    <DetailRow label="Year to date" value={taxSheet.ytd_tax} />
+                    <DetailRow label="Proofs" value={proofSummary || "No proof summary attached"} />
+                  </div>
+                ) : (
+                  <p className="section-copy section-copy-soft">Tax sheet will appear here once payroll publishes tax calculation evidence with the payslip.</p>
+                )}
+              </section>
+
+              <section className="ess-payslip-detail-section">
+                <span className="workspace-card__eyebrow">Payslip lines</span>
                 <div className="payroll-rule-snapshot-list">
-                  {payslip.line_snapshot.length ? (
+                  {visibleSections.length ? (
+                    visibleSections.map((section) => (
+                      <div className="payroll-rule-snapshot-group" key={section.key}>
+                        <div className="detail-row">
+                          <span className="detail-label">{section.label}</span>
+                          <span className="detail-value">{section.total}</span>
+                        </div>
+                        {section.lines.slice(0, 6).map((line) => (
+                          <div className="detail-row" key={`${section.key}-${line.component_code}`}>
+                            <span className="detail-label">{line.component_name}</span>
+                            <span className="detail-value">{line.amount}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  ) : payslip.line_snapshot.length ? (
                     payslip.line_snapshot.map((line, index) => (
                       <div className="detail-row" key={`${getLineValue(line, "component_code")}-${index}`}>
                         <span className="detail-label">{getLineValue(line, "component_name")}</span>
@@ -182,6 +217,18 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
                   )}
                 </div>
               </section>
+
+              {renderModel ? (
+                <section className="ess-payslip-detail-section">
+                  <span className="workspace-card__eyebrow">PDF readiness</span>
+                  <div className="detail-grid">
+                    <DetailRow label="Template" value={renderModel.template_ref || "Default payslip template"} />
+                    <DetailRow label="Employee" value={renderModel.employee.code || renderModel.employee.name || "Employee"} />
+                    <DetailRow label="Hidden lines" value={String(renderModel.quality.hidden_line_count)} />
+                    <DetailRow label="Tax sheet" value={taxSheet?.available ? "Attached" : "Not attached"} />
+                  </div>
+                </section>
+              ) : null}
 
               <section className="ess-payslip-detail-section ess-payslip-detail-section--wide">
                 <span className="workspace-card__eyebrow">Source hash</span>

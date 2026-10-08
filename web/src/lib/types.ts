@@ -4441,6 +4441,66 @@ export type HrAdminPayrollOutputBatch = {
   updated_at: string;
 };
 
+export type PayrollPayslipRenderLine = {
+  component_code: string;
+  component_name: string;
+  line_type: string;
+  amount: string;
+  currency_code: string;
+  source_hash: string;
+  statutory_type: string;
+  statutory_treatment_ref: string;
+  tax_regime: string;
+  ytd_amount: string;
+};
+
+export type PayrollPayslipRenderSection = {
+  key: string;
+  label: string;
+  total: string;
+  lines: PayrollPayslipRenderLine[];
+};
+
+export type PayrollPayslipTaxSheet = {
+  available: boolean;
+  tax_regime: string;
+  current_period_tax: string;
+  ytd_tax: string;
+  statutory_line_count: number;
+  proof_status_summary: Record<string, unknown>;
+  lines: PayrollPayslipRenderLine[];
+  statutory_lines: PayrollPayslipRenderLine[];
+};
+
+export type PayrollPayslipRenderModel = {
+  artifact_id: string;
+  title: string;
+  file_name: string;
+  template_ref: string;
+  source_hash: string;
+  checksum_sha256: string;
+  employee: {
+    name: string;
+    code: string;
+  };
+  period: {
+    name: string;
+    payroll_run_name: string;
+    payroll_run_code: string;
+    start_date: string;
+    end_date: string;
+    pay_date: string;
+  };
+  totals: Record<string, string>;
+  sections: PayrollPayslipRenderSection[];
+  tax_sheet: PayrollPayslipTaxSheet;
+  quality: {
+    hidden_line_count: number;
+    visible_line_count: number;
+    has_tax_sheet: boolean;
+  };
+};
+
 export type HrAdminPayrollOutputArtifact = {
   id: string;
   output_batch_id: string;
@@ -4475,6 +4535,7 @@ export type HrAdminPayrollOutputArtifact = {
   output_profile_ref: string;
   totals_snapshot: Record<string, unknown>;
   line_snapshot: Record<string, unknown>[];
+  render_model?: PayrollPayslipRenderModel | null;
   access_summary: {
     published_event_count: number;
     notification_count: number;
@@ -5506,6 +5567,7 @@ export type EssPayrollPayslip = {
   signed_download_expires_at: string | null;
   totals_snapshot: Record<string, unknown>;
   line_snapshot: Record<string, unknown>[];
+  render_model?: PayrollPayslipRenderModel | null;
   access_summary: {
     published_event_count: number;
     notification_count: number;

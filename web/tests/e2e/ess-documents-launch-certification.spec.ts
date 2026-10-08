@@ -146,7 +146,9 @@ test.describe("ESS Documents launch certification", () => {
 
     const uploadDialog = await openUploadDialog(page);
     await expectDialogStable(page, "Upload document");
-    await uploadDialog.getByRole("button", { name: "Close" }).click();
+    await page.keyboard.press("Escape");
+    await expect(uploadDialog).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
 
     const reviewButton = page.getByRole("button", { name: "Review" }).first();
     if (await reviewButton.isVisible().catch(() => false)) {

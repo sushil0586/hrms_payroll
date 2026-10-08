@@ -14,6 +14,7 @@ Use ESS Leave to check leave balances, apply for leave, attach evidence when req
 - [Example: apply one day Earned Leave](#example-apply-one-day-earned-leave)
 - [Example: apply Sick Leave with attachment](#example-apply-sick-leave-with-attachment)
 - [Modal behavior](#modal-behavior)
+- [Leave unit calculation](#leave-unit-calculation)
 - [Evidence behavior](#evidence-behavior)
 - [What HR Controls Upstream](#what-hr-controls-upstream)
 - [Negative validation examples](#negative-validation-examples)
@@ -50,7 +51,7 @@ Employees use this page when they need time off or want to understand available 
 | Request history | Shows submitted requests with status filters, pagination, and a compact row for each request. |
 | Request detail | Opens in a modal so the list stays focused and the employee can inspect one request without losing context. |
 | Apply leave | Opens the leave request modal. The main page does not carry the full form inline. |
-| Request summary | Shows estimated leave units, available balance, weekend days, and attachment requirement before submission. |
+| Request summary | Shows estimated leave units, available balance, non-working days, and attachment requirement before submission. |
 | Policy guidance | Explains the selected leave type, unit, and whether evidence is optional or required. |
 | Final validation | Explains that policy, balance, holiday, and approval routing are checked again during submission. |
 
@@ -61,7 +62,8 @@ Employees use this page when they need time off or want to understand available 
 | Balances | Available, used, pending, and reserved leave by type. |
 | Leave requests | Request history with status tabs and pagination. |
 | Apply leave | Focused modal for creating a new leave request. |
-| Leave request summary | Estimated units, available balance, weekend days, and attachment rule. |
+| Leave request summary | Estimated units, available balance, non-working days, and attachment rule. |
+| Unit calculation | Date-by-date breakdown showing which days were counted or excluded. |
 | Policy guidance | Policy-level guidance for the selected leave type. |
 | Final validation | Final server-side checks before the request is accepted. |
 
@@ -113,6 +115,20 @@ Leave actions should stay lightweight:
 
 This keeps ESS Leave as one responsibility: review balances and requests first, then perform focused actions in modals.
 
+## Leave unit calculation
+
+Leave units are policy-driven and can differ from a simple calendar-day count:
+
+| Rule source | Employee impact |
+| --- | --- |
+| Employee roster / shift assignment | Weekly offs follow the employee's resolved roster. If an employee's weekly offs are Tuesday and Wednesday, Saturday and Sunday can be counted as working leave days. |
+| No resolved roster / shift | The system falls back to the standard Saturday/Sunday weekly off pattern. |
+| Holiday calendar | Tenant holidays can be excluded when the leave policy does not count holiday overlap. |
+| Calendar-day policy | If the policy counts calendar days, weekends and holidays remain chargeable. |
+| Sandwich rule | If enabled by HR policy, intervening weekly offs or holidays inside the selected range can be counted. |
+
+After submission, open **View details** and check **Unit calculation**. It shows each date, weekday, units, and whether the day was **Counted** or **Excluded**. This is the best place to confirm why a Friday-to-Monday request may be two units for a standard weekend employee, while a rostered employee with different weekly offs may see a different result.
+
 ## Evidence behavior
 
 Evidence depends on the HR policy:
@@ -132,7 +148,7 @@ Evidence depends on the HR policy:
 | Balance and accrual setup | Drives available, used, reserved, and after-request balance. |
 | Evidence rule | Decides whether attachment is optional, mandatory, or required only above a threshold. |
 | Approval workflow | Routes the request to manager, HR, or auto-approval. |
-| Holiday and weekend calendar | Affects estimated leave units and weekend/holiday exclusion. |
+| Attendance policy, shift assignment, roster, and holiday calendar | Affects estimated leave units, weekly-off exclusion, and holiday exclusion. |
 
 ## Negative validation examples
 
@@ -149,8 +165,9 @@ The ESS Leave launch certification covers:
 
 - Page structure: balances, filters, tabs, pagination, request history, and no horizontal overflow.
 - Detail drilldown: request detail opens in a modal and closes with `Esc`.
-- Apply modal: policy guidance, evidence optional/required state, final validation, and date blocking.
+- Apply modal: policy guidance, evidence optional/required state, final validation, date blocking, and roster-aware unit calculation.
 - Positive submission path: an optional-evidence leave request can be submitted through the browser against a live local backend.
+- Roster regression: browser coverage proves a custom weekly-off roster can count Saturday/Sunday and exclude the configured weekly-off days instead of hardcoding weekends.
 
 ## Common errors
 
@@ -161,6 +178,7 @@ The ESS Leave launch certification covers:
 | Attachment required. | The policy requires proof for this leave type or duration. | Upload the required file and submit again. |
 | Approval route missing. | The leave policy needs approval but manager/workflow setup is incomplete. | Contact HR to verify reporting manager and approval workflow. |
 | Selected dates are invalid. | End date is before start date, or the date is outside the policy effective window. | Correct the dates and try again. |
+| Leave units do not match Saturday/Sunday expectations. | Your employee roster may use different weekly offs, or HR may not have assigned a roster yet. | Open the request detail **Unit calculation** section and contact HR with the dates shown as counted or excluded. |
 
 ## When to contact HR
 
