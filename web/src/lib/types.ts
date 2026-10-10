@@ -87,6 +87,8 @@ export type HrAdminEmployeeDetail = {
 export type HrAdminOptionItem = {
   id: string;
   name: string;
+  code?: string;
+  employee_code?: string;
   legal_entity_id?: string | null;
   location_id?: string | null;
   business_unit_id?: string | null;
@@ -456,10 +458,12 @@ export type HrAdminEmployeeShiftAssignment = {
   is_primary: boolean;
   config_snapshot?: {
     rotation: {
+      pattern_type?: "fixed_weekly" | "weekly_rotation" | "custom_cycle" | "six_on_one_off" | "five_on_two_off" | "four_on_four_off" | "two_two_three" | string;
       anchor_date: string | null;
       entries: Array<{
         position: number;
-        shift_id: string;
+        entry_kind?: "work" | "off" | string;
+        shift_id: string | null;
         span_days: number;
       }>;
     };
@@ -479,9 +483,11 @@ export type HrAdminEmployeeShiftAssignmentWriteInput = {
   is_primary: boolean;
   config_snapshot: {
     rotation: {
+      pattern_type?: "fixed_weekly" | "weekly_rotation" | "custom_cycle" | "six_on_one_off" | "five_on_two_off" | "four_on_four_off" | "two_two_three" | string;
       anchor_date: string | null;
       entries: Array<{
         position: number;
+        entry_kind?: "work" | "off" | string;
         shift_id: string | null;
         span_days: number;
       }>;
@@ -524,10 +530,12 @@ export type HrAdminEmployeeShiftAssignmentResolution = {
   sequence_summary?: string | null;
   config_snapshot?: {
     rotation: {
+      pattern_type?: "fixed_weekly" | "weekly_rotation" | "custom_cycle" | "six_on_one_off" | "five_on_two_off" | "four_on_four_off" | "two_two_three" | string;
       anchor_date: string | null;
       entries: Array<{
         position: number;
-        shift_id: string;
+        entry_kind?: "work" | "off" | string;
+        shift_id: string | null;
         span_days: number;
       }>;
     };
@@ -544,6 +552,8 @@ export type HrAdminEmployeeShiftAssignmentResolution = {
 };
 
 export type HrAdminWorkScheduleDay = {
+  contract_ref: string;
+  resolver_ref: string;
   employee_id: string;
   employee_code: string;
   date: string;
@@ -554,6 +564,18 @@ export type HrAdminWorkScheduleDay = {
   expected_start_at: string | null;
   expected_end_at: string | null;
   expected_hours: string;
+  expected_break_minutes: number;
+  grace_in_minutes: number;
+  grace_out_minutes: number;
+  crosses_midnight: boolean;
+  is_night_shift: boolean;
+  is_payable_schedule_day: boolean;
+  payroll_day_weight: string;
+  payroll_impact: {
+    expected_work_day: boolean;
+    expected_payable_day: boolean;
+    non_working_reason: string;
+  };
   weekly_off_source: string;
   weekly_off_days: string[];
   holiday_id: string | null;
@@ -571,6 +593,8 @@ export type HrAdminWorkScheduleDay = {
 };
 
 export type HrAdminWorkSchedulePreview = {
+  contract_ref: string;
+  resolver_ref: string;
   employee_id: string;
   employee_code: string;
   start_date: string;
@@ -594,10 +618,12 @@ export type HrAdminShiftRosterTemplate = {
   assignment_kind: "fixed" | "weekly_rotation" | "temporary_override";
   config_snapshot?: {
     rotation: {
+      pattern_type?: "fixed_weekly" | "weekly_rotation" | "custom_cycle" | "six_on_one_off" | "five_on_two_off" | "four_on_four_off" | "two_two_three" | string;
       anchor_date: string | null;
       entries: Array<{
         position: number;
-        shift_id: string;
+        entry_kind?: "work" | "off" | string;
+        shift_id: string | null;
         span_days: number;
       }>;
     };
@@ -613,9 +639,11 @@ export type HrAdminShiftRosterTemplateWriteInput = {
   assignment_kind: "fixed" | "weekly_rotation" | "temporary_override";
   config_snapshot: {
     rotation: {
+      pattern_type?: "fixed_weekly" | "weekly_rotation" | "custom_cycle" | "six_on_one_off" | "five_on_two_off" | "four_on_four_off" | "two_two_three" | string;
       anchor_date: string | null;
       entries: Array<{
         position: number;
+        entry_kind?: "work" | "off" | string;
         shift_id: string | null;
         span_days: number;
       }>;
@@ -731,6 +759,43 @@ export type HrAdminAttendanceRecord = {
   is_regularized: boolean;
   is_locked: boolean;
   notes: string;
+  derivation_summary: AttendanceDerivationSummary;
+};
+
+export type AttendanceDerivationSummary = {
+  schema_ref: string;
+  status: string;
+  schedule_contract_ref: string | null;
+  schedule_resolver_ref: string | null;
+  schedule_day_type: string | null;
+  schedule_resolution_source: string | null;
+  shift_name: string | null;
+  holiday_name: string | null;
+  expected_start_time: string | null;
+  expected_end_time: string | null;
+  expected_hours: string;
+  worked_hours: string;
+  late_minutes: number;
+  early_exit_minutes: number;
+  overtime_hours: string;
+  reasons: string[];
+  warnings: string[];
+  payroll_impact: {
+    expected_work_day: boolean;
+    expected_payable_day: boolean;
+    payable_units: string;
+    lop_units: string;
+    payroll_impacting: boolean;
+  };
+  leave_collision_count: number;
+  leave_collisions: Array<{
+    leave_request_id: string;
+    leave_type: string;
+    leave_status: string;
+    start_date: string;
+    end_date: string;
+    message: string;
+  }>;
 };
 
 export type HrAdminAttendanceRecordListResponse = {
@@ -774,6 +839,11 @@ export type HrAdminAttendanceOperationOptions = {
   shifts: HrAdminOptionItem[];
   holiday_calendars: HrAdminOptionItem[];
 };
+
+export type HrAdminAttendanceWorkbenchOptions = Pick<
+  HrAdminAttendanceOperationOptions,
+  "attendance_statuses" | "attendance_sources" | "regularization_statuses" | "employees" | "shifts"
+>;
 
 export type HrAdminLeaveApprovalRoute =
   | "manager_only"
@@ -1122,6 +1192,26 @@ export type HrAdminPolicyOptions = {
   employees: HrAdminOptionItem[];
   shifts: HrAdminOptionItem[];
   holiday_calendars: HrAdminOptionItem[];
+};
+
+export type HrAdminPolicyWorkbenchOptions = Pick<
+  HrAdminPolicyOptions,
+  | "attendance_policies"
+  | "leave_types"
+  | "leave_policies"
+  | "legal_entities"
+  | "branches"
+  | "locations"
+  | "departments"
+  | "grades"
+  | "employment_types"
+  | "employees"
+  | "shifts"
+>;
+
+export type HrAdminEmployeeOptionSearchResponse = {
+  items: HrAdminOptionItem[];
+  total_count: number;
 };
 
 export type HrAdminWorkflowStep = {
@@ -3645,6 +3735,17 @@ export type HrAdminPayrollRun = {
   warning_count: number;
   blocked_count: number;
   locked_count: number;
+  reconciliation_summary: {
+    status: string;
+    risk: string;
+    snapshot_count: number;
+    blocked_snapshot_count: number;
+    warning_snapshot_count: number;
+    finding_count: number;
+    high_count: number;
+    medium_count: number;
+    source: string;
+  };
   created_at: string;
   updated_at: string;
 };
@@ -3677,6 +3778,20 @@ export type HrAdminPayrollInputSnapshot = {
   document_snapshot: Record<string, unknown>;
   banking_snapshot: Record<string, unknown>;
   validation_snapshot: Record<string, unknown>;
+  reconciliation_summary: {
+    status: string;
+    risk: string;
+    finding_count: number;
+    high_count: number;
+    medium_count: number;
+    findings: Array<{
+      code: string;
+      severity: string;
+      message: string;
+    }>;
+    metrics: Record<string, string>;
+    source: string;
+  };
   source_hash: string;
   config_snapshot: Record<string, unknown>;
   blockers: string[];
@@ -3684,6 +3799,20 @@ export type HrAdminPayrollInputSnapshot = {
   created_at: string;
   updated_at: string;
 };
+
+export type HrAdminPayrollInputSnapshotListItem = Omit<
+  HrAdminPayrollInputSnapshot,
+  | "employee_snapshot"
+  | "organization_snapshot"
+  | "salary_snapshot"
+  | "attendance_snapshot"
+  | "leave_snapshot"
+  | "lifecycle_snapshot"
+  | "document_snapshot"
+  | "banking_snapshot"
+  | "validation_snapshot"
+  | "config_snapshot"
+>;
 
 export type HrAdminPayrollInputSnapshotSetupResponse = {
   summary: {
@@ -3694,8 +3823,16 @@ export type HrAdminPayrollInputSnapshotSetupResponse = {
     locked_snapshot_count: number;
     blocked_snapshot_count: number;
   };
+  pagination?: Record<string, {
+    page: number;
+    page_size: number;
+    total_count: number;
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  }>;
   runs: HrAdminPayrollRun[];
-  snapshots: HrAdminPayrollInputSnapshot[];
+  snapshots: HrAdminPayrollInputSnapshotListItem[];
   options: {
     payroll_run_statuses: HrAdminEnumOption[];
     payroll_input_snapshot_statuses: HrAdminEnumOption[];
@@ -3741,8 +3878,35 @@ export type HrAdminPayrollAdjustment = {
   applied_by_name: string | null;
   source_hash: string;
   config_snapshot: Record<string, unknown>;
+  post_lock_source?: PayrollPostLockImpactItem | null;
   created_at: string;
   updated_at: string;
+};
+
+export type PayrollPostLockImpactItem = {
+  employee_id: string;
+  employee_code: string;
+  employee_name: string;
+  snapshot_id: string;
+  payroll_run_id: string;
+  payroll_run_name: string;
+  pay_group_name: string | null;
+  period_start: string;
+  period_end: string;
+  impacted_start?: string;
+  impacted_end?: string;
+  snapshot_status?: string;
+  source_hash: string;
+  recommended_action: string;
+  adjustment_source_ref: string;
+};
+
+export type PayrollPostLockImpactSummary = {
+  schema_ref: string;
+  status: "clear" | "impacted" | string;
+  impact_count: number;
+  requires_arrears_review: boolean;
+  items: PayrollPostLockImpactItem[];
 };
 
 export type HrAdminPayrollAdjustmentSetupResponse = {
@@ -3754,10 +3918,20 @@ export type HrAdminPayrollAdjustmentSetupResponse = {
     approved_count: number;
     applied_count: number;
     total_amount: string;
+    post_lock_impact_count: number;
   };
+  pagination?: Record<string, {
+    page: number;
+    page_size: number;
+    total_count: number;
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  }>;
   runs: HrAdminPayrollRun[];
-  snapshots: HrAdminPayrollInputSnapshot[];
+  snapshots: HrAdminPayrollInputSnapshotListItem[];
   adjustments: HrAdminPayrollAdjustment[];
+  post_lock_impacts: PayrollPostLockImpactItem[];
   options: {
     adjustment_kinds: HrAdminEnumOption[];
     adjustment_statuses: HrAdminEnumOption[];
@@ -3834,7 +4008,7 @@ export type HrAdminPayrollSettlementSetupResponse = {
     line_count: number;
   };
   runs: HrAdminPayrollRun[];
-  snapshots: HrAdminPayrollInputSnapshot[];
+  snapshots: HrAdminPayrollInputSnapshotListItem[];
   settlements: HrAdminPayrollSettlement[];
   lines: HrAdminPayrollSettlementLine[];
   options: {
@@ -4293,6 +4467,11 @@ export type HrAdminPayrollCalculationLine = {
   updated_at: string;
 };
 
+export type HrAdminPayrollCalculationLineListItem = Omit<
+  HrAdminPayrollCalculationLine,
+  "context_snapshot" | "result_snapshot" | "trace_snapshot" | "config_snapshot"
+> & Partial<Pick<HrAdminPayrollCalculationLine, "context_snapshot" | "result_snapshot" | "trace_snapshot" | "config_snapshot">>;
+
 export type HrAdminPayrollValidationIssue = {
   id: string;
   payroll_run_id: string;
@@ -4336,9 +4515,17 @@ export type HrAdminPayrollCalculationSetupResponse = {
     validation_blocker_count: number;
     latest_net_pay: string;
   };
+  pagination?: Record<string, {
+    page: number;
+    page_size: number;
+    total_count: number;
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  }>;
   runs: HrAdminPayrollRun[];
   calculations: HrAdminPayrollRunCalculation[];
-  lines: HrAdminPayrollCalculationLine[];
+  lines: HrAdminPayrollCalculationLineListItem[];
   validation_issues: HrAdminPayrollValidationIssue[];
   options: {
     payroll_run_statuses: HrAdminEnumOption[];
@@ -4442,12 +4629,20 @@ export type HrAdminPayrollReviewSetupResponse = {
     approval_count: number;
     latest_net_pay: string;
   };
+  pagination?: Record<string, {
+    page: number;
+    page_size: number;
+    total_count: number;
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  }>;
   runs: HrAdminPayrollRun[];
   calculations: HrAdminPayrollRunCalculation[];
   reviews: HrAdminPayrollRunReview[];
   exceptions: HrAdminPayrollRunException[];
   approvals: HrAdminPayrollRunApproval[];
-  lines: HrAdminPayrollCalculationLine[];
+  lines: HrAdminPayrollCalculationLineListItem[];
   options: {
     payroll_run_statuses: HrAdminEnumOption[];
     review_statuses: HrAdminEnumOption[];
@@ -4682,6 +4877,14 @@ export type HrAdminPayrollOutputSetupResponse = {
     published_artifact_count: number;
     latest_net_pay: string;
   };
+  pagination?: Record<string, {
+    page: number;
+    page_size: number;
+    total_count: number;
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  }>;
   runs: HrAdminPayrollRun[];
   reviews: HrAdminPayrollRunReview[];
   output_batches: HrAdminPayrollOutputBatch[];
@@ -4880,6 +5083,14 @@ export type HrAdminPayrollFinanceHandoffSetupResponse = {
     published_payslip_artifact_count?: number;
     latest_net_pay: string;
   };
+  pagination?: Record<string, {
+    page: number;
+    page_size: number;
+    total_count: number;
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  }>;
   output_batches: HrAdminPayrollOutputBatch[];
   handoffs: HrAdminPayrollFinanceHandoff[];
   artifacts: HrAdminPayrollOutputArtifact[];
@@ -5282,6 +5493,7 @@ export type EssAttendanceRecordOption = {
   is_regularized: boolean;
   is_locked: boolean;
   late_minutes: number;
+  derivation_summary: AttendanceDerivationSummary;
 };
 
 export type HrAdminLeaveBalance = {
@@ -5349,6 +5561,10 @@ export type HrAdminLeaveBalanceActionResult = {
   message: string;
 };
 
+export type HrAdminLeaveBalanceListResponse = PaginatedListResponse<HrAdminLeaveBalance>;
+
+export type HrAdminLeaveBalanceTransactionListResponse = PaginatedListResponse<HrAdminLeaveBalanceTransaction>;
+
 export type LeaveSummary = {
   period_year: number;
   pending_requests_count: number;
@@ -5394,6 +5610,7 @@ export type PaginatedListResponse<T> = {
   total_count: number;
   page: number;
   page_size: number;
+  total_pages?: number;
   has_next: boolean;
   has_previous: boolean;
 };
@@ -5436,6 +5653,23 @@ export type LeaveRequestItem = {
       holiday_name?: string | null;
       shift_name?: string | null;
       attendance_policy_name?: string | null;
+    }>;
+  };
+  attendance_collision_summary?: {
+    schema_ref: string;
+    status: string;
+    severity: string;
+    collision_count: number;
+    payroll_blocking: boolean;
+    collisions: Array<{
+      date: string;
+      leave_units: string;
+      attendance_record_id: string;
+      attendance_status: string;
+      shift: string | null;
+      check_in_at: string | null;
+      check_out_at: string | null;
+      message: string;
     }>;
   };
   reason: string;
@@ -5515,6 +5749,7 @@ export type AttendanceRegularizationItem = {
   manager_comment?: string;
   rejection_reason?: string;
   workflow_reference: string;
+  post_lock_payroll_impact?: PayrollPostLockImpactSummary;
   approval_steps?: ApprovalStepItem[];
   applied_at: string | null;
   resolved_at?: string | null;
@@ -5716,6 +5951,14 @@ export type EssPayrollPayslipListResponse = PaginatedListResponse<EssPayrollPays
 export type ManagerLeaveApprovalListResponse = PaginatedListResponse<LeaveRequestItem>;
 
 export type ManagerAttendanceApprovalListResponse = PaginatedListResponse<AttendanceRegularizationItem>;
+
+export type HrAdminLeavePolicyAssignmentListResponse = PaginatedListResponse<HrAdminScopedAssignment>;
+
+export type HrAdminEmployeeShiftAssignmentListResponse = PaginatedListResponse<HrAdminEmployeeShiftAssignment>;
+
+export type HrAdminShiftRosterTemplateListResponse = PaginatedListResponse<HrAdminShiftRosterTemplate>;
+
+export type HrAdminShiftRosterRolloutListResponse = PaginatedListResponse<HrAdminShiftRosterRollout>;
 
 export type SessionMembership = {
   id: string;

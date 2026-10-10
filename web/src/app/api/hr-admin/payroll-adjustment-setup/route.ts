@@ -7,5 +7,6 @@ export async function GET(request: NextRequest) {
     request,
     method: "GET",
     upstreamPath: "/hr-admin/payroll-adjustment-setup/",
+    upstreamSearch: request.nextUrl.search,
   });
 }

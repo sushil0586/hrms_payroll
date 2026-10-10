@@ -9,7 +9,6 @@ import {
   getHrAdminLeavePolicies,
   getHrAdminLeavePolicyAssignments,
   getHrAdminLeaveTypes,
-  getHrAdminPolicyOptions,
 } from "@/lib/api";
 
 export default async function HrAdminPoliciesPage() {
@@ -19,14 +18,12 @@ export default async function HrAdminPoliciesPage() {
     leaveAssignmentsResult,
     attendancePoliciesResult,
     attendanceAssignmentsResult,
-    optionsResult,
   ] = await Promise.all([
     getHrAdminLeaveTypes(),
     getHrAdminLeavePolicies(),
     getHrAdminLeavePolicyAssignments(),
     getHrAdminAttendancePolicies(),
     getHrAdminAttendancePolicyAssignments(),
-    getHrAdminPolicyOptions(),
   ]);
 
   const state =
@@ -34,34 +31,21 @@ export default async function HrAdminPoliciesPage() {
     leavePoliciesResult.state === "live" &&
     leaveAssignmentsResult.state === "live" &&
     attendancePoliciesResult.state === "live" &&
-    attendanceAssignmentsResult.state === "live" &&
-    optionsResult.state === "live"
+    attendanceAssignmentsResult.state === "live"
       ? "live"
       : "demo";
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={state === "live" ? "Live policy mode" : "Demo policy mode"}
         title="Policy control"
         description="Control leave and attendance rules, assignments, and rollout surfaces from one policy workspace."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/leave-types">
-              Open leave types
-            </Link>
-            <Link className="button button--secondary" href="/hr-admin/attendance-policies">
-              Attendance policies
-            </Link>
-            <Link className="button button--secondary" href="/hr-admin/leave-policies">
-              Leave policies
-            </Link>
-            <Link className="button button--secondary" href="/hr-admin/leave-balances">
-              Leave balances
-            </Link>
-            <Link className="button button--secondary" href="/hr-admin/policy-assignments">
-              Policy assignments
-            </Link>
+            <Link className="button button--primary" href="/hr-admin/leave-policies">Leave policies</Link>
+            <Link className="button button--secondary" href="/hr-admin/attendance-policies">Attendance policies</Link>
+            <Link className="button button--secondary" href="/hr-admin/policy-assignments">Assignments</Link>
             <Link className="button button--secondary" href="/hr-admin">
               Back to admin workspace
             </Link>
@@ -76,63 +60,83 @@ export default async function HrAdminPoliciesPage() {
 
       <section className="section">
         <div className="metric-grid-modern">
-          <MetricTile label="Leave types" value={leaveTypesResult.data.length} trend="Behavior building blocks" />
+          <MetricTile label="Leave catalog" value={leaveTypesResult.data.length + leavePoliciesResult.data.length} trend="Types and policies" />
           <MetricTile label="Attendance policies" value={attendancePoliciesResult.data.length} trend="Time-rule coverage" />
-          <MetricTile label="Leave policies" value={leavePoliciesResult.data.length} trend="Entitlement rules" />
           <MetricTile
             label="Policy assignments"
-            value={leaveAssignmentsResult.data.length + attendanceAssignmentsResult.data.length}
+            value={leaveAssignmentsResult.data.total_count + attendanceAssignmentsResult.data.length}
             trend="Scoped rollout rules"
           />
-          <MetricTile label="Available shifts" value={optionsResult.data.shifts.length} trend="Attendance mapping" />
-          <MetricTile label="Holiday calendars" value={optionsResult.data.holiday_calendars.length} trend="Calendar mapping" />
+          <MetricTile label="Policy surfaces" value={4} trend="Catalog, leave, attendance, assignments" />
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section-heading-row">
+          <div>
+            <h2 className="section-heading-soft">Configure policy foundations</h2>
+            <p className="section-copy-soft">Use these pages for rule setup. Assignment and balance operations stay in their own workspaces.</p>
+          </div>
+        </div>
+        <div className="workspace-grid-modern">
+          <WorkspaceCard
+            eyebrow="Leave types"
+            title="Leave catalog"
+            description="Define the leave buckets employees and managers see."
+            href="/hr-admin/leave-types"
+            cta="Manage leave types"
+            details={[
+              { label: "Configured", value: leaveTypesResult.data.length },
+              { label: "Policies", value: leavePoliciesResult.data.length },
+            ]}
+          />
+          <WorkspaceCard
+            eyebrow="Leave policies"
+            title="Entitlement rules"
+            description="Set entitlement, accrual, notice, and eligibility behavior."
+            href="/hr-admin/leave-policies"
+            cta="Manage leave policies"
+            details={[
+              { label: "Policies", value: leavePoliciesResult.data.length },
+              { label: "Assignments", value: leaveAssignmentsResult.data.total_count },
+            ]}
+          />
+          <WorkspaceCard
+            eyebrow="Attendance"
+            title="Time-treatment rules"
+            description="Define lateness, overtime, check-in, and regularization behavior."
+            href="/hr-admin/attendance-policies"
+            cta="Manage attendance policies"
+            details={[
+              { label: "Policies", value: attendancePoliciesResult.data.length },
+              { label: "Assignments", value: attendanceAssignmentsResult.data.length },
+            ]}
+          />
+          <WorkspaceCard
+            eyebrow="Assignments"
+            title="Policy rollout"
+            description="Apply leave and attendance policies to employee or organization scopes."
+            href="/hr-admin/policy-assignments"
+            cta="Open assignments"
+            details={[
+              { label: "Leave", value: leaveAssignmentsResult.data.total_count },
+              { label: "Attendance", value: attendanceAssignmentsResult.data.length },
+            ]}
+          />
         </div>
       </section>
 
       <section className="section">
         <div className="workspace-grid-modern">
           <WorkspaceCard
-            eyebrow="Leave types"
-            title="Shape the leave catalog"
-            description="Define the actual leave buckets employees and managers see before layering policy behavior on top."
-            href="/hr-admin/leave-types"
-            cta="Manage leave types"
-            details={[
-              { label: "Configured", value: leaveTypesResult.data.length },
-              { label: "Categories", value: optionsResult.data.leave_categories.length },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Leave policies"
-            title="Control entitlement logic"
-            description="Set entitlement, accrual, notice, and eligibility rules that determine how leave behaves in practice."
-            href="/hr-admin/leave-policies"
-            cta="Manage leave policies"
-            details={[
-              { label: "Policies", value: leavePoliciesResult.data.length },
-              { label: "Assignments", value: leaveAssignmentsResult.data.length },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Leave balances"
-            title="Run balance operations"
-            description="Inspect balances, apply credits or debits, and process encashment against real policy-aware closing balances."
+            eyebrow="Balances"
+            title="Leave balance operations"
+            description="Inspect balances, apply credits or debits, and process encashment."
             href="/hr-admin/leave-balances"
-            cta="Open leave balances"
+            cta="Open balances"
             details={[
               { label: "Policies", value: leavePoliciesResult.data.length },
-              { label: "Employees", value: optionsResult.data.employees.length },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Attendance"
-            title="Control time-treatment rules"
-            description="Define lateness, overtime, manual entry, check-in, and regularization behavior from a single operator surface."
-            href="/hr-admin/attendance-policies"
-            cta="Manage attendance policies"
-            details={[
-              { label: "Policies", value: attendancePoliciesResult.data.length },
-              { label: "Assignments", value: attendanceAssignmentsResult.data.length },
+              { label: "Surface", value: "Operations" },
             ]}
           />
         </div>

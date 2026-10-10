@@ -35,13 +35,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
   }
 
+  const requestPayload = await request.json().catch(() => null);
+  if (!requestPayload) {
+    return NextResponse.json({ detail: "Import batch audit payload is required." }, { status: 400 });
+  }
+
   const upstream = await fetch(`${API_BASE_URL}/hr-admin/import-batches/`, {
     method: "POST",
     headers: {
       ...headers,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(await request.json()),
+    body: JSON.stringify(requestPayload),
     cache: "no-store",
   });
   const payload = await upstream.json().catch(() => ({}));

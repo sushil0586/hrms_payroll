@@ -250,6 +250,10 @@ function LeaveApprovalSection({
                 label={selected.request_action === "cancellation_request" ? "Cancellation reason" : "Reason"}
                 value={selected.reason || "No reason provided."}
               />
+              <DetailRow
+                label="Attendance Collision"
+                value={selected.attendance_collision_summary?.collision_count ? `${selected.attendance_collision_summary.collision_count} payroll-impacting overlap` : "Clear"}
+              />
               {selected.cancel_requires_reapproval ? (
                 <DetailRow
                   label="Cancellation route"

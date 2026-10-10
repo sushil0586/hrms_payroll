@@ -206,6 +206,48 @@ def login(client: APIClient, identifier: str, password: str = PASSWORD) -> str:
     return response.json()["token"]
 
 
+def next_weekday(days_ahead: int, *, avoid_ranges: list[tuple] | None = None):
+    candidate = timezone.localdate() + timedelta(days=days_ahead)
+    blocked_ranges = avoid_ranges or []
+    while candidate.weekday() >= 5 or any(start <= candidate <= end for start, end in blocked_ranges):
+        candidate += timedelta(days=1)
+    return candidate
+
+
+def restrict_membership_permissions(membership: TenantMembership, permission_keys: list[str]) -> None:
+    for membership_role in membership.membership_roles.select_related("role"):
+        membership_role.role.permissions.all().delete()
+        for permission_key in permission_keys:
+            membership_role.role.permissions.create(permission_key=permission_key)
+
+
+def create_active_schema_mapping_pack_for_connection(connection: PayrollProviderConnection, *, artifact_kind: str):
+    return PayrollProviderSchemaMappingPack.objects.create(
+        tenant=connection.tenant,
+        provider_connection=connection,
+        provider_ref=connection.provider_ref,
+        provider_kind=connection.provider_kind,
+        environment_ref=connection.environment_ref,
+        artifact_kind=artifact_kind,
+        mapping_profile_ref=f"{connection.provider_ref}.{artifact_kind}.mapping.v1",
+        status=PayrollProviderSchemaMappingPackStatus.ACTIVE,
+        source_schema_ref=f"{artifact_kind}.source.v1",
+        target_schema_ref=f"{connection.provider_ref}.{artifact_kind}.target.v1",
+        enforcement_mode="warn",
+        transform_rules=[
+            {
+                "source_path": "artifact_snapshot.file_name",
+                "target_path": "file.name",
+                "required": False,
+                "value_type": "string",
+                "gate_ref": "file_name_mapped",
+            }
+        ],
+        validation_rules=[],
+        evidence_snapshot={"source": "phase0-smoke-fixture"},
+    )
+
+
 def create_employee_scoped_leave_policy(
     *,
     employee: Employee,
@@ -429,7 +471,11 @@ def test_tenant_admin_session_exposes_tenant_workspace_access(api_client: APICli
         status=MembershipStatus.ACTIVE,
         is_default=True,
     )
-    role = Role.objects.create(tenant=tenant, code="tenant-admin", name="Tenant Admin", is_system_role=True)
+    role, _ = Role.objects.get_or_create(
+        tenant=tenant,
+        code="tenant-admin",
+        defaults={"name": "Tenant Admin", "is_system_role": True},
+    )
     membership.membership_roles.create(role=role, is_primary=True)
 
     token = login(api_client, "tenant.owner")
@@ -448,7 +494,7 @@ def test_employee_cannot_access_hr_admin_dashboard(api_client: APIClient, bootst
     token = login(api_client, "riya.sharma")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
-    response = api_client.get("/api/v1/hr-admin/dashboard/")
+    response = api_client.get("/api/v1/hr-admin/dashboard/?sync_remediation=1")
 
     assert response.status_code == 403
 
@@ -458,7 +504,7 @@ def test_hr_admin_dashboard_returns_saas_launch_audit(api_client: APIClient, boo
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
-    response = api_client.get("/api/v1/hr-admin/dashboard/")
+    response = api_client.get("/api/v1/hr-admin/dashboard/?sync_remediation=1")
 
     assert response.status_code == 200, response.json()
     launch_audit = response.json()["launch_audit"]
@@ -1107,9 +1153,8 @@ def test_tenant_admin_role_crud_blocks_permissions_unavailable_for_plan(api_clie
 @pytest.mark.django_db
 def test_tenant_admin_role_crud_requires_manage_permission(api_client: APIClient, bootstrapped_workspace):
     tenant = bootstrapped_workspace["pending_leave"].tenant
-    tenant_admin_role = Role.objects.get(tenant=tenant, code="hr-admin")
-    tenant_admin_role.permissions.all().delete()
-    tenant_admin_role.permissions.create(permission_key="tenant.roles.view")
+    membership = TenantMembership.objects.get(tenant=tenant, user__username="nisha.rao")
+    restrict_membership_permissions(membership, ["tenant.roles.view"])
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
@@ -1133,9 +1178,8 @@ def test_tenant_admin_role_crud_requires_manage_permission(api_client: APIClient
 def test_tenant_admin_membership_invite_requires_manage_permission(api_client: APIClient, bootstrapped_workspace):
     tenant = bootstrapped_workspace["pending_leave"].tenant
     employee_role = Role.objects.get(tenant=tenant, code="employee")
-    tenant_admin_role = Role.objects.get(tenant=tenant, code="hr-admin")
-    tenant_admin_role.permissions.all().delete()
-    tenant_admin_role.permissions.create(permission_key="tenant.users.view")
+    membership = TenantMembership.objects.get(tenant=tenant, user__username="nisha.rao")
+    restrict_membership_permissions(membership, ["tenant.users.view"])
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
@@ -1963,9 +2007,8 @@ def test_hr_admin_attendance_setup_mutations_write_audit_evidence(api_client: AP
 @pytest.mark.django_db
 def test_limited_tenant_admin_permissions_gate_sensitive_actions(api_client: APIClient, bootstrapped_workspace):
     tenant = bootstrapped_workspace["pending_leave"].tenant
-    tenant_admin_role = Role.objects.get(tenant=tenant, code="hr-admin")
-    tenant_admin_role.permissions.all().delete()
-    tenant_admin_role.permissions.create(permission_key="tenant.dashboard.view")
+    membership = TenantMembership.objects.get(tenant=tenant, user__username="nisha.rao")
+    restrict_membership_permissions(membership, ["tenant.dashboard.view"])
     token = login(api_client, "nisha.rao")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
@@ -3415,12 +3458,12 @@ def test_hr_admin_payroll_readiness_returns_source_status_and_summary(api_client
     assert payload["configuration"]["source"] == "platform_default"
     assert payload["summary"]["total_employees"] == 1
     assert payload["summary"]["pending_leave_requests"] == 1
-    assert payload["status_counts"]["warning"] == 1
+    assert payload["status_counts"]["blocked"] == 1
     assert payload["total_count"] == 1
 
     item = payload["items"][0]
     assert item["employee_code"] == "EMP-0042"
-    assert item["readiness_status"] == "warning"
+    assert item["readiness_status"] == "blocked"
     assert item["pending_leave_requests"] == 1
     assert item["source_counts"]["leave_requests"] >= 1
     assert "leave request(s) pending approval" in " ".join(item["warnings"])
@@ -4049,12 +4092,12 @@ def test_hr_admin_payroll_statutory_setup_supports_employer_registrations_and_fi
             "name": "Maharashtra PT August 2026 Return",
             "filing_type_ref": "india.professional_tax.maharashtra.monthly_return",
             "filing_frequency": PayrollFrequency.MONTHLY,
-            "period_start": "2026-08-01",
-            "period_end": "2026-08-31",
-            "due_date": "2026-09-20",
-            "grace_due_date": "2026-09-25",
-            "filing_window_start": "2026-09-01",
-            "filing_window_end": "2026-09-25",
+            "period_start": "2026-11-01",
+            "period_end": "2026-11-30",
+            "due_date": "2026-12-20",
+            "grace_due_date": "2026-12-25",
+            "filing_window_start": "2026-12-01",
+            "filing_window_end": "2026-12-25",
             "status": PayrollStatutoryFilingStatus.UPCOMING,
             "output_profile_ref": "india.pt.mh.return.file.v1",
             "source_ref": "statutory-calendar-seed:fy2026",
@@ -9537,15 +9580,20 @@ def test_rehearse_payroll_provider_launch_command_passes_ready_three_lane_tenant
         },
     }
 
+    artifact_kind_by_provider = {
+        PayrollProviderConnectionKind.BANK: PayrollOutputArtifactKind.BANK_ADVICE,
+        PayrollProviderConnectionKind.ACCOUNTING: PayrollOutputArtifactKind.ACCOUNTING_EXPORT,
+        PayrollProviderConnectionKind.STATUTORY: PayrollOutputArtifactKind.STATUTORY_REPORT,
+    }
     for provider_kind, route in routes_by_kind.items():
-        PayrollProviderConnection.objects.update_or_create(
+        connection, _ = PayrollProviderConnection.objects.update_or_create(
             tenant=tenant,
             provider_ref=route["provider_ref"],
             defaults={
                 "provider_name": f"{provider_kind.title()} launch command provider",
                 "provider_kind": provider_kind,
                 "environment_ref": "production",
-                "status": PayrollProviderConnectionStatus.ACTIVE,
+                "status": PayrollProviderConnectionStatus.CONFIGURED,
                 "adapter_ref": route["adapter_ref"],
                 "sandbox_adapter_ref": "payroll.provider_adapter.sandbox.v1",
                 "channel_ref": f"tenant.launch.command.channel.{provider_kind}.v1",
@@ -9564,6 +9612,12 @@ def test_rehearse_payroll_provider_launch_command_passes_ready_three_lane_tenant
                 "config_snapshot": {"provider_route": route},
             },
         )
+        create_active_schema_mapping_pack_for_connection(
+            connection,
+            artifact_kind=artifact_kind_by_provider[provider_kind],
+        )
+        connection.status = PayrollProviderConnectionStatus.ACTIVE
+        connection.save(update_fields=["status", "updated_at"])
 
     output_file = tmp_path / "ready-launch-audit.json"
     with override_settings(
@@ -11093,6 +11147,10 @@ def test_hr_admin_payroll_provider_connection_setup_certification_and_activation
     assert certified_payload["status"] == PayrollProviderConnectionStatus.CERTIFIED
     assert certified_payload["readiness_snapshot"]["active_allowed"] is True
     assert certified_payload["certification_snapshot"]["evidence_hash"]
+    create_active_schema_mapping_pack_for_connection(
+        PayrollProviderConnection.objects.get(id=connection_id),
+        artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE,
+    )
 
     activate_response = api_client.patch(
         f"/api/v1/hr-admin/payroll-provider-connections/{connection_id}/",
@@ -11551,7 +11609,7 @@ def test_payroll_finance_handoff_resolves_active_provider_connection_refs(api_cl
         provider_name="Active Bank Provider",
         provider_kind="bank",
         environment_ref="sandbox",
-        status=PayrollProviderConnectionStatus.ACTIVE,
+        status=PayrollProviderConnectionStatus.CONFIGURED,
         adapter_ref="payroll.provider_adapter.bank.sandbox.v1",
         sandbox_adapter_ref="payroll.provider_adapter.bank.sandbox.v1",
         channel_ref="bank.sftp.channel.active.v1",
@@ -11562,6 +11620,12 @@ def test_payroll_finance_handoff_resolves_active_provider_connection_refs(api_cl
         certification_status=PayrollProviderCertificationStatus.PASSED,
         certification_profile_ref="bank.neft.certification.v1",
     )
+    create_active_schema_mapping_pack_for_connection(
+        active_connection,
+        artifact_kind=PayrollOutputArtifactKind.BANK_ADVICE,
+    )
+    active_connection.status = PayrollProviderConnectionStatus.ACTIVE
+    active_connection.save(update_fields=["status", "updated_at"])
 
     active_review = create_locked_payroll_review(
         api_client,
@@ -11706,7 +11770,7 @@ def test_hr_admin_payroll_finance_handoff_generates_statutory_filing_artifacts(a
                     "statutory_report:statutory_return": {
                         "provider_ref": "clear-statutory",
                         "channel_ref": "clear-statutory.api.return.v1",
-                        "adapter_ref": "clear-statutory.return.adapter.v1",
+                        "adapter_ref": "payroll.provider_adapter.statutory.sandbox.v1",
                         "submission_mode": "api",
                         "submission_profile_ref": "clear-statutory.pt.return.submit.v1",
                         "request_schema_ref": "clear-statutory.pt.return.request.v1",
@@ -11719,7 +11783,7 @@ def test_hr_admin_payroll_finance_handoff_generates_statutory_filing_artifacts(a
                     "statutory_report:statutory_challan": {
                         "provider_ref": "clear-statutory",
                         "channel_ref": "clear-statutory.api.challan.v1",
-                        "adapter_ref": "clear-statutory.challan.adapter.v1",
+                        "adapter_ref": "payroll.provider_adapter.statutory.sandbox.v1",
                         "submission_mode": "api",
                         "submission_profile_ref": "clear-statutory.pt.challan.submit.v1",
                         "callback_profile_ref": "clear-statutory.callback.v1",
@@ -11792,7 +11856,7 @@ def test_hr_admin_payroll_finance_handoff_generates_statutory_filing_artifacts(a
     assert filing_delivery["provider_ref"] == "clear-statutory"
     assert filing_delivery["channel_ref"] == "clear-statutory.api.return.v1"
     submission_contract = filing_delivery["request_snapshot"]["submission_contract"]
-    assert submission_contract["adapter_ref"] == "clear-statutory.return.adapter.v1"
+    assert submission_contract["adapter_ref"] == "payroll.provider_adapter.statutory.sandbox.v1"
     assert submission_contract["submission_mode"] == "api"
     assert submission_contract["submission_profile_ref"] == "clear-statutory.pt.return.submit.v1"
     assert submission_contract["request_schema_ref"] == "clear-statutory.pt.return.request.v1"
@@ -12229,10 +12293,10 @@ def test_employee_cannot_use_manager_approval_actions(api_client: APIClient, boo
         format="json",
     )
 
-    assert leave_response.status_code == 404
-    assert leave_response.json()["detail"] == "Leave request not found for manager scope."
-    assert regularization_response.status_code == 404
-    assert regularization_response.json()["detail"] == "Attendance regularization not found for manager scope."
+    assert leave_response.status_code == 403
+    assert "leave.requests.approve" in str(leave_response.json())
+    assert regularization_response.status_code == 403
+    assert "attendance.regularization.review" in str(regularization_response.json())
 
 
 @pytest.mark.django_db
@@ -12240,7 +12304,7 @@ def test_employee_can_submit_leave_request(api_client: APIClient, bootstrapped_w
     token = login(api_client, "riya.sharma")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
-    start_date = timezone.localdate() + timedelta(days=30)
+    start_date = next_weekday(30)
     end_date = start_date + timedelta(days=1)
 
     before_count = LeaveRequest.objects.filter(employee__employee_code="EMP-0042").count()
@@ -12298,7 +12362,7 @@ def test_employee_can_submit_leave_request_when_balance_policy_exists_without_as
         closing_balance=Decimal("12.00"),
     )
 
-    start_date = timezone.localdate() + timedelta(days=30)
+    start_date = next_weekday(30)
     response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -12365,7 +12429,7 @@ def test_employee_cannot_submit_leave_without_required_notice(api_client: APICli
         notice_days_required=5,
     )
 
-    start_date = timezone.localdate() + timedelta(days=2)
+    start_date = next_weekday(2)
     response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -12868,7 +12932,8 @@ def test_employee_leave_request_uses_resolved_grade_policy_assignment(api_client
         is_active=True,
     )
 
-    start_date = timezone.localdate() + timedelta(days=16)
+    pending_leave = bootstrapped_workspace["pending_leave"]
+    start_date = next_weekday(16, avoid_ranges=[(pending_leave.start_date, pending_leave.end_date)])
     response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -12977,7 +13042,8 @@ def test_employee_leave_request_uses_resolved_employment_type_policy_assignment(
         is_active=True,
     )
 
-    start_date = timezone.localdate() + timedelta(days=18)
+    pending_leave = bootstrapped_workspace["pending_leave"]
+    start_date = next_weekday(18, avoid_ranges=[(pending_leave.start_date, pending_leave.end_date)])
     response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -13521,7 +13587,7 @@ def test_employee_cannot_withdraw_pending_leave_within_notice_window(api_client:
         priority=10,
         is_active=True,
     )
-    start_date = timezone.localdate() + timedelta(days=2)
+    start_date = timezone.localdate()
     create_response = api_client.post(
         "/api/v1/me/leave-requests/",
         {
@@ -13572,7 +13638,7 @@ def test_employee_cannot_cancel_approved_leave_within_notice_window(api_client: 
 
     employee_token = login(api_client, "riya.sharma")
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {employee_token}")
-    start_date = timezone.localdate() + timedelta(days=2)
+    start_date = timezone.localdate()
     create_response = api_client.post(
         "/api/v1/me/leave-requests/",
         {

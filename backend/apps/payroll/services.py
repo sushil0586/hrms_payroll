@@ -7516,7 +7516,7 @@ def _provider_delivery_route(profile: dict[str, Any], artifact: PayrollOutputArt
         raise PayrollFinanceHandoffError(str(exc)) from exc
     provider_ref = route.get("provider_ref") or f"payroll.provider.{artifact.kind}.manual.v1"
     connection = _provider_connection_for_route(artifact, provider_ref)
-    adapter_ref = route.get("adapter_ref") or (connection.adapter_ref if connection else "") or f"payroll.provider_adapter.{artifact.kind}.manual.v1"
+    adapter_ref = route.get("adapter_ref") or (connection.adapter_ref if connection else "") or "payroll.provider_adapter.manual.v1"
     channel_ref = route.get("channel_ref") or (connection.channel_ref if connection else "") or f"payroll.channel.{artifact.kind}.manual.v1"
     submission_profile_ref = route.get("submission_profile_ref") or f"payroll.submission.{artifact.kind}.manual.v1"
     callback_profile_ref = route.get("callback_profile_ref") or (connection.callback_profile_ref if connection else "") or profile.get("callback_profile_ref") or "payroll.callback.manual.v1"

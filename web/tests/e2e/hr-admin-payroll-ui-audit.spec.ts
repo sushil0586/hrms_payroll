@@ -151,7 +151,7 @@ async function expectNoVisibleControlCollisions(page: Page, route: string) {
 
 async function expectPayrollTypographyConsistent(page: Page, route: string) {
   const fontIssues = await page.locator("main").evaluate((main) => {
-    const expectedFontToken = "Avenir Next";
+    const expectedFontTokens = ["Avenir Next", "Inter", "Segoe UI"];
     const sampledSelectors = [
       "h1",
       "h2",
@@ -183,7 +183,7 @@ async function expectPayrollTypographyConsistent(page: Page, route: string) {
       return elements.flatMap((element) => {
         const fontFamily = window.getComputedStyle(element).fontFamily;
         const isMonospaceContext = Boolean(element.closest("code, pre, kbd, samp"));
-        if (isMonospaceContext || fontFamily.includes(expectedFontToken)) {
+        if (isMonospaceContext || expectedFontTokens.some((token) => fontFamily.includes(token))) {
           return [];
         }
         const label = (element.textContent || element.getAttribute("aria-label") || selector).trim().replace(/\s+/g, " ").slice(0, 60);

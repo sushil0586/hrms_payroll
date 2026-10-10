@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import type { FieldErrors } from "@/lib/ui/validation";
-import type { HrAdminPayrollInputSnapshot, HrAdminPayrollInputSnapshotSetupResponse, HrAdminPayrollRun } from "@/lib/types";
+import type { HrAdminPayrollInputSnapshot, HrAdminPayrollInputSnapshotListItem, HrAdminPayrollInputSnapshotSetupResponse, HrAdminPayrollRun } from "@/lib/types";
 
 type Feedback = {
   tone: "success" | "error";
@@ -32,6 +33,8 @@ const operationTabs: Array<{ value: OperationTab; label: string; detail: string 
   { value: "snapshot", label: "Input snapshot", detail: "Employee source evidence" },
   { value: "lock", label: "Lock gate", detail: "Final input control" },
 ];
+
+const payrollSnapshotImportHeaders = ["employee_code", "monthly_gross", "present_days", "lop_days", "overtime_hours", "leave_days", "working_days"];
 
 function getErrorMessage(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object") return fallback;
@@ -146,7 +149,7 @@ function emptyRunForm(setup: HrAdminPayrollInputSnapshotSetupResponse) {
   };
 }
 
-function snapshotToForm(snapshot?: HrAdminPayrollInputSnapshot | null, runId = "", employeeId = "") {
+function snapshotToForm(snapshot?: Partial<HrAdminPayrollInputSnapshot> | null, runId = "", employeeId = "") {
   return {
     id: snapshot?.id,
     payroll_run_id: snapshot?.payroll_run_id ?? runId,
@@ -158,8 +161,13 @@ function snapshotToForm(snapshot?: HrAdminPayrollInputSnapshot | null, runId = "
     salary_snapshot: JSON.stringify(snapshot?.salary_snapshot ?? { source: "browser", monthly_gross: 50000, currency_code: "INR" }),
     attendance_snapshot: JSON.stringify(snapshot?.attendance_snapshot ?? { working_days: 22, present_days: 22, lop_days: 0 }),
     validation_snapshot: JSON.stringify(snapshot?.validation_snapshot ?? { blockers: [], warnings: [] }),
-    config_profile_ref: typeof snapshot?.config_snapshot.profile_ref === "string" ? snapshot.config_snapshot.profile_ref : "",
+    config_profile_ref: typeof snapshot?.config_snapshot?.profile_ref === "string" ? snapshot.config_snapshot.profile_ref : "",
   };
+}
+
+function snapshotEmployeeLabel(snapshot?: Pick<HrAdminPayrollInputSnapshot, "employee_id" | "employee_name" | "employee_code"> | null) {
+  if (!snapshot?.employee_id) return null;
+  return `${snapshot.employee_name} (${snapshot.employee_code})`;
 }
 
 export function PayrollInputOperationsPanel({
@@ -178,11 +186,13 @@ export function PayrollInputOperationsPanel({
   const router = useRouter();
   const [setup, setSetup] = useState(initialSetup);
   const [runForm, setRunForm] = useState(() => selectedRun ? runToForm(selectedRun) : emptyRunForm(initialSetup));
-  const [snapshotForm, setSnapshotForm] = useState(() => snapshotToForm(selectedSnapshot, selectedRun?.id ?? "", firstValue(initialSetup.options.employees)));
+  const [snapshotForm, setSnapshotForm] = useState(() => snapshotToForm(selectedSnapshot, selectedRun?.id ?? ""));
+  const [selectedEmployeeLabel, setSelectedEmployeeLabel] = useState<string | null>(() => snapshotEmployeeLabel(selectedSnapshot));
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<PayrollInputField>>({});
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [activeOperation, setActiveOperation] = useState<OperationTab>("run");
+  const [bulkCsv, setBulkCsv] = useState("");
 
   const selectedPeriod = useMemo(() => setup.options.periods.find((item) => item.id === runForm.period_id), [runForm.period_id, setup.options.periods]);
   const compatiblePayGroups = useMemo(
@@ -199,7 +209,6 @@ export function PayrollInputOperationsPanel({
     [compatiblePayGroups],
   );
   const runOptions = useMemo(() => setup.runs.map((item) => ({ value: item.id, label: `${item.name} (${item.code})` })), [setup.runs]);
-  const employeeOptions = useMemo(() => setup.options.employees.map((item) => ({ value: item.id, label: `${item.name} (${item.employee_code})` })), [setup.options.employees]);
   const runStatusOptions = useMemo(() => setup.options.payroll_run_statuses.map((item) => ({ value: item.value, label: item.label })), [setup.options.payroll_run_statuses]);
   const snapshotStatusOptions = useMemo(() => setup.options.payroll_input_snapshot_statuses.map((item) => ({ value: item.value, label: item.label })), [setup.options.payroll_input_snapshot_statuses]);
   const lockRunId = runForm.id || snapshotForm.payroll_run_id;
@@ -216,6 +225,8 @@ export function PayrollInputOperationsPanel({
   const lockSnapshotCount = hasLoadedLockSnapshots ? lockRunSnapshots.length : selectedLockRun?.snapshot_count ?? 0;
   const firstBlockingSnapshot = lockRunSnapshots.find((item) => item.blockers.length > 0);
   const firstWarningSnapshot = lockRunSnapshots.find((item) => item.warnings.length > 0);
+  const firstReconciliationBlocker = lockRunSnapshots.find((item) => item.reconciliation_summary.high_count > 0);
+  const reconciliationBlockerCount = lockRunSnapshots.reduce((sum, item) => sum + item.reconciliation_summary.high_count, 0);
   const noPeriodWarning = setup.options.periods.length === 0 ? "No payroll periods are configured. Create a period before creating a payroll run." : "";
   const noCompatiblePayGroupWarning =
     runForm.period_id && compatiblePayGroups.length === 0
@@ -228,6 +239,9 @@ export function PayrollInputOperationsPanel({
   const lockBlockedReason = lockBlockedCount > 0
     ? "Resolve blocker snapshots before locking this payroll run."
     : "";
+  const lockReconciliationBlockedReason = reconciliationBlockerCount > 0
+    ? "Resolve reconciliation blockers before locking this payroll run."
+    : "";
   const lockEmptyReason = lockSnapshotCount === 0
     ? "Create at least one input snapshot before locking this payroll run."
     : "";
@@ -235,8 +249,8 @@ export function PayrollInputOperationsPanel({
     ? "Inputs are already locked for this payroll run."
     : "";
   const lockPermissionReason = !canLockInputs ? lockDisabledReason : "";
-  const lockDisabledMessage = lockPermissionReason || lockBlockedReason || lockEmptyReason || lockAlreadyCompleteReason;
-  const canSubmitLock = canLockInputs && lockSnapshotCount > 0 && lockBlockedCount === 0 && !lockAlreadyCompleteReason && Boolean(runForm.id || snapshotForm.payroll_run_id);
+  const lockDisabledMessage = lockPermissionReason || lockBlockedReason || lockReconciliationBlockedReason || lockEmptyReason || lockAlreadyCompleteReason;
+  const canSubmitLock = canLockInputs && lockSnapshotCount > 0 && lockBlockedCount === 0 && reconciliationBlockerCount === 0 && !lockAlreadyCompleteReason && Boolean(runForm.id || snapshotForm.payroll_run_id);
 
   function updateRunPeriod(value: string) {
     setRunForm((current) => {
@@ -412,6 +426,66 @@ export function PayrollInputOperationsPanel({
     router.refresh();
   }
 
+  function parseBulkRows() {
+    const lines = bulkCsv.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (lines.length < 2) {
+      throw new Error("Paste a CSV header and at least one payroll input row.");
+    }
+    const headers = lines[0].split(",").map((item) => item.trim());
+    const missing = payrollSnapshotImportHeaders.filter((header) => !headers.includes(header));
+    if (missing.length) {
+      throw new Error(`Missing CSV columns: ${missing.join(", ")}.`);
+    }
+    return lines.slice(1).map((line) => {
+      const values = line.split(",").map((item) => item.trim());
+      const row = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]));
+      return {
+        payroll_run_id: runForm.id || snapshotForm.payroll_run_id,
+        employee_code: row.employee_code,
+        monthly_gross: row.monthly_gross,
+        present_days: row.present_days,
+        lop_days: row.lop_days,
+        overtime_hours: row.overtime_hours,
+        leave_days: row.leave_days,
+        working_days: row.working_days,
+      };
+    });
+  }
+
+  async function importBulkSnapshots() {
+    if (!canManageInputs) {
+      setFeedback({ tone: "error", message: manageDisabledReason });
+      return;
+    }
+    if (!(runForm.id || snapshotForm.payroll_run_id)) {
+      setFeedback({ tone: "error", message: "Select or create a payroll run before importing payroll input snapshots." });
+      return;
+    }
+    let rows: ReturnType<typeof parseBulkRows>;
+    try {
+      rows = parseBulkRows();
+    } catch (error) {
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Unable to parse payroll input CSV." });
+      return;
+    }
+    setSubmitting("bulk-snapshot");
+    setFeedback(null);
+    const response = await fetch("/api/hr-admin/payroll-input-snapshots/bulk-import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows }),
+    });
+    const payload = await response.json().catch(() => ({})) as { created_count?: number; failed_count?: number; detail?: string };
+    setSubmitting(null);
+    if (!response.ok && response.status !== 207) {
+      setFeedback({ tone: "error", message: getErrorMessage(payload, "Unable to import payroll input snapshots.") });
+      return;
+    }
+    setFeedback({ tone: payload.failed_count ? "error" : "success", message: `${payload.created_count ?? 0} payroll input snapshots imported; ${payload.failed_count ?? 0} blocked.` });
+    setActiveOperation("lock");
+    router.refresh();
+  }
+
   return (
     <section className="section section--tight salary-crud-console payroll-input-operations-panel" aria-labelledby="payroll-input-operations-title">
       <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -520,11 +594,24 @@ export function PayrollInputOperationsPanel({
         >
           <div className="salary-crud-form__header">
             <div><span className="workspace-card__eyebrow">{snapshotForm.id ? "Edit mode" : "Create mode"}</span><h3>Input snapshot</h3></div>
-            <button className="button button--secondary button--compact" disabled={!canManageInputs} type="button" onClick={() => setSnapshotForm(snapshotToForm(null, runForm.id ?? firstValue(setup.runs), firstValue(setup.options.employees)))}>New</button>
+            <button className="button button--secondary button--compact" disabled={!canManageInputs} type="button" onClick={() => {
+              setSelectedEmployeeLabel(null);
+              setSnapshotForm(snapshotToForm(null, runForm.id ?? firstValue(setup.runs)));
+            }}>New</button>
           </div>
           <div className="form-grid salary-crud-form-grid">
             <SelectField disabled={!canManageInputs} hint={!canManageInputs ? manageDisabledReason : ""} tone="warning" label="Payroll run" required error={fieldErrors["snapshot.payroll_run_id"]} value={snapshotForm.payroll_run_id} options={runOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, payroll_run_id: value }))} />
-            <SelectField disabled={!canManageInputs} label="Employee" required error={fieldErrors["snapshot.employee_id"]} value={snapshotForm.employee_id} options={employeeOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, employee_id: value }))} />
+            <div>
+              <EmployeeSearchSelect
+                value={snapshotForm.employee_id}
+                selectedLabel={selectedEmployeeLabel}
+                onChange={(value) => setSnapshotForm((current) => ({ ...current, employee_id: value }))}
+                onOptionSelected={(item) => setSelectedEmployeeLabel(item ? `${item.name} (${item.employee_code ?? "No code"})` : null)}
+                label="Employee"
+                hint={fieldErrors["snapshot.employee_id"] || "Search by employee code, name, or work email."}
+              />
+              {fieldErrors["snapshot.employee_id"] ? <span className="field-error-text" role="alert">{fieldErrors["snapshot.employee_id"]}</span> : null}
+            </div>
             <SelectField disabled={!canManageInputs} label="Snapshot status" required value={snapshotForm.snapshot_status} options={snapshotStatusOptions} onChange={(value) => setSnapshotForm((current) => ({ ...current, snapshot_status: value }))} />
             <TextField disabled={!canManageInputs} label="Input profile ref" required error={fieldErrors["snapshot.input_profile_ref"]} value={snapshotForm.input_profile_ref} onChange={(value) => setSnapshotForm((current) => ({ ...current, input_profile_ref: value }))} />
             <TextField disabled={!canManageInputs} label="Config profile reference" value={snapshotForm.config_profile_ref} onChange={(value) => setSnapshotForm((current) => ({ ...current, config_profile_ref: value }))} />
@@ -538,17 +625,41 @@ export function PayrollInputOperationsPanel({
           </div>
           <div className="salary-crud-list" aria-label="Payroll input snapshot records">
             {setup.snapshots.slice(0, 6).map((item) => (
-              <button className="salary-crud-record" key={item.id} type="button" onClick={() => setSnapshotForm(snapshotToForm(item))}>
+              <button className="salary-crud-record" key={item.id} type="button" onClick={() => {
+                setSelectedEmployeeLabel(snapshotEmployeeLabel(item));
+                setSnapshotForm(snapshotToForm(item as HrAdminPayrollInputSnapshotListItem));
+              }}>
                 <strong>{item.employee_name}</strong>
                 <span>{item.payroll_run_name}</span>
               </button>
             ))}
           </div>
-          <button className="button button--primary" disabled={!canManageInputs || submitting === "snapshot" || !runOptions.length || !employeeOptions.length} type="submit">
+          <button className="button button--primary" disabled={!canManageInputs || submitting === "snapshot" || !runOptions.length || !snapshotForm.employee_id} type="submit">
             {submitting === "snapshot" ? "Saving..." : snapshotForm.id ? "Save snapshot" : "Create snapshot"}
           </button>
           {!canManageInputs ? <span className="muted">{manageDisabledReason}</span> : null}
         </form>
+
+        <div className="salary-crud-form" aria-label="Payroll input bulk import" data-testid="payroll-input-bulk-import">
+          <div className="salary-crud-form__header">
+            <div><span className="workspace-card__eyebrow">Bulk import</span><h3>Payroll snapshots</h3></div>
+          </div>
+          <p className="section-copy section-copy-soft">Upload-ready CSV capture for payroll input rows after employee, attendance, leave, and bank data are loaded.</p>
+          <label className="form-field">
+            <span className="muted">CSV data</span>
+            <textarea
+              className="input-control"
+              disabled={!canManageInputs}
+              onChange={(event) => setBulkCsv(event.target.value)}
+              placeholder={payrollSnapshotImportHeaders.join(",")}
+              rows={7}
+              value={bulkCsv}
+            />
+          </label>
+          <button className="button button--primary" disabled={!canManageInputs || submitting === "bulk-snapshot"} type="button" onClick={() => void importBulkSnapshots()}>
+            {submitting === "bulk-snapshot" ? "Importing..." : "Import payroll snapshots"}
+          </button>
+        </div>
 
         <div
           className={`salary-crud-form ${activeOperation === "lock" ? "is-active" : ""}`}
@@ -565,6 +676,7 @@ export function PayrollInputOperationsPanel({
             <div><span>Ready</span><strong>{lockReadyCount}</strong></div>
             <div><span>Warnings</span><strong>{lockWarningCount}</strong></div>
             <div><span>Blocked</span><strong>{lockBlockedCount}</strong></div>
+            <div><span>Recon blockers</span><strong>{reconciliationBlockerCount}</strong></div>
             <div><span>Locked</span><strong>{lockLockedCount}</strong></div>
           </div>
           {lockBlockedCount > 0 ? (
@@ -574,6 +686,15 @@ export function PayrollInputOperationsPanel({
                 {firstBlockingSnapshot?.employee_name
                   ? `${firstBlockingSnapshot.employee_name}: ${firstBlockingSnapshot.blockers[0]}`
                   : "Resolve blocker snapshots before locking this run."}
+              </span>
+            </div>
+          ) : reconciliationBlockerCount > 0 ? (
+            <div className="notice notice--compact" role="note">
+              <strong>Reconciliation blocks lock.</strong>
+              <span className="muted">
+                {firstReconciliationBlocker?.employee_name
+                  ? `${firstReconciliationBlocker.employee_name}: ${firstReconciliationBlocker.reconciliation_summary.findings.find((item) => item.severity === "high")?.message ?? "Resolve high-risk reconciliation findings."}`
+                  : "Resolve high-risk reconciliation findings before locking this run."}
               </span>
             </div>
           ) : lockWarningCount > 0 ? (

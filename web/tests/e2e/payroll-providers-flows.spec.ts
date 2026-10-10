@@ -15,10 +15,10 @@ test.describe("HR admin payroll provider connection flows", () => {
     await expect(page.getByText(/real payout, filing, and journal submission stay disabled/i).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Run rehearsal" })).toBeVisible();
     await expect(page.getByText("Selected lane plan")).toBeVisible();
-    await expect(page.getByText("Runtime route")).toBeVisible();
+    const lanePlan = page.locator(".payroll-provider-lane-plan").first();
+    await expect(lanePlan.getByText("Runtime route").first()).toBeVisible();
     await expect(page.getByText("Schema mapping").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Configure provider" })).toBeVisible();
-    const lanePlan = page.locator(".payroll-provider-lane-plan").first();
     await expect(lanePlan).toContainText(/Runtime route|Schema mapping|Sandbox certification|Activation/);
     if (await lanePlan.getByText("Open blockers").isVisible().catch(() => false)) {
       await expect(lanePlan.getByRole("button", { name: "Activate connection" })).toHaveCount(0);

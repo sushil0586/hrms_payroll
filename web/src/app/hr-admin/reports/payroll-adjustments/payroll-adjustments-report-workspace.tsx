@@ -114,6 +114,8 @@ export function PayrollAdjustmentsReportWorkspace({
           row.approvalState,
           row.adjustment_profile_ref,
           row.approval_profile_ref,
+          row.post_lock_source?.adjustment_source_ref,
+          row.post_lock_source?.recommended_action,
           row.source_ref,
           row.reason,
           row.source_hash,
@@ -177,6 +179,7 @@ export function PayrollAdjustmentsReportWorkspace({
           <article className="metric-tile metric-tile-soft"><span>Adjustments</span><strong>{filteredRows.length}</strong><small>{adjustments.length} total rows</small></article>
           <article className="metric-tile metric-tile-soft"><span>Submitted</span><strong>{filteredRows.filter((row) => row.approvalState === "Submitted").length}</strong><small>Awaiting approval</small></article>
           <article className="metric-tile metric-tile-soft"><span>Approved/applied</span><strong>{filteredRows.filter((row) => ["Approved", "Applied"].includes(row.approvalState)).length}</strong><small>Ready for payroll effect</small></article>
+          <article className="metric-tile metric-tile-soft"><span>Post-lock linked</span><strong>{filteredRows.filter((row) => Boolean(row.post_lock_source)).length}</strong><small>Arrear evidence</small></article>
           <article className="metric-tile metric-tile-soft"><span>Total amount</span><strong>{formatMoney(totalAmount)}</strong><small>Filtered adjustments</small></article>
         </div>
 
@@ -193,6 +196,7 @@ export function PayrollAdjustmentsReportWorkspace({
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.filter((row) => row.amountRisk === "High").length}</strong> high value</span>
+          <span className="queue-summary-chip"><strong>{filteredRows.filter((row) => Boolean(row.post_lock_source)).length}</strong> post-lock linked</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((row) => Boolean(row.source_hash)).length}</strong> hash linked</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
           <Link className="button button--secondary" href={exportHref} prefetch={false}>Export filtered CSV</Link>
@@ -201,7 +205,7 @@ export function PayrollAdjustmentsReportWorkspace({
 
         <div className="report-catalog-table-wrap">
           <table className="report-catalog-table payroll-register-table">
-            <thead><tr><th scope="col">Employee</th><th scope="col">Run</th><th scope="col">Adjustment</th><th scope="col">Amount</th><th scope="col">Approval</th><th scope="col">Timeline</th><th scope="col">Evidence</th><th scope="col">Actions</th></tr></thead>
+            <thead><tr><th scope="col">Employee</th><th scope="col">Run</th><th scope="col">Adjustment</th><th scope="col">Amount</th><th scope="col">Approval</th><th scope="col">Timeline</th><th scope="col">Evidence</th><th scope="col">Post-lock</th><th scope="col">Actions</th></tr></thead>
             <tbody>
               {visibleRows.map((row) => (
                 <tr key={row.id}>
@@ -212,10 +216,17 @@ export function PayrollAdjustmentsReportWorkspace({
                   <td><div className="payroll-register-stack"><span className={statusClass(row.approvalState)}>{row.approvalState}</span><span>{row.status_label || titleCase(row.status)}</span><span>{row.approved_by_name ?? row.rejected_by_name ?? row.submitted_by_name ?? "Owner pending"}</span></div></td>
                   <td><div className="payroll-register-stack"><span>Effective {formatDate(row.effective_date)}</span><span>Submitted {formatDate(row.submitted_at)}</span><span>Applied {formatDate(row.applied_at)}</span></div></td>
                   <td><div className="payroll-register-stack"><code>{row.source_hash || "hash.pending"}</code><code>{row.source_ref || "source.pending"}</code><span>{row.adjustment_profile_ref}</span><span>{row.approval_profile_ref}</span></div></td>
+                  <td>
+                    <div className="payroll-register-stack">
+                      <span>{row.post_lock_source ? row.post_lock_source.recommended_action : "Not post-lock"}</span>
+                      <code>{row.post_lock_source?.adjustment_source_ref ?? "source.none"}</code>
+                      <span>{row.post_lock_source ? `${row.post_lock_source.period_start} to ${row.post_lock_source.period_end}` : "No locked input source"}</span>
+                    </div>
+                  </td>
                   <td><div className="report-row-actions"><Link className="button button--secondary" href={`/hr-admin/payroll-adjustments?runId=${row.payroll_run_id}&adjustmentId=${row.id}`}>Review</Link><Link className="button button--ghost" href={`/hr-admin/payroll-adjustments?runId=${row.payroll_run_id}`}>Run</Link></div></td>
                 </tr>
               ))}
-              {visibleRows.length === 0 ? <tr><td colSpan={8}><div className="empty-state">No payroll adjustment rows match the selected filters.</div></td></tr> : null}
+              {visibleRows.length === 0 ? <tr><td colSpan={9}><div className="empty-state">No payroll adjustment rows match the selected filters.</div></td></tr> : null}
             </tbody>
           </table>
         </div>

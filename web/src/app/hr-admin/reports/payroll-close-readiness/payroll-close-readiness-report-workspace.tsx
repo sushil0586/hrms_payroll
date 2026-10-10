@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 
 import type {
   HrAdminPayrollAdjustment,
-  HrAdminPayrollInputSnapshot,
+  HrAdminPayrollInputSnapshotListItem,
   HrAdminPayrollOutputArtifact,
   HrAdminPayrollOutputBatch,
   HrAdminPayrollRun,
@@ -90,7 +90,7 @@ export function PayrollCloseReadinessReportWorkspace({
   artifacts,
 }: {
   runs: HrAdminPayrollRun[];
-  snapshots: HrAdminPayrollInputSnapshot[];
+  snapshots: HrAdminPayrollInputSnapshotListItem[];
   reviews: HrAdminPayrollRunReview[];
   exceptions: HrAdminPayrollRunException[];
   adjustments: HrAdminPayrollAdjustment[];

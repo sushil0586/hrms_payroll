@@ -9,7 +9,7 @@ import { PayrollWorkflowGuide } from "../payroll-workflow-guide";
 import { PayrollReviewExceptionActions } from "./payroll-review-exception-actions";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import type {
-  HrAdminPayrollCalculationLine,
+  HrAdminPayrollCalculationLineListItem,
   HrAdminPayrollRun,
   HrAdminPayrollRunApproval,
   HrAdminPayrollRunException,
@@ -144,6 +144,7 @@ function ReviewRail({
   reviews,
   runs,
   selectedReview,
+  totalPages,
 }: {
   currentParams: Record<string, SearchParamValue>;
   page: number;
@@ -151,8 +152,9 @@ function ReviewRail({
   reviews: HrAdminPayrollRunReview[];
   runs: HrAdminPayrollRun[];
   selectedReview: HrAdminPayrollRunReview | null;
+  totalPages?: number;
 }) {
-  const pagedReviews = paginate(reviews, page, pageSize);
+  const pagedReviews = { items: reviews, page, pageSize, totalPages: totalPages ?? paginate(reviews, page, pageSize).totalPages };
 
   return (
     <aside className="payroll-setup-rail payroll-review-rail">
@@ -187,7 +189,7 @@ function ReviewRail({
           );
         })}
       </div>
-      {reviews.length > pageSize ? (
+      {pagedReviews.totalPages > 1 ? (
         <PaginationControls
           ariaLabel="payroll review queue pagination"
           currentParams={currentParams}
@@ -309,6 +311,14 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
   const lineSize = normalizePageSize(currentParams.lineSize);
   const result = await getHrAdminPayrollReviewSetup({
     review_id: selectedReviewId,
+    review_page: reviewPage,
+    review_page_size: reviewSize,
+    exception_page: exceptionPage,
+    exception_page_size: exceptionSize,
+    approval_page: approvalPage,
+    approval_page_size: approvalSize,
+    line_page: linePage,
+    line_page_size: lineSize,
   });
   const setup = result.data;
   const selectedReview =
@@ -317,14 +327,29 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
     setup.reviews[0] ??
     null;
   const visibleExceptions = selectedReview ? setup.exceptions.filter((item) => item.review_id === selectedReview.id) : setup.exceptions;
-  const pagedExceptions = paginate(visibleExceptions, exceptionPage, exceptionSize);
+  const pagedExceptions = {
+    items: visibleExceptions,
+    page: setup.pagination?.exceptions?.page ?? exceptionPage,
+    pageSize: exceptionSize,
+    totalPages: setup.pagination?.exceptions?.total_pages ?? paginate(visibleExceptions, exceptionPage, exceptionSize).totalPages,
+  };
   const selectedException = visibleExceptions.find((item) => item.id === selectedExceptionId) ?? visibleExceptions[0] ?? null;
   const visibleApprovals = selectedReview ? setup.approvals.filter((item) => item.review_id === selectedReview.id) : setup.approvals;
-  const pagedApprovals = paginate(visibleApprovals, approvalPage, approvalSize);
-  const visibleLines: HrAdminPayrollCalculationLine[] = selectedReview
+  const pagedApprovals = {
+    items: visibleApprovals,
+    page: setup.pagination?.approvals?.page ?? approvalPage,
+    pageSize: approvalSize,
+    totalPages: setup.pagination?.approvals?.total_pages ?? paginate(visibleApprovals, approvalPage, approvalSize).totalPages,
+  };
+  const visibleLines: HrAdminPayrollCalculationLineListItem[] = selectedReview
     ? setup.lines.filter((item) => item.calculation_id === selectedReview.calculation_id)
     : setup.lines;
-  const pagedLines = paginate(visibleLines, linePage, lineSize);
+  const pagedLines = {
+    items: visibleLines,
+    page: setup.pagination?.lines?.page ?? linePage,
+    pageSize: lineSize,
+    totalPages: setup.pagination?.lines?.total_pages ?? paginate(visibleLines, linePage, lineSize).totalPages,
+  };
   const selectedRun = selectedReview ? setup.runs.find((item) => item.id === selectedReview.payroll_run_id) ?? null : null;
   const totals = selectedReview?.totals_snapshot ?? {};
   const summary = selectedReview?.exception_summary_snapshot ?? {};
@@ -335,7 +360,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
   const canGenerateSelectedOutputs = Boolean(selectedReview && selectedReview.status === "locked");
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-review">
+    <main className="shell shell--payroll-setup shell--payroll-review hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live payroll phase 3A" : "Demo payroll phase 3A"}
         title="Payroll Review"
@@ -397,7 +422,15 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
 
       <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-review-workspace">
-          <ReviewRail currentParams={currentParams} page={reviewPage} pageSize={reviewSize} reviews={setup.reviews} runs={setup.runs} selectedReview={selectedReview} />
+          <ReviewRail
+            currentParams={currentParams}
+            page={setup.pagination?.reviews?.page ?? reviewPage}
+            pageSize={reviewSize}
+            reviews={setup.reviews}
+            runs={setup.runs}
+            selectedReview={selectedReview}
+            totalPages={setup.pagination?.reviews?.total_pages}
+          />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -547,7 +580,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   </tbody>
                 </table>
               </div>
-              {visibleExceptions.length > exceptionSize ? (
+              {pagedExceptions.totalPages > 1 ? (
                 <PaginationControls
                   ariaLabel="payroll review exception pagination"
                   currentParams={currentParams}
@@ -569,7 +602,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
             />
 
             <ApprovalTimeline approvals={pagedApprovals.items} totalApprovalCount={visibleApprovals.length} />
-            {visibleApprovals.length > approvalSize ? (
+            {pagedApprovals.totalPages > 1 ? (
               <PaginationControls
                 ariaLabel="payroll review approval pagination"
                 currentParams={currentParams}
@@ -619,7 +652,7 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
                   </tbody>
                 </table>
               </div>
-              {visibleLines.length > lineSize ? (
+              {pagedLines.totalPages > 1 ? (
                 <PaginationControls
                   ariaLabel="payroll review line pagination"
                   currentParams={currentParams}

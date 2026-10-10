@@ -269,6 +269,12 @@ print(json.dumps({
 `;
   const { stdout } = await execFileAsync("bash", ["-lc", `source .venv/bin/activate && python backend/manage.py shell -c '${script.replaceAll("'", "'\\''")}'`], {
     cwd: repoRoot,
+    env: {
+      ...process.env,
+      DJANGO_SETTINGS_MODULE: process.env.DJANGO_SETTINGS_MODULE ?? "config.settings.local",
+      DJANGO_DB_ENGINE: process.env.DJANGO_DB_ENGINE ?? "django.db.backends.sqlite3",
+      POSTGRES_DB: process.env.PLAYWRIGHT_DJANGO_SQLITE_DB ?? process.env.POSTGRES_DB ?? "backend/db.phase3c_e2e.sqlite3",
+    },
     maxBuffer: 1024 * 1024,
   });
   return JSON.parse(stdout.trim().split("\n").at(-1) ?? "{}") as CrossTenantFixture;
@@ -304,7 +310,7 @@ test.describe("Phase 7B cross-tenant object isolation", () => {
     }));
 
     await switchPersona(page, hrAdmin, "/hr-admin/organization?section=departments");
-    await expectPageReady(page, "Organization setup review for the structural backbone of the HRMS.");
+    await expectPageReady(page, "Organization masters");
     await expect(page.getByText("Phase 7B Private Department")).toHaveCount(0);
     await expectDeniedWithoutLeak(await page.request.get(`/api/hr-admin/organization/departments/${fixture.departmentId}`));
     await expectDeniedWithoutLeak(await page.request.patch(`/api/hr-admin/organization/departments/${fixture.departmentId}`, {

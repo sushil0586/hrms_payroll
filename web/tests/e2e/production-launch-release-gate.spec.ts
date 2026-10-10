@@ -26,20 +26,20 @@ test.describe("Production launch release gate proof", () => {
     await expectPageReady(page, "Control center");
     await expectVisibleText(page, [
       "Launch audit",
-      "Launch readiness posture",
+      "Launch guardrails",
       "View assignments",
       "Download audit",
     ]);
     await captureLaunchGateStep(page, testInfo, "01-hr-control-launch-audit");
 
     await gotoAuthenticated(page, "/hr-admin/launch-remediation");
-    await expectPageReady(page, "Launch Remediation");
+    await expectPageReady(page, "Launch Blockers");
     await expectVisibleText(page, [
       "Open assignments",
       "Download audit",
     ]);
     const remediationMain = page.getByRole("main");
-    const actionableRows = remediationMain.getByRole("button", { name: "Assign owner" });
+    const actionableRows = remediationMain.getByRole("button", { name: "Manage" });
     const emptyState = remediationMain.getByRole("heading", { name: "No launch remediation rows" });
     await expect(actionableRows.first().or(emptyState)).toBeVisible();
     await captureLaunchGateStep(page, testInfo, "02-launch-remediation-actions");
@@ -155,6 +155,12 @@ test.describe("Production launch release gate proof", () => {
       "payroll.provider_launch_readiness.audit_pack.v1",
       "payroll.provider_launch_rehearsal.v1",
       "Finance handoff gate",
+    ]);
+    await captureLaunchGateStep(page, testInfo, "10-provider-launch-rehearsal");
+
+    await gotoAuthenticated(page, "/hr-admin/payroll-providers?tab=registry");
+    await expectPageReady(page, "Payroll Providers");
+    await expectVisibleText(page, [
       "Live adapter readiness",
       "Provider client readiness",
       "Provider package manifests",
@@ -162,7 +168,7 @@ test.describe("Production launch release gate proof", () => {
       "Storage and IAM",
       "No raw secrets",
     ]);
-    await captureLaunchGateStep(page, testInfo, "10-provider-launch-rehearsal");
+    await captureLaunchGateStep(page, testInfo, "10b-provider-registry-readiness");
 
     await gotoAuthenticated(page, "/hr-admin/payroll-handoff");
     await expectPageReady(page, "Payroll Handoff");

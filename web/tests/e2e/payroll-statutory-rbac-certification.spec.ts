@@ -264,10 +264,10 @@ test.describe("Payroll and statutory RBAC certification", () => {
       permissions: ["statutory.setup.view", "statutory.declarations.view"],
     });
 
-    await gotoAuthenticated(page, "/hr-admin/payroll-statutory", persona);
+    await gotoAuthenticated(page, "/hr-admin/payroll-statutory?tab=actions", persona);
     await expectPageReady(page, "Payroll Statutory");
-    await expect(page.getByText("TDS e-file report")).toBeVisible();
     await expect(page.getByText("You can review statutory packs, filings, declarations, and evidence.")).toBeVisible();
+    await expect(page.getByText("Read only")).toBeVisible();
     await expect(page.getByTestId("statutory-pack-form")).toHaveCount(0);
     await expect(page.getByTestId("statutory-profile-form")).toHaveCount(0);
 

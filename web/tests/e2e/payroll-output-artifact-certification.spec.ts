@@ -25,6 +25,19 @@ async function selectOptionContaining(select: Locator, text: string) {
   await select.selectOption(value);
 }
 
+async function selectEmployeeSearchOption(page: Page, employee: { id?: string; employeeCode?: string; employeeOptionText?: string }) {
+  const searchNeedle = employee.employeeCode || employee.employeeOptionText || "";
+  expect(searchNeedle, "Expected employee code or name for payroll employee search.").toBeTruthy();
+  await page.getByLabel("Find person").fill(searchNeedle);
+  const employeeSelect = field(form(page, "payroll-input-snapshot-form"), "Employee");
+  await expect.poll(async () => employeeSelect.locator("option").count(), { timeout: 15_000 }).toBeGreaterThan(1);
+  if (employee.id) {
+    await employeeSelect.selectOption(employee.id);
+    return;
+  }
+  await selectOptionContaining(employeeSelect, searchNeedle);
+}
+
 async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: string, action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => routePattern.test(item.url()) && item.request().method() === method, { timeout: 30000 }),
@@ -58,7 +71,12 @@ async function getSignedInEssEmployee(page: Page) {
   const employeeCode = dashboard.profile?.employee_code ?? "";
   const employeeName = dashboard.profile?.full_name ?? "";
   expect(employeeCode || employeeName).toBeTruthy();
+  await gotoAuthenticated(page, "/hr-admin/payroll-inputs", hrAdmin);
+  const optionResponse = await page.request.get(`/api/hr-admin/employees/option-search?q=${encodeURIComponent(employeeCode || employeeName)}&limit=1`);
+  expect(optionResponse.ok(), await optionResponse.text()).toBeTruthy();
+  const optionPayload = (await optionResponse.json()) as { items?: Array<{ id: string }> };
   return {
+    id: optionPayload.items?.[0]?.id,
     employeeCode,
     employeeOptionText: employeeCode || employeeName,
   };
@@ -90,6 +108,7 @@ async function createLockedReview(
   page: Page,
   payrollOperator: Persona,
   options: {
+    employeeId?: string;
     employeeOptionText?: string;
     expectedEmployeeCode?: string;
     additionalEmployees?: Array<{ id: string; employeeCode: string }>;
@@ -126,7 +145,11 @@ async function createLockedReview(
   await snapshotForm.getByRole("button", { name: "New" }).click();
   const snapshot = await submitAndCapture<{ id: string }>(page, /\/api\/hr-admin\/payroll-input-snapshots$/, "POST", async () => {
     await field(snapshotForm, "Payroll run").selectOption(run.payload.id);
-    await selectOptionContaining(field(snapshotForm, "Employee"), options.employeeOptionText ?? "EMP-0042");
+    await selectEmployeeSearchOption(page, {
+      id: options.employeeId,
+      employeeCode: options.expectedEmployeeCode,
+      employeeOptionText: options.employeeOptionText ?? "EMP-0042",
+    });
     await field(snapshotForm, "Snapshot status").selectOption("ready");
     await field(snapshotForm, "Input profile ref").fill("tenant.payroll.input.phase5p.v1");
     await field(snapshotForm, "Config profile reference").fill("tenant.payroll.snapshot.phase5p.v1");
@@ -228,6 +251,7 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     const essEmployee = await getSignedInEssEmployee(page);
     const payrollOperator = await createPayrollLifecycleOperator(page);
     const setup = await createLockedReview(page, payrollOperator, {
+      employeeId: essEmployee.id,
       employeeOptionText: essEmployee.employeeOptionText,
       expectedEmployeeCode: essEmployee.employeeCode || undefined,
     });
@@ -322,6 +346,7 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     const payrollOperator = await createPayrollLifecycleOperator(page);
     const outputProfileRef = "tenant.payroll.outputs.pdf-tax-sheet.v1";
     const setup = await createLockedReview(page, payrollOperator, {
+      employeeId: essEmployee.id,
       employeeOptionText: essEmployee.employeeOptionText,
       expectedEmployeeCode: essEmployee.employeeCode || undefined,
       additionalEmployees: [
@@ -448,6 +473,7 @@ test.describe("Phase 5P payroll output artifact certification", () => {
     const essEmployee = await getSignedInEssEmployee(page);
     const payrollOperator = await createPayrollLifecycleOperator(page);
     const setup = await createLockedReview(page, payrollOperator, {
+      employeeId: essEmployee.id,
       employeeOptionText: essEmployee.employeeOptionText,
       expectedEmployeeCode: essEmployee.employeeCode || undefined,
     });

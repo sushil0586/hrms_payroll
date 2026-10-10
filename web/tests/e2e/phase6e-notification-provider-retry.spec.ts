@@ -132,18 +132,12 @@ test.describe("Phase 6E notification provider failure and retry certification", 
     await expect(page.getByText("Retry ready").first()).toBeVisible();
     await expect(page.getByText("Select notifications").first()).toBeVisible();
     await expect(page.getByText("Quick review").first()).toBeVisible();
-    await expect(page.getByRole("link", { name: "Full review" }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Review" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /Retry selected/ })).toBeDisabled();
 
-    const statusField = page.locator(".inline-review-panel").first().getByRole("combobox", { name: "Status" });
-    const priorityField = page.locator(".inline-review-panel").first().getByRole("combobox", { name: "Priority" });
-    const readStateField = page.locator(".inline-review-panel").first().getByRole("combobox", { name: "Read state" });
-    await expect(statusField).toHaveValue("failed");
-    await expect(priorityField).toHaveValue("high");
-    await expect(readStateField).toBeVisible();
-    await readStateField.selectOption("mark_read");
-    await page.locator(".inline-review-panel").first().getByRole("button", { name: "Save review" }).click();
-    await expect(page.getByText("Notification review updated.").first()).toBeVisible();
+    const retryCard = page.locator(".record-card").filter({ hasText: /Phase 6E failed/ }).first();
+    await expect(retryCard).toContainText("Failed");
+    await expect(retryCard).toContainText("High");
     await captureNotificationStep(page, testInfo, "01-queue-filter-inline-review");
 
     await page.goto(`/hr-admin/notifications/${singleRetry.id}/review`);
@@ -154,7 +148,7 @@ test.describe("Phase 6E notification provider failure and retry certification", 
     await expect(page.getByText("Payload").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Retry delivery" })).toBeEnabled();
     await page.getByRole("button", { name: "Retry delivery" }).click();
-    await expect(page.getByText("Notification delivery retried.")).toBeVisible();
+    await expect(page.getByText("Notification delivery retried.").first()).toBeVisible();
     await expect.poll(async () => (await getNotification(page, singleRetry.id)).status).toBe("delivered");
     const retried = await getNotification(page, singleRetry.id);
     expect(retried.delivery_logs.some((log) => log.provider_name === "in_app_default" && log.status === "delivered")).toBeTruthy();

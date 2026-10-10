@@ -38,7 +38,7 @@ test.describe("Phase R4-B TDS e-file package certification", () => {
 
   test("employee cannot download the HR admin TDS e-file package", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     const response = await page.request.get("/api/hr-admin/reports/tds-efile-package");
     expect([401, 403]).toContain(response.status());

@@ -1,9 +1,10 @@
 import Link from "next/link";
 
 import { AttendanceRecordBulkManager } from "@/app/hr-admin/attendance-records/attendance-record-bulk-manager";
+import { AttendanceRecordImportWorkbench } from "@/app/hr-admin/attendance-records/attendance-record-import-workbench";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminAttendanceOperationOptions, getHrAdminAttendanceRecords } from "@/lib/api";
+import { getHrAdminAttendanceRecords, getHrAdminAttendanceWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
@@ -25,8 +26,11 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
   const source = normalizeParam(currentParams.source) ?? "";
+  const shiftId = normalizeParam(currentParams.shift_id) ?? "";
   const lockState = normalizeParam(currentParams.lock_state) ?? "";
   const regularizedState = normalizeParam(currentParams.regularized_state) ?? "";
+  const fromDate = normalizeParam(currentParams.from_date) ?? "";
+  const toDate = normalizeParam(currentParams.to_date) ?? "";
   const lateOnly = ["1", "true", "yes"].includes((normalizeParam(currentParams.late_only) ?? "").toLowerCase());
 
   const [result, optionsResult] = await Promise.all([
@@ -36,15 +40,18 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
       q,
       status: status || undefined,
       source: source || undefined,
+      shift_id: shiftId || undefined,
       lock_state: lockState || undefined,
       regularized_state: regularizedState || undefined,
+      from_date: fromDate || undefined,
+      to_date: toDate || undefined,
       late_only: lateOnly || undefined,
     }),
-    getHrAdminAttendanceOperationOptions(),
+    getHrAdminAttendanceWorkbenchOptions({ include_people: true, include_shifts: true }),
   ]);
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live attendance records mode" : "Demo attendance records mode"}
         title="Attendance records"
@@ -74,12 +81,16 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
         state={result.state}
         statusOptions={optionsResult.data.attendance_statuses}
         sourceOptions={optionsResult.data.attendance_sources}
+        shiftOptions={optionsResult.data.shifts}
         currentFilters={{
           q,
           status,
           source,
+          shift_id: shiftId,
           lock_state: lockState,
           regularized_state: regularizedState,
+          from_date: fromDate,
+          to_date: toDate,
           late_only: lateOnly,
           page,
           page_size: pageSize,
@@ -91,6 +102,14 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
           has_next: result.data.has_next,
           has_previous: result.data.has_previous,
         }}
+        canManageRecords={canManageRecords}
+      />
+      <AttendanceRecordImportWorkbench
+        records={result.data.items}
+        employees={optionsResult.data.employees}
+        shifts={optionsResult.data.shifts}
+        statusOptions={optionsResult.data.attendance_statuses}
+        sourceOptions={optionsResult.data.attendance_sources}
         canManageRecords={canManageRecords}
       />
     </main>

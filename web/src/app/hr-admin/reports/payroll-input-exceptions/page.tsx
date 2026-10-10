@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminPayrollInputSnapshots, getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
+import { getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
 
 import { ReportInsightsStrip } from "../report-insights-strip";
@@ -10,13 +10,10 @@ import { PayrollInputExceptionsReportWorkspace } from "./payroll-input-exception
 export default async function PayrollInputExceptionsReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
-  const [result, snapshotsResult] = await Promise.all([
-    getHrAdminPayrollInputSnapshotSetup(),
-    getHrAdminPayrollInputSnapshots(),
-  ]);
+  const result = await getHrAdminPayrollInputSnapshotSetup();
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Payroll Input Exceptions Report"
@@ -54,7 +51,7 @@ export default async function PayrollInputExceptionsReportPage() {
         ]}
       />
 
-      <PayrollInputExceptionsReportWorkspace runs={result.data.runs} snapshots={snapshotsResult.data} />
+      <PayrollInputExceptionsReportWorkspace runs={result.data.runs} snapshots={result.data.snapshots} />
     </main>
   );
 }

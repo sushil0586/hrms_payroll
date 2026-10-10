@@ -11,7 +11,7 @@ export default async function TdsEfileReadinessReportPage() {
 
   const [statutoryResult, handoffResult] = await Promise.all([
     getHrAdminPayrollStatutorySetup(),
-    getHrAdminPayrollFinanceHandoffSetup(),
+    getHrAdminPayrollFinanceHandoffSetup({ include_payslip_detail: true, payslip_page_size: 100 }),
   ]);
 
   return (

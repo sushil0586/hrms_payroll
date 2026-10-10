@@ -9,10 +9,10 @@ import { PayrollAdjustmentsReportWorkspace } from "./payroll-adjustments-report-
 export default async function PayrollAdjustmentsReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
-  const result = await getHrAdminPayrollAdjustmentSetup();
+  const result = await getHrAdminPayrollAdjustmentSetup({ include_all_runs: true, adjustment_page_size: 100, snapshot_page_size: 100, post_lock_page_size: 100 });
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Payroll Adjustments Report"

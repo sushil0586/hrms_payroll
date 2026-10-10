@@ -28,7 +28,7 @@ const navGroups: { title: string; items: HrAdminNavItem[] }[] = [
     title: "Time & Leave",
     items: [
       { href: "/hr-admin/attendance-operations", label: "Attendance" },
-      { href: "/hr-admin/leave-balances", label: "Leave" },
+      { href: "/hr-admin/leave-requests", label: "Leave" },
       { href: "/hr-admin/policies", label: "Policies" },
     ],
   },
@@ -95,7 +95,7 @@ async function expectRouteHealthy(page: Page, item: HrAdminNavItem) {
 }
 
 test.describe("HR Admin navigation and control center 95 certification", () => {
-  test.describe.configure({ timeout: 120_000 });
+  test.describe.configure({ timeout: 240_000 });
 
   test("certifies grouped sidebar, topbar, command center, and every menu route on desktop", async ({
     page,
@@ -126,7 +126,8 @@ test.describe("HR Admin navigation and control center 95 certification", () => {
       await expect(nav.getByRole("link", { name: new RegExp(`^${oldCycleItem}\\b`) })).toHaveCount(0);
     }
 
-    await expect(page.getByLabel("Search placeholder")).toContainText(
+    await expect(page.getByRole("searchbox", { name: "Workspace search" })).toHaveAttribute(
+      "placeholder",
       "Search employees, payroll, leave, attendance, reports...",
     );
     await expect(page.getByRole("link", { name: "ESS", exact: true })).toBeVisible();

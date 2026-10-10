@@ -3,7 +3,7 @@ import Link from "next/link";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollCalculationSetup } from "@/lib/api";
-import type { HrAdminPayrollCalculationLine, HrAdminPayrollRun, HrAdminPayrollRunCalculation, HrAdminPayrollValidationIssue } from "@/lib/types";
+import type { HrAdminPayrollCalculationLineListItem, HrAdminPayrollRun, HrAdminPayrollRunCalculation, HrAdminPayrollValidationIssue } from "@/lib/types";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
@@ -88,8 +88,8 @@ function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function annualizationSnapshot(line: HrAdminPayrollCalculationLine) {
-  return recordValue(line.config_snapshot.annualization);
+function annualizationSnapshot(line: HrAdminPayrollCalculationLineListItem) {
+  return recordValue(line.config_snapshot?.annualization);
 }
 
 function snapshotText(value: unknown) {
@@ -247,29 +247,29 @@ function CalculationReadinessPanel({ run, blockerCount }: { run: HrAdminPayrollR
   );
 }
 
-function lineSourceDetail(line: HrAdminPayrollCalculationLine) {
+function lineSourceDetail(line: HrAdminPayrollCalculationLineListItem) {
   if (line.line_source === "adjustment") {
-    return line.config_snapshot.source_ref ? String(line.config_snapshot.source_ref) : "Applied payroll adjustment";
+    return line.config_snapshot?.source_ref ? String(line.config_snapshot.source_ref) : "Applied payroll adjustment";
   }
   if (line.line_source === "statutory") {
-    return String(line.config_snapshot.statutory_treatment_ref ?? line.config_snapshot.statutory_component_code ?? "Configured statutory component");
+    return String(line.config_snapshot?.statutory_treatment_ref ?? line.config_snapshot?.statutory_component_code ?? "Configured statutory component");
   }
 
   return line.rule_version ? `${line.rule_code} v${line.rule_version}` : line.rule_code;
 }
 
-function lineExpressionDetail(line: HrAdminPayrollCalculationLine) {
+function lineExpressionDetail(line: HrAdminPayrollCalculationLineListItem) {
   if (line.line_source === "adjustment") {
-    return String(line.config_snapshot.calculation_consumption_ref ?? line.config_snapshot.source_ref ?? line.source_hash);
+    return String(line.config_snapshot?.calculation_consumption_ref ?? line.config_snapshot?.source_ref ?? line.source_hash);
   }
   if (line.line_source === "statutory") {
-    return String(line.config_snapshot.wage_base_path ?? line.config_snapshot.statutory_treatment_ref ?? line.source_hash);
+    return String(line.config_snapshot?.wage_base_path ?? line.config_snapshot?.statutory_treatment_ref ?? line.source_hash);
   }
 
   return line.expression;
 }
 
-function sourceBlockLabel(line: HrAdminPayrollCalculationLine) {
+function sourceBlockLabel(line: HrAdminPayrollCalculationLineListItem) {
   if (line.line_source === "adjustment") {
     return "Adjustment source";
   }
@@ -285,14 +285,16 @@ function RunRail({
   pageSize,
   runs,
   selectedRun,
+  totalPages,
 }: {
   currentParams: Record<string, SearchParamValue>;
   page: number;
   pageSize: PageSize;
   runs: HrAdminPayrollRun[];
   selectedRun: HrAdminPayrollRun | null;
+  totalPages?: number;
 }) {
-  const pagedRuns = paginate(runs, page, pageSize);
+  const pagedRuns = { items: runs, page, pageSize, totalPages: totalPages ?? paginate(runs, page, pageSize).totalPages };
 
   return (
     <aside className="payroll-setup-rail payroll-calc-run-rail">
@@ -325,7 +327,7 @@ function RunRail({
           </Link>
         ))}
       </div>
-      {runs.length > pageSize ? (
+      {pagedRuns.totalPages > 1 ? (
         <PaginationControls
           ariaLabel="payroll calculation run pagination"
           currentParams={currentParams}
@@ -340,7 +342,7 @@ function RunRail({
   );
 }
 
-function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLine | null }) {
+function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLineListItem | null }) {
   if (!line) {
     return (
       <aside className="payroll-setup-detail-panel payroll-calc-detail-panel">
@@ -353,7 +355,7 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLine | nul
     );
   }
 
-  const dependencies = line.trace_snapshot.dependencies;
+  const dependencies = line.trace_snapshot?.dependencies;
   const dependencyList = Array.isArray(dependencies) ? dependencies.map(String) : [];
   const annualization = annualizationSnapshot(line);
   const capEvidence = Array.isArray(annualization?.declaration_cap_evidence)
@@ -391,7 +393,7 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLine | nul
         <div className="detail-row"><span className="detail-label">Source detail</span><span className="detail-value">{lineSourceDetail(line)}</span></div>
         <div className="detail-row"><span className="detail-label">Order</span><span className="detail-value">{line.calculation_order}</span></div>
         <div className="detail-row"><span className="detail-label">Source</span><span className="detail-value"><code>{line.source_hash.slice(0, 16)}</code></span></div>
-        <div className="detail-row"><span className="detail-label">Result</span><span className="detail-value">{String(line.result_snapshot.result ?? line.amount)}</span></div>
+        <div className="detail-row"><span className="detail-label">Result</span><span className="detail-value">{String(line.result_snapshot?.result ?? line.amount)}</span></div>
       </div>
 
       {annualization ? (
@@ -434,7 +436,7 @@ function CalculationDetail({ line }: { line: HrAdminPayrollCalculationLine | nul
       <section className="payroll-rule-source-card">
         <span className="workspace-card__eyebrow">Configuration</span>
         <div className="payroll-rule-snapshot-list">
-          {Object.entries(line.config_snapshot).slice(0, 5).map(([key, value]) => (
+          {Object.entries(line.config_snapshot ?? {}).slice(0, 5).map(([key, value]) => (
             <div className="detail-row" key={key}>
               <span className="detail-label">{titleCase(key)}</span>
               <span className="detail-value">{snapshotText(value)}</span>
@@ -516,13 +518,26 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
   const result = await getHrAdminPayrollCalculationSetup({
     run_id: selectedRunId,
     calculation_id: selectedCalculationId,
+    run_page: runPage,
+    run_page_size: runSize,
+    calculation_page: calculationPage,
+    calculation_page_size: calculationSize,
+    line_page: linePage,
+    line_page_size: lineSize,
+    issue_page: issuePage,
+    issue_page_size: issueSize,
   });
   const setup = result.data;
   const selectedRun = setup.runs.find((item) => item.id === selectedRunId) ?? setup.runs.find((item) => item.status === "calculated") ?? setup.runs[0] ?? null;
   const visibleCalculations = selectedRun
     ? setup.calculations.filter((item) => item.payroll_run_id === selectedRun.id)
     : setup.calculations;
-  const pagedCalculations = paginate(visibleCalculations, calculationPage, calculationSize);
+  const pagedCalculations = {
+    items: visibleCalculations,
+    page: setup.pagination?.calculations?.page ?? calculationPage,
+    pageSize: calculationSize,
+    totalPages: setup.pagination?.calculations?.total_pages ?? paginate(visibleCalculations, calculationPage, calculationSize).totalPages,
+  };
   const selectedCalculation =
     visibleCalculations.find((item) => item.id === selectedCalculationId) ??
     visibleCalculations[0] ??
@@ -530,7 +545,12 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
   const visibleLines = selectedCalculation
     ? setup.lines.filter((item) => item.calculation_id === selectedCalculation.id)
     : setup.lines;
-  const pagedLines = paginate(visibleLines, linePage, lineSize);
+  const pagedLines = {
+    items: visibleLines,
+    page: setup.pagination?.lines?.page ?? linePage,
+    pageSize: lineSize,
+    totalPages: setup.pagination?.lines?.total_pages ?? paginate(visibleLines, linePage, lineSize).totalPages,
+  };
   const selectedLine = visibleLines.find((item) => item.id === selectedLineId) ?? visibleLines.find((item) => item.component_code === "TDS") ?? visibleLines[0] ?? null;
   const totals = selectedCalculation?.totals_snapshot ?? {};
   const visibleValidationIssues = setup.validation_issues.filter((issue) => {
@@ -542,13 +562,18 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
     }
     return !selectedCalculation || issue.calculation_id === selectedCalculation.id || issue.calculation_id === null;
   });
-  const pagedValidationIssues = paginate(visibleValidationIssues, issuePage, issueSize);
+  const pagedValidationIssues = {
+    items: visibleValidationIssues,
+    page: setup.pagination?.validation_issues?.page ?? issuePage,
+    pageSize: issueSize,
+    totalPages: setup.pagination?.validation_issues?.total_pages ?? paginate(visibleValidationIssues, issuePage, issueSize).totalPages,
+  };
   const readiness = calculationReadiness(selectedRun);
   const openBlockerCount = visibleValidationIssues.filter((issue) => issue.severity === "blocker").length;
   const canOpenSelectedReview = Boolean(selectedRun && selectedCalculation);
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-calculations">
+    <main className="shell shell--payroll-setup shell--payroll-calculations hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live payroll phase 4E" : "Demo payroll phase 4E"}
         title="Payroll Calculations"
@@ -617,7 +642,14 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
 
       <section className="section section--tight">
         <div className="payroll-setup-workspace payroll-calc-workspace">
-          <RunRail currentParams={currentParams} page={runPage} pageSize={runSize} runs={setup.runs} selectedRun={selectedRun} />
+          <RunRail
+            currentParams={currentParams}
+            page={setup.pagination?.runs?.page ?? runPage}
+            pageSize={runSize}
+            runs={setup.runs}
+            selectedRun={selectedRun}
+            totalPages={setup.pagination?.runs?.total_pages}
+          />
 
           <div className="payroll-setup-main-panel">
             <div className="payroll-setup-panel__header payroll-setup-panel__header--split">
@@ -648,7 +680,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
             </div>
 
             <ValidationIssueRegister issues={pagedValidationIssues.items} totalIssueCount={visibleValidationIssues.length} />
-            {visibleValidationIssues.length > issueSize ? (
+            {pagedValidationIssues.totalPages > 1 ? (
               <PaginationControls
                 ariaLabel="payroll calculation issue pagination"
                 currentParams={currentParams}
@@ -725,7 +757,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                 </tbody>
               </table>
             </div>
-            {visibleCalculations.length > calculationSize ? (
+            {pagedCalculations.totalPages > 1 ? (
               <PaginationControls
                 ariaLabel="payroll calculation attempt pagination"
                 currentParams={currentParams}
@@ -784,7 +816,7 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
                   </tbody>
                 </table>
               </div>
-              {visibleLines.length > lineSize ? (
+              {pagedLines.totalPages > 1 ? (
                 <PaginationControls
                   ariaLabel="payroll calculation line pagination"
                   currentParams={currentParams}

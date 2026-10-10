@@ -20,7 +20,7 @@ type PerformanceSample = {
 };
 
 const launchRoutes: RouteExpectation[] = [
-  { path: "/", heading: "Choose your workspace" },
+  { path: "/", heading: /Run payroll, compliance, and employee operations/i },
   { path: "/hr-admin", heading: "Control center" },
   { path: "/hr-admin/payroll-readiness", heading: "Payroll Readiness" },
   { path: "/hr-admin/payroll-inputs", heading: "Payroll Inputs" },
@@ -31,12 +31,12 @@ const launchRoutes: RouteExpectation[] = [
   { path: "/hr-admin/payroll-providers", heading: "Payroll Providers" },
   { path: "/hr-admin/notifications?retry_state=retry_ready", heading: "Notification queue" },
   { path: "/hr-admin/notification-delivery", heading: "Notification delivery" },
-  { path: "/tenant-admin", heading: "Tenant Admin Console" },
+  { path: "/tenant-admin", heading: "Account Control Center" },
   { path: "/tenant-admin/security-readiness", heading: "Enterprise Security Readiness" },
   { path: "/support", heading: "Support Console" },
   { path: "/ess/payslips", heading: "Payslips" },
   { path: "/ess/notifications?subject_type=payroll_payslip", heading: "Notifications" },
-  { path: "/mss/approvals", heading: "Manager inbox" },
+  { path: "/mss/approvals", heading: "Manager approvals" },
 ];
 
 const localBudgets = {

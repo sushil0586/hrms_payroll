@@ -14,11 +14,14 @@ test.describe("Phase R5-A payroll input exceptions report certification", () => 
       await expect(report.getByRole("columnheader", { name: column })).toBeVisible();
     }
 
-    for (const metric of ["Snapshots", "Blocked inputs", "Warning inputs", "Locked snapshots"]) {
+    for (const metric of ["Snapshots", "Blocked inputs", "Warning inputs", "Locked snapshots", "Reconciliation risk"]) {
       await expect(report.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
     }
+    await expect(report.getByText(/reconciliation findings/i).first()).toBeVisible();
 
     const search = report.getByPlaceholder("Search employee, run, issue, hash");
+    await search.fill("reconciliation");
+    await expect(report.getByText(/Showing|No payroll input exception rows/).first()).toBeVisible();
     await search.fill("no-such-payroll-input-exception-row");
     await expect(report.getByText("No payroll input exception rows match the selected filters.")).toBeVisible();
     await search.fill("");
@@ -53,6 +56,8 @@ test.describe("Phase R5-A payroll input exceptions report certification", () => 
     expect(filteredExportBody).toContain("employee_code");
     expect(filteredExportBody).toContain("snapshot_status");
     expect(filteredExportBody).toContain("readiness_risk");
+    expect(filteredExportBody).toContain("reconciliation_status");
+    expect(filteredExportBody).toContain("reconciliation_first_finding");
     expect(filteredExportBody).toContain("source_hash");
 
     const manifestHref = await report.getByRole("link", { name: "Manifest" }).getAttribute("href");
@@ -66,6 +71,8 @@ test.describe("Phase R5-A payroll input exceptions report certification", () => 
     expect(manifest.source_endpoints).toContain("/hr-admin/payroll-input-snapshot-setup/");
     expect(manifest.evidence_columns).toContain("snapshot_status");
     expect(manifest.evidence_columns).toContain("readiness_risk");
+    expect(manifest.evidence_columns).toContain("reconciliation_status");
+    expect(manifest.evidence_columns).toContain("reconciliation_first_finding");
     expect(manifest.evidence_columns).toContain("source_hash");
 
     const auditResponse = await page.request.get("/api/hr-admin/reports/export-audits?report_key=payroll-input-exceptions");

@@ -5,19 +5,23 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import type { HrAdminAttendanceRecord, HrAdminEnumOption } from "@/lib/types";
+import type { HrAdminAttendanceRecord, HrAdminEnumOption, HrAdminOptionItem } from "@/lib/types";
 
 type Props = {
   items: HrAdminAttendanceRecord[];
   state: "live" | "demo";
   statusOptions: HrAdminEnumOption[];
   sourceOptions: HrAdminEnumOption[];
+  shiftOptions: HrAdminOptionItem[];
   currentFilters: {
     q: string;
     status: string;
     source: string;
+    shift_id: string;
     lock_state: string;
     regularized_state: string;
+    from_date: string;
+    to_date: string;
     late_only: boolean;
     page: number;
     page_size: number;
@@ -61,11 +65,16 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function getDerivationReason(item: HrAdminAttendanceRecord) {
+  return item.derivation_summary?.reasons?.[0] || "Attendance status is awaiting derivation evidence.";
+}
+
 export function AttendanceRecordBulkManager({
   items,
   state,
   statusOptions,
   sourceOptions,
+  shiftOptions,
   currentFilters,
   pagination,
   canManageRecords = true,
@@ -78,8 +87,11 @@ export function AttendanceRecordBulkManager({
   const [search, setSearch] = useState(currentFilters.q);
   const [statusFilter, setStatusFilter] = useState(currentFilters.status || "all");
   const [sourceFilter, setSourceFilter] = useState(currentFilters.source || "all");
+  const [shiftFilter, setShiftFilter] = useState(currentFilters.shift_id || "all");
   const [lockFilter, setLockFilter] = useState(currentFilters.lock_state || "all");
   const [regularizedFilter, setRegularizedFilter] = useState(currentFilters.regularized_state || "all");
+  const [fromDate, setFromDate] = useState(currentFilters.from_date);
+  const [toDate, setToDate] = useState(currentFilters.to_date);
   const [lateOnly, setLateOnly] = useState(currentFilters.late_only);
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
   const [bulkStatus, setBulkStatus] = useState(statusOptions[0]?.value ?? "present");
@@ -100,8 +112,11 @@ export function AttendanceRecordBulkManager({
       q: search.trim() || undefined,
       status: statusFilter !== "all" ? statusFilter : undefined,
       source: sourceFilter !== "all" ? sourceFilter : undefined,
+      shift_id: shiftFilter !== "all" ? shiftFilter : undefined,
       lock_state: lockFilter !== "all" ? lockFilter : undefined,
       regularized_state: regularizedFilter !== "all" ? regularizedFilter : undefined,
+      from_date: fromDate || undefined,
+      to_date: toDate || undefined,
       late_only: lateOnly || undefined,
       page,
       page_size: Number(pageSize) || currentFilters.page_size,
@@ -196,6 +211,13 @@ export function AttendanceRecordBulkManager({
             </select>
           </label>
           <label className="form-field">
+            <span className="muted">Shift</span>
+            <select aria-label="Shift" className="input-control" onChange={(event) => setShiftFilter(event.target.value)} value={shiftFilter}>
+              <option value="all">All shifts</option>
+              {shiftOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+            </select>
+          </label>
+          <label className="form-field">
             <span className="muted">Lock state</span>
             <select className="input-control" onChange={(event) => setLockFilter(event.target.value)} value={lockFilter}>
               <option value="all">All rows</option>
@@ -210,6 +232,14 @@ export function AttendanceRecordBulkManager({
               <option value="regularized">Regularized only</option>
               <option value="not_regularized">Not regularized</option>
             </select>
+          </label>
+          <label className="form-field">
+            <span className="muted">From date</span>
+            <input className="input-control" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
+          </label>
+          <label className="form-field">
+            <span className="muted">To date</span>
+            <input className="input-control" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
           </label>
           <label className="form-field">
             <span className="muted">Rows per page</span>
@@ -233,8 +263,11 @@ export function AttendanceRecordBulkManager({
             setSearch("");
             setStatusFilter("all");
             setSourceFilter("all");
+            setShiftFilter("all");
             setLockFilter("all");
             setRegularizedFilter("all");
+            setFromDate("");
+            setToDate("");
             setLateOnly(false);
             setPageSize("25");
             router.push(pathname);
@@ -325,6 +358,9 @@ export function AttendanceRecordBulkManager({
                 <div className="detail-row"><span className="detail-label">Check out</span><span className="detail-value">{formatDateTime(item.check_out_at)}</span></div>
                 <div className="detail-row"><span className="detail-label">Late minutes</span><span className="detail-value">{item.late_minutes}</span></div>
                 <div className="detail-row"><span className="detail-label">Regularized</span><span className="detail-value">{item.is_regularized ? "Yes" : "No"}</span></div>
+                <div className="detail-row"><span className="detail-label">Why this status</span><span className="detail-value">{getDerivationReason(item)}</span></div>
+                <div className="detail-row"><span className="detail-label">Payroll impact</span><span className="detail-value">Payable {item.derivation_summary.payroll_impact.payable_units} / LOP {item.derivation_summary.payroll_impact.lop_units}</span></div>
+                <div className="detail-row"><span className="detail-label">Leave collision</span><span className="detail-value">{item.derivation_summary.leave_collision_count ? `${item.derivation_summary.leave_collision_count} overlapping leave request` : "Clear"}</span></div>
               </div>
             </article>
           );

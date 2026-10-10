@@ -5,14 +5,26 @@ import { gotoAuthenticated } from "../helpers/staging-auth";
 import { createPayrollLifecycleOperator } from "../helpers/tenant-rbac";
 
 test.describe("HR admin payroll review flows", () => {
+  test.setTimeout(60_000);
+
   test("review workspace exposes exceptions, approvals, final lock controls, and live detail", async ({ page }) => {
     const payrollOperator = await createPayrollLifecycleOperator(page);
     await gotoAuthenticated(page, "/hr-admin/payroll-review", payrollOperator);
     await expectPageReady(page, "Payroll Review");
 
+    const setupResponse = await page.request.get("/api/hr-admin/payroll-review-setup?review_page_size=10&exception_page_size=10&approval_page_size=10&line_page_size=10");
+    const setupBody = await setupResponse.body();
+    const setupPayload = JSON.parse(setupBody.toString());
+    expect(setupResponse.ok()).toBeTruthy();
+    expect(setupPayload.calculations.length, "review setup should only include selected review calculation context").toBeLessThanOrEqual(1);
+    expect(setupPayload.exceptions.length, "review setup should honor compact exception page size").toBeLessThanOrEqual(10);
+    expect(setupPayload.approvals.length, "review setup should honor compact approval page size").toBeLessThanOrEqual(10);
+    expect(setupPayload.lines.length, "review setup should honor compact line page size").toBeLessThanOrEqual(10);
+    expect(setupBody.length, "review setup payload should stay compact").toBeLessThan(350_000);
+
     await expect(page.getByRole("heading", { name: "Review queue" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Payroll review desk" })).toBeVisible();
-    await expect(page.getByText("Selected review").first()).toBeVisible();
+    await expect(page.getByText("Selected review").or(page.getByText("Review detail")).or(page.getByText("No review selected")).or(page.getByRole("heading", { name: "No review" })).first()).toBeVisible();
     await expect(page.getByText("Exception register").first()).toBeVisible();
     await expect(page.getByText("Approval trail").first()).toBeVisible();
     await expect(page.getByText("Final lock").first()).toBeVisible();

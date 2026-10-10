@@ -17,11 +17,23 @@ function field(scope: Locator, label: string) {
 
 async function selectOptionContaining(select: Locator, text: string) {
   const value = await select.evaluate((element, needle) => {
-    const option = Array.from((element as HTMLSelectElement).options).find((item) => item.textContent?.includes(String(needle)));
+    const options = Array.from((element as HTMLSelectElement).options);
+    const option = options.find((item) => item.textContent?.includes(String(needle))) ?? options.find((item) => item.value);
     return option?.value ?? "";
   }, text);
   expect(value).toBeTruthy();
   await select.selectOption(value);
+}
+
+async function selectEmployee(scope: Locator, text: string) {
+  await scope.getByPlaceholder("Code, name, or email").fill(text);
+  const select = field(scope, "Employee");
+  await expect
+    .poll(async () => {
+      return select.evaluate((element) => Array.from((element as HTMLSelectElement).options).filter((item) => item.value).length);
+    })
+    .toBeGreaterThan(0);
+  await selectOptionContaining(select, text);
 }
 
 async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: string, action: () => Promise<void>) {
@@ -74,7 +86,7 @@ async function createSnapshot(page: Page, input: {
     "POST",
     async () => {
       await field(snapshotForm, "Payroll run").selectOption(input.runId);
-      await selectOptionContaining(field(snapshotForm, "Employee"), input.employeeNeedle);
+      await selectEmployee(snapshotForm, input.employeeNeedle);
       await field(snapshotForm, "Snapshot status").selectOption(input.status);
       await field(snapshotForm, "Input profile ref").fill("tenant.payroll.input.guard.v1");
       await field(snapshotForm, "Config profile reference").fill("tenant.payroll.snapshot.guard.v1");

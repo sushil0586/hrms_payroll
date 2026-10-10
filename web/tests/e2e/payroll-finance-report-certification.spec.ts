@@ -67,7 +67,7 @@ test.describe("Phase R3-A payroll finance report certification", () => {
     const manifest = await manifestResponse.json();
     expect(manifest.export_schema_version).toBe("hrms.report.export.manifest.v1");
     expect(manifest.csv_checksum_sha256).toMatch(/^[a-f0-9]{64}$/);
-    expect(manifest.source_endpoints).toContain("/hr-admin/payroll-output-setup/");
+    expect(manifest.source_endpoints.some((endpoint: string) => endpoint.startsWith("/hr-admin/payroll-output-setup/"))).toBe(true);
     expect(manifest.evidence_columns).toContain("checksum_sha256");
     expect(manifest.evidence_columns).toContain("source_hash");
 
@@ -90,7 +90,7 @@ test.describe("Phase R3-A payroll finance report certification", () => {
     await openLink.click();
     await expect(page).toHaveURL(/\/hr-admin\/payroll-outputs\?batchId=.+artifactId=/);
     await expectPageReady(page, "Payroll Outputs");
-    await expect(page.getByRole("heading", { name: /Payroll Register/ })).toBeVisible();
+    await expect(page.getByText("Register match")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 

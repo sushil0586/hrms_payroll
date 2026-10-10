@@ -81,6 +81,10 @@ function formatRecordLabel(record: EssAttendanceRecordOption) {
   return `${formatDate(record.attendance_date)} - ${formatStatus(record.status)}${record.shift ? ` - ${record.shift}` : ""}`;
 }
 
+function getDerivationReason(record: EssAttendanceRecordOption | null) {
+  return record?.derivation_summary?.reasons?.[0] || "Choose a day to review the attendance derivation.";
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="detail-row">
@@ -388,6 +392,15 @@ function AttendanceRegularizationModal({
               <DetailRow label="Requested" value={formatStatus(requestedStatus)} />
               <DetailRow label="Shift" value={selectedRecord?.shift ?? "Not assigned"} />
               <DetailRow label="Locked" value={selectedRecord?.is_locked ? "Yes" : "No"} />
+              <DetailRow label="Why this status" value={getDerivationReason(selectedRecord)} />
+              <DetailRow
+                label="Payroll impact"
+                value={selectedRecord ? `Payable ${selectedRecord.derivation_summary.payroll_impact.payable_units} / LOP ${selectedRecord.derivation_summary.payroll_impact.lop_units}` : "Pending"}
+              />
+              <DetailRow
+                label="Leave collision"
+                value={selectedRecord?.derivation_summary.leave_collision_count ? `${selectedRecord.derivation_summary.leave_collision_count} overlapping leave request` : "Clear"}
+              />
             </div>
             <div className="leave-policy-helper">
               <strong>Before you submit</strong>

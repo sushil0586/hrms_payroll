@@ -10,11 +10,11 @@ test.describe("Phase R5-C payroll adjustments report certification", () => {
 
     const report = page.getByTestId("payroll-adjustments-report");
     await expect(report).toBeVisible();
-    for (const column of ["Employee", "Run", "Adjustment", "Amount", "Approval", "Timeline", "Evidence", "Actions"]) {
+    for (const column of ["Employee", "Run", "Adjustment", "Amount", "Approval", "Timeline", "Evidence", "Post-lock", "Actions"]) {
       await expect(report.getByRole("columnheader", { name: column })).toBeVisible();
     }
 
-    for (const metric of ["Adjustments", "Submitted", "Approved/applied", "Total amount"]) {
+    for (const metric of ["Adjustments", "Submitted", "Approved/applied", "Post-lock linked", "Total amount"]) {
       await expect(report.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
     }
 
@@ -54,6 +54,8 @@ test.describe("Phase R5-C payroll adjustments report certification", () => {
     expect(filteredExportBody).toContain("approval_state");
     expect(filteredExportBody).toContain("amount_risk");
     expect(filteredExportBody).toContain("source_hash");
+    expect(filteredExportBody).toContain("post_lock_source_ref");
+    expect(filteredExportBody).toContain("post_lock_recommended_action");
 
     const manifestHref = await report.getByRole("link", { name: "Manifest" }).getAttribute("href");
     expect(manifestHref).toBeTruthy();
@@ -67,6 +69,7 @@ test.describe("Phase R5-C payroll adjustments report certification", () => {
     expect(manifest.evidence_columns).toContain("approval_state");
     expect(manifest.evidence_columns).toContain("amount_risk");
     expect(manifest.evidence_columns).toContain("source_hash");
+    expect(manifest.evidence_columns).toContain("post_lock_source_ref");
 
     const auditResponse = await page.request.get("/api/hr-admin/reports/export-audits?report_key=payroll-adjustments");
     expect(auditResponse.status()).toBe(200);

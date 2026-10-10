@@ -274,12 +274,18 @@ class HrAdminEmployeeBankAccountWriteSerializer(serializers.Serializer):
 class HrAdminOptionItemSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     name = serializers.CharField()
+    employee_code = serializers.CharField(required=False, allow_blank=True)
     legal_entity_id = serializers.UUIDField(required=False, allow_null=True)
     location_id = serializers.UUIDField(required=False, allow_null=True)
     business_unit_id = serializers.UUIDField(required=False, allow_null=True)
     grade_id = serializers.UUIDField(required=False, allow_null=True)
     calendar_id = serializers.UUIDField(required=False, allow_null=True)
     status = serializers.CharField(required=False, allow_blank=True)
+
+
+class HrAdminEmployeeOptionSearchSerializer(serializers.Serializer):
+    items = HrAdminOptionItemSerializer(many=True)
+    total_count = serializers.IntegerField()
 
 
 class HrAdminManagerOptionSerializer(serializers.Serializer):
@@ -2078,6 +2084,7 @@ class HrAdminPayrollRunSerializer(serializers.Serializer):
     warning_count = serializers.IntegerField()
     blocked_count = serializers.IntegerField()
     locked_count = serializers.IntegerField()
+    reconciliation_summary = serializers.JSONField()
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
 
@@ -2128,8 +2135,36 @@ class HrAdminPayrollInputSnapshotSerializer(serializers.Serializer):
     document_snapshot = serializers.JSONField()
     banking_snapshot = serializers.JSONField()
     validation_snapshot = serializers.JSONField()
+    reconciliation_summary = serializers.JSONField()
     source_hash = serializers.CharField(allow_blank=True)
     config_snapshot = serializers.JSONField()
+    blockers = serializers.ListField(child=serializers.CharField())
+    warnings = serializers.ListField(child=serializers.CharField())
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class HrAdminPayrollInputSnapshotListSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    payroll_run_id = serializers.UUIDField()
+    payroll_run_name = serializers.CharField()
+    employee_id = serializers.UUIDField()
+    employee_name = serializers.CharField()
+    employee_code = serializers.CharField()
+    pay_group_assignment_id = serializers.UUIDField(allow_null=True)
+    pay_group_name = serializers.CharField(allow_null=True)
+    salary_assignment_id = serializers.UUIDField(allow_null=True)
+    salary_structure_name = serializers.CharField(allow_null=True)
+    salary_structure_version = serializers.IntegerField(allow_null=True)
+    snapshot_status = serializers.CharField()
+    snapshot_status_label = serializers.CharField()
+    period_start = serializers.DateField()
+    period_end = serializers.DateField()
+    source_collected_at = serializers.DateTimeField()
+    locked_at = serializers.DateTimeField(allow_null=True)
+    input_profile_ref = serializers.CharField()
+    reconciliation_summary = serializers.JSONField()
+    source_hash = serializers.CharField(allow_blank=True)
     blockers = serializers.ListField(child=serializers.CharField())
     warnings = serializers.ListField(child=serializers.CharField())
     created_at = serializers.DateTimeField()
@@ -2162,6 +2197,19 @@ class HrAdminPayrollInputSnapshotWriteSerializer(serializers.Serializer):
         return attrs
 
 
+class HrAdminPayrollInputSnapshotBulkImportRowSerializer(serializers.Serializer):
+    employee_code = serializers.CharField(max_length=64)
+    payroll_run_id = serializers.UUIDField()
+    monthly_gross = serializers.DecimalField(max_digits=12, decimal_places=2)
+    present_days = serializers.DecimalField(max_digits=8, decimal_places=2)
+    lop_days = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, default=0)
+    overtime_hours = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, default=0)
+    leave_days = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, default=0)
+    working_days = serializers.DecimalField(max_digits=8, decimal_places=2, required=False, default=22)
+    currency_code = serializers.CharField(max_length=3, required=False, default="INR")
+    input_profile_ref = serializers.CharField(max_length=160, required=False, default="payroll.input.bulk_import.v1")
+
+
 class HrAdminPayrollInputLockResultSerializer(serializers.Serializer):
     payroll_run = HrAdminPayrollRunSerializer()
     locked_count = serializers.IntegerField()
@@ -2180,8 +2228,9 @@ class HrAdminPayrollInputSnapshotOptionsSerializer(serializers.Serializer):
 
 class HrAdminPayrollInputSnapshotSetupSerializer(serializers.Serializer):
     summary = serializers.DictField(child=serializers.IntegerField())
+    pagination = serializers.JSONField(required=False)
     runs = HrAdminPayrollRunSerializer(many=True)
-    snapshots = HrAdminPayrollInputSnapshotSerializer(many=True)
+    snapshots = HrAdminPayrollInputSnapshotListSerializer(many=True)
     options = HrAdminPayrollInputSnapshotOptionsSerializer()
 
 
@@ -2369,6 +2418,36 @@ class HrAdminPayrollCalculationLineSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField()
 
 
+class HrAdminPayrollCalculationLineListSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    calculation_id = serializers.UUIDField()
+    payroll_run_id = serializers.UUIDField()
+    input_snapshot_id = serializers.UUIDField()
+    employee_id = serializers.UUIDField()
+    employee_code = serializers.CharField()
+    employee_name = serializers.CharField()
+    rule_version_id = serializers.UUIDField(allow_null=True)
+    rule_code = serializers.CharField(allow_blank=True)
+    rule_name = serializers.CharField(allow_blank=True)
+    rule_version = serializers.IntegerField(allow_null=True)
+    adjustment_id = serializers.UUIDField(allow_null=True)
+    line_source = serializers.CharField()
+    line_source_label = serializers.CharField()
+    component_code = serializers.CharField()
+    component_name = serializers.CharField()
+    line_type = serializers.CharField()
+    calculation_order = serializers.IntegerField()
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    currency_code = serializers.CharField()
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    expression = serializers.CharField(allow_blank=True)
+    source_hash = serializers.CharField(allow_blank=True)
+    error_message = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
 class HrAdminPayrollDraftCalculateRequestSerializer(serializers.Serializer):
     calculation_profile_ref = serializers.CharField(max_length=160, required=False, allow_blank=True)
 
@@ -2420,9 +2499,10 @@ class HrAdminPayrollCalculationOptionsSerializer(serializers.Serializer):
 
 class HrAdminPayrollCalculationSetupSerializer(serializers.Serializer):
     summary = serializers.JSONField()
+    pagination = serializers.JSONField(required=False)
     runs = HrAdminPayrollRunSerializer(many=True)
     calculations = HrAdminPayrollRunCalculationSerializer(many=True)
-    lines = HrAdminPayrollCalculationLineSerializer(many=True)
+    lines = HrAdminPayrollCalculationLineListSerializer(many=True)
     validation_issues = HrAdminPayrollValidationIssueSerializer(many=True)
     options = HrAdminPayrollCalculationOptionsSerializer()
 
@@ -2542,12 +2622,13 @@ class HrAdminPayrollReviewOptionsSerializer(serializers.Serializer):
 
 class HrAdminPayrollReviewSetupSerializer(serializers.Serializer):
     summary = serializers.JSONField()
+    pagination = serializers.JSONField(required=False)
     runs = HrAdminPayrollRunSerializer(many=True)
     calculations = HrAdminPayrollRunCalculationSerializer(many=True)
     reviews = HrAdminPayrollRunReviewSerializer(many=True)
     exceptions = HrAdminPayrollRunExceptionSerializer(many=True)
     approvals = HrAdminPayrollRunApprovalSerializer(many=True)
-    lines = HrAdminPayrollCalculationLineSerializer(many=True)
+    lines = HrAdminPayrollCalculationLineListSerializer(many=True)
     options = HrAdminPayrollReviewOptionsSerializer()
 
 
@@ -2681,6 +2762,7 @@ class HrAdminPayrollOutputOptionsSerializer(serializers.Serializer):
 
 class HrAdminPayrollOutputSetupSerializer(serializers.Serializer):
     summary = serializers.JSONField()
+    pagination = serializers.JSONField(required=False)
     runs = HrAdminPayrollRunSerializer(many=True)
     reviews = HrAdminPayrollRunReviewSerializer(many=True)
     output_batches = HrAdminPayrollOutputBatchSerializer(many=True)
@@ -3243,6 +3325,7 @@ class HrAdminPayrollFinanceHandoffOptionsSerializer(serializers.Serializer):
 
 class HrAdminPayrollFinanceHandoffSetupSerializer(serializers.Serializer):
     summary = serializers.JSONField()
+    pagination = serializers.JSONField(required=False)
     output_batches = HrAdminPayrollOutputBatchSerializer(many=True)
     handoffs = HrAdminPayrollFinanceHandoffSerializer(many=True)
     artifacts = HrAdminPayrollOutputArtifactSerializer(many=True)
@@ -3290,6 +3373,7 @@ class HrAdminPayrollAdjustmentSerializer(serializers.Serializer):
     applied_by_name = serializers.CharField(allow_null=True)
     source_hash = serializers.CharField(allow_blank=True)
     config_snapshot = serializers.JSONField()
+    post_lock_source = serializers.JSONField(required=False, allow_null=True)
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
 
@@ -3322,9 +3406,11 @@ class HrAdminPayrollAdjustmentDecisionSerializer(serializers.Serializer):
 
 class HrAdminPayrollAdjustmentSetupSerializer(serializers.Serializer):
     summary = serializers.JSONField()
+    pagination = serializers.JSONField(required=False)
     runs = HrAdminPayrollRunSerializer(many=True)
-    snapshots = HrAdminPayrollInputSnapshotSerializer(many=True)
+    snapshots = HrAdminPayrollInputSnapshotListSerializer(many=True)
     adjustments = HrAdminPayrollAdjustmentSerializer(many=True)
+    post_lock_impacts = serializers.ListField(child=serializers.DictField(), required=False)
     options = serializers.JSONField()
 
 
@@ -4278,6 +4364,7 @@ class HrAdminShiftRosterRolloutSerializer(serializers.Serializer):
     summary = serializers.CharField()
     created_at = serializers.DateTimeField()
     scope_labels = serializers.ListField(child=serializers.CharField(), allow_empty=True)
+    scope_labels = serializers.ListField(child=serializers.CharField(), allow_empty=True)
 
 
 class HrAdminPolicyOptionsSerializer(serializers.Serializer):
@@ -4300,6 +4387,20 @@ class HrAdminPolicyOptionsSerializer(serializers.Serializer):
     employees = HrAdminOptionItemSerializer(many=True)
     shifts = HrAdminOptionItemSerializer(many=True)
     holiday_calendars = HrAdminOptionItemSerializer(many=True)
+
+
+class HrAdminPolicyWorkbenchOptionsSerializer(serializers.Serializer):
+    attendance_policies = HrAdminOptionItemSerializer(many=True)
+    leave_types = HrAdminOptionItemSerializer(many=True)
+    leave_policies = HrAdminOptionItemSerializer(many=True)
+    legal_entities = HrAdminOptionItemSerializer(many=True)
+    branches = HrAdminOptionItemSerializer(many=True)
+    locations = HrAdminOptionItemSerializer(many=True)
+    departments = HrAdminOptionItemSerializer(many=True)
+    grades = HrAdminOptionItemSerializer(many=True)
+    employment_types = HrAdminOptionItemSerializer(many=True)
+    employees = HrAdminOptionItemSerializer(many=True)
+    shifts = HrAdminOptionItemSerializer(many=True)
 
 
 class HrAdminShiftSerializer(serializers.Serializer):
@@ -4451,9 +4552,12 @@ class HrAdminAttendanceRecordSerializer(serializers.Serializer):
     is_regularized = serializers.BooleanField()
     is_locked = serializers.BooleanField()
     notes = serializers.CharField(allow_blank=True)
+    derivation_summary = serializers.JSONField()
 
 
 class HrAdminAttendanceRecordWriteSerializer(serializers.Serializer):
+    employee_id = serializers.UUIDField(required=False)
+    attendance_date = serializers.DateField(required=False)
     status = serializers.ChoiceField(choices=AttendanceStatus.choices, required=False)
     source = serializers.ChoiceField(choices=AttendanceSource.choices, required=False)
     shift_id = serializers.UUIDField(required=False, allow_null=True)
@@ -4478,6 +4582,14 @@ class HrAdminAttendanceOperationOptionsSerializer(serializers.Serializer):
     employees = HrAdminOptionItemSerializer(many=True)
     shifts = HrAdminOptionItemSerializer(many=True)
     holiday_calendars = HrAdminOptionItemSerializer(many=True)
+
+
+class HrAdminAttendanceWorkbenchOptionsSerializer(serializers.Serializer):
+    attendance_statuses = HrAdminEnumOptionSerializer(many=True)
+    attendance_sources = HrAdminEnumOptionSerializer(many=True)
+    regularization_statuses = HrAdminEnumOptionSerializer(many=True)
+    employees = HrAdminOptionItemSerializer(many=True)
+    shifts = HrAdminOptionItemSerializer(many=True)
 
 
 class HrAdminWorkflowStepSerializer(serializers.Serializer):
@@ -5682,6 +5794,7 @@ class LeaveRequestHistoryItemSerializer(serializers.Serializer):
     requested_units = serializers.DecimalField(max_digits=8, decimal_places=2)
     approved_units = serializers.DecimalField(max_digits=8, decimal_places=2)
     unit_breakdown = serializers.JSONField(required=False)
+    attendance_collision_summary = serializers.JSONField(required=False)
     reason = serializers.CharField(allow_blank=True)
     attachment_reference = serializers.CharField(allow_blank=True)
     attachments = serializers.ListField(child=serializers.DictField(), required=False)
@@ -5749,6 +5862,7 @@ class AttendanceRecordOptionSerializer(serializers.Serializer):
     is_regularized = serializers.BooleanField()
     is_locked = serializers.BooleanField()
     late_minutes = serializers.IntegerField()
+    derivation_summary = serializers.JSONField()
 
 
 class HrAdminAttendanceRecordListSerializer(serializers.Serializer):
@@ -5776,6 +5890,7 @@ class AttendanceRegularizationHistoryItemSerializer(serializers.Serializer):
     manager_comment = serializers.CharField(allow_blank=True)
     rejection_reason = serializers.CharField(allow_blank=True)
     workflow_reference = serializers.CharField(allow_blank=True)
+    post_lock_payroll_impact = serializers.JSONField(required=False)
     applied_at = serializers.DateTimeField(allow_null=True)
     resolved_at = serializers.DateTimeField(allow_null=True)
     created_at = serializers.DateTimeField()
@@ -5897,6 +6012,7 @@ class ManagerLeaveApprovalItemSerializer(serializers.Serializer):
     rejection_reason = serializers.CharField(required=False, allow_blank=True)
     workflow_reference = serializers.CharField(allow_blank=True)
     approval_steps = serializers.ListField(child=serializers.DictField(), required=False)
+    post_lock_payroll_impact = serializers.JSONField(required=False)
     applied_at = serializers.DateTimeField(allow_null=True)
     approved_at = serializers.DateTimeField(required=False, allow_null=True)
     cancelled_at = serializers.DateTimeField(required=False, allow_null=True)
@@ -5982,6 +6098,10 @@ class LeaveRequestCreateSerializer(serializers.Serializer):
     )
     reason = serializers.CharField(required=False, allow_blank=True)
     attachment_reference = serializers.CharField(required=False, allow_blank=True)
+
+
+class HrAdminLeaveRequestCreateSerializer(LeaveRequestCreateSerializer):
+    employee_id = serializers.UUIDField()
 
 
 class LeaveRequestLifecycleActionSerializer(serializers.Serializer):

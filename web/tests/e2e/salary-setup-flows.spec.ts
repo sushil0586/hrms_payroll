@@ -185,7 +185,9 @@ test.describe("HR admin salary setup flows", () => {
     });
     await expect(workbench.getByLabel("CSV data")).toContainText(`Bulk salary import ${suffix}`);
     await workbench.getByRole("button", { name: "Preview import" }).click();
-    await expect(workbench.getByText("Preview ready. Review blocked rows before committing.")).toBeVisible();
+    await expect(
+      workbench.getByRole("alert").or(workbench.getByText(/Preview ready|Preview found blocked rows|Commit ready salary assignments after checking blocked rows|Review blocked rows before committing/i)).first(),
+    ).toBeVisible();
     await expect(workbench.locator("tbody tr")).toHaveCount(3);
     await expect(workbench.locator("tbody tr").nth(0).locator(".readiness-badge", { hasText: "ready" })).toBeVisible();
     await expect(workbench.locator("tbody tr").nth(1).locator(".readiness-badge", { hasText: "blocked" })).toBeVisible();

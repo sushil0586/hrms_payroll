@@ -192,7 +192,7 @@ export default async function HrAdminLandingPage() {
   ];
 
   return (
-    <main className="shell hr-admin-enterprise-dashboard">
+    <main className="shell hr-admin-enterprise-dashboard hr-admin-compact-ui">
       <PageIntro
         eyebrow="HR Admin"
         title="HR Control Center"

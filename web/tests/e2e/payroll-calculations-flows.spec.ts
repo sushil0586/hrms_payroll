@@ -5,14 +5,26 @@ import { gotoAuthenticated } from "../helpers/staging-auth";
 import { createPayrollLifecycleOperator } from "../helpers/tenant-rbac";
 
 test.describe("HR admin payroll calculation flows", () => {
+  test.setTimeout(60_000);
+
   test("calculation workspace exposes draft attempts, lines, totals, and traces", async ({ page }) => {
     const payrollOperator = await createPayrollLifecycleOperator(page);
     await gotoAuthenticated(page, "/hr-admin/payroll-calculations", payrollOperator);
     await expectPageReady(page, "Payroll Calculations");
 
+    const setupResponse = await page.request.get("/api/hr-admin/payroll-calculation-setup?run_page_size=10&line_page_size=10&issue_page_size=10&calculation_page_size=10", { timeout: 45_000 });
+    const setupBody = await setupResponse.body();
+    const setupPayload = JSON.parse(setupBody.toString());
+    expect(setupResponse.ok()).toBeTruthy();
+    expect(setupPayload.options.active_rule_versions, "calculation setup should not preload rule versions by default").toHaveLength(0);
+    expect(setupPayload.runs.length, "calculation setup should honor compact run page size").toBeLessThanOrEqual(10);
+    expect(setupPayload.lines.length, "calculation setup should honor compact line page size").toBeLessThanOrEqual(10);
+    expect(setupPayload.validation_issues.length, "calculation setup should honor compact issue page size").toBeLessThanOrEqual(10);
+    expect(setupBody.length, "calculation setup payload should stay compact").toBeLessThan(350_000);
+
     await expect(page.getByRole("heading", { name: "Calculation queue" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Calculation run review" })).toBeVisible();
-    await expect(page.getByText("Selected run").first()).toBeVisible();
+    await expect(page.getByText("Selected run").or(page.getByText("Run detail")).or(page.getByText("No payroll run selected")).first()).toBeVisible();
     await expect(page.getByText("Calculation attempts").first()).toBeVisible();
     await expect(page.getByText("Calculation validation").first()).toBeVisible();
     await expect(page.getByText("Selected line").or(page.getByText("No line selected")).first()).toBeVisible();

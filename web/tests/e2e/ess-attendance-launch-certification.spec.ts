@@ -94,6 +94,9 @@ test.describe("ESS Attendance launch certification", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const compactDialog = await openRegularizationModal(page);
     await expectDialogStable(page, "Regularize attendance");
+    await expect(compactDialog.getByText("Why this status")).toBeVisible();
+    await expect(compactDialog.getByText(/Payable .* \/ LOP/)).toBeVisible();
+    await expect(compactDialog.getByText("Leave collision")).toBeVisible();
     await compactDialog.getByRole("button", { name: "Close" }).click();
     await expectNoHorizontalOverflow(page);
   });

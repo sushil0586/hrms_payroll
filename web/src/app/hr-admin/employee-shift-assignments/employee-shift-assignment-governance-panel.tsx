@@ -2,26 +2,10 @@
 
 import { useState } from "react";
 
-import type { HrAdminOptionItem, HrAdminWorkScheduleDay, HrAdminWorkSchedulePreview } from "@/lib/types";
+import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
+import type { HrAdminWorkScheduleDay, HrAdminWorkSchedulePreview } from "@/lib/types";
 
-type Props = {
-  employees: HrAdminOptionItem[];
-};
-
-function renderSelectOptions(items: HrAdminOptionItem[]) {
-  return [
-    <option key="blank" value="">
-      Select an option
-    </option>,
-    ...items.map((item) => (
-      <option key={item.id} value={item.id}>
-        {item.name}
-      </option>
-    )),
-  ];
-}
-
-export function EmployeeShiftAssignmentGovernancePanel({ employees }: Props) {
+export function EmployeeShiftAssignmentGovernancePanel() {
   const [employeeId, setEmployeeId] = useState("");
   const [attendanceDate, setAttendanceDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -85,12 +69,7 @@ export function EmployeeShiftAssignmentGovernancePanel({ employees }: Props) {
           </div>
         </div>
         <form className="queue-toolbar panel-card-soft" onSubmit={handleInspect}>
-          <label className="queue-toolbar__search">
-            <span className="muted">Employee</span>
-            <select className="input-control" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
-              {renderSelectOptions(employees)}
-            </select>
-          </label>
+          <EmployeeSearchSelect value={employeeId} onChange={setEmployeeId} />
           <label className="queue-toolbar__search">
             <span className="muted">Start date</span>
             <input className="input-control" type="date" value={attendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} />

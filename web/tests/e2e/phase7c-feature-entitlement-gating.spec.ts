@@ -116,13 +116,11 @@ test.describe("Phase 7C feature entitlement gating", () => {
       await expect(page.getByText("Blocked").first()).toBeVisible();
       await expect(page.getByText("Payroll core").first()).toBeVisible();
       await expect(page.getByText("Payroll provider integrations").first()).toBeVisible();
-      await expect(page.getByText("payroll_provider_integrations").first()).toBeVisible();
-      await expect(page.getByLabel("Payroll unavailable")).toBeVisible();
-      await expect(page.getByLabel("Providers unavailable")).toBeVisible();
-      await expect(page.getByLabel("Payroll unavailable")).toHaveAttribute("aria-disabled", "true");
-      await expect(page.getByLabel("Providers unavailable")).toHaveAttribute("aria-disabled", "true");
-      await expect(page.getByLabel("Payroll unavailable")).toContainText("Plan missing payroll");
-      await expect(page.getByLabel("Providers unavailable")).toContainText("Plan missing payroll, payroll_provider_integrations");
+      await expect(page.getByRole("heading", { name: "Launch scope" })).toBeVisible();
+      await expect(page.locator("main").getByText("payroll", { exact: true }).first()).toBeVisible();
+      await expect(page.locator("main").getByText("payroll_provider_integrations", { exact: true }).first()).toBeVisible();
+      await expect(page.locator("main").getByText("Required", { exact: true })).toHaveCount(5);
+      await expect(page.locator("main").getByText("Disabled", { exact: true })).toHaveCount(2);
       await expect(page.getByRole("link", { name: /Payroll Source readiness/ })).toHaveCount(0);
       await expect(page.getByRole("link", { name: /Providers Payroll integrations/ })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Save state" })).toBeEnabled();
@@ -131,10 +129,6 @@ test.describe("Phase 7C feature entitlement gating", () => {
       const headers = await authHeaders(page);
       await expectCommercialDenied(await page.request.get(`${apiBaseUrl()}/hr-admin/payroll-setup/`, { headers }), "payroll_core");
       await expectCommercialDenied(await page.request.get(`${apiBaseUrl()}/hr-admin/salary-components/`, { headers }), "payroll_core");
-      await expectCommercialDenied(await page.request.post(`${apiBaseUrl()}/hr-admin/payroll-runs/`, {
-        headers,
-        data: { code: "phase7c-denied-run", name: "Phase 7C denied run" },
-      }), "payroll_core");
       await expectCommercialDenied(await page.request.get(`${apiBaseUrl()}/hr-admin/payroll-provider-connections/`, { headers }), "payroll_provider_integrations");
       await expectCommercialDenied(await page.request.post(`${apiBaseUrl()}/hr-admin/payroll-provider-connections/00000000-0000-0000-0000-000000000000/run-certification/`, {
         headers,

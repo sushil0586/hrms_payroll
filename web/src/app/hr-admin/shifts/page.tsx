@@ -13,7 +13,7 @@ export default async function HrAdminShiftsPage() {
   const result = await getHrAdminShifts();
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live shift mode" : "Demo shift mode"}
         title="Shifts"

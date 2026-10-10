@@ -3,17 +3,20 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import type { HrAdminPayrollInputSnapshot, HrAdminPayrollRun } from "@/lib/types";
+import type { HrAdminPayrollInputSnapshotListItem, HrAdminPayrollRun } from "@/lib/types";
 
 const PAGE_SIZE = 10;
 
-type PayrollInputExceptionRow = HrAdminPayrollInputSnapshot & {
+type PayrollInputExceptionRow = HrAdminPayrollInputSnapshotListItem & {
   runStatus: string;
   issueType: "Blocked" | "Warning" | "Ready";
   issueCount: number;
   lockState: "Locked" | "Unlocked";
   attendanceDays: string;
   readinessRisk: "High" | "Medium" | "Low";
+  reconciliationRisk: string;
+  reconciliationStatus: string;
+  reconciliationFindings: number;
 };
 
 function titleCase(value: string) {
@@ -41,12 +44,12 @@ function statusClass(status: string) {
   return "record-chip";
 }
 
-function snapshotNumber(snapshot: Record<string, unknown>, key: string) {
-  const value = snapshot[key];
+function snapshotMetric(snapshot: HrAdminPayrollInputSnapshotListItem, key: string) {
+  const value = snapshot.reconciliation_summary.metrics[key];
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
 
-function toReportRow(snapshot: HrAdminPayrollInputSnapshot, runsById: Map<string, HrAdminPayrollRun>): PayrollInputExceptionRow {
+function toReportRow(snapshot: HrAdminPayrollInputSnapshotListItem, runsById: Map<string, HrAdminPayrollRun>): PayrollInputExceptionRow {
   const blockerCount = snapshot.blockers.length;
   const warningCount = snapshot.warnings.length;
   const issueType = blockerCount > 0 ? "Blocked" : warningCount > 0 ? "Warning" : "Ready";
@@ -57,8 +60,11 @@ function toReportRow(snapshot: HrAdminPayrollInputSnapshot, runsById: Map<string
     issueType,
     issueCount: blockerCount + warningCount,
     lockState: snapshot.locked_at ? "Locked" : "Unlocked",
-    attendanceDays: `${snapshotNumber(snapshot.attendance_snapshot, "present_days")}/${snapshotNumber(snapshot.attendance_snapshot, "working_days")}`,
+    attendanceDays: `${snapshotMetric(snapshot, "attendance_present_days")}/${snapshotMetric(snapshot, "schedule_working_days")}`,
     readinessRisk,
+    reconciliationRisk: snapshot.reconciliation_summary?.risk ?? "Low",
+    reconciliationStatus: snapshot.reconciliation_summary?.status ?? "ready",
+    reconciliationFindings: snapshot.reconciliation_summary?.finding_count ?? 0,
   };
 }
 
@@ -67,7 +73,7 @@ export function PayrollInputExceptionsReportWorkspace({
   snapshots,
 }: {
   runs: HrAdminPayrollRun[];
-  snapshots: HrAdminPayrollInputSnapshot[];
+  snapshots: HrAdminPayrollInputSnapshotListItem[];
 }) {
   const [query, setQuery] = useState("");
   const [runId, setRunId] = useState("All");
@@ -99,6 +105,9 @@ export function PayrollInputExceptionsReportWorkspace({
           item.snapshot_status,
           item.issueType,
           item.readinessRisk,
+          item.reconciliationRisk,
+          item.reconciliationStatus,
+          item.reconciliation_summary?.findings?.map((finding) => finding.message).join(" "),
           item.source_hash,
           item.blockers.join(" "),
           item.warnings.join(" "),
@@ -196,6 +205,11 @@ export function PayrollInputExceptionsReportWorkspace({
             <strong>{filteredRows.filter((item) => item.lockState === "Locked").length}</strong>
             <small>Immutable evidence</small>
           </article>
+          <article className="metric-tile metric-tile-soft">
+            <span>Reconciliation risk</span>
+            <strong>{filteredRows.filter((item) => item.reconciliationRisk !== "Low").length}</strong>
+            <small>Attendance, leave, payroll mismatches</small>
+          </article>
         </div>
 
         <div className="report-filter-panel" aria-label="Payroll input exception filters">
@@ -257,6 +271,7 @@ export function PayrollInputExceptionsReportWorkspace({
 
         <div className="report-catalog-summary" aria-live="polite">
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.readinessRisk === "High").length}</strong> high risk</span>
+          <span className="queue-summary-chip"><strong>{filteredRows.reduce((sum, item) => sum + item.reconciliationFindings, 0)}</strong> reconciliation findings</span>
           <span className="queue-summary-chip"><strong>{filteredRows.filter((item) => item.source_hash).length}</strong> source hashed</span>
           <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
         </div>
@@ -300,6 +315,7 @@ export function PayrollInputExceptionsReportWorkspace({
                     <div className="payroll-register-stack">
                       <span>{item.salary_structure_name || "Salary missing"}</span>
                       <span>Attendance {item.attendanceDays}</span>
+                      <span>{item.reconciliationFindings} reconciliation findings</span>
                       <span>{item.blockers[0] || item.warnings[0] || "No blockers or warnings"}</span>
                     </div>
                   </td>

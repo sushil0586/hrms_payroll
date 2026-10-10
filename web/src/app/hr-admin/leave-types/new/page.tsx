@@ -13,7 +13,7 @@ export default async function HrAdminNewLeaveTypePage() {
   const defaultUnit = optionsResult.data.leave_units[0]?.value || "day";
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create leave type"

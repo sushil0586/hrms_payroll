@@ -49,10 +49,10 @@ const operationsRoutes: OperationsRoute[] = [
   },
   {
     path: "/hr-admin/launch-remediation",
-    heading: "Launch Remediation",
-    stripHeading: "Launch blocker command desk",
+    heading: "Launch Blockers",
+    stripHeading: "Blocker routing",
     activeLabel: "Remediation",
-    visibleText: ["Assignment filters", "Open assignments", "Blockers"],
+    visibleText: ["Filters", "Open assignments", "Blockers"],
   },
   {
     path: "/hr-admin/import-history",
@@ -99,6 +99,8 @@ async function expectOperationsRoute(page: Page, route: OperationsRoute) {
 }
 
 test.describe("HR Admin operations phase 14 certification", () => {
+  test.describe.configure({ timeout: 120_000 });
+
   test("certifies HR-facing operations pages have clear ownership and active governance navigation", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 960 });
     for (const route of operationsRoutes) {

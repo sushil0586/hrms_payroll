@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-H compliance report hub certification", () => {
   test("HR admin can use the compliance report hub cards, metrics, exports, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports", hrAdmin);
     await expectPageReady(page, "Reports");
     await expect(page.getByRole("link", { name: "Compliance hub" })).toHaveAttribute("href", "/hr-admin/reports/compliance");

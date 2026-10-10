@@ -30,9 +30,9 @@ test.describe("Production provider callback and retry proof", () => {
     await expectVisibleText(page, [
       "Webhook identity",
       "Credential source",
-      "callback_signature_matched",
-      "callback_replay_window",
-      "callback_rate_limit",
+      "Signature adapter",
+      "Webhook security",
+      "Provider status",
     ]);
     await expectNoHorizontalOverflow(page);
     await captureProviderStep(page, testInfo, "02-callback-evidence-drilldown");

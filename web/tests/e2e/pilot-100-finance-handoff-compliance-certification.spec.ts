@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { employee, gotoAuthenticated, hrAdmin, payrollFinanceManager } from "../helpers/staging-auth";
 
 type PayrollOutputBatch = {
   id: string;
@@ -195,7 +195,7 @@ test.describe.serial("P100-9 finance handoff and compliance certification", () =
 
     await gotoAuthenticated(page, `/hr-admin/payroll-outputs?batchId=${batch.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Outputs");
-    await expect(page.getByRole("heading", { name: runName, exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: runName, exact: true }).first()).toBeVisible();
     await expect(page.getByText("Finance handoff readiness")).toBeVisible();
     await expect(page.getByText(/\d+ artifacts/).first()).toBeVisible();
 
@@ -221,9 +221,9 @@ test.describe.serial("P100-9 finance handoff and compliance certification", () =
     expect(handoff.artifact_count).toBeGreaterThanOrEqual(3);
     expect(handoff.handoff_profile_ref).toContain("handoff");
 
-    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoff.id}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoff.id}`, payrollFinanceManager);
     await expectPageReady(page, "Payroll Handoff");
-    await expect(page.getByRole("heading", { name: runName, exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: runName, exact: true }).first()).toBeVisible();
     for (const heading of [
       "Handoff controls",
       "Configurable finance routing",
@@ -302,7 +302,7 @@ test.describe.serial("P100-9 finance handoff and compliance certification", () =
     const handoffJobs = handoffSetup.provider_jobs.filter((job) => deliveries.some((delivery) => delivery.id === job.provider_delivery_id));
     expect(handoffJobs.every((job) => ["completed", "queued", "running"].includes(job.status))).toBe(true);
     expect(handoffSetup.artifacts.filter((artifact) => artifact.output_batch_id === batch.id && artifact.kind === "provider_audit_pack").length).toBe(1);
-    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoff.id}`, hrAdmin);
+    await gotoAuthenticated(page, `/hr-admin/payroll-handoff?handoffId=${handoff.id}`, payrollFinanceManager);
     await expectPageReady(page, "Payroll Handoff");
     await expect(page.getByRole("heading", { name: "Provider audit pack" })).toBeVisible();
 
@@ -347,14 +347,14 @@ test.describe.serial("P100-9 finance handoff and compliance certification", () =
     await gotoAuthenticated(page, "/hr-admin/reports/payroll-register", hrAdmin);
     await expectPageReady(page, "Payroll Register Report");
     const registerReport = page.getByTestId("payroll-register-report");
-    await page.getByPlaceholder("Search run, file, profile, hash").fill(runName);
-    await expect(registerReport.locator("tbody").getByText(runName).first()).toBeVisible();
-    const registerCsv = await csvExport(page, `/api/hr-admin/reports/payroll-register?q=${encodeURIComponent(runName)}&sort=net_pay_desc`, "payroll-register");
-    expect(registerCsv).toContain(runName);
+    await page.getByPlaceholder("Search run, file, profile, hash").fill(prefix);
+    await expect(registerReport.locator("tbody").getByText(prefix).first()).toBeVisible();
+    const registerCsv = await csvExport(page, `/api/hr-admin/reports/payroll-register?q=${encodeURIComponent(prefix)}&sort=net_pay_desc`, "payroll-register");
+    expect(registerCsv).toContain(prefix);
     expect(registerCsv).toContain("source_hash");
 
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
     const blockedHandoff = await backendApiRequest(page, "/hr-admin/payroll-finance-handoff-setup/", "GET");
     expect([401, 403]).toContain(blockedHandoff.status());
     const blockedBank = await page.request.get(`/api/hr-admin/reports/bank-advice?q=${encodeURIComponent(runName)}`);

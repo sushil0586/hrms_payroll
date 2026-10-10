@@ -65,7 +65,7 @@ test.describe("Phase R4-A statutory deductions report certification", () => {
 
     const openLink = report.getByRole("link", { name: "Open" }).first();
     if (!(await openLink.isVisible().catch(() => false))) {
-      await page.getByRole("link", { name: "Statutory setup" }).click();
+      await page.getByRole("link", { name: "Statutory setup", exact: true }).click();
     } else {
       await openLink.click();
     }
@@ -76,12 +76,12 @@ test.describe("Phase R4-A statutory deductions report certification", () => {
 
   test("employee cannot access statutory deductions report", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     await page.goto("/hr-admin/reports/statutory-deductions", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("statutory-deductions-report")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My workspace" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "HR admin restricted" })).toHaveCount(0);
   });
 });

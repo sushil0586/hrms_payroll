@@ -1,19 +1,30 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
+import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import type {
   HrAdminOptionItem,
-  HrAdminPolicyOptions,
+  HrAdminPolicyWorkbenchOptions,
   HrAdminShiftRosterRollout,
   HrAdminShiftRosterTemplate,
   HrAdminShiftRosterTemplateRolloutResult,
 } from "@/lib/types";
 
 type Props = {
-  options: HrAdminPolicyOptions;
+  options: Pick<HrAdminPolicyWorkbenchOptions, "legal_entities" | "branches" | "locations" | "departments">;
   templates: HrAdminShiftRosterTemplate[];
   rollouts: HrAdminShiftRosterRollout[];
+  rolloutPage: number;
+  rolloutPageSize: number;
+  rolloutTotalCount: number;
+  hasPreviousRollout: boolean;
+  hasNextRollout: boolean;
+  firstRolloutHref: string;
+  previousRolloutHref: string;
+  nextRolloutHref: string;
+  lastRolloutHref: string;
 };
 
 function selectOptions(items: HrAdminOptionItem[]) {
@@ -57,13 +68,27 @@ function formatApiError(payload: unknown) {
   return messages[0] ?? "Unable to run roster rollout.";
 }
 
-export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props) {
+export function ShiftRosterRolloutPanel({
+  options,
+  templates,
+  rollouts,
+  rolloutPage,
+  rolloutPageSize,
+  rolloutTotalCount,
+  hasPreviousRollout,
+  hasNextRollout,
+  firstRolloutHref,
+  previousRolloutHref,
+  nextRolloutHref,
+  lastRolloutHref,
+}: Props) {
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [legalEntityId, setLegalEntityId] = useState("");
   const [branchId, setBranchId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
-  const [employeeIds, setEmployeeIds] = useState<string[]>([]);
+  const [employeeSearchId, setEmployeeSearchId] = useState("");
+  const [selectedEmployees, setSelectedEmployees] = useState<HrAdminOptionItem[]>([]);
   const [effectiveFrom, setEffectiveFrom] = useState("");
   const [effectiveTo, setEffectiveTo] = useState("");
   const [isPrimary, setIsPrimary] = useState(true);
@@ -113,7 +138,7 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
       setError("Choose a roster template and an effective start date first.");
       return;
     }
-    if (employeeIds.length === 0 && !departmentId) {
+    if (selectedEmployees.length === 0 && !departmentId) {
       setError("Choose employees directly or target a department for rollout.");
       return;
     }
@@ -124,7 +149,7 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           template_id: templateId,
-          employee_ids: employeeIds,
+          employee_ids: selectedEmployees.map((item) => item.id),
           legal_entity_id: legalEntityId || null,
           branch_id: branchId || null,
           location_id: locationId || null,
@@ -165,22 +190,36 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
           <label className="form-field"><span className="muted">Department scope</span><select className="input-control" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>{selectOptions(options.departments)}</select></label>
           <label className="form-field"><span className="muted">Effective from</span><input className="input-control" type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} /></label>
           <label className="form-field"><span className="muted">Effective to</span><input className="input-control" type="date" value={effectiveTo} onChange={(e) => setEffectiveTo(e.target.value)} /></label>
-          <label className="form-field">
-            <span className="muted">Target employees</span>
-            <select
-              className="input-control input-control--multiselect"
-              multiple
-              size={5}
-              value={employeeIds}
-              onChange={(e) => setEmployeeIds(Array.from(e.target.selectedOptions).map((option) => option.value))}
-            >
-              {options.employees.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="form-field">
+            <EmployeeSearchSelect
+              hint="Add specific employees when rollout should not target a full department."
+              label="Target employee"
+              value={employeeSearchId}
+              onChange={setEmployeeSearchId}
+              onOptionSelected={(item) => {
+                if (!item) return;
+                setSelectedEmployees((current) => (current.some((entry) => entry.id === item.id) ? current : [...current, item]));
+                setEmployeeSearchId("");
+              }}
+            />
+            {selectedEmployees.length ? (
+              <div className="queue-toolbar__meta" aria-label="Selected employees">
+                {selectedEmployees.map((item) => (
+                  <button
+                    className="queue-summary-chip"
+                    key={item.id}
+                    onClick={() => setSelectedEmployees((current) => current.filter((entry) => entry.id !== item.id))}
+                    type="button"
+                  >
+                    <strong>{item.employee_code ?? "Employee"}</strong>
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <FieldHint>Direct employee targets are optional when department scope is selected.</FieldHint>
+            )}
+          </div>
         </div>
         <div className="toggle-field-list">
           <label className="toggle-field">
@@ -226,10 +265,10 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
           </div>
         ) : null}
         {rollouts.length ? (
-          <div className="detail-grid">
+          <div className="detail-grid" data-testid="roster-rollout-history">
             <div className="detail-row">
               <span className="detail-label">Recent rollout history</span>
-              <span className="detail-value">{rollouts.length} recent run(s)</span>
+              <span className="detail-value">{`${rollouts.length} of ${rolloutTotalCount} rollout run(s)`}</span>
             </div>
             {rollouts.map((item) => (
               <div className="detail-row" key={item.id}>
@@ -239,6 +278,24 @@ export function ShiftRosterRolloutPanel({ options, templates, rollouts }: Props)
             ))}
           </div>
         ) : null}
+        <div className="pagination-bar" aria-label="Roster rollout history pagination">
+          <div className="pagination-bar__summary">
+            <span className="queue-summary-chip">
+              <strong>Page {rolloutPage}</strong>
+              of {Math.max(1, Math.ceil(rolloutTotalCount / Math.max(rolloutPageSize, 1)))}
+            </span>
+            <span className="queue-summary-chip">
+              <strong>{rolloutPageSize}</strong>
+              rows per page
+            </span>
+          </div>
+          <div className="pagination-bar__actions">
+            {hasPreviousRollout ? <Link className="button button--secondary" href={firstRolloutHref}>First</Link> : <button className="button button--secondary" disabled type="button">First</button>}
+            {hasPreviousRollout ? <Link className="button button--secondary" href={previousRolloutHref}>Previous</Link> : <button className="button button--secondary" disabled type="button">Previous</button>}
+            {hasNextRollout ? <Link className="button button--secondary" href={nextRolloutHref}>Next</Link> : <button className="button button--secondary" disabled type="button">Next</button>}
+            {hasNextRollout ? <Link className="button button--secondary" href={lastRolloutHref}>Last</Link> : <button className="button button--secondary" disabled type="button">Last</button>}
+          </div>
+        </div>
       </div>
     </section>
   );

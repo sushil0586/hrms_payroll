@@ -32,7 +32,7 @@ const routes: Phase8Route[] = [
   { path: "/tenant-admin", heading: "Account Control Center", persona: hrAdmin, label: "tenant-admin" },
   { path: "/platform-admin", heading: "Platform Admin", persona: platformAdmin, label: "platform-admin" },
   { path: "/ess/payslips", heading: "Payslips", persona: employee, label: "ess-payslips", expectsSidebar: true },
-  { path: "/mss/approvals", heading: "Manager inbox", persona: manager, label: "mss-approvals", expectsSidebar: true },
+  { path: "/mss/approvals", heading: "Manager approvals", persona: manager, label: "mss-approvals", expectsSidebar: true },
   { path: "/support", heading: "Support Console", persona: platformAdmin, label: "support-console" },
 ];
 

@@ -344,16 +344,20 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
   const result = await getHrAdminPayrollOutputSetup({
     batch_id: selectedBatchId,
     artifact_id: selectedArtifactId,
+    batch_page: numberParam(currentParams.batchPage, 1),
+    batch_page_size: batchPageSize,
+    artifact_page: numberParam(currentParams.artifactPage, 1),
+    artifact_page_size: artifactPageSize,
   });
   const setup = result.data;
-  const batchTotalPages = Math.max(1, Math.ceil(setup.output_batches.length / batchPageSize));
-  const batchPage = Math.min(numberParam(currentParams.batchPage, 1), batchTotalPages);
-  const pagedBatches = setup.output_batches.slice((batchPage - 1) * batchPageSize, batchPage * batchPageSize);
+  const batchTotalPages = setup.pagination?.output_batches?.total_pages ?? Math.max(1, Math.ceil(setup.output_batches.length / batchPageSize));
+  const batchPage = setup.pagination?.output_batches?.page ?? Math.min(numberParam(currentParams.batchPage, 1), batchTotalPages);
+  const pagedBatches = setup.output_batches;
   const selectedBatch = setup.output_batches.find((item) => item.id === selectedBatchId) ?? pagedBatches[0] ?? setup.output_batches[0] ?? null;
   const visibleArtifacts = selectedBatch ? setup.artifacts.filter((item) => item.output_batch_id === selectedBatch.id) : setup.artifacts;
-  const artifactTotalPages = Math.max(1, Math.ceil(visibleArtifacts.length / artifactPageSize));
-  const artifactPage = Math.min(numberParam(currentParams.artifactPage, 1), artifactTotalPages);
-  const pagedArtifacts = visibleArtifacts.slice((artifactPage - 1) * artifactPageSize, artifactPage * artifactPageSize);
+  const artifactTotalPages = setup.pagination?.artifacts?.total_pages ?? Math.max(1, Math.ceil(visibleArtifacts.length / artifactPageSize));
+  const artifactPage = setup.pagination?.artifacts?.page ?? Math.min(numberParam(currentParams.artifactPage, 1), artifactTotalPages);
+  const pagedArtifacts = visibleArtifacts;
   const selectedArtifact = visibleArtifacts.find((item) => item.id === selectedArtifactId) ?? pagedArtifacts[0] ?? visibleArtifacts[0] ?? null;
   const totals = selectedBatch?.totals_snapshot ?? {};
   const summary = selectedBatch?.artifact_summary_snapshot ?? {};
@@ -370,7 +374,7 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
   const handoffReadinessStatus = !selectedBatch ? "blocked" : canGenerateSelectedHandoff ? "ready" : selectedBatch.status;
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-outputs">
+    <main className="shell shell--payroll-setup shell--payroll-outputs hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live payroll phase 3B" : "Demo payroll phase 3B"}
         title="Payroll Outputs"

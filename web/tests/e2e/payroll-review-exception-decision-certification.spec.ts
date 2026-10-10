@@ -25,6 +25,18 @@ async function selectOptionContaining(select: Locator, text: string) {
   await select.selectOption(value);
 }
 
+async function selectFirstPayrollEmployee(page: Page) {
+  const response = await page.request.get("/api/hr-admin/employees/option-search?q=EMP&limit=1");
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const payload = (await response.json()) as { items?: Array<{ id: string; employee_code?: string; name?: string }> };
+  const employee = payload.items?.[0];
+  expect(employee, "Expected at least one employee option for review fixture setup.").toBeTruthy();
+  await page.getByLabel("Find person").fill(employee!.employee_code || employee!.name || "");
+  const employeeSelect = field(form(page, "payroll-input-snapshot-form"), "Employee");
+  await expect.poll(async () => employeeSelect.locator("option").count(), { timeout: 15_000 }).toBeGreaterThan(1);
+  await employeeSelect.selectOption(employee!.id);
+}
+
 async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: string, action: () => Promise<void>) {
   const [response] = await Promise.all([
     page.waitForResponse((item) => routePattern.test(item.url()) && item.request().method() === method, { timeout: 30000 }),
@@ -60,7 +72,7 @@ async function createApprovedReadyReview(page: Page, payrollOperator: Persona) {
   await snapshotForm.getByRole("button", { name: "New" }).click();
   const snapshot = await submitAndCapture<{ id: string }>(page, /\/api\/hr-admin\/payroll-input-snapshots$/, "POST", async () => {
     await field(snapshotForm, "Payroll run").selectOption(run.payload.id);
-    await selectOptionContaining(field(snapshotForm, "Employee"), "EMP-0042");
+    await selectFirstPayrollEmployee(page);
     await field(snapshotForm, "Snapshot status").selectOption("ready");
     await field(snapshotForm, "Input profile ref").fill("tenant.payroll.input.phase5o.v1");
     await field(snapshotForm, "Config profile reference").fill("tenant.payroll.snapshot.phase5o.v1");

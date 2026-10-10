@@ -66,18 +66,16 @@ test.describe("Production tenant and role isolation proof", () => {
     await expectPageReady(page, "Payslips");
 
     await expectVisibleText(page, [
-      "Published only",
+      "Published payslips only",
       "Employee scoped",
-      "Audit protected",
-      "Download tracked",
-      "The API resolves files through the signed-in employee context and tenant boundary.",
+      "access tracking",
       "Published payslips",
-      /Download via authenticated route|Download tracked/,
+      /Download payslip|Download latest/,
     ]);
     const reviewPayslip = page.getByRole("button", { name: "Review payslip" }).first();
     if (await reviewPayslip.isVisible().catch(() => false)) {
       await reviewPayslip.click();
-      await expectVisibleText(page, ["Access trail", "Calculation lines"]);
+      await expectVisibleText(page, ["Access trail", "Payslip lines"]);
     }
 
     const pageText = await page.locator("body").innerText();
@@ -119,11 +117,10 @@ test.describe("Production tenant and role isolation proof", () => {
     await expectPageReady(page, "Account Control Center");
     await expectVisibleText(page, [
       "Tenant Status",
-      "Action Queue",
+      "Items that need your attention",
       "Launch checklist",
-      "User Management",
-      "Access design",
-      "Download audit",
+      "User access",
+      "Support access",
     ]);
     await expectNoHorizontalOverflow(page);
     await captureIsolationStep(page, testInfo, "03-tenant-admin-role-controls");

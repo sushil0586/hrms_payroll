@@ -44,7 +44,6 @@ type HandoffSetup = {
 type PayrollInputSetup = {
   options: {
     periods: Array<{ id: string }>;
-    employees: Array<{ id: string; employee_code: string }>;
   };
 };
 
@@ -112,11 +111,6 @@ function signatureFor(delivery: HandoffSetup["deliveries"][number], idempotencyK
   const policy = delivery.config_snapshot.submission_contract?.callback_security_policy ?? {};
   const fields = policy.signature_material_fields ?? [
     "provider_ref",
-    "provider_delivery_id",
-    "handoff_id",
-    "output_artifact_id",
-    "artifact_kind",
-    "channel_ref",
     "external_reference",
     "idempotency_key",
     "payload_checksum_sha256",
@@ -148,17 +142,11 @@ function signatureFor(delivery: HandoffSetup["deliveries"][number], idempotencyK
 
 async function ensureRetryableDelivery(page: Page) {
   let setup = await getHandoffSetup(page);
-  let delivery =
-    setup.deliveries.find((item) => item.artifact_kind === "bank_advice" && ["failed", "rejected"].includes(item.status)) ??
-    setup.deliveries.find((item) => item.artifact_kind === "bank_advice" && item.status !== "reconciled");
-
-  if (!delivery) {
-    const handoff = setup.handoffs.find((item) => item.status !== "accepted") ?? await createDisposableHandoff(page);
-    const transmitResponse = await page.request.post(`/api/hr-admin/payroll-finance-handoffs/${handoff.id}/transmit`, { data: {} });
-    expect(transmitResponse.ok()).toBeTruthy();
-    setup = await getHandoffSetup(page);
-    delivery = setup.deliveries.find((item) => item.handoff_id === handoff.id && item.artifact_kind === "bank_advice");
-  }
+  const handoff = await createDisposableHandoff(page);
+  const transmitResponse = await page.request.post(`/api/hr-admin/payroll-finance-handoffs/${handoff.id}/transmit`, { data: {} });
+  expect(transmitResponse.ok()).toBeTruthy();
+  setup = await getHandoffSetup(page);
+  const delivery = setup.deliveries.find((item) => item.handoff_id === handoff.id && item.artifact_kind === "bank_advice");
 
   expect(delivery, "Expected a bank advice provider delivery for retry certification.").toBeTruthy();
   if (["failed", "rejected"].includes(delivery!.status)) {
@@ -201,9 +189,13 @@ async function ensureRetryableDelivery(page: Page) {
 async function createDisposableHandoff(page: Page) {
   const setup = await getJson<PayrollInputSetup>(page, "/hr-admin/payroll-input-snapshot-setup/");
   const period = setup.options.periods[0];
-  const employee = setup.options.employees.find((item) => item.employee_code === "EMP-0042") ?? setup.options.employees[0];
+  const employeeResponse = await page.request.get("/api/hr-admin/employees/option-search?q=EMP&limit=1");
+  expect(employeeResponse.ok(), await employeeResponse.text()).toBeTruthy();
+  const employeePayload = (await employeeResponse.json()) as { items?: Array<{ id: string; employee_code?: string }> };
+  const employee = employeePayload.items?.[0];
   expect(period).toBeTruthy();
   expect(employee).toBeTruthy();
+  const employeeId = employee!.id;
   const runRef = Date.now();
   const run = await postJson<{ id: string }>(page, "/api/hr-admin/payroll-runs", {
     period_id: period.id,
@@ -216,7 +208,7 @@ async function createDisposableHandoff(page: Page) {
   });
   await postJson(page, "/api/hr-admin/payroll-input-snapshots", {
     payroll_run_id: run.id,
-    employee_id: employee.id,
+    employee_id: employeeId,
     snapshot_status: "ready",
     input_profile_ref: "tenant.payroll.input.phase6d.v1",
     config_profile_ref: "tenant.payroll.snapshot.phase6d.v1",
@@ -259,7 +251,12 @@ async function runProviderJobWorker() {
     "source .venv/bin/activate && python backend/manage.py process_payroll_provider_jobs --limit 10",
   ], {
     cwd: repoRoot,
-    env: { ...process.env, DJANGO_SETTINGS_MODULE: process.env.DJANGO_SETTINGS_MODULE ?? "config.settings.local" },
+    env: {
+      ...process.env,
+      DJANGO_SETTINGS_MODULE: process.env.DJANGO_SETTINGS_MODULE ?? "config.settings.local",
+      DJANGO_DB_ENGINE: process.env.DJANGO_DB_ENGINE ?? "django.db.backends.sqlite3",
+      POSTGRES_DB: process.env.PLAYWRIGHT_DJANGO_SQLITE_DB ?? "backend/db.phase3b2_browser.sqlite3",
+    },
     timeout: 60_000,
   });
 }

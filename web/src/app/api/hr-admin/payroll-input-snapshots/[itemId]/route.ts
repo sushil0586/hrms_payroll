@@ -14,3 +14,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     upstreamPath: `/hr-admin/payroll-input-snapshots/${itemId}/`,
   });
 }
+
+export async function GET(request: NextRequest, context: RouteContext) {
+  const { itemId } = await context.params;
+  return proxyHrAdminPayrollConfigRequest({
+    request,
+    method: "GET",
+    upstreamPath: `/hr-admin/payroll-input-snapshots/${itemId}/`,
+  });
+}

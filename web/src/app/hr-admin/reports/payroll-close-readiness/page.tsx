@@ -19,13 +19,13 @@ export default async function PayrollCloseReadinessReportPage() {
   const [inputSetup, reviewSetup, adjustmentSetup, settlementSetup, outputSetup] = await Promise.all([
     getHrAdminPayrollInputSnapshotSetup(),
     getHrAdminPayrollReviewSetup(),
-    getHrAdminPayrollAdjustmentSetup(),
+    getHrAdminPayrollAdjustmentSetup({ include_all_runs: true, adjustment_page_size: 100, snapshot_page_size: 100, post_lock_page_size: 100 }),
     getHrAdminPayrollSettlementSetup(),
     getHrAdminPayrollOutputSetup(),
   ]);
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui">
       <PageIntro
         eyebrow={inputSetup.state === "live" ? "Live payroll finance report" : "Demo payroll finance report"}
         title="Payroll Close Readiness Report"

@@ -2,8 +2,8 @@ import Link from "next/link";
 
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminPayrollInputSnapshots, getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
-import type { HrAdminPayrollInputSnapshot, HrAdminPayrollRun } from "@/lib/types";
+import { getHrAdminPayrollInputSnapshot, getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
+import type { HrAdminPayrollInputSnapshot, HrAdminPayrollInputSnapshotListItem, HrAdminPayrollRun } from "@/lib/types";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { PayrollCycleJourney } from "../payroll-cycle-journey";
 import { PayrollWorkflowGuide } from "../payroll-workflow-guide";
@@ -77,6 +77,14 @@ function formatDate(value: string | null) {
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
+}
+
+function statusClass(status: string) {
+  const normalized = status.toLowerCase();
+  if (["ready", "locked", "low"].includes(normalized)) return "record-chip record-chip--success";
+  if (["warning", "medium"].includes(normalized)) return "record-chip record-chip--warning";
+  if (["blocked", "high"].includes(normalized)) return "record-chip record-chip--danger";
+  return "record-chip";
 }
 
 type PayrollScheduleSpineDay = {
@@ -214,7 +222,9 @@ function RunRail({
               <span>{run.snapshot_count} snapshots</span>
               <span>{run.locked_count} locked</span>
               <span>{run.blocked_count} blocked</span>
+              <span>{run.reconciliation_summary.finding_count} recon findings</span>
             </div>
+            <span className={statusClass(run.reconciliation_summary.risk)}>{run.reconciliation_summary.risk} reconciliation</span>
             <code>{run.input_profile_ref}</code>
             {selectedRun?.id === run.id ? <span className="payroll-rule-selected-marker">Selected run</span> : null}
           </Link>
@@ -242,12 +252,11 @@ function SnapshotCard({
 }: {
   currentParams: Record<string, SearchParamValue>;
   selected: boolean;
-  snapshot: HrAdminPayrollInputSnapshot;
+  snapshot: HrAdminPayrollInputSnapshotListItem;
 }) {
   const issueCount = snapshot.blockers.length + snapshot.warnings.length;
-  const scheduleSpine = getScheduleSpine(snapshot.attendance_snapshot);
-  const workingDays = scheduleSpine?.working_days ?? snapshot.attendance_snapshot.working_days ?? 0;
-  const presentDays = snapshot.attendance_snapshot.present_days ?? workingDays;
+  const workingDays = snapshot.reconciliation_summary.metrics.schedule_working_days ?? "0";
+  const presentDays = snapshot.reconciliation_summary.metrics.attendance_present_days ?? workingDays;
 
   return (
     <article className={`payroll-input-snapshot-card ${selected ? "is-selected" : ""}`}>
@@ -261,7 +270,7 @@ function SnapshotCard({
       <div className="payroll-input-snapshot-card__meta">
         <span><strong>Salary</strong>{snapshot.salary_structure_name || "Missing"}</span>
         <span><strong>Attendance</strong>{String(presentDays)}/{String(workingDays)}</span>
-        {scheduleSpine ? <span><strong>Weekly offs</strong>{metricValue(scheduleSpine.weekly_off_days)}</span> : null}
+        <span><strong>Risk</strong>{snapshot.reconciliation_summary.risk}</span>
         <span><strong>Issues</strong>{issueCount}</span>
       </div>
       <div className="payroll-input-snapshot-card__footer">
@@ -294,6 +303,7 @@ function SnapshotDetail({ snapshot }: { snapshot: HrAdminPayrollInputSnapshot | 
   const issueList = [...snapshot.blockers, ...snapshot.warnings];
   const attendanceSpine = getScheduleSpine(snapshot.attendance_snapshot);
   const leaveSpine = getScheduleSpine(snapshot.leave_snapshot);
+  const reconciliation = snapshot.reconciliation_summary;
   const sourceFamilies = [
     { label: "Employee", snapshot: snapshot.employee_snapshot },
     { label: "Organization", snapshot: snapshot.organization_snapshot },
@@ -327,6 +337,38 @@ function SnapshotDetail({ snapshot }: { snapshot: HrAdminPayrollInputSnapshot | 
         <span className="workspace-card__eyebrow">Source hash</span>
         <code>{snapshot.source_hash}</code>
       </div>
+
+      <section className="workspace-card workspace-card--compact">
+        <div className="workspace-card__header">
+          <div>
+            <span className="workspace-card__eyebrow">Reconciliation</span>
+            <h3 className="section-heading-soft">Attendance and payroll input check</h3>
+            <p className="section-copy section-copy-soft">Compares schedule-spine working days, attendance days, leave units, LOP, and validation issues before payroll close.</p>
+          </div>
+          <span className={statusClass(reconciliation.status)}>{titleCase(reconciliation.status)}</span>
+        </div>
+        <div className="detail-grid">
+          <div className="detail-row"><span className="detail-label">Risk</span><span className="detail-value">{reconciliation.risk}</span></div>
+          <div className="detail-row"><span className="detail-label">Findings</span><span className="detail-value">{reconciliation.finding_count}</span></div>
+          <div className="detail-row"><span className="detail-label">Schedule working</span><span className="detail-value">{reconciliation.metrics.schedule_working_days ?? "0"}</span></div>
+          <div className="detail-row"><span className="detail-label">Attendance present</span><span className="detail-value">{reconciliation.metrics.attendance_present_days ?? "0"}</span></div>
+          <div className="detail-row"><span className="detail-label">LOP days</span><span className="detail-value">{reconciliation.metrics.attendance_lop_days ?? "0"}</span></div>
+          <div className="detail-row"><span className="detail-label">Leave units</span><span className="detail-value">{reconciliation.metrics.leave_units ?? "0"}</span></div>
+          <div className="detail-row"><span className="detail-label">Leave-attendance collisions</span><span className="detail-value">{reconciliation.metrics.leave_attendance_collision_count ?? "0"}</span></div>
+        </div>
+        {reconciliation.findings.length ? (
+          <div className="payroll-rule-snapshot-list">
+            {reconciliation.findings.slice(0, 4).map((finding) => (
+              <div className="detail-row" key={finding.code}>
+                <span className="detail-label">{titleCase(finding.severity)} / {titleCase(finding.code)}</span>
+                <span className="detail-value">{finding.message}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="section-copy section-copy-soft">No attendance, leave, or day-count mismatch findings for this snapshot.</p>
+        )}
+      </section>
 
       {attendanceSpine ? (
         <section className="workspace-card workspace-card--compact">
@@ -404,31 +446,34 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
   const runSize = normalizePageSize(currentParams.runSize);
   const snapshotPage = parsePositiveInteger(currentParams.snapshotPage, 1);
   const snapshotSize = normalizePageSize(currentParams.snapshotSize);
-  const result = await getHrAdminPayrollInputSnapshotSetup();
-  const selectedRunSnapshotsResult = selectedRunId
-    ? await getHrAdminPayrollInputSnapshots({ payroll_run_id: selectedRunId })
-    : null;
-  const setup = selectedRunSnapshotsResult
-    ? {
-        ...result.data,
-        snapshots: [
-          ...selectedRunSnapshotsResult.data,
-          ...result.data.snapshots.filter((snapshot) => !selectedRunSnapshotsResult.data.some((selected) => selected.id === snapshot.id)),
-        ],
-      }
-    : result.data;
+  const [result, selectedSnapshotResult] = await Promise.all([
+    getHrAdminPayrollInputSnapshotSetup({
+    run_id: selectedRunId,
+    snapshot_page: snapshotPage,
+    snapshot_page_size: snapshotSize,
+    }),
+    selectedSnapshotId ? getHrAdminPayrollInputSnapshot(selectedSnapshotId) : Promise.resolve(null),
+  ]);
+  const setup = result.data;
   const selectedRun = setup.runs.find((item) => item.id === selectedRunId) ?? setup.runs[0] ?? null;
   const visibleSnapshots = selectedRun
     ? setup.snapshots.filter((item) => item.payroll_run_id === selectedRun.id)
     : setup.snapshots;
-  const pagedSnapshots = paginate(visibleSnapshots, snapshotPage, snapshotSize);
-  const selectedSnapshot =
+  const pagedSnapshots = {
+    items: visibleSnapshots,
+    page: setup.pagination?.snapshots?.page ?? snapshotPage,
+    pageSize: snapshotSize,
+    totalPages: setup.pagination?.snapshots?.total_pages ?? paginate(visibleSnapshots, snapshotPage, snapshotSize).totalPages,
+  };
+  const selectedSnapshotSummary =
     visibleSnapshots.find((item) => item.id === selectedSnapshotId) ??
-    visibleSnapshots[0] ??
     null;
+  const selectedSnapshot = selectedSnapshotResult?.state === "live" || selectedSnapshotResult?.state === "demo"
+    ? selectedSnapshotResult.data
+    : null;
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-inputs">
+    <main className="shell shell--payroll-setup shell--payroll-inputs hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live payroll phase 1C" : "Demo payroll phase 1C"}
         title="Payroll Inputs"
@@ -507,7 +552,7 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
                   <SnapshotCard
                     currentParams={currentParams}
                     key={snapshot.id}
-                    selected={selectedSnapshot?.id === snapshot.id}
+                    selected={selectedSnapshotSummary?.id === snapshot.id}
                     snapshot={snapshot}
                   />
                 ))
@@ -519,7 +564,7 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
               )}
             </div>
 
-            {visibleSnapshots.length > snapshotSize ? (
+            {pagedSnapshots.totalPages > 1 ? (
               <PaginationControls
                 ariaLabel="payroll input snapshot pagination"
                 currentParams={currentParams}
@@ -546,6 +591,8 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
                 <div className="detail-row"><span className="detail-label">Warnings</span><span className="detail-value">{selectedRun?.warning_count ?? 0}</span></div>
                 <div className="detail-row"><span className="detail-label">Blocked</span><span className="detail-value">{selectedRun?.blocked_count ?? 0}</span></div>
                 <div className="detail-row"><span className="detail-label">Locked</span><span className="detail-value">{selectedRun?.locked_count ?? 0}</span></div>
+                <div className="detail-row"><span className="detail-label">Reconciliation risk</span><span className="detail-value">{selectedRun?.reconciliation_summary.risk ?? "Low"}</span></div>
+                <div className="detail-row"><span className="detail-label">Reconciliation findings</span><span className="detail-value">{selectedRun?.reconciliation_summary.finding_count ?? 0}</span></div>
               </div>
             </div>
           </div>

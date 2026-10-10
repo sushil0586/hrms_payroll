@@ -25,6 +25,7 @@ test.describe("HR Admin leave request operations certification", () => {
     if (await requestCards.count()) {
       await expect(requestCards.first()).toContainText(/Pending approval from|Approved|Rejected|Cancelled|Withdrawn/i);
       await expect(requestCards.first()).toContainText(/Workflow|Approval track/i);
+      await expect(requestCards.first()).toContainText("Attendance collision");
       await expect(requestCards.first().getByRole("link", { name: "Open balance" })).toHaveAttribute("href", /\/hr-admin\/leave-balances\?q=/);
     } else {
       await expect(page.getByText("No leave requests match the current filters.")).toBeVisible();

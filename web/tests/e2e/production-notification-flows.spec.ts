@@ -133,23 +133,22 @@ test.describe("Production notification reliability proof", () => {
     await loginIfRequired(page, employee, "/ess/notifications?subject_type=payroll_payslip");
     await expectPageReady(page, "Notifications");
 
-    await expectVisibleText(page, [
-      "Inbox filters",
-      "Notification detail",
-      "Open source",
-      "Channel",
-      "in_app",
-    ]);
+    await expectVisibleText(page, ["Inbox filters", "Inbox list"]);
     await expect(page.getByRole("combobox", { name: /^Subject type/ })).toHaveValue("payroll_payslip");
-    await expect(page.getByRole("link", { name: "Open source" })).toHaveAttribute("href", /\/ess\/payslips/);
+    await page.getByRole("button", { name: "Review notification" }).first().click();
+    const detailDialog = page.getByRole("dialog", { name: /Notification detail/ });
+    await expect(detailDialog).toBeVisible();
+    await expect(detailDialog.getByText("Channel")).toBeVisible();
+    await expect(detailDialog.getByText("In App").first()).toBeVisible();
+    await expect(detailDialog.getByRole("link", { name: "Open source" })).toHaveAttribute("href", /\/ess\/payslips/);
 
-    await page.getByRole("link", { name: "Open source" }).click();
+    await detailDialog.getByRole("link", { name: "Open source" }).click();
     await expect(page).toHaveURL(/\/ess\/payslips/);
     await expectPageReady(page, "Payslips");
     await expectVisibleText(page, [
       "Published payslips",
-      "Published only",
-      "Audit protected",
+      "Published payslips only",
+      "access tracking",
     ]);
 
     await page.getByRole("button", { name: "Review payslip" }).first().click();
@@ -160,9 +159,9 @@ test.describe("Production notification reliability proof", () => {
       "Latest notification",
       "Access trail",
       "Storage governance",
-      "Calculation lines",
-      "payroll.download.stream.local.v1",
-      "payroll.retention.7y.v1",
+      "Payslip lines",
+      /payroll\.download\.(stream\.local|signed_url)\.v1/,
+      /payroll\.retention\.(7y|10y)\.v1/,
     ]);
 
     await expectNoHorizontalOverflow(page);

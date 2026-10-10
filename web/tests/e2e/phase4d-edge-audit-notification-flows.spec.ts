@@ -71,16 +71,19 @@ async function clearPendingEmployeeRegularization(page: Page) {
 
 async function createAndApproveRegularization(page: Page, reason: string, note: string) {
   await clearPendingEmployeeRegularization(page);
-  await switchTo(page, "/ess", employee);
-  await expectPageReady(page, "Self service");
-  await field(page, "Requested status").selectOption("remote");
-  await field(page, "Reason", 1).fill(reason);
+  await switchTo(page, "/ess/attendance", employee);
+  await expectPageReady(page, "Attendance");
+  await page.getByRole("button", { name: /Regularize attendance|New correction/ }).first().click();
+  const regularizeDialog = page.getByRole("dialog", { name: "Regularize attendance" });
+  await expect(regularizeDialog).toBeVisible();
+  await regularizeDialog.getByRole("combobox", { name: "Requested status" }).selectOption("remote");
+  await regularizeDialog.getByRole("textbox", { name: "Reason" }).fill(reason);
   const created = await submitAndCapture<{ id: string; status: string }>(
     page,
     "/api/me/attendance-regularizations",
     "POST",
     async () => {
-      await page.getByRole("button", { name: "Submit regularization" }).click();
+        await regularizeDialog.getByRole("button", { name: "Submit correction" }).click();
     },
   );
   expect(created.ok).toBeTruthy();
@@ -125,14 +128,17 @@ test.describe("Phase 4D leave and attendance edge, audit, and notification certi
     expect(lockResult.ok).toBeTruthy();
     expect(lockResult.requestBody).toMatchObject({ action: "lock" });
 
-    await switchTo(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
-    const lockedOption = field(page, "Attendance record").locator(`option[value="${recordId}"]`);
+    await switchTo(page, "/ess/attendance", employee);
+    await expectPageReady(page, "Attendance");
+    await page.getByRole("button", { name: /Regularize attendance|New correction/ }).first().click();
+    const regularizeDialog = page.getByRole("dialog", { name: "Regularize attendance" });
+    await expect(regularizeDialog).toBeVisible();
+    const lockedOption = field(regularizeDialog, "Attendance record").locator(`option[value="${recordId}"]`);
     if (employeeCode === "EMP-0042") {
       await expect(lockedOption).toBeDisabled();
       await expect(lockedOption).toContainText(/remote|present|absent|late|half day|on leave|weekly off|holiday|unknown/i);
     } else {
-      await expect(field(page, "Attendance record").locator(`option[value="${recordId}"]`)).toHaveCount(0);
+      await expect(field(regularizeDialog, "Attendance record").locator(`option[value="${recordId}"]`)).toHaveCount(0);
     }
 
     await switchTo(page, "/hr-admin/attendance-records?page_size=10", hrAdmin);
@@ -149,10 +155,13 @@ test.describe("Phase 4D leave and attendance edge, audit, and notification certi
     expect(unlockResult.ok).toBeTruthy();
     expect(unlockResult.requestBody).toMatchObject({ action: "unlock" });
 
-    await switchTo(page, "/ess", employee);
-    await expectPageReady(page, "Self service");
+    await switchTo(page, "/ess/attendance", employee);
+    await expectPageReady(page, "Attendance");
+    await page.getByRole("button", { name: /Regularize attendance|New correction/ }).first().click();
+    const unlockedDialog = page.getByRole("dialog", { name: "Regularize attendance" });
+    await expect(unlockedDialog).toBeVisible();
     if (employeeCode === "EMP-0042") {
-      await expect(field(page, "Attendance record").locator(`option[value="${recordId}"]`)).toBeEnabled();
+      await expect(field(unlockedDialog, "Attendance record").locator(`option[value="${recordId}"]`)).toBeEnabled();
     }
     await expectNoHorizontalOverflow(page);
   });
@@ -214,9 +223,12 @@ test.describe("Phase 4D leave and attendance edge, audit, and notification certi
     await expectPageReady(page, "Notifications");
     await expect(field(page, "Search")).toHaveValue(regularizationId);
     await expect(field(page, "Subject type")).toHaveValue("attendance_regularization");
-    await expect(page.locator("article").filter({ hasText: "Notification detail" }).first()).toContainText("Attendance regularization updated");
-    await expect(page.locator("article").filter({ hasText: "Notification detail" }).first()).toContainText("attendance_regularization");
-    await expect(page.locator("article").filter({ hasText: "Notification detail" }).first().getByRole("link", { name: "Open source" })).toHaveAttribute("href", `/ess?regId=${regularizationId}`);
+    await page.getByRole("button", { name: "Review notification" }).first().click();
+    const detailDialog = page.getByRole("dialog", { name: /Notification detail/ });
+    await expect(detailDialog).toBeVisible();
+    await expect(detailDialog).toContainText("Attendance regularization updated");
+    await expect(detailDialog).toContainText("attendance_regularization");
+    await expect(detailDialog.getByRole("link", { name: "Open source" })).toHaveAttribute("href", `/ess?regId=${regularizationId}`);
     await expectNoHorizontalOverflow(page);
   });
 });

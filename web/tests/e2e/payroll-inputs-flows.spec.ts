@@ -81,23 +81,56 @@ async function createAlternateCalendarPeriodThroughBrowser(page: Page) {
 
 test.describe("HR admin payroll input snapshot flows", () => {
   test("input workspace exposes run locks, source snapshots, and live employee traces", async ({ page }) => {
+    const employeeSearchResponses: Array<{ url: string; bytes: number }> = [];
+    page.on("response", async (response) => {
+      if (response.url().includes("/api/hr-admin/employees/option-search")) {
+        employeeSearchResponses.push({ url: response.url(), bytes: (await response.body()).length });
+      }
+    });
+
     await gotoAuthenticated(page, "/hr-admin/payroll-inputs");
     await expectPageReady(page, "Payroll Inputs");
+
+    const slimSetupResponse = await page.request.get("/api/hr-admin/payroll-input-snapshot-setup/");
+    const slimSetupBody = await slimSetupResponse.body();
+    const slimSetup = JSON.parse(slimSetupBody.toString());
+    expect(slimSetupResponse.ok()).toBeTruthy();
+    expect(slimSetup.options.employees, "payroll inputs should not preload employees by default").toHaveLength(0);
+    expect(slimSetup.snapshots[0]?.attendance_snapshot, "payroll input setup should use compact snapshot rows").toBeUndefined();
+    expect(slimSetupBody.length, "payroll input setup payload should stay compact").toBeLessThan(500_000);
+    if (slimSetup.snapshots[0]?.id) {
+      const detailResponse = await page.request.get(`/api/hr-admin/payroll-input-snapshots/${slimSetup.snapshots[0].id}`);
+      const detailPayload = await detailResponse.json();
+      expect(detailResponse.ok()).toBeTruthy();
+      expect(detailPayload.attendance_snapshot, "snapshot detail should keep full source evidence").toBeTruthy();
+    }
 
     await expect(page.getByRole("heading", { name: "Input control" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Input snapshot review" })).toBeVisible();
     await expect(page.getByText("Selected run").first()).toBeVisible();
+    await expect(page.getByText(/recon findings/i).or(page.getByText("Reconciliation findings")).first()).toBeVisible();
+    await expect(page.getByText("Recon blockers").first()).toBeVisible();
+    await expect(page.getByText(/reconciliation/i).first()).toBeVisible();
     await expect(page.getByText("Employee snapshots", { exact: true })).toBeVisible();
     await expect(page.getByLabel("payroll input snapshot pagination").or(page.getByText("No input snapshots")).or(page.getByRole("link", { name: "Inspect" })).first()).toBeVisible();
-    await expect(page.getByText("Selected for detail").or(page.getByText("No input snapshots")).first()).toBeVisible();
+    await expect(page.getByText("No employee selected").or(page.getByText("No input snapshots")).first()).toBeVisible();
     await expect(page.getByText("Source hash").or(page.getByText("Input profile")).or(page.getByText("No input snapshots")).first()).toBeVisible();
+    expect(employeeSearchResponses.length, "employee picker should not query before the snapshot form is used").toBe(0);
 
     const snapshotLink = page.locator("main a[href*='snapshotId=']").first();
     if (await snapshotLink.isVisible().catch(() => false)) {
       await snapshotLink.click();
       await expect(page).toHaveURL(/snapshotId=/);
       await expect(page.getByText("Source hash").or(page.getByRole("heading", { name: "Lock readiness" })).first()).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Attendance and payroll input check" })).toBeVisible();
+      await expect(page.getByText("Schedule working")).toBeVisible();
+      await expect(page.getByText("Attendance present")).toBeVisible();
     }
+
+    await page.getByRole("navigation", { name: "Payroll input operation steps" }).getByRole("button", { name: /Input snapshot/ }).click();
+    await page.getByPlaceholder("Code, name, or email").fill("EMP");
+    await expect.poll(() => employeeSearchResponses.length, { message: "Employee search should be lazy-loaded from the snapshot form." }).toBeGreaterThan(0);
+    expect(employeeSearchResponses[0].bytes, "employee search response should stay compact").toBeLessThan(10_000);
 
     await expectNoHorizontalOverflow(page);
   });

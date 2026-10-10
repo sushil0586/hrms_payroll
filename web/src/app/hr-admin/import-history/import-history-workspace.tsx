@@ -5,7 +5,28 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { ImportBatchAudit } from "@/lib/import-batch-audit";
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const IMPORT_TYPE_OPTIONS = [
+  "employee_profile_bulk_import",
+  "employee_bank_bulk_import",
+  "reporting_manager_bulk_import",
+  "attendance_record_bulk_import",
+  "leave_request_bulk_import",
+  "leave_policy_assignment_bulk_import",
+  "employee_shift_assignment_bulk_import",
+  "payroll_input_snapshot_bulk_import",
+];
+
+type ImportHistoryPayload = {
+  items: ImportBatchAudit[];
+  total_count?: number;
+  count?: number;
+  page?: number;
+  page_size?: number;
+  total_pages?: number;
+  has_next?: boolean;
+  has_previous?: boolean;
+};
 
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (match) => match.toUpperCase());
@@ -39,41 +60,77 @@ function moduleLink(importType: string) {
 export function ImportHistoryWorkspace() {
   const [items, setItems] = useState<ImportBatchAudit[]>([]);
   const [query, setQuery] = useState("");
+  const [actor, setActor] = useState("");
+  const [sourceHash, setSourceHash] = useState("");
+  const [batchHash, setBatchHash] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [importType, setImportType] = useState("All");
   const [status, setStatus] = useState("All");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrevious, setHasPrevious] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setQuery(params.get("q") ?? "");
+    setActor(params.get("actor") ?? "");
+    setSourceHash(params.get("source_hash") ?? "");
+    setBatchHash(params.get("batch_hash") ?? "");
+    setFromDate(params.get("from_date") ?? "");
+    setToDate(params.get("to_date") ?? "");
+    setImportType(params.get("import_type") ?? "All");
+    setStatus(params.get("status") ?? "All");
+    setPage(Number(params.get("page") ?? 1) || 1);
+    setPageSize(Number(params.get("page_size") ?? 25) || 25);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams();
     if (query.trim()) params.set("q", query.trim());
+    if (actor.trim()) params.set("actor", actor.trim());
+    if (sourceHash.trim()) params.set("source_hash", sourceHash.trim());
+    if (batchHash.trim()) params.set("batch_hash", batchHash.trim());
+    if (fromDate) params.set("from_date", fromDate);
+    if (toDate) params.set("to_date", toDate);
     if (importType !== "All") params.set("import_type", importType);
     if (status !== "All") params.set("status", status);
+    params.set("page", String(page));
+    params.set("page_size", String(pageSize));
+    const queryString = params.toString();
+    window.history.replaceState(null, "", queryString ? `/hr-admin/import-history?${queryString}` : "/hr-admin/import-history");
     fetch(`/api/hr-admin/import-batches?${params.toString()}`, {
       cache: "no-store",
       signal: controller.signal,
     })
       .then(async (response) => {
         if (!response.ok) throw new Error("Import history could not load.");
-        return response.json() as Promise<{ items: ImportBatchAudit[] }>;
+        return response.json() as Promise<ImportHistoryPayload>;
       })
       .then((payload) => {
         setItems(payload.items);
+        setTotalCount(payload.total_count ?? payload.count ?? payload.items.length);
+        setTotalPages(payload.total_pages ?? Math.max(1, Math.ceil((payload.total_count ?? payload.count ?? payload.items.length) / pageSize)));
+        setHasNext(Boolean(payload.has_next));
+        setHasPrevious(Boolean(payload.has_previous));
         setLoadState("ready");
       })
       .catch((error) => {
         if (error.name !== "AbortError") setLoadState("error");
       });
     return () => controller.abort();
-  }, [importType, query, status]);
+  }, [actor, batchHash, fromDate, importType, page, pageSize, query, sourceHash, status, toDate]);
 
-  const importTypes = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => item.import_type))).sort()], [items]);
+  const importTypes = useMemo(() => ["All", ...Array.from(new Set([...IMPORT_TYPE_OPTIONS, ...items.map((item) => item.import_type)])).sort()], [items]);
   const statuses = ["All", "previewed", "committed", "partial", "failed", "rollback_review"];
-  const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const firstIndex = (currentPage - 1) * PAGE_SIZE;
-  const visibleItems = items.slice(firstIndex, firstIndex + PAGE_SIZE);
+  const currentPage = Math.min(page, totalPages);
+  const firstIndex = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const lastIndex = Math.min(currentPage * pageSize, totalCount);
 
   function updateFilter(action: () => void) {
     action();
@@ -83,13 +140,19 @@ export function ImportHistoryWorkspace() {
 
   function resetFilters() {
     setQuery("");
+    setActor("");
+    setSourceHash("");
+    setBatchHash("");
+    setFromDate("");
+    setToDate("");
     setImportType("All");
     setStatus("All");
     setPage(1);
+    setPageSize(25);
     setLoadState("loading");
   }
 
-  const hasActiveFilters = Boolean(query.trim()) || importType !== "All" || status !== "All";
+  const hasActiveFilters = Boolean(query.trim()) || Boolean(actor.trim()) || Boolean(sourceHash.trim()) || Boolean(batchHash.trim()) || Boolean(fromDate) || Boolean(toDate) || importType !== "All" || status !== "All" || pageSize !== 25;
 
   return (
     <section className="section section--tight" aria-label="Import batch history">
@@ -97,7 +160,7 @@ export function ImportHistoryWorkspace() {
         <div className="metric-grid-modern payroll-setup-metrics import-history-metrics">
           <article className="metric-tile metric-tile-soft">
             <span>Import batches</span>
-            <strong>{items.length}</strong>
+            <strong>{totalCount}</strong>
             <small>Current filter</small>
           </article>
           <article className="metric-tile metric-tile-soft">
@@ -123,6 +186,10 @@ export function ImportHistoryWorkspace() {
             <input className="input-control" type="search" value={query} onChange={(event) => updateFilter(() => setQuery(event.target.value))} placeholder="Search type, actor, file, hash" />
           </label>
           <label>
+            <span>Actor</span>
+            <input className="input-control" type="search" value={actor} onChange={(event) => updateFilter(() => setActor(event.target.value))} placeholder="Uploaded by" />
+          </label>
+          <label>
             <span>Import type</span>
             <select aria-label="Import type" className="input-control" value={importType} onChange={(event) => updateFilter(() => setImportType(event.target.value))}>
               {importTypes.map((item) => (
@@ -138,6 +205,30 @@ export function ImportHistoryWorkspace() {
               ))}
             </select>
           </label>
+          <label>
+            <span>From</span>
+            <input className="input-control" type="date" value={fromDate} onChange={(event) => updateFilter(() => setFromDate(event.target.value))} />
+          </label>
+          <label>
+            <span>To</span>
+            <input className="input-control" type="date" value={toDate} onChange={(event) => updateFilter(() => setToDate(event.target.value))} />
+          </label>
+          <label>
+            <span>Batch hash</span>
+            <input className="input-control" type="search" value={batchHash} onChange={(event) => updateFilter(() => setBatchHash(event.target.value))} placeholder="Batch hash" />
+          </label>
+          <label>
+            <span>Source hash</span>
+            <input className="input-control" type="search" value={sourceHash} onChange={(event) => updateFilter(() => setSourceHash(event.target.value))} placeholder="Source hash" />
+          </label>
+          <label>
+            <span>Rows</span>
+            <select aria-label="Rows per page" className="input-control" value={pageSize} onChange={(event) => updateFilter(() => setPageSize(Number(event.target.value)))}>
+              {PAGE_SIZE_OPTIONS.map((item) => (
+                <option key={item} value={item}>{item} per page</option>
+              ))}
+            </select>
+          </label>
           <div className="import-history-toolbar__actions">
             <button className="button button--secondary" type="button" disabled={!hasActiveFilters} onClick={resetFilters}>
               Reset
@@ -146,16 +237,16 @@ export function ImportHistoryWorkspace() {
         </div>
 
         <div className="report-catalog-summary" aria-live="polite">
-          <span className="queue-summary-chip"><strong>{currentPage}</strong> of {pageCount} pages</span>
-          <span className="queue-summary-chip"><strong>{items.length === 0 ? 0 : firstIndex + 1}-{Math.min(firstIndex + PAGE_SIZE, items.length)}</strong> shown</span>
+          <span className="queue-summary-chip"><strong>{currentPage}</strong> of {totalPages} pages</span>
+          <span className="queue-summary-chip"><strong>{firstIndex}-{lastIndex}</strong> shown</span>
           <span className="queue-summary-chip"><strong>{loadState === "loading" ? "Loading" : loadState === "error" ? "Blocked" : "Ready"}</strong> status</span>
         </div>
 
-        {visibleItems.length === 0 ? (
+        {items.length === 0 ? (
           <div className="empty-state">{loadState === "loading" ? "Loading import history." : "No import batches match the selected filters."}</div>
         ) : (
           <div className="import-history-list" aria-label="Import batch results">
-            {visibleItems.map((item) => {
+            {items.map((item) => {
               const rowErrors = item.row_errors ?? [];
               const firstError = rowErrors[0]?.message ? String(rowErrors[0].message) : "No row errors";
               const link = moduleLink(item.import_type);
@@ -204,9 +295,9 @@ export function ImportHistoryWorkspace() {
         )}
 
         <div className="pagination-bar" aria-label="Import history pagination">
-          <button className="button button--secondary" type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
-          <span>Showing {items.length === 0 ? 0 : firstIndex + 1}-{Math.min(firstIndex + PAGE_SIZE, items.length)} of {items.length}</span>
-          <button className="button button--secondary" type="button" disabled={currentPage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Next</button>
+          <button className="button button--secondary" type="button" disabled={!hasPrevious || loadState === "loading"} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
+          <span>Showing {firstIndex}-{lastIndex} of {totalCount}</span>
+          <button className="button button--secondary" type="button" disabled={!hasNext || loadState === "loading"} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
         </div>
       </div>
     </section>

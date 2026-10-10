@@ -3,21 +3,18 @@ import Link from "next/link";
 import { AttendancePolicyAssignmentGovernancePanel } from "@/app/hr-admin/attendance-policy-assignments/attendance-policy-assignment-governance-panel";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminAttendancePolicyAssignments, getHrAdminPolicyOptions } from "@/lib/api";
+import { getHrAdminAttendancePolicyAssignments } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminAttendancePolicyAssignmentsPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/policy-assignments" });
   const canManagePolicies = sessionHasPermission(sessionUser, "attendance.policies.manage");
-  const [result, optionsResult] = await Promise.all([
-    getHrAdminAttendancePolicyAssignments(),
-    getHrAdminPolicyOptions(),
-  ]);
+  const result = await getHrAdminAttendancePolicyAssignments();
   const activeCount = result.data.filter((item) => item.is_active).length;
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live attendance assignment mode" : "Demo attendance assignment mode"}
         title="Attendance assignments"
@@ -113,7 +110,7 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
       </section>
 
       {canManagePolicies ? (
-        <AttendancePolicyAssignmentGovernancePanel employees={optionsResult.data.employees} />
+        <AttendancePolicyAssignmentGovernancePanel />
       ) : (
         <section className="section"><div className="notice"><strong>Read-only attendance assignment view.</strong><span className="muted">Resolution previews and assignment edits require attendance policy management permission.</span></div></section>
       )}

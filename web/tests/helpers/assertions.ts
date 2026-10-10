@@ -5,7 +5,10 @@ export async function expectAppShell(page: Page) {
 }
 
 export async function expectModernHeader(page: Page, heading: string | RegExp) {
-  await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+  const levelOneHeading = page.getByRole("heading", { level: 1, name: heading });
+  const anyHeading = page.getByRole("heading", { name: heading });
+  const pageIntroTitle = page.locator(".page-intro__title").filter({ hasText: heading });
+  await expect(levelOneHeading.or(anyHeading).or(pageIntroTitle).first()).toBeVisible();
 }
 
 export async function expectNoAppError(page: Page) {

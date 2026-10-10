@@ -17,6 +17,8 @@ type Props = {
     status: string;
     requested_status: string;
     current_status: string;
+    from_date: string;
+    to_date: string;
     page: number;
     page_size: number;
   };
@@ -80,6 +82,8 @@ export function AttendanceRegularizationQueue({
   const [status, setStatus] = useState(currentFilters.status || "all");
   const [requestedStatus, setRequestedStatus] = useState(currentFilters.requested_status || "all");
   const [currentStatus, setCurrentStatus] = useState(currentFilters.current_status || "all");
+  const [fromDate, setFromDate] = useState(currentFilters.from_date);
+  const [toDate, setToDate] = useState(currentFilters.to_date);
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
 
   function goToPage(page: number) {
@@ -88,6 +92,8 @@ export function AttendanceRegularizationQueue({
       status: status !== "all" ? status : undefined,
       requested_status: requestedStatus !== "all" ? requestedStatus : undefined,
       current_status: currentStatus !== "all" ? currentStatus : undefined,
+      from_date: fromDate || undefined,
+      to_date: toDate || undefined,
       page,
       page_size: Number(pageSize) || currentFilters.page_size,
     })}`);
@@ -102,6 +108,8 @@ export function AttendanceRegularizationQueue({
     setStatus("all");
     setRequestedStatus("all");
     setCurrentStatus("all");
+    setFromDate("");
+    setToDate("");
     setPageSize("25");
     router.push(pathname);
   }
@@ -144,6 +152,14 @@ export function AttendanceRegularizationQueue({
               <option value="all">All current statuses</option>
               {attendanceStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
+          </label>
+          <label className="form-field">
+            <span className="muted">From date</span>
+            <input className="input-control" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
+          </label>
+          <label className="form-field">
+            <span className="muted">To date</span>
+            <input className="input-control" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
           </label>
           <label className="form-field">
             <span className="muted">Rows per page</span>

@@ -3,15 +3,17 @@ import Link from "next/link";
 import { createEmptyLeavePolicyAssignmentValue } from "@/app/hr-admin/leave-policy-assignments/form-values";
 import { LeavePolicyAssignmentForm } from "@/app/hr-admin/leave-policy-assignments/leave-policy-assignment-form";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminPolicyOptions } from "@/lib/api";
+import { getHrAdminPolicyWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewLeavePolicyAssignmentPage() {
   await requireSessionPermission({ permissionKeys: ["leave.policies.manage"], fallbackPath: "/hr-admin/leave-policy-assignments" });
-  const optionsResult = await getHrAdminPolicyOptions();
+  const optionsResult = await getHrAdminPolicyWorkbenchOptions({
+    include: ["leave_policies", "legal_entities", "branches", "departments", "grades", "employment_types"],
+  });
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create leave assignment"

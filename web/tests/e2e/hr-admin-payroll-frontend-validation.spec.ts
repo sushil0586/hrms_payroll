@@ -1,17 +1,18 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { expectNoAppError, expectNoHorizontalOverflow, expectPageReady, suppressBrowserTestNoise } from "../helpers/assertions";
+import { hrAdmin } from "../helpers/staging-auth";
 
 async function gotoHrAdminDemo(page: Page, path: string) {
-  await page.goto("/", { waitUntil: "domcontentloaded" });
-  const origin = new URL(page.url()).origin;
-  await page.context().addCookies([
-    {
-      name: "hrms_access_token",
-      value: "playwright-demo-token",
-      url: origin,
+  await page.request.post("/api/auth/logout").catch(() => null);
+  await page.context().clearCookies();
+  const response = await page.request.post("/api/auth/login", {
+    data: {
+      identifier: hrAdmin.username,
+      password: hrAdmin.password,
     },
-  ]);
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
   await page.goto(path, { waitUntil: "networkidle" });
 }
 
@@ -41,7 +42,7 @@ test.describe("HR Admin payroll frontend validation", () => {
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-setup");
     await suppressBrowserTestNoise(page);
-    await expectPageReady(page, "Payroll setup");
+    await expectPageReady(page, "Payroll Setup");
     await openSetupActions(page);
 
     const form = page.getByTestId("payroll-calendar-form");
@@ -66,7 +67,7 @@ test.describe("HR Admin payroll frontend validation", () => {
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-setup");
     await suppressBrowserTestNoise(page);
-    await expectPageReady(page, "Payroll setup");
+    await expectPageReady(page, "Payroll Setup");
     await openSetupActions(page);
     await page.getByRole("button", { name: /Periods/ }).click();
 
@@ -93,7 +94,7 @@ test.describe("HR Admin payroll frontend validation", () => {
 
     await gotoHrAdminDemo(page, "/hr-admin/salary-setup");
     await suppressBrowserTestNoise(page);
-    await expectPageReady(page, "Salary setup");
+    await expectPageReady(page, "Salary Setup");
     await openSetupActions(page);
     await page.getByRole("button", { name: /Lines/ }).click();
 
@@ -119,7 +120,7 @@ test.describe("HR Admin payroll frontend validation", () => {
 
     await gotoHrAdminDemo(page, "/hr-admin/salary-setup#salary-assignment-import-workbench");
     await suppressBrowserTestNoise(page);
-    await expectPageReady(page, "Salary setup");
+    await expectPageReady(page, "Salary Setup");
     await openSetupActions(page);
 
     const workbench = page.getByTestId("salary-assignment-import-workbench");
@@ -155,7 +156,7 @@ test.describe("HR Admin payroll frontend validation", () => {
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-rules");
     await suppressBrowserTestNoise(page);
-    await expectPageReady(page, "Payroll rules");
+    await expectPageReady(page, "Payroll Rules");
     await openSetupActions(page);
 
     const form = page.getByTestId("payroll-rule-definition-form");
@@ -182,7 +183,7 @@ test.describe("HR Admin payroll frontend validation", () => {
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-rules");
     await suppressBrowserTestNoise(page);
-    await expectPageReady(page, "Payroll rules");
+    await expectPageReady(page, "Payroll Rules");
     await openSetupActions(page);
     await page.getByRole("button", { name: /Versions/ }).click();
 
@@ -256,14 +257,7 @@ test.describe("HR Admin payroll frontend validation", () => {
     await field(form, "Salary snapshot JSON").fill("{bad json");
     await field(form, "Attendance snapshot JSON").fill("{bad json");
     await field(form, "Validation snapshot JSON").fill("{bad json");
-    await form.locator("button[type='submit']").click();
-
-    await expect(form.getByText("Enter the input profile reference.")).toBeVisible();
-    await expect(form.getByText("Employee snapshot must be valid JSON.")).toBeVisible();
-    await expect(form.getByText("Organization snapshot must be valid JSON.")).toBeVisible();
-    await expect(form.getByText("Salary snapshot must be valid JSON.")).toBeVisible();
-    await expect(form.getByText("Attendance snapshot must be valid JSON.")).toBeVisible();
-    await expect(form.getByText("Validation snapshot must be valid JSON.")).toBeVisible();
+    await expect(form.locator("button[type='submit']")).toBeDisabled();
     expect(apiCalls).toBe(0);
     await expectNoAppError(page);
     await expectNoHorizontalOverflow(page);
@@ -301,7 +295,11 @@ test.describe("HR Admin payroll frontend validation", () => {
     await expect(dialog.getByText("Provider ref is required before this provider setup can be saved.")).toBeVisible();
     await expect(dialog.getByText("Environment is required before this provider setup can be saved.")).toBeVisible();
     await expect(dialog.getByText("Adapter ref is required for a real or live provider route.")).toBeVisible();
-    await expect(dialog.getByText("Credential ref is required when credentials are required.")).toBeVisible();
+    await expect(dialog.getByText("Channel ref is required for a real or live provider route.")).toBeVisible();
+    await expect(dialog.getByText("Callback profile is required for a real or live provider route.")).toBeVisible();
+    await expect(dialog.getByText("Callback verification is required for a real or live provider route.")).toBeVisible();
+    await expect(dialog.getByText("Retry policy is required for a real or live provider route.")).toBeVisible();
+    await expect(dialog.getByText("Certification profile is required for a real or live provider route.")).toBeVisible();
     await expect(dialog.getByText("Config JSON is invalid.")).toBeVisible();
     expect(apiCalls).toBe(0);
     await expectNoAppError(page);

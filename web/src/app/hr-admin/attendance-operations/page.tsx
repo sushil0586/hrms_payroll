@@ -41,12 +41,8 @@ export default async function HrAdminAttendanceOperationsPage() {
         description="Control shifts, calendars, daily records, and correction queues from one operational layer."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/shifts">Open shifts</Link>
+            <Link className="button button--primary" href="/hr-admin/attendance-records">Attendance records</Link>
             <Link className="button button--secondary" href="/hr-admin/employee-shift-assignments">Shift assignments</Link>
-            <Link className="button button--secondary" href="/hr-admin/shift-roster-templates">Roster templates</Link>
-            <Link className="button button--secondary" href="/hr-admin/holiday-calendars">Holiday calendars</Link>
-            <Link className="button button--secondary" href="/hr-admin/attendance-records">Attendance records</Link>
-            <Link className="button button--secondary" href="/hr-admin/attendance-regularizations">Regularizations</Link>
             <Link className="button button--secondary" href="/hr-admin">Back to admin workspace</Link>
           </>
         }
@@ -69,21 +65,58 @@ export default async function HrAdminAttendanceOperationsPage() {
 
       <section className="section">
         <div className="metric-grid-modern">
-          <MetricTile label="Shift masters configured" value={shiftsResult.data.length} trend="Time-window setup" />
-          <MetricTile label="Shift assignments" value={shiftAssignmentsResult.data.length} trend="Coverage windows" />
-          <MetricTile label="Roster templates" value={rosterTemplatesResult.data.length} trend="Repeat rollout patterns" />
-          <MetricTile label="Holiday calendars configured" value={calendarsResult.data.length} trend="Calendar coverage" />
-          <MetricTile label="Attendance records in review window" value={recordsResult.data.total_count} trend="Operational row volume" />
-          <MetricTile label="Regularizations in review window" value={regularizationsResult.data.total_count} trend="Correction pressure" />
+          <MetricTile label="Attendance records" value={recordsResult.data.total_count} trend="Review window" />
+          <MetricTile label="Regularizations" value={regularizationsResult.data.total_count} trend="Correction queue" />
+          <MetricTile label="Shift coverage" value={shiftAssignmentsResult.data.total_count} trend="Assignments" />
+          <MetricTile label="Setup assets" value={shiftsResult.data.length + calendarsResult.data.length + rosterTemplatesResult.data.total_count} trend="Shifts, calendars, rosters" />
         </div>
       </section>
 
       <section className="section">
+        <div className="section-heading-row">
+          <div>
+            <h2 className="section-heading-soft">Operate attendance</h2>
+            <p className="section-copy-soft">Use these pages for daily review and correction work.</p>
+          </div>
+        </div>
+        <div className="workspace-grid-modern">
+          <WorkspaceCard
+            eyebrow="Records"
+            title="Daily attendance rows"
+            description="Filter, bulk-edit, and correct attendance data from a queue built for operational review."
+            href="/hr-admin/attendance-records"
+            cta="Open records"
+            details={[
+              { label: "Rows", value: recordsResult.data.total_count },
+              { label: "Page size", value: recordsResult.data.items.length },
+            ]}
+          />
+          <WorkspaceCard
+            eyebrow="Regularizations"
+            title="Correction requests"
+            description="Review employee correction requests with enough context to keep audit quality high."
+            href="/hr-admin/attendance-regularizations"
+            cta="Open regularizations"
+            details={[
+              { label: "Requests", value: regularizationsResult.data.total_count },
+              { label: "Page size", value: regularizationsResult.data.items.length },
+            ]}
+          />
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section-heading-row">
+          <div>
+            <h2 className="section-heading-soft">Configure attendance foundations</h2>
+            <p className="section-copy-soft">Use these pages for setup work that attendance runtime depends on.</p>
+          </div>
+        </div>
         <div className="workspace-grid-modern">
           <WorkspaceCard
             eyebrow="Shifts"
-            title="Shape working-time windows"
-            description="Configure shift timing, grace rules, and weekly-offs so attendance interpretation starts from clean operational assumptions."
+            title="Working-time windows"
+            description="Configure shift timing, grace rules, and weekly-offs."
             href="/hr-admin/shifts"
             cta="Manage shifts"
             details={[
@@ -93,57 +126,35 @@ export default async function HrAdminAttendanceOperationsPage() {
           />
           <WorkspaceCard
             eyebrow="Assignments"
-            title="Map employees onto shift windows"
-            description="Govern fixed shifts, weekly rotations, and temporary overrides before runtime decides which shift actually resolves."
+            title="Employee shift coverage"
+            description="Govern fixed shifts, weekly rotations, and temporary overrides."
             href="/hr-admin/employee-shift-assignments"
             cta="Manage shift assignments"
             details={[
-              { label: "Assignments", value: shiftAssignmentsResult.data.length },
-              { label: "Primary windows", value: shiftAssignmentsResult.data.filter((item) => item.is_primary).length },
+              { label: "Assignments", value: shiftAssignmentsResult.data.total_count },
+              { label: "Primary on page", value: shiftAssignmentsResult.data.items.filter((item) => item.is_primary).length },
             ]}
           />
           <WorkspaceCard
             eyebrow="Rosters"
-            title="Publish reusable shift patterns"
-            description="Define reusable roster templates once, then bulk-roll them out across departments or selected employees."
+            title="Reusable shift patterns"
+            description="Define roster templates once, then roll them out across teams."
             href="/hr-admin/shift-roster-templates"
             cta="Manage roster templates"
             details={[
-              { label: "Templates", value: rosterTemplatesResult.data.length },
-              { label: "Published or locked", value: rosterTemplatesResult.data.filter((item) => item.status !== "draft").length },
+              { label: "Templates", value: rosterTemplatesResult.data.total_count },
+              { label: "Published on page", value: rosterTemplatesResult.data.items.filter((item) => item.status !== "draft").length },
             ]}
           />
           <WorkspaceCard
             eyebrow="Calendars"
-            title="Define holiday treatment"
-            description="Maintain calendar years and holiday scopes that policies and attendance rows can reference without ambiguity."
+            title="Holiday treatment"
+            description="Maintain calendar years and holiday scopes for attendance interpretation."
             href="/hr-admin/holiday-calendars"
             cta="Manage calendars"
             details={[
               { label: "Calendars", value: calendarsResult.data.length },
               { label: "Holiday rows", value: calendarsResult.data.reduce((total, item) => total + item.holidays.length, 0) },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Records"
-            title="Review daily attendance rows"
-            description="Filter, bulk-edit, and correct attendance data from a queue built for high-volume operational review."
-            href="/hr-admin/attendance-records"
-            cta="Open records"
-            details={[
-              { label: "Rows in window", value: recordsResult.data.total_count },
-              { label: "Current page", value: recordsResult.data.items.length },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Regularizations"
-            title="Resolve correction requests"
-            description="Review and action employee correction requests with enough context to keep audit quality high."
-            href="/hr-admin/attendance-regularizations"
-            cta="Open regularizations"
-            details={[
-              { label: "Requests in window", value: regularizationsResult.data.total_count },
-              { label: "Current page", value: regularizationsResult.data.items.length },
             ]}
           />
         </div>

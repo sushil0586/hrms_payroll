@@ -507,6 +507,23 @@ class LeaveRequestWorkflowPolicyRuntimeTests(TestCase):
             ],
         )
 
+    def test_weekend_only_leave_request_is_rejected_when_policy_excludes_weekly_off(self):
+        with self.assertRaises(ValidationError) as context:
+            submit_leave_request(
+                employee=self.employee,
+                leave_type=self.leave_type,
+                start_date=date(2026, 10, 10),
+                end_date=date(2026, 10, 11),
+                start_day_portion="full_day",
+                end_day_portion="full_day",
+                reason="Weekend only",
+            )
+
+        self.assertEqual(
+            context.exception.message_dict["start_date"],
+            ["Selected dates do not include working leave days under this policy."],
+        )
+
     def test_weekend_exclusion_uses_standard_weekend_when_attendance_policy_is_missing(self):
         AttendancePolicyAssignment.objects.filter(employee=self.employee).delete()
 

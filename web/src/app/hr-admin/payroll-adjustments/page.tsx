@@ -156,6 +156,17 @@ function AdjustmentDetail({ adjustment }: { adjustment: HrAdminPayrollAdjustment
         <code>{adjustment.source_hash}</code>
       </section>
 
+      {adjustment.post_lock_source ? (
+        <section className="payroll-rule-source-card">
+          <span className="workspace-card__eyebrow">Post-lock source</span>
+          <div className="detail-grid">
+            <div className="detail-row"><span className="detail-label">Locked run</span><span className="detail-value">{adjustment.post_lock_source.payroll_run_name}</span></div>
+            <div className="detail-row"><span className="detail-label">Impacted period</span><span className="detail-value">{adjustment.post_lock_source.period_start} to {adjustment.post_lock_source.period_end}</span></div>
+            <div className="detail-row"><span className="detail-label">Recommended action</span><span className="detail-value">{adjustment.post_lock_source.recommended_action}</span></div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="payroll-rule-source-card">
         <span className="workspace-card__eyebrow">Reason</span>
         <p className="section-copy section-copy-soft">{adjustment.reason || "No reason captured."}</p>
@@ -169,14 +180,14 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
   const selectedRunId = normalizeParam(currentParams.runId);
   const selectedAdjustmentId = normalizeParam(currentParams.adjustmentId);
   const activeTab = normalizeAdjustmentTab(currentParams.tab, selectedAdjustmentId);
-  const result = await getHrAdminPayrollAdjustmentSetup();
+  const result = await getHrAdminPayrollAdjustmentSetup(selectedRunId ? { run_id: selectedRunId } : undefined);
   const setup = result.data;
   const selectedRun = setup.runs.find((item) => item.id === selectedRunId) ?? setup.runs.find((item) => item.status === "inputs_locked") ?? setup.runs[0] ?? null;
   const visibleAdjustments = selectedRun ? setup.adjustments.filter((item) => item.payroll_run_id === selectedRun.id) : setup.adjustments;
   const selectedAdjustment = visibleAdjustments.find((item) => item.id === selectedAdjustmentId) ?? visibleAdjustments[0] ?? null;
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-adjustments">
+    <main className="shell shell--payroll-setup shell--payroll-adjustments hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live payroll phase 4A" : "Demo payroll phase 4A"}
         title="Payroll Adjustments"
@@ -210,6 +221,7 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
           <MetricTile className="metric-tile-soft" label="Submitted" value={setup.summary.submitted_count} trend={`${setup.summary.approved_count} approved`} />
           <MetricTile className="metric-tile-soft" label="Draft" value={setup.summary.draft_count} trend="Needs review" />
           <MetricTile className="metric-tile-soft" label="Total value" value={formatMoney(setup.summary.total_amount)} trend="All directions" />
+          <MetricTile className="metric-tile-soft" label="Post-lock impacts" value={setup.summary.post_lock_impact_count} trend="Arrears review" />
         </div>
       </section>
 
@@ -279,7 +291,37 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
                   <strong>Calculation prep</strong>
                   <span>Applied adjustments are source-hashed and consumed by draft payroll calculations.</span>
                 </article>
+                <article>
+                  <strong>Post-lock arrears</strong>
+                  <span>Locked payroll inputs are surfaced as arrear or correction candidates with source refs for audit trail continuity.</span>
+                </article>
               </div>
+              {setup.post_lock_impacts.length ? (
+                <div className="payroll-table-scroll">
+                  <table className="payroll-readiness-table payroll-setup-table payroll-adjustment-table">
+                    <thead>
+                      <tr>
+                        <th>Employee</th>
+                        <th>Locked run</th>
+                        <th>Period</th>
+                        <th>Action</th>
+                        <th>Source ref</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {setup.post_lock_impacts.slice(0, 5).map((impact) => (
+                        <tr key={impact.adjustment_source_ref}>
+                          <td><strong>{impact.employee_name}</strong><span>{impact.employee_code}</span></td>
+                          <td>{impact.payroll_run_name}</td>
+                          <td>{impact.period_start} to {impact.period_end}</td>
+                          <td>{impact.recommended_action}</td>
+                          <td><code>{impact.adjustment_source_ref}</code></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </section>
             ) : null}
 

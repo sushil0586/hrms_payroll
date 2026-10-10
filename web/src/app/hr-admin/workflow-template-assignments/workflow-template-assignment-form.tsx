@@ -24,6 +24,20 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to save workflow assignment.");
 }
 
+function getServerFieldErrors(payload: unknown): FieldErrors<AssignmentField> {
+  if (!payload || typeof payload !== "object") return {};
+  const errors: FieldErrors<AssignmentField> = {};
+  for (const field of ["template_id", "priority"] as const) {
+    const value = (payload as Record<string, unknown>)[field];
+    if (Array.isArray(value) && value.length) {
+      errors[field] = String(value[0]);
+    } else if (typeof value === "string") {
+      errors[field] = value;
+    }
+  }
+  return errors;
+}
+
 function selectOptions(items: Array<{ id: string; name: string }>) {
   return [
     <option key="blank" value="">
@@ -122,6 +136,7 @@ export function WorkflowTemplateAssignmentForm({ initialValue, mode, options, it
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
+      setFieldErrors(getServerFieldErrors(payload));
       setError(getErrorMessage(payload));
       setIsSubmitting(false);
       return;

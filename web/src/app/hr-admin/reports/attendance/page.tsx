@@ -10,10 +10,11 @@ import { ReportFamilyWorkspace } from "../report-family-workspace";
 import { ReportInsightsStrip } from "../report-insights-strip";
 
 const groups = [
-  { key: "all", label: "All Attendance", reports: ["attendance-register", "attendance-exceptions", "leave-balance"] },
-  { key: "daily", label: "Daily Register", reports: ["attendance-register"] },
-  { key: "exceptions", label: "Exceptions", reports: ["attendance-exceptions"] },
-  { key: "leave", label: "Leave Balance", reports: ["leave-balance"] },
+  { key: "all", label: "All Attendance", reports: ["attendance-register", "attendance-derivation-exceptions", "attendance-exceptions", "leave-attendance-collisions", "roster-rollout-audit", "leave-balance"] },
+  { key: "daily", label: "Daily Register", reports: ["attendance-register", "attendance-derivation-exceptions", "roster-rollout-audit"] },
+  { key: "exceptions", label: "Exceptions", reports: ["attendance-derivation-exceptions", "attendance-exceptions", "leave-attendance-collisions"] },
+  { key: "roster", label: "Roster", reports: ["roster-rollout-audit"] },
+  { key: "leave", label: "Leave", reports: ["leave-balance", "leave-attendance-collisions"] },
 ];
 
 export default async function AttendanceReportsPage() {
@@ -23,7 +24,7 @@ export default async function AttendanceReportsPage() {
   const reports = reportCatalog.filter((report) => report.category === "Attendance");
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui">
       <PageIntro
         eyebrow={dashboardResult.state === "live" ? "Live attendance reports" : "Demo attendance reports"}
         title="Attendance Reports"

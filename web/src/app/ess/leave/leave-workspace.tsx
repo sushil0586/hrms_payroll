@@ -683,6 +683,7 @@ function LeaveDetailModal({ isDemo, item, onClose }: { isDemo: boolean; item: Le
             <DetailRow label="Policy" value={item.policy_name || "Not mapped"} />
             <DetailRow label="Applied at" value={formatDateTime(item.applied_at)} />
             <DetailRow label="Reason" value={item.reason || "No reason provided."} />
+            <DetailRow label="Attendance collision" value={item.attendance_collision_summary?.collision_count ? `${item.attendance_collision_summary.collision_count} payroll-impacting overlap` : "Clear"} />
             <DetailRow label="Workflow" value={item.workflow_reference || "Not available"} />
           </div>
         </section>

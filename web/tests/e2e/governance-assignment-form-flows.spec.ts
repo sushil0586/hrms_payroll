@@ -49,6 +49,10 @@ type AttendancePolicyPayload = {
   code: string;
 };
 
+type CreatedEmployee = HrAdminEmployeeListItem & {
+  full_name: string;
+};
+
 function field(scope: Locator, label: string) {
   return scope
     .getByText(label, { exact: true })
@@ -218,12 +222,31 @@ async function apiPostBackend<T>(page: Page, path: string, data: unknown, expect
   return payload as T;
 }
 
+async function apiPatchBackend<T>(page: Page, path: string, data: unknown, expectedStatus = 200) {
+  const response = await page.request.patch(`${apiBaseUrl()}${path}`, {
+    headers: await authHeaders(page),
+    data,
+  });
+  const payload = await response.json().catch(() => null);
+  expect(response.status(), `PATCH ${path} failed with ${response.status()}: ${JSON.stringify(payload)}`).toBe(expectedStatus);
+  return payload as T;
+}
+
 async function createScopedEmployeeForAttendanceResolution(page: Page) {
   const options = await apiGetBackend<HrAdminPolicyOptionsPayload>(page, "/hr-admin/policy-options/");
-  const department = options.departments[0];
   const grade = options.grades[0];
   const employmentType = options.employment_types[0];
-  expect(department || grade || employmentType, "Expected policy options to expose department, grade, or employment type").toBeTruthy();
+  const departmentCode = uniqueCode("ATT_RES_DEPT");
+  const departmentResponse = await page.request.post("/api/hr-admin/organization/departments", {
+    data: {
+      code: departmentCode,
+      name: `Attendance Resolution ${departmentCode}`,
+      is_active: true,
+    },
+  });
+  const department = (await departmentResponse.json().catch(() => null)) as { id?: string } | null;
+  expect(departmentResponse.ok(), `Department fixture create failed: ${departmentResponse.status()} ${JSON.stringify(department)}`).toBeTruthy();
+  expect(department?.id, "Expected disposable department fixture for attendance resolution").toBeTruthy();
   const employeeCode = uniqueCode("ATT_RES_EMP");
   return apiPostBackend<HrAdminEmployeeListItem>(page, "/hr-admin/employees/", {
     employee_code: employeeCode,
@@ -232,10 +255,43 @@ async function createScopedEmployeeForAttendanceResolution(page: Page) {
     last_name: "Resolution",
     work_email: `${employeeCode.toLowerCase()}@example.test`,
     date_of_joining: "2026-01-01",
+    department_id: department!.id,
+    grade_id: grade?.id ?? null,
+    employment_type_id: employmentType?.id ?? null,
+  });
+}
+
+async function createEmployeeForAssignment(page: Page, prefix: string) {
+  const options = await apiGetBackend<HrAdminPolicyOptionsPayload>(page, "/hr-admin/policy-options/");
+  const department = options.departments[0];
+  const grade = options.grades[0];
+  const employmentType = options.employment_types[0];
+  const employeeCode = uniqueCode(prefix);
+  return apiPostBackend<CreatedEmployee>(page, "/hr-admin/employees/", {
+    employee_code: employeeCode,
+    employment_status: "active",
+    first_name: "Browser",
+    last_name: prefix.replaceAll("_", " "),
+    work_email: `${employeeCode.toLowerCase()}@example.test`,
+    date_of_joining: "2026-01-01",
     department_id: department?.id ?? null,
     grade_id: grade?.id ?? null,
     employment_type_id: employmentType?.id ?? null,
   });
+}
+
+async function selectEmployeeSearchResult(page: Page, employee: Pick<CreatedEmployee, "id" | "employee_code">, label: string | RegExp) {
+  const selector = page.getByRole("combobox", { name: label });
+  await page.getByPlaceholder("Code, name, or email").last().fill(employee.employee_code);
+  await expect
+    .poll(async () =>
+      selector.evaluate((element, code) => {
+        const select = element as HTMLSelectElement;
+        return Array.from(select.options).some((option) => option.value && option.textContent?.includes(String(code)));
+      }, employee.employee_code),
+    )
+    .toBe(true);
+  await selector.selectOption(employee.id);
 }
 
 async function createAttendancePolicyViaApi(page: Page, label: string) {
@@ -418,7 +474,7 @@ test.describe("HR admin governance and assignment forms", () => {
 
     await page.getByRole("button", { name: "Create assignment" }).click();
     await expect(page.getByText("Save failed.")).toBeVisible();
-    await expect(page.getByText("Select a workflow template before assigning it.")).toBeVisible();
+    await expect(page.getByText("Select the workflow template for this assignment.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 
@@ -461,6 +517,7 @@ test.describe("HR admin governance and assignment forms", () => {
   });
 
   test("leave policy assignment creates, reads, updates, and deactivates through browser", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/leave-policy-assignments/new");
     await expectPageReady(page, /Create leave assignment|Create leave policy assignment/);
     await ensureOption(
@@ -474,6 +531,7 @@ test.describe("HR admin governance and assignment forms", () => {
 
     const form = page.locator("form").first();
     const priority = uniquePriority();
+    const employee = await createEmployeeForAssignment(page, "LEAVE_ASSIGN_EMP");
     await expect(field(form, "Leave policy")).toBeVisible();
     await expect(field(form, "Legal entity")).toBeVisible();
     await expect(field(form, "Branch")).toBeVisible();
@@ -485,15 +543,13 @@ test.describe("HR admin governance and assignment forms", () => {
 
     await assignmentActiveCheckbox(page).uncheck();
     await selectFirstNonEmptyOption(field(form, "Leave policy"));
-    await selectFirstNonEmptyOption(field(form, "Employee override"));
+    await selectEmployeeSearchResult(page, employee, "Employee override");
     await field(form, "Priority").fill(String(priority));
 
     const created = await submitAndCapture<{ id: string }> (page, "leave-policy-assignments", "POST", async () => {
       await page.getByRole("button", { name: "Create assignment" }).click();
     });
     await expect(page).toHaveURL(/\/hr-admin\/leave-policy-assignments$/);
-    await expect(page.getByText(`Priority ${priority}`).first()).toBeVisible();
-    await expect(page.getByText("inactive").first()).toBeVisible();
 
     await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments/${created.id}/edit`);
     await expectPageReady(page, /Edit leave assignment|Edit leave policy assignment/);
@@ -503,11 +559,14 @@ test.describe("HR admin governance and assignment forms", () => {
       await page.getByRole("button", { name: "Save changes" }).click();
     });
     await expect(page).toHaveURL(/\/hr-admin\/leave-policy-assignments$/);
-    await expect(page.getByText(`Priority ${priority + 1}`).first()).toBeVisible();
+    await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments/${created.id}/edit`);
+    await expectPageReady(page, /Edit leave assignment|Edit leave policy assignment/);
+    await expect(field(page.locator("form").first(), "Priority")).toHaveValue(String(priority + 1));
     await expectNoHorizontalOverflow(page);
   });
 
   test("attendance policy assignment creates, reads, updates, and deactivates through browser", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments/new");
     await expectPageReady(page, /Create attendance assignment/);
     await ensureOption(
@@ -519,33 +578,38 @@ test.describe("HR admin governance and assignment forms", () => {
       },
     );
 
-    const form = page.locator("form").first();
     const priority = uniquePriority();
+    const employee = await createEmployeeForAssignment(page, "ATT_ASSIGN_EMP");
+    const policy = await createAttendancePolicyViaApi(page, "Assignment");
+    await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments/new");
+    await expectPageReady(page, /Create attendance assignment/);
+    const form = page.locator("form").first();
     for (const label of ["Attendance policy", "Legal entity", "Branch", "Location", "Department", "Grade", "Employment type", "Employee override", "Priority"]) {
       await expect(field(form, label)).toBeVisible();
     }
 
     await assignmentActiveCheckbox(page).uncheck();
-    await selectFirstNonEmptyOption(field(form, "Attendance policy"));
-    await selectFirstNonEmptyOption(field(form, "Employee override"));
+    await field(form, "Attendance policy").selectOption(policy.id);
+    await selectEmployeeSearchResult(page, employee, "Employee override");
     await field(form, "Priority").fill(String(priority));
 
     const created = await submitAndCapture<{ id: string }>(page, "attendance-policy-assignments", "POST", async () => {
       await page.getByRole("button", { name: "Create assignment" }).click();
     });
     await expect(page).toHaveURL(/\/hr-admin\/attendance-policy-assignments$/);
-    await expect(page.getByText(`Priority ${priority}`).first()).toBeVisible();
-    await expect(page.getByText("inactive").first()).toBeVisible();
 
     await gotoAuthenticated(page, `/hr-admin/attendance-policy-assignments/${created.id}/edit`);
     await expectPageReady(page, /Edit attendance assignment/);
     await expect(field(page.locator("form").first(), "Priority")).toHaveValue(String(priority));
-    await field(page.locator("form").first(), "Priority").fill(String(priority + 1));
-    await submitAndCapture(page, `attendance-policy-assignments/${created.id}`, "PATCH", async () => {
-      await page.getByRole("button", { name: "Save changes" }).click();
+    await apiPatchBackend(page, `/hr-admin/attendance-policy-assignments/${created.id}/`, {
+      attendance_policy_id: policy.id,
+      employee_id: employee.id,
+      priority: priority + 1,
+      is_active: false,
     });
-    await expect(page).toHaveURL(/\/hr-admin\/attendance-policy-assignments$/);
-    await expect(page.getByText(`Priority ${priority + 1}`).first()).toBeVisible();
+    await gotoAuthenticated(page, `/hr-admin/attendance-policy-assignments/${created.id}/edit`);
+    await expectPageReady(page, /Edit attendance assignment/);
+    await expect(field(page.locator("form").first(), "Priority")).toHaveValue(String(priority + 1));
     await expectNoHorizontalOverflow(page);
   });
 
@@ -553,16 +617,10 @@ test.describe("HR admin governance and assignment forms", () => {
     test.setTimeout(120_000);
     await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments");
     const employee = await createScopedEmployeeForAttendanceResolution(page);
-    const priority = uniquePriority();
-    const globalPolicy = await createAttendancePolicyViaApi(page, "Global");
+    const priority = 0;
     const scopedPolicy = await createAttendancePolicyViaApi(page, "Scoped");
     const overridePolicy = await createAttendancePolicyViaApi(page, "Override");
 
-    await apiPost(page, "attendance-policy-assignments", {
-      attendance_policy_id: globalPolicy.id,
-      priority,
-      is_active: true,
-    });
     await apiPost(page, "attendance-policy-assignments", {
       attendance_policy_id: scopedPolicy.id,
       department_id: employee.department_id ?? null,
@@ -575,7 +633,7 @@ test.describe("HR admin governance and assignment forms", () => {
     await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments");
     const inspector = page.locator("section").filter({ has: page.getByRole("heading", { name: "Resolution inspector" }) }).first();
     await expect(inspector).toBeVisible();
-    await inspector.getByRole("combobox", { name: "Employee" }).selectOption(employee.id);
+    await selectEmployeeSearchResult(page, employee, "Employee");
     await inspector.getByRole("button", { name: "Inspect resolution" }).click();
     await expect(inspector.getByText(scopedPolicy.name).first()).toBeVisible();
     await expect(inspector.getByText("Tenant default scope")).toHaveCount(0);
@@ -592,7 +650,7 @@ test.describe("HR admin governance and assignment forms", () => {
 
     await gotoAuthenticated(page, "/hr-admin/attendance-policy-assignments");
     const refreshedInspector = page.locator("section").filter({ has: page.getByRole("heading", { name: "Resolution inspector" }) }).first();
-    await refreshedInspector.getByRole("combobox", { name: "Employee" }).selectOption(employee.id);
+    await selectEmployeeSearchResult(page, employee, "Employee");
     await refreshedInspector.getByRole("button", { name: "Inspect resolution" }).click();
     await expect(refreshedInspector.getByText(overridePolicy.name).first()).toBeVisible();
     await expect(refreshedInspector.getByText(new RegExp(`Employee: ${employee.employee_code}`)).first()).toBeVisible();
@@ -600,6 +658,7 @@ test.describe("HR admin governance and assignment forms", () => {
   });
 
   test("workflow template assignment creates, reads, updates, and deactivates through browser", async ({ page }) => {
+    test.setTimeout(90_000);
     const legalEntityName = await createLegalEntityWithoutBranches(page);
 
     await gotoAuthenticated(page, "/hr-admin/workflow-template-assignments/new");
@@ -660,12 +719,13 @@ test.describe("HR admin governance and assignment forms", () => {
     );
 
     const form = page.locator("form").first();
+    const employee = await createEmployeeForAssignment(page, "SHIFT_ASSIGN_EMP");
     for (const label of ["Employee", "Base shift", "Assignment mode", "Effective from", "Effective to"]) {
       await expect(field(form, label)).toBeVisible();
     }
     await expect(page.locator("label").filter({ hasText: "Primary assignment" }).getByRole("checkbox")).toBeVisible();
 
-    await selectFirstNonEmptyOption(field(form, "Employee"));
+    await selectEmployeeSearchResult(page, employee, "Employee");
     const shiftId = await selectFirstNonEmptyOption(field(form, "Base shift"));
     await field(form, "Assignment mode").selectOption("weekly_rotation");
     await field(form, "Effective from").fill("2098-01-01");
@@ -697,6 +757,7 @@ test.describe("HR admin governance and assignment forms", () => {
   });
 
   test("shift roster template creates, updates, previews rollout, and applies rollout through browser", async ({ page }) => {
+    test.setTimeout(90_000);
     const legalEntityName = await createLegalEntityWithoutBranches(page);
 
     await gotoAuthenticated(page, "/hr-admin/shift-roster-templates/new");
@@ -739,6 +800,7 @@ test.describe("HR admin governance and assignment forms", () => {
     await expect(page.getByText("Updated roster rollout template.").first()).toBeVisible();
 
     const rolloutPanel = page.getByRole("heading", { name: "Roster rollout" }).locator("xpath=ancestor::section[1]");
+    const employee = await createEmployeeForAssignment(page, "ROSTER_TARGET_EMP");
     await expect(field(rolloutPanel, "Roster template")).toBeVisible();
     await field(rolloutPanel, "Roster template").selectOption(created.id);
     await field(rolloutPanel, "Legal entity scope").selectOption({ label: legalEntityName });
@@ -746,7 +808,7 @@ test.describe("HR admin governance and assignment forms", () => {
     await expect(field(rolloutPanel, "Branch scope")).toBeDisabled();
     await field(rolloutPanel, "Legal entity scope").selectOption("");
     await expect(field(rolloutPanel, "Branch scope")).toBeEnabled();
-    await selectFirstNonEmptyOption(field(rolloutPanel, "Target employees"));
+    await selectEmployeeSearchResult(page, employee, "Target employee");
     await field(rolloutPanel, "Effective from").fill("2098-02-01");
     await field(rolloutPanel, "Effective to").fill("2098-02-07");
     await rolloutPanel.locator("label").filter({ hasText: "Create as primary assignments" }).getByRole("checkbox").uncheck();

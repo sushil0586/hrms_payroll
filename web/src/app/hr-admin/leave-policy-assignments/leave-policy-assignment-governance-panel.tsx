@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 
+import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import type { HrAdminLeavePolicyAssignmentResolution, HrAdminOptionItem } from "@/lib/types";
 
 type Props = {
-  employees: HrAdminOptionItem[];
   leaveTypes: HrAdminOptionItem[];
 };
 
@@ -22,7 +22,7 @@ function renderSelectOptions(items: HrAdminOptionItem[]) {
   ];
 }
 
-export function LeavePolicyAssignmentGovernancePanel({ employees, leaveTypes }: Props) {
+export function LeavePolicyAssignmentGovernancePanel({ leaveTypes }: Props) {
   const [employeeId, setEmployeeId] = useState("");
   const [leaveTypeId, setLeaveTypeId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -70,12 +70,7 @@ export function LeavePolicyAssignmentGovernancePanel({ employees, leaveTypes }: 
           </div>
         </div>
         <form className="queue-toolbar panel-card-soft" onSubmit={handleInspect}>
-          <label className="queue-toolbar__search">
-            <span className="muted">Employee</span>
-            <select className="input-control" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
-              {renderSelectOptions(employees)}
-            </select>
-          </label>
+          <EmployeeSearchSelect value={employeeId} onChange={setEmployeeId} />
           <label className="queue-toolbar__search">
             <span className="muted">Leave type</span>
             <select className="input-control" value={leaveTypeId} onChange={(event) => setLeaveTypeId(event.target.value)}>

@@ -82,7 +82,11 @@ async function getCommercialControl(page: Page) {
 }
 
 async function runDjangoScript(script: string) {
-  const { stdout } = await execFileAsync(resolve(repoRoot, ".venv/bin/python"), ["backend/manage.py", "shell", "-c", script], { cwd: repoRoot });
+  const env = { ...process.env };
+  if (env.DJANGO_DB_ENGINE === "django.db.backends.sqlite3" && env.POSTGRES_DB && !env.POSTGRES_DB.startsWith("/")) {
+    env.POSTGRES_DB = resolve(repoRoot, "backend", env.POSTGRES_DB);
+  }
+  const { stdout } = await execFileAsync(resolve(repoRoot, ".venv/bin/python"), ["backend/manage.py", "shell", "-c", script], { cwd: repoRoot, env });
   return stdout.trim();
 }
 
@@ -186,6 +190,7 @@ async function expectCommercialUsageDenied(response: APIResponse, scopeRef: stri
 
 test.describe("Phase 7G usage-limit gating", () => {
   test("active membership limit blocks launch, payroll access, and new active member activation", async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
     await switchPersona(page, hrAdmin, "/hr-admin/saas-control-plane");
     await expectPageReady(page, "SaaS Control Plane");
     const original = await getCommercialControl(page);
@@ -206,10 +211,10 @@ test.describe("Phase 7G usage-limit gating", () => {
       expect(exceeded.enforcement.scopes.find((scope) => scope.scope_ref === "payroll_core")?.blocking_reasons).toContain("usage_limit_exceeded");
 
       await expect(page.getByText("SaaS Control Plane")).toBeVisible();
-      await expect(page.getByText("Usage exceptions")).toBeVisible();
+      await expect(page.locator(".metric-tile__label").filter({ hasText: "Usage exceptions" })).toBeVisible();
       await expect(page.getByText("Limit exceeded", { exact: true })).toBeVisible();
       await expect(page.getByText("Active Memberships").first()).toBeVisible();
-      await expect(page.getByText("Exceeded").first()).toBeVisible();
+      await expect(page.locator(".readiness-badge").filter({ hasText: "Exceeded" }).first()).toBeVisible();
       await expect(page.getByText("Payroll core").first()).toBeVisible();
       await expect(page.getByText("usage_limit_exceeded").first()).toBeVisible();
       await expectNoHorizontalOverflow(page);
@@ -225,26 +230,29 @@ test.describe("Phase 7G usage-limit gating", () => {
       await expectNoHorizontalOverflow(page);
       await captureUsageStep(page, testInfo, "02-payroll-page-usage-denied");
 
-      await switchPersona(page, hrAdmin, "/tenant-admin");
-      await expectPageReady(page, "Tenant Admin Console");
-      await expect(page.getByRole("main").getByText("Seats", { exact: true }).first()).toBeVisible();
-      await expect(page.getByRole("main").getByText("Blocked").first()).toBeVisible();
+      await switchPersona(page, hrAdmin, "/tenant-admin/users");
+      await expectPageReady(page, "Tenant User Management");
+      await expect(page.getByRole("main").getByText("Members", { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole("main").getByText("Seat usage", { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole("main").getByText("Exceeded", { exact: true }).first()).toBeVisible();
+      const tenantConsoleResponse = await page.request.get("/api/tenant-admin/console");
+      expect(tenantConsoleResponse.ok()).toBeTruthy();
+      const tenantConsole = await tenantConsoleResponse.json();
+      const roleId = tenantConsole.membership_management.role_options[0]?.id;
+      expect(roleId).toBeTruthy();
       const stamp = Date.now();
-      await page.getByRole("main").getByLabel("Email").fill(`phase7g-${stamp}@example.test`);
-      await page.getByRole("main").getByLabel("Username").fill(`phase7g.${stamp}`);
-      await page.getByRole("main").getByLabel("First name").fill("Phase");
-      await page.getByRole("main").getByLabel("Last name").fill("SevenG");
-      await page.getByRole("main").getByLabel("Status").selectOption("active");
-      const inviteButton = page.getByRole("main").getByRole("button", { name: "Invite member" });
-      await expect(inviteButton).toBeEnabled();
-      const inviteResponsePromise = page.waitForResponse(
-        (response) => response.url().includes("/api/tenant-admin/memberships") && response.request().method() === "POST",
-        { timeout: 20_000 },
-      );
-      await inviteButton.click();
-      const inviteResponse = await inviteResponsePromise;
+      const inviteResponse = await page.request.post("/api/tenant-admin/memberships", {
+        data: {
+          email: `phase7g-${stamp}@example.test`,
+          username: `phase7g.${stamp}`,
+          first_name: "Phase",
+          last_name: "SevenG",
+          membership_status: "active",
+          role_ids: [roleId],
+        },
+      });
       expect(inviteResponse.status()).toBe(400);
-      await expect(page.getByRole("status")).toContainText("active membership limit");
+      expect(JSON.stringify(await inviteResponse.json()).toLowerCase()).toContain("active membership limit");
       await expectNoHorizontalOverflow(page);
       await captureUsageStep(page, testInfo, "03-active-member-invite-limit-denied");
     } finally {

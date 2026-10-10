@@ -37,8 +37,8 @@ test.describe.serial("deployed read-only auth routing proof", () => {
 
   test("manager opens MSS without HR admin escalation", async ({ page }) => {
     await gotoAuthenticated(page, "/mss/approvals", manager);
-    await expectPageReady(page, "Manager inbox");
-    await expectWorkspaceLoaded(page, /Manager inbox|Manager/i);
+    await expectPageReady(page, /Manager approvals|Manager inbox/i);
+    await expectWorkspaceLoaded(page, /Manager approvals|Manager inbox|Manager/i);
   });
 
   test("tenant admin opens tenant control center", async ({ page }) => {

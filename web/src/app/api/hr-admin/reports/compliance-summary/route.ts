@@ -108,7 +108,10 @@ export async function GET(request: NextRequest) {
 
   const [statutoryResult, handoffResult] = await Promise.all([
     upstreamJson<StatutorySetup>("/hr-admin/payroll-statutory-setup/", token),
-    upstreamJson<HandoffSetup>("/hr-admin/payroll-finance-handoff-setup/", token),
+    upstreamJson<HandoffSetup>(
+      "/hr-admin/payroll-finance-handoff-setup/?handoff_page_size=1&artifact_page_size=250&payslip_page_size=1&delivery_page_size=250&callback_page_size=1&retry_page_size=1&job_page_size=1",
+      token,
+    ),
   ]);
   if (!statutoryResult.ok) return NextResponse.json({ detail: statutoryResult.detail }, { status: statutoryResult.status });
   if (!handoffResult.ok) return NextResponse.json({ detail: handoffResult.detail }, { status: handoffResult.status });

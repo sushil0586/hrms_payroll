@@ -185,9 +185,10 @@ function handoffReadiness({
   deliveries: HrAdminPayrollProviderDelivery[];
   auditPackCount: number;
 }) {
-  const hasBankAdvice = artifacts.some((artifact) => artifact.kind === "bank_advice");
-  const hasAccountingExport = artifacts.some((artifact) => artifact.kind === "accounting_export");
-  const hasStatutoryReport = artifacts.some((artifact) => artifact.kind === "statutory_report");
+  const summary = handoff?.handoff_summary_snapshot ?? {};
+  const hasBankAdvice = Number(summary.bank_advice_count ?? 0) > 0 || artifacts.some((artifact) => artifact.kind === "bank_advice");
+  const hasAccountingExport = Number(summary.accounting_export_count ?? 0) > 0 || artifacts.some((artifact) => artifact.kind === "accounting_export");
+  const hasStatutoryReport = Number(summary.statutory_report_count ?? 0) > 0 || artifacts.some((artifact) => artifact.kind === "statutory_report");
   const openDeliveryCount = deliveries.filter((delivery) => ["queued", "submitted", "acknowledged"].includes(delivery.status)).length;
   const failedDeliveryCount = deliveries.filter((delivery) => ["failed", "rejected"].includes(delivery.status)).length;
   const terminalDeliveryCount = deliveries.filter((delivery) => ["reconciled", "failed", "rejected"].includes(delivery.status)).length;
@@ -1442,16 +1443,35 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
   const selectedEvidence = parseEvidenceParam(currentParams.evidence);
   const handoffPageSize = Math.min(numberParam(currentParams.handoffPageSize, 8), 25);
   const artifactPageSize = Math.min(numberParam(currentParams.artifactPageSize, 8), 25);
-  const result = await getHrAdminPayrollFinanceHandoffSetup();
+  const deliveryPageSize = Math.min(numberParam(currentParams.deliveryPageSize, 6), 25);
+  const callbackPageSize = Math.min(numberParam(currentParams.callbackPageSize, 6), 25);
+  const retryPageSize = Math.min(numberParam(currentParams.retryPageSize, 6), 25);
+  const jobPageSize = Math.min(numberParam(currentParams.jobPageSize, 6), 25);
+  const result = await getHrAdminPayrollFinanceHandoffSetup({
+    handoff_id: selectedHandoffId,
+    handoff_page: numberParam(currentParams.handoffPage, 1),
+    handoff_page_size: handoffPageSize,
+    artifact_page: numberParam(currentParams.artifactPage, 1),
+    artifact_page_size: artifactPageSize,
+    delivery_page: numberParam(currentParams.deliveryPage, 1),
+    delivery_page_size: deliveryPageSize,
+    callback_page: numberParam(currentParams.callbackPage, 1),
+    callback_page_size: callbackPageSize,
+    retry_page: numberParam(currentParams.retryPage, 1),
+    retry_page_size: retryPageSize,
+    job_page: numberParam(currentParams.jobPage, 1),
+    job_page_size: jobPageSize,
+    include_output_batches: false,
+  });
   const setup = result.data;
-  const handoffTotalPages = Math.max(1, Math.ceil(setup.handoffs.length / handoffPageSize));
-  const handoffPage = Math.min(numberParam(currentParams.handoffPage, 1), handoffTotalPages);
-  const pagedHandoffs = setup.handoffs.slice((handoffPage - 1) * handoffPageSize, handoffPage * handoffPageSize);
+  const handoffTotalPages = setup.pagination?.handoffs?.total_pages ?? Math.max(1, Math.ceil(setup.handoffs.length / handoffPageSize));
+  const handoffPage = setup.pagination?.handoffs?.page ?? Math.min(numberParam(currentParams.handoffPage, 1), handoffTotalPages);
+  const pagedHandoffs = setup.handoffs;
   const selectedHandoff = setup.handoffs.find((item) => item.id === selectedHandoffId) ?? pagedHandoffs[0] ?? setup.handoffs[0] ?? null;
   const visibleArtifacts = selectedHandoff ? setup.artifacts.filter((item) => item.output_batch_id === selectedHandoff.output_batch_id) : setup.artifacts;
-  const artifactTotalPages = Math.max(1, Math.ceil(visibleArtifacts.length / artifactPageSize));
-  const artifactPage = Math.min(numberParam(currentParams.artifactPage, 1), artifactTotalPages);
-  const pagedArtifacts = visibleArtifacts.slice((artifactPage - 1) * artifactPageSize, artifactPage * artifactPageSize);
+  const artifactTotalPages = setup.pagination?.artifacts?.total_pages ?? Math.max(1, Math.ceil(visibleArtifacts.length / artifactPageSize));
+  const artifactPage = setup.pagination?.artifacts?.page ?? Math.min(numberParam(currentParams.artifactPage, 1), artifactTotalPages);
+  const pagedArtifacts = visibleArtifacts;
   const selectedArtifact = visibleArtifacts.find((item) => item.id === selectedArtifactId) ?? pagedArtifacts[0] ?? visibleArtifacts[0] ?? null;
   const selectedHandoffDeliveries = selectedHandoff ? setup.deliveries.filter((item) => item.handoff_id === selectedHandoff.id) : [];
   const selectedDelivery = selectedArtifact ? setup.deliveries.find((item) => item.output_artifact_id === selectedArtifact.id) ?? null : null;
@@ -1470,7 +1490,7 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
   });
 
   return (
-    <main className="shell shell--payroll-setup shell--payroll-outputs shell--payroll-handoff">
+    <main className="shell shell--payroll-setup shell--payroll-outputs shell--payroll-handoff hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live payroll phase 3C" : "Demo payroll phase 3C"}
         title="Payroll Handoff"

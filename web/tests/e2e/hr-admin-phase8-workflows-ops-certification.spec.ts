@@ -50,6 +50,7 @@ async function expectRightAlignedActions(container: ReturnType<Page["locator"]>,
 
 test.describe("HR Admin phase 8 workflows and operations certification", () => {
   test("certifies workflow hub, filters, child catalog links, and form entry points", async ({ page }) => {
+    test.setTimeout(90_000);
     await page.setViewportSize({ width: 1440, height: 960 });
     await gotoAuthenticated(page, "/hr-admin/workflows");
     await expectPageReady(page, "Workflow control");
@@ -100,7 +101,9 @@ test.describe("HR Admin phase 8 workflows and operations certification", () => {
       await expectRightAlignedActions(assignmentCards, ".record-card__actions");
       const assignmentEdit = assignmentCards.first().getByRole("link", { name: "Edit" });
       await expect(assignmentEdit).toBeVisible();
-      await assignmentEdit.click();
+      const assignmentEditHref = await assignmentEdit.getAttribute("href");
+      expect(assignmentEditHref).toMatch(/\/hr-admin\/workflow-template-assignments\/.+\/edit/);
+      await page.goto(assignmentEditHref!, { waitUntil: "domcontentloaded" });
       await expectPageReady(page, "Edit workflow assignment");
       await expect(page.getByRole("button", { name: /Save changes/ })).toBeVisible();
     } else {

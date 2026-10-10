@@ -14,7 +14,7 @@ test.describe("HR admin SaaS control plane", () => {
     await expect(page.getByText("API access policy")).toBeVisible();
     await expect(page.getByText("Payroll core")).toBeVisible();
     await expect(page.getByRole("button", { name: "Save state" })).toBeVisible();
-    await expect(page.getByText("Usage limits")).toBeVisible();
+    await expect(page.locator(".workspace-card__eyebrow").filter({ hasText: "Usage limits" })).toBeVisible();
     await expect(page.getByText("Active Employees").first()).toBeVisible();
     await expect(page.getByText("Usage snapshot ledger")).toBeVisible();
     await expect(page.getByText("Commercial audit history")).toBeVisible();

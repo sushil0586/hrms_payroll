@@ -34,6 +34,22 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to save roster template.");
 }
 
+const guidedPatterns = [
+  { value: "custom_cycle", label: "Custom cycle" },
+  { value: "weekly_rotation", label: "Weekly rotation" },
+  { value: "six_on_one_off", label: "6 on / 1 off" },
+  { value: "five_on_two_off", label: "5 on / 2 off" },
+  { value: "four_on_four_off", label: "4 on / 4 off" },
+  { value: "two_two_three", label: "2-2-3" },
+];
+
+const guidedPatternEntries: Record<string, Array<{ entry_kind: "work" | "off"; span_days: number }>> = {
+  six_on_one_off: [{ entry_kind: "work", span_days: 6 }, { entry_kind: "off", span_days: 1 }],
+  five_on_two_off: [{ entry_kind: "work", span_days: 5 }, { entry_kind: "off", span_days: 2 }],
+  four_on_four_off: [{ entry_kind: "work", span_days: 4 }, { entry_kind: "off", span_days: 4 }],
+  two_two_three: [{ entry_kind: "work", span_days: 2 }, { entry_kind: "off", span_days: 2 }, { entry_kind: "work", span_days: 3 }],
+};
+
 export function ShiftRosterTemplateForm({ initialValue, mode, options, itemId }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
@@ -44,7 +60,7 @@ export function ShiftRosterTemplateForm({ initialValue, mode, options, itemId }:
     setFormValue((current) => ({ ...current, [key]: value }));
   }
 
-  function updateRotationEntry(index: number, key: "shift_id" | "span_days", value: string | number | null) {
+  function updateRotationEntry(index: number, key: "entry_kind" | "shift_id" | "span_days", value: string | number | null) {
     setFormValue((current) => ({
       ...current,
       config_snapshot: {
@@ -56,6 +72,7 @@ export function ShiftRosterTemplateForm({ initialValue, mode, options, itemId }:
               ? {
                   ...entry,
                   [key]: key === "span_days" ? Math.max(Number(value || 1), 1) : value,
+                  ...(key === "entry_kind" && value === "off" ? { shift_id: null } : {}),
                 }
               : entry,
           ),
@@ -73,8 +90,28 @@ export function ShiftRosterTemplateForm({ initialValue, mode, options, itemId }:
           ...current.config_snapshot.rotation,
           entries: [
             ...current.config_snapshot.rotation.entries,
-            { position: current.config_snapshot.rotation.entries.length, shift_id: current.shift_id, span_days: 7 },
+            { position: current.config_snapshot.rotation.entries.length, entry_kind: "work", shift_id: current.shift_id, span_days: 7 },
           ],
+        },
+      },
+    }));
+  }
+
+  function updatePatternType(patternType: string) {
+    setFormValue((current) => ({
+      ...current,
+      assignment_kind: "weekly_rotation",
+      config_snapshot: {
+        ...current.config_snapshot,
+        rotation: {
+          ...current.config_snapshot.rotation,
+          pattern_type: patternType,
+          entries: (guidedPatternEntries[patternType] ?? current.config_snapshot.rotation.entries).map((entry, index) => ({
+            position: index,
+            entry_kind: entry.entry_kind ?? "work",
+            shift_id: entry.entry_kind === "off" ? null : current.shift_id,
+            span_days: entry.span_days,
+          })),
         },
       },
     }));
@@ -145,6 +182,7 @@ export function ShiftRosterTemplateForm({ initialValue, mode, options, itemId }:
           {formValue.assignment_kind === "weekly_rotation" ? (
             <FormSection title="Rotation pattern" description="Build the reusable rotation sequence that this template will stamp into employee shift assignments.">
               <div className="form-grid">
+                <label className="form-field"><span className="muted">Pattern</span><select className="input-control" value={formValue.config_snapshot.rotation.pattern_type ?? "custom_cycle"} onChange={(e) => updatePatternType(e.target.value)}>{guidedPatterns.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
                 <label className="form-field"><span className="muted">Rotation anchor date</span><input className="input-control" type="date" value={formValue.config_snapshot.rotation.anchor_date ?? ""} onChange={(e) => setFormValue((current) => ({ ...current, config_snapshot: { ...current.config_snapshot, rotation: { ...current.config_snapshot.rotation, anchor_date: e.target.value || null } } }))} /></label>
               </div>
               <div className="detail-grid">
@@ -153,7 +191,11 @@ export function ShiftRosterTemplateForm({ initialValue, mode, options, itemId }:
                     <span className="detail-label">Step {index + 1}</span>
                     <span className="detail-value">
                       <span className="inline-form-row">
-                        <select className="input-control" value={entry.shift_id ?? ""} onChange={(e) => updateRotationEntry(index, "shift_id", e.target.value || null)}>
+                        <select className="input-control" value={entry.entry_kind ?? "work"} onChange={(e) => updateRotationEntry(index, "entry_kind", e.target.value)}>
+                          <option value="work">Work</option>
+                          <option value="off">Off</option>
+                        </select>
+                        <select className="input-control" disabled={(entry.entry_kind ?? "work") === "off"} value={entry.shift_id ?? ""} onChange={(e) => updateRotationEntry(index, "shift_id", e.target.value || null)}>
                           {selectOptions(options.shifts)}
                         </select>
                         <input className="input-control" min={1} type="number" value={entry.span_days} onChange={(e) => updateRotationEntry(index, "span_days", Number(e.target.value))} />

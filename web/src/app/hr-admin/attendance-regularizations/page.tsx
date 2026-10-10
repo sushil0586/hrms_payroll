@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AttendanceRegularizationQueue } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-queue";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminAttendanceOperationOptions, getHrAdminAttendanceRegularizations } from "@/lib/api";
+import { getHrAdminAttendanceRegularizations, getHrAdminAttendanceWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
@@ -26,6 +26,8 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
   const status = normalizeParam(currentParams.status) ?? "";
   const requestedStatus = normalizeParam(currentParams.requested_status) ?? "";
   const currentStatus = normalizeParam(currentParams.current_status) ?? "";
+  const fromDate = normalizeParam(currentParams.from_date) ?? "";
+  const toDate = normalizeParam(currentParams.to_date) ?? "";
 
   const [result, optionsResult] = await Promise.all([
     getHrAdminAttendanceRegularizations({
@@ -35,12 +37,14 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
       status: status || undefined,
       requested_status: requestedStatus || undefined,
       current_status: currentStatus || undefined,
+      from_date: fromDate || undefined,
+      to_date: toDate || undefined,
     }),
-    getHrAdminAttendanceOperationOptions(),
+    getHrAdminAttendanceWorkbenchOptions(),
   ]);
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" && optionsResult.state === "live" ? "Live regularization mode" : "Demo regularization mode"}
         title="Regularizations"
@@ -74,6 +78,8 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
           status,
           requested_status: requestedStatus,
           current_status: currentStatus,
+          from_date: fromDate,
+          to_date: toDate,
           page,
           page_size: pageSize,
         }}

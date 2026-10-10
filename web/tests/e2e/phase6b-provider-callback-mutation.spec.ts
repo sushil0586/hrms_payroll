@@ -61,11 +61,6 @@ function signatureFor(delivery: HandoffSetup["deliveries"][number], idempotencyK
   const policy = delivery.config_snapshot.submission_contract?.callback_security_policy ?? {};
   const fields = policy.signature_material_fields ?? [
     "provider_ref",
-    "provider_delivery_id",
-    "handoff_id",
-    "output_artifact_id",
-    "artifact_kind",
-    "channel_ref",
     "external_reference",
     "idempotency_key",
     "payload_checksum_sha256",
@@ -209,9 +204,9 @@ test.describe("Phase 6B provider callback mutation certification", () => {
     const evidencePanel = page.getByLabel("Callback audit evidence");
     await expect(evidencePanel.getByRole("heading", { name: "Callback Evidence" })).toBeVisible();
     await expect(evidencePanel.getByText(idempotencyKey)).toBeVisible();
-    await expect(evidencePanel.getByText("callback_signature_matched")).toBeVisible();
-    await expect(evidencePanel.getByText("callback_replay_window")).toBeVisible();
-    await expect(evidencePanel.getByText("callback_rate_limit")).toBeVisible();
+    await expect(evidencePanel.getByText("Webhook security")).toBeVisible();
+    await expect(evidencePanel.getByText("Signature adapter")).toBeVisible();
+    await expect(evidencePanel.getByText("Provider status")).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await captureProviderStep(page, testInfo, "01-callback-mutation-ledger-evidence");
   });

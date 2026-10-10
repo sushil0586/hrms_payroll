@@ -50,9 +50,12 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
       "/api/hr-admin/reports/finance-handoff-exceptions?sort=risk",
       "/api/hr-admin/reports/finance-handoff-exceptions?sort=risk&format=manifest",
     ];
-    for (const path of exportPaths) {
-      const response = await page.request.get(path);
-      expect(response.status()).toBe(200);
+    const exportResponses: Array<{ path: string; response: Awaited<ReturnType<typeof page.request.get>> }> = [];
+    for (let index = 0; index < exportPaths.length; index += 6) {
+      exportResponses.push(...(await Promise.all(exportPaths.slice(index, index + 6).map(async (path) => ({ path, response: await page.request.get(path) })))));
+    }
+    for (const { path, response } of exportResponses) {
+      expect(response.status(), path).toBe(200);
       expect(response.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
     }
 
@@ -182,7 +185,7 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
       expect(auditResponse.status()).toBe(200);
       const auditPayload = await auditResponse.json();
       expect(auditPayload.items.length).toBeGreaterThanOrEqual(1);
-      expect(auditPayload.items[0].source_endpoints).toContain(report.source);
+      expect(auditPayload.items[0].source_endpoints.some((endpoint: string) => endpoint.startsWith(report.source))).toBeTruthy();
       expect(auditPayload.items[0].evidence_columns).toContain(report.evidence);
     }
 
@@ -207,7 +210,7 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
     expect(payrollAuditPayload.items.length).toBeGreaterThanOrEqual(2);
     expect(payrollAuditPayload.items.some((item: { export_type: string }) => item.export_type === "csv")).toBeTruthy();
     expect(payrollAuditPayload.items.some((item: { export_type: string }) => item.export_type === "manifest")).toBeTruthy();
-    expect(payrollAuditPayload.items[0].source_endpoints).toContain("/hr-admin/payroll-output-setup/");
+    expect(payrollAuditPayload.items[0].source_endpoints.some((endpoint: string) => endpoint.startsWith("/hr-admin/payroll-output-setup/"))).toBeTruthy();
 
     await workspace.getByLabel("Report key").selectOption("All");
     await searchInput.fill("salary-variance");
@@ -223,7 +226,7 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
     expect(salaryVarianceAuditPayload.items.length).toBeGreaterThanOrEqual(2);
     expect(salaryVarianceAuditPayload.items.some((item: { export_type: string }) => item.export_type === "csv")).toBeTruthy();
     expect(salaryVarianceAuditPayload.items.some((item: { export_type: string }) => item.export_type === "manifest")).toBeTruthy();
-    expect(salaryVarianceAuditPayload.items[0].source_endpoints).toContain("/hr-admin/payroll-review-setup/");
+    expect(salaryVarianceAuditPayload.items[0].source_endpoints.some((endpoint: string) => endpoint.startsWith("/hr-admin/payroll-review-setup/"))).toBeTruthy();
 
     await workspace.getByLabel("Report key").selectOption("All");
     await searchInput.fill("bank-advice");
@@ -239,7 +242,7 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
     expect(bankAdviceAuditPayload.items.length).toBeGreaterThanOrEqual(2);
     expect(bankAdviceAuditPayload.items.some((item: { export_type: string }) => item.export_type === "csv")).toBeTruthy();
     expect(bankAdviceAuditPayload.items.some((item: { export_type: string }) => item.export_type === "manifest")).toBeTruthy();
-    expect(bankAdviceAuditPayload.items[0].source_endpoints).toContain("/hr-admin/payroll-finance-handoff-setup/");
+    expect(bankAdviceAuditPayload.items[0].source_endpoints.some((endpoint: string) => endpoint.startsWith("/hr-admin/payroll-finance-handoff-setup/"))).toBeTruthy();
 
     await workspace.getByLabel("Report key").selectOption("All");
     await searchInput.fill("no-such-export-audit-row");
@@ -255,7 +258,7 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
 
   test("employee cannot read HR admin report export audit history", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "My workspace");
+    await expectPageReady(page, /My workspace|Manager approvals/);
 
     const response = await page.request.get("/api/hr-admin/reports/export-audits");
     expect([401, 403]).toContain(response.status());
@@ -267,6 +270,6 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
     await page.goto("/hr-admin/reports/export-audits", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("report-export-audit-workspace")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "My workspace" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /My workspace|Manager approvals/ })).toBeVisible();
   });
 });

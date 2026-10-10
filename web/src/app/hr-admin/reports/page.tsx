@@ -18,7 +18,7 @@ export default async function HrAdminReportsPage() {
   const state = dashboardResult.state;
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui">
       <PageIntro
         eyebrow={state === "live" ? "Live reports" : "Demo reports"}
         title="Reports"

@@ -2,10 +2,15 @@ import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import type {
-  HrAdminPayrollCalculationLine,
+  HrAdminPayrollCalculationLineListItem,
   HrAdminAttendanceRecordListResponse,
   HrAdminAttendanceRegularizationListResponse,
   HrAdminLeaveBalance,
+  HrAdminLeaveRequestListResponse,
+  HrAdminShiftRosterRollout,
+  HrAdminShiftRosterRolloutListResponse,
+  HrAdminShiftRosterTemplate,
+  HrAdminShiftRosterTemplateListResponse,
   HrAdminPayrollFinanceHandoffSetupResponse,
   HrAdminPayrollAdjustmentSetupResponse,
   HrAdminPayrollInputSnapshot,
@@ -29,6 +34,9 @@ import {
   getHrAdminEmployees,
   getHrAdminLifecycleQueue,
   getHrAdminLeaveBalances,
+  getHrAdminLeaveRequests,
+  getHrAdminShiftRosterRollouts,
+  getHrAdminShiftRosterTemplates,
   getHrAdminNotifications,
   getHrAdminPayrollAdjustmentSetup,
   getHrAdminPayrollFinanceHandoffSetup,
@@ -166,6 +174,59 @@ const REPORT_EVIDENCE_COLUMNS: Record<string, string[]> = {
     "notes",
     "detail_href",
   ],
+  "attendance-derivation-exceptions": [
+    "employee_code",
+    "employee_name",
+    "department",
+    "designation",
+    "attendance_record_id",
+    "attendance_date",
+    "attendance_status",
+    "derived_status",
+    "schedule_day_type",
+    "schedule_resolution_source",
+    "shift",
+    "expected_hours",
+    "worked_hours",
+    "late_minutes",
+    "early_exit_minutes",
+    "overtime_hours",
+    "payable_units",
+    "lop_units",
+    "payroll_impacting",
+    "leave_collision_count",
+    "exception_risk",
+    "first_reason",
+    "first_warning",
+    "source",
+    "is_locked",
+    "detail_href",
+  ],
+  "roster-rollout-audit": [
+    "rollout_id",
+    "template_id",
+    "template_name",
+    "template_code",
+    "template_status",
+    "assignment_kind",
+    "pattern_type",
+    "anchor_date",
+    "rotation_step_count",
+    "off_step_count",
+    "status",
+    "effective_from",
+    "effective_to",
+    "is_primary",
+    "target_count",
+    "created_count",
+    "skipped_count",
+    "completion_rate",
+    "rollout_risk",
+    "scope",
+    "summary",
+    "created_at",
+    "detail_href",
+  ],
   "leave-balance": [
     "employee_code",
     "employee_name",
@@ -210,6 +271,32 @@ const REPORT_EVIDENCE_COLUMNS: Record<string, string[]> = {
     "payroll_impact",
     "detail_href",
   ],
+  "leave-attendance-collisions": [
+    "employee_code",
+    "employee_name",
+    "department",
+    "designation",
+    "leave_request_id",
+    "leave_type",
+    "leave_type_code",
+    "policy_name",
+    "leave_status",
+    "leave_start_date",
+    "leave_end_date",
+    "approved_units",
+    "collision_date",
+    "leave_units",
+    "attendance_record_id",
+    "attendance_status",
+    "shift",
+    "check_in_at",
+    "check_out_at",
+    "severity",
+    "payroll_blocking",
+    "message",
+    "workflow_reference",
+    "detail_href",
+  ],
   "payroll-input-exceptions": [
     "employee_code",
     "employee_name",
@@ -232,6 +319,12 @@ const REPORT_EVIDENCE_COLUMNS: Record<string, string[]> = {
     "attendance_present_days",
     "attendance_working_days",
     "attendance_days",
+    "reconciliation_status",
+    "reconciliation_risk",
+    "reconciliation_finding_count",
+    "reconciliation_high_count",
+    "reconciliation_medium_count",
+    "reconciliation_first_finding",
     "input_profile_ref",
     "source_collected_at",
     "source_hash",
@@ -289,6 +382,12 @@ const REPORT_EVIDENCE_COLUMNS: Record<string, string[]> = {
     "adjustment_profile_ref",
     "approval_profile_ref",
     "source_ref",
+    "post_lock_source_ref",
+    "post_lock_snapshot_id",
+    "post_lock_payroll_run_name",
+    "post_lock_period_start",
+    "post_lock_period_end",
+    "post_lock_recommended_action",
     "reason",
     "submitted_at",
     "approved_at",
@@ -600,6 +699,23 @@ function applyExportFilters(reportKey: string, rows: Array<Record<string, unknow
       if (filters.regularized_state === "pending" && row.is_regularized !== false) return false;
       if (filters.exception_type && row.exception_type !== filters.exception_type) return false;
     }
+    if (reportKey === "attendance-derivation-exceptions") {
+      if (filters.derived_status && row.derived_status !== filters.derived_status) return false;
+      if (filters.exception_risk && row.exception_risk !== filters.exception_risk) return false;
+      if (filters.department && row.department !== filters.department) return false;
+      if (filters.payroll_impacting === "true" && row.payroll_impacting !== true) return false;
+      if (filters.payroll_impacting === "false" && row.payroll_impacting !== false) return false;
+      if (filters.leave_collision === "present" && Number(row.leave_collision_count ?? 0) <= 0) return false;
+      if (filters.leave_collision === "none" && Number(row.leave_collision_count ?? 0) > 0) return false;
+    }
+    if (reportKey === "roster-rollout-audit") {
+      if (filters.status && row.status !== filters.status) return false;
+      if (filters.assignment_kind && row.assignment_kind !== filters.assignment_kind) return false;
+      if (filters.template_status && row.template_status !== filters.template_status) return false;
+      if (filters.rollout_risk && row.rollout_risk !== filters.rollout_risk) return false;
+      if (filters.primary_state === "primary" && row.is_primary !== true) return false;
+      if (filters.primary_state === "secondary" && row.is_primary !== false) return false;
+    }
     if (reportKey === "leave-balance") {
       if (filters.leave_policy && row.leave_policy_name !== filters.leave_policy) return false;
       if (filters.leave_type && row.leave_type_name !== filters.leave_type) return false;
@@ -612,6 +728,14 @@ function applyExportFilters(reportKey: string, rows: Array<Record<string, unknow
       if (filters.current_status && row.current_status !== filters.current_status) return false;
       if (filters.sla_risk && row.sla_risk !== filters.sla_risk) return false;
       if (filters.payroll_impact && row.payroll_impact !== filters.payroll_impact) return false;
+    }
+    if (reportKey === "leave-attendance-collisions") {
+      if (filters.leave_status && row.leave_status !== filters.leave_status) return false;
+      if (filters.severity && row.severity !== filters.severity) return false;
+      if (filters.payroll_blocking === "true" && row.payroll_blocking !== true) return false;
+      if (filters.payroll_blocking === "false" && row.payroll_blocking !== false) return false;
+      if (filters.leave_type && row.leave_type !== filters.leave_type) return false;
+      if (filters.attendance_status && row.attendance_status !== filters.attendance_status) return false;
     }
     if (reportKey === "payroll-input-exceptions") {
       if (filters.payroll_run_id && row.payroll_run_id !== filters.payroll_run_id) return false;
@@ -671,7 +795,7 @@ const COMPLIANCE_SOURCE_ENDPOINTS = [
   "/hr-admin/payroll-statutory-setup/",
   "/hr-admin/payroll-finance-handoff-setup/",
 ];
-const PAYROLL_REGISTER_SOURCE_ENDPOINTS = ["/hr-admin/payroll-output-setup/"];
+const PAYROLL_REGISTER_SOURCE_ENDPOINTS = ["/hr-admin/payroll-output-setup/?artifact_kind=register&artifact_page_size=100"];
 const SALARY_VARIANCE_SOURCE_ENDPOINTS = ["/hr-admin/payroll-review-setup/"];
 const BANK_ADVICE_SOURCE_ENDPOINTS = ["/hr-admin/payroll-finance-handoff-setup/"];
 const FINANCE_HANDOFF_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-finance-handoff-setup/"];
@@ -679,8 +803,11 @@ const WORKFORCE_SOURCE_ENDPOINTS = ["/hr-admin/employees/"];
 const DOCUMENT_COMPLIANCE_SOURCE_ENDPOINTS = ["/hr-admin/employee-documents/"];
 const LIFECYCLE_QUEUE_SOURCE_ENDPOINTS = ["/hr-admin/lifecycle-queue/"];
 const ATTENDANCE_REGISTER_SOURCE_ENDPOINTS = ["/hr-admin/attendance-records/"];
+const ATTENDANCE_DERIVATION_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/attendance-records/"];
+const ROSTER_ROLLOUT_AUDIT_SOURCE_ENDPOINTS = ["/hr-admin/shift-roster-rollouts/", "/hr-admin/shift-roster-templates/"];
 const LEAVE_BALANCE_SOURCE_ENDPOINTS = ["/hr-admin/leave-balances/"];
 const ATTENDANCE_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/attendance-regularizations/"];
+const LEAVE_ATTENDANCE_COLLISIONS_SOURCE_ENDPOINTS = ["/hr-admin/leave-requests/"];
 const PAYROLL_INPUT_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-input-snapshot-setup/"];
 const PAYROLL_REVIEW_EXCEPTIONS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-review-setup/"];
 const PAYROLL_ADJUSTMENTS_SOURCE_ENDPOINTS = ["/hr-admin/payroll-adjustment-setup/"];
@@ -699,8 +826,11 @@ function sourceEndpointsForReport(reportKey: string) {
   if (reportKey === "document-compliance") return DOCUMENT_COMPLIANCE_SOURCE_ENDPOINTS;
   if (reportKey === "lifecycle-queue" || reportKey === "lifecycle-aging") return LIFECYCLE_QUEUE_SOURCE_ENDPOINTS;
   if (reportKey === "attendance-register") return ATTENDANCE_REGISTER_SOURCE_ENDPOINTS;
+  if (reportKey === "attendance-derivation-exceptions") return ATTENDANCE_DERIVATION_EXCEPTIONS_SOURCE_ENDPOINTS;
+  if (reportKey === "roster-rollout-audit") return ROSTER_ROLLOUT_AUDIT_SOURCE_ENDPOINTS;
   if (reportKey === "leave-balance") return LEAVE_BALANCE_SOURCE_ENDPOINTS;
   if (reportKey === "attendance-exceptions") return ATTENDANCE_EXCEPTIONS_SOURCE_ENDPOINTS;
+  if (reportKey === "leave-attendance-collisions") return LEAVE_ATTENDANCE_COLLISIONS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-input-exceptions") return PAYROLL_INPUT_EXCEPTIONS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-review-exceptions") return PAYROLL_REVIEW_EXCEPTIONS_SOURCE_ENDPOINTS;
   if (reportKey === "payroll-adjustments") return PAYROLL_ADJUSTMENTS_SOURCE_ENDPOINTS;
@@ -843,19 +973,14 @@ async function getComplianceExportRows(reportKey: string, token: string) {
     return null;
   }
 
-  const [statutoryResult, handoffResult] = await Promise.all([
-    upstreamJson<HrAdminPayrollStatutorySetupResponse>("/hr-admin/payroll-statutory-setup/", token),
-    upstreamJson<HrAdminPayrollFinanceHandoffSetupResponse>("/hr-admin/payroll-finance-handoff-setup/", token),
-  ]);
-
-  if (!statutoryResult.ok) return { error: statutoryResult };
-  if (!handoffResult.ok) return { error: handoffResult };
-
-  const statutory = statutoryResult.data;
-  const handoff = handoffResult.data;
-  if (!statutory || !handoff) return { error: { ok: false, status: 502, data: null, detail: "Live report source data is unavailable." } };
-
   if (reportKey === "provider-filing-receipts") {
+    const handoffResult = await upstreamJson<HrAdminPayrollFinanceHandoffSetupResponse>(
+      "/hr-admin/payroll-finance-handoff-setup/?handoff_page_size=1&artifact_page_size=1&payslip_page_size=1&delivery_page_size=250&callback_page_size=250&retry_page_size=250&job_page_size=250",
+      token,
+    );
+    if (!handoffResult.ok) return { error: handoffResult };
+    const handoff = handoffResult.data;
+    if (!handoff) return { error: { ok: false, status: 502, data: null, detail: "Live report source data is unavailable." } };
     return {
       rows: handoff.deliveries.map((delivery) => {
         const callbacks = handoff.callback_events.filter((event) => event.provider_delivery_id === delivery.id);
@@ -883,6 +1008,21 @@ async function getComplianceExportRows(reportKey: string, token: string) {
       }),
     };
   }
+
+  const [statutoryResult, handoffResult] = await Promise.all([
+    upstreamJson<HrAdminPayrollStatutorySetupResponse>("/hr-admin/payroll-statutory-setup/", token),
+    upstreamJson<HrAdminPayrollFinanceHandoffSetupResponse>(
+      "/hr-admin/payroll-finance-handoff-setup/?handoff_page_size=1&artifact_page_size=250&payslip_page_size=1&delivery_page_size=1&callback_page_size=1&retry_page_size=1&job_page_size=1",
+      token,
+    ),
+  ]);
+
+  if (!statutoryResult.ok) return { error: statutoryResult };
+  if (!handoffResult.ok) return { error: handoffResult };
+
+  const statutory = statutoryResult.data;
+  const handoff = handoffResult.data;
+  if (!statutory || !handoff) return { error: { ok: false, status: 502, data: null, detail: "Live report source data is unavailable." } };
 
   const registrationsByType = new Map(statutory.employer_registrations.map((registration) => [registration.statutory_type, registration]));
   if (reportKey === "statutory-filing-status") {
@@ -944,7 +1084,7 @@ async function getComplianceExportRows(reportKey: string, token: string) {
 async function getPayrollRegisterExportRows(reportKey: string, token: string) {
   if (reportKey !== "payroll-register") return null;
 
-  const outputResult = await upstreamJson<HrAdminPayrollOutputSetupResponse>("/hr-admin/payroll-output-setup/", token);
+  const outputResult = await upstreamJson<HrAdminPayrollOutputSetupResponse>("/hr-admin/payroll-output-setup/?artifact_kind=register&artifact_page_size=100", token);
   if (!outputResult.ok) return { error: outputResult };
 
   const output = outputResult.data;
@@ -979,13 +1119,14 @@ async function getPayrollRegisterExportRows(reportKey: string, token: string) {
   };
 }
 
-function calculationLineAmount(line: HrAdminPayrollCalculationLine) {
+function calculationLineAmount(line: HrAdminPayrollCalculationLineListItem) {
   return numberValue(line.amount);
 }
 
-function baselineNetPayForLines(lines: HrAdminPayrollCalculationLine[]) {
+function baselineNetPayForLines(lines: HrAdminPayrollCalculationLineListItem[]) {
   for (const line of lines) {
-    const baseline = line.context_snapshot.previous_net_pay ?? line.context_snapshot.baseline_net_pay ?? line.context_snapshot.prior_period_net_pay;
+    const snapshot = line.context_snapshot ?? {};
+    const baseline = snapshot.previous_net_pay ?? snapshot.baseline_net_pay ?? snapshot.prior_period_net_pay;
     if (baseline !== undefined && baseline !== null && Number.isFinite(Number(baseline))) return Number(baseline);
   }
   return null;
@@ -1001,7 +1142,7 @@ async function getSalaryVarianceExportRows(reportKey: string, token: string) {
   if (!reviewSetup) return { error: { ok: false, status: 502, data: null, detail: "Live salary variance source data is unavailable." } };
 
   const reviewByCalculationId = new Map(reviewSetup.reviews.map((review) => [review.calculation_id, review]));
-  const grouped = new Map<string, HrAdminPayrollCalculationLine[]>();
+  const grouped = new Map<string, HrAdminPayrollCalculationLineListItem[]>();
   for (const line of reviewSetup.lines) {
     const key = `${line.calculation_id}:${line.employee_id}`;
     grouped.set(key, [...(grouped.get(key) ?? []), line]);
@@ -1558,6 +1699,136 @@ async function getAttendanceRegisterExportRows(reportKey: string, token: string)
   };
 }
 
+function attendanceDerivationRisk(item: HrAdminAttendanceRecordListResponse["items"][number]) {
+  const summary = item.derivation_summary;
+  if (summary.leave_collision_count > 0 || summary.payroll_impact.payroll_impacting || item.status === "absent") return "High";
+  if (summary.warnings.length > 0 || item.status === "late" || item.status === "half_day" || item.late_minutes > 0 || item.early_exit_minutes > 0) return "Medium";
+  return "Low";
+}
+
+function attendanceDerivationExceptionRows(attendance: HrAdminAttendanceRecordListResponse) {
+  return attendance.items
+    .filter((item) => {
+      const summary = item.derivation_summary;
+      return (
+        summary.warnings.length > 0 ||
+        summary.payroll_impact.payroll_impacting ||
+        summary.leave_collision_count > 0 ||
+        ["absent", "late", "half_day"].includes(item.status) ||
+        !summary.schedule_day_type
+      );
+    })
+    .map((item) => {
+      const summary = item.derivation_summary;
+      return {
+        employee_code: item.employee_code,
+        employee_name: item.employee_name,
+        department: item.department ?? "",
+        designation: item.designation ?? "",
+        attendance_record_id: item.id,
+        attendance_date: item.attendance_date,
+        attendance_status: item.status,
+        derived_status: summary.status,
+        schedule_day_type: summary.schedule_day_type ?? "",
+        schedule_resolution_source: summary.schedule_resolution_source ?? "",
+        shift: summary.shift_name ?? item.shift ?? "",
+        expected_hours: summary.expected_hours,
+        worked_hours: summary.worked_hours,
+        late_minutes: summary.late_minutes,
+        early_exit_minutes: summary.early_exit_minutes,
+        overtime_hours: summary.overtime_hours,
+        payable_units: summary.payroll_impact.payable_units,
+        lop_units: summary.payroll_impact.lop_units,
+        payroll_impacting: summary.payroll_impact.payroll_impacting,
+        leave_collision_count: summary.leave_collision_count,
+        exception_risk: attendanceDerivationRisk(item),
+        first_reason: summary.reasons[0] ?? "",
+        first_warning: summary.warnings[0] ?? "",
+        source: item.source,
+        is_locked: item.is_locked,
+        detail_href: `/hr-admin/attendance-records/${item.id}/edit`,
+      };
+    });
+}
+
+async function getAttendanceDerivationExceptionsExportRows(reportKey: string, token: string) {
+  if (reportKey !== "attendance-derivation-exceptions") return null;
+
+  const attendanceResult = await upstreamJson<HrAdminAttendanceRecordListResponse>("/hr-admin/attendance-records/?page=1&page_size=500", token);
+  if (!attendanceResult.ok) return { error: attendanceResult };
+
+  const attendance = attendanceResult.data;
+  if (!attendance) return { error: { ok: false, status: 502, data: null, detail: "Live attendance derivation exception source data is unavailable." } };
+
+  return {
+    rows: attendanceDerivationExceptionRows(attendance),
+  };
+}
+
+function rosterRolloutRisk(item: HrAdminShiftRosterRollout) {
+  if (item.status !== "completed") return "High";
+  if (item.skipped_count > 0 || item.created_count < item.target_count) return "Medium";
+  return "Low";
+}
+
+function rosterCompletionRate(item: HrAdminShiftRosterRollout) {
+  if (!item.target_count) return 0;
+  return Math.round((item.created_count / item.target_count) * 100);
+}
+
+function rosterPatternType(template?: HrAdminShiftRosterTemplate) {
+  return template?.config_snapshot?.rotation?.pattern_type ?? template?.assignment_kind ?? "";
+}
+
+function rosterRolloutAuditRows(rollouts: HrAdminShiftRosterRollout[], templates: HrAdminShiftRosterTemplate[]) {
+  const templateById = new Map(templates.map((template) => [template.id, template]));
+  return rollouts.map((item) => {
+    const template = templateById.get(item.template_id);
+    const entries = template?.config_snapshot?.rotation?.entries ?? [];
+    return {
+      rollout_id: item.id,
+      template_id: item.template_id,
+      template_name: item.template_name,
+      template_code: template?.code ?? "",
+      template_status: template?.status ?? "",
+      assignment_kind: template?.assignment_kind ?? "",
+      pattern_type: rosterPatternType(template),
+      anchor_date: template?.config_snapshot?.rotation?.anchor_date ?? "",
+      rotation_step_count: entries.length,
+      off_step_count: entries.filter((entry) => entry.entry_kind === "off").length,
+      status: item.status,
+      effective_from: item.effective_from,
+      effective_to: item.effective_to ?? "",
+      is_primary: item.is_primary,
+      target_count: item.target_count,
+      created_count: item.created_count,
+      skipped_count: item.skipped_count,
+      completion_rate: rosterCompletionRate(item),
+      rollout_risk: rosterRolloutRisk(item),
+      scope: item.scope_labels.join(" | "),
+      summary: item.summary,
+      created_at: item.created_at,
+      detail_href: "/hr-admin/shift-roster-templates",
+    };
+  });
+}
+
+async function getRosterRolloutAuditExportRows(reportKey: string, token: string) {
+  if (reportKey !== "roster-rollout-audit") return null;
+
+  const [rolloutsResult, templatesResult] = await Promise.all([
+    upstreamJson<HrAdminShiftRosterRolloutListResponse>("/hr-admin/shift-roster-rollouts/?page_size=500", token),
+    upstreamJson<HrAdminShiftRosterTemplateListResponse>("/hr-admin/shift-roster-templates/?page_size=500", token),
+  ]);
+  if (!rolloutsResult.ok) return { error: rolloutsResult };
+  if (!templatesResult.ok) return { error: templatesResult };
+  if (!rolloutsResult.data || !templatesResult.data) return { error: { ok: false, status: 502, data: null, detail: "Live roster rollout audit source data is unavailable." } };
+
+  return {
+    rows: rosterRolloutAuditRows(rolloutsResult.data.items, templatesResult.data.items),
+  };
+}
+
 function availableLeaveUnits(item: HrAdminLeaveBalance) {
   return Number(item.closing_balance) - Number(item.reserved_amount);
 }
@@ -1586,10 +1857,10 @@ function leaveLiabilityState(item: HrAdminLeaveBalance) {
 async function getLeaveBalanceExportRows(reportKey: string, token: string) {
   if (reportKey !== "leave-balance") return null;
 
-  const leaveResult = await upstreamJson<HrAdminLeaveBalance[]>("/hr-admin/leave-balances/", token);
+  const leaveResult = await upstreamJson<HrAdminLeaveBalance[] | { items?: HrAdminLeaveBalance[] }>("/hr-admin/leave-balances/", token);
   if (!leaveResult.ok) return { error: leaveResult };
 
-  const balances = leaveResult.data;
+  const balances = Array.isArray(leaveResult.data) ? leaveResult.data : leaveResult.data?.items;
   if (!balances) return { error: { ok: false, status: 502, data: null, detail: "Live leave balance source data is unavailable." } };
 
   return {
@@ -1684,10 +1955,62 @@ async function getAttendanceExceptionsExportRows(reportKey: string, token: strin
   };
 }
 
-function snapshotIssueType(snapshot: HrAdminPayrollInputSnapshot) {
+function leaveAttendanceCollisionRows(leaveRequests: HrAdminLeaveRequestListResponse) {
+  return leaveRequests.items.flatMap((item) => {
+    const summary = item.attendance_collision_summary;
+    const severity = summary?.severity ?? "none";
+    const payrollBlocking = summary?.payroll_blocking ?? false;
+    return (summary?.collisions ?? []).map((collision) => ({
+      employee_code: item.employee_code ?? "",
+      employee_name: item.employee_name ?? "",
+      department: item.department ?? "",
+      designation: item.designation ?? "",
+      leave_request_id: item.id,
+      leave_type: item.leave_type,
+      leave_type_code: item.leave_type_code,
+      policy_name: item.policy_name ?? "",
+      leave_status: item.status,
+      leave_start_date: item.start_date,
+      leave_end_date: item.end_date,
+      approved_units: item.approved_units,
+      collision_date: collision.date,
+      leave_units: collision.leave_units,
+      attendance_record_id: collision.attendance_record_id,
+      attendance_status: collision.attendance_status,
+      shift: collision.shift ?? "",
+      check_in_at: collision.check_in_at ?? "",
+      check_out_at: collision.check_out_at ?? "",
+      severity,
+      payroll_blocking: payrollBlocking,
+      message: collision.message,
+      workflow_reference: item.workflow_reference,
+      detail_href: `/hr-admin/leave-requests/${item.id}/review`,
+    }));
+  });
+}
+
+async function getLeaveAttendanceCollisionsExportRows(reportKey: string, token: string) {
+  if (reportKey !== "leave-attendance-collisions") return null;
+
+  const leaveResult = await upstreamJson<HrAdminLeaveRequestListResponse>("/hr-admin/leave-requests/?page=1&page_size=500", token);
+  if (!leaveResult.ok) return { error: leaveResult };
+
+  const leaveRequests = leaveResult.data;
+  if (!leaveRequests) return { error: { ok: false, status: 502, data: null, detail: "Live leave-attendance collision source data is unavailable." } };
+
+  return {
+    rows: leaveAttendanceCollisionRows(leaveRequests),
+  };
+}
+
+function snapshotIssueType(snapshot: Pick<HrAdminPayrollInputSnapshot, "blockers" | "warnings">) {
   if (snapshot.blockers.length > 0) return "Blocked";
   if (snapshot.warnings.length > 0) return "Warning";
   return "Ready";
+}
+
+function snapshotMetric(snapshot: { reconciliation_summary?: { metrics?: Record<string, string> } }, key: string) {
+  return numberValue(snapshot.reconciliation_summary?.metrics?.[key]);
 }
 
 async function getPayrollInputExceptionsExportRows(reportKey: string, token: string) {
@@ -1704,8 +2027,9 @@ async function getPayrollInputExceptionsExportRows(reportKey: string, token: str
     rows: inputSetup.snapshots.map((snapshot) => {
       const run = runsById.get(snapshot.payroll_run_id);
       const issueType = snapshotIssueType(snapshot);
-      const attendancePresentDays = numberValue(snapshot.attendance_snapshot.present_days);
-      const attendanceWorkingDays = numberValue(snapshot.attendance_snapshot.working_days);
+      const attendancePresentDays = snapshotMetric(snapshot, "attendance_present_days");
+      const attendanceWorkingDays = snapshotMetric(snapshot, "schedule_working_days");
+      const reconciliationFindings = snapshot.reconciliation_summary?.findings ?? [];
       return {
         employee_code: snapshot.employee_code,
         employee_name: snapshot.employee_name,
@@ -1728,6 +2052,12 @@ async function getPayrollInputExceptionsExportRows(reportKey: string, token: str
         attendance_present_days: attendancePresentDays,
         attendance_working_days: attendanceWorkingDays,
         attendance_days: `${attendancePresentDays}/${attendanceWorkingDays}`,
+        reconciliation_status: snapshot.reconciliation_summary?.status ?? "ready",
+        reconciliation_risk: snapshot.reconciliation_summary?.risk ?? "Low",
+        reconciliation_finding_count: snapshot.reconciliation_summary?.finding_count ?? 0,
+        reconciliation_high_count: snapshot.reconciliation_summary?.high_count ?? 0,
+        reconciliation_medium_count: snapshot.reconciliation_summary?.medium_count ?? 0,
+        reconciliation_first_finding: reconciliationFindings[0]?.message ?? "",
         input_profile_ref: snapshot.input_profile_ref,
         source_collected_at: snapshot.source_collected_at,
         source_hash: snapshot.source_hash,
@@ -1821,6 +2151,7 @@ function adjustmentAmountRisk(amount: unknown) {
 }
 
 function payrollAdjustmentReportRow(adjustment: HrAdminPayrollAdjustmentSetupResponse["adjustments"][number]) {
+  const postLockSource = adjustment.post_lock_source;
   return {
     employee_code: adjustment.employee_code,
     employee_name: adjustment.employee_name,
@@ -1844,6 +2175,12 @@ function payrollAdjustmentReportRow(adjustment: HrAdminPayrollAdjustmentSetupRes
     adjustment_profile_ref: adjustment.adjustment_profile_ref,
     approval_profile_ref: adjustment.approval_profile_ref,
     source_ref: adjustment.source_ref,
+    post_lock_source_ref: postLockSource?.adjustment_source_ref ?? "",
+    post_lock_snapshot_id: postLockSource?.snapshot_id ?? "",
+    post_lock_payroll_run_name: postLockSource?.payroll_run_name ?? "",
+    post_lock_period_start: postLockSource?.period_start ?? "",
+    post_lock_period_end: postLockSource?.period_end ?? "",
+    post_lock_recommended_action: postLockSource?.recommended_action ?? "",
     reason: adjustment.reason,
     submitted_at: adjustment.submitted_at ?? "",
     approved_at: adjustment.approved_at ?? "",
@@ -1857,7 +2194,7 @@ function payrollAdjustmentReportRow(adjustment: HrAdminPayrollAdjustmentSetupRes
 async function getPayrollAdjustmentsExportRows(reportKey: string, token: string) {
   if (reportKey !== "payroll-adjustments") return null;
 
-  const adjustmentResult = await upstreamJson<HrAdminPayrollAdjustmentSetupResponse>("/hr-admin/payroll-adjustment-setup/", token);
+  const adjustmentResult = await upstreamJson<HrAdminPayrollAdjustmentSetupResponse>("/hr-admin/payroll-adjustment-setup/?include_all_runs=true&adjustment_page_size=100&snapshot_page_size=100&post_lock_page_size=100", token);
   if (!adjustmentResult.ok) return { error: adjustmentResult };
 
   const adjustmentSetup = adjustmentResult.data;
@@ -2064,7 +2401,7 @@ async function getPayrollCloseReadinessExportRows(reportKey: string, token: stri
   const [inputResult, reviewResult, adjustmentResult, settlementResult, outputResult] = await Promise.all([
     upstreamJson<HrAdminPayrollInputSnapshotSetupResponse>("/hr-admin/payroll-input-snapshot-setup/", token),
     upstreamJson<HrAdminPayrollReviewSetupResponse>("/hr-admin/payroll-review-setup/", token),
-    upstreamJson<HrAdminPayrollAdjustmentSetupResponse>("/hr-admin/payroll-adjustment-setup/", token),
+    upstreamJson<HrAdminPayrollAdjustmentSetupResponse>("/hr-admin/payroll-adjustment-setup/?include_all_runs=true&adjustment_page_size=100&snapshot_page_size=100&post_lock_page_size=100", token),
     upstreamJson<HrAdminPayrollSettlementSetupResponse>("/hr-admin/payroll-settlement-setup/", token),
     upstreamJson<HrAdminPayrollOutputSetupResponse>("/hr-admin/payroll-output-setup/", token),
   ]);
@@ -2299,9 +2636,20 @@ async function getDemoRows(reportKey: string) {
         detail_href: `/hr-admin/attendance-records/${item.id}/edit`,
       }));
     }
+    case "attendance-derivation-exceptions": {
+      const result = await getHrAdminAttendanceRecords({ page: 1, page_size: 500 });
+      return attendanceDerivationExceptionRows(result.data);
+    }
+    case "roster-rollout-audit": {
+      const [rolloutsResult, templatesResult] = await Promise.all([
+        getHrAdminShiftRosterRollouts({ page: 1, page_size: 500 }),
+        getHrAdminShiftRosterTemplates(),
+      ]);
+      return rosterRolloutAuditRows(rolloutsResult.data.items, templatesResult.data.items);
+    }
     case "leave-balance": {
-      const result = await getHrAdminLeaveBalances();
-      return result.data.map((item) => ({
+      const result = await getHrAdminLeaveBalances({ page_size: 50 });
+      return result.data.items.map((item) => ({
         employee_code: item.employee_code,
         employee_name: item.employee_name,
         leave_policy_name: item.leave_policy_name,
@@ -2352,14 +2700,19 @@ async function getDemoRows(reportKey: string) {
         };
       });
     }
+    case "leave-attendance-collisions": {
+      const result = await getHrAdminLeaveRequests({ page: 1, page_size: 500 });
+      return leaveAttendanceCollisionRows(result.data);
+    }
     case "payroll-input-exceptions": {
       const result = await getHrAdminPayrollInputSnapshotSetup();
       const runsById = new Map(result.data.runs.map((run) => [run.id, run]));
       return result.data.snapshots.map((snapshot) => {
         const run = runsById.get(snapshot.payroll_run_id);
         const issueType = snapshotIssueType(snapshot);
-        const attendancePresentDays = numberValue(snapshot.attendance_snapshot.present_days);
-        const attendanceWorkingDays = numberValue(snapshot.attendance_snapshot.working_days);
+        const attendancePresentDays = snapshotMetric(snapshot, "attendance_present_days");
+        const attendanceWorkingDays = snapshotMetric(snapshot, "schedule_working_days");
+        const reconciliationFindings = snapshot.reconciliation_summary?.findings ?? [];
         return {
           employee_code: snapshot.employee_code,
           employee_name: snapshot.employee_name,
@@ -2382,6 +2735,12 @@ async function getDemoRows(reportKey: string) {
           attendance_present_days: attendancePresentDays,
           attendance_working_days: attendanceWorkingDays,
           attendance_days: `${attendancePresentDays}/${attendanceWorkingDays}`,
+          reconciliation_status: snapshot.reconciliation_summary?.status ?? "ready",
+          reconciliation_risk: snapshot.reconciliation_summary?.risk ?? "Low",
+          reconciliation_finding_count: snapshot.reconciliation_summary?.finding_count ?? 0,
+          reconciliation_high_count: snapshot.reconciliation_summary?.high_count ?? 0,
+          reconciliation_medium_count: snapshot.reconciliation_summary?.medium_count ?? 0,
+          reconciliation_first_finding: reconciliationFindings[0]?.message ?? "",
           input_profile_ref: snapshot.input_profile_ref,
           source_collected_at: snapshot.source_collected_at,
           source_hash: snapshot.source_hash,
@@ -2428,7 +2787,7 @@ async function getDemoRows(reportKey: string) {
       });
     }
     case "payroll-adjustments": {
-      const result = await getHrAdminPayrollAdjustmentSetup();
+      const result = await getHrAdminPayrollAdjustmentSetup({ include_all_runs: true, adjustment_page_size: 100, snapshot_page_size: 100, post_lock_page_size: 100 });
       return result.data.adjustments.map(payrollAdjustmentReportRow);
     }
     case "payroll-settlements": {
@@ -2439,7 +2798,7 @@ async function getDemoRows(reportKey: string) {
       const [inputSetup, reviewSetup, adjustmentSetup, settlementSetup, outputSetup] = await Promise.all([
         getHrAdminPayrollInputSnapshotSetup(),
         getHrAdminPayrollReviewSetup(),
-        getHrAdminPayrollAdjustmentSetup(),
+        getHrAdminPayrollAdjustmentSetup({ include_all_runs: true, adjustment_page_size: 100, snapshot_page_size: 100, post_lock_page_size: 100 }),
         getHrAdminPayrollSettlementSetup(),
         getHrAdminPayrollOutputSetup(),
       ]);
@@ -2579,6 +2938,28 @@ export async function GET(request: NextRequest, { params }: Props) {
       return exportResponse(request, reportKey, applyExportFilters(reportKey, attendanceRegisterExport.rows, filters), filters, auditContext);
     }
 
+    const attendanceDerivationExceptionsExport = await getAttendanceDerivationExceptionsExportRows(reportKey, token);
+    if (attendanceDerivationExceptionsExport) {
+      if ("error" in attendanceDerivationExceptionsExport) {
+        const exportError = attendanceDerivationExceptionsExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, attendanceDerivationExceptionsExport.rows, filters), filters, auditContext);
+    }
+
+    const rosterRolloutAuditExport = await getRosterRolloutAuditExportRows(reportKey, token);
+    if (rosterRolloutAuditExport) {
+      if ("error" in rosterRolloutAuditExport) {
+        const exportError = rosterRolloutAuditExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, rosterRolloutAuditExport.rows, filters), filters, auditContext);
+    }
+
     const leaveBalanceExport = await getLeaveBalanceExportRows(reportKey, token);
     if (leaveBalanceExport) {
       if ("error" in leaveBalanceExport) {
@@ -2599,6 +2980,17 @@ export async function GET(request: NextRequest, { params }: Props) {
         }
       }
       return exportResponse(request, reportKey, applyExportFilters(reportKey, attendanceExceptionsExport.rows, filters), filters, auditContext);
+    }
+
+    const leaveAttendanceCollisionsExport = await getLeaveAttendanceCollisionsExportRows(reportKey, token);
+    if (leaveAttendanceCollisionsExport) {
+      if ("error" in leaveAttendanceCollisionsExport) {
+        const exportError = leaveAttendanceCollisionsExport.error;
+        if (exportError) {
+          return NextResponse.json({ detail: exportError.detail }, { status: exportError.status });
+        }
+      }
+      return exportResponse(request, reportKey, applyExportFilters(reportKey, leaveAttendanceCollisionsExport.rows, filters), filters, auditContext);
     }
 
     const payrollInputExceptionsExport = await getPayrollInputExceptionsExportRows(reportKey, token);

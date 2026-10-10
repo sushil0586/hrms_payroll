@@ -234,7 +234,7 @@ test.describe("HR Admin leave and attendance RBAC certification", () => {
 
     await gotoAuthenticated(page, "/hr-admin/attendance-records?page_size=5", persona);
     await expectPageReady(page, "Attendance records");
-    await expect(page.getByText("Read-only attendance view.")).toBeVisible();
+    await expect(page.getByText("Read-only attendance view.").first()).toBeVisible();
     await expect(page.getByRole("main").getByRole("link", { name: "Edit record" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Mark selected|Bulk approve|Bulk reject/i })).toHaveCount(0);
 

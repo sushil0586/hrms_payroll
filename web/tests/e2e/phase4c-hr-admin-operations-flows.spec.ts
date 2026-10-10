@@ -246,8 +246,8 @@ test.describe("Phase 4C HR-admin operations certification", () => {
     await expect(field(page, "Rows per page")).toBeVisible();
     await expect(page.getByRole("button", { name: "Apply filters" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Clear filters" })).toBeVisible();
-    await expect(card(page, rejectReason)).toContainText("pending");
-    await expect(card(page, rejectReason)).toContainText("remote");
+    await expect(card(page, rejectReason)).toContainText(/pending/i);
+    await expect(card(page, rejectReason)).toContainText(/remote/i);
     await expect(card(page, rejectReason).getByRole("link", { name: "Review request" })).toHaveAttribute("href", `/hr-admin/attendance-regularizations/${rejectId}/review`);
     await expect(card(page, rejectReason).getByRole("link", { name: "Full review" })).toHaveAttribute("href", `/hr-admin/attendance-regularizations/${rejectId}/review`);
     await field(card(page, rejectReason), "Decision note").fill(rejectNote);
@@ -287,7 +287,7 @@ test.describe("Phase 4C HR-admin operations certification", () => {
 
     await switchTo(page, `/hr-admin/attendance-regularizations?status=approved&q=${encodeURIComponent(approveReason)}`, hrAdmin);
     await expectPageReady(page, "Regularizations");
-    await expect(card(page, approveReason)).toContainText("approved");
+    await expect(card(page, approveReason)).toContainText(/approved/i);
     await expect(card(page, approveReason).getByRole("button", { name: "Approve" })).toBeDisabled();
     await expect(card(page, approveReason).getByRole("button", { name: "Reject" })).toBeDisabled();
     await field(page, "Rows per page").selectOption("10");

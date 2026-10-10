@@ -97,6 +97,7 @@ export const hrAdminNavigation: HrAdminNavGroup[] = [
   {
     title: "Time & Leave",
     items: [
+      { href: "/hr-admin/time-to-payroll", label: "Time to Payroll", shortLabel: "TP", blurb: "Roster to payroll control", permissions: ["attendance.view", "payroll.inputs.view", "payroll.review"] },
       { href: "/hr-admin/attendance-operations", label: "Attendance", shortLabel: "AT", blurb: "Records and review windows", permissions: ["attendance.view", "attendance.records.manage", "attendance.regularization.review"] },
       { href: "/hr-admin/leave-requests", label: "Leave", shortLabel: "LV", blurb: "Requests and balances", permissions: ["leave.view", "leave.policies.manage"] },
       { href: "/hr-admin/policies", label: "Policies", shortLabel: "PO", blurb: "Leave and attendance rules", permissions: ["leave.policies.manage", "attendance.policies.manage"] },
@@ -212,6 +213,7 @@ const workforceSearchDestinations: HrAdminSearchDestination[] = [
 ];
 
 const timeLeaveSearchDestinations: HrAdminSearchDestination[] = [
+  { href: "/hr-admin/time-to-payroll", label: "Time to Payroll control", description: "Roster, leave, attendance, payroll input, and arrears journey", section: "Time & Leave" },
   { href: "/hr-admin/attendance-records", label: "Attendance records", description: "Daily attendance records and corrections", section: "Time & Leave" },
   { href: "/hr-admin/attendance-regularizations", label: "Attendance regularizations", description: "Review employee attendance correction requests", section: "Time & Leave" },
   { href: "/hr-admin/shifts", label: "Shifts", description: "Shift master setup", section: "Time & Leave" },

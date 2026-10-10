@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import type { HrAdminPayrollCalculationLine, HrAdminPayrollRunException } from "@/lib/types";
+import type { HrAdminPayrollCalculationLineListItem, HrAdminPayrollRunException } from "@/lib/types";
 
 type Option = {
   value: string;
@@ -13,7 +13,7 @@ type Option = {
 type Props = {
   reviewId: string | null;
   selectedException: HrAdminPayrollRunException | null;
-  lines: HrAdminPayrollCalculationLine[];
+  lines: HrAdminPayrollCalculationLineListItem[];
   severityOptions: Option[];
   canManageExceptions: boolean;
 };

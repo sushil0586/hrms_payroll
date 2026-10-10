@@ -10,7 +10,7 @@ import { PayrollRegisterReportWorkspace } from "./payroll-register-report-worksp
 export default async function PayrollRegisterReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
-  const result = await getHrAdminPayrollOutputSetup();
+  const result = await getHrAdminPayrollOutputSetup({ artifact_kind: "register", artifact_page_size: 100 });
 
   return (
     <main className="shell shell--payroll-setup shell--payroll-outputs">

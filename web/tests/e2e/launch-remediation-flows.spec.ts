@@ -39,15 +39,17 @@ test.describe("HR admin launch remediation workspace", () => {
     });
 
     await gotoAuthenticated(page, "/hr-admin/launch-remediation");
-    await expectPageReady(page, "Launch Remediation");
+    await expectPageReady(page, "Launch Blockers");
     await expect(page.getByText("Open assignments")).toBeVisible();
     await expect(page.getByText("Primary bank coverage")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Assignment filters" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Filters" })).toBeVisible();
     await expect(page.locator(".record-card").filter({ hasText: "Primary bank coverage" }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Download audit" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Assign owner" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Manage" }).first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Acknowledge" }).first().click();
+    await page.getByRole("button", { name: "Manage" }).first().click();
+    await expect(page.getByRole("dialog", { name: "Manage blocker" })).toBeVisible();
+    await page.getByRole("button", { name: "Acknowledge" }).click();
     await expect(page.getByText("Assignment updated.")).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });

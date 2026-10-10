@@ -1,9 +1,10 @@
 import Link from "next/link";
 
+import { LeaveRequestImportWorkbench } from "@/app/hr-admin/leave-requests/leave-request-import-workbench";
 import { LeaveRequestQueue } from "@/app/hr-admin/leave-requests/leave-request-queue";
 import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminLeaveRequests } from "@/lib/api";
+import { getHrAdminLeaveRequests, getHrAdminPolicyOptions } from "@/lib/api";
 import { requireSessionPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
@@ -27,18 +28,21 @@ export default async function HrAdminLeaveRequestsPage({ searchParams }: PagePro
   const fromDate = normalizeParam(currentParams.from_date) ?? "";
   const toDate = normalizeParam(currentParams.to_date) ?? "";
 
-  const result = await getHrAdminLeaveRequests({
-    page,
-    page_size: pageSize,
-    q,
-    status: status || undefined,
-    leave_type_code: leaveTypeCode || undefined,
-    from_date: fromDate || undefined,
-    to_date: toDate || undefined,
-  });
+  const [result, optionsResult] = await Promise.all([
+    getHrAdminLeaveRequests({
+      page,
+      page_size: pageSize,
+      q,
+      status: status || undefined,
+      leave_type_code: leaveTypeCode || undefined,
+      from_date: fromDate || undefined,
+      to_date: toDate || undefined,
+    }),
+    getHrAdminPolicyOptions(),
+  ]);
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live leave operations" : "Demo leave operations"}
         title="Leave Requests"
@@ -82,6 +86,12 @@ export default async function HrAdminLeaveRequestsPage({ searchParams }: PagePro
           has_previous: result.data.has_previous,
         }}
         statusCounts={result.data.status_counts}
+        leaveTypeOptions={optionsResult.data.leave_types}
+      />
+      <LeaveRequestImportWorkbench
+        requests={result.data.items}
+        employees={optionsResult.data.employees}
+        leaveTypes={optionsResult.data.leave_types}
       />
     </main>
   );

@@ -342,7 +342,7 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
   ];
 
   return (
-    <main className="shell shell--payroll-readiness">
+    <main className="shell shell--payroll-readiness hr-admin-compact-ui">
       <PageIntro
         eyebrow={readinessResult.state === "live" ? "Live payroll phase 0" : "Demo payroll phase 0"}
         title="Payroll Readiness"

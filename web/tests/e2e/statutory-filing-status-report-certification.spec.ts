@@ -1,7 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
-import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+import { gotoAuthenticated, hrAdmin, type Persona } from "../helpers/staging-auth";
+
+const restrictedPersona: Persona = {
+  username: process.env.PLAYWRIGHT_LIVE_NO_ACCESS_USERNAME ?? "restricted.viewer",
+  password: process.env.PLAYWRIGHT_LIVE_NO_ACCESS_PASSWORD ?? process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123",
+};
 
 test.describe("Phase R4-D statutory filing status report certification", () => {
   test("HR admin can certify filing status catalog, filters, pagination, evidence, and drilldowns", async ({ page }) => {
@@ -88,13 +93,12 @@ test.describe("Phase R4-D statutory filing status report certification", () => {
   });
 
   test("employee cannot access statutory filing status report", async ({ page }) => {
-    await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await gotoAuthenticated(page, "/workspace-access", restrictedPersona);
+    await expectPageReady(page, "No workspace access is assigned");
 
     await page.goto("/hr-admin/reports/statutory-filing-status", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("statutory-filing-status-report")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No workspace access is assigned" })).toBeVisible();
   });
 });

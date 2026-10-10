@@ -3,18 +3,20 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import { FormSection } from "@/components/patterns/form-section";
 import type {
   HrAdminEmployeeShiftAssignmentConflictCheck,
   HrAdminEmployeeShiftAssignmentWriteInput,
-  HrAdminPolicyOptions,
+  HrAdminPolicyWorkbenchOptions,
 } from "@/lib/types";
 
 type Props = {
   initialValue: HrAdminEmployeeShiftAssignmentWriteInput;
   mode: "create" | "edit";
-  options: HrAdminPolicyOptions;
+  options: Pick<HrAdminPolicyWorkbenchOptions, "shifts">;
   itemId?: string;
+  initialEmployeeLabel?: string | null;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -44,14 +46,13 @@ function FieldHint({ children, tone = "default" }: { children: string; tone?: "d
   return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
 }
 
-export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemId }: Props) {
+export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemId, initialEmployeeLabel }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conflictCheck, setConflictCheck] = useState<HrAdminEmployeeShiftAssignmentConflictCheck | null>(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
-  const employeeWarning = options.employees.length === 0 ? "No active employees are available for shift assignment." : null;
   const shiftWarning = options.shifts.length === 0 ? "No active shifts are available. Create a shift before assigning coverage." : null;
 
   function update<Key extends keyof HrAdminEmployeeShiftAssignmentWriteInput>(key: Key, value: HrAdminEmployeeShiftAssignmentWriteInput[Key]) {
@@ -200,7 +201,12 @@ export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemI
         <div className="form-shell-card__grid">
           <FormSection title="Coverage window" description="Choose the employee, base shift, assignment mode, and date window.">
             <div className="form-grid">
-              <label className="form-field"><span className="muted">Employee</span><select className="input-control" disabled={Boolean(employeeWarning)} value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select><FieldHint tone={employeeWarning ? "warning" : "default"}>{employeeWarning ?? "Choose the employee whose shift coverage should resolve for attendance."}</FieldHint></label>
+              <EmployeeSearchSelect
+                hint="Choose the employee whose shift coverage should resolve for attendance."
+                selectedLabel={initialEmployeeLabel}
+                value={formValue.employee_id ?? ""}
+                onChange={(value) => update("employee_id", value || null)}
+              />
               <label className="form-field"><span className="muted">Base shift</span><select className="input-control" disabled={Boolean(shiftWarning)} value={formValue.shift_id ?? ""} onChange={(e) => update("shift_id", e.target.value || null)}>{selectOptions(options.shifts)}</select><FieldHint tone={shiftWarning ? "warning" : "default"}>{shiftWarning ?? "Choose the default shift for fixed, override, and rotation coverage."}</FieldHint></label>
               <label className="form-field">
                 <span className="muted">Assignment mode</span>

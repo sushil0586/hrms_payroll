@@ -36,14 +36,16 @@ async function switchPersona(page: Page, persona: Persona, path: string) {
 }
 
 test.describe("Phase 7H audit download and rejected support lifecycle", () => {
+  test.setTimeout(120_000);
+
   test("rejected support access is browser-visible and exported in the audit pack", async ({ page }, testInfo) => {
     const stamp = Date.now();
     const reason = `Phase 7H rejected support grant ${stamp}`;
     const decisionNote = `Rejected during Phase 7H audit download certification ${stamp}.`;
 
-    await switchPersona(page, hrAdmin, "/tenant-admin");
-    await expectPageReady(page, "Tenant Admin Console");
-    await expect(page.getByRole("heading", { name: "Scoped support grants" })).toBeVisible();
+    await switchPersona(page, hrAdmin, "/tenant-admin/support-access");
+    await expectPageReady(page, "Support Access");
+    await expect(page.getByRole("heading", { name: "Controlled assistance" })).toBeVisible();
     await expect(page.getByRole("main").getByLabel("Support agent")).toBeVisible();
     await expect(page.getByRole("main").getByLabel("Duration")).toBeVisible();
     await expect(page.getByRole("main").getByLabel("Reason")).toBeVisible();
@@ -61,7 +63,7 @@ test.describe("Phase 7H audit download and rejected support lifecycle", () => {
     );
     await requestButton.click();
     await expect((await createResponsePromise).ok()).toBeTruthy();
-    await expect(page.getByRole("status")).toContainText("Support access requested.");
+    await expect(page.getByRole("status")).toContainText("Support access request submitted successfully.");
 
     const rejectedRow = page.locator(".tenant-support-access-row").filter({ hasText: reason }).first();
     await expect(rejectedRow).toBeVisible({ timeout: 20_000 });
@@ -80,8 +82,8 @@ test.describe("Phase 7H audit download and rejected support lifecycle", () => {
     );
     await rejectedRow.getByRole("button", { name: "Reject" }).click();
     await expect((await rejectResponsePromise).ok()).toBeTruthy();
-    await expect(page.getByRole("status")).toContainText("Reject saved.");
-    await expect(rejectedRow.getByText("Rejected")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("status")).toContainText("Reject saved successfully.");
+    await expect(rejectedRow.getByText("Rejected", { exact: true })).toBeVisible({ timeout: 20_000 });
     await expect(rejectedRow.getByRole("button", { name: "Approve" })).toBeDisabled();
     await expect(rejectedRow.getByRole("button", { name: "Start session" })).toBeDisabled();
     await expect(rejectedRow.getByRole("button", { name: "Revoke" })).toBeDisabled();

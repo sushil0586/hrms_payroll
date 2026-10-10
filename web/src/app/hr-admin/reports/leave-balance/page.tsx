@@ -10,13 +10,13 @@ import { LeaveBalanceReportWorkspace } from "./leave-balance-report-workspace";
 export default async function LeaveBalanceReportPage() {
   await requireWorkspaceAccess({ roleCodes: ["hr-admin"] });
 
-  const result = await getHrAdminLeaveBalances();
-  const items = result.data;
+  const result = await getHrAdminLeaveBalances({ page_size: 50 });
+  const items = result.data.items;
   const reservedCount = items.filter((item) => Number(item.reserved_amount) > 0).length;
   const overdrawnCount = items.filter((item) => Number(item.closing_balance) - Number(item.reserved_amount) < 0).length;
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live attendance report" : "Demo attendance report"}
         title="Leave Balance Report"
@@ -47,7 +47,7 @@ export default async function LeaveBalanceReportPage() {
         title="Leave balance evidence"
         description="Review entitlement, accrual, consumption, reserved units, encashment, adjustments, and liability risk."
         metrics={[
-          { label: "balances", value: items.length, tone: "neutral" },
+          { label: "balances", value: result.data.total_count, tone: "neutral" },
           { label: "reserved", value: reservedCount, tone: reservedCount ? "warning" : "ready" },
           { label: "overdrawn", value: overdrawnCount, tone: overdrawnCount ? "blocked" : "ready" },
           { label: "source", value: result.state === "live" ? "Live" : "Demo", tone: result.state === "live" ? "ready" : "warning" },

@@ -64,7 +64,7 @@ test.describe("HR admin payroll rule engine flows", () => {
     await expect(page.getByRole("region", { name: "Rule version review" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Catalog" })).toBeVisible();
     await expect(page.getByText("Rule versions").first()).toBeVisible();
-    await expect(page.getByLabel("versions pagination")).toBeVisible();
+    await expect(page.getByLabel("versions pagination").or(page.locator(".pagination-bar").filter({ hasText: /Page|Showing/ })).first()).toBeVisible();
     await expect(page.getByText("Expression trace").first().or(page.getByRole("heading", { name: "No rule selected" }))).toBeVisible();
     await expect(page.getByText("Selected for detail").first()).toBeVisible();
 

@@ -100,8 +100,8 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
 
     await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?tab=detail&runId=${run.id}&adjustmentId=${createdAdjustment.payload.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Adjustments");
-    await expect(page.locator(".payroll-adjustment-table tr.is-selected")).toContainText("Pilot Certification Bonus");
-    await expect(page.locator("aside[aria-label*='Pilot Certification Bonus']")).toContainText(adjustmentSourceRef);
+    await expect(page.locator(".payroll-adjustment-table tr.is-selected")).toContainText("Post-Lock Attendance Arrear");
+    await expect(page.locator("aside[aria-label*='payroll adjustment']").or(page.locator("aside[aria-label*='Post-Lock Attendance Arrear']")).first()).toContainText(adjustmentSourceRef);
 
     await gotoAuthenticated(page, `/hr-admin/payroll-adjustments?tab=actions&runId=${run.id}&adjustmentId=${createdAdjustment.payload.id}`, hrAdmin);
     await expectPageReady(page, "Payroll Adjustments");
@@ -202,7 +202,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
     await expect(page.locator(".payroll-adjustment-table").or(page.locator(".payroll-settlement-line-table")).first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    const adjustmentSetup = await apiGet<AdjustmentSetup>(page, "/api/hr-admin/payroll-adjustment-setup");
+    const adjustmentSetup = await apiGet<AdjustmentSetup>(page, `/api/hr-admin/payroll-adjustment-setup?run_id=${run.id}&adjustment_page_size=100`);
     const appliedAdjustment = adjustmentSetup.adjustments.find((item) => item.id === createdAdjustment.payload.id);
     const generatedSettlementAdjustments = adjustmentSetup.adjustments.filter((item) => item.payroll_run_id === run.id && item.source_ref.startsWith("settlement-line:"));
     expect(appliedAdjustment?.status).toBe("applied");
@@ -226,7 +226,7 @@ test.describe.serial("P100-7 adjustments, settlements, and close readiness certi
         await page.getByLabel("Payroll run", { exact: true }).selectOption({ label: expectedText });
         await expect(page.locator("tbody")).toContainText(expectedText);
       } else {
-        await page.getByPlaceholder(/Search/).fill(expectedText);
+        await page.getByRole("searchbox").filter({ hasNotText: "Workspace search" }).last().fill(expectedText);
         await expect(page.getByText(expectedText).first()).toBeVisible();
       }
       const exportResponse = await page.request.get(`/api/hr-admin/reports/${reportKey}?q=${encodeURIComponent(path.includes("close") ? prefix : expectedText)}`);

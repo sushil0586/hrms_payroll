@@ -16,7 +16,7 @@ export default async function HrAdminEditLeavePolicyPage({ params }: PageProps) 
   if (!itemResult.data?.id) notFound();
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={itemResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
         title="Edit leave policy"

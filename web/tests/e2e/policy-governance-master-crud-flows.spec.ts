@@ -88,7 +88,7 @@ async function openEditByCode(page: Page, listPath: string, code: string, headin
 }
 
 async function expectDuplicateSaveFails(page: Page) {
-  await expect(page.getByText("Save failed.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Save failed.").first()).toBeVisible({ timeout: 15_000 });
   await expectNoHorizontalOverflow(page);
 }
 
@@ -336,6 +336,16 @@ test.describe("HR admin policy and governance master CRUD", () => {
 
     await gotoAuthenticated(page, "/hr-admin/leave-policies/new");
     await expectPageReady(page, "Create leave policy");
+    for (const sectionTitle of [
+      "Advanced routing and evidence rules",
+      "Advanced entitlement and carry-forward rules",
+      "Balance operation governance",
+      "Request lifecycle governance",
+      "Holiday-linked leave governance",
+      "Workflow preview",
+    ]) {
+      await page.locator("summary", { hasText: sectionTitle }).click();
+    }
     await expectFields(page, [
       "Leave type",
       "Code",
@@ -352,8 +362,6 @@ test.describe("HR admin policy and governance master CRUD", () => {
       "Gender restriction",
       "Marital status restriction",
       "Minimum service days",
-      "Default approval route",
-      "Escalation route",
       "Attachment label",
       "Grant mode",
       "Proration mode",
@@ -363,6 +371,7 @@ test.describe("HR admin policy and governance master CRUD", () => {
       "Employee",
       "Requested units",
     ]);
+    await expect(page.locator("summary", { hasText: "Advanced routing and evidence rules" })).toBeVisible();
     await expectToggles(page, [
       "Allow half day",
       "Allow backdated application",
@@ -391,8 +400,6 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await field(page, "Max carry forward").fill("6.00");
     await field(page, "Max consecutive days").fill("5.00");
     await field(page, "Notice days required").fill("2");
-    await field(page, "Gender restriction").fill("any");
-    await field(page, "Marital status restriction").fill("any");
     await field(page, "Minimum service days").fill("30");
     await toggle(page, "Allow half day").check();
     await toggle(page, "Always require attachment").check();
@@ -415,7 +422,15 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await field(page, "Code").fill(code);
     await field(page, "Name").fill(`${name} Duplicate`);
     await field(page, "Status").selectOption("active");
+    const duplicateResponsePromise = page.waitForResponse((response) =>
+      response.url().includes("/api/hr-admin/leave-policies") && response.request().method() === "POST",
+    );
     await page.getByRole("button", { name: "Create leave policy" }).click();
+    const duplicateResponse = await duplicateResponsePromise;
+    expect(duplicateResponse.status()).toBe(400);
+    const duplicatePayload = await duplicateResponse.json();
+    const duplicateCodeMessage = Array.isArray(duplicatePayload.code) ? duplicatePayload.code.join(" ") : String(duplicatePayload.code ?? "");
+    expect(duplicateCodeMessage).toContain("already exists");
     await expectDuplicateSaveFails(page);
     expect(edit.id).not.toBe("");
   });

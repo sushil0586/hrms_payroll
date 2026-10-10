@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { AttendancePolicyAssignmentForm } from "@/app/hr-admin/attendance-policy-assignments/attendance-policy-assignment-form";
 import { attendancePolicyAssignmentToFormValue } from "@/app/hr-admin/attendance-policy-assignments/form-values";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminAttendancePolicyAssignments, getHrAdminPolicyOptions } from "@/lib/api";
+import { getHrAdminAttendancePolicyAssignments, getHrAdminPolicyWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission } from "@/lib/workspace-access";
 
 type PageProps = { params: Promise<{ itemId: string }> };
@@ -12,12 +12,17 @@ type PageProps = { params: Promise<{ itemId: string }> };
 export default async function HrAdminEditAttendancePolicyAssignmentPage({ params }: PageProps) {
   await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-policy-assignments" });
   const { itemId } = await params;
-  const [itemsResult, optionsResult] = await Promise.all([getHrAdminAttendancePolicyAssignments(), getHrAdminPolicyOptions()]);
+  const [itemsResult, optionsResult] = await Promise.all([
+    getHrAdminAttendancePolicyAssignments(),
+    getHrAdminPolicyWorkbenchOptions({
+      include: ["attendance_policies", "legal_entities", "branches", "locations", "departments", "grades", "employment_types"],
+    }),
+  ]);
   const item = itemsResult.data.find((entry) => entry.id === itemId);
   if (!item) notFound();
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={itemsResult.state === "live" && optionsResult.state === "live" ? "Live edit mode" : "Demo edit mode"}
         title="Edit attendance assignment"

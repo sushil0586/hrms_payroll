@@ -50,9 +50,28 @@ DECIMAL_ZERO = Decimal("0.00")
 DECIMAL_HUNDREDTH = Decimal("0.01")
 DEFAULT_EMPLOYEE_SHIFT_ASSIGNMENT_CONFIG = {
     "rotation": {
+        "pattern_type": "custom",
         "anchor_date": None,
         "entries": [],
     }
+}
+SCHEDULE_SPINE_CONTRACT_REF = "schedule_spine.contract.v1"
+SCHEDULE_SPINE_RESOLVER_REF = "attendance.resolve_employee_work_schedule.v1"
+ATTENDANCE_DERIVATION_SUMMARY_REF = "attendance.derivation_summary.v1"
+ROSTER_PATTERN_TYPES = {
+    "fixed_weekly",
+    "weekly_rotation",
+    "custom_cycle",
+    "six_on_one_off",
+    "five_on_two_off",
+    "four_on_four_off",
+    "two_two_three",
+}
+ROSTER_PATTERN_DEFAULTS = {
+    "six_on_one_off": [6, 1],
+    "five_on_two_off": [5, 2],
+    "four_on_four_off": [4, 4],
+    "two_two_three": [2, 2, 3],
 }
 
 
@@ -68,12 +87,20 @@ def _quantize_hours(value: Decimal | int | float | str | None) -> Decimal:
 def normalize_employee_shift_assignment_config(raw: dict | None, *, fallback_shift_id: str | None = None, effective_from=None) -> dict:
     raw = raw if isinstance(raw, dict) else {}
     rotation_raw = raw.get("rotation") if isinstance(raw.get("rotation"), dict) else {}
+    pattern_type = str(rotation_raw.get("pattern_type") or "custom_cycle").strip() or "custom_cycle"
+    if pattern_type == "custom":
+        pattern_type = "custom_cycle"
+    if pattern_type not in ROSTER_PATTERN_TYPES:
+        pattern_type = "custom_cycle"
     normalized_entries: list[dict] = []
     for index, entry in enumerate(rotation_raw.get("entries") or []):
         if not isinstance(entry, dict):
             continue
         shift_id = entry.get("shift_id") or fallback_shift_id
-        if not shift_id:
+        entry_kind = str(entry.get("entry_kind") or "work").strip().lower()
+        if entry_kind not in {"work", "off"}:
+            entry_kind = "work"
+        if not shift_id and entry_kind == "work":
             continue
         try:
             span_days = max(int(entry.get("span_days") or 7), 1)
@@ -82,14 +109,26 @@ def normalize_employee_shift_assignment_config(raw: dict | None, *, fallback_shi
         normalized_entries.append(
             {
                 "position": index,
-                "shift_id": str(shift_id),
+                "entry_kind": entry_kind,
+                "shift_id": str(shift_id) if shift_id else None,
                 "span_days": span_days,
             }
         )
+    if pattern_type in ROSTER_PATTERN_DEFAULTS and fallback_shift_id:
+        normalized_entries = [
+            {
+                "position": index,
+                "entry_kind": "work" if index % 2 == 0 else "off",
+                "shift_id": str(fallback_shift_id) if index % 2 == 0 else None,
+                "span_days": span_days,
+            }
+            for index, span_days in enumerate(ROSTER_PATTERN_DEFAULTS[pattern_type])
+        ]
     if not normalized_entries and fallback_shift_id:
         normalized_entries.append(
             {
                 "position": 0,
+                "entry_kind": "work",
                 "shift_id": str(fallback_shift_id),
                 "span_days": 7,
             }
@@ -105,6 +144,7 @@ def normalize_employee_shift_assignment_config(raw: dict | None, *, fallback_shi
         normalized_anchor_date = None
     return {
         "rotation": {
+            "pattern_type": pattern_type,
             "anchor_date": normalized_anchor_date,
             "entries": normalized_entries,
         }
@@ -486,6 +526,7 @@ def _resolve_shift_from_assignment(assignment: EmployeeShiftAssignment, *, atten
     elapsed_days = max((attendance_date - anchor_date).days, 0)
     day_pointer = elapsed_days % cycle_days
     shift_ids = {entry["shift_id"] for entry in entries}
+    shift_ids.discard(None)
     shift_map = {
         str(item.id): item
         for item in Shift.objects.filter(tenant=assignment.tenant, id__in=shift_ids)
@@ -497,14 +538,15 @@ def _resolve_shift_from_assignment(assignment: EmployeeShiftAssignment, *, atten
         if day_pointer < cumulative_days:
             chosen_entry = entry
             break
-    chosen_shift = shift_map.get(chosen_entry["shift_id"], assignment.shift)
+    chosen_shift = None if chosen_entry.get("entry_kind") == "off" else shift_map.get(chosen_entry["shift_id"], assignment.shift)
     sequence_summary = " -> ".join(
-        f"{shift_map.get(entry['shift_id'], assignment.shift).name} ({entry['span_days']}d)"
+        f"{'Off' if entry.get('entry_kind') == 'off' else shift_map.get(entry['shift_id'], assignment.shift).name} ({entry['span_days']}d)"
         for entry in entries
     )
     return {
         "shift": chosen_shift,
         "assignment_kind": assignment.assignment_kind,
+        "entry_kind": chosen_entry.get("entry_kind", "work"),
         "sequence_summary": sequence_summary,
         "config_snapshot": config_snapshot,
     }
@@ -931,15 +973,17 @@ def resolve_employee_work_day(*, employee, work_date: date, policy: AttendancePo
     assignment = _find_matching_employee_shift_assignment(employee=employee, attendance_date=work_date)
     resolved_assignment = _resolve_shift_from_assignment(assignment, attendance_date=work_date) if assignment else None
     shift = resolved_assignment["shift"] if resolved_assignment else getattr(policy, "default_shift", None)
+    is_roster_off_day = bool(resolved_assignment and resolved_assignment.get("entry_kind") == "off")
     holiday = _resolve_holiday_for_employee(employee, attendance_date=work_date, policy=policy)
     weekday_name = work_date.strftime("%A").lower()
     shift_weekly_off_days = {str(day).lower() for day in (getattr(shift, "weekly_off_days", None) or [])}
     default_weekly_off_days = {"saturday", "sunday"}
-    effective_weekly_off_days = shift_weekly_off_days or default_weekly_off_days
+    effective_weekly_off_days = shift_weekly_off_days if shift else default_weekly_off_days
     is_weekly_off = weekday_name in effective_weekly_off_days
     expected_start_at = None
     expected_end_at = None
     expected_hours = "0.00"
+    crosses_midnight = False
     warnings: list[str] = []
 
     if shift:
@@ -947,6 +991,7 @@ def resolve_employee_work_day(*, employee, work_date: date, policy: AttendancePo
         expected_start_at = start_at.isoformat()
         expected_end_at = end_at.isoformat()
         expected_hours = f"{_quantize_hours(getattr(shift, 'working_hours', 0)):.2f}"
+        crosses_midnight = end_at.date() > start_at.date()
         if not getattr(shift, "is_active", True):
             warnings.append("Resolved shift is inactive.")
     else:
@@ -954,6 +999,8 @@ def resolve_employee_work_day(*, employee, work_date: date, policy: AttendancePo
 
     if holiday:
         day_type = "holiday"
+    elif is_roster_off_day:
+        day_type = "weekly_off"
     elif is_weekly_off:
         day_type = "weekly_off"
     elif shift:
@@ -972,6 +1019,8 @@ def resolve_employee_work_day(*, employee, work_date: date, policy: AttendancePo
         weekly_off_source = "default_weekend"
 
     return {
+        "contract_ref": SCHEDULE_SPINE_CONTRACT_REF,
+        "resolver_ref": SCHEDULE_SPINE_RESOLVER_REF,
         "employee_id": str(employee.id),
         "employee_code": employee.employee_code,
         "date": work_date.isoformat(),
@@ -982,6 +1031,18 @@ def resolve_employee_work_day(*, employee, work_date: date, policy: AttendancePo
         "expected_start_at": expected_start_at,
         "expected_end_at": expected_end_at,
         "expected_hours": expected_hours,
+        "expected_break_minutes": int(getattr(shift, "break_minutes", 0) or 0) if shift else 0,
+        "grace_in_minutes": int(getattr(shift, "grace_in_minutes", 0) or 0) if shift else 0,
+        "grace_out_minutes": int(getattr(shift, "grace_out_minutes", 0) or 0) if shift else 0,
+        "crosses_midnight": crosses_midnight,
+        "is_night_shift": bool(getattr(shift, "is_night_shift", False)) if shift else False,
+        "is_payable_schedule_day": day_type == "working_day",
+        "payroll_day_weight": "1.00" if day_type == "working_day" else "0.00",
+        "payroll_impact": {
+            "expected_work_day": day_type == "working_day",
+            "expected_payable_day": day_type == "working_day",
+            "non_working_reason": day_type if day_type in {"weekly_off", "holiday", "unassigned"} else "",
+        },
         "weekly_off_source": weekly_off_source,
         "weekly_off_days": sorted(effective_weekly_off_days),
         "holiday_id": str(holiday.id) if holiday else None,
@@ -1010,6 +1071,8 @@ def resolve_employee_work_schedule(*, employee, start_date: date, end_date: date
         days.append(resolve_employee_work_day(employee=employee, work_date=pointer, policy=policy))
         pointer += timedelta(days=1)
     return {
+        "contract_ref": SCHEDULE_SPINE_CONTRACT_REF,
+        "resolver_ref": SCHEDULE_SPINE_RESOLVER_REF,
         "employee_id": str(employee.id),
         "employee_code": employee.employee_code,
         "start_date": start_date.isoformat(),
@@ -1160,6 +1223,105 @@ def evaluate_attendance_runtime(
         "late_minutes": late_minutes,
         "early_exit_minutes": early_exit_minutes,
         "overtime_hours": overtime_hours,
+    }
+
+
+def build_attendance_derivation_summary(record: AttendanceRecord) -> dict:
+    schedule_day = resolve_employee_work_day(employee=record.employee, work_date=record.attendance_date)
+    from apps.leave_management.models import LeaveRequest, LeaveRequestStatus
+
+    leave_collisions = [
+        {
+            "leave_request_id": str(item.id),
+            "leave_type": item.leave_type.name,
+            "leave_status": item.status,
+            "start_date": item.start_date.isoformat(),
+            "end_date": item.end_date.isoformat(),
+            "message": "Leave request overlaps this attendance day.",
+        }
+        for item in LeaveRequest.objects.filter(
+            tenant=record.tenant,
+            employee=record.employee,
+            status__in=[LeaveRequestStatus.APPROVED, LeaveRequestStatus.PARTIALLY_APPROVED],
+            start_date__lte=record.attendance_date,
+            end_date__gte=record.attendance_date,
+        ).select_related("leave_type")
+    ]
+    expected_hours = _quantize_hours(schedule_day.get("expected_hours"))
+    worked_hours = _quantize_hours(record.work_duration_hours)
+    overtime_hours = _quantize_hours(record.overtime_hours)
+    status = record.status
+    reasons: list[str] = []
+    warnings = list(schedule_day.get("warnings") or [])
+
+    if record.holiday_id or schedule_day.get("day_type") == "holiday":
+        holiday_name = record.holiday.name if record.holiday else schedule_day.get("holiday_name") or "resolved holiday"
+        reasons.append(f"Marked holiday because {holiday_name} applies to this date.")
+    elif schedule_day.get("day_type") == "weekly_off":
+        reasons.append("Marked weekly off from the resolved roster or shift calendar.")
+    elif status == AttendanceStatus.ON_LEAVE:
+        reasons.append("Marked on leave from an approved leave workflow.")
+    elif status == AttendanceStatus.REMOTE:
+        reasons.append("Marked remote work from the attendance source or correction.")
+    elif not record.check_in_at and not record.check_out_at:
+        reasons.append("No check-in or check-out was captured for a scheduled working day.")
+    elif not record.check_in_at or not record.check_out_at:
+        reasons.append("Only one punch was captured, so the day needs review or regularization.")
+    else:
+        reasons.append(f"Worked {worked_hours} hours against {expected_hours} expected hours.")
+
+    if record.late_minutes:
+        reasons.append(f"{record.late_minutes} late minutes after shift grace.")
+    if record.early_exit_minutes:
+        reasons.append(f"{record.early_exit_minutes} early-exit minutes before shift grace.")
+    if overtime_hours > DECIMAL_ZERO:
+        reasons.append(f"{overtime_hours} overtime hours crossed the configured threshold.")
+
+    if status in {AttendanceStatus.ABSENT, AttendanceStatus.UNKNOWN} and schedule_day.get("day_type") == "working_day":
+        warnings.append("Payroll-impacting working day without a payable attendance status.")
+    if not record.check_in_at or not record.check_out_at:
+        warnings.append("Punch evidence is missing or incomplete.")
+
+    if status in {AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.REMOTE}:
+        payable_units = Decimal("1.00")
+        lop_units = DECIMAL_ZERO
+    elif status == AttendanceStatus.HALF_DAY:
+        payable_units = Decimal("0.50")
+        lop_units = Decimal("0.50")
+    elif status == AttendanceStatus.ABSENT:
+        payable_units = DECIMAL_ZERO
+        lop_units = Decimal("1.00") if schedule_day.get("day_type") == "working_day" else DECIMAL_ZERO
+    else:
+        payable_units = DECIMAL_ZERO
+        lop_units = DECIMAL_ZERO
+
+    return {
+        "schema_ref": ATTENDANCE_DERIVATION_SUMMARY_REF,
+        "status": status,
+        "schedule_contract_ref": schedule_day.get("contract_ref"),
+        "schedule_resolver_ref": schedule_day.get("resolver_ref"),
+        "schedule_day_type": schedule_day.get("day_type"),
+        "schedule_resolution_source": schedule_day.get("resolution_source"),
+        "shift_name": record.shift.name if record.shift else schedule_day.get("shift_name"),
+        "holiday_name": record.holiday.name if record.holiday else schedule_day.get("holiday_name"),
+        "expected_start_time": schedule_day.get("expected_start_time"),
+        "expected_end_time": schedule_day.get("expected_end_time"),
+        "expected_hours": str(expected_hours),
+        "worked_hours": str(worked_hours),
+        "late_minutes": record.late_minutes,
+        "early_exit_minutes": record.early_exit_minutes,
+        "overtime_hours": str(overtime_hours),
+        "reasons": reasons,
+        "warnings": warnings,
+        "payroll_impact": {
+            "expected_work_day": bool((schedule_day.get("payroll_impact") or {}).get("expected_work_day")),
+            "expected_payable_day": bool((schedule_day.get("payroll_impact") or {}).get("expected_payable_day")),
+            "payable_units": str(payable_units.quantize(DECIMAL_HUNDREDTH)),
+            "lop_units": str(lop_units.quantize(DECIMAL_HUNDREDTH)),
+            "payroll_impacting": bool(lop_units > DECIMAL_ZERO or status in {AttendanceStatus.ABSENT, AttendanceStatus.UNKNOWN}),
+        },
+        "leave_collisions": leave_collisions,
+        "leave_collision_count": len(leave_collisions),
     }
 
 

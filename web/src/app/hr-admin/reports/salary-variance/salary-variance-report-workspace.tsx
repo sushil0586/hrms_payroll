@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import type { HrAdminPayrollCalculationLine, HrAdminPayrollRunReview } from "@/lib/types";
+import type { HrAdminPayrollCalculationLineListItem, HrAdminPayrollRunReview } from "@/lib/types";
 
 type VarianceBand = "All" | "Increase" | "Decrease" | "No change" | "Baseline pending";
 
@@ -38,13 +38,13 @@ function formatPercent(value: number | null) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
-function amount(line: HrAdminPayrollCalculationLine) {
+function amount(line: HrAdminPayrollCalculationLineListItem) {
   return Number(line.amount ?? 0);
 }
 
-function readBaselineNetPay(lines: HrAdminPayrollCalculationLine[]) {
+function readBaselineNetPay(lines: HrAdminPayrollCalculationLineListItem[]) {
   for (const line of lines) {
-    const snapshot = line.context_snapshot as Record<string, unknown>;
+    const snapshot = line.context_snapshot ?? {};
     const baseline = snapshot.previous_net_pay ?? snapshot.baseline_net_pay ?? snapshot.prior_period_net_pay;
     if (baseline !== undefined && baseline !== null && Number.isFinite(Number(baseline))) {
       return Number(baseline);
@@ -53,9 +53,9 @@ function readBaselineNetPay(lines: HrAdminPayrollCalculationLine[]) {
   return null;
 }
 
-function buildRows(lines: HrAdminPayrollCalculationLine[], reviews: HrAdminPayrollRunReview[]): SalaryVarianceRow[] {
+function buildRows(lines: HrAdminPayrollCalculationLineListItem[], reviews: HrAdminPayrollRunReview[]): SalaryVarianceRow[] {
   const reviewByCalculationId = new Map(reviews.map((review) => [review.calculation_id, review]));
-  const grouped = new Map<string, HrAdminPayrollCalculationLine[]>();
+  const grouped = new Map<string, HrAdminPayrollCalculationLineListItem[]>();
 
   lines.forEach((line) => {
     const key = `${line.calculation_id}:${line.employee_id}`;
@@ -116,7 +116,7 @@ export function SalaryVarianceReportWorkspace({
   lines,
   reviews,
 }: {
-  lines: HrAdminPayrollCalculationLine[];
+  lines: HrAdminPayrollCalculationLineListItem[];
   reviews: HrAdminPayrollRunReview[];
 }) {
   const [query, setQuery] = useState("");

@@ -165,6 +165,7 @@ export async function createRoleBackedTenantUser(
 
 export function payrollLifecyclePermissions() {
   return [
+    "employees.view",
     "payroll.inputs.view",
     "payroll.inputs.manage",
     "payroll.calculate",

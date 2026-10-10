@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import type { HrAdminPayrollAdjustment, HrAdminPayrollAdjustmentSetupResponse, HrAdminPayrollInputSnapshot, HrAdminPayrollRun } from "@/lib/types";
+import type { HrAdminPayrollAdjustment, HrAdminPayrollAdjustmentSetupResponse, HrAdminPayrollInputSnapshotListItem, HrAdminPayrollRun } from "@/lib/types";
 
 type Props = {
   setup: HrAdminPayrollAdjustmentSetupResponse;
@@ -31,10 +31,16 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
     () => setup.snapshots.filter((snapshot) => snapshot.payroll_run_id === selectedRun?.id && snapshot.snapshot_status === "locked"),
     [selectedRun?.id, setup.snapshots],
   );
+  const runPostLockImpacts = useMemo(
+    () => setup.post_lock_impacts.filter((impact) => impact.payroll_run_id === selectedRun?.id),
+    [selectedRun?.id, setup.post_lock_impacts],
+  );
+  const [postLockImpactRef, setPostLockImpactRef] = useState(runPostLockImpacts[0]?.adjustment_source_ref ?? "");
+  const selectedPostLockImpact = runPostLockImpacts.find((impact) => impact.adjustment_source_ref === postLockImpactRef) ?? runPostLockImpacts[0] ?? null;
   const [snapshotId, setSnapshotId] = useState(runSnapshots[0]?.id ?? "");
-  const activeSnapshot = runSnapshots.find((snapshot) => snapshot.id === snapshotId) ?? runSnapshots[0] ?? null;
+  const activeSnapshot = runSnapshots.find((snapshot) => snapshot.id === (selectedPostLockImpact?.snapshot_id ?? snapshotId)) ?? runSnapshots[0] ?? null;
   const [amount, setAmount] = useState("12500");
-  const [sourceRef, setSourceRef] = useState("pilot-adjustment-manual");
+  const [sourceRef, setSourceRef] = useState(runPostLockImpacts[0]?.adjustment_source_ref ?? "pilot-adjustment-manual");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState("");
@@ -85,10 +91,10 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
         payroll_run_id: selectedRun.id,
         employee_id: activeSnapshot.employee_id,
         input_snapshot_id: activeSnapshot.id,
-        kind: "bonus",
+        kind: selectedPostLockImpact ? "arrear" : "bonus",
         direction: "earning",
-        component_code: "P100_BONUS",
-        component_name: "Pilot Certification Bonus",
+        component_code: selectedPostLockImpact ? "POST_LOCK_ARREAR" : "P100_BONUS",
+        component_name: selectedPostLockImpact ? "Post-Lock Attendance Arrear" : "Pilot Certification Bonus",
         amount,
         currency_code: "INR",
         effective_date: activeSnapshot.period_end,
@@ -97,8 +103,10 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
         adjustment_profile_ref: "tenant.payroll.adjustment.pilot100.v1",
         approval_profile_ref: "tenant.payroll.adjustment.approval.pilot100.v1",
         source_ref: sourceRef,
-        reason: "Pilot certification one-time adjustment entered through HR admin workspace.",
-        config_snapshot: { source_system_ref: "hr_admin_browser_certification", pilot_phase: "P100-7" },
+        reason: selectedPostLockImpact
+          ? "Post-lock attendance or leave change requires arrear/correction review."
+          : "Pilot certification one-time adjustment entered through HR admin workspace.",
+        config_snapshot: { source_system_ref: "hr_admin_browser_certification", pilot_phase: "P100-7", post_lock_source: selectedPostLockImpact },
       },
       "Adjustment created as draft.",
     );
@@ -129,10 +137,33 @@ export function PayrollAdjustmentActionsPanel({ setup, selectedRun, selectedAdju
         <span className="payroll-setup-count">{runSnapshots.length} locked snapshots</span>
       </div>
       <div className="payroll-output-handoff-grid payroll-adjustment-control-grid">
+        {runPostLockImpacts.length ? (
+          <label>
+            <span>Post-lock impact</span>
+            <select
+              aria-label="Post-lock payroll impact"
+              value={selectedPostLockImpact?.adjustment_source_ref ?? postLockImpactRef}
+              onChange={(event) => {
+                const impact = runPostLockImpacts.find((item) => item.adjustment_source_ref === event.target.value) ?? null;
+                setPostLockImpactRef(event.target.value);
+                setSourceRef(impact?.adjustment_source_ref ?? event.target.value);
+                if (impact) {
+                  setSnapshotId(impact.snapshot_id);
+                }
+              }}
+            >
+              {runPostLockImpacts.map((impact) => (
+                <option key={impact.adjustment_source_ref} value={impact.adjustment_source_ref}>
+                  {impact.employee_code} - {impact.period_start} to {impact.period_end}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <label>
           <span>Employee snapshot</span>
           <select aria-label="Employee snapshot" value={snapshotId} onChange={(event) => setSnapshotId(event.target.value)}>
-            {runSnapshots.map((snapshot: HrAdminPayrollInputSnapshot) => (
+            {runSnapshots.map((snapshot: HrAdminPayrollInputSnapshotListItem) => (
               <option key={snapshot.id} value={snapshot.id}>
                 {snapshot.employee_code} - {snapshot.employee_name}
               </option>

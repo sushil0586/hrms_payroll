@@ -55,6 +55,23 @@ async function submitAndCapture<T>(
   return payload as T;
 }
 
+function payloadId(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+  const item = payload as Record<string, unknown>;
+  if (typeof item.id === "string") {
+    return item.id;
+  }
+  if (item.item && typeof item.item === "object" && typeof (item.item as Record<string, unknown>).id === "string") {
+    return String((item.item as Record<string, unknown>).id);
+  }
+  if (item.data && typeof item.data === "object" && typeof (item.data as Record<string, unknown>).id === "string") {
+    return String((item.data as Record<string, unknown>).id);
+  }
+  return "";
+}
+
 async function createNotificationTemplateThroughBrowser(page: Page, channel = "in_app") {
   const code = uniqueCode("NOTIF_TEMPLATE");
   await gotoAuthenticated(page, "/hr-admin/notification-templates/new");
@@ -73,12 +90,14 @@ async function createNotificationTemplateThroughBrowser(page: Page, channel = "i
   await field(form, "Body template").fill("Hello {employee_name}, your request is {status}.");
   await field(form, "Metadata template JSON").fill(JSON.stringify({ action_path: "/hr-admin/notifications" }, null, 2));
 
-  const created = await submitAndCapture<{ id: string; code: string }>(page, "notification-templates", "POST", async () => {
+  const created = await submitAndCapture<{ id?: string; code?: string }>(page, "notification-templates", "POST", async () => {
     await page.getByRole("button", { name: "Create template" }).click();
   });
+  const createdId = payloadId(created);
+  expect(createdId).toBeTruthy();
   await expect(page).toHaveURL(/\/hr-admin\/notification-templates$/);
   await expect(page.getByText(code).first()).toBeVisible();
-  return { ...created, code };
+  return { ...created, id: createdId, code };
 }
 
 test.describe("HR admin notification setup CRUD", () => {
@@ -98,7 +117,7 @@ test.describe("HR admin notification setup CRUD", () => {
     await expect(page.locator("label").filter({ hasText: "System seeded" }).getByRole("checkbox")).toBeVisible();
 
     await page.getByRole("button", { name: "Create template" }).click();
-    await expect(field(form, "Code")).toBeFocused();
+    await expect(field(form, "Code")).toHaveAttribute("aria-invalid", "true");
 
     const code = uniqueCode("NOTIF_TEMPLATE");
     await field(form, "Code").fill(code);
@@ -111,7 +130,7 @@ test.describe("HR admin notification setup CRUD", () => {
     await field(form, "Body template").fill("Hello {employee_name}, your request is {status}.");
     await field(form, "Metadata template JSON").fill("{");
     await page.getByRole("button", { name: "Create template" }).click();
-    await expect(page.getByText("Metadata template must be valid JSON.")).toBeVisible();
+    await expect(page.getByText("Metadata template must be a valid JSON object.")).toBeVisible();
 
     await field(form, "Reply-to label").fill("HR Helpdesk");
     await field(form, "Metadata template JSON").fill(JSON.stringify({ reply_to_label: "HR Helpdesk", source: "playwright" }, null, 2));
@@ -130,26 +149,30 @@ test.describe("HR admin notification setup CRUD", () => {
     });
     await expect(page.getByText("Test notification created.")).toBeVisible();
 
-    const created = await submitAndCapture<{ id: string; code: string }>(page, "notification-templates", "POST", async () => {
+    const created = await submitAndCapture<{ id?: string; code?: string }>(page, "notification-templates", "POST", async () => {
       await page.getByRole("button", { name: "Create template" }).click();
     });
+    const createdId = payloadId(created);
+    expect(createdId).toBeTruthy();
     await expect(page).toHaveURL(/\/hr-admin\/notification-templates$/);
     await expect(page.getByText(code).first()).toBeVisible();
 
-    await gotoAuthenticated(page, `/hr-admin/notification-templates/${created.id}/edit`);
+    await gotoAuthenticated(page, `/hr-admin/notification-templates/${createdId}/edit`);
     await expectPageReady(page, "Edit notification template");
     const editForm = page.locator("form").first();
     await expect(field(editForm, "Code")).toHaveValue(code);
     await field(editForm, "Name").fill(`Updated ${code}`);
     await field(editForm, "Status").selectOption("archived");
     await field(editForm, "Body template").fill("Updated body for {employee_name}.");
-    await submitAndCapture(page, `notification-templates/${created.id}`, "PATCH", async () => {
+    await submitAndCapture(page, `notification-templates/${createdId}`, "PATCH", async () => {
       await page.getByRole("button", { name: "Save changes" }).click();
     });
     await expect(page).toHaveURL(/\/hr-admin\/notification-templates$/);
-    await expect(page.getByText(`Updated ${code}`).first()).toBeVisible();
-    const updatedTemplateCard = page.locator("article").filter({ hasText: `Updated ${code}` }).first();
-    await expect(updatedTemplateCard.getByText("archived").first()).toBeVisible();
+    await gotoAuthenticated(page, `/hr-admin/notification-templates/${createdId}/edit`);
+    await expectPageReady(page, "Edit notification template");
+    const persistedTemplateForm = page.locator("form").first();
+    await expect(field(persistedTemplateForm, "Name")).toHaveValue(`Updated ${code}`);
+    await expect(field(persistedTemplateForm, "Status")).toHaveValue("archived");
 
     await gotoAuthenticated(page, "/hr-admin/notification-templates/new");
     await expectPageReady(page, "Create notification template");
@@ -196,7 +219,7 @@ test.describe("HR admin notification setup CRUD", () => {
     await field(form, "Routing key").fill("explicit_membership");
     await field(form, "Recipient snapshot JSON").fill("{");
     await page.getByRole("button", { name: "Create notification event" }).click();
-    await expect(page.getByText("Recipient snapshot must be valid JSON.")).toBeVisible();
+    await expect(page.getByText("Recipient snapshot must be a valid JSON object.")).toBeVisible();
 
     await field(form, "Recipient snapshot JSON").fill(JSON.stringify({ routing: "explicit_membership", source: "playwright" }, null, 2));
     await page.locator("label").filter({ hasText: "Active" }).getByRole("checkbox").uncheck();
@@ -214,27 +237,27 @@ test.describe("HR admin notification setup CRUD", () => {
     });
     await expect(page.getByText("Test notification created.")).toBeVisible();
 
-    const created = await submitAndCapture<{ id: string }>(page, "notification-events", "POST", async () => {
+    const created = await submitAndCapture<{ id?: string }>(page, "notification-events", "POST", async () => {
       await page.getByRole("button", { name: "Create notification event" }).click();
     });
+    const createdId = payloadId(created);
+    expect(createdId).toBeTruthy();
     await expect(page).toHaveURL(/\/hr-admin\/notification-events$/);
-    await expect(page.getByText(code).first()).toBeVisible();
-    const createdEventCard = page.locator("article").filter({ hasText: code }).first();
-    await expect(createdEventCard.getByText("inactive")).toBeVisible();
-    await expect(createdEventCard.getByText("5 min")).toBeVisible();
 
-    await gotoAuthenticated(page, `/hr-admin/notification-events/${created.id}/edit`);
+    await gotoAuthenticated(page, `/hr-admin/notification-events/${createdId}/edit`);
     await expectPageReady(page, "Edit notification event");
     const editForm = page.locator("form").first();
     await expect(field(editForm, "Code")).toHaveValue(code);
+    await expect(field(editForm, "Delay minutes")).toHaveValue("5");
+    await expect(page.locator("label").filter({ hasText: "Active" }).getByRole("checkbox")).not.toBeChecked();
     await field(editForm, "Name").fill(`Updated ${code}`);
     await field(editForm, "Priority").selectOption("critical");
     await field(editForm, "Delay minutes").fill("7");
     await page.locator("label").filter({ hasText: "Active" }).getByRole("checkbox").check();
-    await submitAndCapture(page, `notification-events/${created.id}`, "PATCH", async () => {
+    await submitAndCapture(page, `notification-events/${createdId}`, "PATCH", async () => {
       await page.getByRole("button", { name: "Save changes" }).click();
     });
-    await gotoAuthenticated(page, `/hr-admin/notification-events/${created.id}/edit`);
+    await gotoAuthenticated(page, `/hr-admin/notification-events/${createdId}/edit`);
     await expectPageReady(page, "Edit notification event");
     const persistedForm = page.locator("form").first();
     await expect(field(persistedForm, "Name")).toHaveValue(`Updated ${code}`);

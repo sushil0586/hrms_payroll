@@ -15,6 +15,10 @@ type LeaveBalanceTransactionRow = {
   status: string;
 };
 
+type PaginatedResponse<T> = {
+  items: T[];
+};
+
 test.describe("HR admin leave balance import flows", () => {
   test("leave balance import validates commits and records audited transactions", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/leave-balances", hrAdmin);
@@ -26,10 +30,11 @@ test.describe("HR admin leave balance import flows", () => {
         throw new Error(`Leave balance read failed with ${response.status}`);
       }
       return response.json();
-    }) as LeaveBalanceRow[];
-    expect(balances.length).toBeGreaterThan(0);
+    }) as PaginatedResponse<LeaveBalanceRow>;
+    const balanceRows = balances.items;
+    expect(balanceRows.length).toBeGreaterThan(0);
 
-    const first = balances[0];
+    const first = balanceRows[0];
     const suffix = String(Date.now()).slice(-6);
     const reason = `Browser leave import ${suffix}`;
     const duplicateReason = `Browser leave import duplicate ${suffix}`;
@@ -79,9 +84,9 @@ test.describe("HR admin leave balance import flows", () => {
         throw new Error(`Leave transaction read failed with ${response.status}`);
       }
       return response.json();
-    }) as LeaveBalanceTransactionRow[];
-    expect(transactions.some((item) => item.reason === reason && item.employee_code === first.employee_code)).toBeTruthy();
-    expect(transactions.some((item) => item.reason === duplicateReason)).toBeFalsy();
+    }) as PaginatedResponse<LeaveBalanceTransactionRow>;
+    expect(transactions.items.some((item) => item.reason === reason && item.employee_code === first.employee_code)).toBeTruthy();
+    expect(transactions.items.some((item) => item.reason === duplicateReason)).toBeFalsy();
 
     await expectNoHorizontalOverflow(page);
   });

@@ -3,19 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import { FormSection } from "@/components/patterns/form-section";
 import type {
   HrAdminAttendancePolicyAssignmentConflictCheck,
   HrAdminAttendancePolicyAssignmentWriteInput,
   HrAdminOptionItem,
-  HrAdminPolicyOptions,
+  HrAdminPolicyWorkbenchOptions,
 } from "@/lib/types";
 import { type FieldErrors, hasFieldErrors, requireValue } from "@/lib/ui/validation";
 
 type Props = {
   initialValue: HrAdminAttendancePolicyAssignmentWriteInput;
   mode: "create" | "edit";
-  options: HrAdminPolicyOptions;
+  options: Pick<
+    HrAdminPolicyWorkbenchOptions,
+    "attendance_policies" | "legal_entities" | "branches" | "locations" | "departments" | "grades" | "employment_types"
+  >;
   itemId?: string;
 };
 
@@ -219,7 +223,12 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
               <label className="form-field"><span className="muted">Department</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.department_id ?? ""} onChange={(e) => update("department_id", e.target.value || null)}>{selectOptions(options.departments)}</select></label>
               <label className="form-field"><span className="muted">Grade</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.grade_id ?? ""} onChange={(e) => update("grade_id", e.target.value || null)}>{selectOptions(options.grades)}</select></label>
               <label className="form-field"><span className="muted">Employment type</span><select className="input-control" disabled={hasEmployeeOverride} value={hasEmployeeOverride ? "" : formValue.employment_type_id ?? ""} onChange={(e) => update("employment_type_id", e.target.value || null)}>{selectOptions(options.employment_types)}</select></label>
-              <label className="form-field"><span className="muted">Employee override</span><select className="input-control" value={formValue.employee_id ?? ""} onChange={(e) => update("employee_id", e.target.value || null)}>{selectOptions(options.employees)}</select></label>
+              <EmployeeSearchSelect
+                hint={hasEmployeeOverride ? "Employee override clears organization filters." : "Optional. Search only when this policy should target one employee."}
+                label="Employee override"
+                value={formValue.employee_id ?? ""}
+                onChange={(value) => update("employee_id", value || null)}
+              />
               <label className="form-field"><span className="muted">Priority</span><input aria-invalid={Boolean(fieldErrors.priority)} className="input-control" type="number" value={formValue.priority} onChange={(e) => update("priority", Number(e.target.value))} />{fieldErrors.priority ? <span className="field-error-text">{fieldErrors.priority}</span> : null}</label>
             </div>
             {formValue.is_active ? (

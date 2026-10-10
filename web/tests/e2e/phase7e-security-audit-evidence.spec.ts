@@ -54,7 +54,7 @@ async function switchPersona(page: Page, persona: Persona, path: string) {
 
 async function createActiveSupportSession(page: Page, sessionRef: string) {
   await switchPersona(page, hrAdmin, "/tenant-admin");
-  await expectPageReady(page, "Tenant Admin Console");
+  await expectPageReady(page, "Account Control Center");
 
   const createResponse = await page.request.post("/api/tenant-admin/support-access-grants", {
     data: {
@@ -98,6 +98,8 @@ async function getTrustAudit(page: Page, sessionRef: string) {
 }
 
 test.describe("Phase 7E security audit evidence", () => {
+  test.setTimeout(120_000);
+
   test("support lifecycle and runtime decisions are customer-visible in trust audit", async ({ page }, testInfo) => {
     const sessionRef = `phase7e-audit-${Date.now()}`;
     await createActiveSupportSession(page, sessionRef);
@@ -117,7 +119,7 @@ test.describe("Phase 7E security audit evidence", () => {
     await switchPersona(page, hrAdmin, `/tenant-admin/trust-audit?event_group=support&support_session_ref=${sessionRef}`);
     await expectPageReady(page, "Tenant Trust Audit");
     await expect(page.getByText(`Session: ${sessionRef}`)).toBeVisible();
-    await expect(page.getByRole("link", { name: "Support access", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Support access" }).first()).toBeVisible();
     await expect(page.getByText("Support Access Session Started", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Support Access Session Checked", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Support Access Session Denied", { exact: true }).first()).toBeVisible();

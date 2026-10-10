@@ -2,26 +2,10 @@
 
 import { useState } from "react";
 
-import type { HrAdminAttendancePolicyAssignmentResolution, HrAdminOptionItem } from "@/lib/types";
+import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
+import type { HrAdminAttendancePolicyAssignmentResolution } from "@/lib/types";
 
-type Props = {
-  employees: HrAdminOptionItem[];
-};
-
-function renderSelectOptions(items: HrAdminOptionItem[]) {
-  return [
-    <option key="blank" value="">
-      Select an option
-    </option>,
-    ...items.map((item) => (
-      <option key={item.id} value={item.id}>
-        {item.name}
-      </option>
-    )),
-  ];
-}
-
-export function AttendancePolicyAssignmentGovernancePanel({ employees }: Props) {
+export function AttendancePolicyAssignmentGovernancePanel() {
   const [employeeId, setEmployeeId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -67,12 +51,7 @@ export function AttendancePolicyAssignmentGovernancePanel({ employees }: Props) 
           </div>
         </div>
         <form className="queue-toolbar panel-card-soft" onSubmit={handleInspect}>
-          <label className="queue-toolbar__search">
-            <span className="muted">Employee</span>
-            <select className="input-control" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
-              {renderSelectOptions(employees)}
-            </select>
-          </label>
+          <EmployeeSearchSelect value={employeeId} onChange={setEmployeeId} />
           <div className="queue-toolbar__actions">
             <button className="button button--primary" disabled={isLoading} type="submit">
               {isLoading ? "Inspecting..." : "Inspect resolution"}

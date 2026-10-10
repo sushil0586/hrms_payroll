@@ -3,24 +3,30 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import type {
   HrAdminLeaveBalance,
   HrAdminLeaveBalanceActionInput,
   HrAdminLeaveBalanceActionResult,
+  HrAdminLeaveBalanceListResponse,
   HrAdminLeaveBalanceTransaction,
-  HrAdminPolicyOptions,
+  HrAdminLeaveBalanceTransactionListResponse,
+  HrAdminPolicyWorkbenchOptions,
 } from "@/lib/types";
 
 type Props = {
-  initialBalances: HrAdminLeaveBalance[];
-  initialTransactions: HrAdminLeaveBalanceTransaction[];
-  options: HrAdminPolicyOptions;
+  balancesPage: HrAdminLeaveBalanceListResponse;
+  transactionsPage: HrAdminLeaveBalanceTransactionListResponse;
+  options: Pick<HrAdminPolicyWorkbenchOptions, "leave_policies">;
   canManageBalances?: boolean;
   initialFilters?: {
+    balancePage?: number;
     employeeId?: string;
+    pageSize?: number;
     policyId?: string;
     query?: string;
+    transactionPage?: number;
     transactionStatus?: string;
   };
 };
@@ -66,6 +72,15 @@ function selectOptions(items: Array<{ id: string; name: string }>, emptyLabel = 
       </option>
     )),
   ];
+}
+
+function buildLeaveBalanceHref(updates: Record<string, string | undefined>) {
+  const params = new URLSearchParams();
+  Object.entries(updates).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const query = params.toString();
+  return `/hr-admin/leave-balances${query ? `?${query}` : ""}`;
 }
 
 function leaveBalanceTemplateCsv() {
@@ -393,15 +408,15 @@ function LeaveBalanceImportWorkbench({
 }
 
 export function LeaveBalanceOperations({
-  initialBalances,
-  initialTransactions,
+  balancesPage,
+  transactionsPage,
   options,
   canManageBalances = true,
   initialFilters,
 }: Props) {
   const router = useRouter();
-  const [balances, setBalances] = useState(initialBalances);
-  const [transactions, setTransactions] = useState(initialTransactions);
+  const [balances, setBalances] = useState(balancesPage.items);
+  const [transactions, setTransactions] = useState(transactionsPage.items);
   const [query, setQuery] = useState(initialFilters?.query ?? "");
   const [employeeFilter, setEmployeeFilter] = useState(initialFilters?.employeeId ?? "");
   const [policyFilter, setPolicyFilter] = useState(initialFilters?.policyId ?? "");
@@ -414,52 +429,40 @@ export function LeaveBalanceOperations({
   const [reviewReasonById, setReviewReasonById] = useState<Record<string, string>>({});
   const [reviewingTransactionId, setReviewingTransactionId] = useState<string | null>(null);
   const reviewingTransactionRef = useRef<string | null>(null);
-  const [balancePage, setBalancePage] = useState(1);
-  const [transactionPage, setTransactionPage] = useState(1);
+  const pageSize = initialFilters?.pageSize ?? balancesPage.page_size;
+  const safeBalancePage = Math.min(balancesPage.page, balancesPage.total_pages ?? Math.max(1, Math.ceil(balancesPage.total_count / balancesPage.page_size)));
+  const safeTransactionPage = Math.min(transactionsPage.page, transactionsPage.total_pages ?? Math.max(1, Math.ceil(transactionsPage.total_count / transactionsPage.page_size)));
+  const balanceEmployeeOptions = balances.map((item) => ({
+    id: item.employee_id,
+    name: item.employee_name,
+    employee_code: item.employee_code,
+  }));
 
-  const filteredBalances = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return balances.filter((item) => {
-      if (employeeFilter && item.employee_id !== employeeFilter) return false;
-      if (policyFilter && item.leave_policy_id !== policyFilter) return false;
-      if (!normalizedQuery) return true;
-      return [
-        item.employee_name,
-        item.employee_code,
-        item.leave_policy_name,
-        item.leave_type_name,
-      ].some((value) => value.toLowerCase().includes(normalizedQuery));
+  function filterHref(updates: Record<string, string | undefined> = {}) {
+    return buildLeaveBalanceHref({
+      q: query.trim() || undefined,
+      employee_id: employeeFilter || undefined,
+      leave_policy_id: policyFilter || undefined,
+      transaction_status: transactionStatusFilter || undefined,
+      page_size: String(pageSize),
+      balance_page: "1",
+      transaction_page: "1",
+      ...updates,
     });
-  }, [balances, employeeFilter, policyFilter, query]);
-
-  const filteredTransactions = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return transactions.filter((item) => {
-      if (employeeFilter && item.employee_id !== employeeFilter) return false;
-      if (policyFilter && item.leave_policy_id !== policyFilter) return false;
-      if (transactionStatusFilter && item.status !== transactionStatusFilter) return false;
-      if (!normalizedQuery) return true;
-      return [
-        item.employee_name,
-        item.employee_code,
-        item.leave_policy_name,
-        item.reason,
-        item.action,
-      ].some((value) => value.toLowerCase().includes(normalizedQuery));
-    });
-  }, [employeeFilter, policyFilter, query, transactionStatusFilter, transactions]);
-
-  function resetFilteredPages() {
-    setBalancePage(1);
-    setTransactionPage(1);
   }
 
-  const balanceTotalPages = Math.max(1, Math.ceil(filteredBalances.length / BALANCE_PAGE_SIZE));
-  const transactionTotalPages = Math.max(1, Math.ceil(filteredTransactions.length / TRANSACTION_PAGE_SIZE));
-  const safeBalancePage = Math.min(balancePage, balanceTotalPages);
-  const safeTransactionPage = Math.min(transactionPage, transactionTotalPages);
-  const pagedBalances = filteredBalances.slice((safeBalancePage - 1) * BALANCE_PAGE_SIZE, safeBalancePage * BALANCE_PAGE_SIZE);
-  const pagedTransactions = filteredTransactions.slice((safeTransactionPage - 1) * TRANSACTION_PAGE_SIZE, safeTransactionPage * TRANSACTION_PAGE_SIZE);
+  function pageHref(updates: Record<string, string | undefined>) {
+    return buildLeaveBalanceHref({
+      q: initialFilters?.query || undefined,
+      employee_id: initialFilters?.employeeId || undefined,
+      leave_policy_id: initialFilters?.policyId || undefined,
+      transaction_status: initialFilters?.transactionStatus || undefined,
+      page_size: String(pageSize),
+      balance_page: String(initialFilters?.balancePage ?? balancesPage.page),
+      transaction_page: String(initialFilters?.transactionPage ?? transactionsPage.page),
+      ...updates,
+    });
+  }
 
   function update<Key extends keyof HrAdminLeaveBalanceActionInput>(key: Key, value: HrAdminLeaveBalanceActionInput[Key]) {
     setFormValue((current) => ({ ...current, [key]: value }));
@@ -586,12 +589,7 @@ export function LeaveBalanceOperations({
           </div>
           <form className="queue-toolbar panel-card-soft" onSubmit={handleSubmit}>
             <div className="queue-toolbar__grid two-column-grid">
-              <label className="queue-toolbar__search">
-                <span className="muted">Employee</span>
-                <select className="input-control" value={formValue.employee_id ?? ""} onChange={(event) => update("employee_id", event.target.value || null)}>
-                  {selectOptions(options.employees)}
-                </select>
-              </label>
+              <EmployeeSearchSelect initialOptions={balanceEmployeeOptions} value={formValue.employee_id ?? ""} onChange={(value) => update("employee_id", value || null)} />
               <label className="queue-toolbar__search">
                 <span className="muted">Leave policy</span>
                 <select className="input-control" value={formValue.leave_policy_id ?? ""} onChange={(event) => update("leave_policy_id", event.target.value || null)}>
@@ -652,34 +650,21 @@ export function LeaveBalanceOperations({
                 className="input-control"
                 placeholder="Employee, code, policy, leave type"
                 value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  resetFilteredPages();
-                }}
+                onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <label className="queue-toolbar__search">
-              <span className="muted">Employee filter</span>
-              <select
-                className="input-control"
-                value={employeeFilter}
-                onChange={(event) => {
-                  setEmployeeFilter(event.target.value);
-                  resetFilteredPages();
-                }}
-              >
-                {selectOptions(options.employees, "All employees")}
-              </select>
-            </label>
+            <EmployeeSearchSelect
+              hint="Leave blank to show all employees in the loaded ledger."
+              label="Employee filter"
+              value={employeeFilter}
+              onChange={(value) => setEmployeeFilter(value)}
+            />
             <label className="queue-toolbar__search">
               <span className="muted">Policy filter</span>
               <select
                 className="input-control"
                 value={policyFilter}
-                onChange={(event) => {
-                  setPolicyFilter(event.target.value);
-                  resetFilteredPages();
-                }}
+                onChange={(event) => setPolicyFilter(event.target.value)}
               >
                 {selectOptions(options.leave_policies, "All leave policies")}
               </select>
@@ -689,10 +674,7 @@ export function LeaveBalanceOperations({
               <select
                 className="input-control"
                 value={transactionStatusFilter}
-                onChange={(event) => {
-                  setTransactionStatusFilter(event.target.value);
-                  resetFilteredPages();
-                }}
+                onChange={(event) => setTransactionStatusFilter(event.target.value)}
               >
                 <option value="">All statuses</option>
                 <option value="pending">Pending review</option>
@@ -700,6 +682,18 @@ export function LeaveBalanceOperations({
                 <option value="rejected">Rejected</option>
               </select>
             </label>
+            <label className="queue-toolbar__search">
+              <span className="muted">Rows</span>
+              <select className="input-control" value={String(pageSize)} onChange={(event) => router.push(filterHref({ page_size: event.target.value }))}>
+                <option value="12">12</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </label>
+          </div>
+          <div className="queue-toolbar__actions">
+            <button className="button button--primary" onClick={() => router.push(filterHref())} type="button">Apply filters</button>
+            <button className="button button--secondary" onClick={() => router.push("/hr-admin/leave-balances")} type="button">Clear</button>
           </div>
         </div>
       </section>
@@ -712,17 +706,17 @@ export function LeaveBalanceOperations({
           </div>
           <div className="queue-toolbar__meta">
             <span className="queue-summary-chip">
-              <strong>{filteredBalances.length}</strong>
+              <strong>{balancesPage.total_count}</strong>
               balances
             </span>
             <span className="queue-summary-chip">
-              <strong>{BALANCE_PAGE_SIZE}</strong>
+              <strong>{balancesPage.page_size}</strong>
               rows per page
             </span>
           </div>
         </div>
         <div className="queue-list">
-          {pagedBalances.map((item) => (
+          {balances.map((item) => (
             <article className="record-card panel-card-soft" key={item.id}>
               <div className="record-card__header">
                 <div className="record-card__title-wrap">
@@ -772,17 +766,20 @@ export function LeaveBalanceOperations({
               </div>
             </article>
           ))}
+          {balances.length === 0 ? (
+            <div className="payroll-setup-empty-state"><strong>No leave balances match these filters.</strong><span>Clear filters or search by employee, code, policy, or leave type.</span></div>
+          ) : null}
         </div>
         <PaginationBar
-          hasNext={safeBalancePage < balanceTotalPages}
-          hasPrevious={safeBalancePage > 1}
-          onFirst={() => setBalancePage(1)}
-          onLast={() => setBalancePage(balanceTotalPages)}
-          onNext={() => setBalancePage((page) => Math.min(balanceTotalPages, page + 1))}
-          onPrevious={() => setBalancePage((page) => Math.max(1, page - 1))}
+          firstHref={pageHref({ balance_page: "1", transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
+          hasNext={balancesPage.has_next}
+          hasPrevious={balancesPage.has_previous}
+          lastHref={pageHref({ balance_page: String(balancesPage.total_pages ?? 1), transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
+          nextHref={pageHref({ balance_page: String(safeBalancePage + 1), transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
           page={safeBalancePage}
-          pageSize={BALANCE_PAGE_SIZE}
-          totalCount={filteredBalances.length}
+          pageSize={balancesPage.page_size}
+          previousHref={pageHref({ balance_page: String(safeBalancePage - 1), transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
+          totalCount={balancesPage.total_count}
         />
       </section>
 
@@ -794,17 +791,17 @@ export function LeaveBalanceOperations({
           </div>
           <div className="queue-toolbar__meta">
             <span className="queue-summary-chip">
-              <strong>{filteredTransactions.length}</strong>
+              <strong>{transactionsPage.total_count}</strong>
               transactions
             </span>
             <span className="queue-summary-chip">
-              <strong>{TRANSACTION_PAGE_SIZE}</strong>
+              <strong>{transactionsPage.page_size}</strong>
               rows per page
             </span>
           </div>
         </div>
         <div className="queue-list">
-          {pagedTransactions.map((item) => (
+          {transactions.map((item) => (
             <article className="record-card panel-card-soft" key={item.id}>
               <div className="record-card__header">
                 <div className="record-card__title-wrap">
@@ -902,17 +899,20 @@ export function LeaveBalanceOperations({
               ) : null}
             </article>
           ))}
+          {transactions.length === 0 ? (
+            <div className="payroll-setup-empty-state"><strong>No leave balance transactions match these filters.</strong><span>Clear filters or search by employee, policy, action, reason, or status.</span></div>
+          ) : null}
         </div>
         <PaginationBar
-          hasNext={safeTransactionPage < transactionTotalPages}
-          hasPrevious={safeTransactionPage > 1}
-          onFirst={() => setTransactionPage(1)}
-          onLast={() => setTransactionPage(transactionTotalPages)}
-          onNext={() => setTransactionPage((page) => Math.min(transactionTotalPages, page + 1))}
-          onPrevious={() => setTransactionPage((page) => Math.max(1, page - 1))}
+          firstHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: "1", page_size: String(pageSize) })}
+          hasNext={transactionsPage.has_next}
+          hasPrevious={transactionsPage.has_previous}
+          lastHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: String(transactionsPage.total_pages ?? 1), page_size: String(pageSize) })}
+          nextHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: String(safeTransactionPage + 1), page_size: String(pageSize) })}
           page={safeTransactionPage}
-          pageSize={TRANSACTION_PAGE_SIZE}
-          totalCount={filteredTransactions.length}
+          pageSize={transactionsPage.page_size}
+          previousHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: String(safeTransactionPage - 1), page_size: String(pageSize) })}
+          totalCount={transactionsPage.total_count}
         />
       </section>
     </>

@@ -149,9 +149,27 @@ def build_workspace_access_payload(
         "audit.hr.",
     )
     legacy_hr_admin_access = "hr-admin" in role_codes
-    hr_admin_access = legacy_hr_admin_access or any(
+    manager_scoped_permission_keys = {
+        "leave.requests.approve",
+        "attendance.regularization.review",
+    }
+    role_driven_hr_permission_access = any(role_code.startswith("hr-") for role_code in role_codes)
+    elevated_permission_driven_hr_admin_access = any(
         permission_key.startswith(hr_permission_prefixes)
+        and permission_key not in manager_scoped_permission_keys
+        and not permission_key.endswith(".view")
         for permission_key in effective_permission_keys
+    )
+    view_permission_driven_hr_admin_access = role_driven_hr_permission_access and any(
+        permission_key.startswith(hr_permission_prefixes)
+        and permission_key not in manager_scoped_permission_keys
+        for permission_key in effective_permission_keys
+    )
+    hr_admin_access = legacy_hr_admin_access or (
+        (elevated_permission_driven_hr_admin_access or view_permission_driven_hr_admin_access)
+        and "tenant-admin" not in role_codes
+        and "manager" not in role_codes
+        and "employee" not in role_codes
     )
     tenant_admin_access = (
         legacy_hr_admin_access

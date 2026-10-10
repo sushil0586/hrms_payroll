@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
@@ -656,6 +656,19 @@ class Command(BaseCommand):
         )
         return shift
 
+    @staticmethod
+    def _next_contiguous_working_range(anchor: date, *, days_ahead: int = 15, length: int = 2):
+        start = anchor + timedelta(days=days_ahead)
+        while start.weekday() > 4:
+            start += timedelta(days=1)
+        end = start
+        remaining = length - 1
+        while remaining:
+            end += timedelta(days=1)
+            if end.weekday() <= 4:
+                remaining -= 1
+        return start, end
+
     def _seed_attendance_and_requests(self, *, tenant, employees, leave_catalog, shift, today):
         AttendanceRecord.objects.filter(
             tenant=tenant,
@@ -668,12 +681,14 @@ class Command(BaseCommand):
         employees["aman"].attendance_regularizations.all().delete()
         employees["meera"].attendance_regularizations.all().delete()
 
+        approved_leave_date, _ = self._next_contiguous_working_range(today, days_ahead=0, length=1)
+
         record_specs = [
             (employees["riya"], today - timedelta(days=3), AttendanceStatus.LATE, "10:14", "18:30", 74),
             (employees["riya"], today - timedelta(days=2), AttendanceStatus.PRESENT, "09:08", "18:22", 0),
             (employees["riya"], today - timedelta(days=1), AttendanceStatus.PRESENT, "09:03", "18:15", 0),
             (employees["riya"], today, AttendanceStatus.PRESENT, "09:12", None, 0),
-            (employees["aman"], today, AttendanceStatus.ON_LEAVE, None, None, 0),
+            (employees["aman"], approved_leave_date, AttendanceStatus.ON_LEAVE, None, None, 0),
             (employees["meera"], today, AttendanceStatus.LATE, "09:58", None, 48),
             (employees["manager"], today, AttendanceStatus.PRESENT, "09:01", None, 0),
         ]
@@ -698,11 +713,12 @@ class Command(BaseCommand):
             )
             created_records[(employee.employee_code, attendance_date.isoformat())] = record
 
+        pending_start_date, pending_end_date = self._next_contiguous_working_range(today)
         pending_leave = submit_leave_request(
             employee=employees["riya"],
             leave_type=leave_catalog["leave_types"]["casual-leave"],
-            start_date=today + timedelta(days=15),
-            end_date=today + timedelta(days=16),
+            start_date=pending_start_date,
+            end_date=pending_end_date,
             start_day_portion="full_day",
             end_day_portion="full_day",
             reason="Family event out of town.",
@@ -710,8 +726,8 @@ class Command(BaseCommand):
         approved_leave = submit_leave_request(
             employee=employees["aman"],
             leave_type=leave_catalog["leave_types"]["sick-leave"],
-            start_date=today,
-            end_date=today,
+            start_date=approved_leave_date,
+            end_date=approved_leave_date,
             start_day_portion="full_day",
             end_day_portion="full_day",
             reason="Medical rest advised.",

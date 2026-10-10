@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
-import type { LeaveRequestItem, PagedStatusCounts } from "@/lib/types";
+import type { HrAdminOptionItem, LeaveRequestItem, PagedStatusCounts } from "@/lib/types";
 
 type Props = {
   items: LeaveRequestItem[];
@@ -26,6 +26,7 @@ type Props = {
     has_previous: boolean;
   };
   statusCounts: PagedStatusCounts;
+  leaveTypeOptions: HrAdminOptionItem[];
 };
 
 const REQUEST_STATUS_OPTIONS = [
@@ -86,17 +87,7 @@ function getWaitingLabel(item: LeaveRequestItem) {
   return "Pending approval from configured approver";
 }
 
-function getLeaveTypeCodes(items: LeaveRequestItem[]) {
-  const codes = new Map<string, string>();
-  items.forEach((item) => {
-    if (item.leave_type_code) {
-      codes.set(item.leave_type_code, item.leave_type);
-    }
-  });
-  return Array.from(codes.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
-}
-
-export function LeaveRequestQueue({ items, currentFilters, pagination, statusCounts }: Props) {
+export function LeaveRequestQueue({ items, currentFilters, pagination, statusCounts, leaveTypeOptions }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [search, setSearch] = useState(currentFilters.q);
@@ -105,7 +96,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
   const [fromDate, setFromDate] = useState(currentFilters.from_date);
   const [toDate, setToDate] = useState(currentFilters.to_date);
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
-  const leaveTypeOptions = useMemo(() => getLeaveTypeCodes(items), [items]);
+  const filterLeaveTypeOptions = useMemo(() => leaveTypeOptions.filter((item) => item.code).sort((a, b) => a.name.localeCompare(b.name)), [leaveTypeOptions]);
 
   function goToPage(page: number) {
     router.push(`${pathname}${buildQueryString({
@@ -159,7 +150,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
             <span className="muted">Leave type</span>
             <select className="input-control" onChange={(event) => setLeaveTypeCode(event.target.value)} value={leaveTypeCode}>
               <option value="all">All leave types</option>
-              {leaveTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              {filterLeaveTypeOptions.map((option) => <option key={option.id} value={option.code}>{option.name}</option>)}
             </select>
           </label>
           <label className="form-field">
@@ -213,6 +204,7 @@ export function LeaveRequestQueue({ items, currentFilters, pagination, statusCou
               <div className="detail-row"><span className="detail-label">Approved at</span><span className="detail-value">{formatDateTime(item.approved_at)}</span></div>
               <div className="detail-row"><span className="detail-label">Approved units</span><span className="detail-value">{item.approved_units}</span></div>
               <div className="detail-row"><span className="detail-label">Reason</span><span className="detail-value">{item.reason || "No reason captured"}</span></div>
+              <div className="detail-row"><span className="detail-label">Attendance collision</span><span className="detail-value">{item.attendance_collision_summary?.collision_count ? `${item.attendance_collision_summary.collision_count} payroll-impacting overlap` : "Clear"}</span></div>
               <div className="detail-row"><span className="detail-label">Manager note</span><span className="detail-value">{item.manager_comment || item.rejection_reason || "No decision note yet"}</span></div>
               <div className="detail-row"><span className="detail-label">Workflow</span><span className="detail-value">{item.workflow_reference || "Not linked"}</span></div>
             </div>

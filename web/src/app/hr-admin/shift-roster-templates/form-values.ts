@@ -10,13 +10,15 @@ export function shiftRosterTemplateToFormValue(item: HrAdminShiftRosterTemplate)
     assignment_kind: item.assignment_kind,
     config_snapshot: {
       rotation: {
+        pattern_type: item.config_snapshot?.rotation?.pattern_type ?? "custom_cycle",
         anchor_date: item.config_snapshot?.rotation?.anchor_date ?? null,
         entries:
           item.config_snapshot?.rotation?.entries?.map((entry) => ({
             position: entry.position,
+            entry_kind: entry.entry_kind ?? "work",
             shift_id: entry.shift_id,
             span_days: entry.span_days,
-          })) ?? [{ position: 0, shift_id: item.shift_id, span_days: 7 }],
+          })) ?? [{ position: 0, entry_kind: "work", shift_id: item.shift_id, span_days: 7 }],
       },
     },
   };
@@ -32,8 +34,9 @@ export function createEmptyShiftRosterTemplateValue(): HrAdminShiftRosterTemplat
     assignment_kind: "fixed",
     config_snapshot: {
       rotation: {
+        pattern_type: "custom_cycle",
         anchor_date: null,
-        entries: [{ position: 0, shift_id: null, span_days: 7 }],
+        entries: [{ position: 0, entry_kind: "work", shift_id: null, span_days: 7 }],
       },
     },
   };

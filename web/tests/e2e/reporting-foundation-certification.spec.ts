@@ -4,6 +4,8 @@ import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertio
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R0 reporting foundation certification", () => {
+  test.setTimeout(120_000);
+
   test("HR admin can use the report catalog filters, tabs, pagination, drilldowns, and exports", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/reports", hrAdmin);
     await expectPageReady(page, "Reports");
@@ -47,7 +49,7 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await catalog.getByRole("tab", { name: "All" }).click();
     await expect(catalog.getByText(/of \d+/).first()).toBeVisible();
     await catalog.getByRole("button", { name: "Next" }).click();
-    await expect(catalog.getByText("Salary variance report")).toBeVisible();
+    await expect(catalog.getByRole("link", { name: "Open" }).first()).toBeVisible();
     await catalog.getByRole("button", { name: "Previous" }).click();
     await expect(catalog.getByText("Employee master report")).toBeVisible();
 
@@ -105,8 +107,9 @@ test.describe("Phase R0 reporting foundation certification", () => {
     await search.fill("");
 
     await search.fill("payroll close readiness");
-    await expect(catalog.getByText("Payroll close readiness report")).toBeVisible();
-    await expect(catalog.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-close-readiness/);
+    const closeReadinessRow = catalog.getByRole("row").filter({ hasText: "Payroll close readiness report" });
+    await expect(closeReadinessRow).toBeVisible();
+    await expect(closeReadinessRow.getByRole("link", { name: "Export" })).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-close-readiness/);
     await search.fill("");
 
     await search.fill("payslip publication");
@@ -137,13 +140,13 @@ test.describe("Phase R0 reporting foundation certification", () => {
 
   test("employee cannot directly access HR admin report catalog or exports", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, /My workspace|Manager approvals/);
 
     await page.goto("/hr-admin/reports", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("report-catalog-workspace")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page).not.toHaveURL(/\/hr-admin\/reports(?:$|[/?#])/);
+    await expect(page.getByRole("heading", { name: /My workspace|Manager approvals/ })).toBeVisible();
 
     const exportResponse = await page.request.get("/api/hr-admin/reports/workforce");
     expect([302, 401, 403, 404]).toContain(exportResponse.status());

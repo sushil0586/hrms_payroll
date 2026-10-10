@@ -20,6 +20,20 @@ async function selectFirstAvailableOption(select: Locator) {
   return value;
 }
 
+async function firstEmployeeOption(page: Page) {
+  const response = await page.request.get("/api/hr-admin/employees/option-search?limit=1");
+  expect(response.ok()).toBeTruthy();
+  const payload = await response.json();
+  return payload.items?.[0] as { id: string; employee_code?: string; name?: string } | undefined;
+}
+
+async function selectEmployeeSearchOption(page: Page, employeeOption: { id: string; employee_code?: string; name?: string }, label = "Employee") {
+  await page.getByLabel("Find person").fill(employeeOption.employee_code || employeeOption.name || "");
+  const select = page.getByLabel(label).first();
+  await expect.poll(async () => select.locator("option").count(), { timeout: 15_000 }).toBeGreaterThan(1);
+  await select.selectOption(employeeOption.id);
+}
+
 async function expectActionFailureThenSuccess(
   page: Page,
   routePattern: string,
@@ -101,6 +115,9 @@ test.describe("HR Admin attendance operations workflow certification", () => {
     await toolbar.getByRole("button", { name: "Clear filters" }).click();
     await expect(page).toHaveURL(/\/hr-admin\/attendance-records$/);
     await expectPageReady(page, "Attendance records");
+    await expect(page.getByText("Why this status").first()).toBeVisible();
+    await expect(page.getByText(/Payable .* \/ LOP/).first()).toBeVisible();
+    await expect(page.getByText("Leave collision").first()).toBeVisible();
 
     const selectPage = page.getByRole("button", { name: "Select page" }).first();
     if (await selectPage.isEnabled().catch(() => false)) {
@@ -215,8 +232,10 @@ test.describe("HR Admin attendance operations workflow certification", () => {
     await page.getByRole("button", { name: "Preview schedule" }).click();
     await expect(page.getByText("Choose both an employee and a start date to inspect resolved shift coverage.")).toBeVisible();
 
-    const employeeId = await selectFirstAvailableOption(field(page, "Employee"));
-    test.skip(!employeeId, "No employee options are available for shift resolution certification.");
+    const employeeOption = await firstEmployeeOption(page);
+    test.skip(!employeeOption, "No employee options are available for shift resolution certification.");
+    await selectEmployeeSearchOption(page, employeeOption!);
+    const employeeId = employeeOption!.id;
     await field(page, "Start date").fill("2026-10-06");
     await expectActionFailureThenSuccess(
       page,
@@ -285,9 +304,8 @@ test.describe("HR Admin attendance operations workflow certification", () => {
     const templateId = await selectFirstAvailableOption(field(page, "Roster template"));
     test.skip(!templateId, "No roster templates are available for rollout certification.");
     await field(page, "Effective from").fill("2026-10-06");
-    const targetEmployeeId = await selectFirstAvailableOption(field(page, "Target employees"));
-    const departmentId = targetEmployeeId ? "" : await selectFirstAvailableOption(field(page, "Department scope"));
-    test.skip(!targetEmployeeId && !departmentId, "No employee or department targets are available for roster rollout certification.");
+    const departmentId = await selectFirstAvailableOption(field(page, "Department scope"));
+    test.skip(!departmentId, "No department targets are available for roster rollout certification.");
 
     await expectActionFailureThenSuccess(
       page,
@@ -311,7 +329,7 @@ test.describe("HR Admin attendance operations workflow certification", () => {
         summary: "Preview ready.",
         items: [
           {
-            employee_id: targetEmployeeId || "playwright-employee",
+            employee_id: employeeId,
             employee_name: "Playwright Employee",
             employee_code: "PW-ATT",
             status: "ready",

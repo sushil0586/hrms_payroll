@@ -3,15 +3,17 @@ import Link from "next/link";
 import { AttendancePolicyAssignmentForm } from "@/app/hr-admin/attendance-policy-assignments/attendance-policy-assignment-form";
 import { createEmptyAttendancePolicyAssignmentValue } from "@/app/hr-admin/attendance-policy-assignments/form-values";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminPolicyOptions } from "@/lib/api";
+import { getHrAdminPolicyWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission } from "@/lib/workspace-access";
 
 export default async function HrAdminNewAttendancePolicyAssignmentPage() {
   await requireSessionPermission({ permissionKeys: ["attendance.policies.manage"], fallbackPath: "/hr-admin/attendance-policy-assignments" });
-  const optionsResult = await getHrAdminPolicyOptions();
+  const optionsResult = await getHrAdminPolicyWorkbenchOptions({
+    include: ["attendance_policies", "legal_entities", "branches", "locations", "departments", "grades", "employment_types"],
+  });
 
   return (
-    <main className="shell shell--time-leave">
+    <main className="shell shell--time-leave hr-admin-compact-ui">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create attendance assignment"

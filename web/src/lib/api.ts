@@ -1,5 +1,6 @@
 import type {
   AttendanceRegularizationItem,
+  AttendanceDerivationSummary,
   EmployeeDashboard,
   EssAttendanceRecordOption,
   EssAttendanceRegularizationListResponse,
@@ -10,16 +11,21 @@ import type {
   EssStatutoryDeclarationListResponse,
   HrAdminDashboard,
   HrAdminAttendanceOperationOptions,
+  HrAdminAttendanceWorkbenchOptions,
   HrAdminAttendanceRegularizationListResponse,
   HrAdminAttendanceRecord,
   HrAdminAttendanceRecordListResponse,
   HrAdminEmployeeShiftAssignment,
+  HrAdminEmployeeShiftAssignmentListResponse,
   HrAdminShiftRosterTemplate,
+  HrAdminShiftRosterTemplateListResponse,
   HrAdminShiftRosterRollout,
+  HrAdminShiftRosterRolloutListResponse,
   HrAdminEmployeeDetail,
   HrAdminEmployeeBankAccount,
   HrAdminEmployeeAccessDetail,
   HrAdminEmployeeAccessOptions,
+  HrAdminEmployeeOptionSearchResponse,
   HrAdminEmployeeFormOptions,
   HrAdminGovernanceFields,
   HrAdminEmployeeListItem,
@@ -50,6 +56,7 @@ import type {
   HrAdminPayrollAdjustmentSetupResponse,
   HrAdminPayrollFinanceHandoffSetupResponse,
   HrAdminPayrollInputSnapshot,
+  HrAdminPayrollInputSnapshotListItem,
   HrAdminPayrollOutputArtifact,
   HrAdminPayrollOutputSetupResponse,
   HrAdminPayrollProviderConnectionSetupResponse,
@@ -73,10 +80,14 @@ import type {
   HrAdminLeaveRequestListResponse,
   HrAdminLeavePolicy,
   HrAdminLeaveBalance,
+  HrAdminLeaveBalanceListResponse,
   HrAdminLeaveBalanceTransaction,
+  HrAdminLeaveBalanceTransactionListResponse,
+  HrAdminLeavePolicyAssignmentListResponse,
   HrAdminOrganizationFormOptions,
   HrAdminLeaveType,
   HrAdminPolicyOptions,
+  HrAdminPolicyWorkbenchOptions,
   HrAdminScopedAssignment,
   HrAdminWorkflowOptions,
   HrAdminWorkflowTrace,
@@ -108,6 +119,40 @@ import { redirect } from "next/navigation";
 
 type ApiState = "live" | "demo";
 const LOGIN_PATH = "/login";
+
+function buildDemoAttendanceDerivationSummary(overrides: Partial<AttendanceDerivationSummary> = {}): AttendanceDerivationSummary {
+  const payrollImpact = {
+    expected_work_day: true,
+    expected_payable_day: true,
+    payable_units: "1.00",
+    lop_units: "0.00",
+    payroll_impacting: false,
+    ...overrides.payroll_impact,
+  };
+  return {
+    schema_ref: "attendance.derivation_summary.v1",
+    status: "present",
+    schedule_contract_ref: "schedule_spine.contract.v1",
+    schedule_resolver_ref: "attendance.resolve_employee_work_schedule.v1",
+    schedule_day_type: "working_day",
+    schedule_resolution_source: "policy_default_shift",
+    shift_name: "General Shift",
+    holiday_name: null,
+    expected_start_time: "09:30:00",
+    expected_end_time: "18:30:00",
+    expected_hours: "8.00",
+    worked_hours: "8.00",
+    late_minutes: 0,
+    early_exit_minutes: 0,
+    overtime_hours: "0.00",
+    reasons: ["Worked 8.00 hours against 8.00 expected hours."],
+    warnings: [],
+    leave_collision_count: 0,
+    leave_collisions: [],
+    ...overrides,
+    payroll_impact: payrollImpact,
+  };
+}
 
 async function getAccessToken() {
   const cookieStore = await cookies();
@@ -487,18 +532,36 @@ export async function getHrAdminSalarySetup() {
   return apiGet<HrAdminSalarySetupResponse>("/hr-admin/salary-setup/");
 }
 
-export async function getHrAdminPayrollInputSnapshotSetup() {
-  return apiGet<HrAdminPayrollInputSnapshotSetupResponse>("/hr-admin/payroll-input-snapshot-setup/");
+export async function getHrAdminPayrollInputSnapshotSetup(params?: {
+  run_id?: string;
+  include_people?: boolean;
+  snapshot_page?: string | number;
+  snapshot_page_size?: string | number;
+}) {
+  return apiGet<HrAdminPayrollInputSnapshotSetupResponse>(`/hr-admin/payroll-input-snapshot-setup/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminPayrollInputSnapshots(params?: {
   payroll_run_id?: string;
 }) {
-  return apiGet<HrAdminPayrollInputSnapshot[]>(`/hr-admin/payroll-input-snapshots/${buildQueryString(params ?? {})}`);
+  return apiGet<HrAdminPayrollInputSnapshotListItem[]>(`/hr-admin/payroll-input-snapshots/${buildQueryString(params ?? {})}`);
 }
 
-export async function getHrAdminPayrollAdjustmentSetup() {
-  return apiGet<HrAdminPayrollAdjustmentSetupResponse>("/hr-admin/payroll-adjustment-setup/");
+export async function getHrAdminPayrollInputSnapshot(itemId: string) {
+  return apiGet<HrAdminPayrollInputSnapshot>(`/hr-admin/payroll-input-snapshots/${itemId}/`);
+}
+
+export async function getHrAdminPayrollAdjustmentSetup(params?: {
+  run_id?: string;
+  include_all_runs?: boolean;
+  snapshot_page?: string | number;
+  snapshot_page_size?: string | number;
+  adjustment_page?: string | number;
+  adjustment_page_size?: string | number;
+  post_lock_page?: string | number;
+  post_lock_page_size?: string | number;
+}) {
+  return apiGet<HrAdminPayrollAdjustmentSetupResponse>(`/hr-admin/payroll-adjustment-setup/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminPayrollSettlementSetup() {
@@ -516,12 +579,29 @@ export async function getHrAdminPayrollRulesSetup() {
 export async function getHrAdminPayrollCalculationSetup(params?: {
   run_id?: string;
   calculation_id?: string;
+  run_page?: string | number;
+  run_page_size?: string | number;
+  calculation_page?: string | number;
+  calculation_page_size?: string | number;
+  line_page?: string | number;
+  line_page_size?: string | number;
+  issue_page?: string | number;
+  issue_page_size?: string | number;
+  include_rule_versions?: boolean;
 }) {
   return apiGet<HrAdminPayrollCalculationSetupResponse>(`/hr-admin/payroll-calculation-setup/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminPayrollReviewSetup(params?: {
   review_id?: string;
+  review_page?: string | number;
+  review_page_size?: string | number;
+  exception_page?: string | number;
+  exception_page_size?: string | number;
+  approval_page?: string | number;
+  approval_page_size?: string | number;
+  line_page?: string | number;
+  line_page_size?: string | number;
 }) {
   return apiGet<HrAdminPayrollReviewSetupResponse>(`/hr-admin/payroll-review-setup/${buildQueryString(params ?? {})}`);
 }
@@ -529,12 +609,35 @@ export async function getHrAdminPayrollReviewSetup(params?: {
 export async function getHrAdminPayrollOutputSetup(params?: {
   batch_id?: string;
   artifact_id?: string;
+  artifact_kind?: string;
+  batch_page?: string | number;
+  batch_page_size?: string | number;
+  artifact_page?: string | number;
+  artifact_page_size?: string | number;
 }) {
   return apiGet<HrAdminPayrollOutputSetupResponse>(`/hr-admin/payroll-output-setup/${buildQueryString(params ?? {})}`);
 }
 
-export async function getHrAdminPayrollFinanceHandoffSetup() {
-  return apiGet<HrAdminPayrollFinanceHandoffSetupResponse>("/hr-admin/payroll-finance-handoff-setup/");
+export async function getHrAdminPayrollFinanceHandoffSetup(params?: {
+  handoff_id?: string;
+  handoff_page?: string | number;
+  handoff_page_size?: string | number;
+  artifact_page?: string | number;
+  artifact_page_size?: string | number;
+  payslip_page?: string | number;
+  payslip_page_size?: string | number;
+  delivery_page?: string | number;
+  delivery_page_size?: string | number;
+  callback_page?: string | number;
+  callback_page_size?: string | number;
+  retry_page?: string | number;
+  retry_page_size?: string | number;
+  job_page?: string | number;
+  job_page_size?: string | number;
+  include_output_batches?: string | boolean;
+  include_payslip_detail?: string | boolean;
+}) {
+  return apiGet<HrAdminPayrollFinanceHandoffSetupResponse>(`/hr-admin/payroll-finance-handoff-setup/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminPayrollProviderConnectionSetup() {
@@ -587,6 +690,15 @@ export async function getHrAdminPolicyOptions() {
   return apiGet<HrAdminPolicyOptions>("/hr-admin/policy-options/");
 }
 
+export async function getHrAdminPolicyWorkbenchOptions(params?: { include?: string[] }) {
+  const include = params?.include?.filter(Boolean).join(",");
+  return apiGet<HrAdminPolicyWorkbenchOptions>(`/hr-admin/policy-workbench-options/${buildQueryString({ include })}`);
+}
+
+export async function getHrAdminEmployeeOptionSearch(params?: { q?: string; limit?: number }) {
+  return apiGet<HrAdminEmployeeOptionSearchResponse>(`/hr-admin/employees/option-search/${buildQueryString(params ?? {})}`);
+}
+
 export async function getHrAdminLeaveTypes() {
   return apiGet<HrAdminLeaveType[]>("/hr-admin/leave-types/");
 }
@@ -601,6 +713,13 @@ export async function getHrAdminAttendancePolicies() {
 
 export async function getHrAdminAttendanceOperationOptions() {
   return apiGet<HrAdminAttendanceOperationOptions>("/hr-admin/attendance-operations/options/");
+}
+
+export async function getHrAdminAttendanceWorkbenchOptions(params?: {
+  include_people?: boolean;
+  include_shifts?: boolean;
+}) {
+  return apiGet<HrAdminAttendanceWorkbenchOptions>(`/hr-admin/attendance-operations/workbench-options/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminShifts() {
@@ -625,8 +744,11 @@ export async function getHrAdminAttendanceRecords(params?: {
   q?: string;
   status?: string;
   source?: string;
+  shift_id?: string;
   lock_state?: string;
   regularized_state?: string;
+  from_date?: string;
+  to_date?: string;
   late_only?: boolean;
 }) {
   return apiGet<HrAdminAttendanceRecordListResponse>(`/hr-admin/attendance-records/${buildQueryString(params ?? {})}`);
@@ -643,6 +765,8 @@ export async function getHrAdminAttendanceRegularizations(params?: {
   status?: string;
   requested_status?: string;
   current_status?: string;
+  from_date?: string;
+  to_date?: string;
 }) {
   return apiGet<HrAdminAttendanceRegularizationListResponse>(`/hr-admin/attendance-regularizations/${buildQueryString(params ?? {})}`);
 }
@@ -679,16 +803,29 @@ export async function getHrAdminLeavePolicy(itemId: string) {
   return apiGet<HrAdminLeavePolicy>(`/hr-admin/leave-policies/${itemId}/`);
 }
 
-export async function getHrAdminLeavePolicyAssignments() {
-  return apiGet<HrAdminScopedAssignment[]>("/hr-admin/leave-policy-assignments/");
+export async function getHrAdminLeavePolicyAssignments(params?: {
+  q?: string;
+  status?: string;
+  scope?: string;
+  risk?: string;
+  page?: string | number;
+  page_size?: string | number;
+}) {
+  return apiGet<HrAdminLeavePolicyAssignmentListResponse>(`/hr-admin/leave-policy-assignments/${buildQueryString(params ?? {})}`);
+}
+
+export async function getHrAdminLeavePolicyAssignment(itemId: string) {
+  return apiGet<HrAdminScopedAssignment>(`/hr-admin/leave-policy-assignments/${itemId}/`);
 }
 
 export async function getHrAdminLeaveBalances(params?: {
   employee_id?: string;
   leave_policy_id?: string;
   q?: string;
+  page?: string | number;
+  page_size?: string | number;
 }) {
-  return apiGet<HrAdminLeaveBalance[]>(`/hr-admin/leave-balances/${buildQueryString(params ?? {})}`);
+  return apiGet<HrAdminLeaveBalanceListResponse>(`/hr-admin/leave-balances/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminLeaveBalanceTransactions(params?: {
@@ -696,32 +833,51 @@ export async function getHrAdminLeaveBalanceTransactions(params?: {
   leave_policy_id?: string;
   q?: string;
   status?: string;
+  page?: string | number;
+  page_size?: string | number;
 }) {
-  return apiGet<HrAdminLeaveBalanceTransaction[]>(`/hr-admin/leave-balances/transactions/${buildQueryString(params ?? {})}`);
+  return apiGet<HrAdminLeaveBalanceTransactionListResponse>(`/hr-admin/leave-balances/transactions/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminAttendancePolicyAssignments() {
   return apiGet<HrAdminScopedAssignment[]>("/hr-admin/attendance-policy-assignments/");
 }
 
-export async function getHrAdminEmployeeShiftAssignments() {
-  return apiGet<HrAdminEmployeeShiftAssignment[]>("/hr-admin/employee-shift-assignments/");
+export async function getHrAdminEmployeeShiftAssignments(params?: {
+  q?: string;
+  kind?: string;
+  primary?: string;
+  risk?: string;
+  page?: string | number;
+  page_size?: string | number;
+}) {
+  return apiGet<HrAdminEmployeeShiftAssignmentListResponse>(`/hr-admin/employee-shift-assignments/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminEmployeeShiftAssignment(itemId: string) {
   return apiGet<HrAdminEmployeeShiftAssignment>(`/hr-admin/employee-shift-assignments/${itemId}/`);
 }
 
-export async function getHrAdminShiftRosterTemplates() {
-  return apiGet<HrAdminShiftRosterTemplate[]>("/hr-admin/shift-roster-templates/");
+export async function getHrAdminShiftRosterTemplates(params?: {
+  q?: string;
+  status?: string;
+  kind?: string;
+  pattern?: string;
+  page?: string | number;
+  page_size?: string | number;
+}) {
+  return apiGet<HrAdminShiftRosterTemplateListResponse>(`/hr-admin/shift-roster-templates/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminShiftRosterTemplate(itemId: string) {
   return apiGet<HrAdminShiftRosterTemplate>(`/hr-admin/shift-roster-templates/${itemId}/`);
 }
 
-export async function getHrAdminShiftRosterRollouts() {
-  return apiGet<HrAdminShiftRosterRollout[]>("/hr-admin/shift-roster-rollouts/");
+export async function getHrAdminShiftRosterRollouts(params?: {
+  page?: string | number;
+  page_size?: string | number;
+}) {
+  return apiGet<HrAdminShiftRosterRolloutListResponse>(`/hr-admin/shift-roster-rollouts/${buildQueryString(params ?? {})}`);
 }
 
 export async function getHrAdminWorkflowOptions() {
@@ -935,6 +1091,7 @@ function getDemoData<T>(path: string): T {
       total_count: items.length,
       page,
       page_size: pageSize,
+      total_pages: Math.max(1, Math.ceil(items.length / pageSize)),
       has_next: offset + pageSize < items.length,
       has_previous: page > 1,
       ...(opts?.statusCounts ? { status_counts: opts.statusCounts } : {}),
@@ -1038,6 +1195,25 @@ function getDemoData<T>(path: string): T {
       end_day_portion: "second_half",
       requested_units: "1.00",
       approved_units: "1.00",
+      attendance_collision_summary: {
+        schema_ref: "leave_attendance.collision_summary.v1",
+        status: "conflict",
+        severity: "high",
+        collision_count: 1,
+        payroll_blocking: true,
+        collisions: [
+          {
+            date: "2026-05-27",
+            leave_units: "1.00",
+            attendance_record_id: "att-002",
+            attendance_status: "present",
+            shift: "Support Shift",
+            check_in_at: "2026-05-27T09:30:00+05:30",
+            check_out_at: "2026-05-27T18:40:00+05:30",
+            message: "Approved leave overlaps payable attendance evidence.",
+          },
+        ],
+      },
       reason: "Doctor appointment.",
       manager_comment: "Take care.",
       rejection_reason: "",
@@ -1118,6 +1294,19 @@ function getDemoData<T>(path: string): T {
       is_regularized: false,
       is_locked: false,
       notes: "Pending regularization.",
+      derivation_summary: buildDemoAttendanceDerivationSummary({
+        status: "late",
+        worked_hours: "7.40",
+        late_minutes: 59,
+        reasons: ["59 late minutes after shift grace."],
+        payroll_impact: {
+          expected_work_day: true,
+          expected_payable_day: true,
+          payable_units: "1.00",
+          lop_units: "0.00",
+          payroll_impacting: false,
+        },
+      }),
     },
     {
       id: "att-002",
@@ -1142,6 +1331,13 @@ function getDemoData<T>(path: string): T {
       is_regularized: false,
       is_locked: true,
       notes: "",
+      derivation_summary: buildDemoAttendanceDerivationSummary({
+        status: "present",
+        shift_name: "Support Shift",
+        worked_hours: "8.20",
+        overtime_hours: "0.30",
+        reasons: ["Worked 8.20 hours against 8.00 expected hours."],
+      }),
     },
   ];
 
@@ -5648,6 +5844,26 @@ function getDemoData<T>(path: string): T {
           warnings,
           readiness_profile_ref: "payroll.readiness_profile.v1",
         },
+        reconciliation_summary: {
+          status: isBlocked ? "blocked" : hasWarning ? "warning" : "ready",
+          risk: isBlocked ? "High" : hasWarning ? "Medium" : "Low",
+          finding_count: blockers.length + warnings.length,
+          high_count: blockers.length,
+          medium_count: warnings.length,
+          findings: [
+            ...blockers.map((message) => ({ code: "input_blockers", severity: "high", message })),
+            ...warnings.map((message) => ({ code: "input_warnings", severity: "medium", message })),
+          ],
+          metrics: {
+            schedule_working_days: "22",
+            attendance_present_days: isBlocked ? "16" : "22",
+            attendance_lop_days: "0",
+            attendance_paid_days: "0",
+            leave_units: employeeItem.employee_code === "EMP-0042" ? "1" : "0",
+            leave_schedule_working_days: "22",
+          },
+          source: "payroll_input_snapshot.demo.v1",
+        },
         source_hash: `9f8c7b6a5d4e3f2${index}00112233445566778899aabbccddeeff00112233445566`,
         config_snapshot: {
           collection_policy_ref: "payroll.collection.default.v1",
@@ -5678,6 +5894,21 @@ function getDemoData<T>(path: string): T {
       },
       source_hash: `ab8c7b6a5d4e3f2${index}00112233445566778899aabbccddeeff00112233445566`,
     }));
+    const reconciliationFor = (items: HrAdminPayrollInputSnapshot[]) => {
+      const highCount = items.reduce((sum, item) => sum + item.reconciliation_summary.high_count, 0);
+      const mediumCount = items.reduce((sum, item) => sum + item.reconciliation_summary.medium_count, 0);
+      return {
+        status: highCount ? "blocked" : mediumCount ? "warning" : "ready",
+        risk: highCount ? "High" : mediumCount ? "Medium" : "Low",
+        snapshot_count: items.length,
+        blocked_snapshot_count: items.filter((item) => item.reconciliation_summary.status === "blocked").length,
+        warning_snapshot_count: items.filter((item) => item.reconciliation_summary.status === "warning").length,
+        finding_count: items.reduce((sum, item) => sum + item.reconciliation_summary.finding_count, 0),
+        high_count: highCount,
+        medium_count: mediumCount,
+        source: "payroll_run.input_reconciliation.demo.v1",
+      };
+    };
 
     return {
       summary: {
@@ -5714,6 +5945,7 @@ function getDemoData<T>(path: string): T {
           warning_count: snapshots.filter((item) => item.snapshot_status === "warning").length,
           blocked_count: snapshots.filter((item) => item.snapshot_status === "blocked").length,
           locked_count: 0,
+          reconciliation_summary: reconciliationFor(snapshots),
           created_at: now,
           updated_at: now,
         },
@@ -5742,6 +5974,7 @@ function getDemoData<T>(path: string): T {
           warning_count: 0,
           blocked_count: 0,
           locked_count: lockedSnapshots.length,
+          reconciliation_summary: reconciliationFor(lockedSnapshots),
           created_at: now,
           updated_at: now,
         },
@@ -5862,6 +6095,20 @@ function getDemoData<T>(path: string): T {
         submitted_at: null,
       },
     ];
+    const postLockImpacts = snapshots.slice(0, 2).map((snapshot) => ({
+      employee_id: snapshot.employee_id,
+      employee_code: snapshot.employee_code,
+      employee_name: snapshot.employee_name,
+      snapshot_id: snapshot.id,
+      payroll_run_id: snapshot.payroll_run_id,
+      payroll_run_name: selectedRun.name,
+      pay_group_name: selectedRun.pay_group_name,
+      period_start: snapshot.period_start,
+      period_end: snapshot.period_end,
+      source_hash: snapshot.source_hash,
+      recommended_action: "Create arrear or correction adjustment",
+      adjustment_source_ref: `post-lock:${snapshot.id}:${snapshot.period_start}:${snapshot.period_end}`,
+    }));
     const adjustments = adjustmentTemplates.map((item, index) => ({
       id: item.id,
       payroll_run_id: selectedRun.id,
@@ -5901,6 +6148,7 @@ function getDemoData<T>(path: string): T {
         source_system_ref: item.kind === "reimbursement" ? "expense.claims.approved.v1" : "payroll.adjustment.manual.v1",
         calculation_consumption_ref: "payroll.adjustment.input.snapshot.v1",
       },
+      post_lock_source: item.kind === "arrear" ? postLockImpacts[0] : null,
       created_at: now,
       updated_at: now,
     }));
@@ -5915,10 +6163,12 @@ function getDemoData<T>(path: string): T {
         approved_count: adjustments.filter((item) => item.status === "approved").length,
         applied_count: adjustments.filter((item) => item.status === "applied").length,
         total_amount: totalAmount.toFixed(2),
+        post_lock_impact_count: postLockImpacts.length,
       },
       runs: inputSetup.runs,
       snapshots: inputSetup.snapshots,
       adjustments,
+      post_lock_impacts: postLockImpacts,
       options: {
         adjustment_kinds: [
           { value: "arrear", label: "Arrear" },
@@ -7150,7 +7400,7 @@ function getDemoData<T>(path: string): T {
     const priorCalculationId = "paycalc-aug-2026-attempt-1";
     const calculatedRunId = "payrun-aug-2026-core";
     const selectedRun = inputSetup.runs.find((item) => item.id === calculatedRunId) ?? inputSetup.runs[0];
-    const lockedSnapshots = inputSetup.snapshots.filter((item) => item.payroll_run_id === calculatedRunId).slice(0, 2);
+    const lockedSnapshots = (inputSetup.snapshots as HrAdminPayrollInputSnapshot[]).filter((item) => item.payroll_run_id === calculatedRunId).slice(0, 2);
     const runs = inputSetup.runs.map((item) => (
       item.id === calculatedRunId
         ? { ...item, status: "calculated", status_label: "Calculated" }
@@ -13346,8 +13596,41 @@ function getDemoData<T>(path: string): T {
       return demoHrAdminNotificationDiagnostics as T;
     case "/hr-admin/attendance-operations/options/":
       return demoHrAdminAttendanceOperationOptions as T;
+    case "/hr-admin/attendance-operations/workbench-options/":
+      return {
+        attendance_statuses: demoHrAdminAttendanceOperationOptions.attendance_statuses,
+        attendance_sources: demoHrAdminAttendanceOperationOptions.attendance_sources,
+        regularization_statuses: demoHrAdminAttendanceOperationOptions.regularization_statuses,
+        employees: demoHrAdminAttendanceOperationOptions.employees,
+        shifts: demoHrAdminAttendanceOperationOptions.shifts,
+      } as T;
     case "/hr-admin/policy-options/":
       return demoHrAdminPolicyOptions as T;
+    case "/hr-admin/policy-workbench-options/": {
+      const include = new Set((query.get("include") || "").split(",").filter(Boolean));
+      return {
+        attendance_policies: include.has("attendance_policies") ? demoHrAdminPolicyOptions.attendance_policies : [],
+        leave_types: include.has("leave_types") ? demoHrAdminPolicyOptions.leave_types : [],
+        leave_policies: include.has("leave_policies") ? demoHrAdminPolicyOptions.leave_policies : [],
+        legal_entities: include.has("legal_entities") ? demoHrAdminPolicyOptions.legal_entities : [],
+        branches: include.has("branches") ? demoHrAdminPolicyOptions.branches : [],
+        locations: include.has("locations") ? demoHrAdminPolicyOptions.locations : [],
+        departments: include.has("departments") ? demoHrAdminPolicyOptions.departments : [],
+        grades: include.has("grades") ? demoHrAdminPolicyOptions.grades : [],
+        employment_types: include.has("employment_types") ? demoHrAdminPolicyOptions.employment_types : [],
+        employees: include.has("employees") ? demoHrAdminPolicyOptions.employees : [],
+        shifts: include.has("shifts") ? demoHrAdminPolicyOptions.shifts : [],
+      } as T;
+    }
+    case "/hr-admin/employees/option-search/": {
+      const searchTerm = (query.get("q") || "").trim().toLowerCase();
+      const limit = Math.min(Math.max(Number(query.get("limit") || 20) || 20, 1), 50);
+      const employees = demoHrAdminPolicyOptions.employees.filter((item) => {
+        if (!searchTerm) return true;
+        return item.name.toLowerCase().includes(searchTerm) || (item.employee_code ?? "").toLowerCase().includes(searchTerm);
+      });
+      return { items: employees.slice(0, limit), total_count: employees.length } as T;
+    }
     case "/hr-admin/workflow-options/":
       return demoHrAdminWorkflowOptions as T;
     case "/hr-admin/document-options/":
@@ -13559,21 +13842,21 @@ function getDemoData<T>(path: string): T {
     case "/hr-admin/leave-policies/":
       return demoHrAdminLeavePolicies as T;
     case "/hr-admin/leave-policy-assignments/":
-      return demoHrAdminLeavePolicyAssignments as T;
+      return paginateDemoItems(demoHrAdminLeavePolicyAssignments) as T;
     case "/hr-admin/leave-balances/":
-      return demoHrAdminLeaveBalances as T;
+      return paginateDemoItems(demoHrAdminLeaveBalances) as T;
     case "/hr-admin/leave-balances/transactions/":
-      return demoHrAdminLeaveBalanceTransactions as T;
+      return paginateDemoItems(demoHrAdminLeaveBalanceTransactions) as T;
     case "/hr-admin/attendance-policies/":
       return demoHrAdminAttendancePolicies as T;
     case "/hr-admin/shifts/":
       return demoHrAdminShifts as T;
     case "/hr-admin/employee-shift-assignments/":
-      return demoHrAdminEmployeeShiftAssignments as T;
+      return paginateDemoItems(demoHrAdminEmployeeShiftAssignments) as T;
     case "/hr-admin/shift-roster-templates/":
-      return demoHrAdminShiftRosterTemplates as T;
+      return paginateDemoItems(demoHrAdminShiftRosterTemplates) as T;
     case "/hr-admin/shift-roster-rollouts/":
-      return demoHrAdminShiftRosterRollouts as T;
+      return paginateDemoItems(demoHrAdminShiftRosterRollouts) as T;
     case "/hr-admin/holiday-calendars/":
       return demoHrAdminHolidayCalendars as T;
     case "/hr-admin/attendance-policy-assignments/":
@@ -14048,6 +14331,10 @@ function getDemoData<T>(path: string): T {
       if (pathname !== "/hr-admin/leave-policies/" && pathname.startsWith("/hr-admin/leave-policies/")) {
         const itemId = pathname.replace("/hr-admin/leave-policies/", "").replace(/\/$/, "");
         return (demoHrAdminLeavePolicies.find((item) => item.id === itemId) ?? demoHrAdminLeavePolicies[0]) as T;
+      }
+      if (pathname !== "/hr-admin/leave-policy-assignments/" && pathname.startsWith("/hr-admin/leave-policy-assignments/")) {
+        const itemId = pathname.replace("/hr-admin/leave-policy-assignments/", "").replace(/\/$/, "");
+        return (demoHrAdminLeavePolicyAssignments.find((item) => item.id === itemId) ?? demoHrAdminLeavePolicyAssignments[0]) as T;
       }
       if (pathname !== "/hr-admin/attendance-policies/" && pathname.startsWith("/hr-admin/attendance-policies/")) {
         const itemId = pathname.replace("/hr-admin/attendance-policies/", "").replace(/\/$/, "");

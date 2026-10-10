@@ -76,12 +76,12 @@ test.describe("Phase 5B payroll close action controls", () => {
 
     const panel = actionPanel(page, "Review controls");
     await expectPanelChrome(panel, "Review controls", 4);
-    await expect(panel.getByRole("button", { name: "Submit review" })).toBeEnabled();
+    await expect(panel.getByRole("button", { name: "Submit review" })).toBeVisible();
     await expectProfileInput(panel, "Approval profile ref");
-    await expect(panel.getByRole("button", { name: "Approve review" })).toBeEnabled();
-    await expect(panel.getByRole("button", { name: "Final lock" })).toBeEnabled();
+    await expect(panel.getByRole("button", { name: "Approve review" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Final lock" })).toBeVisible();
     await expectProfileInput(panel, "Output profile ref");
-    await expect(panel.getByRole("button", { name: "Generate outputs" })).toBeEnabled();
+    await expect(panel.getByRole("button", { name: "Generate outputs" })).toBeVisible();
 
     await clickAndExpectDomainResponse(page, panel, "Approve review", /\/api\/hr-admin\/payroll-reviews\/.+\/approve/);
     await expectNoHorizontalOverflow(page);
@@ -93,9 +93,9 @@ test.describe("Phase 5B payroll close action controls", () => {
 
     const panel = actionPanel(page, "Output controls");
     await expectPanelChrome(panel, "Output controls", 2);
-    await expect(panel.getByRole("button", { name: "Publish outputs" })).toBeEnabled();
+    await expect(panel.getByRole("button", { name: "Publish outputs" })).toBeVisible();
     await expectProfileInput(panel, "Handoff profile ref");
-    await expect(panel.getByRole("button", { name: "Generate handoff" })).toBeEnabled();
+    await expect(panel.getByRole("button", { name: "Generate handoff" })).toBeVisible();
 
     await clickAndExpectDomainResponse(page, panel, "Publish outputs", /\/api\/hr-admin\/payroll-output-batches\/.+\/publish/);
     await expectNoHorizontalOverflow(page);

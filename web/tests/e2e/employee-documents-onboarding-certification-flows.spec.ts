@@ -412,8 +412,15 @@ test.describe("Phase 3B employee documents and onboarding certification", () => 
 
     await card(page, workflowRef).getByRole("link", { name: "Edit" }).click();
     await expectOnboardingFormCertified(page, "edit");
+    await page.getByRole("button", { name: "Add checklist item" }).click();
+    const blockingChecklistCard = page.locator("article.record-card").filter({ hasText: "onboarding-item-2" }).first();
+    await expect(blockingChecklistCard).toBeVisible();
+    await field(blockingChecklistCard, "Label").fill("Confirm workstation readiness");
+    await selectFirstNonEmptyOption(field(blockingChecklistCard, "Owner"));
+    await field(blockingChecklistCard, "Due on").fill("2026-05-04");
+    await expect(page.getByText("1/2 checklist items complete, 1 open.")).toBeVisible();
     await field(page, "Status").selectOption("completed");
-    await expect(page.getByText("Completion is still blocked.").or(page.getByText("Readiness preview.")).first()).toBeVisible();
+    await expect(page.getByText("Completion is still blocked.")).toBeVisible();
     const blockedCompletionResult = await submitAndCapture(page, `onboardings/${createResult.payload.id}`, "PATCH", async () => {
       await page.getByRole("button", { name: "Save changes" }).click();
     });

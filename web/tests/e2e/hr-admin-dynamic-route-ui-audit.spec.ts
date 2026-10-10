@@ -36,6 +36,8 @@ const dynamicSourceRoutes = [
   "/hr-admin/workflow-templates",
 ].filter((route) => staticRouteSet.has(route));
 
+const uuidPattern = /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?=\/|\?|$)/gi;
+
 function normalizeHrAdminHref(rawHref: string) {
   const url = new URL(rawHref);
   if (!url.pathname.startsWith("/hr-admin")) {
@@ -53,6 +55,11 @@ function normalizeHrAdminHref(rawHref: string) {
   return `${url.pathname}${url.search}`;
 }
 
+function dynamicSignature(href: string) {
+  const url = new URL(href, "http://hrms.local");
+  return url.pathname.replace(uuidPattern, "/:id");
+}
+
 async function collectDynamicHrAdminLinks(page: Page, sourceRoute: string, candidates: Map<string, DynamicCandidate>) {
   await gotoDemoHrAdmin(page, sourceRoute);
   const hrefs = await page.locator("a[href]").evaluateAll((links) => links.map((link) => (link as HTMLAnchorElement).href));
@@ -63,11 +70,12 @@ async function collectDynamicHrAdminLinks(page: Page, sourceRoute: string, candi
       continue;
     }
 
-    const candidate = candidates.get(href);
+    const signature = dynamicSignature(href);
+    const candidate = candidates.get(signature);
     if (candidate) {
       candidate.sources.push(sourceRoute);
     } else {
-      candidates.set(href, { href, sources: [sourceRoute] });
+      candidates.set(signature, { href, sources: [sourceRoute] });
     }
   }
 }
@@ -75,7 +83,7 @@ async function collectDynamicHrAdminLinks(page: Page, sourceRoute: string, candi
 test.describe("HR Admin dynamic route UI audit", () => {
   test.skip(dynamicSourceRoutes.length === 0, "No HR Admin record-list source routes were discovered.");
 
-  for (const [index, sourceRoutes] of chunks(dynamicSourceRoutes, 6).entries()) {
+  for (const [index, sourceRoutes] of chunks(dynamicSourceRoutes, 3).entries()) {
     test(`discovers and audits record-backed action pages group ${index + 1}`, async ({ page }) => {
       test.setTimeout(360_000);
       await page.setViewportSize({ width: 1440, height: 960 });

@@ -4,6 +4,8 @@ import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertio
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase PLF-5F Compliance summary certification", () => {
+  test.setTimeout(90_000);
+
   test("HR admin can certify consolidated compliance summary, filters, exports, hub discovery, and drilldowns", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/reports", hrAdmin);
     await expectPageReady(page, "Reports");
@@ -63,18 +65,21 @@ test.describe("Phase PLF-5F Compliance summary certification", () => {
     expect(manifest.source_row_count).toBeGreaterThanOrEqual(6);
 
     await expect(report.getByLabel("Compliance summary pagination")).toBeVisible();
-    await report.locator("tbody tr").filter({ hasText: "Provider evidence" }).getByRole("link", { name: "Open" }).click();
+    const providerEvidenceLink = report.locator("tbody tr").filter({ hasText: "Provider evidence" }).getByRole("link", { name: "Open" });
+    await expect(providerEvidenceLink).toHaveAttribute("href", "/hr-admin/reports/provider-filing-receipts");
+    await page.goto((await providerEvidenceLink.getAttribute("href")) ?? "/hr-admin/reports/provider-filing-receipts", { waitUntil: "domcontentloaded" });
     await expectPageReady(page, "Provider Filing Receipts");
     await expectNoHorizontalOverflow(page);
   });
 
   test("employee cannot access consolidated compliance summary", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
     await page.goto("/hr-admin/reports/compliance-summary", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("compliance-summary-report")).toHaveCount(0);
-    await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
+    await expect(page).toHaveURL(/\/ess(?:$|[/?#])/);
+    await expect(page.getByRole("heading", { name: "My workspace" })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Compliance Summary/i })).toHaveCount(0);
   });
 });

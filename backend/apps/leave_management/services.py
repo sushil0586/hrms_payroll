@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from apps.attendance.models import Holiday, HolidayCalendar, HolidayType
+from apps.attendance.models import AttendanceRecord, AttendanceStatus, Holiday, HolidayCalendar, HolidayType
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipStatus, TenantMembership
 from apps.leave_management.models import (
@@ -1220,6 +1220,98 @@ def calculate_leave_request_unit_breakdown(
         "allow_weekend_holiday_overlap": bool(leave_policy.allow_weekend_holiday_overlap) if leave_policy else True,
         "sandwich_rule_enabled": bool(leave_policy.sandwich_rule_enabled) if leave_policy else False,
         "days": rows,
+    }
+
+
+PAYABLE_ATTENDANCE_STATUSES = {
+    AttendanceStatus.PRESENT,
+    AttendanceStatus.LATE,
+    AttendanceStatus.HALF_DAY,
+    AttendanceStatus.REMOTE,
+}
+
+
+def build_leave_attendance_collision_summary(leave_request: LeaveRequest) -> dict:
+    attendance_records = {
+        item.attendance_date: item
+        for item in AttendanceRecord.objects.filter(
+            tenant=leave_request.tenant,
+            employee=leave_request.employee,
+            attendance_date__gte=leave_request.start_date,
+            attendance_date__lte=leave_request.end_date,
+        ).select_related("shift")
+    }
+    unit_breakdown = calculate_leave_request_unit_breakdown(
+        employee=leave_request.employee,
+        leave_policy=leave_request.leave_policy,
+        start_date=leave_request.start_date,
+        end_date=leave_request.end_date,
+        start_day_portion=leave_request.start_day_portion,
+        end_day_portion=leave_request.end_day_portion,
+    )
+    collisions: list[dict] = []
+    for day in unit_breakdown.get("days", []):
+        try:
+            day_date = date.fromisoformat(str(day.get("date")))
+        except ValueError:
+            continue
+        record = attendance_records.get(day_date)
+        if not day.get("counted") or not record or record.status not in PAYABLE_ATTENDANCE_STATUSES:
+            continue
+        collisions.append(
+            {
+                "date": day["date"],
+                "leave_units": day.get("units", "0.00"),
+                "attendance_record_id": str(record.id),
+                "attendance_status": record.status,
+                "shift": record.shift.name if record.shift else None,
+                "check_in_at": record.check_in_at.isoformat() if record.check_in_at else None,
+                "check_out_at": record.check_out_at.isoformat() if record.check_out_at else None,
+                "message": "Approved leave overlaps payable attendance evidence.",
+            }
+        )
+    severity = "high" if leave_request.status == LeaveRequestStatus.APPROVED and collisions else "medium" if collisions else "none"
+    return {
+        "schema_ref": "leave_attendance.collision_summary.v1",
+        "status": "conflict" if collisions else "clear",
+        "severity": severity,
+        "collision_count": len(collisions),
+        "payroll_blocking": bool(leave_request.status == LeaveRequestStatus.APPROVED and collisions),
+        "collisions": collisions,
+    }
+
+
+def build_leave_attendance_collision_snapshot(*, employee, period_start: date, period_end: date) -> dict:
+    leave_requests = (
+        LeaveRequest.objects.filter(
+            tenant=employee.tenant,
+            employee=employee,
+            status__in=[LeaveRequestStatus.APPROVED, LeaveRequestStatus.PARTIALLY_APPROVED],
+            start_date__lte=period_end,
+            end_date__gte=period_start,
+        )
+        .select_related("leave_type", "leave_policy", "employee")
+        .order_by("start_date", "created_at")
+    )
+    items = []
+    for request in leave_requests:
+        summary = build_leave_attendance_collision_summary(request)
+        for collision in summary["collisions"]:
+            items.append(
+                {
+                    **collision,
+                    "leave_request_id": str(request.id),
+                    "leave_type": request.leave_type.name,
+                    "leave_status": request.status,
+                }
+            )
+    return {
+        "schema_ref": "leave_attendance.collision_snapshot.v1",
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "collision_count": len(items),
+        "payroll_blocking": bool(items),
+        "items": items,
     }
 
 

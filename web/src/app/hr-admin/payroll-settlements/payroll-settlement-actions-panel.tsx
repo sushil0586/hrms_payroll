@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import type { HrAdminPayrollInputSnapshot, HrAdminPayrollRun, HrAdminPayrollSettlement, HrAdminPayrollSettlementSetupResponse } from "@/lib/types";
+import type { HrAdminPayrollInputSnapshotListItem, HrAdminPayrollRun, HrAdminPayrollSettlement, HrAdminPayrollSettlementSetupResponse } from "@/lib/types";
 
 type Props = {
   setup: HrAdminPayrollSettlementSetupResponse;
@@ -169,7 +169,7 @@ export function PayrollSettlementActionsPanel({ setup, selectedRun, selectedSett
         <label>
           <span>Employee snapshot</span>
           <select aria-label="Settlement employee snapshot" value={snapshotId} onChange={(event) => setSnapshotId(event.target.value)}>
-            {runSnapshots.map((snapshot: HrAdminPayrollInputSnapshot) => (
+            {runSnapshots.map((snapshot: HrAdminPayrollInputSnapshotListItem) => (
               <option key={snapshot.id} value={snapshot.id}>
                 {snapshot.employee_code} - {snapshot.employee_name}
               </option>
