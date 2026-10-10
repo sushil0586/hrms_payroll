@@ -65,15 +65,11 @@ export function LaunchRemediationActions({
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [isOpen, setIsOpen] = useState(false);
-  const [canUsePortal, setCanUsePortal] = useState(false);
   useEscapeClose(isOpen, () => {
     if (!isSaving) {
       setIsOpen(false);
     }
   });
-  useEffect(() => {
-    setCanUsePortal(true);
-  }, []);
 
   async function submitAction(action: "acknowledge" | "assign" | "set_due_date" | "send_reminder" | "escalate" | "ignore") {
     setIsSaving(true);
@@ -176,7 +172,7 @@ export function LaunchRemediationActions({
           Manage
         </button>
       </div>
-      {canUsePortal && dialog ? createPortal(dialog, document.body) : dialog}
+      {dialog && typeof document !== "undefined" ? createPortal(dialog, document.body) : dialog}
     </div>
   );
 }
