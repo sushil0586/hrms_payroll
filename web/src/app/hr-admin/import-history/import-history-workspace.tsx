@@ -57,37 +57,35 @@ function moduleLink(importType: string) {
   return { href: "/hr-admin/import-history", label: "Open imports" };
 }
 
+function searchParamValue(name: string, fallback: string) {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+  return new URLSearchParams(window.location.search).get(name) ?? fallback;
+}
+
+function searchParamNumber(name: string, fallback: number) {
+  const value = Number(searchParamValue(name, String(fallback)));
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 export function ImportHistoryWorkspace() {
   const [items, setItems] = useState<ImportBatchAudit[]>([]);
-  const [query, setQuery] = useState("");
-  const [actor, setActor] = useState("");
-  const [sourceHash, setSourceHash] = useState("");
-  const [batchHash, setBatchHash] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [importType, setImportType] = useState("All");
-  const [status, setStatus] = useState("All");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [query, setQuery] = useState(() => searchParamValue("q", ""));
+  const [actor, setActor] = useState(() => searchParamValue("actor", ""));
+  const [sourceHash, setSourceHash] = useState(() => searchParamValue("source_hash", ""));
+  const [batchHash, setBatchHash] = useState(() => searchParamValue("batch_hash", ""));
+  const [fromDate, setFromDate] = useState(() => searchParamValue("from_date", ""));
+  const [toDate, setToDate] = useState(() => searchParamValue("to_date", ""));
+  const [importType, setImportType] = useState(() => searchParamValue("import_type", "All"));
+  const [status, setStatus] = useState(() => searchParamValue("status", "All"));
+  const [page, setPage] = useState(() => searchParamNumber("page", 1));
+  const [pageSize, setPageSize] = useState(() => searchParamNumber("page_size", 25));
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [hasNext, setHasNext] = useState(false);
   const [hasPrevious, setHasPrevious] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setQuery(params.get("q") ?? "");
-    setActor(params.get("actor") ?? "");
-    setSourceHash(params.get("source_hash") ?? "");
-    setBatchHash(params.get("batch_hash") ?? "");
-    setFromDate(params.get("from_date") ?? "");
-    setToDate(params.get("to_date") ?? "");
-    setImportType(params.get("import_type") ?? "All");
-    setStatus(params.get("status") ?? "All");
-    setPage(Number(params.get("page") ?? 1) || 1);
-    setPageSize(Number(params.get("page_size") ?? 25) || 25);
-  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
