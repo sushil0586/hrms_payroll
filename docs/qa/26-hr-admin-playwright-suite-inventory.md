@@ -10,7 +10,7 @@ Purpose: classify the HR portal / HR Admin-related Playwright inventory so the r
 | --- | ---: |
 | HR-related Playwright spec files discovered | 213 |
 | HR-related Playwright test declarations discovered | 665 |
-| Current tracker-backed HR Admin functional/live workflow result | 87 passed / 88 total |
+| Current tracker-backed HR Admin functional/live workflow result | 93 passed / 94 total |
 | Current functional/live expected skips | 1 |
 | Current active HR Admin Playwright blockers | 0 |
 
@@ -35,8 +35,8 @@ Phase 0 is the protected checkpoint for expanding HR Admin Playwright coverage. 
 
 | Classification | Spec files | Test declarations | Declared skips | Recommended handling |
 | --- | ---: | ---: | ---: | --- |
-| `verified-working` | 28 | 97 | 10 | Keep in release gate |
-| `candidate-functional` | 101 | 321 | 35 | Review next for Docker functional batch |
+| `verified-working` | 31 | 103 | 10 | Keep in release gate |
+| `candidate-functional` | 98 | 315 | 35 | Review next for Docker functional batch |
 | `candidate-visual` | 31 | 87 | 3 | Repair/shard visual checks as needed |
 | `historical-cross-module` | 53 | 160 | 22 | Defer or supersede after coverage review |
 
@@ -123,6 +123,14 @@ Phase 1 setup validation:
 | Drift from verified-working list | 0 missing, 0 extra |
 | HR-P1-1 Playwright list check | `--list` resolved 10 tests across 6 files |
 
+## Phase 2A Candidate Promotion
+
+Phase 2A starts with low-risk report/readiness candidates. Each promoted spec must pass against the Docker web build and local API/Postgres before moving to `verified-working`.
+
+| Slice | Specs | Result | Repairs made | Evidence |
+| --- | --- | --- | --- | --- |
+| HR-P2A-1 Attendance reports | `attendance-derivation-exceptions-report-certification.spec.ts`, `attendance-exceptions-report-certification.spec.ts`, `attendance-register-report-certification.spec.ts` | 6 passed / 6 total | Replaced stale `.metric-tile` assertions with shared compact summary metric assertion; made search assertions stable against live seed data; updated drilldown assertions to modal/query-string and permission-aware drawer behavior. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/attendance-derivation-exceptions-report-certification.spec.ts tests/e2e/attendance-exceptions-report-certification.spec.ts tests/e2e/attendance-register-report-certification.spec.ts --workers=1 --reporter=line` -> `6 passed (2.4m)`. |
+
 ## Next Batch Recommendation
 
 | Batch | Target | Why | Exit gate |
@@ -136,10 +144,10 @@ Phase 1 setup validation:
 | Spec file | Cases | Declared skips | Classification | Recommended action |
 | --- | ---: | ---: | --- | --- |
 | `web/tests/e2e/accerio-september-payroll-real-scenario.spec.ts` | 3 | 0 | `historical-cross-module` | `defer-or-supersede-after-review` |
-| `web/tests/e2e/attendance-derivation-exceptions-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/attendance-exceptions-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/attendance-derivation-exceptions-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
+| `web/tests/e2e/attendance-exceptions-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/attendance-records-slim-options-qa.spec.ts` | 2 | 1 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/attendance-register-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/attendance-register-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/authenticated-docs-access.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/bank-advice-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/challan-reconciliation-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |

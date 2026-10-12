@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-Q bank advice report certification", () => {
@@ -15,7 +15,7 @@ test.describe("Phase R4-Q bank advice report certification", () => {
     }
 
     for (const metric of ["Bank advice files", "Payout value", "Submitted", "Reconciled"]) {
-      await expect(report.locator(".metric-tile").filter({ hasText: metric })).toBeVisible();
+      await expectSummaryMetric(report, metric);
     }
 
     const search = report.getByPlaceholder("Search run, provider, file, hash");

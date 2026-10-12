@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-S leave balance report certification", () => {
@@ -15,7 +15,7 @@ test.describe("Phase R4-S leave balance report certification", () => {
     }
 
     for (const metric of ["Balance rows", "Closing liability", "Reserved units", "High liability risk"]) {
-      await expect(report.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+      await expectSummaryMetric(report, metric);
     }
 
     const search = report.getByPlaceholder("Search employee, policy, leave type");

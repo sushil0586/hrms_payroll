@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase 7D roster rollout audit report certification", () => {
@@ -15,7 +15,7 @@ test.describe("Phase 7D roster rollout audit report certification", () => {
     }
 
     for (const metric of ["Rollouts", "Created assignments", "Skipped rows", "Medium/high risk"]) {
-      await expect(report.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+      await expectSummaryMetric(report, metric);
     }
 
     const search = report.getByPlaceholder("Search template, pattern, scope, summary");

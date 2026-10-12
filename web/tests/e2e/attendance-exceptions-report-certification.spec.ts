@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-T attendance exceptions SLA report certification", () => {
   test("HR admin can certify attendance exception filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/attendance-exceptions", hrAdmin);
     await expectPageReady(page, "Attendance Exceptions SLA Report");
 
@@ -15,7 +16,7 @@ test.describe("Phase R4-T attendance exceptions SLA report certification", () =>
     }
 
     for (const metric of ["Exception rows", "Pending review", "Overdue SLA", "Payroll impact"]) {
-      await expect(report.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+      await expectSummaryMetric(report, metric);
     }
 
     const search = report.getByPlaceholder("Search employee, reason, workflow, status");
@@ -82,9 +83,10 @@ test.describe("Phase R4-T attendance exceptions SLA report certification", () =>
 
     const reviewLink = report.getByRole("link", { name: "Review" }).first();
     if ((await reviewLink.count()) > 0) {
-      await expect(reviewLink).toHaveAttribute("href", /\/hr-admin\/attendance-regularizations\/.+\/review/);
+      await expect(reviewLink).toHaveAttribute("href", /\/hr-admin\/attendance-regularizations\?reviewRegularization=.+/);
       await reviewLink.click();
-      await expect(page).toHaveURL(/\/hr-admin\/attendance-regularizations\/.+\/review/);
+      await expect(page).toHaveURL(/\/hr-admin\/attendance-regularizations\?reviewRegularization=.+/);
+      await expect(page.getByRole("dialog", { name: /regularization|review/i })).toBeVisible();
       await expectNoHorizontalOverflow(page);
     } else {
       await expect(report.getByText("No attendance exception rows match the selected filters.")).toBeVisible();

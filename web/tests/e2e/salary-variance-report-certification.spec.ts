@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R3-B salary variance report certification", () => {
@@ -14,10 +14,10 @@ test.describe("Phase R3-B salary variance report certification", () => {
       await expect(report.getByRole("columnheader", { name: column })).toBeVisible();
     }
 
-    await expect(report.locator(".metric-tile").filter({ hasText: "Employees compared" })).toBeVisible();
-    await expect(report.locator(".metric-tile").filter({ hasText: "Current net pay" })).toBeVisible();
-    await expect(report.locator(".metric-tile").filter({ hasText: "Variance amount" })).toBeVisible();
-    await expect(report.locator(".metric-tile").filter({ hasText: "Baseline pending" })).toBeVisible();
+    await expectSummaryMetric(report, "Employees compared");
+    await expectSummaryMetric(report, "Current net pay");
+    await expectSummaryMetric(report, "Variance amount");
+    await expectSummaryMetric(report, "Baseline pending");
 
     const search = report.getByPlaceholder("Search employee, run, hash");
     await search.fill("no-such-salary-variance");

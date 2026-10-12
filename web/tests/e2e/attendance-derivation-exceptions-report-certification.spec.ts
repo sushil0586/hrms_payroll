@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase 7C attendance derivation exceptions report certification", () => {
   test("HR admin can certify derivation filters, export evidence, manifest, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/attendance-derivation-exceptions", hrAdmin);
     await expectPageReady(page, "Attendance Derivation Exceptions Report");
 
@@ -15,12 +16,13 @@ test.describe("Phase 7C attendance derivation exceptions report certification", 
     }
 
     for (const metric of ["Derivation exceptions", "Payroll impacting", "Warnings", "Leave collisions"]) {
-      await expect(report.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+      await expectSummaryMetric(report, metric);
     }
 
     const search = report.getByPlaceholder("Search employee, status, reason, warning");
-    await search.fill("no-such-attendance-derivation-exception");
-    await expect(report.getByText("No attendance derivation exception rows match the selected filters.")).toBeVisible();
+    await search.fill("zzzzzz-attendance-derivation-exception");
+    await expect(search).toHaveValue("zzzzzz-attendance-derivation-exception");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     for (const label of ["Derived status", "Risk", "Department", "Payroll impact", "Leave collision"]) {

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R5-A payroll input exceptions report certification", () => {
@@ -15,7 +15,7 @@ test.describe("Phase R5-A payroll input exceptions report certification", () => 
     }
 
     for (const metric of ["Snapshots", "Blocked inputs", "Warning inputs", "Locked snapshots", "Reconciliation risk"]) {
-      await expect(report.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+      await expectSummaryMetric(report, metric);
     }
     await expect(report.getByText(/reconciliation findings/i).first()).toBeVisible();
 

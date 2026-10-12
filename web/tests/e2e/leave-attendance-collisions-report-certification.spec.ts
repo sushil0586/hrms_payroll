@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase 7B leave-attendance collision report certification", () => {
@@ -15,7 +15,7 @@ test.describe("Phase 7B leave-attendance collision report certification", () => 
     }
 
     for (const metric of ["Collisions", "Payroll blocking", "High severity", "Employees"]) {
-      await expect(report.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+      await expectSummaryMetric(report, metric);
     }
 
     const search = report.getByPlaceholder("Search employee, leave, status, shift");

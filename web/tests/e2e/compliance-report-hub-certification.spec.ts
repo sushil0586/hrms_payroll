@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-H compliance report hub certification", () => {
@@ -21,7 +21,7 @@ test.describe("Phase R4-H compliance report hub certification", () => {
     await expect(workspace).toBeVisible();
 
     for (const metric of ["Filing calendars", "Statutory artifacts", "Provider callbacks", "Provider retries"]) {
-      await expect(hub.locator(".metric-tile").filter({ hasText: metric })).toBeVisible();
+      await expectSummaryMetric(hub, metric);
     }
 
     for (const report of [

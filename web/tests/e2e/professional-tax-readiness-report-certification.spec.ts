@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase PLF-5D Professional Tax readiness certification", () => {
@@ -20,7 +20,7 @@ test.describe("Phase PLF-5D Professional Tax readiness certification", () => {
     await expect(report).toBeVisible();
 
     for (const metric of ["Readiness", "Warnings", "Blocked gates", "PT artifacts"]) {
-      await expect(report.locator(".metric-tile").filter({ hasText: metric })).toBeVisible();
+      await expectSummaryMetric(report, metric);
     }
     for (const column of ["Gate", "Area", "Status", "Owner", "Signal", "Evidence", "Source", "Actions"]) {
       await expect(report.getByRole("columnheader", { name: column })).toBeVisible();

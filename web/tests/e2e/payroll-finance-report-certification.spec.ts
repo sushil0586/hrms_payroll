@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R3-A payroll finance report certification", () => {
@@ -18,10 +18,10 @@ test.describe("Phase R3-A payroll finance report certification", () => {
     await expect(report.getByRole("columnheader", { name: "Evidence" })).toBeVisible();
     await expect(report.getByRole("columnheader", { name: "Actions" })).toBeVisible();
 
-    await expect(report.locator(".metric-tile").filter({ hasText: "Register artifacts" })).toBeVisible();
-    await expect(report.locator(".metric-tile").filter({ hasText: "Gross earnings" })).toBeVisible();
-    await expect(report.locator(".metric-tile").filter({ hasText: "Deductions" })).toBeVisible();
-    await expect(report.locator(".metric-tile").filter({ hasText: "Net pay" })).toBeVisible();
+    await expectSummaryMetric(report, "Register artifacts");
+    await expectSummaryMetric(report, "Gross earnings");
+    await expectSummaryMetric(report, "Deductions");
+    await expectSummaryMetric(report, "Net pay");
 
     const search = report.getByPlaceholder("Search run, file, profile, hash");
     await search.fill("no-such-payroll-register");

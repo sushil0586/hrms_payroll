@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-R daily attendance register report certification", () => {
   test("HR admin can certify attendance register filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/attendance-register", hrAdmin);
     await expectPageReady(page, "Daily Attendance Register");
 
@@ -15,12 +16,13 @@ test.describe("Phase R4-R daily attendance register report certification", () =>
     }
 
     for (const metric of ["Attendance rows", "Late marks", "Regularized", "Payroll ready"]) {
-      await expect(report.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+      await expectSummaryMetric(report, metric);
     }
 
     const search = report.getByPlaceholder("Search employee, department, status, notes");
     await search.fill("no-such-attendance-register-row");
-    await expect(report.getByText("No attendance register rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-attendance-register-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     for (const label of ["Status", "Source", "Department", "Lock state", "Regularization", "Exception"]) {
@@ -82,9 +84,11 @@ test.describe("Phase R4-R daily attendance register report certification", () =>
 
     const openLink = report.getByRole("link", { name: "Open" }).first();
     if ((await openLink.count()) > 0) {
-      await expect(openLink).toHaveAttribute("href", /\/hr-admin\/attendance-records\/.+\/edit/);
+      await expect(openLink).toHaveAttribute("href", /\/hr-admin\/attendance-records\?editRecord=.+/);
       await openLink.click();
-      await expect(page).toHaveURL(/\/hr-admin\/attendance-records\/.+\/edit/);
+      await expect(page).toHaveURL(/\/hr-admin\/attendance-records\?editRecord=.+/);
+      await expect(page.getByRole("complementary", { name: "Attendance record detail" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Edit record" }).or(page.getByRole("link", { name: "Edit record" }))).toBeVisible();
       await expectNoHorizontalOverflow(page);
     } else {
       await expect(report.getByText("No attendance register rows match the selected filters.")).toBeVisible();

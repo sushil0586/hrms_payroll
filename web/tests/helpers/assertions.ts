@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 export async function expectAppShell(page: Page) {
   await expect(page.locator("main.shell:not(.app-loading-shell)").first()).toBeVisible();
@@ -23,6 +23,48 @@ export async function expectNoHorizontalOverflow(page: Page) {
   });
 
   expect(overflow).toBeLessThanOrEqual(1);
+}
+
+export async function expectSummaryMetric(scope: Locator, label: string | RegExp) {
+  const summaryMetric = scope
+    .locator(
+      [
+        ".attendance-summary-strip span",
+        ".report-summary-strip span",
+        ".report-insights-strip__metric",
+        ".payroll-run-summary-strip span",
+        ".payroll-setup-metrics span",
+        ".metric-tile",
+      ].join(", "),
+    )
+    .filter({ hasText: label })
+    .first();
+
+  await expect(summaryMetric).toBeVisible();
+}
+
+function backendApiBaseUrl() {
+  return process.env.HRMS_API_BASE_URL?.replace(/\/$/, "");
+}
+
+function backendPathFromProxyPath(path: string) {
+  const backendPath = path.startsWith("/api/") ? path.slice("/api".length) : path;
+  const [pathname, query = ""] = backendPath.split("?");
+  const normalizedPathname = pathname.endsWith("/") ? pathname : `${pathname}/`;
+  return query ? `${normalizedPathname}?${query}` : normalizedPathname;
+}
+
+export async function requestBackendPath(page: Page, path: string) {
+  const apiBase = backendApiBaseUrl();
+  if (!apiBase) {
+    return page.request.get(path);
+  }
+
+  const token = (await page.context().cookies()).find((cookie) => cookie.name === "hrms_access_token")?.value;
+  expect(token, "Expected authenticated browser session token.").toBeTruthy();
+  return page.request.get(`${apiBase}${backendPathFromProxyPath(path)}`, {
+    headers: { Authorization: `Token ${token}` },
+  });
 }
 
 export async function suppressBrowserTestNoise(page: Page) {

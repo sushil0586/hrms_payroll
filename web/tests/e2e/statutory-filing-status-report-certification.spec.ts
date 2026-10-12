@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { gotoAuthenticated, hrAdmin, type Persona } from "../helpers/staging-auth";
 
 const restrictedPersona: Persona = {
@@ -32,7 +32,7 @@ test.describe("Phase R4-D statutory filing status report certification", () => {
     }
 
     for (const metric of ["Filing calendars", "Due or overdue", "Published evidence", "Provider routes"]) {
-      await expect(report.locator(".metric-tile").filter({ hasText: metric })).toBeVisible();
+      await expectSummaryMetric(report, metric);
     }
 
     const search = report.getByPlaceholder("Search filing, TAN, provider, output profile, hash");
