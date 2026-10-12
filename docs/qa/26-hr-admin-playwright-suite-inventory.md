@@ -73,11 +73,55 @@ PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_
   tests/e2e/payroll-setup-flows.spec.ts \
   tests/e2e/payroll-statutory-flows.spec.ts \
   tests/e2e/phase4c-hr-admin-operations-flows.spec.ts \
-  tests/e2e/salary-setup-flows.spec.ts
+  tests/e2e/salary-setup-flows.spec.ts \
   --workers=1 --reporter=line
 ```
 
 For the two broad route-closure specs, keep sharded/focused reruns when a single route group flakes under load. The tracker records the current Docker evidence and repaired focused reruns.
+
+## Phase 1 Release-Gate Groups
+
+Use these smaller groups instead of one monolithic command when validating the frozen HR Admin baseline. All commands assume the Docker web image is serving on `http://127.0.0.1:3200` and the local API is available at `http://127.0.0.1:8012/api/v1`.
+
+```bash
+export PLAYWRIGHT_SKIP_WEB_SERVER=1
+export PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200
+export HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1
+```
+
+| Group | Scope | Specs | Expected status |
+| --- | --- | --- | --- |
+| HR-P1-1 | Workforce, employee master, access, documents, generated letters | `employee-bank-accounts-certification.spec.ts`, `employee-lifecycle-certification-flows.spec.ts`, `generated-letter-flows.spec.ts`, `hr-admin-employee-documents-live-workflow.spec.ts`, `hr-admin-employee-production-certification.spec.ts`, `hr-admin-workforce-documents-access-responsive-certification.spec.ts` | Pass with documented expected skips only. |
+| HR-P1-2 | Attendance and leave operations | `hr-admin-attendance-operations-workflow-certification.spec.ts`, `hr-admin-leave-request-operations-certification.spec.ts`, `phase4c-hr-admin-operations-flows.spec.ts`, `governance-assignment-form-flows.spec.ts` | Pass with documented expected skips only. |
+| HR-P1-3 | Payroll setup, rules, calculations, and salary setup | `payroll-calculations-flows.spec.ts`, `payroll-rules-flows.spec.ts`, `payroll-setup-flows.spec.ts`, `salary-setup-flows.spec.ts` | Pass. |
+| HR-P1-4 | Payroll operations, outputs, providers, statutory | `payroll-adjustments-flows.spec.ts`, `payroll-handoff-flows.spec.ts`, `payroll-outputs-flows.spec.ts`, `payroll-providers-flows.spec.ts`, `payroll-review-flows.spec.ts`, `payroll-settlements-flows.spec.ts`, `payroll-statutory-flows.spec.ts` | Pass with the known provider expected skip only. |
+| HR-P1-5 | Reports and compliance browser checks | `hr-admin-compliance-export-ui-polish-certification.spec.ts`, `hr-admin-report-workspace-submenu-certification.spec.ts`, `hr-admin-reports-operations-ui-audit.spec.ts`, `hr-admin-reports-phase13-certification.spec.ts` | Pass; keep reports/operations audit sharded if broad run times out. |
+| HR-P1-6 | Route/responsive visual closure | `hr-admin-e90-8-final-ux-certification.spec.ts`, `hr-admin-full-route-ui-audit.spec.ts`, `hr-admin-responsive-route-closure.spec.ts` | Pass or pass through documented focused reruns for any transient heavy route group. |
+
+Example:
+
+```bash
+pnpm --dir web exec playwright test \
+  tests/e2e/employee-bank-accounts-certification.spec.ts \
+  tests/e2e/employee-lifecycle-certification-flows.spec.ts \
+  tests/e2e/generated-letter-flows.spec.ts \
+  tests/e2e/hr-admin-employee-documents-live-workflow.spec.ts \
+  tests/e2e/hr-admin-employee-production-certification.spec.ts \
+  tests/e2e/hr-admin-workforce-documents-access-responsive-certification.spec.ts \
+  --workers=1 --reporter=line
+```
+
+Phase 1 completion rule: every group must either pass on Docker or have a tracker-backed focused rerun explaining the skip/flaky route group. Do not add candidate specs to these groups until they pass in Phase 2.
+
+Phase 1 setup validation:
+
+| Check | Result |
+| --- | --- |
+| Verified-working specs grouped | 28 grouped / 28 unique |
+| Missing spec paths | 0 |
+| Duplicate spec paths | 0 |
+| Drift from verified-working list | 0 missing, 0 extra |
+| HR-P1-1 Playwright list check | `--list` resolved 10 tests across 6 files |
 
 ## Next Batch Recommendation
 
