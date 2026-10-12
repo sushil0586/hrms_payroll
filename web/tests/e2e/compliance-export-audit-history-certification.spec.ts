@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-L compliance export audit history certification", () => {
@@ -68,7 +68,7 @@ test.describe("Phase R4-L compliance export audit history certification", () => 
     const workspace = page.getByTestId("report-export-audit-workspace");
     await expect(workspace).toBeVisible();
     for (const metric of ["Audit records", "CSV exports", "Manifests", "Reports"]) {
-      await expect(workspace.locator(".metric-tile").filter({ hasText: metric })).toBeVisible();
+      await expectSummaryMetric(workspace, metric);
     }
     for (const column of ["Generated", "Report", "Type", "Rows", "Checksum", "Filters", "Evidence", "Actor"]) {
       await expect(workspace.getByRole("columnheader", { name: column })).toBeVisible();

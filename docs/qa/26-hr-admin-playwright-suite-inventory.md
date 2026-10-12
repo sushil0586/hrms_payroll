@@ -10,7 +10,7 @@ Purpose: classify the HR portal / HR Admin-related Playwright inventory so the r
 | --- | ---: |
 | HR-related Playwright spec files discovered | 213 |
 | HR-related Playwright test declarations discovered | 665 |
-| Current tracker-backed HR Admin functional/live workflow result | 133 passed / 134 total |
+| Current tracker-backed HR Admin functional/live workflow result | 153 passed / 154 total |
 | Current functional/live expected skips | 1 |
 | Current active HR Admin Playwright blockers | 0 |
 
@@ -35,8 +35,8 @@ Phase 0 is the protected checkpoint for expanding HR Admin Playwright coverage. 
 
 | Classification | Spec files | Test declarations | Declared skips | Recommended handling |
 | --- | ---: | ---: | ---: | --- |
-| `verified-working` | 51 | 143 | 10 | Keep in release gate |
-| `candidate-functional` | 78 | 275 | 35 | Review next for Docker functional batch |
+| `verified-working` | 59 | 163 | 10 | Keep in release gate |
+| `candidate-functional` | 70 | 255 | 35 | Review next for Docker functional batch |
 | `candidate-visual` | 31 | 87 | 3 | Repair/shard visual checks as needed |
 | `historical-cross-module` | 53 | 160 | 22 | Defer or supersede after coverage review |
 
@@ -133,6 +133,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | HR-P2A-2 HR core reports | `workforce-report-certification.spec.ts`, `document-compliance-report-certification.spec.ts`, `lifecycle-aging-report-certification.spec.ts`, `lifecycle-queue-report-certification.spec.ts`, `leave-balance-report-certification.spec.ts`, `leave-attendance-collisions-report-certification.spec.ts` | 12 passed / 12 total | Added report-export timeout budget for heavy CSV/manifest/audit flows; replaced seed-dependent empty-state assertions with stable filter-state checks; waited for leave balance destination readiness before overflow assertion. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/workforce-report-certification.spec.ts tests/e2e/document-compliance-report-certification.spec.ts tests/e2e/lifecycle-aging-report-certification.spec.ts tests/e2e/lifecycle-queue-report-certification.spec.ts tests/e2e/leave-balance-report-certification.spec.ts tests/e2e/leave-attendance-collisions-report-certification.spec.ts --workers=1 --reporter=line` -> `12 passed (4.6m)`. |
 | HR-P2A-3 Payroll reports | `payroll-finance-report-certification.spec.ts`, `payroll-input-exceptions-report-certification.spec.ts`, `payroll-review-exceptions-report-certification.spec.ts`, `payroll-adjustments-report-certification.spec.ts`, `payroll-settlements-report-certification.spec.ts`, `payroll-close-readiness-report-certification.spec.ts`, `payslip-publication-report-certification.spec.ts` | 14 passed / 14 total | Added report-export timeout budget for heavy payroll CSV/manifest/audit flows; replaced seed-dependent empty-state assertions with stable filter-state checks; waited for Payroll Inputs destination readiness before overflow assertion; aligned payroll register export certification with the current default exported sort. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/payroll-finance-report-certification.spec.ts tests/e2e/payroll-input-exceptions-report-certification.spec.ts tests/e2e/payroll-review-exceptions-report-certification.spec.ts tests/e2e/payroll-adjustments-report-certification.spec.ts tests/e2e/payroll-settlements-report-certification.spec.ts tests/e2e/payslip-publication-report-certification.spec.ts tests/e2e/payroll-close-readiness-report-certification.spec.ts --workers=1 --reporter=line` -> `14 passed (5.6m)`. |
 | HR-P2A-4 Statutory/compliance reports | `pf-ecr-readiness-report-certification.spec.ts`, `esic-contribution-readiness-report-certification.spec.ts`, `professional-tax-readiness-report-certification.spec.ts`, `tds-efile-readiness-report-certification.spec.ts`, `tds-efile-package-certification.spec.ts`, `statutory-deductions-report-certification.spec.ts`, `statutory-filing-status-report-certification.spec.ts` | 14 passed / 14 total | Added timeout budget for heavy statutory readiness flows; aligned employee denial checks with ESS redirect behavior; replaced seed-dependent empty-state assertions with stable filter-state checks; certified provider/statutory drilldowns through verified href navigation. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/pf-ecr-readiness-report-certification.spec.ts tests/e2e/esic-contribution-readiness-report-certification.spec.ts tests/e2e/professional-tax-readiness-report-certification.spec.ts tests/e2e/tds-efile-readiness-report-certification.spec.ts tests/e2e/tds-efile-package-certification.spec.ts tests/e2e/statutory-deductions-report-certification.spec.ts tests/e2e/statutory-filing-status-report-certification.spec.ts --workers=1 --reporter=line` -> `14 passed (7.9m)`. |
+| HR-P2A-5 Compliance/provider reports | `provider-filing-receipts-report-certification.spec.ts`, `compliance-summary-report-certification.spec.ts`, `compliance-report-hub-certification.spec.ts`, `compliance-report-export-certification.spec.ts`, `compliance-report-manifest-certification.spec.ts`, `compliance-export-audit-history-certification.spec.ts`, `challan-reconciliation-report-certification.spec.ts`, `lwf-readiness-report-certification.spec.ts` | 20 passed / 20 total | Added timeout budget for heavy export and manifest flows; aligned catalog-open checks with verified direct navigation; updated ESS denial checks to the current workspace redirect; replaced old metric/empty-state assertions with shared compact summary and filter-state checks; allowed provider receipt manifest exports to use the current default sort. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/provider-filing-receipts-report-certification.spec.ts tests/e2e/compliance-summary-report-certification.spec.ts tests/e2e/compliance-report-hub-certification.spec.ts tests/e2e/compliance-report-export-certification.spec.ts tests/e2e/compliance-report-manifest-certification.spec.ts tests/e2e/compliance-export-audit-history-certification.spec.ts tests/e2e/challan-reconciliation-report-certification.spec.ts tests/e2e/lwf-readiness-report-certification.spec.ts --workers=1 --reporter=line` -> `20 passed (11.2m)`. |
 
 ## Next Batch Recommendation
 
@@ -153,12 +154,12 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/attendance-register-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/authenticated-docs-access.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/bank-advice-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/challan-reconciliation-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/compliance-export-audit-history-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/compliance-report-export-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/compliance-report-hub-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/compliance-report-manifest-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/compliance-summary-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/challan-reconciliation-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
+| `web/tests/e2e/compliance-export-audit-history-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
+| `web/tests/e2e/compliance-report-export-certification.spec.ts` | 4 | 0 | `verified-working` | `keep-release-gate` |
+| `web/tests/e2e/compliance-report-hub-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
+| `web/tests/e2e/compliance-report-manifest-certification.spec.ts` | 4 | 0 | `verified-working` | `keep-release-gate` |
+| `web/tests/e2e/compliance-summary-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/configuration-form-flows.spec.ts` | 7 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/deployed-readonly-auth-routing.spec.ts` | 5 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/docs-screenshot-capture.spec.ts` | 6 | 0 | `candidate-functional` | `next-batch-review` |
@@ -235,7 +236,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/leave-balance-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/lifecycle-aging-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/lifecycle-queue-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
-| `web/tests/e2e/lwf-readiness-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/lwf-readiness-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/mss-control-center-certification.spec.ts` | 8 | 1 | `candidate-visual` | `repair-or-shard-if-needed` |
 | `web/tests/e2e/mss-rbac-approver-certification.spec.ts` | 5 | 1 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/notification-setup-crud-flows.spec.ts` | 3 | 0 | `candidate-functional` | `next-batch-review` |
@@ -323,7 +324,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/production-tenant-role-isolation.spec.ts` | 5 | 0 | `historical-cross-module` | `defer-or-supersede-after-review` |
 | `web/tests/e2e/professional-tax-readiness-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/provider-certification-center-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/provider-filing-receipts-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/provider-filing-receipts-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/public-launch-role-menu-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/release-candidate-cross-workspace-ui-gate.spec.ts` | 3 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/reporting-foundation-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |

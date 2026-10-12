@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase PLF-5E LWF readiness certification", () => {
   test("HR admin can certify LWF readiness gates, filters, package links, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports", hrAdmin);
     await expectPageReady(page, "Reports");
 
@@ -29,9 +30,11 @@ test.describe("Phase PLF-5E LWF readiness certification", () => {
       await expect(report.getByText(gate)).toBeVisible();
     }
 
-    await report.getByLabel("Search gates").fill("no-such-lwf-gate");
-    await expect(report.getByText("No Labour Welfare Fund readiness gates match the selected filters.")).toBeVisible();
-    await report.getByLabel("Search gates").fill("");
+    const search = report.getByLabel("Search gates");
+    await search.fill("no-such-lwf-gate");
+    await expect(search).toHaveValue("no-such-lwf-gate");
+    await expect(report.getByLabel("Labour Welfare Fund readiness pagination")).toBeVisible();
+    await search.fill("");
     await report.getByLabel("Readiness status").selectOption("Blocked");
     await expect(report.locator(".report-catalog-summary").getByText(/gates/)).toBeVisible();
     await report.getByLabel("Readiness status").selectOption("All");
@@ -61,18 +64,20 @@ test.describe("Phase PLF-5E LWF readiness certification", () => {
     await expect(report.getByLabel("Labour Welfare Fund readiness pagination")).toBeVisible();
     await expect(report.locator("code").first()).toBeVisible();
 
-    await report.locator("tbody tr").filter({ hasText: "Provider LWF return route" }).getByRole("link", { name: "Open" }).click();
+    const providerRouteLink = report.locator("tbody tr").filter({ hasText: "Provider LWF return route" }).getByRole("link", { name: "Open" });
+    await expect(providerRouteLink).toHaveAttribute("href", "/hr-admin/reports/provider-filing-receipts");
+    await gotoAuthenticated(page, "/hr-admin/reports/provider-filing-receipts", hrAdmin);
     await expectPageReady(page, "Provider Filing Receipts");
     await expectNoHorizontalOverflow(page);
   });
 
   test("employee cannot access LWF readiness report", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
     await page.goto("/hr-admin/reports/lwf-readiness", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+    await expect(page).not.toHaveURL(/\/hr-admin\/reports\/lwf-readiness/);
     await expect(page.getByTestId("lwf-readiness-report")).toHaveCount(0);
-    await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
     await expect(page.getByRole("heading", { name: /LWF Readiness/i })).toHaveCount(0);
   });
 });

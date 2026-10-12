@@ -35,6 +35,8 @@ const exportCases = [
 ];
 
 test.describe("Phase R4-F compliance report export certification", () => {
+  test.setTimeout(120_000);
+
   for (const item of exportCases) {
     test(`HR admin can download audited ${item.key} CSV export`, async ({ page }) => {
       await gotoAuthenticated(page, item.route, hrAdmin);

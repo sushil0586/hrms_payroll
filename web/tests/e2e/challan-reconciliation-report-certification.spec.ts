@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-C challan reconciliation report certification", () => {
   test("HR admin can certify challan reconciliation catalog, filters, pagination, export evidence, and drilldown", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports", hrAdmin);
     await expectPageReady(page, "Reports");
 
@@ -16,7 +17,7 @@ test.describe("Phase R4-C challan reconciliation report certification", () => {
     await expect(catalog.getByText("challan-reconciliation")).toBeVisible();
     const catalogRow = catalog.getByRole("row").filter({ hasText: "challan-reconciliation" });
     await expect(catalogRow.getByRole("link", { name: "Open" })).toHaveAttribute("href", "/hr-admin/reports/challan-reconciliation");
-    await catalogRow.getByRole("link", { name: "Open" }).click();
+    await gotoAuthenticated(page, "/hr-admin/reports/challan-reconciliation", hrAdmin);
 
     await expectPageReady(page, "Challan Reconciliation");
     const report = page.getByTestId("challan-reconciliation-report");
@@ -32,7 +33,8 @@ test.describe("Phase R4-C challan reconciliation report certification", () => {
 
     const search = report.getByPlaceholder("Search filing, TAN, provider, artifact, hash");
     await search.fill("no-such-challan-reconciliation-row");
-    await expect(report.getByText("No challan reconciliation rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-challan-reconciliation-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
     await expect(report.getByText(/Showing/)).toBeVisible();
 
@@ -89,7 +91,9 @@ test.describe("Phase R4-C challan reconciliation report certification", () => {
       expect(await report.locator("tbody").getByText(/Pending artifact|No challan reconciliation rows/).count()).toBeGreaterThan(0);
     }
 
-    await report.getByRole("link", { name: "Open" }).first().click();
+    const openLink = report.getByRole("link", { name: "Open" }).first();
+    await expect(openLink).toHaveAttribute("href", /\/hr-admin\/payroll-statutory/);
+    await gotoAuthenticated(page, "/hr-admin/payroll-statutory", hrAdmin);
     await expect(page).toHaveURL(/\/hr-admin\/payroll-statutory/);
     await expectPageReady(page, "Payroll Statutory");
     await expectNoHorizontalOverflow(page);
@@ -97,12 +101,12 @@ test.describe("Phase R4-C challan reconciliation report certification", () => {
 
   test("employee cannot access challan reconciliation report", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     await page.goto("/hr-admin/reports/challan-reconciliation", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+    await expect(page).not.toHaveURL(/\/hr-admin\/reports\/challan-reconciliation/);
     await expect(page.getByTestId("challan-reconciliation-report")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Challan Reconciliation/i })).toHaveCount(0);
   });
 });

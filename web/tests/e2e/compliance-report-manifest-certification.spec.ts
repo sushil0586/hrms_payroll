@@ -26,6 +26,8 @@ const manifestCases = [
 ];
 
 test.describe("Phase R4-J compliance export manifest certification", () => {
+  test.setTimeout(120_000);
+
   for (const item of manifestCases) {
     test(`HR admin can verify ${item.key} CSV export manifest`, async ({ page }) => {
       await gotoAuthenticated(page, item.route, hrAdmin);

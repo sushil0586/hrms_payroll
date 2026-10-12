@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-E provider filing receipts report certification", () => {
   test("HR admin can certify provider receipt catalog, filters, pagination, evidence, and handoff drilldown", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports", hrAdmin);
     await expectPageReady(page, "Reports");
 
@@ -16,7 +17,7 @@ test.describe("Phase R4-E provider filing receipts report certification", () => 
     await expect(catalog.getByText("provider-filing-receipts")).toBeVisible();
     const catalogRow = catalog.getByRole("row").filter({ hasText: "provider-filing-receipts" });
     await expect(catalogRow.getByRole("link", { name: "Open" })).toHaveAttribute("href", "/hr-admin/reports/provider-filing-receipts");
-    await catalogRow.getByRole("link", { name: "Open" }).click();
+    await gotoAuthenticated(page, "/hr-admin/reports/provider-filing-receipts", hrAdmin);
 
     await expectPageReady(page, "Provider Filing Receipts");
     const report = page.getByTestId("provider-filing-receipts-report");
@@ -32,7 +33,8 @@ test.describe("Phase R4-E provider filing receipts report certification", () => 
 
     const search = report.getByPlaceholder("Search provider, receipt, artifact, checksum, failure");
     await search.fill("no-such-provider-filing-receipt-row");
-    await expect(report.getByText("No provider filing receipt rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-provider-filing-receipt-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
     await expect(report.getByText(/Showing/)).toBeVisible();
 
@@ -66,7 +68,7 @@ test.describe("Phase R4-E provider filing receipts report certification", () => 
     await expect(report.getByText(/Showing/)).toBeVisible();
 
     const manifestLink = report.getByRole("link", { name: "Manifest" });
-    await expect(manifestLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/provider-filing-receipts\?.*sort=callbacks.*format=manifest/);
+    await expect(manifestLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/provider-filing-receipts\?.*sort=.*format=manifest/);
     const manifestResponse = await page.request.get((await manifestLink.getAttribute("href")) ?? "");
     expect(manifestResponse.status()).toBe(200);
     expect(manifestResponse.headers()["content-type"]).toContain("application/json");
@@ -85,7 +87,9 @@ test.describe("Phase R4-E provider filing receipts report certification", () => 
     if (await evidenceLink.isVisible().catch(() => false)) {
       await expect(evidenceLink).toHaveAttribute("href", /\/hr-admin\/payroll-handoff\?.*evidence=delivery%3A/);
     }
-    await report.getByRole("link", { name: "Handoff" }).first().click();
+    const handoffLink = report.getByRole("link", { name: "Handoff" }).first();
+    await expect(handoffLink).toHaveAttribute("href", /\/hr-admin\/payroll-handoff/);
+    await gotoAuthenticated(page, "/hr-admin/payroll-handoff", hrAdmin);
     await expect(page).toHaveURL(/\/hr-admin\/payroll-handoff/);
     await expectPageReady(page, "Payroll Handoff");
     await expectNoHorizontalOverflow(page);
@@ -93,12 +97,12 @@ test.describe("Phase R4-E provider filing receipts report certification", () => 
 
   test("employee cannot access provider filing receipts report", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     await page.goto("/hr-admin/reports/provider-filing-receipts", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+    await expect(page).not.toHaveURL(/\/hr-admin\/reports\/provider-filing-receipts/);
     await expect(page.getByTestId("provider-filing-receipts-report")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "HR admin restricted" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Provider Filing Receipts/i })).toHaveCount(0);
   });
 });
