@@ -16,6 +16,21 @@ Purpose: classify the HR portal / HR Admin-related Playwright inventory so the r
 
 Important distinction: the 665 count is the broad repository inventory. The 88 count is the current tracker-backed HR Admin functional/live working set verified against the local Docker web build, API, and Postgres.
 
+## Phase 0 Baseline Freeze
+
+| Item | Status |
+| --- | --- |
+| Freeze date | 2026-10-12 |
+| Baseline branch | `main` |
+| Baseline commit | `ffd92f9` |
+| Remote state | `origin/main` points to `ffd92f9` |
+| Working tree | Clean at freeze check |
+| Docker baseline | Web `http://127.0.0.1:3200`, API `http://127.0.0.1:8012/api/v1`, Postgres `127.0.0.1:55432` |
+| Functional/live benchmark | 87 passed / 88 total, 1 expected skip, 0 active blockers |
+| Broad inventory | 213 HR-related Playwright specs, 665 test declarations |
+
+Phase 0 is the protected checkpoint for expanding HR Admin Playwright coverage. Later phases must update this inventory and the portal test register when specs move between `candidate-*`, `verified-working`, `historical-cross-module`, `superseded`, or `deferred`.
+
 ## Classification Summary
 
 | Classification | Spec files | Test declarations | Declared skips | Recommended handling |
@@ -289,4 +304,3 @@ For the two broad route-closure specs, keep sharded/focused reruns when a single
 | `web/tests/e2e/user-journey-phase6-ess-mss-practical-workflow.spec.ts` | 12 | 7 | `historical-cross-module` | `defer-or-supersede-after-review` |
 | `web/tests/e2e/workflow-trace-flows.spec.ts` | 1 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/workforce-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-
