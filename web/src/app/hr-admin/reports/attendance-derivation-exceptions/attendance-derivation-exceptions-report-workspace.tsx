@@ -130,11 +130,12 @@ export function AttendanceDerivationExceptionsReportWorkspace({ items }: { items
   return (
     <section className="section section--tight" aria-label="Attendance derivation exceptions report workspace">
       <div className="report-catalog-workspace attendance-derivation-exceptions-report" data-testid="attendance-derivation-exceptions-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Derivation exceptions</span><strong>{filteredRows.length}</strong><small>{rows.length} total rows</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Payroll impacting</span><strong>{filteredRows.filter((row) => row.record.derivation_summary.payroll_impact.payroll_impacting).length}</strong><small>Needs payroll review</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Warnings</span><strong>{filteredRows.filter((row) => row.record.derivation_summary.warnings.length > 0).length}</strong><small>Resolver warnings</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Leave collisions</span><strong>{filteredRows.reduce((sum, row) => sum + row.record.derivation_summary.leave_collision_count, 0)}</strong><small>Linked overlaps</small></article>
+        <div className="attendance-summary-strip report-summary-strip" aria-label="Derivation exception summary">
+          <span><strong>{filteredRows.length}</strong> derivation exceptions</span>
+          <span><strong>{rows.length}</strong> total rows</span>
+          <span><strong>{filteredRows.filter((row) => row.record.derivation_summary.payroll_impact.payroll_impacting).length}</strong> payroll impacting</span>
+          <span><strong>{filteredRows.filter((row) => row.record.derivation_summary.warnings.length > 0).length}</strong> warnings</span>
+          <span><strong>{filteredRows.reduce((sum, row) => sum + row.record.derivation_summary.leave_collision_count, 0)}</strong> leave collisions</span>
         </div>
 
         <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Attendance derivation exception filters">
@@ -168,7 +169,7 @@ export function AttendanceDerivationExceptionsReportWorkspace({ items }: { items
                     <td><div className="payroll-register-stack"><span>{summary.worked_hours} worked / {summary.expected_hours} expected</span><span>{summary.late_minutes} late minutes</span><span>{summary.early_exit_minutes} early exit minutes</span></div></td>
                     <td><div className="payroll-register-stack"><span className={statusClass(String(summary.payroll_impact.payroll_impacting))}>{summary.payroll_impact.payroll_impacting ? "Payroll impacting" : "Not payroll impacting"}</span><span>{summary.payroll_impact.payable_units} payable units</span><span>{summary.payroll_impact.lop_units} LOP units</span><span>{summary.leave_collision_count} leave collisions</span></div></td>
                     <td><div className="payroll-register-stack"><span>{summary.reasons[0] ?? "No reason captured"}</span><span>{summary.warnings[0] ?? "No warning"}</span><code>{summary.schedule_contract_ref ?? "contract.none"}</code></div></td>
-                    <td><div className="report-row-actions"><Link className="button button--secondary" href={`/hr-admin/attendance-records/${record.id}/edit`}>Review</Link><Link className="button button--ghost" href={`/hr-admin/reports/attendance-register?status=${encodeURIComponent(record.status)}`}>Register</Link></div></td>
+                    <td><div className="report-row-actions"><Link className="button button--secondary" href={`/hr-admin/attendance-records?editRecord=${record.id}`}>Review</Link><Link className="button button--ghost" href={`/hr-admin/reports/attendance-register?status=${encodeURIComponent(record.status)}`}>Register</Link></div></td>
                   </tr>
                 );
               })}

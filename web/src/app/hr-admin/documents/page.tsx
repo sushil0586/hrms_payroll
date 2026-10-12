@@ -1,8 +1,6 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { WorkspaceCard } from "@/components/patterns/workspace-card";
 import {
   getHrAdminDocumentCategories,
   getHrAdminDocumentRequirements,
@@ -51,66 +49,66 @@ export default async function HrAdminDocumentsPage() {
         }
       />
 
-      <section className="section">
-        <div className="metrics-grid">
-          <MetricTile label="Categories" value={categoriesResult.data.length} trend="Configured document types" />
-          <MetricTile label="Requirement rules" value={requirementsResult.data.length} trend="Scoped compliance rules" />
-          <MetricTile label="Documents in queue" value={employeeDocumentsResult.data.total_count} trend="Review window size" />
-          <MetricTile label="Generated letters" value={generatedLettersResult.data.total_count} trend="Issued employee artifacts" />
+      <section className="workspace-section" aria-label="Document control summary">
+        <div className="attendance-summary-strip">
+          <span><strong>{categoriesResult.data.length}</strong> categories</span>
+          <span><strong>{requirementsResult.data.length}</strong> requirement rules</span>
+          <span><strong>{employeeDocumentsResult.data.total_count}</strong> documents in queue</span>
+          <span><strong>{generatedLettersResult.data.total_count}</strong> generated letters</span>
         </div>
       </section>
 
-      <section className="section document-control-grid">
-        <div className="workspace-grid">
+      <section className="workspace-section document-control-grid">
+        <article className="workspace-data-panel">
+          <div className="workspace-data-panel__header">
+            <div>
+              <h2 className="section-heading-soft">Document workspaces</h2>
+              <p className="section-copy section-copy-soft">Open the focused setup, review, and letter queues.</p>
+            </div>
+          </div>
+          <div className="workspace-table-scroll">
+            <table className="workspace-table attendance-directory-table document-control-table" aria-label="Document control workspaces">
+              <thead>
+                <tr>
+                  <th>Workspace</th>
+                  <th>Scope</th>
+                  <th>Records</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
           {canViewDocuments ? (
-            <WorkspaceCard
-              eyebrow="Taxonomy"
-              title="Document categories"
-              description="Control reusable document types, upload rules, and verification behavior."
-              href="/hr-admin/document-categories"
-              cta={canManageDocuments ? "Manage categories" : "View categories"}
-              details={[
-                { label: "Configured", value: categoriesResult.data.length },
-                { label: "Verification required", value: categoriesResult.data.filter((item) => item.requires_verification).length },
-              ]}
-            />
+            <tr>
+              <td className="workspace-table__primary-cell"><div><strong>Document categories</strong><span>Reusable document types and upload behavior.</span></div></td>
+              <td>Taxonomy</td>
+              <td><span className="workspace-table__secondary">{categoriesResult.data.length} configured / {categoriesResult.data.filter((item) => item.requires_verification).length} verification required</span></td>
+              <td><Link className="button button--secondary button--compact" href="/hr-admin/document-categories">{canManageDocuments ? "Manage" : "View"}</Link></td>
+            </tr>
           ) : null}
           {canViewDocuments ? (
-            <WorkspaceCard
-              eyebrow="Compliance"
-              title="Document requirements"
-              description="Define where documents are mandatory by legal entity, branch, department, grade, and employment context."
-              href="/hr-admin/document-requirements"
-              cta={canManageDocuments ? "Manage requirements" : "View requirements"}
-              details={[
-                { label: "Rules", value: requirementsResult.data.length },
-                { label: "Mandatory", value: requirementsResult.data.filter((item) => item.is_mandatory).length },
-              ]}
-            />
+            <tr>
+              <td className="workspace-table__primary-cell"><div><strong>Document requirements</strong><span>Compliance rules by organization and employment context.</span></div></td>
+              <td>Compliance</td>
+              <td><span className="workspace-table__secondary">{requirementsResult.data.length} rules / {requirementsResult.data.filter((item) => item.is_mandatory).length} mandatory</span></td>
+              <td><Link className="button button--secondary button--compact" href="/hr-admin/document-requirements">{canManageDocuments ? "Manage" : "View"}</Link></td>
+            </tr>
           ) : null}
-          <WorkspaceCard
-            eyebrow="Letters"
-            title="Generated HR letters"
-            description="Preview employee variables, create downloadable letter artifacts, and keep issue history attached to employee records."
-            href="/hr-admin/generated-letters"
-            cta="Generate letters"
-            details={[
-              { label: "Generated", value: generatedLettersResult.data.total_count },
-              { label: "Downloadable", value: generatedLettersResult.data.items.filter((item) => item.artifact_id).length },
-            ]}
-          />
-          <WorkspaceCard
-            eyebrow="Operations"
-            title="Employee document review"
-            description="Keep the verification queue moving with shared filters, expiry tracking, and review actions."
-            href="/hr-admin/employee-documents"
-            cta="Open review queue"
-            details={[
-              { label: "Queue size", value: employeeDocumentsResult.data.total_count },
-              { label: "Visible page", value: employeeDocumentsResult.data.items.length },
-            ]}
-          />
-        </div>
+          <tr>
+            <td className="workspace-table__primary-cell"><div><strong>Generated HR letters</strong><span>Issue downloadable employee letter artifacts.</span></div></td>
+            <td>Letters</td>
+            <td><span className="workspace-table__secondary">{generatedLettersResult.data.total_count} generated / {generatedLettersResult.data.items.filter((item) => item.artifact_id).length} downloadable</span></td>
+            <td><Link className="button button--secondary button--compact" href="/hr-admin/generated-letters">Open</Link></td>
+          </tr>
+          <tr>
+            <td className="workspace-table__primary-cell"><div><strong>Employee document review</strong><span>Verification queue, expiry tracking, and review actions.</span></div></td>
+            <td>Operations</td>
+            <td><span className="workspace-table__secondary">{employeeDocumentsResult.data.total_count} queued / {employeeDocumentsResult.data.items.length} visible</span></td>
+            <td><Link className="button button--primary button--compact" href="/hr-admin/employee-documents">Open queue</Link></td>
+          </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
       </section>
     </main>
   );

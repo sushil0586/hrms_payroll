@@ -517,7 +517,7 @@ test.describe("HR admin governance and assignment forms", () => {
   });
 
   test("leave policy assignment creates, reads, updates, and deactivates through browser", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     await gotoAuthenticated(page, "/hr-admin/leave-policy-assignments/new");
     await expectPageReady(page, /Create leave assignment|Create leave policy assignment/);
     await ensureOption(
@@ -542,7 +542,11 @@ test.describe("HR admin governance and assignment forms", () => {
     await expect(field(form, "Priority")).toBeVisible();
 
     await assignmentActiveCheckbox(page).uncheck();
-    await selectFirstNonEmptyOption(field(form, "Leave policy"));
+    const selectedPolicyLabel = await selectFirstNonEmptyOption(field(form, "Leave policy"));
+    const policyName = await field(form, "Leave policy").evaluate((element, selectedValue) => {
+      const select = element as HTMLSelectElement;
+      return Array.from(select.options).find((option) => option.value === selectedValue)?.textContent?.trim() ?? "";
+    }, selectedPolicyLabel);
     await selectEmployeeSearchResult(page, employee, "Employee override");
     await field(form, "Priority").fill(String(priority));
 
@@ -551,17 +555,22 @@ test.describe("HR admin governance and assignment forms", () => {
     });
     await expect(page).toHaveURL(/\/hr-admin\/leave-policy-assignments$/);
 
-    await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments/${created.id}/edit`);
-    await expectPageReady(page, /Edit leave assignment|Edit leave policy assignment/);
-    await expect(field(page.locator("form").first(), "Priority")).toHaveValue(String(priority));
-    await field(page.locator("form").first(), "Priority").fill(String(priority + 1));
+    await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments?q=${encodeURIComponent(policyName)}`);
+    await expect(page.getByRole("table").first()).toContainText(policyName);
+    await page.getByRole("button", { name: "Inspect" }).first().click();
+    await page.getByRole("link", { name: "Edit" }).click();
+    const editDialog = page.getByRole("dialog", { name: /Edit leave assignment/ });
+    await expect(editDialog).toBeVisible();
+    await expect(field(editDialog, "Priority")).toHaveValue(String(priority));
+    await field(editDialog, "Priority").fill(String(priority + 1));
     await submitAndCapture(page, `leave-policy-assignments/${created.id}`, "PATCH", async () => {
-      await page.getByRole("button", { name: "Save changes" }).click();
+      await editDialog.getByRole("button", { name: "Save changes" }).click();
     });
     await expect(page).toHaveURL(/\/hr-admin\/leave-policy-assignments$/);
-    await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments/${created.id}/edit`);
-    await expectPageReady(page, /Edit leave assignment|Edit leave policy assignment/);
-    await expect(field(page.locator("form").first(), "Priority")).toHaveValue(String(priority + 1));
+    await gotoAuthenticated(page, `/hr-admin/leave-policy-assignments?editLeaveAssignment=${created.id}`);
+    const savedDialog = page.getByRole("dialog", { name: /Edit leave assignment/ });
+    await expect(savedDialog).toBeVisible();
+    await expect(field(savedDialog, "Priority")).toHaveValue(String(priority + 1));
     await expectNoHorizontalOverflow(page);
   });
 

@@ -175,12 +175,12 @@ export function PayrollAdjustmentsReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Payroll adjustments report workspace">
       <div className="report-catalog-workspace payroll-adjustments-report" data-testid="payroll-adjustments-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Adjustments</span><strong>{filteredRows.length}</strong><small>{adjustments.length} total rows</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Submitted</span><strong>{filteredRows.filter((row) => row.approvalState === "Submitted").length}</strong><small>Awaiting approval</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Approved/applied</span><strong>{filteredRows.filter((row) => ["Approved", "Applied"].includes(row.approvalState)).length}</strong><small>Ready for payroll effect</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Post-lock linked</span><strong>{filteredRows.filter((row) => Boolean(row.post_lock_source)).length}</strong><small>Arrear evidence</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Total amount</span><strong>{formatMoney(totalAmount)}</strong><small>Filtered adjustments</small></article>
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{filteredRows.length}</strong> Adjustments</span>
+          <span><strong>{filteredRows.filter((row) => row.approvalState === "Submitted").length}</strong> Submitted</span>
+          <span><strong>{filteredRows.filter((row) => ["Approved", "Applied"].includes(row.approvalState)).length}</strong> Approved/applied</span>
+          <span><strong>{filteredRows.filter((row) => Boolean(row.post_lock_source)).length}</strong> Post-lock linked</span>
+          <span><strong>{formatMoney(totalAmount)}</strong> Total amount</span>
         </div>
 
         <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Payroll adjustment filters">

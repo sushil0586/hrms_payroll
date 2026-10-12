@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import type { HrAdminLeaveTypeImpact } from "@/lib/types";
 
 type Props = {
@@ -54,19 +55,6 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
   }
 
   useEffect(() => {
-    if (!dialogOpen) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isSubmitting) {
-        setDialogOpen(false);
-        setImpact(null);
-        setError("");
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [dialogOpen, isSubmitting]);
-
-  useEffect(() => {
     if (!toast) return;
     const timeout = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(timeout);
@@ -102,16 +90,14 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
       {successMessage ? <span className="record-chip record-chip--success" role="status">{successMessage}</span> : null}
       <button className="button button--ghost" onClick={openDialog} type="button">Remove</button>
       {dialogOpen ? (
-        <div className="modal-backdrop" role="presentation">
-          <section aria-label={`Remove ${leaveTypeName}`} aria-modal="true" className="modal-panel modal-panel--wide" role="dialog">
-            <div className="modal-panel__header">
-              <div>
-                <p className="section-eyebrow">Leave type removal check</p>
-                <h2 className="section-heading-soft">{leaveTypeName}</h2>
-                <p className="section-copy section-copy-soft">The system checks linked policies and leave history before allowing a permanent delete.</p>
-              </div>
-              <button className="button button--secondary" disabled={isSubmitting} onClick={closeDialog} type="button">Close</button>
-            </div>
+        <HrAdminActionModal
+          closeHref="/hr-admin/leave-types"
+          description="The system checks linked policies and leave history before allowing a permanent delete."
+          eyebrow="Leave type removal check"
+          labelledBy={`leave-type-remove-${leaveTypeId}`}
+          onClose={closeDialog}
+          title={leaveTypeName}
+        >
             {isLoadingImpact ? (
               <div className="notice"><strong>Checking impact.</strong><span className="muted">Reviewing policies, leave requests, balances, and transactions.</span></div>
             ) : null}
@@ -143,8 +129,7 @@ export function LeaveTypeActions({ isActive, leaveTypeId, leaveTypeName }: Props
                 </button>
               </div>
             </div>
-          </section>
-        </div>
+        </HrAdminActionModal>
       ) : null}
     </>
   );

@@ -29,8 +29,6 @@ export default async function LeaveAttendanceCollisionsReportPage() {
             <Link className="button button--primary" href="/hr-admin/payroll-inputs">Payroll inputs</Link>
           </>
         }
-        pills={["Collision evidence", "Payroll blocking", "Source linked"]}
-        showPills
       />
 
       <ReportInsightsStrip

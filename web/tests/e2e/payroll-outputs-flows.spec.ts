@@ -1,8 +1,22 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { gotoAuthenticated } from "../helpers/staging-auth";
 import { createPayrollLifecycleOperator } from "../helpers/tenant-rbac";
+
+async function openFirstArtifact(page: Page) {
+  const artifactLink = page.locator("main table a[href*='artifactId=']").first();
+  if (!(await artifactLink.isVisible().catch(() => false))) {
+    return false;
+  }
+  const href = await artifactLink.getAttribute("href");
+  expect(href).toContain("artifactId=");
+  await artifactLink.scrollIntoViewIfNeeded();
+  await page.goto(href!, { waitUntil: "domcontentloaded" });
+  await expectPageReady(page, "Payroll Outputs");
+  await expect(page).toHaveURL(/artifactId=/);
+  return true;
+}
 
 test.describe("HR admin payroll output flows", () => {
   test("outputs workspace exposes artifact register, storage strategy, and live artifact details", async ({ page }) => {
@@ -18,16 +32,7 @@ test.describe("HR admin payroll output flows", () => {
     await expect(page.getByText("Selected artifact").or(page.getByText("No artifact selected")).first()).toBeVisible();
     await expect(page.getByText("Storage").or(page.getByText("Source hash")).or(page.getByText("No output artifacts")).first()).toBeVisible();
 
-    const artifactLink = page.locator("main table a[href*='artifactId=']").first();
-    if (await artifactLink.isVisible().catch(() => false)) {
-      const href = await artifactLink.getAttribute("href");
-      expect(href).toContain("artifactId=");
-      await artifactLink.scrollIntoViewIfNeeded();
-      await Promise.all([
-        page.waitForURL(/artifactId=/),
-        artifactLink.click(),
-      ]);
-      await expect(page).toHaveURL(/artifactId=/);
+    if (await openFirstArtifact(page)) {
       await expect(page.getByText("Access governance").or(page.getByText("Download file")).or(page.getByText("Storage")).first()).toBeVisible();
     }
 
@@ -35,15 +40,12 @@ test.describe("HR admin payroll output flows", () => {
   });
 
   test("outputs workspace preserves artifact selection through refresh and history", async ({ page }) => {
+    test.setTimeout(90_000);
     const payrollOperator = await createPayrollLifecycleOperator(page);
     await gotoAuthenticated(page, "/hr-admin/payroll-outputs", payrollOperator);
     await expectPageReady(page, "Payroll Outputs");
 
-    const artifactLink = page.locator("main table a[href*='artifactId=']").first();
-    if (await artifactLink.isVisible().catch(() => false)) {
-      await artifactLink.scrollIntoViewIfNeeded();
-      await artifactLink.click();
-      await expect(page).toHaveURL(/artifactId=/);
+    if (await openFirstArtifact(page)) {
       await expect(page.getByText("Selected artifact")).toBeVisible();
 
       await page.reload({ waitUntil: "domcontentloaded" });
@@ -51,9 +53,9 @@ test.describe("HR admin payroll output flows", () => {
       await expect(page).toHaveURL(/artifactId=/);
       await expect(page.getByText("Selected artifact")).toBeVisible();
 
-      await page.goBack();
+      await page.goBack({ waitUntil: "domcontentloaded", timeout: 60_000 });
       await expectPageReady(page, "Payroll Outputs");
-      await page.goForward();
+      await page.goForward({ waitUntil: "domcontentloaded", timeout: 60_000 });
       await expectPageReady(page, "Payroll Outputs");
       await expect(page).toHaveURL(/artifactId=/);
     }
@@ -101,11 +103,7 @@ test.describe("HR admin payroll output flows", () => {
     await expect(page.getByText("Artifact register").first()).toBeVisible();
     await expect(page.getByText("Finance handoff readiness").first()).toBeVisible();
 
-    const artifactLink = page.locator("main table a[href*='artifactId=']").first();
-    if (await artifactLink.isVisible().catch(() => false)) {
-      await artifactLink.scrollIntoViewIfNeeded();
-      await artifactLink.click();
-      await expect(page).toHaveURL(/artifactId=/);
+    if (await openFirstArtifact(page)) {
       await expect(page.getByText("Selected artifact")).toBeVisible();
     }
 

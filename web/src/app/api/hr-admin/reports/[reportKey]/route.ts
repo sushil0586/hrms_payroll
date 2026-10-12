@@ -1984,7 +1984,7 @@ function leaveAttendanceCollisionRows(leaveRequests: HrAdminLeaveRequestListResp
       payroll_blocking: payrollBlocking,
       message: collision.message,
       workflow_reference: item.workflow_reference,
-      detail_href: `/hr-admin/leave-requests/${item.id}/review`,
+      detail_href: `/hr-admin/leave-requests?selectedLeave=${item.id}`,
     }));
   });
 }

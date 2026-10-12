@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type React from "react";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollFinanceHandoffSetup } from "@/lib/api";
@@ -379,17 +378,19 @@ function HandoffRail({
           </Link>
         ))}
       </div>
-      <PaginationBar
-        firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: "1", handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
-        hasNext={page < totalPages}
-        hasPrevious={page > 1}
-        lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: String(totalPages), handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
-        nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: String(page + 1), handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
-        page={page}
-        pageSize={pageSize}
-        previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: String(page - 1), handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
-        totalCount={allHandoffs.length}
-      />
+      {totalPages > 1 ? (
+        <PaginationBar
+          firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: "1", handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
+          hasNext={page < totalPages}
+          hasPrevious={page > 1}
+          lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: String(totalPages), handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
+          nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: String(page + 1), handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
+          page={page}
+          pageSize={pageSize}
+          previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { handoffPage: String(page - 1), handoffPageSize: String(pageSize), handoffId: undefined, artifactId: undefined, evidence: undefined })}
+          totalCount={allHandoffs.length}
+        />
+      ) : null}
     </aside>
   );
 }
@@ -1245,17 +1246,19 @@ function DeliveryLedger({
           ))}
           {pagedDeliveries.items.length === 0 ? <div className="empty-state">No provider deliveries are recorded for this handoff yet.</div> : null}
         </div>
-        <PaginationBar
-          firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: "1", deliveryPageSize: String(deliveryPageSize) })}
-          hasNext={pagedDeliveries.page < pagedDeliveries.totalPages}
-          hasPrevious={pagedDeliveries.page > 1}
-          lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: String(pagedDeliveries.totalPages), deliveryPageSize: String(deliveryPageSize) })}
-          nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: String(pagedDeliveries.page + 1), deliveryPageSize: String(deliveryPageSize) })}
-          page={pagedDeliveries.page}
-          pageSize={deliveryPageSize}
-          previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: String(pagedDeliveries.page - 1), deliveryPageSize: String(deliveryPageSize) })}
-          totalCount={visibleDeliveries.length}
-        />
+        {pagedDeliveries.totalPages > 1 ? (
+          <PaginationBar
+            firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: "1", deliveryPageSize: String(deliveryPageSize) })}
+            hasNext={pagedDeliveries.page < pagedDeliveries.totalPages}
+            hasPrevious={pagedDeliveries.page > 1}
+            lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: String(pagedDeliveries.totalPages), deliveryPageSize: String(deliveryPageSize) })}
+            nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: String(pagedDeliveries.page + 1), deliveryPageSize: String(deliveryPageSize) })}
+            page={pagedDeliveries.page}
+            pageSize={deliveryPageSize}
+            previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, deliveryPage: String(pagedDeliveries.page - 1), deliveryPageSize: String(deliveryPageSize) })}
+            totalCount={visibleDeliveries.length}
+          />
+        ) : null}
       </section>
 
       <section className="payroll-setup-assignment-panel payroll-handoff-retry-panel">
@@ -1287,17 +1290,19 @@ function DeliveryLedger({
           ))}
           {pagedRetryEvents.items.length === 0 ? <div className="empty-state">No retry events are currently attached to this handoff.</div> : null}
         </div>
-        <PaginationBar
-          firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: "1", retryPageSize: String(retryPageSize) })}
-          hasNext={pagedRetryEvents.page < pagedRetryEvents.totalPages}
-          hasPrevious={pagedRetryEvents.page > 1}
-          lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: String(pagedRetryEvents.totalPages), retryPageSize: String(retryPageSize) })}
-          nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: String(pagedRetryEvents.page + 1), retryPageSize: String(retryPageSize) })}
-          page={pagedRetryEvents.page}
-          pageSize={retryPageSize}
-          previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: String(pagedRetryEvents.page - 1), retryPageSize: String(retryPageSize) })}
-          totalCount={visibleRetryEvents.length}
-        />
+        {pagedRetryEvents.totalPages > 1 ? (
+          <PaginationBar
+            firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: "1", retryPageSize: String(retryPageSize) })}
+            hasNext={pagedRetryEvents.page < pagedRetryEvents.totalPages}
+            hasPrevious={pagedRetryEvents.page > 1}
+            lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: String(pagedRetryEvents.totalPages), retryPageSize: String(retryPageSize) })}
+            nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: String(pagedRetryEvents.page + 1), retryPageSize: String(retryPageSize) })}
+            page={pagedRetryEvents.page}
+            pageSize={retryPageSize}
+            previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, retryPage: String(pagedRetryEvents.page - 1), retryPageSize: String(retryPageSize) })}
+            totalCount={visibleRetryEvents.length}
+          />
+        ) : null}
       </section>
 
       <section className="payroll-setup-assignment-panel payroll-handoff-job-panel">
@@ -1350,17 +1355,19 @@ function DeliveryLedger({
           ))}
           {pagedJobs.items.length === 0 ? <div className="empty-state">No provider queue jobs are recorded for this handoff yet.</div> : null}
         </div>
-        <PaginationBar
-          firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: "1", jobPageSize: String(jobPageSize) })}
-          hasNext={pagedJobs.page < pagedJobs.totalPages}
-          hasPrevious={pagedJobs.page > 1}
-          lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: String(pagedJobs.totalPages), jobPageSize: String(jobPageSize) })}
-          nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: String(pagedJobs.page + 1), jobPageSize: String(jobPageSize) })}
-          page={pagedJobs.page}
-          pageSize={jobPageSize}
-          previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: String(pagedJobs.page - 1), jobPageSize: String(jobPageSize) })}
-          totalCount={visibleJobs.length}
-        />
+        {pagedJobs.totalPages > 1 ? (
+          <PaginationBar
+            firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: "1", jobPageSize: String(jobPageSize) })}
+            hasNext={pagedJobs.page < pagedJobs.totalPages}
+            hasPrevious={pagedJobs.page > 1}
+            lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: String(pagedJobs.totalPages), jobPageSize: String(jobPageSize) })}
+            nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: String(pagedJobs.page + 1), jobPageSize: String(jobPageSize) })}
+            page={pagedJobs.page}
+            pageSize={jobPageSize}
+            previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, jobPage: String(pagedJobs.page - 1), jobPageSize: String(jobPageSize) })}
+            totalCount={visibleJobs.length}
+          />
+        ) : null}
       </section>
 
       <section className="payroll-setup-assignment-panel payroll-handoff-callback-panel">
@@ -1416,17 +1423,19 @@ function DeliveryLedger({
           })}
           {pagedEvents.items.length === 0 ? <div className="empty-state">No callback events are recorded for this handoff yet.</div> : null}
         </div>
-        <PaginationBar
-          firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: "1", callbackPageSize: String(callbackPageSize) })}
-          hasNext={pagedEvents.page < pagedEvents.totalPages}
-          hasPrevious={pagedEvents.page > 1}
-          lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: String(pagedEvents.totalPages), callbackPageSize: String(callbackPageSize) })}
-          nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: String(pagedEvents.page + 1), callbackPageSize: String(callbackPageSize) })}
-          page={pagedEvents.page}
-          pageSize={callbackPageSize}
-          previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: String(pagedEvents.page - 1), callbackPageSize: String(callbackPageSize) })}
-          totalCount={visibleEvents.length}
-        />
+        {pagedEvents.totalPages > 1 ? (
+          <PaginationBar
+            firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: "1", callbackPageSize: String(callbackPageSize) })}
+            hasNext={pagedEvents.page < pagedEvents.totalPages}
+            hasPrevious={pagedEvents.page > 1}
+            lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: String(pagedEvents.totalPages), callbackPageSize: String(callbackPageSize) })}
+            nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: String(pagedEvents.page + 1), callbackPageSize: String(callbackPageSize) })}
+            page={pagedEvents.page}
+            pageSize={callbackPageSize}
+            previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { ...baseUpdates, callbackPage: String(pagedEvents.page - 1), callbackPageSize: String(callbackPageSize) })}
+            totalCount={visibleEvents.length}
+          />
+        ) : null}
       </section>
     </>
   );
@@ -1552,16 +1561,18 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Handoffs" value={setup.summary.handoff_count} trend={`${setup.summary.transmitted_handoff_count} transmitted`} />
-          <MetricTile className="metric-tile-soft" label="Finance artifacts" value={setup.summary.finance_artifact_count} trend={`${setup.summary.published_output_batch_count} published batches`} />
-          <MetricTile className="metric-tile-soft" label="Filing files" value={setup.summary.statutory_filing_artifact_count ?? 0} trend={`${setup.summary.statutory_filing_count ?? 0} filing calendars`} />
-          <MetricTile className="metric-tile-soft" label="Callbacks" value={setup.summary.provider_callback_event_count ?? 0} trend={`${setup.summary.processed_provider_callback_event_count ?? 0} processed`} />
-          <MetricTile className="metric-tile-soft" label="Retries" value={setup.summary.provider_retry_event_count ?? 0} trend={`${setup.summary.scheduled_provider_retry_event_count ?? 0} scheduled`} />
-          <MetricTile className="metric-tile-soft" label="Provider jobs" value={setup.summary.provider_job_count ?? 0} trend={`${setup.summary.queued_provider_job_count ?? 0} queued / ${setup.summary.recovered_provider_job_count ?? 0} recovered`} />
-          <MetricTile className="metric-tile-soft" label="Audit packs" value={setup.summary.provider_audit_pack_count ?? auditPackArtifacts.length} trend="Locked evidence" />
-          <MetricTile className="metric-tile-soft" label="Reconciled" value={setup.summary.reconciled_delivery_count} trend={`${setup.summary.submitted_delivery_count} submitted`} />
-          <MetricTile className="metric-tile-soft" label="Latest net pay" value={formatMoney(setup.summary.latest_net_pay)} trend="Handoff total" />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll handoff summary">
+          <span><strong>{setup.summary.handoff_count}</strong> handoffs</span>
+          <span><strong>{setup.summary.transmitted_handoff_count}</strong> transmitted</span>
+          <span><strong>{setup.summary.finance_artifact_count}</strong> finance artifacts</span>
+          <span><strong>{setup.summary.published_output_batch_count}</strong> published batches</span>
+          <span><strong>{setup.summary.statutory_filing_artifact_count ?? 0}</strong> filing files</span>
+          <span><strong>{setup.summary.provider_callback_event_count ?? 0}</strong> callbacks</span>
+          <span><strong>{setup.summary.provider_retry_event_count ?? 0}</strong> retries</span>
+          <span><strong>{setup.summary.provider_job_count ?? 0}</strong> provider jobs</span>
+          <span><strong>{setup.summary.provider_audit_pack_count ?? auditPackArtifacts.length}</strong> audit packs</span>
+          <span><strong>{setup.summary.reconciled_delivery_count}</strong> reconciled</span>
+          <span><strong>{formatMoney(setup.summary.latest_net_pay)}</strong> latest net pay</span>
         </div>
       </section>
 
@@ -1824,17 +1835,19 @@ export default async function HrAdminPayrollHandoffPage({ searchParams }: PagePr
                   </tbody>
                 </table>
               </div>
-              <PaginationBar
-                firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: "1", artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
-                hasNext={artifactPage < artifactTotalPages}
-                hasPrevious={artifactPage > 1}
-                lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: String(artifactTotalPages), artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
-                nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: String(artifactPage + 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
-                page={artifactPage}
-                pageSize={artifactPageSize}
-                previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: String(artifactPage - 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
-                totalCount={visibleArtifacts.length}
-              />
+              {artifactTotalPages > 1 ? (
+                <PaginationBar
+                  firstHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: "1", artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
+                  hasNext={artifactPage < artifactTotalPages}
+                  hasPrevious={artifactPage > 1}
+                  lastHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: String(artifactTotalPages), artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
+                  nextHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: String(artifactPage + 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
+                  page={artifactPage}
+                  pageSize={artifactPageSize}
+                  previousHref={buildHref("/hr-admin/payroll-handoff", currentParams, { artifactPage: String(artifactPage - 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, evidence: undefined, handoffId: selectedHandoff?.id })}
+                  totalCount={visibleArtifacts.length}
+                />
+              ) : null}
             </div>
 
             <DeliveryLedger

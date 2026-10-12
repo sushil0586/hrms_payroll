@@ -1,9 +1,8 @@
 import Link from "next/link";
 
 import { EmployeeDocumentQueue } from "@/app/hr-admin/employee-documents/employee-document-queue";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminDocumentOptions, getHrAdminEmployeeDocuments } from "@/lib/api";
+import { getHrAdminDocumentOptions, getHrAdminEmployeeDocument, getHrAdminEmployeeDocuments } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 
 type SearchParamValue = string | string[] | undefined;
@@ -32,6 +31,7 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
   const categoryId = normalizeParam(currentParams.category_id) ?? "";
   const expiryFilter = normalizeParam(currentParams.expiry_filter) ?? "";
   const reviewSaved = normalizeParam(currentParams.review_saved) === "1";
+  const reviewDocumentId = normalizeParam(currentParams.reviewDocument) ?? "";
 
   const [result, optionsResult] = await Promise.all([
     getHrAdminEmployeeDocuments({
@@ -47,6 +47,7 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
   ]);
   const expiringOnPage = result.data.items.filter((item) => item.is_expiring_soon).length;
   const expiredOnPage = result.data.items.filter((item) => item.is_expired).length;
+  const reviewDocumentResult = canVerifyDocuments && reviewDocumentId ? await getHrAdminEmployeeDocument(reviewDocumentId) : null;
 
   return (
     <main className="shell hr-document-workbench">
@@ -67,14 +68,6 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
           "Review actions",
         ]}
       />
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Documents in queue" value={result.data.total_count} trend="Reviewable records" />
-          <MetricTile label="Categories configured" value={optionsResult.data.categories.length} trend="Compliance structure" />
-          <MetricTile label="Expiring on page" value={expiringOnPage} trend="Within the next 30 days" />
-          <MetricTile label="Expired on page" value={expiredOnPage} trend={`Page ${result.data.page}`} />
-        </div>
-      </section>
       <EmployeeDocumentQueue
         items={result.data.items}
         verificationStatusOptions={optionsResult.data.verification_statuses}
@@ -99,8 +92,15 @@ export default async function HrAdminEmployeeDocumentsPage({ searchParams }: Pag
         canExportDocuments={canExportDocuments}
         canManageDocuments={canManageDocuments}
         canVerifyDocuments={canVerifyDocuments}
+        documentOptions={optionsResult.data}
+        reviewDocument={reviewDocumentResult?.data ?? null}
         initialActionNotice={reviewSaved ? "Document review updated." : ""}
         initialActionNoticeTitle="Review action complete."
+        summary={{
+          categoriesConfigured: optionsResult.data.categories.length,
+          expiredOnPage,
+          expiringOnPage,
+        }}
       />
     </main>
   );

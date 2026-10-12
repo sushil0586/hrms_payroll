@@ -169,12 +169,12 @@ async function auditReportsOperationsRoute(page: Page, route: string) {
 }
 
 test.describe("HR Admin reports, audit, and operations UI audit", () => {
-  test("certifies reports/operations page layout, controls, links, and exports", async ({ page }) => {
-    test.setTimeout(480_000);
-    await page.setViewportSize({ width: 1440, height: 960 });
+  test.describe.configure({ timeout: 120_000 });
 
-    for (const route of reportsOperationsRoutes) {
+  for (const route of reportsOperationsRoutes) {
+    test(`certifies ${route} page layout, controls, links, and exports`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 960 });
       await auditReportsOperationsRoute(page, route);
-    }
-  });
+    });
+  }
 });

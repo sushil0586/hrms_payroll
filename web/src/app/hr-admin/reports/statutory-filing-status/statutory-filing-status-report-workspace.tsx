@@ -185,23 +185,23 @@ export function StatutoryFilingStatusReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Statutory filing status report workspace">
       <div className="report-catalog-workspace statutory-filing-status-report" data-testid="statutory-filing-status-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <article>
             <span>Filing calendars</span>
             <strong>{filteredRows.length}</strong>
             <small>{filings.length} configured</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Due or overdue</span>
             <strong>{filteredRows.filter((row) => row.dueStatus === "Due" || row.dueStatus === "Overdue").length}</strong>
             <small>Calendar risk</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Published evidence</span>
             <strong>{filteredRows.reduce((sum, row) => sum + row.publishedArtifactCount, 0)}</strong>
             <small>Statutory artifacts</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Provider routes</span>
             <strong>{unique(filteredRows.map((row) => row.providerRef)).length}</strong>
             <small>Configurable filing paths</small>

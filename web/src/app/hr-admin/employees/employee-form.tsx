@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
+import { WorkspaceFormFooter } from "@/components/patterns/workspace-standard";
 import type { HrAdminEmployeeFormOptions, HrAdminEmployeeWriteInput, HrAdminOptionItem } from "@/lib/types";
 import { hasFieldErrors, requireText, validateDateOrder, validateEmail } from "@/lib/ui/validation";
 
@@ -12,9 +13,18 @@ type EmployeeFormProps = {
   mode: "create" | "edit";
   options: HrAdminEmployeeFormOptions;
   employeeId?: string;
+  cancelHref?: string;
 };
 
 type FieldErrors = Partial<Record<keyof HrAdminEmployeeWriteInput, string>>;
+type EmployeeFormStep = "identity" | "contact" | "structure" | "review";
+
+const employeeFormSteps: Array<{ id: EmployeeFormStep; label: string }> = [
+  { id: "identity", label: "Identity" },
+  { id: "contact", label: "Contact" },
+  { id: "structure", label: "Structure" },
+  { id: "review", label: "Review" },
+];
 
 function normalizePayload(value: HrAdminEmployeeWriteInput) {
   const nullableFields = new Set([
@@ -85,6 +95,39 @@ function FieldHint({ children, tone = "default" }: { children: string; tone?: "d
 
 function FieldError({ message }: { message?: string }) {
   return message ? <span className="field-error-text" role="alert">{message}</span> : null;
+}
+
+function ReviewRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="employee-form-review-row">
+      <span>{label}</span>
+      <strong>{value || "Not set"}</strong>
+    </div>
+  );
+}
+
+function findOptionName(items: HrAdminOptionItem[], id: string | null | undefined) {
+  if (!id) {
+    return "Not set";
+  }
+  return items.find((item) => item.id === id)?.name ?? "Not set";
+}
+
+function stepForErrors(errors: FieldErrors): EmployeeFormStep {
+  if (errors.employee_code || errors.first_name || errors.employment_status) {
+    return "identity";
+  }
+  if (
+    errors.work_email ||
+    errors.personal_email ||
+    errors.date_of_birth ||
+    errors.date_of_joining ||
+    errors.probation_end_date ||
+    errors.confirmation_date
+  ) {
+    return "contact";
+  }
+  return "structure";
 }
 
 function sanitizeStructureValue(
@@ -184,9 +227,10 @@ function sanitizeStructureValue(
   return nextValue;
 }
 
-export function EmployeeForm({ initialValue, mode, options, employeeId }: EmployeeFormProps) {
+export function EmployeeForm({ initialValue, mode, options, employeeId, cancelHref }: EmployeeFormProps) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
+  const [activeStep, setActiveStep] = useState<EmployeeFormStep>("identity");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const [error, setError] = useState("");
@@ -279,6 +323,20 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
     setFormValue((current) => sanitizeStructureValue({ ...current, [key]: value }, options, key));
   }
 
+  function goToPreviousStep() {
+    setActiveStep((current) => {
+      const currentIndex = employeeFormSteps.findIndex((step) => step.id === current);
+      return employeeFormSteps[Math.max(0, currentIndex - 1)].id;
+    });
+  }
+
+  function goToNextStep() {
+    setActiveStep((current) => {
+      const currentIndex = employeeFormSteps.findIndex((step) => step.id === current);
+      return employeeFormSteps[Math.min(employeeFormSteps.length - 1, currentIndex + 1)].id;
+    });
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmittingRef.current) {
@@ -304,6 +362,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
     if (hasFieldErrors(nextErrors)) {
       setFieldErrors(nextErrors);
       setError("Review the highlighted employee fields and try again.");
+      setActiveStep(stepForErrors(nextErrors));
       isSubmittingRef.current = false;
       return;
     }
@@ -330,6 +389,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
       const nextErrors = extractErrors(payload);
       setError(nextErrors.message);
       setFieldErrors(nextErrors.fieldErrors);
+      setActiveStep(stepForErrors(nextErrors.fieldErrors));
       setIsSubmitting(false);
       isSubmittingRef.current = false;
       return;
@@ -347,7 +407,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
           <div>
             <h2>{mode === "create" ? "Create employee master" : "Edit employee master"}</h2>
             <p className="section-copy">
-              Keep identity, dates, and structure clean before access, lifecycle, and payroll setup.
+              Work through identity, contact dates, and structural mapping before saving.
             </p>
           </div>
           <div className="form-shell-card__meta">
@@ -360,7 +420,22 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
           </div>
         </div>
 
-        <div className="form-shell-card__grid">
+        <div className="employee-form-stepper" aria-label="Employee form progress">
+          {employeeFormSteps.map((step, index) => (
+            <button
+              aria-current={activeStep === step.id ? "step" : undefined}
+              className="employee-form-stepper__item"
+              key={step.id}
+              onClick={() => setActiveStep(step.id)}
+              type="button"
+            >
+              <span>{index + 1}.</span>
+              {step.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="form-shell-card__grid employee-form-step-body">
           {dateWarnings.length ? (
             <div className="notice notice--error form-shell-card__notice" role="alert">
               <strong>Date review needed.</strong>
@@ -373,10 +448,8 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
               <span className="muted">{mappingWarnings.join(", ")}.</span>
             </div>
           ) : null}
-          <FormSection
-            title="Identity and employment"
-            description="Set the core person profile and employment state that downstream workflows inherit."
-          >
+          {activeStep === "identity" ? (
+          <FormSection title="Identity and employment" description="Core employment details.">
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Employee code</span>
@@ -413,11 +486,10 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
               </label>
             </div>
           </FormSection>
+          ) : null}
 
-          <FormSection
-            title="Contact and dates"
-            description="Keep communication details and milestone dates clean so access, payroll, and lifecycle modules can trust the record."
-          >
+          {activeStep === "contact" ? (
+          <FormSection title="Contact and dates" description="Emails, phone, and milestones.">
             <div className="form-grid">
               <label className="form-field">
                 <span className="muted">Work email</span>
@@ -455,11 +527,13 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
               </label>
             </div>
           </FormSection>
+          ) : null}
 
+          {activeStep === "structure" ? (
           <FormSection
             fullWidth
             title="Structural mapping"
-            description="These assignments drive approvals, policy eligibility, routing, attendance interpretation, and payroll coverage."
+            description="Org, approval, and payroll mapping."
           >
             <div className="form-grid">
               <label className="form-field">
@@ -467,7 +541,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                 <select className="input-control" value={formValue.legal_entity_id ?? ""} onChange={(event) => updateField("legal_entity_id", event.target.value || null)}>
                   {selectOptions(options.legal_entities)}
                 </select>
-                <FieldHint>Branch and cost center options narrow to the selected legal entity.</FieldHint>
+                <FieldHint>Filters branch and cost center.</FieldHint>
                 <FieldError message={fieldErrors.legal_entity_id} />
               </label>
               <label className="form-field">
@@ -481,7 +555,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                   {selectOptions(filteredBranches)}
                 </select>
                 <FieldHint tone={branchWarning ? "warning" : "default"}>
-                  {branchWarning ?? "Selecting a branch aligns the location automatically when the branch has a mapped location."}
+                  {branchWarning ?? "Can set location automatically."}
                 </FieldHint>
                 <FieldError message={fieldErrors.branch_id} />
               </label>
@@ -491,7 +565,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                   {selectOptions(filteredLocations)}
                 </select>
                 <FieldHint tone={branchLocationWarning ? "warning" : "default"}>
-                  {branchLocationWarning ?? "Location is narrowed by the selected branch when a branch-level location exists."}
+                  {branchLocationWarning ?? "Filtered by branch when mapped."}
                 </FieldHint>
                 <FieldError message={fieldErrors.location_id} />
               </label>
@@ -501,7 +575,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                   {selectOptions(filteredBusinessUnits)}
                 </select>
                 <FieldHint tone={departmentBusinessUnitWarning ? "warning" : "default"}>
-                  {departmentBusinessUnitWarning ?? "Department selection will align or narrow the business unit automatically."}
+                  {departmentBusinessUnitWarning ?? "Can align from department."}
                 </FieldHint>
                 <FieldError message={fieldErrors.business_unit_id} />
               </label>
@@ -516,7 +590,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                   {selectOptions(filteredDepartments)}
                 </select>
                 <FieldHint tone={departmentWarning ? "warning" : "default"}>
-                  {departmentWarning ?? "Only departments from the selected business unit remain available."}
+                  {departmentWarning ?? "Filtered by business unit."}
                 </FieldHint>
                 <FieldError message={fieldErrors.department_id} />
               </label>
@@ -531,7 +605,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                   {selectOptions(filteredCostCenters)}
                 </select>
                 <FieldHint tone={costCenterWarning ? "warning" : "default"}>
-                  {costCenterWarning ?? "Cost centers narrow to the selected legal entity."}
+                  {costCenterWarning ?? "Filtered by legal entity."}
                 </FieldHint>
                 <FieldError message={fieldErrors.cost_center_id} />
               </label>
@@ -540,7 +614,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                 <select className="input-control" value={formValue.designation_id ?? ""} onChange={(event) => updateField("designation_id", event.target.value || null)}>
                   {selectOptions(filteredDesignations)}
                 </select>
-                <FieldHint>Designation choice will align the grade if the designation has a mapped grade.</FieldHint>
+                <FieldHint>Can align grade automatically.</FieldHint>
                 <FieldError message={fieldErrors.designation_id} />
               </label>
               <label className="form-field">
@@ -549,7 +623,7 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
                   {selectOptions(filteredGrades)}
                 </select>
                 <FieldHint tone={gradeWarning ? "warning" : "default"}>
-                  {gradeWarning ?? "Only grades compatible with the selected designation remain available."}
+                  {gradeWarning ?? "Filtered by designation."}
                 </FieldHint>
                 <FieldError message={fieldErrors.grade_id} />
               </label>
@@ -573,6 +647,40 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
               </label>
             </div>
           </FormSection>
+          ) : null}
+
+          {activeStep === "review" ? (
+            <FormSection fullWidth title="Review" description="Confirm before saving.">
+              <div className="employee-form-review-grid">
+                <ReviewRow label="Employee code" value={formValue.employee_code} />
+                <ReviewRow label="Status" value={formValue.employment_status} />
+                <ReviewRow label="First name" value={formValue.first_name} />
+                <ReviewRow label="Middle name" value={formValue.middle_name} />
+                <ReviewRow label="Last name" value={formValue.last_name} />
+                <ReviewRow label="Preferred name" value={formValue.preferred_name} />
+                <ReviewRow label="Work email" value={formValue.work_email} />
+                <ReviewRow label="Personal email" value={formValue.personal_email} />
+                <ReviewRow label="Phone number" value={formValue.phone_number} />
+                <ReviewRow label="Date of birth" value={formValue.date_of_birth} />
+                <ReviewRow label="Date of joining" value={formValue.date_of_joining} />
+                <ReviewRow label="Probation end date" value={formValue.probation_end_date} />
+                <ReviewRow label="Confirmation date" value={formValue.confirmation_date} />
+                <ReviewRow label="Legal entity" value={findOptionName(options.legal_entities, formValue.legal_entity_id)} />
+                <ReviewRow label="Branch" value={findOptionName(options.branches, formValue.branch_id)} />
+                <ReviewRow label="Location" value={findOptionName(options.locations, formValue.location_id)} />
+                <ReviewRow label="Business unit" value={findOptionName(options.business_units, formValue.business_unit_id)} />
+                <ReviewRow label="Department" value={findOptionName(options.departments, formValue.department_id)} />
+                <ReviewRow label="Cost center" value={findOptionName(options.cost_centers, formValue.cost_center_id)} />
+                <ReviewRow label="Designation" value={findOptionName(options.designations, formValue.designation_id)} />
+                <ReviewRow label="Grade" value={findOptionName(options.grades, formValue.grade_id)} />
+                <ReviewRow label="Employment type" value={findOptionName(options.employment_types, formValue.employment_type_id)} />
+                <ReviewRow
+                  label="Reporting manager"
+                  value={formValue.reporting_manager_id ? options.managers.find((manager) => manager.id === formValue.reporting_manager_id)?.name : "Not set"}
+                />
+              </div>
+            </FormSection>
+          ) : null}
         </div>
 
         {error ? (
@@ -582,17 +690,47 @@ export function EmployeeForm({ initialValue, mode, options, employeeId }: Employ
           </div>
         ) : null}
 
-        <div className="form-actions-bar">
-          <span className="muted">This saves directly back into the employee directory and keeps the selected master ready for access and lifecycle setup.</span>
-          <div className="form-actions-bar__buttons">
+        <WorkspaceFormFooter
+          className="form-actions-bar"
+          fixed
+          note={`Step ${employeeFormSteps.findIndex((step) => step.id === activeStep) + 1} of ${employeeFormSteps.length}`}
+        >
+          <button
+            className="button button--secondary"
+            onClick={() => cancelHref ? window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close")) : router.back()}
+            type="button"
+          >
+            Cancel
+          </button>
+          {activeStep !== "identity" ? (
+            <button
+              className="button button--secondary"
+              onClick={(event) => {
+                event.preventDefault();
+                goToPreviousStep();
+              }}
+              type="button"
+            >
+              Back
+            </button>
+          ) : null}
+          {activeStep !== "review" ? (
+            <button
+              className="button button--primary"
+              onClick={(event) => {
+                event.preventDefault();
+                goToNextStep();
+              }}
+              type="button"
+            >
+              Continue
+            </button>
+          ) : (
             <button className="button button--primary" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : mode === "create" ? "Create employee" : "Save changes"}
             </button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">
-              Cancel
-            </button>
-          </div>
-        </div>
+          )}
+        </WorkspaceFormFooter>
       </section>
     </form>
   );

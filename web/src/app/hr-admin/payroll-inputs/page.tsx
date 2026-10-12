@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollInputSnapshot, getHrAdminPayrollInputSnapshotSetup } from "@/lib/api";
 import type { HrAdminPayrollInputSnapshot, HrAdminPayrollInputSnapshotListItem, HrAdminPayrollRun } from "@/lib/types";
@@ -525,11 +524,13 @@ export default async function HrAdminPayrollInputsPage({ searchParams }: PagePro
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Runs" value={setup.summary.run_count} trend={`${setup.summary.collecting_run_count} collecting`} />
-          <MetricTile className="metric-tile-soft" label="Snapshots" value={setup.summary.snapshot_count} trend="Period scoped" />
-          <MetricTile className="metric-tile-soft" label="Locked inputs" value={setup.summary.locked_snapshot_count} trend={`${setup.summary.inputs_locked_run_count} locked runs`} />
-          <MetricTile className="metric-tile-soft" label="Blocked" value={setup.summary.blocked_snapshot_count} trend="Must clear before lock" />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll input summary">
+          <span><strong>{setup.summary.run_count}</strong> runs</span>
+          <span><strong>{setup.summary.collecting_run_count}</strong> collecting</span>
+          <span><strong>{setup.summary.snapshot_count}</strong> snapshots</span>
+          <span><strong>{setup.summary.locked_snapshot_count}</strong> locked inputs</span>
+          <span><strong>{setup.summary.inputs_locked_run_count}</strong> locked runs</span>
+          <span><strong>{setup.summary.blocked_snapshot_count}</strong> blocked</span>
         </div>
       </section>
 

@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollOutputSetup } from "@/lib/api";
@@ -146,17 +145,19 @@ function BatchRail({
           <div className="empty-state">No output batches are available yet. Generate outputs from a locked payroll review to populate this rail.</div>
         ) : null}
       </div>
-      <PaginationBar
-        firstHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: "1", batchPageSize: String(pageSize), batchId: undefined })}
-        hasNext={page < totalPages}
-        hasPrevious={page > 1}
-        lastHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: String(totalPages), batchPageSize: String(pageSize), batchId: undefined })}
-        nextHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: String(page + 1), batchPageSize: String(pageSize), batchId: undefined })}
-        page={page}
-        pageSize={pageSize}
-        previousHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: String(page - 1), batchPageSize: String(pageSize), batchId: undefined })}
-        totalCount={allBatches.length}
-      />
+      {totalPages > 1 ? (
+        <PaginationBar
+          firstHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: "1", batchPageSize: String(pageSize), batchId: undefined })}
+          hasNext={page < totalPages}
+          hasPrevious={page > 1}
+          lastHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: String(totalPages), batchPageSize: String(pageSize), batchId: undefined })}
+          nextHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: String(page + 1), batchPageSize: String(pageSize), batchId: undefined })}
+          page={page}
+          pageSize={pageSize}
+          previousHref={buildHref("/hr-admin/payroll-outputs", currentParams, { batchPage: String(page - 1), batchPageSize: String(pageSize), batchId: undefined })}
+          totalCount={allBatches.length}
+        />
+      ) : null}
     </aside>
   );
 }
@@ -426,11 +427,14 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Output batches" value={setup.summary.output_batch_count} trend={`${setup.summary.published_batch_count} published`} />
-          <MetricTile className="metric-tile-soft" label="Artifacts" value={setup.summary.artifact_count} trend={`${setup.summary.published_artifact_count} published`} />
-          <MetricTile className="metric-tile-soft" label="Payslips" value={setup.summary.payslip_count} trend={`${setup.summary.register_count} registers`} />
-          <MetricTile className="metric-tile-soft" label="Latest net pay" value={formatMoney(setup.summary.latest_net_pay)} trend="Output total" />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll output summary">
+          <span><strong>{setup.summary.output_batch_count}</strong> batches</span>
+          <span><strong>{setup.summary.published_batch_count}</strong> published batches</span>
+          <span><strong>{setup.summary.artifact_count}</strong> artifacts</span>
+          <span><strong>{setup.summary.published_artifact_count}</strong> published artifacts</span>
+          <span><strong>{setup.summary.payslip_count}</strong> payslips</span>
+          <span><strong>{setup.summary.register_count}</strong> registers</span>
+          <span><strong>{formatMoney(setup.summary.latest_net_pay)}</strong> latest net pay</span>
         </div>
       </section>
 
@@ -592,17 +596,19 @@ export default async function HrAdminPayrollOutputsPage({ searchParams }: PagePr
                   </tbody>
                 </table>
               </div>
-              <PaginationBar
-                firstHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: "1", artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
-                hasNext={artifactPage < artifactTotalPages}
-                hasPrevious={artifactPage > 1}
-                lastHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: String(artifactTotalPages), artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
-                nextHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: String(artifactPage + 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
-                page={artifactPage}
-                pageSize={artifactPageSize}
-                previousHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: String(artifactPage - 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
-                totalCount={visibleArtifacts.length}
-              />
+              {artifactTotalPages > 1 ? (
+                <PaginationBar
+                  firstHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: "1", artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
+                  hasNext={artifactPage < artifactTotalPages}
+                  hasPrevious={artifactPage > 1}
+                  lastHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: String(artifactTotalPages), artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
+                  nextHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: String(artifactPage + 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
+                  page={artifactPage}
+                  pageSize={artifactPageSize}
+                  previousHref={buildHref("/hr-admin/payroll-outputs", currentParams, { artifactPage: String(artifactPage - 1), artifactPageSize: String(artifactPageSize), artifactId: undefined, batchId: selectedBatch?.id })}
+                  totalCount={visibleArtifacts.length}
+                />
+              ) : null}
             </div>
 
             <section className="payroll-setup-assignment-panel payroll-output-handoff-panel">

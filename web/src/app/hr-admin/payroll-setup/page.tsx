@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollSetup } from "@/lib/api";
 import type {
@@ -148,10 +147,12 @@ function PaginationControls({
   const isFirst = page <= 1;
   const isLast = page >= totalPages;
   const className = "button button--secondary payroll-setup-pagination__button";
+  const showPageControls = totalPages > 1;
   return (
     <div className="payroll-setup-pagination" aria-label={`${tab} pagination`}>
       <span className="payroll-setup-count">{total ? `${page} of ${totalPages}` : "0 records"}</span>
       <div className="payroll-setup-page-size" aria-label="Rows per page">
+        <span className="payroll-setup-page-size__label">Rows</span>
         {PAGE_SIZE_OPTIONS.map((option) => (
           <Link
             aria-current={pageSize === option ? "page" : undefined}
@@ -163,36 +164,38 @@ function PaginationControls({
           </Link>
         ))}
       </div>
-      <div className="payroll-setup-pagination__nav">
-        <Link
-          aria-disabled={isFirst}
-          className={`${className}${isFirst ? " is-disabled" : ""}`}
-          href={setupHref(currentParams, { tab, [pageParam]: 1 })}
-        >
-          First
-        </Link>
-        <Link
-          aria-disabled={isFirst}
-          className={`${className}${isFirst ? " is-disabled" : ""}`}
-          href={setupHref(currentParams, { tab, [pageParam]: Math.max(1, page - 1) })}
-        >
-          Previous
-        </Link>
-        <Link
-          aria-disabled={isLast}
-          className={`${className}${isLast ? " is-disabled" : ""}`}
-          href={setupHref(currentParams, { tab, [pageParam]: Math.min(totalPages, page + 1) })}
-        >
-          Next
-        </Link>
-        <Link
-          aria-disabled={isLast}
-          className={`${className}${isLast ? " is-disabled" : ""}`}
-          href={setupHref(currentParams, { tab, [pageParam]: totalPages })}
-        >
-          Last
-        </Link>
-      </div>
+      {showPageControls ? (
+        <div className="payroll-setup-pagination__nav">
+          <Link
+            aria-disabled={isFirst}
+            className={`${className}${isFirst ? " is-disabled" : ""}`}
+            href={setupHref(currentParams, { tab, [pageParam]: 1 })}
+          >
+            First
+          </Link>
+          <Link
+            aria-disabled={isFirst}
+            className={`${className}${isFirst ? " is-disabled" : ""}`}
+            href={setupHref(currentParams, { tab, [pageParam]: Math.max(1, page - 1) })}
+          >
+            Previous
+          </Link>
+          <Link
+            aria-disabled={isLast}
+            className={`${className}${isLast ? " is-disabled" : ""}`}
+            href={setupHref(currentParams, { tab, [pageParam]: Math.min(totalPages, page + 1) })}
+          >
+            Next
+          </Link>
+          <Link
+            aria-disabled={isLast}
+            className={`${className}${isLast ? " is-disabled" : ""}`}
+            href={setupHref(currentParams, { tab, [pageParam]: totalPages })}
+          >
+            Last
+          </Link>
+        </div>
+      ) : <span aria-hidden="true" />}
     </div>
   );
 }
@@ -598,11 +601,13 @@ export default async function HrAdminPayrollSetupPage({ searchParams }: PageProp
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Calendars" value={setup.summary.calendar_count} trend={`${setup.summary.active_calendar_count} active`} />
-          <MetricTile className="metric-tile-soft" label="Open periods" value={setup.summary.open_period_count} trend="Ready for input locking" />
-          <MetricTile className="metric-tile-soft" label="Active groups" value={setup.summary.active_pay_group_count} trend="Scoped payroll cohorts" />
-          <MetricTile className="metric-tile-soft" label="Assigned employees" value={setup.summary.assigned_employee_count} trend={`${setup.summary.unassigned_employee_count} unassigned`} />
+        <div className="attendance-summary-strip payroll-setup-summary-strip" aria-label="Payroll setup summary">
+          <span><strong>{setup.summary.calendar_count}</strong> calendars</span>
+          <span><strong>{setup.summary.active_calendar_count}</strong> active</span>
+          <span><strong>{setup.summary.open_period_count}</strong> open periods</span>
+          <span><strong>{setup.summary.active_pay_group_count}</strong> active groups</span>
+          <span><strong>{setup.summary.assigned_employee_count}</strong> assigned employees</span>
+          <span><strong>{setup.summary.unassigned_employee_count}</strong> unassigned</span>
         </div>
       </section>
 

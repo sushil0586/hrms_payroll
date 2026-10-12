@@ -20,17 +20,17 @@ Statuses allowed: Verified, Partially Verified, Not Verified, Blocked, Not Appli
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `P4-GATE-001` | QA baseline | Preserve Phase 3C 29 Passed, 3 Conditional, 0 Failed, 0 Blocked baseline | Verified | `docs/qa/13-e2e-execution-register.md`, `docs/qa/evidence/phase3c7/` | Local/sandbox | P0 | QA lead | None | Baseline recorded and not overwritten | QA lead |
 | `P4-GATE-002` | QA baseline | All certified HR Admin modules documented with evidence | Verified | `docs/qa/08-test-execution-results.md`, `06-master-test-case-register.md` | Local/sandbox | P1 | QA lead | None | Module evidence linked by scenario/register | QA lead |
-| `P4-GATE-003` | Deployment | Production deployment path documented | Partially Verified | `ops/ec2/README.md`, `ops/ec2/deploy.sh`, `docker-compose.production.yml`, `docs/qa/evidence/phase4b/03-deployment-surface-inventory.json` | Repository | P0 | DevOps owner | Execute on target host and archive logs | Successful deploy with service status, nginx test, commit ref and smoke evidence | CTO/DevOps |
-| `P4-GATE-004` | Deployment | Target production preflight passes with network checks | Not Verified | Static proof only: `docs/qa/evidence/phase4b/02-static-production-preflight-skip-network.json`; target/network preflight not executed | Not executed on target | P0 | DevOps owner | Run `python manage.py production_preflight --strict` on target | PASS with 0 blockers and archived JSON/log | CTO/DevOps |
-| `P4-GATE-005` | Deployment | Migrations applied safely to target Postgres | Not Verified | `deploy.sh`, CI migration proof; no target migration evidence | CI only | P0 | Backend lead | Run migrate in staging/prod release path | Migrations complete, rollback plan attached | Backend lead |
+| `P4-GATE-003` | Deployment | Production deployment path documented | Partially Verified | `ops/ec2/README.md`, `ops/ec2/deploy.sh`, `docker-compose.production.yml`, `docs/qa/evidence/phase4b/06-stage-public-health-headers.log`, `08-stage-post-deploy-smoke.log` | Repository + stage public smoke | P0 | DevOps owner | Execute on target host and archive logs | Successful deploy with service status, nginx test, commit ref and smoke evidence | CTO/DevOps |
+| `P4-GATE-004` | Deployment | Target production preflight passes with network checks | Not Verified | Stage smoke passed, but target-host `production_preflight --strict` not executed; see `docs/qa/evidence/phase4b/08-stage-post-deploy-smoke.log` | Stage public smoke only | P0 | DevOps owner | Run `python manage.py production_preflight --strict` on target | PASS with 0 blockers and archived JSON/log | CTO/DevOps |
+| `P4-GATE-005` | Deployment | Migrations applied safely to target Postgres | Not Verified | `deploy.sh`, CI migration proof, stage API health; no target-host migration evidence | CI + stage health only | P0 | Backend lead | Run migrate in staging/prod release path | Migrations complete, rollback plan attached | Backend lead |
 | `P4-GATE-006` | Deployment | Rollback path rehearsed | Partially Verified | `ops/ec2/rollback.sh` | Repository | P1 | DevOps owner | Rehearse rollback on staging target | Rollback returns previous release and preflight passes | DevOps owner |
-| `P4-GATE-007` | HTTPS/session | HTTPS, secure cookies, SSL redirect and HSTS enabled | Partially Verified | `production.py` secure defaults, `docs/qa/evidence/phase4b/02-static-production-preflight-skip-network.json` | Code/config only | P0 | Security owner | Verify through deployed response headers and browser session | HTTPS-only, secure cookies, HSTS and no mixed-content issues | Security owner |
-| `P4-GATE-008` | Nginx/security headers | Reverse proxy headers configured | Partially Verified | `ops/ec2/nginx/hrms.conf`, `docs/qa/evidence/phase4b/03-deployment-surface-inventory.json` | Repository | P1 | DevOps/security | Install TLS config and test deployed headers | `nginx -t` plus header scan evidence | Security owner |
-| `P4-GATE-009` | Secrets | Production secrets managed outside repo | Partially Verified | `.env.example`, `docs/payroll-production-env-template.md`, `docs/qa/evidence/phase4b/01-local-env-key-inventory-redacted.log` | Repository/local redacted inventory | P0 | DevOps/security | Prove secret manager or protected env path | No committed secrets; rotation owner and access log documented | Security owner |
+| `P4-GATE-007` | HTTPS/session | HTTPS, secure cookies, SSL redirect and HSTS enabled | Partially Verified | `production.py` secure defaults, deployed HTTPS/header evidence `docs/qa/evidence/phase4b/06-stage-public-health-headers.log`, TLS evidence `09-stage-tls-certificate.log`; HSTS not observed | Stage partial | P0 | Security owner | Verify through deployed response headers and browser session | HTTPS-only, secure cookies, HSTS and no mixed-content issues | Security owner |
+| `P4-GATE-008` | Nginx/security headers | Reverse proxy headers configured | Partially Verified | `ops/ec2/nginx/hrms.conf`, deployed header evidence `docs/qa/evidence/phase4b/06-stage-public-health-headers.log`; `nginx -t` not captured | Repository + stage headers | P1 | DevOps/security | Install TLS config and test deployed headers | `nginx -t` plus header scan evidence | Security owner |
+| `P4-GATE-009` | Secrets | Production secrets managed outside repo | Partially Verified | `.env.example`, `docs/payroll-production-env-template.md`, empty local stage env inventory `docs/qa/evidence/phase4b/07-stage-env-key-inventory-redacted.log`; protected target secret source not proven | Repository/local env inventory | P0 | DevOps/security | Prove secret manager or protected env path | No committed secrets; rotation owner and access log documented | Security owner |
 | `P4-GATE-010` | Auth/RBAC | BasicAuth disabled in production | Verified | `production.py`, `production_preflight.py` | Code/static | P0 | Backend/security | None | Production REST auth excludes BasicAuthentication | Security owner |
-| `P4-GATE-011` | Auth/RBAC | Deployed role login and route access verified | Not Verified | `run-final-production-audit.py` suites; Phase 4B found no approved live credentials | Not executed on target | P0 | QA/security | Run deployed Playwright role/RBAC suite | HR Admin, Tenant Admin, Manager, Employee, Payroll, Finance, Support and Restricted personas pass | QA/security |
-| `P4-GATE-012` | Tenant isolation | Two-tenant isolation verified in deployed environment | Partially Verified | Phase 3C.7 local evidence | Local/sandbox | P0 | Security/backend | Execute deployed two-tenant negative proof | Cross-tenant objects denied without metadata leakage | Security owner |
-| `P4-GATE-013` | Session security | Stale session/logout/back-forward fail closed in deployed environment | Partially Verified | Phase 3B/3C browser evidence | Local/sandbox | P0 | Security/QA | Run deployed auth routing suite | Stale sessions redirect/deny consistently | Security owner |
+| `P4-GATE-011` | Auth/RBAC | Deployed role login and route access verified | Not Verified | `docs/qa/evidence/phase4b/10-stage-deployed-rbac-isolation-playwright.log`: attempted deployed suite; default stage personas returned HTTP 400 invalid credentials | Stage attempted, blocked by credentials | P0 | QA/security | Run deployed Playwright role/RBAC suite with approved stage personas | HR Admin, Tenant Admin, Manager, Employee, Payroll, Finance, Support and Restricted personas pass | QA/security |
+| `P4-GATE-012` | Tenant isolation | Two-tenant isolation verified in deployed environment | Partially Verified | Phase 3C.7 local evidence plus deployed unauthenticated negative API checks in `docs/qa/evidence/phase4b/10-stage-deployed-rbac-isolation-playwright.log` | Local/sandbox + stage partial | P0 | Security/backend | Execute deployed two-tenant negative proof | Cross-tenant objects denied without metadata leakage | Security owner |
+| `P4-GATE-013` | Session security | Stale session/logout/back-forward fail closed in deployed environment | Partially Verified | Phase 3B/3C browser evidence plus deployed stale-cookie redirect in `docs/qa/evidence/phase4b/10-stage-deployed-rbac-isolation-playwright.log` | Local/sandbox + stage partial | P0 | Security/QA | Run deployed auth routing suite | Stale sessions redirect/deny consistently | Security owner |
 | `P4-GATE-014` | Enterprise identity | MFA/SSO/SCIM launch posture declared | Partially Verified | `production_preflight.py`, env docs, static proof accepts `verified` or approved `not_in_scope` | Config requirement only | P1 | Product/security | Set `HRMS_ENTERPRISE_IDENTITY_STATUS=verified` or approved `not_in_scope` | Owner-approved identity scope recorded | Product/security |
 | `P4-GATE-015` | Email | SMTP/SES backend configured with verified sender | Not Verified | `.env.example`, `verify_email_delivery.py` | Not executed on target | P0 | DevOps/notifications | Configure provider secrets and sender/domain | Preflight email gates pass | DevOps |
 | `P4-GATE-016` | Email | Real email delivery proof captured | Not Verified | `verify_email_delivery.py` | Not executed on target | P0 | Notifications owner | Run `verify_email_delivery --to <controlled-mailbox>` | Provider accepted delivery, sanitized evidence JSON archived | Notifications owner |
@@ -70,16 +70,89 @@ Statuses allowed: Verified, Partially Verified, Not Verified, Blocked, Not Appli
 
 ## Phase 4B Update - 2026-10-10
 
-Phase 4B performed repository/configuration inspection and non-destructive static preflight only because no confirmed deployed target authorization or approved live credentials were available.
+Phase 4B now includes non-destructive deployed stage verification against `https://hrms.accerio.in`. Public availability, backend health, TLS certificate and post-deploy smoke passed. Credentialed RBAC and two-tenant certification remain Not Verified because approved stage personas were not available and default demo credentials were rejected by the deployed login API.
 
 Evidence added:
 
 | Evidence | Result |
 | --- | --- |
-| `docs/qa/evidence/phase4b/01-local-env-key-inventory-redacted.log` | Local env keys inventoried with values redacted. |
-| `docs/qa/evidence/phase4b/02-static-production-preflight-skip-network.json` | Passed static `production_preflight --strict --skip-network` with sanitized production-shaped values. |
-| `docs/qa/evidence/phase4b/03-deployment-surface-inventory.json` | Deployment/security/test surface exists in repository. |
-| `docs/qa/evidence/phase4b/04-django-check-deploy-static.log` | Failed under incomplete local env, confirming local env is not production-ready. |
-| `docs/qa/evidence/phase4b/05-django-check-deploy-static-production-shaped.log` | Passed `check --deploy` with sanitized production-shaped env; warnings are schema/documentation warnings. |
+| `docs/qa/evidence/phase4b/06-stage-public-health-headers.log` | Root, API health and login returned HTTP 200; deployed security headers captured. |
+| `docs/qa/evidence/phase4b/07-stage-env-key-inventory-redacted.log` | No local `PLAYWRIGHT_*`, `HRMS_*`, deployment or database env vars were available. |
+| `docs/qa/evidence/phase4b/08-stage-post-deploy-smoke.log` | Passed public post-deploy smoke: API/root/login all HTTP 200 and health body OK. |
+| `docs/qa/evidence/phase4b/09-stage-tls-certificate.log` | Let's Encrypt certificate for `hrms.accerio.in`, valid 2026-09-08 through 2026-12-07. |
+| `docs/qa/evidence/phase4b/10-stage-deployed-rbac-isolation-playwright.log` | 10 deployed scenarios attempted: 4 passed, 3 failed due invalid default stage credentials, 3 did not run after serial/dependent credential failure. |
+| `docs/qa/17-phase4b-production-environment-hardening-report.md` | Detailed Phase 4B deployed-stage report and residual P0/P1 risks. |
 
-No gate status counts changed in Phase 4B. Target-only gates remain Not Verified until executed on an authorized deployment.
+Gate status counts did not change: stage public smoke improves evidence for partially verified deployment/security gates, but target-host strict preflight, credentialed RBAC, two-tenant proof, host service/timer status and protected secret-source evidence remain unresolved.
+
+## Phase 4B.1 Update - 2026-10-10
+
+Phase 4B.1 focused on staging authentication prerequisites, strict preflight prerequisites and security revalidation.
+
+Evidence added:
+
+| Evidence | Result |
+| --- | --- |
+| `docs/qa/evidence/phase4b1/01-stage-default-persona-login-probes.log` | `platform.admin` authenticated; tenant personas `nisha.rao`, `riya.sharma`, `karan.mehta`, `payroll.finance`, `support.agent` returned HTTP 400 invalid credentials. |
+| `docs/qa/evidence/phase4b1/signoff-preflight/launch-signoff-report.md` | Staging signoff preflight-only decision: `STAGING PREFLIGHT BLOCKED`; missing required staging env posture. |
+| `docs/qa/evidence/phase4b1/03-stage-root-headers-hsts-check.log` | Deployed root headers captured; `Strict-Transport-Security` absent. |
+| `docs/qa/evidence/phase4b1/04-stage-deployed-rbac-isolation-rerun.log` | Original 10 deployed browser scenarios reexecuted: 4 passed, 3 blocked by invalid tenant persona credentials, 3 not run after dependent credential failure. |
+| `docs/qa/18-phase4b1-staging-auth-preflight-revalidation.md` | Focused findings, supported provisioning path, HSTS recommendation and admin actions. |
+
+Gate status counts remain unchanged. `P4-GATE-011` remains Not Verified because platform-admin login alone does not satisfy the required deployed role matrix. `P4-GATE-012` and `P4-GATE-013` remain Partially Verified because unauthenticated/stale-session boundaries pass but credentialed tenant isolation, logout, revocation and two-tenant checks are blocked by missing staging prerequisites. `P4-GATE-004` remains Not Verified until host `production_preflight --strict` is executed.
+
+## Phase 4B.2 Update - 2026-10-10
+
+Phase 4B.2 executed actual staging host and browser verification against `https://hrms.accerio.in` using supplied staging personas, without production/customer mutations or seed/bootstrap operations.
+
+Evidence added:
+
+| Evidence | Result |
+| --- | --- |
+| `docs/qa/evidence/phase4b2/01-staging-provided-persona-login-probes.json` | 5 supplied persona candidates authenticated, 1 returned invalid credentials. |
+| `docs/qa/evidence/phase4b2/02-stage-host-identity.log` | EC2 target and release path verified; protected backend env present. |
+| `docs/qa/evidence/phase4b2/03-stage-readonly-account-tenant-inventory.json` | Read-only account/tenant inventory captured; no blind provisioning performed because a non-sandbox active tenant exists. |
+| `docs/qa/evidence/phase4b2/04-stage-host-production-preflight-strict.json` | Target-host strict preflight executed and failed one P0 blocker. |
+| `docs/qa/evidence/phase4b2/07-stage-authentication-class-proof.json` | Deployed REST auth classes include `BasicAuthentication`. |
+| `docs/qa/evidence/phase4b2/08-stage-deployed-rbac-isolation-playwright.log` | Original 10 deployed browser scenarios rerun: 8 passed, 2 failed, 0 blocked, 0 not run. |
+| `docs/qa/19-phase4b2-staging-auth-rbac-preflight-certification.md` | Detailed Phase 4B.2 staging certification report. |
+
+Gate status impact:
+
+- `P4-GATE-004` remains **Not Verified / failed on target** because strict preflight has a blocker.
+- `P4-GATE-010` is downgraded from static Verified to **Blocked for deployed certification** because BasicAuthentication is enabled on staging.
+- `P4-GATE-011` improves from Not Verified to **Partially Verified** for supplied HR/Tenant/ESS/MSS personas, but full role matrix is incomplete and 2 of 10 browser scenarios failed.
+- `P4-GATE-012` remains **Partially Verified**; no authorized second-tenant persona was available for true deployed two-tenant proof.
+- `P4-GATE-013` remains **Partially Verified**; stale session and redirect checks pass, but full logout/revocation matrix still needs credentialed role coverage.
+- `P4-GATE-007` and `P4-GATE-008` remain **Partially Verified**; nginx config passes and defensive headers exist, but HSTS is absent.
+
+Phase 4B.2 verdict: **Not Certified** for pilot/production launch security until the BasicAuthentication preflight blocker, Platform Admin credential proof, two-tenant deployed isolation proof and the two browser scenario failures are resolved and rerun.
+
+## Phase 4B.3 Update - 2026-10-10
+
+Phase 4B.3 remediated the deployed staging security blockers and reran focused certification.
+
+Evidence added:
+
+| Evidence | Result |
+| --- | --- |
+| `docs/qa/evidence/phase4b2/16-stage-host-production-preflight-strict-after-fix.json` | Target-host strict preflight passed with 0 blockers. |
+| `docs/qa/evidence/phase4b2/17-stage-authentication-class-proof-after-fix.json` | Deployed auth classes are TokenAuthentication and SessionAuthentication only. |
+| `docs/qa/evidence/phase4b2/18-stage-security-headers-after-hsts.json` | HSTS `max-age=300` present on root, login and API-health responses. |
+| `docs/qa/evidence/phase4b2/19-stage-browser-final-rerun-after-deploy.log` | Original 10 deployed browser scenarios passed. |
+| `docs/qa/evidence/phase4b2/29-stage-platform-two-tenant-rbac-final.log` | Two-tenant browser isolation passed; broad route-menu suite retains 2 stale/timebox failures. |
+| `docs/qa/evidence/phase4b2/31-stage-platform-focused-route-api-proof.json` | Focused Platform Admin route/API allow and HR/Tenant deny proof passed. |
+| `docs/qa/evidence/phase4b2/32-stage-disposable-platform-admin-cleanup.json` | Disposable Platform Admin accounts deactivated after proof. |
+| `docs/qa/20-phase4b3-staging-security-final-revalidation.md` | Detailed Phase 4B.3 final revalidation report. |
+
+Gate status impact:
+
+- `P4-GATE-004` is **Verified** for staging: strict preflight passed.
+- `P4-GATE-007` is **Verified for staging pilot posture**: HTTPS/security headers and HSTS are present; production HSTS max-age/includeSubDomains/preload policy remains a later hardening decision.
+- `P4-GATE-008` is **Verified for staging**: nginx config test passed and headers captured.
+- `P4-GATE-010` is **Verified on deployed staging**: BasicAuthentication is absent.
+- `P4-GATE-011` is **Verified for Phase 4B staging scope**: original 10 browser scenarios passed, Platform Admin focused proof passed, and HR/Tenant/ESS/MSS routes were verified.
+- `P4-GATE-012` is **Verified for staging**: two-tenant browser isolation proof passed with disposable sandbox tenants.
+- `P4-GATE-013` is **Verified for Phase 4B staging scope**: stale-session and auth-routing checks passed; deeper enterprise identity revocation remains Phase 4 identity hardening.
+
+Phase 4B.3 verdict: **Certified for deployed staging authentication, RBAC, strict preflight, HSTS pilot posture and tenant-isolation evidence**. Broader production launch remains gated by non-Phase-4B items: missing-bank decision, provider conditionals, real external email/SMS proof or approved exclusion, backup/restore, monitoring/alerting and production HSTS policy sign-off.

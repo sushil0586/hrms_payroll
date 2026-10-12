@@ -33,8 +33,6 @@ export default async function AttendanceDerivationExceptionsReportPage() {
             <Link className="button button--primary" href="/hr-admin/attendance-records">Review records</Link>
           </>
         }
-        pills={["Derivation evidence", "Payroll impact", "Source linked"]}
-        showPills
       />
 
       <ReportInsightsStrip

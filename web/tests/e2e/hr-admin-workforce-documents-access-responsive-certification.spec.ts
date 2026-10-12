@@ -13,7 +13,7 @@ type ResponsiveRoute = {
 
 const scopedRoutes: ResponsiveRoute[] = [
   { path: "/hr-admin/employees", heading: "Employees", primaryAction: "New employee" },
-  { path: "/hr-admin/employees/new", heading: "Create employee", primaryAction: "Create employee" },
+  { path: "/hr-admin/employees/new", heading: "Create employee", primaryAction: "Continue" },
   { path: "/hr-admin/employee-documents", heading: "Employee document review", primaryAction: "Upload document" },
   { path: "/hr-admin/employee-documents/new", heading: /Upload employee document|Employee document/i },
   { path: "/hr-admin/document-categories", heading: /Document categories/i, primaryAction: "Create category" },

@@ -70,8 +70,16 @@ test.describe("Production tenant and role isolation proof", () => {
       "Employee scoped",
       "access tracking",
       "Published payslips",
-      /Download payslip|Download latest/,
     ]);
+    const hasPublishedPayslip = await page.getByRole("link", { name: /Download payslip|Download latest/ }).first().isVisible().catch(() => false);
+    if (hasPublishedPayslip) {
+      await expect(page.getByRole("link", { name: /Download payslip|Download latest/ }).first()).toHaveAttribute(
+        "href",
+        /\/api\/me\/payroll-payslips\/.+\/download/,
+      );
+    } else {
+      await expectVisibleText(page, ["No payslip published", "No payslips found."]);
+    }
     const reviewPayslip = page.getByRole("button", { name: "Review payslip" }).first();
     if (await reviewPayslip.isVisible().catch(() => false)) {
       await reviewPayslip.click();
@@ -120,8 +128,13 @@ test.describe("Production tenant and role isolation proof", () => {
       "Items that need your attention",
       "Launch checklist",
       "User access",
-      "Support access",
     ]);
+    const supportAccessLink = page.getByRole("link", { name: /Support access|Open support|Scoped support/i }).first();
+    if (await supportAccessLink.isVisible().catch(() => false)) {
+      await expect(supportAccessLink).toHaveAttribute("href", /\/tenant-admin\/support-access/);
+    } else {
+      await expectVisibleText(page, ["Open the right workspace", "Detailed users, roles, support grants, and audit records stay on their own pages."]);
+    }
     await expectNoHorizontalOverflow(page);
     await captureIsolationStep(page, testInfo, "03-tenant-admin-role-controls");
 

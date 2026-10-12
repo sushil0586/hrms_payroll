@@ -16,7 +16,7 @@ export default async function AttendanceExceptionsReportPage() {
   const rejectedCount = items.filter((item) => item.status === "rejected").length;
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live attendance report" : "Demo attendance report"}
         title="Attendance Exceptions SLA Report"
@@ -37,8 +37,6 @@ export default async function AttendanceExceptionsReportPage() {
             </Link>
           </>
         }
-        pills={["Regularizations", "SLA", "Payroll impact"]}
-        showPills
       />
 
       <ReportInsightsStrip

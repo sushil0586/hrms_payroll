@@ -1,11 +1,12 @@
 import Link from "next/link";
 
+import { LeaveRequestOverrideForm } from "@/app/hr-admin/leave-requests/leave-request-override-form";
 import { LeaveRequestImportWorkbench } from "@/app/hr-admin/leave-requests/leave-request-import-workbench";
 import { LeaveRequestQueue } from "@/app/hr-admin/leave-requests/leave-request-queue";
-import { MetricTile } from "@/components/patterns/metric-tile";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminLeaveRequests, getHrAdminPolicyOptions } from "@/lib/api";
-import { requireSessionPermission } from "@/lib/workspace-access";
+import { getHrAdminLeaveRequest, getHrAdminLeaveRequests, getHrAdminPolicyOptions } from "@/lib/api";
+import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 type SearchParamValue = string | string[] | undefined;
@@ -18,7 +19,8 @@ function normalizeParam(value: SearchParamValue) {
 }
 
 export default async function HrAdminLeaveRequestsPage({ searchParams }: PageProps) {
-  await requireSessionPermission({ permissionKeys: ["leave.view"], fallbackPath: "/hr-admin" });
+  const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view"], fallbackPath: "/hr-admin" });
+  const canApproveLeaveRequests = sessionHasPermission(sessionUser, "leave.requests.approve");
   const currentParams = (await searchParams) ?? {};
   const page = Math.max(Number(normalizeParam(currentParams.page) || "1") || 1, 1);
   const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) || "25") || 25, 1), 100);
@@ -27,6 +29,8 @@ export default async function HrAdminLeaveRequestsPage({ searchParams }: PagePro
   const leaveTypeCode = normalizeParam(currentParams.leave_type_code) ?? "";
   const fromDate = normalizeParam(currentParams.from_date) ?? "";
   const toDate = normalizeParam(currentParams.to_date) ?? "";
+  const selectedLeaveId = normalizeParam(currentParams.selectedLeave) ?? "";
+  const overrideLeaveId = normalizeParam(currentParams.overrideLeave) ?? "";
 
   const [result, optionsResult] = await Promise.all([
     getHrAdminLeaveRequests({
@@ -40,6 +44,13 @@ export default async function HrAdminLeaveRequestsPage({ searchParams }: PagePro
     }),
     getHrAdminPolicyOptions(),
   ]);
+  const selectedLeave = selectedLeaveId
+    ? result.data.items.find((item) => item.id === selectedLeaveId) ?? (await getHrAdminLeaveRequest(selectedLeaveId)).data
+    : null;
+  const overrideLeave = canApproveLeaveRequests && overrideLeaveId
+    ? result.data.items.find((item) => item.id === overrideLeaveId) ?? (await getHrAdminLeaveRequest(overrideLeaveId)).data
+    : null;
+  const overrideCloseHref = overrideLeaveId ? `/hr-admin/leave-requests?selectedLeave=${overrideLeaveId}` : "/hr-admin/leave-requests";
 
   return (
     <main className="shell shell--time-leave hr-admin-compact-ui">
@@ -48,7 +59,6 @@ export default async function HrAdminLeaveRequestsPage({ searchParams }: PagePro
         title="Leave Requests"
         description="Review every leave request across the tenant with employee context, policy evidence, approval track, and balance handoff links."
         actions={<Link className="button button--secondary" href="/hr-admin/leave-balances">Open leave balances</Link>}
-        pills={["Tenant-wide queue", "Approval track visible", "Print-ready operations view"]}
       />
       <TimeLeaveOperationsStrip
         current="leaveRequests"
@@ -59,16 +69,9 @@ export default async function HrAdminLeaveRequestsPage({ searchParams }: PagePro
         secondaryMetricLabel="pending"
         secondaryMetricValue={result.data.status_counts.pending ?? 0}
       />
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Matching requests" value={result.data.total_count} trend="Filtered workload" />
-          <MetricTile label="Pending approval" value={result.data.status_counts.pending ?? 0} trend="Needs approver action" />
-          <MetricTile label="Approved" value={result.data.status_counts.approved ?? 0} trend="Payroll-impacting leave" />
-          <MetricTile label="Rejected/cancelled" value={(result.data.status_counts.rejected ?? 0) + (result.data.status_counts.cancelled ?? 0)} trend="Closed exceptions" />
-        </div>
-      </section>
       <LeaveRequestQueue
         items={result.data.items}
+        selectedItem={selectedLeave}
         currentFilters={{
           q,
           status,
@@ -87,12 +90,24 @@ export default async function HrAdminLeaveRequestsPage({ searchParams }: PagePro
         }}
         statusCounts={result.data.status_counts}
         leaveTypeOptions={optionsResult.data.leave_types}
+        canApproveLeaveRequests={canApproveLeaveRequests}
       />
       <LeaveRequestImportWorkbench
         requests={result.data.items}
         employees={optionsResult.data.employees}
         leaveTypes={optionsResult.data.leave_types}
       />
+      {overrideLeave ? (
+        <HrAdminActionModal
+          closeHref={overrideCloseHref}
+          description="Approve or reject the current pending leave step when HR must act for an unavailable approver."
+          eyebrow="HR override"
+          labelledBy="leave-request-override-title"
+          title="Review leave request"
+        >
+          <LeaveRequestOverrideForm closeHref={overrideCloseHref} item={overrideLeave} />
+        </HrAdminActionModal>
+      ) : null}
     </main>
   );
 }

@@ -1,0 +1,14 @@
+{
+  "label": "p4b2_platform_admin_v3",
+  "timestamp_utc": "2026-10-10T12:15:59Z",
+  "http_status": 200,
+  "authenticated": true,
+  "workspace_access": {
+    "ess": false,
+    "mss": false,
+    "hr_admin": false,
+    "tenant_admin": false,
+    "platform_admin": true
+  },
+  "error_class": null
+}

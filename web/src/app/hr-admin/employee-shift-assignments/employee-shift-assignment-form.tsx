@@ -17,6 +17,9 @@ type Props = {
   options: Pick<HrAdminPolicyWorkbenchOptions, "shifts">;
   itemId?: string;
   initialEmployeeLabel?: string | null;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -46,7 +49,16 @@ function FieldHint({ children, tone = "default" }: { children: string; tone?: "d
   return <span className={`field-help-text${tone === "warning" ? " field-help-text--warning" : ""}`}>{children}</span>;
 }
 
-export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemId, initialEmployeeLabel }: Props) {
+export function EmployeeShiftAssignmentForm({
+  initialValue,
+  mode,
+  options,
+  itemId,
+  initialEmployeeLabel,
+  cancelHref,
+  successHref = "/hr-admin/employee-shift-assignments",
+  compact = false,
+}: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -173,7 +185,7 @@ export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemI
       setIsSubmitting(false);
       return;
     }
-    router.push("/hr-admin/employee-shift-assignments");
+    router.push(successHref);
     router.refresh();
   }
 
@@ -185,7 +197,7 @@ export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemI
     .join(" -> ");
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className={`section form-layout-modern employee-shift-assignment-form${compact ? " employee-shift-assignment-form--modal" : ""}`} onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -340,7 +352,7 @@ export function EmployeeShiftAssignmentForm({ initialValue, mode, options, itemI
           <span className="muted">Shift assignment runtime supports fixed windows, weekly rotations, and temporary overrides.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create assignment" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={() => (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
           </div>
         </div>
       </section>

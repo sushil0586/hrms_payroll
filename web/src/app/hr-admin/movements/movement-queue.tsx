@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceDataTable, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { HrAdminEnumOption, HrAdminLifecycleOwnerBulkActionInput, HrAdminLifecycleOwnerOption, HrAdminLifecycleStatusBulkActionInput, HrAdminMovement } from "@/lib/types";
 
 type Props = {
@@ -83,6 +84,25 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
       page,
       page_size: Number(pageSize) || currentFilters.page_size,
     })}`);
+  }
+
+  function queueHref(params: Record<string, string | number | boolean | undefined>) {
+    return `${pathname}${buildQueryString({
+      q: search.trim() || undefined,
+      status: status !== "all" ? status : undefined,
+      movement_type: movementType !== "all" ? movementType : undefined,
+      owner: owner !== "all" ? owner : undefined,
+      page: pagination.page,
+      page_size: Number(pageSize) || currentFilters.page_size,
+      ...params,
+    })}`;
+  }
+
+  function statusTone(value: string) {
+    if (value === "completed" || value === "approved") return "success";
+    if (value === "blocked" || value === "cancelled") return "danger";
+    if (value === "in_progress" || value === "pending") return "info";
+    return "neutral";
   }
 
   async function handleBulkOwnerAction(nextOwnerValue: string) {
@@ -181,12 +201,6 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
               {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
-          <label className="form-field">
-            <span className="muted">Rows per page</span>
-            <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
-              {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
-            </select>
-          </label>
         </div>
         <div className="queue-toolbar__actions">
           <button className="button button--primary" onClick={() => goToPage(1)} type="button">Apply filters</button>
@@ -263,37 +277,44 @@ export function MovementQueue({ items, state, lifecycleStatusOptions, movementTy
         {error ? <div className="notice notice--error" role="alert"><strong>Bulk movement action failed.</strong><span className="muted">{error}</span></div> : null}
       </section>
 
-      <div className="queue-list lifecycle-record-list">
+      <WorkspaceDataTable ariaLabel="Movement records" className="lifecycle-table">
+        <thead>
+          <tr>
+            <th><input aria-label="Select all movement records on this page" checked={allSelected} onChange={toggleAll} type="checkbox" /></th>
+            <th>Employee</th>
+            <th>Movement</th>
+            <th>Status</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Owner</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
         {items.map((item) => {
           const isSelected = selectedIds.includes(item.id);
           return (
-          <article className="record-card panel-card-soft lifecycle-record-card" key={item.id}>
-            <div className="record-card__header">
-              <div className="record-card__title-wrap">
-                <label className="record-card__title">
-                  <input checked={isSelected} onChange={() => toggleOne(item.id)} type="checkbox" />
-                  <h2>{item.employee_name}</h2>
-                </label>
-                <div className="record-card__eyebrow">
-                  <span className="record-chip record-chip--accent">{item.movement_type}</span>
-                  <span className="record-chip">{item.status}</span>
-                  <span className="record-chip">Effective {item.effective_date}</span>
-                </div>
-                <p className="section-copy section-copy-soft">{item.workflow_reference || "Workflow not linked"} • Owner {item.owner_value || item.to_manager || "unassigned"}</p>
-              </div>
-              <div className="record-card__actions">
-                <Link className="button button--secondary" href={`/hr-admin/movements/${item.id}/edit`}>Edit</Link>
-              </div>
-            </div>
-            <div className="detail-grid lifecycle-detail-grid">
-              <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{item.status}</span></div>
-              <div className="detail-row"><span className="detail-label">From department</span><span className="detail-value">{item.from_department || "NA"}</span></div>
-              <div className="detail-row"><span className="detail-label">To department</span><span className="detail-value">{item.to_department || "NA"}</span></div>
-              <div className="detail-row"><span className="detail-label">To designation</span><span className="detail-value">{item.to_designation || "NA"}</span></div>
-            </div>
-          </article>
-        );
+            <tr className={isSelected ? "is-selected" : ""} key={item.id}>
+              <td><input aria-label={`Select ${item.employee_name}`} checked={isSelected} onChange={() => toggleOne(item.id)} type="checkbox" /></td>
+              <td><strong>{item.employee_name}</strong><span>{item.employee_code} · {item.workflow_reference || "No workflow"}</span></td>
+              <td><strong>{item.movement_type}</strong><span>Effective {item.effective_date}</span></td>
+              <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{item.status}</WorkspaceStatusBadge></td>
+              <td><strong>{item.from_department || "NA"}</strong><span>{item.from_designation || item.from_location || "Source unchanged"}</span></td>
+              <td><strong>{item.to_department || "NA"}</strong><span>{item.to_designation || item.to_location || "Destination pending"}</span></td>
+              <td><strong>{item.owner_value || item.to_manager || "Unassigned"}</strong><span>{item.to_manager || "No manager change"}</span></td>
+              <td><Link className="button button--secondary" href={queueHref({ editMovement: item.id })}>Edit</Link></td>
+            </tr>
+          );
         })}
+        </tbody>
+      </WorkspaceDataTable>
+      <div className="lifecycle-pagination-row">
+        <label className="form-field form-field--inline">
+          <span className="muted">Rows</span>
+          <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+            {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
+          </select>
+        </label>
         {items.length === 0 ? (
           <div className="card panel">
             <strong>No movement records match the current filters.</strong>

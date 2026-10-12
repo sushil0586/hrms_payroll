@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollFinanceHandoffSetup, getHrAdminPayrollProviderConnectionSetup } from "@/lib/api";
 import { PAYROLL_LIVE_RAILS_ENABLED } from "@/lib/runtime-flags";
@@ -842,26 +841,21 @@ export default async function PayrollProvidersPage({ searchParams }: PageProps) 
       </section>
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Connections" value={setup.summary.connection_count} trend={`${setup.summary.active_connection_count} active`} />
-          <MetricTile className="metric-tile-soft" label="Certified" value={setup.summary.certified_connection_count} trend={`${setup.summary.active_allowed_count} launch ready`} />
-          <MetricTile className="metric-tile-soft" label="Sandbox ready" value={setup.summary.sandbox_ready_connection_count} trend={`${setup.summary.blocked_connection_count} blocked`} />
-          <MetricTile className="metric-tile-soft" label="Cert runs" value={setup.summary.certification_run_count} trend={`${setup.summary.failed_certification_run_count} failed`} />
-          <MetricTile className="metric-tile-soft" label="Mapping packs" value={setup.summary.schema_mapping_pack_count ?? 0} trend={`${setup.summary.draft_schema_mapping_pack_count ?? 0} draft / ${setup.summary.active_schema_mapping_pack_count ?? 0} active`} />
-          <MetricTile className="metric-tile-soft" label="Simulations" value={setup.summary.schema_mapping_simulation_count ?? 0} trend={`${setup.summary.changed_schema_mapping_simulation_count ?? 0} changed`} />
-          <MetricTile className="metric-tile-soft" label="Adapters" value={setup.summary.adapter_registry_count ?? adapterRows.length} trend={`${setup.summary.ready_adapter_registry_count ?? adapterRows.filter((item) => item.status === "ready").length} ready`} />
-          <MetricTile className="metric-tile-soft" label="Live packs" value={setup.summary.production_pack_adapter_registry_count ?? 0} trend={`${setup.summary.configured_adapter_registry_count ?? 0} configured`} />
-          <MetricTile className="metric-tile-soft" label="Clients" value={setup.summary.client_registry_count ?? clientRows.length} trend={`${setup.summary.ready_client_registry_count ?? clientRows.filter((item) => item.status === "ready").length} ready`} />
-          <MetricTile className="metric-tile-soft" label="Fixtures" value={setup.summary.fixture_client_registry_count ?? 0} trend={`${setup.summary.configured_client_registry_count ?? 0} configured`} />
-          <MetricTile className="metric-tile-soft" label="Packages" value={setup.summary.package_registry_count ?? packageRows.length} trend={`${setup.summary.ready_package_registry_count ?? packageRows.filter((item) => item.status === "ready").length} ready`} />
-          <MetricTile className="metric-tile-soft" label="Storage policies" value={setup.summary.storage_policy_registry_count ?? storagePolicyRows.length} trend={`${setup.summary.blocked_storage_policy_registry_count ?? storagePolicyRows.filter((item) => item.status !== "ready").length} blocked`} />
-          <MetricTile className="metric-tile-soft" label="Launch rehearsal" value={String(setup.summary.launch_rehearsal_ready_lane_count ?? launchRehearsal.ready_lane_count ?? 0)} trend={`${String(setup.summary.launch_rehearsal_blocker_count ?? launchRehearsal.launch_blocker_count ?? 0)} blockers`} />
-          <MetricTile className="metric-tile-soft" label="Launch history" value={setup.summary.launch_rehearsal_run_count ?? launchHistory.length} trend={`${setup.summary.ready_launch_rehearsal_run_count ?? launchHistory.filter((item) => item.status === "ready").length} ready runs`} />
-          <MetricTile className="metric-tile-soft" label="Credential refs" value={setup.summary.credential_required_count} trend="No raw secrets" />
-          <MetricTile className="metric-tile-soft" label="Bank lanes" value={setup.summary.bank_connection_count} trend="Payout providers" />
-          <MetricTile className="metric-tile-soft" label="Statutory lanes" value={setup.summary.statutory_connection_count} trend="Return and challan" />
-          <MetricTile className="metric-tile-soft" label="Failure taxonomy" value={blockedFailureBucketCount} trend={`${warningFailureBucketCount} watch`} />
-          <MetricTile className="metric-tile-soft" label="Callback/retry" value={(handoffSetup.summary.provider_callback_event_count ?? 0) + (handoffSetup.summary.provider_retry_event_count ?? 0)} trend={`${handoffSetup.summary.dead_lettered_provider_retry_event_count ?? 0} dead-lettered`} />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll provider summary">
+          <span><strong>{setup.summary.connection_count}</strong> connections</span>
+          <span><strong>{setup.summary.active_connection_count}</strong> active</span>
+          <span><strong>{setup.summary.certified_connection_count}</strong> certified</span>
+          <span><strong>{setup.summary.active_allowed_count}</strong> launch ready</span>
+          <span><strong>{setup.summary.blocked_connection_count}</strong> blocked</span>
+          <span><strong>{setup.summary.certification_run_count}</strong> cert runs</span>
+          <span><strong>{setup.summary.schema_mapping_pack_count ?? 0}</strong> mapping packs</span>
+          <span><strong>{setup.summary.adapter_registry_count ?? adapterRows.length}</strong> adapters</span>
+          <span><strong>{setup.summary.client_registry_count ?? clientRows.length}</strong> clients</span>
+          <span><strong>{setup.summary.package_registry_count ?? packageRows.length}</strong> packages</span>
+          <span><strong>{setup.summary.storage_policy_registry_count ?? storagePolicyRows.length}</strong> storage policies</span>
+          <span><strong>{String(setup.summary.launch_rehearsal_blocker_count ?? launchRehearsal.launch_blocker_count ?? 0)}</strong> launch blockers</span>
+          <span><strong>{blockedFailureBucketCount}</strong> failure buckets</span>
+          <span><strong>{(handoffSetup.summary.provider_callback_event_count ?? 0) + (handoffSetup.summary.provider_retry_event_count ?? 0)}</strong> callback/retry</span>
         </div>
       </section>
 

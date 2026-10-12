@@ -12,7 +12,11 @@ function detailPanel(page: Page) {
 }
 
 function directoryItems(page: Page) {
-  return page.locator(".employee-directory-item");
+  return page.locator(".employee-directory-table tbody tr");
+}
+
+function directoryItemLinks(page: Page) {
+  return page.locator(".employee-directory-table__identity");
 }
 
 function fieldByLabel(scope: Page | Locator, label: string) {
@@ -26,12 +30,11 @@ function fieldByLabel(scope: Page | Locator, label: string) {
 async function expectEmployeeWorkbenchReady(page: Page) {
   await expect(page.locator("main.shell")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1, name: "Employees" })).toBeVisible();
-  await expect(page.getByText("Workforce command")).toBeVisible();
-  await expect(page.getByText("Operational readiness")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Access readiness review" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Review access" })).toHaveAttribute("href", "/hr-admin/employees?readiness=access_review&page_size=25");
+  const summary = page.locator(".hr-employee-summary-strip");
+  await expect(summary.getByText("employees", { exact: true })).toBeVisible();
+  await expect(summary.getByText("access provisioned", { exact: true })).toBeVisible();
+  await expect(summary.getByText("need review", { exact: true })).toBeVisible();
   await expect(directoryPanel(page)).toBeVisible();
-  await expect(detailPanel(page)).toBeVisible();
   await expectNoAppError(page);
   await expectNoHorizontalOverflow(page);
 }
@@ -83,23 +86,19 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
     await gotoDemoHrAdmin(page, "/hr-admin/employees?page_size=5");
     await expectEmployeeWorkbenchReady(page);
 
-    for (const metric of [
-      "Employees in scope",
-      "Active employees",
-      "Access provisioned",
-      "Departments represented",
-      "Manager reviews",
-    ]) {
-      await expect(page.locator(".metric-tile, .metric-tile-soft").filter({ hasText: metric }).first()).toBeVisible();
-    }
+    await expect(page.locator(".hr-employee-summary-strip")).toBeVisible();
+    await expect(page.locator(".hr-employee-summary-strip").getByText("employees")).toBeVisible();
+    await expect(page.locator(".hr-employee-summary-strip").getByText("access provisioned")).toBeVisible();
+    await expect(page.locator(".hr-employee-summary-strip").getByText("need review")).toBeVisible();
 
     const panel = directoryPanel(page);
     await expect(fieldByLabel(panel, "Search")).toBeVisible();
     await expect(fieldByLabel(panel, "Department")).toBeVisible();
+    await expect(fieldByLabel(panel, "Status")).toBeVisible();
+    await panel.locator(".directory-more-filters summary").click();
     await expect(fieldByLabel(panel, "Manager review")).toBeVisible();
     await expect(fieldByLabel(panel, "Readiness")).toBeVisible();
-    await expect(fieldByLabel(panel, "Page size")).toBeVisible();
-    await expect(panel.getByRole("button", { name: "Apply" })).toBeVisible();
+    await expect(panel.locator(".directory-filter-bar").getByRole("button", { name: "Apply" })).toBeVisible();
     await expect(panel.getByRole("link", { name: "Reset" })).toHaveAttribute("href", "/hr-admin/employees");
     await expectDirectoryFiltersStayInsidePanel(page);
 
@@ -108,22 +107,22 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
     }
 
     await expect(directoryItems(page)).toHaveCount(5);
-    const firstEmployeeHref = await directoryItems(page).first().getAttribute("href");
+    const firstEmployeeHref = await directoryItemLinks(page).first().getAttribute("href");
     expect(firstEmployeeHref, "Employee directory item should expose a selectable detail route").toMatch(/employeeId=/);
     await page.goto(firstEmployeeHref!, { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/employeeId=/);
-    await expect(detailPanel(page).locator(".detail-row").filter({ hasText: "Access Provisioned" })).toBeVisible();
-    await expect(detailPanel(page).locator(".detail-row").filter({ hasText: "Reporting Manager" })).toBeVisible();
+    await expect(detailPanel(page)).toBeVisible();
+    await expect(detailPanel(page).locator(".detail-row").filter({ hasText: "Work email" })).toBeVisible();
+    await expect(detailPanel(page).getByText("Structure", { exact: true })).toBeVisible();
 
-    const actionsSummary = detailPanel(page).locator("details.action-menu summary").first();
-    if (await actionsSummary.isVisible().catch(() => false)) {
-      await actionsSummary.click();
-      await expect(detailPanel(page).getByRole("link", { name: "Edit employee" })).toHaveAttribute("href", /\/hr-admin\/employees\/.+\/edit/);
-      await expect(detailPanel(page).getByRole("link", { name: "Manage access" })).toHaveAttribute("href", /\/hr-admin\/employees\/.+\/access/);
-      await expect(detailPanel(page).getByRole("link", { name: "Manage bank accounts" })).toHaveAttribute("href", /\/hr-admin\/employees\/.+\/bank-accounts/);
+    const actionsButton = detailPanel(page).getByRole("button", { name: "Actions" }).first();
+    if (await actionsButton.isVisible().catch(() => false)) {
+      await actionsButton.click();
+      await expect(page.getByRole("link", { name: "Edit employee" })).toHaveAttribute("href", /action=edit/);
+      await expect(page.getByRole("link", { name: "Manage access" })).toHaveAttribute("href", /action=access/);
+      await expect(page.getByRole("link", { name: "Manage bank accounts" })).toHaveAttribute("href", /action=bank/);
     } else {
-      await expect(detailPanel(page).getByText("Focused detail for the selected employee.")).toBeVisible();
-      await expect(page.getByRole("link", { name: "New employee" })).toHaveCount(0);
+      await expect(detailPanel(page)).toBeVisible();
     }
 
     await page.goto("/hr-admin/employees?q=NO_MATCH_EMPLOYEE_PHASE10&status=all&page_size=5", { waitUntil: "domcontentloaded" });
@@ -131,7 +130,7 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
     await expect(page).toHaveURL(/NO_MATCH_EMPLOYEE_PHASE10/);
     await expect(fieldByLabel(directoryPanel(page), "Search")).toHaveValue("NO_MATCH_EMPLOYEE_PHASE10");
     await expect(page.getByText("No employees in this view.")).toBeVisible();
-    await expect(page.getByText("No employee selected.")).toBeVisible();
+    await expect(detailPanel(page)).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
 
     await expect(directoryPanel(page).getByRole("link", { name: "Reset" })).toHaveAttribute("href", "/hr-admin/employees");
@@ -156,7 +155,7 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
         await expect(managerImport).toBeHidden();
       }
 
-      await importsDisclosure.locator("summary").click();
+      await importsDisclosure.getByText("Open tools").click();
     }
 
     if (await employeeImport.isVisible().catch(() => false)) {
@@ -196,8 +195,12 @@ test.describe("HR Admin employee workbench phase 10 certification", () => {
       await page.setViewportSize(viewport);
       await gotoDemoHrAdmin(page, "/hr-admin/employees?page_size=5");
       await expectEmployeeWorkbenchReady(page);
-      await expect(directoryItems(page).first()).toBeVisible();
+      await expect(directoryItemLinks(page).first()).toBeVisible();
       await expect(fieldByLabel(directoryPanel(page), "Search")).toBeVisible();
+      const selectedHref = await directoryItemLinks(page).first().getAttribute("href");
+      expect(selectedHref).toMatch(/employeeId=/);
+      await page.goto(selectedHref!, { waitUntil: "domcontentloaded" });
+      await expect(detailPanel(page)).toBeVisible();
       await expectDirectoryAndDetailDoNotOverlap(page);
       await expectDirectoryFiltersStayInsidePanel(page);
       await expectNoHorizontalOverflow(page);

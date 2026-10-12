@@ -7,7 +7,9 @@ import { createPortal } from "react-dom";
 
 import { LeaveRequestLifecycleActions } from "@/app/ess/leave-request-lifecycle-actions";
 import { ActionToast } from "@/components/patterns/action-toast";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { EssLeaveRequestListResponse, EssLeaveTypeOption, LeaveBalance, LeaveRequestItem } from "@/lib/types";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder, validateUploadFile } from "@/lib/ui/validation";
 
@@ -45,6 +47,14 @@ function statusClass(status: string) {
 
 function formatStatus(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function statusTone(status: string): "success" | "warning" | "danger" | "info" | "neutral" {
+  if (["approved", "complete", "completed"].includes(status)) return "success";
+  if (["pending", "partially_approved", "in_progress"].includes(status)) return "warning";
+  if (["rejected", "cancelled", "withdrawn", "failed"].includes(status)) return "danger";
+  if (["draft", "submitted"].includes(status)) return "info";
+  return "neutral";
 }
 
 function normalizeParam(value: SearchParamValue) {
@@ -379,7 +389,6 @@ function LeaveApplyModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  useEscapeClose(onClose);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [leaveTypeId, setLeaveTypeId] = useState(leaveTypes[0]?.id ?? "");
   const [startDate, setStartDate] = useState(today);
@@ -505,16 +514,15 @@ function LeaveApplyModal({
   }, [toast]);
 
   return (
-    <div className="modal-shell" role="presentation">
+    <HrAdminActionModal
+      closeHref="/ess/leave"
+      description="Choose the leave type and dates. Add evidence only when this policy asks for it."
+      eyebrow="ESS leave"
+      labelledBy="ess-apply-leave-modal"
+      onClose={onClose}
+      title="Apply leave"
+    >
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <div aria-label="Apply leave" aria-modal="true" className="modal ess-leave-modal" role="dialog">
-        <div className="modal__header">
-          <div>
-            <h2>Apply leave</h2>
-            <p>Choose the leave type and dates. Add evidence only when this policy asks for it.</p>
-          </div>
-          <button aria-label="Close apply leave dialog" className="button button--secondary" onClick={onClose} type="button">Close</button>
-        </div>
         <form className="leave-apply-layout" noValidate onSubmit={submitLeave}>
           <div className="form-grid leave-apply-form">
             <label className="form-field">
@@ -652,24 +660,20 @@ function LeaveApplyModal({
             </div>
           </aside>
         </form>
-      </div>
-    </div>
+    </HrAdminActionModal>
   );
 }
 
 function LeaveDetailModal({ isDemo, item, onClose }: { isDemo: boolean; item: LeaveRequestItem; onClose: () => void }) {
-  useEscapeClose(onClose);
-
   return (
-    <div className="modal-shell" role="presentation">
-      <div aria-label="Leave request detail" aria-modal="true" className="modal ess-leave-modal ess-leave-modal--wide" role="dialog">
-        <div className="modal__header">
-          <div>
-            <h2>{item.leave_type}</h2>
-            <p>{formatDate(item.start_date)} to {formatDate(item.end_date)} • {item.requested_units} units</p>
-          </div>
-          <button aria-label="Close leave request detail" className="button button--secondary" onClick={onClose} type="button">Close</button>
-        </div>
+    <HrAdminActionModal
+      closeHref="/ess/leave"
+      description={`${formatDate(item.start_date)} to ${formatDate(item.end_date)} - ${item.requested_units} units`}
+      eyebrow="Leave request detail"
+      labelledBy={`ess-leave-request-${item.id}`}
+      onClose={onClose}
+      title={item.leave_type}
+    >
         <LeaveDecisionCard item={item} />
         <section className="ess-modal-section">
           <h3 className="section-heading-soft">Timeline</h3>
@@ -693,8 +697,7 @@ function LeaveDetailModal({ isDemo, item, onClose }: { isDemo: boolean; item: Le
           <LeaveEvidence item={item} />
         </section>
         <LeaveRequestLifecycleActions isDemo={isDemo} item={item} onCompleted={onClose} />
-      </div>
-    </div>
+    </HrAdminActionModal>
   );
 }
 
@@ -797,13 +800,14 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
           <button className="button button--primary" onClick={() => setApplyOpen(true)} type="button">Apply leave</button>
           <Link className="button button--secondary" href="/ess">Overview</Link>
         </div>
-        <div className="workspace-control-header__metrics" aria-label="Leave summary">
-          <span className="queue-summary-chip"><strong>{formatUnits(totalAvailableBalance)}</strong> available</span>
-          <span className="queue-summary-chip"><strong>{pendingCount}</strong> pending</span>
-          <span className="queue-summary-chip"><strong>{approvedCount}</strong> approved</span>
-          <span className="queue-summary-chip"><strong>{formatUnits(totalReservedBalance)}</strong> reserved</span>
-        </div>
       </section>
+
+      <div className="attendance-summary-strip" aria-label="Leave summary">
+        <span><strong>{formatUnits(totalAvailableBalance)}</strong> available</span>
+        <span><strong>{pendingCount}</strong> pending</span>
+        <span><strong>{approvedCount}</strong> approved</span>
+        <span><strong>{formatUnits(totalReservedBalance)}</strong> reserved</span>
+      </div>
 
       <section className="workspace-section">
         <div className="workspace-section__header">
@@ -878,14 +882,13 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
               </Link>
             ))}
           </div>
-          <details className="workspace-filter-disclosure" open={filtersActive}>
-            <summary>
-              <span>Filters</span>
-              <small>{visibleRequests.length} shown from the loaded page</small>
-            </summary>
-            <div className="leave-history-filters">
+          <div className="workspace-filter-disclosure">
+            <div className="queue-toolbar__header">
+              <span className="queue-summary-chip"><strong>{visibleRequests.length}</strong> shown</span>
+            </div>
+            <WorkspaceFilterBar>
               <label className="form-field">
-                <span className="muted">Search leave history</span>
+                <span>Search</span>
                 <input
                   className="input-control"
                   onChange={(event) => setHistoryQuery(event.target.value)}
@@ -894,7 +897,7 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
                 />
               </label>
               <label className="form-field">
-                <span className="muted">Type filter</span>
+                <span>Type</span>
                 <select className="input-control" onChange={(event) => setHistoryLeaveType(event.target.value)} value={historyLeaveType}>
                   <option value="all">All types</option>
                   {leaveTypeOptions.map((leaveType) => (
@@ -903,7 +906,7 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
                 </select>
               </label>
               <label className="form-field">
-                <span className="muted">Period filter</span>
+                <span>Period</span>
                 <select className="input-control" onChange={(event) => setHistoryPeriod(event.target.value)} value={historyPeriod}>
                   <option value="all">All periods</option>
                   <option value="upcoming">Upcoming</option>
@@ -923,63 +926,73 @@ export function LeaveWorkspace({ balances, currentParams, isDemo, leaveRequests,
               >
                 Clear filters
               </button>
-            </div>
-          </details>
-          <div className="workspace-table leave-request-table" role="table" aria-label="Leave request history">
-            <div className="workspace-table__row workspace-table__row--head" role="row">
-              <span role="columnheader">Date</span>
-              <span role="columnheader">Leave type</span>
-              <span role="columnheader">Duration</span>
-              <span role="columnheader">Status</span>
-              <span role="columnheader">Approver</span>
-              <span role="columnheader">Actions</span>
-            </div>
-            {visibleRequests.length ? (
-              visibleRequests.map((request) => {
-                const waitingLabel = getApprovalWaitingLabel(request);
-                return (
-                  <div
-                    className="workspace-table__row leave-request-row"
-                    key={request.id}
-                    role="row"
-                  >
-                    <span role="cell">
-                      <strong>{formatDate(request.start_date)}</strong>
-                      <small>{formatDate(request.end_date)}</small>
-                    </span>
-                    <span role="cell">
-                      <strong>{request.leave_type}</strong>
-                      <small>{request.policy_name || "Policy pending"}</small>
-                    </span>
-                    <span role="cell">{request.requested_units} units</span>
-                    <span role="cell">
-                      <span className={statusClass(request.status)}>{formatStatus(request.status)}</span>
-                    </span>
-                    <span role="cell">
-                      <strong>{getRequestOwnerLabel(request)}</strong>
-                      <small>{waitingLabel || request.reason || "Decision history available"}</small>
-                    </span>
-                    <span role="cell">
-                      <button
-                        className="button button--secondary"
-                        onClick={() => {
-                          setDismissedRequestId(null);
-                          setClickedRequest(request);
-                        }}
-                        type="button"
-                      >
-                        View
-                      </button>
-                    </span>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="notice workspace-empty-state">
-                <strong>{leaveRequests.items.length ? "No requests match these filters." : "No leave requests in this view."}</strong>
-                <span className="muted">{leaveRequests.items.length ? "Clear filters or try another status tab." : "Try another status tab once more data is available."}</span>
-              </div>
-            )}
+            </WorkspaceFilterBar>
+          </div>
+          <div className="employee-directory-table-wrap">
+            <table className="workspace-table attendance-directory-table leave-request-table" aria-label="Leave request history">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Leave type</th>
+                  <th>Duration</th>
+                  <th>Status</th>
+                  <th>Approver</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRequests.length ? (
+                  visibleRequests.map((request) => {
+                    const waitingLabel = getApprovalWaitingLabel(request);
+                    return (
+                      <tr key={request.id}>
+                        <td>
+                          <div className="workspace-table__primary-cell">
+                            <strong>{formatDate(request.start_date)}</strong>
+                            <span>{formatDate(request.end_date)}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="workspace-table__primary-cell">
+                            <strong>{request.leave_type}</strong>
+                            <span>{request.policy_name || "Policy pending"}</span>
+                          </div>
+                        </td>
+                        <td>{request.requested_units} units</td>
+                        <td><WorkspaceStatusBadge tone={statusTone(request.status)}>{formatStatus(request.status)}</WorkspaceStatusBadge></td>
+                        <td>
+                          <div className="workspace-table__primary-cell">
+                            <strong>{getRequestOwnerLabel(request)}</strong>
+                            <span>{waitingLabel || request.reason || "Decision history available"}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <button
+                            className="button button--secondary"
+                            onClick={() => {
+                              setDismissedRequestId(null);
+                              setClickedRequest(request);
+                            }}
+                            type="button"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={6}>
+                      <div className="notice workspace-empty-state">
+                        <strong>{leaveRequests.items.length ? "No requests match these filters." : "No leave requests in this view."}</strong>
+                        <span className="muted">{leaveRequests.items.length ? "Clear filters or try another status tab." : "Try another status tab once more data is available."}</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </article>
         <PaginationBar

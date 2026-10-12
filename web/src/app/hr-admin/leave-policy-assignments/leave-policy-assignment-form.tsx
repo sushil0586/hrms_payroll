@@ -20,6 +20,7 @@ type Props = {
   options: Pick<HrAdminPolicyWorkbenchOptions, "leave_policies" | "legal_entities" | "branches" | "departments" | "grades" | "employment_types">;
   itemId?: string;
   initialEmployeeLabel?: string | null;
+  returnPath?: string;
 };
 
 type LeavePolicyAssignmentField = "leave_policy_id" | "priority";
@@ -55,7 +56,7 @@ function filteredByLegalEntity(items: HrAdminOptionItem[], legalEntityId: string
   return items.filter((item) => !legalEntityId || item.legal_entity_id === legalEntityId);
 }
 
-export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId, initialEmployeeLabel }: Props) {
+export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId, initialEmployeeLabel, returnPath = "/hr-admin/leave-policy-assignments" }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -195,7 +196,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
     setIsSubmitting(false);
     isSubmittingRef.current = false;
     window.setTimeout(() => {
-      router.push("/hr-admin/leave-policy-assignments");
+      router.push(returnPath);
       router.refresh();
     }, 700);
   }
@@ -301,7 +302,7 @@ export function LeavePolicyAssignmentForm({ initialValue, mode, options, itemId,
           <span className="muted">Assignment changes go back into the leave policy rollout layer immediately.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create assignment" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={() => router.push(returnPath)} type="button">Cancel</button>
           </div>
         </div>
       </section>

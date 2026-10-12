@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { WorkspaceDataTable, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type {
   HrAdminEmployeeListItem,
   HrAdminEnumOption,
@@ -47,6 +48,13 @@ function humanizeStatus(value: string) {
     .join(" ");
 }
 
+function statusTone(value: string) {
+  if (["generated", "issued", "active", "completed"].includes(value)) return "success";
+  if (["failed", "cancelled", "revoked"].includes(value)) return "danger";
+  if (["draft", "pending"].includes(value)) return "warning";
+  return "neutral";
+}
+
 export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetters }: Props) {
   const router = useRouter();
   const defaultEmployeeId = employees[0]?.id ?? "";
@@ -67,6 +75,12 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
   const [error, setError] = useState("");
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setIsHydrated(true), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   const selectedEmployee = useMemo(
     () => employees.find((employee) => employee.id === draft.employee_id),
@@ -166,7 +180,11 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
   }
 
   return (
-    <section className="section overview-split document-letter-workspace">
+    <section
+      className="section overview-split document-letter-workspace"
+      data-hydrated={isHydrated ? "true" : "false"}
+      suppressHydrationWarning
+    >
       <form className="form-shell-card overview-split__primary document-child-form document-letter-form" onSubmit={handleSubmit}>
         <div className="form-shell-card__header">
           <div>
@@ -297,8 +315,8 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
         </div>
       </form>
 
-      <aside className="record-card panel-card-soft overview-split__secondary document-record-card document-letter-preview">
-        <div className="record-card__header">
+      <aside className="workspace-standard-panel overview-split__secondary document-record-card document-letter-preview">
+        <div className="workspace-standard-panel__header">
           <div>
             <h2>Preview</h2>
             <p className="section-copy section-copy-soft">Rendered text before storage.</p>
@@ -328,45 +346,50 @@ export function GeneratedLetterWorkspace({ employees, letterTypes, initialLetter
         )}
       </aside>
 
-      <section className="record-card panel-card-soft document-record-card document-letter-artifacts">
-        <div className="record-card__header">
+      <section className="workspace-standard-panel document-record-card document-letter-artifacts">
+        <div className="workspace-standard-panel__header">
           <div>
             <h2>Generated artifacts</h2>
             <p className="section-copy section-copy-soft">Stored letters attached to employee records.</p>
           </div>
-          <div className="record-card__eyebrow">
-            <span className="record-chip">{initialLetters.length} visible</span>
+          <div className="workspace-standard-panel__meta">
+            <span className="queue-summary-chip"><strong>{initialLetters.length}</strong> visible</span>
           </div>
         </div>
-        <div className="queue-list document-record-list">
-          {initialLetters.map((item) => (
-            <article className="record-card panel-card-soft document-record-card" key={item.id}>
-              <div className="record-card__header">
-                <div>
-                  <h2>{item.title}</h2>
-                  <p className="section-copy section-copy-soft">{item.employee_name} ({item.employee_code})</p>
-                </div>
-                <div className="record-card__actions">
-                  {item.artifact_id ? <a className="button button--ghost" href={`/api/hr-admin/generated-letters/${item.id}/download`}>Download</a> : null}
-                </div>
-              </div>
-              <div className="detail-grid document-detail-grid">
-                <div className="detail-row"><span className="detail-label">Type</span><span className="detail-value">{item.letter_type}</span></div>
-                <div className="detail-row"><span className="detail-label">Template</span><span className="detail-value">{item.template_code || "Manual"}</span></div>
-                <div className="detail-row"><span className="detail-label">Issue date</span><span className="detail-value">{item.issue_date || "Not set"}</span></div>
-                <div className="detail-row"><span className="detail-label">Workflow</span><span className="detail-value">{item.workflow_reference || "Not linked"}</span></div>
-                <div className="detail-row"><span className="detail-label">File</span><span className="detail-value">{item.file_name || "Pending"}</span></div>
-                <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{humanizeStatus(item.status)}</span></div>
-              </div>
-            </article>
-          ))}
+        <WorkspaceDataTable ariaLabel="Generated HR letters" className="document-control-table generated-letter-table">
+          <thead>
+            <tr>
+              <th>Letter</th>
+              <th>Employee</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Issue date</th>
+              <th>Workflow</th>
+              <th>File</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {initialLetters.map((item) => (
+              <tr key={item.id}>
+                <td><strong>{item.title}</strong><span>{item.template_code || "Manual template"}</span></td>
+                <td><strong>{item.employee_name}</strong><span>{item.employee_code}</span></td>
+                <td><WorkspaceStatusBadge tone="info">{humanizeStatus(item.letter_type)}</WorkspaceStatusBadge></td>
+                <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{humanizeStatus(item.status)}</WorkspaceStatusBadge></td>
+                <td><strong>{item.issue_date || "Not set"}</strong><span>Updated {item.updated_at || "NA"}</span></td>
+                <td><strong>{item.workflow_reference || "Not linked"}</strong></td>
+                <td><strong>{item.file_name || "Pending"}</strong><span>{item.artifact_id ? "Stored artifact" : "No artifact"}</span></td>
+                <td>{item.artifact_id ? <a className="button button--ghost" href={`/api/hr-admin/generated-letters/${item.id}/download`}>Download</a> : <span className="muted">Unavailable</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </WorkspaceDataTable>
           {initialLetters.length === 0 ? (
             <div className="empty-state">
               <strong>No generated letters found.</strong>
               <span className="muted">Use the generator to create the first stored employee artifact.</span>
             </div>
           ) : null}
-        </div>
       </section>
     </section>
   );

@@ -1,18 +1,38 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
-import { getHrAdminLeaveTypes } from "@/lib/api";
+import { getHrAdminLeaveType, getHrAdminLeaveTypes, getHrAdminPolicyOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
-import { LeaveTypeActions } from "./leave-type-actions";
+import { createEmptyLeaveTypeValue, leaveTypeToFormValue } from "./form-values";
+import { LeaveTypeForm } from "./leave-type-form";
+import { LeaveTypesWorkbench } from "./leave-types-workbench";
 
-export default async function HrAdminLeaveTypesPage() {
+type SearchParamValue = string | string[] | undefined;
+type PageProps = {
+  searchParams?: Promise<Record<string, SearchParamValue>>;
+};
+
+function normalizeParam(value: SearchParamValue) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function HrAdminLeaveTypesPage({ searchParams }: PageProps) {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["leave.view", "leave.policies.manage"], fallbackPath: "/hr-admin" });
   const canManagePolicies = sessionHasPermission(sessionUser, "leave.policies.manage");
-  const result = await getHrAdminLeaveTypes();
+  const currentParams = (await searchParams) ?? {};
+  const createModal = normalizeParam(currentParams.leaveTypeModal) === "create";
+  const editLeaveTypeId = normalizeParam(currentParams.editLeaveType);
+  const shouldLoadModal = canManagePolicies && (createModal || Boolean(editLeaveTypeId));
+  const [result, optionsResult, editResult] = await Promise.all([
+    getHrAdminLeaveTypes(),
+    shouldLoadModal ? getHrAdminPolicyOptions() : Promise.resolve(null),
+    canManagePolicies && editLeaveTypeId ? getHrAdminLeaveType(editLeaveTypeId) : Promise.resolve(null),
+  ]);
   const activeCount = result.data.filter((item) => item.is_active).length;
+  const modalTitle = createModal ? "Create leave type" : editResult?.data ? "Edit leave type" : "";
+  const closeHref = "/hr-admin/leave-types";
 
   return (
     <main className="shell shell--time-leave hr-admin-compact-ui">
@@ -23,7 +43,7 @@ export default async function HrAdminLeaveTypesPage() {
         actions={
           <>
             {canManagePolicies ? (
-              <Link className="button button--primary" href="/hr-admin/leave-types/new">
+              <Link className="button button--primary" href="/hr-admin/leave-types?leaveTypeModal=create">
                 Create leave type
               </Link>
             ) : null}
@@ -45,49 +65,35 @@ export default async function HrAdminLeaveTypesPage() {
         secondaryMetricValue={activeCount}
       />
 
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Leave types" value={result.data.length} trend="Configured categories" />
-          <MetricTile label="Active types" value={activeCount} trend="Currently usable" />
-          <MetricTile label="Inactive types" value={result.data.length - activeCount} trend="Needs review" />
-        </div>
-      </section>
+      <LeaveTypesWorkbench canManagePolicies={canManagePolicies} leaveTypes={result.data} />
 
-      <section className="section queue-layout">
-        <div className="queue-list">
-          {result.data.map((item) => (
-            <article className="record-card" key={item.id}>
-              <div className="record-card__header">
-                <div className="record-card__title-wrap">
-                  <div className="record-card__title">
-                    <h2>{item.name}</h2>
-                  </div>
-                  <div className="record-card__eyebrow">
-                    <span className="record-chip record-chip--accent">{item.category}</span>
-                    <span className="record-chip">{item.unit}</span>
-                    <span className={`record-chip${item.is_active ? " record-chip--accent" : ""}`}>
-                      {item.is_active ? "active" : "inactive"}
-                    </span>
-                    <PlatformGovernanceCard item={item} />
-                  </div>
-                  <p className="section-copy">{item.code}</p>
-                </div>
-                <div className="record-card__actions">
-                  {canManagePolicies ? (
-                    <>
-                      <Link className="button button--secondary" href={`/hr-admin/leave-types/${item.id}/edit`}>
-                        Edit
-                      </Link>
-                      <LeaveTypeActions isActive={item.is_active} leaveTypeId={item.id} leaveTypeName={item.name} />
-                    </>
-                  ) : null}
-                </div>
-              </div>
-              <PlatformGovernanceNotice item={item} />
-            </article>
-          ))}
-        </div>
-      </section>
+      {shouldLoadModal && optionsResult && (createModal || editResult?.data) ? (
+        <HrAdminActionModal
+          closeHref={closeHref}
+          description="Required fields are marked with an asterisk. Existing validation, governance locks, and save APIs are unchanged."
+          eyebrow="Leave setup"
+          labelledBy="leave-type-modal-title"
+          title={modalTitle}
+        >
+          {createModal ? (
+            <LeaveTypeForm
+              initialValue={createEmptyLeaveTypeValue(optionsResult.data.leave_categories[0]?.value || "paid", optionsResult.data.leave_units[0]?.value || "day")}
+              mode="create"
+              options={optionsResult.data}
+              returnPath={closeHref}
+            />
+          ) : editResult?.data ? (
+            <LeaveTypeForm
+              initialValue={leaveTypeToFormValue(editResult.data)}
+              item={editResult.data}
+              itemId={editResult.data.id}
+              mode="edit"
+              options={optionsResult.data}
+              returnPath={closeHref}
+            />
+          ) : null}
+        </HrAdminActionModal>
+      ) : null}
     </main>
   );
 }

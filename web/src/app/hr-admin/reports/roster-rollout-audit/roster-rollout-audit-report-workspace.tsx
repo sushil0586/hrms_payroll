@@ -152,11 +152,12 @@ export function RosterRolloutAuditReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Roster rollout audit report workspace">
       <div className="report-catalog-workspace roster-rollout-audit-report" data-testid="roster-rollout-audit-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Rollouts</span><strong>{filteredRows.length}</strong><small>{rollouts.length} total runs</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Created assignments</span><strong>{filteredRows.reduce((sum, row) => sum + row.created_count, 0)}</strong><small>Generated rows</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Skipped rows</span><strong>{filteredRows.reduce((sum, row) => sum + row.skipped_count, 0)}</strong><small>Needs review</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Medium/high risk</span><strong>{filteredRows.filter((row) => row.rollout_risk !== "Low").length}</strong><small>Rollout audit</small></article>
+        <div className="attendance-summary-strip report-summary-strip" aria-label="Roster rollout audit summary">
+          <span><strong>{filteredRows.length}</strong> rollouts</span>
+          <span><strong>{rollouts.length}</strong> total runs</span>
+          <span><strong>{filteredRows.reduce((sum, row) => sum + row.created_count, 0)}</strong> created</span>
+          <span><strong>{filteredRows.reduce((sum, row) => sum + row.skipped_count, 0)}</strong> skipped</span>
+          <span><strong>{filteredRows.filter((row) => row.rollout_risk !== "Low").length}</strong> review risk</span>
         </div>
 
         <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Roster rollout audit filters">
@@ -188,7 +189,7 @@ export function RosterRolloutAuditReportWorkspace({
                   <td><div className="payroll-register-stack"><span>{row.scope || "Manual selection"}</span></div></td>
                   <td><div className="payroll-register-stack"><span className={statusClass(row.status)}>{titleCase(row.status)}</span><span>{row.created_count}/{row.target_count} created</span><span>{row.skipped_count} skipped</span><span>{row.completion_rate}% completion</span></div></td>
                   <td><div className="payroll-register-stack"><span className={statusClass(row.rollout_risk)}>{row.rollout_risk}</span><span>{row.summary}</span></div></td>
-                  <td><div className="report-row-actions"><Link className="button button--secondary" href="/hr-admin/shift-roster-templates">Review</Link><Link className="button button--ghost" href={`/hr-admin/shift-roster-templates/${row.template_id}/edit`}>Template</Link></div></td>
+                  <td><div className="report-row-actions"><Link className="button button--secondary" href="/hr-admin/shift-roster-templates">Review</Link><Link className="button button--ghost" href={`/hr-admin/shift-roster-templates?editRoster=${row.template_id}`}>Template</Link></div></td>
                 </tr>
               ))}
               {visibleRows.length === 0 ? <tr><td colSpan={7}><div className="empty-state">No roster rollout audit rows match the selected filters.</div></td></tr> : null}

@@ -173,11 +173,11 @@ export function PayrollReviewExceptionsReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Payroll review exceptions report workspace">
       <div className="report-catalog-workspace payroll-review-exceptions-report" data-testid="payroll-review-exceptions-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Exceptions</span><strong>{filteredRows.length}</strong><small>{exceptions.length} total exceptions</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Open exceptions</span><strong>{filteredRows.filter((row) => row.status === "open").length}</strong><small>Need review action</small></article>
-          <article className="metric-tile metric-tile-soft"><span>High risk</span><strong>{filteredRows.filter((row) => row.risk === "High").length}</strong><small>Blocks approval</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Decided</span><strong>{filteredRows.filter((row) => row.decisionState !== "Pending").length}</strong><small>Decision evidence</small></article>
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{filteredRows.length}</strong> Exceptions</span>
+          <span><strong>{filteredRows.filter((row) => row.status === "open").length}</strong> Open exceptions</span>
+          <span><strong>{filteredRows.filter((row) => row.risk === "High").length}</strong> High risk</span>
+          <span><strong>{filteredRows.filter((row) => row.decisionState !== "Pending").length}</strong> Decided</span>
         </div>
 
         <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Payroll review exception filters">

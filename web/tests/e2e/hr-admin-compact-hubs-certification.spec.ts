@@ -7,7 +7,7 @@ const routes = [
   {
     path: "/hr-admin/policies",
     heading: "Policy control",
-    requiredText: ["Configure policy foundations", "Leave catalog", "Policy rollout", "Leave balance operations"],
+    requiredText: ["Configure policy foundations", "Leave catalog", "Scoped rollout", "Leave balance operations"],
   },
   {
     path: "/hr-admin/policy-assignments",
@@ -22,6 +22,7 @@ test.describe("HR admin compact hub certification", () => {
     { name: "tablet", width: 820, height: 1180 },
   ]) {
     test(`keeps policy hubs compact and focused on ${viewport.name}`, async ({ page }) => {
+      test.setTimeout(120_000);
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
       for (const route of routes) {

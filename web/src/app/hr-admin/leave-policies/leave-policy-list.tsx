@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PlatformGovernanceCard, PlatformGovernanceNotice } from "@/components/patterns/platform-governance-card";
+import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { HrAdminLeavePolicy, HrAdminLeavePolicyImpact } from "@/lib/types";
 
 type Props = {
@@ -27,6 +29,7 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
   const [status, setStatus] = useState("");
   const [leaveType, setLeaveType] = useState("");
   const [accrualFrequency, setAccrualFrequency] = useState("");
+  const [selectedPolicyId, setSelectedPolicyId] = useState(policies[0]?.id ?? "");
   const [selectedPolicy, setSelectedPolicy] = useState<HrAdminLeavePolicy | null>(null);
   const [impact, setImpact] = useState<HrAdminLeavePolicyImpact | null>(null);
   const [isImpactLoading, setIsImpactLoading] = useState(false);
@@ -49,6 +52,9 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
       return matchesQuery && matchesStatus && matchesLeaveType && matchesAccrual;
     });
   }, [accrualFrequency, leaveType, policies, query, status]);
+
+  const activeCount = policies.filter((item) => normalized(item.status) === "active").length;
+  const selectedDetail = filteredPolicies.find((item) => item.id === selectedPolicyId) ?? null;
 
   function clearFilters() {
     setQuery("");
@@ -84,21 +90,6 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
   }
 
   useEffect(() => {
-    if (!selectedPolicy) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        if (!isActionSubmitting) {
-          setSelectedPolicy(null);
-          setImpact(null);
-          setActionError("");
-        }
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedPolicy, isActionSubmitting]);
-
-  useEffect(() => {
     if (!toast) return;
     const timeout = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(timeout);
@@ -132,117 +123,145 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
   return (
     <section className="section queue-layout">
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <div className="queue-toolbar panel-card-soft">
+      <div className="attendance-summary-strip" aria-label="Leave policy summary">
+        <span><strong>{policies.length}</strong> policies</span>
+        <span><strong>{activeCount}</strong> active</span>
+        <span><strong>{policies.length - activeCount}</strong> inactive or draft</span>
+      </div>
+
+      <div className="workspace-data-panel">
         <div className="queue-toolbar__header">
           <div>
-            <h2 className="section-heading-soft">Policy filters</h2>
-            <p className="section-copy section-copy-soft">Find the right leave policy by name, type, status, or accrual behavior before editing.</p>
+            <h2 className="section-heading-soft">Leave policy catalog</h2>
+            <p className="section-copy section-copy-soft">Find a policy, inspect details, then edit or remove with the existing checks.</p>
           </div>
           <span className="queue-summary-chip"><strong>{filteredPolicies.length}</strong> shown</span>
         </div>
-        <div className="queue-toolbar__grid">
+        <WorkspaceFilterBar>
           <label className="form-field">
-            <span className="muted">Search</span>
+            <span>Search</span>
             <input className="input-control" onChange={(event) => setQuery(event.target.value)} placeholder="Policy name, code, type, status" value={query} />
           </label>
           <label className="form-field">
-            <span className="muted">Status</span>
+            <span>Status</span>
             <select className="input-control" onChange={(event) => setStatus(event.target.value)} value={status}>
               <option value="">All statuses</option>
               {statusOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </label>
           <label className="form-field">
-            <span className="muted">Leave type</span>
+            <span>Leave type</span>
             <select className="input-control" onChange={(event) => setLeaveType(event.target.value)} value={leaveType}>
               <option value="">All leave types</option>
               {leaveTypeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </label>
-          <label className="form-field">
-            <span className="muted">Accrual frequency</span>
-            <select className="input-control" onChange={(event) => setAccrualFrequency(event.target.value)} value={accrualFrequency}>
-              <option value="">All accruals</option>
-              {accrualOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
-        </div>
-        <div className="queue-toolbar__summary">
-          <span className="queue-summary-chip"><strong>{policies.length}</strong> total</span>
-          <span className="queue-summary-chip"><strong>{status || "Any"}</strong> status</span>
-          <span className="queue-summary-chip"><strong>{leaveType || "Any"}</strong> leave type</span>
-          <button className="button button--secondary" onClick={clearFilters} type="button">Clear filters</button>
-        </div>
-      </div>
+          <details className="attendance-more-filters">
+            <summary className="button button--secondary">More filters</summary>
+            <div className="attendance-more-filters__content">
+              <label className="form-field">
+                <span>Accrual frequency</span>
+                <select className="input-control" onChange={(event) => setAccrualFrequency(event.target.value)} value={accrualFrequency}>
+                  <option value="">All accruals</option>
+                  {accrualOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+            </div>
+          </details>
+          <div className="filter-actions">
+            <button className="button button--primary" type="button">Apply filters</button>
+            <button className="button button--secondary" onClick={clearFilters} type="button">Clear</button>
+          </div>
+        </WorkspaceFilterBar>
 
-      <div className="queue-list">
         {successMessage ? (
           <div className="notice notice--success" role="status">
             <strong>Policy updated.</strong>
             <span className="muted">{successMessage}</span>
           </div>
         ) : null}
-        {filteredPolicies.map((item) => (
-          <article className="record-card" key={item.id}>
-            <div className="record-card__header">
-              <div className="record-card__title-wrap">
-                <div className="record-card__title">
-                  <h2>{item.name}</h2>
+
+        <div className="employee-directory-layout">
+          <div className="employee-directory-table-wrap">
+            <table className="workspace-table attendance-directory-table">
+              <thead>
+                <tr>
+                  <th>Policy</th>
+                  <th>Leave type</th>
+                  <th>Entitlement</th>
+                  <th>Accrual</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPolicies.map((item) => (
+                  <tr className={selectedDetail?.id === item.id ? "table-row--selected" : ""} key={item.id}>
+                    <td>
+                      <div className="workspace-table__primary-cell">
+                        <strong>{item.name}</strong>
+                        <span>{item.code}</span>
+                      </div>
+                    </td>
+                    <td>{item.leave_type}</td>
+                    <td>{item.annual_entitlement} units</td>
+                    <td>{item.accrual_frequency}</td>
+                    <td><WorkspaceStatusBadge tone={normalized(item.status) === "active" ? "success" : "neutral"}>{item.status}</WorkspaceStatusBadge></td>
+                    <td><button className="button button--secondary" onClick={() => setSelectedPolicyId(item.id)} type="button">Inspect</button></td>
+                  </tr>
+                ))}
+                {filteredPolicies.length === 0 ? (
+                  <tr><td colSpan={6}>No leave policies match the current filters.</td></tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+
+          {selectedDetail ? (
+            <aside className="panel-card-soft attendance-detail-drawer" aria-label="Leave policy detail">
+              <div className="record-card__header">
+                <div>
+                  <h2>{selectedDetail.name}</h2>
+                  <p className="section-copy section-copy-soft">{selectedDetail.code} · {selectedDetail.leave_type}</p>
                 </div>
-                <div className="record-card__eyebrow">
-                  <span className="record-chip record-chip--accent">{item.leave_type}</span>
-                  <span className="record-chip">{item.status}</span>
-                  <span className="record-chip">{item.accrual_frequency}</span>
-                  <PlatformGovernanceCard item={item} />
-                </div>
-                <p className="section-copy">{item.code}</p>
-              </div>
-              <div className="record-card__actions">
-                {canManagePolicies ? (
-                  <>
-                    <Link className="button button--secondary" href={`/hr-admin/leave-policies/${item.id}/edit`}>
+                <div className="record-card__actions">
+                  <button className="button button--secondary" onClick={() => setSelectedPolicyId("")} type="button">Close</button>
+                  {canManagePolicies ? (
+                    <Link className="button button--secondary" href={`/hr-admin/leave-policies?editLeavePolicy=${selectedDetail.id}`}>
                       Edit
                     </Link>
-                    <button className="button button--ghost" onClick={() => openRemoveDialog(item)} type="button">
-                      Remove
-                    </button>
-                  </>
-                ) : null}
+                  ) : null}
+                  {canManagePolicies ? <button className="button button--ghost" onClick={() => openRemoveDialog(selectedDetail)} type="button">Remove</button> : null}
+                </div>
               </div>
-            </div>
-            <div className="detail-grid">
-              <div className="detail-row">
-                <span className="detail-label">Annual entitlement</span>
-                <span className="detail-value">{item.annual_entitlement} units</span>
+              <div className="record-card__eyebrow">
+                <WorkspaceStatusBadge tone={normalized(selectedDetail.status) === "active" ? "success" : "neutral"}>{selectedDetail.status}</WorkspaceStatusBadge>
+                <WorkspaceStatusBadge tone="info">{selectedDetail.accrual_frequency}</WorkspaceStatusBadge>
+                <PlatformGovernanceCard item={selectedDetail} />
               </div>
-              <div className="detail-row">
-                <span className="detail-label">Accrual frequency</span>
-                <span className="detail-value">{item.accrual_frequency}</span>
+              <div className="detail-grid">
+                <div className="detail-row"><span className="detail-label">Annual entitlement</span><span className="detail-value">{selectedDetail.annual_entitlement} units</span></div>
+                <div className="detail-row"><span className="detail-label">Effective from</span><span className="detail-value">{selectedDetail.effective_from || "Not set"}</span></div>
+                <div className="detail-row"><span className="detail-label">Effective to</span><span className="detail-value">{selectedDetail.effective_to || "Open ended"}</span></div>
+                <div className="detail-row"><span className="detail-label">Sandwich rule</span><span className="detail-value">{selectedDetail.sandwich_rule_enabled ? "Enabled" : "Disabled"}</span></div>
+                <div className="detail-row"><span className="detail-label">Probation eligible</span><span className="detail-value">{selectedDetail.is_probation_eligible ? "Yes" : "No"}</span></div>
+                <div className="detail-row"><span className="detail-label">Minimum service</span><span className="detail-value">{selectedDetail.minimum_service_days} days</span></div>
               </div>
-            </div>
-            <PlatformGovernanceNotice item={item} />
-          </article>
-        ))}
-        {filteredPolicies.length === 0 ? (
-          <div className="card panel">
-            <strong>No leave policies match the current filters.</strong>
-            <p className="section-copy section-copy-soft">Clear filters or broaden the search to review more policy records.</p>
-          </div>
-        ) : null}
+              <PlatformGovernanceNotice item={selectedDetail} />
+            </aside>
+          ) : null}
+        </div>
       </div>
 
       {selectedPolicy ? (
-        <div className="modal-backdrop" role="presentation">
-          <section aria-modal="true" className="modal-panel modal-panel--wide" role="dialog" aria-label={`Remove ${selectedPolicy.name}`}>
-            <div className="modal-panel__header">
-              <div>
-                <p className="section-eyebrow">Policy removal check</p>
-                <h2 className="section-heading-soft">{selectedPolicy.name}</h2>
-                <p className="section-copy section-copy-soft">The system checks usage before allowing permanent deletion. Used policies should be archived for audit history.</p>
-              </div>
-              <button className="button button--secondary" disabled={isActionSubmitting} onClick={closeRemoveDialog} type="button">Close</button>
-            </div>
-
+        <HrAdminActionModal
+          closeHref="/hr-admin/leave-policies"
+          description="The system checks usage before allowing permanent deletion. Used policies should be archived for audit history."
+          eyebrow="Policy removal check"
+          labelledBy={`leave-policy-remove-${selectedPolicy.id}`}
+          onClose={closeRemoveDialog}
+          title={selectedPolicy.name}
+        >
             {isImpactLoading ? (
               <div className="notice">
                 <strong>Checking impact.</strong>
@@ -289,8 +308,7 @@ export function LeavePolicyList({ canManagePolicies, policies }: Props) {
                 </button>
               </div>
             </div>
-          </section>
-        </div>
+        </HrAdminActionModal>
       ) : null}
     </section>
   );

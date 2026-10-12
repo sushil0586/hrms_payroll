@@ -211,23 +211,23 @@ export function LifecycleAgingReportWorkspace({ items }: { items: HrAdminLifecyc
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Aging records</span>
             <strong>{filteredRows.length}</strong>
             <small>{items.length} total lifecycle records</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Overdue items</span>
             <strong>{filteredRows.filter((item) => item.daysOverdue > 0).length}</strong>
             <small>SLA date has passed</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Escalations</span>
             <strong>{filteredRows.filter((item) => item.next_escalation_on).length}</strong>
             <small>Escalation date scheduled</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>High SLA risk</span>
             <strong>{filteredRows.filter((item) => item.slaRisk === "High").length}</strong>
             <small>Owner, overdue, or document blocker</small>

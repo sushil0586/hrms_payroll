@@ -152,23 +152,23 @@ export function PayrollRegisterReportWorkspace({
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <article>
             <span>Register artifacts</span>
             <strong>{filteredRows.length}</strong>
             <small>{rows.length} total source artifacts</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Gross earnings</span>
             <strong>{formatMoney(totalGross)}</strong>
             <small>Filtered total</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Deductions</span>
             <strong>{formatMoney(totalDeductions)}</strong>
             <small>Employee deductions</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Net pay</span>
             <strong>{formatMoney(totalNetPay)}</strong>
             <small>Locked output basis</small>

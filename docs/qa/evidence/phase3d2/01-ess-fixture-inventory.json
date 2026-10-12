@@ -1,0 +1,14 @@
+{
+  "db": "backend/db.phase3c_e2e.sqlite3",
+  "tenants": [
+    "northstar-foods",
+    "phase7b-isolation-tenant"
+  ],
+  "users": 129,
+  "employee_user": true,
+  "employee_docs": 7,
+  "payroll_output_artifacts": 117,
+  "payslip_artifacts": 104,
+  "statutory_declarations": 0,
+  "employees": 134
+}

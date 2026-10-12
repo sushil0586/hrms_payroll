@@ -21,6 +21,9 @@ type Props = {
     "attendance_policies" | "legal_entities" | "branches" | "locations" | "departments" | "grades" | "employment_types"
   >;
   itemId?: string;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 type AttendancePolicyAssignmentField = "attendance_policy_id" | "priority";
@@ -56,7 +59,7 @@ function filteredByLegalEntity(items: HrAdminOptionItem[], legalEntityId: string
   return items.filter((item) => !legalEntityId || item.legal_entity_id === legalEntityId);
 }
 
-export function AttendancePolicyAssignmentForm({ initialValue, mode, options, itemId }: Props) {
+export function AttendancePolicyAssignmentForm({ initialValue, mode, options, itemId, cancelHref, successHref = "/hr-admin/attendance-policy-assignments", compact = false }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -195,12 +198,20 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
       submittingRef.current = false;
       return;
     }
-    router.push("/hr-admin/attendance-policy-assignments");
+    router.push(successHref);
     router.refresh();
   }
 
+  function handleCancel() {
+    if (cancelHref) {
+      router.push(cancelHref);
+      return;
+    }
+    router.back();
+  }
+
   return (
-    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+    <form className={`section form-layout-modern attendance-policy-assignment-form${compact ? " attendance-policy-assignment-form--modal" : ""}`} noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -292,7 +303,7 @@ export function AttendancePolicyAssignmentForm({ initialValue, mode, options, it
           <span className="muted">Assignment changes apply to the rollout layer immediately.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create assignment" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
           </div>
         </div>
       </section>

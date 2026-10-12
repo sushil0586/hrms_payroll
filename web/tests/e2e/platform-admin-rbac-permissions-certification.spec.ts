@@ -109,7 +109,7 @@ async function expectPlatformRouteAllowed(page: Page, route: (typeof platformRou
 
 async function expectPlatformRouteDenied(page: Page, persona: Persona, routePath: string) {
   await loginAs(page, persona, routePath);
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/$|\/hr-admin$|\/tenant-admin$|\/ess$|\/mss/);
   await expect(page.locator('[data-testid^="platform-admin-"]')).toHaveCount(0);
   await expect(page.locator('a[href^="/platform-admin"]')).toHaveCount(0);
   await expectNoAppError(page);

@@ -1,0 +1,5856 @@
+{
+  "generatedAt": "2026-10-10T21:18:00+05:30",
+  "reference": "HR Admin Employees page and employee create/edit modal",
+  "summary": {
+    "total": 321,
+    "byWorkspace": {
+      "hr-admin": 268,
+      "ess": 17,
+      "mss": 7,
+      "tenant-admin": 14,
+      "platform-admin": 15
+    },
+    "byType": {
+      "page": 172,
+      "form": 30,
+      "workspace-component": 75,
+      "component": 18,
+      "modal-dialog-component": 16,
+      "error-state": 4,
+      "layout": 5,
+      "loading-state": 1
+    },
+    "byPriority": {
+      "medium": 151,
+      "low": 92,
+      "high": 78
+    }
+  },
+  "entries": [
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-operations/page.tsx",
+      "route": "/hr-admin/attendance-operations",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-policies/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/attendance-policies/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-policies/attendance-policy-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-policies/new/page.tsx",
+      "route": "/hr-admin/attendance-policies/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-policies/page.tsx",
+      "route": "/hr-admin/attendance-policies",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-policy-assignments/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/attendance-policy-assignments/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-policy-assignments/attendance-policy-assignment-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-policy-assignments/attendance-policy-assignment-governance-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-policy-assignments/new/page.tsx",
+      "route": "/hr-admin/attendance-policy-assignments/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-policy-assignments/page.tsx",
+      "route": "/hr-admin/attendance-policy-assignments",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-records/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/attendance-records/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-records/attendance-record-bulk-manager.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-records/attendance-record-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-records/attendance-record-import-workbench.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-records/page.tsx",
+      "route": "/hr-admin/attendance-records",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-regularizations/[itemId]/review/page.tsx",
+      "route": "/hr-admin/attendance-regularizations/[itemId]/review",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-regularizations/attendance-regularization-inline-review.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-regularizations/attendance-regularization-queue.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-regularizations/attendance-regularization-review-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/attendance-regularizations/page.tsx",
+      "route": "/hr-admin/attendance-regularizations",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/audit/page.tsx",
+      "route": "/hr-admin/audit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/compliance-evidence-strip.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/document-categories/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/document-categories/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/document-categories/document-category-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/document-categories/new/page.tsx",
+      "route": "/hr-admin/document-categories/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/document-categories/page.tsx",
+      "route": "/hr-admin/document-categories",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/document-requirements/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/document-requirements/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/document-requirements/document-requirement-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/document-requirements/new/page.tsx",
+      "route": "/hr-admin/document-requirements/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/document-requirements/page.tsx",
+      "route": "/hr-admin/document-requirements",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/documents/page.tsx",
+      "route": "/hr-admin/documents",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-documents/[itemId]/review/page.tsx",
+      "route": "/hr-admin/employee-documents/[itemId]/review",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-documents/employee-document-inline-review.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-documents/employee-document-queue.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "verified",
+      "priority": "high",
+      "recommendation": "converted from stacked record cards to table/detail drawer; filters, reminders, export and review actions preserved",
+      "evidence": [
+        "/tmp/hrms-documents-table-drawer-desktop.png",
+        "/tmp/hrms-documents-table-drawer-mobile.png"
+      ],
+      "remainingIssues": [
+        "Inline review panel still uses legacy inner form layout."
+      ]
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-documents/employee-document-review-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "verified",
+      "priority": "high",
+      "recommendation": "uses WorkspaceStatusBadge and WorkspaceFormFooter; metadata/review API preserved",
+      "evidence": [
+        "/tmp/hrms-batch1-document-review-1440-followup.png",
+        "/tmp/hrms-batch1-document-review-390-followup.png"
+      ],
+      "remainingIssues": []
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-documents/employee-document-upload-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-documents/new/page.tsx",
+      "route": "/hr-admin/employee-documents/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-documents/page.tsx",
+      "route": "/hr-admin/employee-documents",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "verified",
+      "priority": "high",
+      "recommendation": "uses approved internal page standard: compact summary, table-first queue, selected row, document detail drawer",
+      "evidence": [
+        "/tmp/hrms-documents-table-drawer-desktop.png",
+        "/tmp/hrms-documents-table-drawer-mobile.png"
+      ],
+      "remainingIssues": [
+        "Document upload/new form remains for later document-management batch."
+      ]
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-shift-assignments/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/employee-shift-assignments/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-shift-assignments/employee-shift-assignment-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-shift-assignments/employee-shift-assignment-governance-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-shift-assignments/employee-shift-assignment-import-workbench.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-shift-assignments/new/page.tsx",
+      "route": "/hr-admin/employee-shift-assignments/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employee-shift-assignments/page.tsx",
+      "route": "/hr-admin/employee-shift-assignments",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/[employeeId]/access/access-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "verified",
+      "priority": "high",
+      "recommendation": "runs inside HrAdminActionModal; retain permission/API behavior",
+      "evidence": [
+        "/tmp/hrms-batch1-employee-access-modal-desktop-1440.png"
+      ],
+      "remainingIssues": []
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/[employeeId]/access/page.tsx",
+      "route": "/hr-admin/employees/[employeeId]/access",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/[employeeId]/bank-accounts/bank-account-manager.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "component-migrated",
+      "priority": "high",
+      "recommendation": "runs inside HrAdminActionModal; add dedicated keyboard smoke check in next modal batch",
+      "evidence": [],
+      "remainingIssues": [
+        "Needs dedicated browser keyboard verification."
+      ]
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/[employeeId]/bank-accounts/page.tsx",
+      "route": "/hr-admin/employees/[employeeId]/bank-accounts",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/[employeeId]/edit/page.tsx",
+      "route": "/hr-admin/employees/[employeeId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/employee-bank-import-workbench.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/employee-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "verified",
+      "priority": "high",
+      "recommendation": "guided four-step create/edit form using shared sticky footer and modal shell",
+      "evidence": [
+        "/tmp/hrms-batch1-employee-create-modal-mobile-followup.png"
+      ],
+      "remainingIssues": []
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/employee-import-workbench.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/employee-manager-import-workbench.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/new/page.tsx",
+      "route": "/hr-admin/employees/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/employees/page.tsx",
+      "route": "/hr-admin/employees",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": true,
+        "modal": true,
+        "drawer": true,
+        "dashboard": true
+      },
+      "status": "verified",
+      "priority": "high",
+      "recommendation": "approved compact employee directory/detail reference; preserve as queue/table standard",
+      "evidence": [
+        "/tmp/hrms-batch1-employees-desktop-1440.png"
+      ],
+      "remainingIssues": []
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/error.tsx",
+      "route": null,
+      "type": "error-state",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/exits/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/exits/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/exits/exit-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/exits/exit-queue.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/exits/new/page.tsx",
+      "route": "/hr-admin/exits/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/exits/page.tsx",
+      "route": "/hr-admin/exits",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/generated-letters/generated-letter-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/generated-letters/page.tsx",
+      "route": "/hr-admin/generated-letters",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/holiday-calendars/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/holiday-calendars/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/holiday-calendars/holiday-calendar-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/holiday-calendars/new/page.tsx",
+      "route": "/hr-admin/holiday-calendars/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/holiday-calendars/page.tsx",
+      "route": "/hr-admin/holiday-calendars",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/import-history/import-history-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/import-history/page.tsx",
+      "route": "/hr-admin/import-history",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/launch-remediation/launch-remediation-actions.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/launch-remediation/page.tsx",
+      "route": "/hr-admin/launch-remediation",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/layout.tsx",
+      "route": null,
+      "type": "layout",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-balances/leave-balance-operations.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-balances/page.tsx",
+      "route": "/hr-admin/leave-balances",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policies/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/leave-policies/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policies/leave-policy-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policies/leave-policy-list.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policies/new/page.tsx",
+      "route": "/hr-admin/leave-policies/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policies/page.tsx",
+      "route": "/hr-admin/leave-policies",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policy-assignments/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/leave-policy-assignments/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policy-assignments/leave-policy-assignment-actions.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": true,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policy-assignments/leave-policy-assignment-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policy-assignments/leave-policy-assignment-governance-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policy-assignments/leave-policy-assignment-import-workbench.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policy-assignments/new/page.tsx",
+      "route": "/hr-admin/leave-policy-assignments/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-policy-assignments/page.tsx",
+      "route": "/hr-admin/leave-policy-assignments",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-requests/leave-request-import-workbench.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-requests/leave-request-queue.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-requests/page.tsx",
+      "route": "/hr-admin/leave-requests",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-types/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/leave-types/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-types/leave-type-actions.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-types/leave-type-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-types/new/page.tsx",
+      "route": "/hr-admin/leave-types/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/leave-types/page.tsx",
+      "route": "/hr-admin/leave-types",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/lifecycle/lifecycle-item-editor.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/lifecycle/lifecycle-queue.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "verified",
+      "priority": "high",
+      "recommendation": "converted from stacked record cards to table/detail drawer; bulk owner/status actions and record links preserved",
+      "evidence": [
+        "/tmp/hrms-lifecycle-table-drawer-desktop.png",
+        "/tmp/hrms-lifecycle-table-drawer-mobile.png"
+      ],
+      "remainingIssues": []
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/lifecycle/page.tsx",
+      "route": "/hr-admin/lifecycle",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "verified",
+      "priority": "high",
+      "recommendation": "uses approved internal page standard: compact summary, table-first lifecycle queue, selected row, lifecycle detail drawer",
+      "evidence": [
+        "/tmp/hrms-lifecycle-table-drawer-desktop.png",
+        "/tmp/hrms-lifecycle-table-drawer-mobile.png"
+      ],
+      "remainingIssues": [
+        "Lifecycle child edit forms need deeper visual review."
+      ]
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/loading.tsx",
+      "route": null,
+      "type": "loading-state",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/movements/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/movements/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/movements/movement-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/movements/movement-queue.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/movements/new/page.tsx",
+      "route": "/hr-admin/movements/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/movements/page.tsx",
+      "route": "/hr-admin/movements",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-delivery/notification-delivery-manager.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-delivery/page.tsx",
+      "route": "/hr-admin/notification-delivery",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-diagnostics/page.tsx",
+      "route": "/hr-admin/notification-diagnostics",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-events/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/notification-events/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-events/new/page.tsx",
+      "route": "/hr-admin/notification-events/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-events/notification-event-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-events/page.tsx",
+      "route": "/hr-admin/notification-events",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-templates/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/notification-templates/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-templates/new/page.tsx",
+      "route": "/hr-admin/notification-templates/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-templates/notification-template-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notification-templates/page.tsx",
+      "route": "/hr-admin/notification-templates",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notifications/[itemId]/review/page.tsx",
+      "route": "/hr-admin/notifications/[itemId]/review",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notifications/notification-inline-review.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notifications/notification-preview-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notifications/notification-queue.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notifications/notification-retry-action.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notifications/page.tsx",
+      "route": "/hr-admin/notifications",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/notifications-admin/page.tsx",
+      "route": "/hr-admin/notifications-admin",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/onboardings/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/onboardings/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/onboardings/new/page.tsx",
+      "route": "/hr-admin/onboardings/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/onboardings/onboarding-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/onboardings/onboarding-queue.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/onboardings/page.tsx",
+      "route": "/hr-admin/onboardings",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/operations-governance-strip.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/organization/[section]/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/organization/[section]/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/organization/[section]/new/page.tsx",
+      "route": "/hr-admin/organization/[section]/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/organization/organization-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/organization/organization-guided-setup.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/organization/organization-import-workbench.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/organization/page.tsx",
+      "route": "/hr-admin/organization",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/page.tsx",
+      "route": "/hr-admin",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-adjustments/page.tsx",
+      "route": "/hr-admin/payroll-adjustments",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-adjustments/payroll-adjustment-actions-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-calculations/page.tsx",
+      "route": "/hr-admin/payroll-calculations",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-close-actions-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-cycle-journey.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-handoff/page.tsx",
+      "route": "/hr-admin/payroll-handoff",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-inputs/page.tsx",
+      "route": "/hr-admin/payroll-inputs",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-inputs/payroll-input-operations-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-outputs/page.tsx",
+      "route": "/hr-admin/payroll-outputs",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-providers/launch-rehearsal-actions.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-providers/mapping-pack-lifecycle-actions.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-providers/mapping-pack-rule-builder.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": true,
+        "drawer": true,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate modal to standard dialog shell with focus/dirty handling; align drawer to inspection-panel standard"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-providers/page.tsx",
+      "route": "/hr-admin/payroll-providers",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-providers/provider-certification-actions.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-providers/provider-connection-activation-action.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-providers/provider-connection-editor.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-readiness/page.tsx",
+      "route": "/hr-admin/payroll-readiness",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-review/page.tsx",
+      "route": "/hr-admin/payroll-review",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-review/payroll-review-exception-actions.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-rules/page.tsx",
+      "route": "/hr-admin/payroll-rules",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-rules/payroll-rule-operations-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-settlements/page.tsx",
+      "route": "/hr-admin/payroll-settlements",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-settlements/payroll-settlement-actions-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-setup/page.tsx",
+      "route": "/hr-admin/payroll-setup",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-setup/payroll-setup-crud-console.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-shared/setup-record-list.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-statutory/page.tsx",
+      "route": "/hr-admin/payroll-statutory",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-statutory/payroll-statutory-crud-console.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/payroll-workflow-guide.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/policies/page.tsx",
+      "route": "/hr-admin/policies",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/policy-assignments/page.tsx",
+      "route": "/hr-admin/policy-assignments",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/probation-reviews/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/probation-reviews/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/probation-reviews/new/page.tsx",
+      "route": "/hr-admin/probation-reviews/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/probation-reviews/page.tsx",
+      "route": "/hr-admin/probation-reviews",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/probation-reviews/probation-review-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/probation-reviews/probation-review-queue.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/attendance/page.tsx",
+      "route": "/hr-admin/reports/attendance",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/attendance-derivation-exceptions/attendance-derivation-exceptions-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/attendance-derivation-exceptions/page.tsx",
+      "route": "/hr-admin/reports/attendance-derivation-exceptions",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/attendance-exceptions/attendance-exceptions-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/attendance-exceptions/page.tsx",
+      "route": "/hr-admin/reports/attendance-exceptions",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/attendance-register/attendance-register-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/attendance-register/page.tsx",
+      "route": "/hr-admin/reports/attendance-register",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/bank-advice/bank-advice-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/bank-advice/page.tsx",
+      "route": "/hr-admin/reports/bank-advice",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/challan-reconciliation/challan-reconciliation-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/challan-reconciliation/page.tsx",
+      "route": "/hr-admin/reports/challan-reconciliation",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/compliance/compliance-report-hub-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/compliance/page.tsx",
+      "route": "/hr-admin/reports/compliance",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/compliance-summary/compliance-summary-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/compliance-summary/page.tsx",
+      "route": "/hr-admin/reports/compliance-summary",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/document-compliance/document-compliance-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/document-compliance/page.tsx",
+      "route": "/hr-admin/reports/document-compliance",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/esic-contribution-readiness/esic-contribution-readiness-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/esic-contribution-readiness/page.tsx",
+      "route": "/hr-admin/reports/esic-contribution-readiness",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/export-audits/page.tsx",
+      "route": "/hr-admin/reports/export-audits",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/export-audits/report-export-audit-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/finance-handoff-exceptions/finance-handoff-exceptions-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/finance-handoff-exceptions/page.tsx",
+      "route": "/hr-admin/reports/finance-handoff-exceptions",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/hr-core/page.tsx",
+      "route": "/hr-admin/reports/hr-core",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/leave-attendance-collisions/leave-attendance-collisions-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/leave-attendance-collisions/page.tsx",
+      "route": "/hr-admin/reports/leave-attendance-collisions",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/leave-balance/leave-balance-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/leave-balance/page.tsx",
+      "route": "/hr-admin/reports/leave-balance",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/lifecycle-aging/lifecycle-aging-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/lifecycle-aging/page.tsx",
+      "route": "/hr-admin/reports/lifecycle-aging",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/lifecycle-queue/lifecycle-queue-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/lifecycle-queue/page.tsx",
+      "route": "/hr-admin/reports/lifecycle-queue",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/lwf-readiness/lwf-readiness-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/lwf-readiness/page.tsx",
+      "route": "/hr-admin/reports/lwf-readiness",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/page.tsx",
+      "route": "/hr-admin/reports",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll/page.tsx",
+      "route": "/hr-admin/reports/payroll",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-adjustments/page.tsx",
+      "route": "/hr-admin/reports/payroll-adjustments",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-adjustments/payroll-adjustments-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-close-readiness/page.tsx",
+      "route": "/hr-admin/reports/payroll-close-readiness",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-close-readiness/payroll-close-readiness-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-input-exceptions/page.tsx",
+      "route": "/hr-admin/reports/payroll-input-exceptions",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-input-exceptions/payroll-input-exceptions-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-register/page.tsx",
+      "route": "/hr-admin/reports/payroll-register",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-register/payroll-register-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-review-exceptions/page.tsx",
+      "route": "/hr-admin/reports/payroll-review-exceptions",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-review-exceptions/payroll-review-exceptions-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-settlements/page.tsx",
+      "route": "/hr-admin/reports/payroll-settlements",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payroll-settlements/payroll-settlements-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payslip-publication/page.tsx",
+      "route": "/hr-admin/reports/payslip-publication",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/payslip-publication/payslip-publication-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/pf-ecr-readiness/page.tsx",
+      "route": "/hr-admin/reports/pf-ecr-readiness",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/pf-ecr-readiness/pf-ecr-readiness-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/professional-tax-readiness/page.tsx",
+      "route": "/hr-admin/reports/professional-tax-readiness",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/professional-tax-readiness/professional-tax-readiness-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/provider-filing-receipts/page.tsx",
+      "route": "/hr-admin/reports/provider-filing-receipts",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/provider-filing-receipts/provider-filing-receipts-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/report-catalog-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/report-family-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/report-insights-strip.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/roster-rollout-audit/page.tsx",
+      "route": "/hr-admin/reports/roster-rollout-audit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/roster-rollout-audit/roster-rollout-audit-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/salary-variance/page.tsx",
+      "route": "/hr-admin/reports/salary-variance",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/salary-variance/salary-variance-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/statutory-deductions/page.tsx",
+      "route": "/hr-admin/reports/statutory-deductions",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/statutory-deductions/statutory-deductions-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/statutory-filing-status/page.tsx",
+      "route": "/hr-admin/reports/statutory-filing-status",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/statutory-filing-status/statutory-filing-status-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/tds-efile-readiness/page.tsx",
+      "route": "/hr-admin/reports/tds-efile-readiness",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/tds-efile-readiness/tds-efile-readiness-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/workforce/page.tsx",
+      "route": "/hr-admin/reports/workforce",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/reports/workforce/workforce-report-workspace.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/saas-control-plane/commercial-lifecycle-actions.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/saas-control-plane/page.tsx",
+      "route": "/hr-admin/saas-control-plane",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/saas-operations/page.tsx",
+      "route": "/hr-admin/saas-operations",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/saas-resilience/page.tsx",
+      "route": "/hr-admin/saas-resilience",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/saas-sla-operations/page.tsx",
+      "route": "/hr-admin/saas-sla-operations",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/salary-setup/page.tsx",
+      "route": "/hr-admin/salary-setup",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": true,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/salary-setup/salary-setup-crud-console.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/shift-roster-templates/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/shift-roster-templates/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/shift-roster-templates/new/page.tsx",
+      "route": "/hr-admin/shift-roster-templates/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/shift-roster-templates/page.tsx",
+      "route": "/hr-admin/shift-roster-templates",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/shift-roster-templates/shift-roster-rollout-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/shift-roster-templates/shift-roster-template-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/shifts/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/shifts/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/shifts/new/page.tsx",
+      "route": "/hr-admin/shifts/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/shifts/page.tsx",
+      "route": "/hr-admin/shifts",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/shifts/shift-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/time-leave-operations-strip.tsx",
+      "route": null,
+      "type": "component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/time-to-payroll/page.tsx",
+      "route": "/hr-admin/time-to-payroll",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/workflow-template-assignments/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/workflow-template-assignments/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/workflow-template-assignments/new/page.tsx",
+      "route": "/hr-admin/workflow-template-assignments/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/workflow-template-assignments/page.tsx",
+      "route": "/hr-admin/workflow-template-assignments",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/workflow-template-assignments/workflow-template-assignment-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/workflow-templates/[itemId]/edit/page.tsx",
+      "route": "/hr-admin/workflow-templates/[itemId]/edit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/workflow-templates/new/page.tsx",
+      "route": "/hr-admin/workflow-templates/new",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/workflow-templates/page.tsx",
+      "route": "/hr-admin/workflow-templates",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/workflow-templates/workflow-template-form.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "hr-admin",
+      "path": "hr-admin/workflows/page.tsx",
+      "route": "/hr-admin/workflows",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/attendance/attendance-workspace.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/attendance/page.tsx",
+      "route": "/ess/attendance",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/documents/employee-document-center.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/documents/page.tsx",
+      "route": "/ess/documents",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/error.tsx",
+      "route": null,
+      "type": "error-state",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/ess-request-submission-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/layout.tsx",
+      "route": null,
+      "type": "layout",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/leave/leave-workspace.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/leave/page.tsx",
+      "route": "/ess/leave",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/leave-request-lifecycle-actions.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": true,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/notifications/page.tsx",
+      "route": "/ess/notifications",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/page.tsx",
+      "route": "/ess",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/payslips/page.tsx",
+      "route": "/ess/payslips",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": true,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar; migrate table density/status/action columns to standard data table; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/payslips/payslip-detail-action.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/payslips/payslip-read-receipt-action.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": false
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/statutory-declarations/page.tsx",
+      "route": "/ess/statutory-declarations",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "ess",
+      "path": "ess/statutory-declarations/statutory-declaration-workspace.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "mss",
+      "path": "mss/approvals/manager-approval-review-action.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "mss",
+      "path": "mss/approvals/manager-decision-panel.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "mss",
+      "path": "mss/approvals/page.tsx",
+      "route": "/mss/approvals",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "mss",
+      "path": "mss/error.tsx",
+      "route": null,
+      "type": "error-state",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "mss",
+      "path": "mss/layout.tsx",
+      "route": null,
+      "type": "layout",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "mss",
+      "path": "mss/notifications/page.tsx",
+      "route": "/mss/notifications",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "mss",
+      "path": "mss/page.tsx",
+      "route": "/mss",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/layout.tsx",
+      "route": null,
+      "type": "layout",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/page.tsx",
+      "route": "/tenant-admin",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/plan/page.tsx",
+      "route": "/tenant-admin/plan",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/roles/page.tsx",
+      "route": "/tenant-admin/roles",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/security-readiness/page.tsx",
+      "route": "/tenant-admin/security-readiness",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/settings/page.tsx",
+      "route": "/tenant-admin/settings",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/setup/page.tsx",
+      "route": "/tenant-admin/setup",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/support-access/page.tsx",
+      "route": "/tenant-admin/support-access",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/tenant-change-request-actions.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/tenant-membership-actions.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/tenant-role-actions.tsx",
+      "route": null,
+      "type": "modal-dialog-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/tenant-support-access-actions.tsx",
+      "route": null,
+      "type": "workspace-component",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/trust-audit/page.tsx",
+      "route": "/tenant-admin/trust-audit",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "tenant-admin",
+      "path": "tenant-admin/users/page.tsx",
+      "route": "/tenant-admin/users",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/admins/page.tsx",
+      "route": "/platform-admin/admins",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/audit-logs/page.tsx",
+      "route": "/platform-admin/audit-logs",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/error.tsx",
+      "route": null,
+      "type": "error-state",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "low",
+      "recommendation": "visual QA against employee reference"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/launch/page.tsx",
+      "route": "/platform-admin/launch",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/layout.tsx",
+      "route": null,
+      "type": "layout",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/leads/page.tsx",
+      "route": "/platform-admin/leads",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/onboarding/page.tsx",
+      "route": "/platform-admin/onboarding",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/page.tsx",
+      "route": "/platform-admin",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/permissions/page.tsx",
+      "route": "/platform-admin/permissions",
+      "type": "page",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/permissions/permission-catalog-actions.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": false,
+        "table": false,
+        "form": true,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "use guided form layout and fixed action footer; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/platform-admin-console.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": true,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": true,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer; migrate modal to standard dialog shell with focus/dirty handling"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/platform-admin-renderer.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/platform-launch-workspace.tsx",
+      "route": null,
+      "type": "form",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": true,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "high",
+      "recommendation": "align filters/actions to standard toolbar; use guided form layout and fixed action footer"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/policy-packs/page.tsx",
+      "route": "/platform-admin/policy-packs",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    },
+    {
+      "workspace": "platform-admin",
+      "path": "platform-admin/tenants/page.tsx",
+      "route": "/platform-admin/tenants",
+      "type": "page",
+      "patterns": {
+        "pageIntro": false,
+        "toolbar": true,
+        "table": false,
+        "form": false,
+        "modal": false,
+        "drawer": false,
+        "dashboard": true
+      },
+      "status": "not-started",
+      "priority": "medium",
+      "recommendation": "adopt standard page header; align filters/actions to standard toolbar"
+    }
+  ]
+}

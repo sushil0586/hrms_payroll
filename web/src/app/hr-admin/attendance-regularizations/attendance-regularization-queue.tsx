@@ -1,17 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import { AttendanceRegularizationInlineReview } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-inline-review";
-import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { AttendanceRegularizationReviewForm } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-review-form";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
+import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { AttendanceRegularizationItem, HrAdminEnumOption } from "@/lib/types";
 
 type Props = {
   items: AttendanceRegularizationItem[];
   regularizationStatusOptions: HrAdminEnumOption[];
   attendanceStatusOptions: HrAdminEnumOption[];
+  reviewItem?: AttendanceRegularizationItem | null;
   currentFilters: {
     q: string;
     status: string;
@@ -35,9 +38,7 @@ type Props = {
 function buildQueryString(params: Record<string, string | number | boolean | undefined>) {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === "" || value === false) {
-      return;
-    }
+    if (value === undefined || value === "" || value === false) return;
     query.set(key, String(value));
   });
   const queryString = query.toString();
@@ -57,14 +58,19 @@ function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function statusTone(status: string) {
+  if (status === "approved") return "success";
+  if (status === "rejected" || status === "cancelled") return "danger";
+  if (status === "pending") return "warning";
+  return "neutral";
+}
+
 function getWaitingLabel(item: AttendanceRegularizationItem) {
   if (item.status !== "pending") {
     return item.status === "approved" ? "Approved" : item.status === "rejected" ? "Rejected" : titleCase(item.status);
   }
   const currentStep = item.approval_steps?.find((step) => step.is_current) ?? item.approval_steps?.[0];
-  if (currentStep?.manager_name) {
-    return `Pending approval from ${currentStep.manager_name}`;
-  }
+  if (currentStep?.manager_name) return `Pending approval from ${currentStep.manager_name}`;
   return "Pending approval from configured approver";
 }
 
@@ -72,12 +78,15 @@ export function AttendanceRegularizationQueue({
   items,
   regularizationStatusOptions,
   attendanceStatusOptions,
+  reviewItem,
   currentFilters,
   pagination,
   canReviewRegularizations = true,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const reviewRegularizationId = searchParams.get("reviewRegularization") ?? "";
   const [search, setSearch] = useState(currentFilters.q);
   const [status, setStatus] = useState(currentFilters.status || "all");
   const [requestedStatus, setRequestedStatus] = useState(currentFilters.requested_status || "all");
@@ -85,22 +94,34 @@ export function AttendanceRegularizationQueue({
   const [fromDate, setFromDate] = useState(currentFilters.from_date);
   const [toDate, setToDate] = useState(currentFilters.to_date);
   const [pageSize, setPageSize] = useState(String(currentFilters.page_size));
+  const [selectedItemId, setSelectedItemId] = useState(items[0]?.id ?? "");
 
-  function goToPage(page: number) {
-    router.push(`${pathname}${buildQueryString({
+  const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
+  const modalReviewItem = canReviewRegularizations && reviewRegularizationId ? reviewItem : null;
+  const numericPageSize = Number(pageSize) || currentFilters.page_size;
+  const totalPages = Math.max(1, Math.ceil(pagination.total_count / Math.max(numericPageSize, 1)));
+  const pageStart = pagination.total_count === 0 ? 0 : ((pagination.page - 1) * numericPageSize) + 1;
+  const pageEnd = pagination.total_count === 0 ? 0 : Math.min(pagination.page * numericPageSize, pagination.total_count);
+  const pendingCount = items.filter((item) => item.status === "pending").length;
+  const approvedCount = items.filter((item) => item.status === "approved").length;
+  const rejectedCount = items.filter((item) => item.status === "rejected").length;
+
+  function currentQueueHref(params: Record<string, string | number | boolean | undefined> = {}) {
+    return `${pathname}${buildQueryString({
       q: search.trim() || undefined,
       status: status !== "all" ? status : undefined,
       requested_status: requestedStatus !== "all" ? requestedStatus : undefined,
       current_status: currentStatus !== "all" ? currentStatus : undefined,
       from_date: fromDate || undefined,
       to_date: toDate || undefined,
-      page,
-      page_size: Number(pageSize) || currentFilters.page_size,
-    })}`);
+      page: pagination.page,
+      page_size: numericPageSize,
+      ...params,
+    })}`;
   }
 
-  function applyFilters() {
-    goToPage(1);
+  function goToPage(page: number) {
+    router.push(currentQueueHref({ page, reviewRegularization: undefined }));
   }
 
   function clearFilters() {
@@ -115,19 +136,27 @@ export function AttendanceRegularizationQueue({
   }
 
   return (
-    <section className="section queue-layout">
-      <section className="queue-toolbar panel-card-soft">
+    <section className="section queue-layout attendance-regularization-layout">
+      <div className="hr-employee-summary-strip attendance-summary-strip">
+        <span><strong>{pagination.total_count}</strong> requests</span>
+        <span><strong>{pendingCount}</strong> pending on page</span>
+        <span><strong>{approvedCount}</strong> approved on page</span>
+        <span><strong>{rejectedCount}</strong> rejected on page</span>
+        <span><strong>{regularizationStatusOptions.length}</strong> statuses</span>
+      </div>
+
+      <section className="queue-toolbar panel-card-soft attendance-queue-toolbar">
         <div className="queue-toolbar__header">
           <div>
             <h2 className="section-heading-soft">Regularizations</h2>
             <p className="section-copy section-copy-soft">Search, filter, and review correction requests.</p>
           </div>
           <div className="queue-toolbar__meta">
-            <span className="queue-summary-chip"><strong>{pagination.total_count}</strong> total requests</span>
+            <span className="queue-summary-chip"><strong>{items.length}</strong> in this view</span>
             <span className="queue-summary-chip"><strong>{items.length}</strong> on this page</span>
           </div>
         </div>
-        <div className="queue-toolbar__grid">
+        <WorkspaceFilterBar className="queue-toolbar__grid attendance-filter-grid">
           <label className="form-field">
             <span className="muted">Search</span>
             <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Employee, code, date, shift, reason" value={search} />
@@ -140,116 +169,199 @@ export function AttendanceRegularizationQueue({
             </select>
           </label>
           <label className="form-field">
-            <span className="muted">Requested attendance status</span>
+            <span className="muted">Requested status</span>
             <select className="input-control" onChange={(event) => setRequestedStatus(event.target.value)} value={requestedStatus}>
               <option value="all">All requested statuses</option>
               {attendanceStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
-          <label className="form-field">
-            <span className="muted">Current attendance status</span>
-            <select className="input-control" onChange={(event) => setCurrentStatus(event.target.value)} value={currentStatus}>
-              <option value="all">All current statuses</option>
-              {attendanceStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <label className="form-field">
-            <span className="muted">From date</span>
-            <input className="input-control" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
-          </label>
-          <label className="form-field">
-            <span className="muted">To date</span>
-            <input className="input-control" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
-          </label>
-          <label className="form-field">
-            <span className="muted">Rows per page</span>
-            <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
-              {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
-            </select>
-          </label>
-        </div>
-        <div className="queue-toolbar__actions">
-          <button className="button button--primary" onClick={applyFilters} type="button">Apply filters</button>
+          <details className="directory-more-filters attendance-more-filters">
+            <summary className="button button--secondary button--compact">More filters</summary>
+            <div className="directory-more-filters__panel attendance-more-filters__panel">
+              <label className="form-field">
+                <span className="muted">Current status</span>
+                <select className="input-control" onChange={(event) => setCurrentStatus(event.target.value)} value={currentStatus}>
+                  <option value="all">All current statuses</option>
+                  {attendanceStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label className="form-field">
+                <span className="muted">From date</span>
+                <input className="input-control" onChange={(event) => setFromDate(event.target.value)} type="date" value={fromDate} />
+              </label>
+              <label className="form-field">
+                <span className="muted">To date</span>
+                <input className="input-control" onChange={(event) => setToDate(event.target.value)} type="date" value={toDate} />
+              </label>
+            </div>
+          </details>
+        </WorkspaceFilterBar>
+        <div className="queue-toolbar__actions attendance-toolbar-actions">
+          <button className="button button--primary" onClick={() => goToPage(1)} type="button">Apply filters</button>
           <button className="button button--ghost" onClick={clearFilters} type="button">Clear filters</button>
-        </div>
-        <div className="queue-toolbar__summary">
-          <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> shared state</span>
-          <span className="queue-summary-chip"><strong>{regularizationStatusOptions.length}</strong> request statuses</span>
         </div>
       </section>
 
-      <div className="queue-list">
-        {items.map((item) => (
-          <article className="record-card panel-card-soft" key={item.id}>
+      <div className={`attendance-review-workbench${selectedItem ? " attendance-review-workbench--with-detail" : ""}`}>
+        <article className="record-card panel-card-soft attendance-directory-panel">
+          <div className="employee-directory-table-wrap attendance-directory-table-wrap">
+            {items.length ? (
+              <table className="employee-directory-table attendance-directory-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Attendance</th>
+                    <th>Status</th>
+                    <th>Requested</th>
+                    <th>Workflow</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => {
+                    const isSelected = selectedItem?.id === item.id;
+                    return (
+                      <tr className={isSelected ? "employee-directory-table__row--active" : ""} key={item.id}>
+                        <td>
+                          <button className="document-table-title-button" onClick={() => setSelectedItemId(item.id)} type="button">
+                            <strong>{item.employee_name || "Unknown employee"}</strong>
+                            <small>{item.employee_code || "No code"} · {item.department || "Unassigned"}</small>
+                          </button>
+                        </td>
+                        <td>
+                          <strong>{item.attendance_date}</strong>
+                          <small>{item.shift || "No shift"}</small>
+                        </td>
+                        <td>
+                          <WorkspaceStatusBadge tone={statusTone(item.status)}>{titleCase(item.status)}</WorkspaceStatusBadge>
+                          <small>{titleCase(item.current_status)}</small>
+                        </td>
+                        <td>
+                          <strong>{titleCase(item.requested_status)}</strong>
+                          <small>{item.reason || "No reason"}</small>
+                        </td>
+                        <td>
+                          <strong>{item.workflow_reference || "Not linked"}</strong>
+                          <small>{item.approval_steps?.length ?? 0} approval steps</small>
+                        </td>
+                        <td>
+                          <button className="button button--secondary button--compact" onClick={() => setSelectedItemId(item.id)} type="button">Inspect</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <div className="notice">
+                <strong>No regularizations match the current filters.</strong>
+                <span className="muted">Try clearing one or more filters to widen the queue.</span>
+              </div>
+            )}
+          </div>
+        </article>
+
+        {selectedItem ? (
+          <article className="record-card panel-card-soft employee-detail-drawer attendance-detail-drawer">
             <div className="record-card__header">
               <div className="record-card__title-wrap">
-                <div className="record-card__title">
-                  <h2>{item.employee_name}</h2>
-                </div>
-                <div className="record-card__eyebrow">
-                  <span className="record-chip record-chip--accent">{titleCase(item.status)}</span>
-                  <span className="record-chip">{titleCase(item.current_status)} to {titleCase(item.requested_status)}</span>
-                  <span className="record-chip">{item.approval_steps?.length ?? 0} approval steps</span>
-                </div>
-                <p className="section-copy section-copy-soft">{item.employee_code} • {item.attendance_date} • {item.shift || "No shift"}</p>
+                <h2 className="section-heading-soft">Regularization detail</h2>
+                <p className="section-copy section-copy-soft">Focused detail for the selected correction request.</p>
               </div>
-              {canReviewRegularizations ? (
-                <div className="record-card__actions">
-                  <Link className="button button--secondary" href={`/hr-admin/attendance-regularizations/${item.id}/review`}>
-                    Review request
-                  </Link>
-                </div>
-              ) : null}
+              <div className="record-card__actions">
+                <button className="button button--ghost button--compact" onClick={() => setSelectedItemId("")} type="button">Close</button>
+                {canReviewRegularizations ? (
+                  <Link className="button button--secondary button--compact" href={currentQueueHref({ reviewRegularization: selectedItem.id })}>Review request</Link>
+                ) : (
+                  <button className="button button--secondary button--compact" disabled title="Requires attendance.regularization.review permission." type="button">Review request</button>
+                )}
+              </div>
+            </div>
+            <div className="document-detail-identity">
+              <div>
+                <h3>{selectedItem.employee_name || "Unknown employee"}</h3>
+                <p>{selectedItem.employee_code || "No code"} · {selectedItem.attendance_date} · {selectedItem.shift || "No shift"}</p>
+              </div>
+              <WorkspaceStatusBadge tone={statusTone(selectedItem.status)}>{titleCase(selectedItem.status)}</WorkspaceStatusBadge>
             </div>
             <div className="notice notice--quiet">
-              <strong>{getWaitingLabel(item)}</strong>
-              <span className="muted">{item.shift ? `Shift: ${item.shift}` : "No shift is assigned to this attendance record."}</span>
+              <strong>{getWaitingLabel(selectedItem)}</strong>
+              <span className="muted">{selectedItem.shift ? `Shift: ${selectedItem.shift}` : "No shift is assigned to this attendance record."}</span>
             </div>
-            <div className="detail-grid">
-              <div className="detail-row"><span className="detail-label">Applied at</span><span className="detail-value">{formatDateTime(item.applied_at)}</span></div>
-              <div className="detail-row"><span className="detail-label">Reason</span><span className="detail-value">{item.reason || "No reason"}</span></div>
-              <div className="detail-row"><span className="detail-label">Manager comment</span><span className="detail-value">{item.manager_comment || "None"}</span></div>
-              <div className="detail-row"><span className="detail-label">Workflow reference</span><span className="detail-value">{item.workflow_reference || "Not linked"}</span></div>
-            </div>
-            <div className="queue-list queue-list--compact">
-              {(item.approval_steps ?? []).length ? item.approval_steps?.map((step) => (
-                <div className="detail-row" key={`${item.id}-${step.level}-${step.name}`}>
-                  <span className="detail-label">Level {step.level} • {titleCase(step.status)}</span>
-                  <span className="detail-value">{step.name}: {step.manager_name || "Configured approver"}{step.comment ? ` • ${step.comment}` : ""}</span>
+            <div className="employee-detail-stack detail-grid-soft">
+              <details className="employee-detail-section" open>
+                <summary>Request</summary>
+                <div className="employee-detail-section__grid">
+                  <div className="detail-row"><span className="detail-label">Employee</span><span className="detail-value">{selectedItem.employee_name} ({selectedItem.employee_code})</span></div>
+                  <div className="detail-row"><span className="detail-label">Department</span><span className="detail-value">{selectedItem.department || "Unassigned"}</span></div>
+                  <div className="detail-row"><span className="detail-label">Current to requested</span><span className="detail-value">{titleCase(selectedItem.current_status)} to {titleCase(selectedItem.requested_status)}</span></div>
+                  <div className="detail-row"><span className="detail-label">Applied at</span><span className="detail-value">{formatDateTime(selectedItem.applied_at)}</span></div>
+                  <div className="detail-row"><span className="detail-label">Reason</span><span className="detail-value">{selectedItem.reason || "No reason"}</span></div>
+                  <div className="detail-row"><span className="detail-label">Workflow</span><span className="detail-value">{selectedItem.workflow_reference || "Not linked"}</span></div>
                 </div>
-              )) : (
-                <div className="detail-row">
-                  <span className="detail-label">Approval track</span>
-                  <span className="detail-value">No workflow evidence attached to this request.</span>
+              </details>
+              <details className="employee-detail-section" open>
+                <summary>Times and comments</summary>
+                <div className="employee-detail-section__grid">
+                  <div className="detail-row"><span className="detail-label">Actual check in</span><span className="detail-value">{formatDateTime(selectedItem.actual_check_in_at)}</span></div>
+                  <div className="detail-row"><span className="detail-label">Requested check in</span><span className="detail-value">{formatDateTime(selectedItem.requested_check_in_at)}</span></div>
+                  <div className="detail-row"><span className="detail-label">Actual check out</span><span className="detail-value">{formatDateTime(selectedItem.actual_check_out_at)}</span></div>
+                  <div className="detail-row"><span className="detail-label">Requested check out</span><span className="detail-value">{formatDateTime(selectedItem.requested_check_out_at)}</span></div>
+                  <div className="detail-row"><span className="detail-label">Manager comment</span><span className="detail-value">{selectedItem.manager_comment || "None"}</span></div>
+                  <div className="detail-row"><span className="detail-label">Rejection note</span><span className="detail-value">{selectedItem.rejection_reason || "None"}</span></div>
                 </div>
-              )}
+              </details>
             </div>
             {canReviewRegularizations ? (
-              <AttendanceRegularizationInlineReview item={item} />
+              <AttendanceRegularizationInlineReview item={selectedItem} reviewHref={currentQueueHref({ reviewRegularization: selectedItem.id })} />
             ) : (
               <div className="notice"><strong>Read-only regularization view.</strong><span className="muted">Approvals and rejections require attendance regularization review permission.</span></div>
             )}
           </article>
-        ))}
-        {items.length === 0 ? (
-          <div className="record-card panel-card-soft">
-            <strong>No regularizations match the current filters.</strong>
-            <p className="muted">Try clearing one or more filters to widen the queue.</p>
-          </div>
         ) : null}
       </div>
 
-      <PaginationBar
-        hasNext={pagination.has_next}
-        hasPrevious={pagination.has_previous}
-        onFirst={() => goToPage(1)}
-        onLast={() => goToPage(Math.max(1, Math.ceil(pagination.total_count / pagination.page_size)))}
-        onNext={() => goToPage(pagination.page + 1)}
-        onPrevious={() => goToPage(pagination.page - 1)}
-        page={pagination.page}
-        pageSize={pagination.page_size}
-        totalCount={pagination.total_count}
-      />
+      <section className="card panel pagination-panel attendance-pagination-panel">
+        <div className="pagination-bar">
+          <div className="pagination-bar__summary">
+            <span className="queue-summary-chip"><strong>{pageStart}-{pageEnd}</strong> of {pagination.total_count} requests</span>
+            <span className="queue-summary-chip"><strong>Page {pagination.page}</strong> of {totalPages}</span>
+            <label className="lifecycle-page-size-control">
+              <span>Rows</span>
+              <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+                {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
+              </select>
+            </label>
+            <button className="button button--secondary button--compact" onClick={() => goToPage(1)} type="button">Apply</button>
+          </div>
+          {totalPages > 1 ? (
+            <div className="pagination-bar__actions">
+              <button className="button button--secondary" disabled={!pagination.has_previous} onClick={() => goToPage(1)} type="button">First</button>
+              <button className="button button--secondary" disabled={!pagination.has_previous} onClick={() => goToPage(pagination.page - 1)} type="button">Previous</button>
+              <button className="button button--secondary" disabled={!pagination.has_next} onClick={() => goToPage(pagination.page + 1)} type="button">Next</button>
+              <button className="button button--secondary" disabled={!pagination.has_next} onClick={() => goToPage(totalPages)} type="button">Last</button>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      {modalReviewItem ? (
+        <HrAdminActionModal
+          className="attendance-review-modal"
+          closeHref={currentQueueHref({ reviewRegularization: undefined })}
+          description="Review and decide this correction request without leaving the queue."
+          eyebrow="Attendance review"
+          labelledBy="attendance-review-modal-title"
+          title={`Review ${modalReviewItem.employee_name || "regularization"}`}
+        >
+          <AttendanceRegularizationReviewForm
+            compact
+            cancelHref={currentQueueHref({ reviewRegularization: undefined })}
+            item={modalReviewItem}
+            successHref={currentQueueHref({ reviewRegularization: undefined })}
+          />
+        </HrAdminActionModal>
+      ) : null}
     </section>
   );
 }

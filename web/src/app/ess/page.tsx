@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getEssDashboard } from "@/lib/api";
 
 function formatDate(value: string | null) {
@@ -48,11 +49,8 @@ const essActionStatusLabel: Record<EssActionStatus, string> = {
   warning: "Review",
 };
 
-function essActionChipClass(status: EssActionStatus) {
-  if (status === "ready") {
-    return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--ready";
-  }
-  return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--warning";
+function essActionTone(status: EssActionStatus) {
+  return status === "ready" ? "success" : "warning";
 }
 
 function essActionStatus(value: number): EssActionStatus {
@@ -133,27 +131,11 @@ export default async function EssPage() {
       </section>
 
       <section className="workspace-section">
-        <div className="workspace-summary-grid metric-grid-modern">
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">LV</span><h3>Pending leave</h3></div>
-            <strong>{pendingLeaveCount}</strong>
-            <p>Requests waiting for approval or follow-up.</p>
-          </article>
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">AT</span><h3>Attendance fixes</h3></div>
-            <strong>{pendingRegularizationCount}</strong>
-            <p>Corrections waiting for manager review.</p>
-          </article>
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">HR</span><h3>Hours this month</h3></div>
-            <strong>{dashboard.attendance.month_to_date.work_duration_hours}</strong>
-            <p>Logged so far in this attendance period.</p>
-          </article>
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">TD</span><h3>Today status</h3></div>
-            <strong>{dashboard.attendance.today.status.replace("_", " ")}</strong>
-            <p>{formatDate(dashboard.attendance.today.date)} attendance state.</p>
-          </article>
+        <div className="attendance-summary-strip" aria-label="ESS summary">
+          <span><strong>{pendingLeaveCount}</strong> pending leave</span>
+          <span><strong>{pendingRegularizationCount}</strong> attendance fixes</span>
+          <span><strong>{dashboard.attendance.month_to_date.work_duration_hours}</strong> hours this month</span>
+          <span><strong>{dashboard.attendance.today.status.replace("_", " ")}</strong> today</span>
         </div>
       </section>
 
@@ -167,24 +149,32 @@ export default async function EssPage() {
             </div>
             <span className="queue-summary-chip"><strong>{activeSignals}</strong> active signals</span>
           </div>
-          <div className="workspace-table ess-action-list" role="table" aria-label="Today actions">
-            <div className="workspace-table__row workspace-table__row--head ess-action-row" role="row">
-              <span role="columnheader">State</span>
-              <span role="columnheader">Action</span>
-              <span role="columnheader">Count</span>
-              <span role="columnheader">Open</span>
-            </div>
-            {commandActions.map((item) => (
-              <div className="workspace-table__row ess-action-row" key={item.label} role="row">
-                <span role="cell"><span className={essActionChipClass(item.status)}>{essActionStatusLabel[item.status]}</span></span>
-                <span role="cell">
-                  <strong>{item.label}</strong>
-                  <small>{item.detail}</small>
-                </span>
-                <span role="cell"><span className="record-chip">{item.value}</span></span>
-                <span role="cell"><Link className="button button--secondary" href={item.href}>{item.action}</Link></span>
-              </div>
-            ))}
+          <div className="workspace-table-scroll">
+            <table className="workspace-table attendance-directory-table ess-action-list" aria-label="Today actions">
+              <thead>
+                <tr>
+                  <th>State</th>
+                  <th>Action</th>
+                  <th>Count</th>
+                  <th>Open</th>
+                </tr>
+              </thead>
+              <tbody>
+                {commandActions.map((item) => (
+                  <tr key={item.label}>
+                    <td><WorkspaceStatusBadge tone={essActionTone(item.status)}>{essActionStatusLabel[item.status]}</WorkspaceStatusBadge></td>
+                    <td className="workspace-table__primary-cell">
+                      <div>
+                        <strong>{item.label}</strong>
+                        <span>{item.detail}</span>
+                      </div>
+                    </td>
+                    <td><span className="record-chip">{item.value}</span></td>
+                    <td><Link className="button button--secondary" href={item.href}>{item.action}</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </article>
 
@@ -195,7 +185,7 @@ export default async function EssPage() {
               <h2>What do you want to do?</h2>
               <p>Use one focused page for each employee task.</p>
             </div>
-            <span className={essActionChipClass(activeSignals ? "warning" : "ready")}>{activeSignals ? "Review" : "Ready"}</span>
+            <WorkspaceStatusBadge tone={essActionTone(activeSignals ? "warning" : "ready")}>{activeSignals ? "Review" : "Ready"}</WorkspaceStatusBadge>
           </div>
           <div className="ess-shortcut-grid">
             {quickActions.map((item) => (

@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminSaasOperationalHealth } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
@@ -81,15 +80,15 @@ export default async function HrAdminSaasOperationsPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Operations posture" value={titleCase(data.summary.status)} trend={`${data.summary.blocked_signal_count} blocked signals`} />
-          <MetricTile label="Open remediation" value={data.summary.open_remediation_count} trend={`${data.summary.overdue_remediation_count} overdue`} />
-          <MetricTile label="Resilience" value={titleCase(data.summary.resilience_status)} trend={`${data.summary.resilience_blocker_count} blockers`} />
-          <MetricTile label="SLA ops" value={titleCase(data.summary.sla_status)} trend={`${data.summary.sla_open_incident_count} open incidents`} />
-          <MetricTile label="Notifications" value={data.summary.failed_notification_count} trend={`${data.summary.pending_notification_count} pending`} />
-          <MetricTile label="Provider queue" value={data.summary.queued_provider_job_count} trend={`${data.summary.dead_lettered_provider_job_count} dead-lettered`} />
-          <MetricTile label="Support sessions" value={data.summary.active_support_session_count} trend={`${data.summary.expired_support_grant_count} expired grants`} />
-          <MetricTile label="Tenant changes" value={data.summary.pending_change_request_count} trend="Awaiting decision" />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{titleCase(data.summary.status)}</strong> Operations posture</span>
+          <span><strong>{data.summary.open_remediation_count}</strong> Open remediation</span>
+          <span><strong>{titleCase(data.summary.resilience_status)}</strong> Resilience</span>
+          <span><strong>{titleCase(data.summary.sla_status)}</strong> SLA ops</span>
+          <span><strong>{data.summary.failed_notification_count}</strong> Notifications</span>
+          <span><strong>{data.summary.queued_provider_job_count}</strong> Provider queue</span>
+          <span><strong>{data.summary.active_support_session_count}</strong> Support sessions</span>
+          <span><strong>{data.summary.pending_change_request_count}</strong> Tenant changes</span>
         </div>
       </section>
 

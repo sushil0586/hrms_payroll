@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
 import { FormSection } from "@/components/patterns/form-section";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PlatformGovernanceFormBanner } from "@/components/patterns/platform-governance-form-banner";
 import { GovernanceLockHint, isGovernanceFieldLocked } from "@/components/patterns/platform-governance-locks";
 import type {
@@ -23,6 +24,7 @@ type Props = {
   options: HrAdminPolicyOptions;
   itemId?: string;
   item?: HrAdminLeavePolicy;
+  returnPath?: string;
 };
 
 type LeavePolicyField =
@@ -358,7 +360,7 @@ function normalizedLabel(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: Props) {
+export function LeavePolicyForm({ initialValue, mode, options, itemId, item, returnPath = "/hr-admin/leave-policies" }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -607,7 +609,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
     setIsSubmitting(false);
     isSubmittingRef.current = false;
     window.setTimeout(() => {
-      router.push("/hr-admin/leave-policies");
+      router.push(returnPath);
       router.refresh();
     }, 700);
   }
@@ -1578,17 +1580,14 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
         </div>
 
         {isPreviewOpen ? (
-          <div className="modal-backdrop" role="presentation">
-            <section aria-modal="true" className="modal-panel modal-panel--wide" role="dialog" aria-label="Preview leave policy">
-              <div className="modal-panel__header">
-                <div>
-                  <p className="section-eyebrow">Policy preview</p>
-                  <h2 className="section-heading-soft">{formValue.name || "Draft leave policy"}</h2>
-                  <p className="section-copy section-copy-soft">Test entitlement, service tiers, evidence rules, and approval routing before HR saves or assigns this policy.</p>
-                </div>
-                <button className="button button--secondary" disabled={isPreviewLoading} onClick={closePreviewDialog} type="button">Close</button>
-              </div>
-
+          <HrAdminActionModal
+            closeHref={returnPath}
+            description="Test entitlement, service tiers, evidence rules, and approval routing before HR saves or assigns this policy."
+            eyebrow="Policy preview"
+            labelledBy="leave-policy-preview-modal"
+            onClose={closePreviewDialog}
+            title={formValue.name || "Draft leave policy"}
+          >
               <div className="form-grid">
                 <label className="form-field">
                   <span className="muted">Employee</span>
@@ -1686,8 +1685,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
                   <span className="muted">Select an employee and run preview to see entitlement, carry-forward, evidence, and approval behavior.</span>
                 </div>
               )}
-            </section>
-          </div>
+          </HrAdminActionModal>
         ) : null}
 
         {successMessage ? <div className="notice notice--success" role="status"><strong>Save complete.</strong><span className="muted">{successMessage}</span></div> : null}
@@ -1696,7 +1694,7 @@ export function LeavePolicyForm({ initialValue, mode, options, itemId, item }: P
           <span className="muted">Policy changes save back into the leave policy catalog and stay ready for scoped assignments.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting || (mode === "edit" && item?.can_edit_directly === false)} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create leave policy" : item && item.can_edit_directly === false ? "Direct edit unavailable" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={() => router.push(returnPath)} type="button">Cancel</button>
           </div>
         </div>
       </section>

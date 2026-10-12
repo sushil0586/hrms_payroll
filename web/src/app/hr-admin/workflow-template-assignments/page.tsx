@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminWorkflowTemplateAssignments } from "@/lib/api";
 
@@ -23,10 +22,10 @@ export default async function HrAdminWorkflowTemplateAssignmentsPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern workflow-metric-grid">
-          <MetricTile label="Assignments" trend="Scoped rollout entries" value={result.data.length} />
-          <MetricTile label="Active assignments" trend="Enabled in current catalog" value={result.data.filter((item) => item.is_active).length} />
-          <MetricTile label="Unique modules" trend="Represented in visible list" value={new Set(result.data.map((item) => item.module)).size} />
+        <div className="attendance-summary-strip payroll-run-summary-strip workflow-metric-grid">
+          <span><strong>{result.data.length}</strong> Assignments</span>
+          <span><strong>{result.data.filter((item) => item.is_active).length}</strong> Active assignments</span>
+          <span><strong>{new Set(result.data.map((item) => item.module)).size}</strong> Unique modules</span>
         </div>
       </section>
 

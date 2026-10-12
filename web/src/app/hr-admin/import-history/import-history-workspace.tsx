@@ -155,23 +155,23 @@ export function ImportHistoryWorkspace() {
   return (
     <section className="section section--tight" aria-label="Import batch history">
       <div className="report-catalog-workspace import-history-workspace" data-testid="import-history-workspace">
-        <div className="metric-grid-modern payroll-setup-metrics import-history-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics import-history-metrics">
+          <article>
             <span>Import batches</span>
             <strong>{totalCount}</strong>
             <small>Current filter</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Committed</span>
             <strong>{items.filter((item) => item.status === "committed").length}</strong>
             <small>Completed batches</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Blocked rows</span>
             <strong>{items.reduce((total, item) => total + (item.blocked_count ?? 0), 0)}</strong>
             <small>Needs correction</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Rollback ready</span>
             <strong>{items.filter((item) => item.rollback_supported).length}</strong>
             <small>Configured reversals</small>

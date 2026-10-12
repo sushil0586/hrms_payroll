@@ -5,6 +5,7 @@ import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("HR admin control center certification", () => {
   test("shows command queue, shortcuts, launch posture, and certified layout", async ({ page }) => {
+    test.setTimeout(60_000);
     await gotoAuthenticated(page, "/hr-admin", hrAdmin);
     await expectPageReady(page, "HR Control Center");
 

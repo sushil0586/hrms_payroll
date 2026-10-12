@@ -99,18 +99,6 @@ function summarizeMessage(item: HrAdminNotification) {
   return item.body || item.subject || "No body content.";
 }
 
-function SummaryCard({ label, value, hint }: { label: string; value: ReactNode; hint: string }) {
-  return (
-    <article className="workspace-summary-card metric-tile user-notification-metric">
-      <div className="workspace-summary-card__meta">
-        <span>{label}</span>
-        <strong>{value}</strong>
-        <small>{hint}</small>
-      </div>
-    </article>
-  );
-}
-
 export function UserNotificationCenter({
   actions,
   apiEndpointBase,
@@ -161,11 +149,13 @@ export function UserNotificationCenter({
         </div>
       </header>
 
-      <section className="workspace-summary-grid user-notification-summary-grid" aria-label="Notification metrics">
-        <SummaryCard label="Notifications" value={data.total_count} hint="Current filtered view" />
-        <SummaryCard label="Unread on page" value={unreadOnPage} hint="Needs review" />
-        <SummaryCard label="High priority" value={highPriorityOnPage} hint="Escalated attention" />
-        <SummaryCard label="Failed on page" value={failedOnPage} hint="Delivery exceptions" />
+      <section className="workspace-section user-notification-summary" aria-label="Notification metrics">
+        <div className="attendance-summary-strip">
+          <span><strong>{data.total_count}</strong> notifications</span>
+          <span><strong>{unreadOnPage}</strong> unread on page</span>
+          <span><strong>{highPriorityOnPage}</strong> high priority</span>
+          <span><strong>{failedOnPage}</strong> failed on page</span>
+        </div>
       </section>
 
       <section className="workspace-section queue-layout user-notification-center">
@@ -274,37 +264,42 @@ export function UserNotificationCenter({
                 Open {crossWorkspaceLabel}
               </Link>
             </div>
-            <div className="workspace-table tableish">
+            <div className="workspace-table-scroll user-notification-table-scroll">
               {data.items.length ? (
-                <div className="workspace-table__row workspace-table__row--head user-notification-row user-notification-row--head">
-                  <span>Message</span>
-                  <span>Priority</span>
-                  <span>Delivery</span>
-                  <span>Received</span>
-                  <span>Actions</span>
-                </div>
-              ) : null}
-              {data.items.length ? (
-                data.items.map((item) => (
-                  <article
-                    className="workspace-table__row user-notification-row"
-                    key={item.id}
-                  >
-                    <div className="user-notification-row__message">
-                      <strong>{item.title || item.event_definition_name || "Notification"}</strong>
-                      <span>{summarizeMessage(item)}</span>
-                    </div>
-                    <span className={`record-chip record-chip--${item.priority}`}>{titleCase(item.priority)}</span>
-                    <div className="user-notification-row__delivery">
-                      <span className={`record-chip record-chip--${item.status}`}>{titleCase(item.status)}</span>
-                      <small>{titleCase(item.channel)}</small>
-                    </div>
-                    <span className="muted">{formatDateTime(item.created_at)}</span>
-                    <div className="table-actions">
-                      <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${item.id}`} item={item} sourceHref={resolveSourceHref(item, workspace)} />
-                    </div>
-                  </article>
-                ))
+                <table className="workspace-table attendance-directory-table user-notification-table" aria-label="Notifications">
+                  <thead>
+                    <tr>
+                      <th>Message</th>
+                      <th>Priority</th>
+                      <th>Delivery</th>
+                      <th>Received</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="workspace-table__primary-cell">
+                          <div>
+                            <strong>{item.title || item.event_definition_name || "Notification"}</strong>
+                            <span>{summarizeMessage(item)}</span>
+                          </div>
+                        </td>
+                        <td><span className={`record-chip record-chip--${item.priority}`}>{titleCase(item.priority)}</span></td>
+                        <td>
+                          <span className={`record-chip record-chip--${item.status}`}>{titleCase(item.status)}</span>
+                          <span className="workspace-table__secondary">{titleCase(item.channel)}</span>
+                        </td>
+                        <td><span className="workspace-table__secondary">{formatDateTime(item.created_at)}</span></td>
+                        <td>
+                          <div className="table-actions">
+                            <UserNotificationDetailAction endpoint={`${apiEndpointBase}/${item.id}`} item={item} sourceHref={resolveSourceHref(item, workspace)} />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               ) : (
                 <div className="notice user-notification-empty">
                   <strong>No notifications match the current filters.</strong>

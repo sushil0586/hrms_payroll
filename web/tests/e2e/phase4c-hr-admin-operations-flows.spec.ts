@@ -17,7 +17,7 @@ function field(scope: Page | Locator, label: string, index = 0) {
 }
 
 function card(page: Page, text: string | RegExp) {
-  return page.locator("article.record-card, a.tableish__row").filter({ hasText: text }).first();
+  return page.locator("article.record-card, a.tableish__row, table.workspace-table tbody tr").filter({ hasText: text }).first();
 }
 
 async function ensureChecked(locator: Locator) {
@@ -409,7 +409,7 @@ test.describe("Phase 4C HR-admin operations certification", () => {
     await expect(page.getByText("Tracked balances")).toBeVisible();
     await expect(page.getByText("Encashed units")).toBeVisible();
     await expect(page.getByText("Net adjustments")).toBeVisible();
-    await expect(page.locator(".metric-tile__label", { hasText: "Pending reviews" })).toBeVisible();
+    await expect(page.locator(".attendance-summary-strip", { hasText: "pending reviews" })).toBeVisible();
 
     const balanceOperations = page.locator("section").filter({ has: page.getByRole("heading", { name: "Balance operations" }) });
     await expect(field(balanceOperations, "Employee")).toBeVisible();
@@ -447,13 +447,18 @@ test.describe("Phase 4C HR-admin operations certification", () => {
     expect(actionResult.requestBody).toMatchObject({ action: "credit_adjustment", units: "0.01", reason });
     await expect(page.getByText("Update recorded.")).toBeVisible();
     await expect(page.getByText(actionResult.payload.message)).toBeVisible();
-    await expect(card(page, reason)).toBeVisible();
-    await expect(card(page, reason)).toContainText(actionResult.payload.transaction.status);
 
     await field(page, "Search").fill(reason);
+    const moreFilters = page.locator("details").filter({ hasText: "More filters" }).first();
+    if (!(await moreFilters.getAttribute("open"))) {
+      await moreFilters.locator("summary").click();
+    }
     await field(page, "Transaction status").selectOption(actionResult.payload.transaction.status === "pending" ? "pending" : "applied");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page).toHaveURL(/q=PW_LEAVE_BALANCE_/);
     await expect(card(page, reason)).toBeVisible();
-    await expect(card(page, reason)).toContainText("0.01 units");
+    await expect(card(page, reason)).toContainText(actionResult.payload.transaction.status);
+    await expect(card(page, reason)).toContainText("0.01");
 
     const transactionCard = card(page, reason);
     if (actionResult.payload.transaction.status === "pending") {

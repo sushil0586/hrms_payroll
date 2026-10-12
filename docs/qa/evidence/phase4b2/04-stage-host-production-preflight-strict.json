@@ -1,0 +1,159 @@
+CommandError: Production preflight failed.
+{
+  "failed_blocker_count": 1,
+  "gates": [
+    {
+      "detail": "DEBUG is disabled.",
+      "ref": "django.debug_disabled",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "HRMS_ENABLE_DEMO_DATA is false.",
+      "ref": "demo.disabled",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "DRF BasicAuthentication is not enabled.",
+      "ref": "auth.basic_disabled",
+      "severity": "blocker",
+      "status": "failed"
+    },
+    {
+      "detail": "Session cookie is secure.",
+      "ref": "cookies.session_secure",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "CSRF cookie is secure.",
+      "ref": "cookies.csrf_secure",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Allowed hosts configured.",
+      "ref": "hosts.configured",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Enterprise identity status is declared as verified or not_in_scope.",
+      "ref": "enterprise_identity.scope_declared",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Database engine is django.db.backends.postgresql.",
+      "ref": "db.postgres_engine",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Database connection succeeded.",
+      "ref": "db.connectivity",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Redis broker URL configured.",
+      "ref": "redis.broker_url",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Redis ping succeeded.",
+      "ref": "redis.ping",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Email backend is django.core.mail.backends.smtp.EmailBackend.",
+      "ref": "email.backend_live",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Default sender configured.",
+      "ref": "email.from_configured",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Email provider connection opened.",
+      "ref": "email.connectivity",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Notification processor is enabled or an EC2 worker/timer is declared.",
+      "ref": "notifications.processor_enabled",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Notification Celery beat schedule or EC2 systemd timer is declared.",
+      "ref": "notifications.scheduler_declared",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Payroll provider worker deployment is declared by HRMS_PAYROLL_PROVIDER_WORKER_ENABLED.",
+      "ref": "payroll.worker_declared",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Payroll provider runtime credentials configured.",
+      "ref": "payroll.providers.credentials",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Production-capable payroll provider adapter is registered.",
+      "ref": "payroll.providers.registry",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "No payroll provider adapters are blocked.",
+      "ref": "payroll.providers.no_blocked_adapters",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Payroll artifact storage credentials configured.",
+      "ref": "payroll.storage.credentials",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Configured storage credential refs resolve.",
+      "ref": "payroll.storage.credential_refs",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Storage policies configured.",
+      "ref": "payroll.storage.policies",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "Storage control verification mode is strict.",
+      "ref": "payroll.storage.strict_controls",
+      "severity": "blocker",
+      "status": "passed"
+    },
+    {
+      "detail": "No storage policies are blocked.",
+      "ref": "payroll.storage.no_blocked_policies",
+      "severity": "blocker",
+      "status": "passed"
+    }
+  ],
+  "skip_network": false,
+  "status": "failed",
+  "strict": true
+}

@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminOrganizationItem, getHrAdminOrganizationSnapshot } from "@/lib/api";
@@ -417,11 +416,11 @@ export default async function HrAdminOrganizationPage({ searchParams }: PageProp
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Legal entities" value={snapshotResult.data.summary.legal_entities_count} trend="Legal structure" />
-          <MetricTile label="Branches" value={snapshotResult.data.summary.branches_count} trend="Operational footprint" />
-          <MetricTile label="Cost centers" value={snapshotResult.data.summary.cost_centers_count} trend="Finance mapping" />
-          <MetricTile label="Employment types" value={snapshotResult.data.summary.employment_types_count} trend="Workforce rules" />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{snapshotResult.data.summary.legal_entities_count}</strong> Legal entities</span>
+          <span><strong>{snapshotResult.data.summary.branches_count}</strong> Branches</span>
+          <span><strong>{snapshotResult.data.summary.cost_centers_count}</strong> Cost centers</span>
+          <span><strong>{snapshotResult.data.summary.employment_types_count}</strong> Employment types</span>
         </div>
       </section>
 

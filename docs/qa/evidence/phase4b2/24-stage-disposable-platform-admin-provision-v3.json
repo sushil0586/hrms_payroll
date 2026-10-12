@@ -1,0 +1,8 @@
+{
+  "label": "p4b2_platform_admin_v3",
+  "active": true,
+  "staff": true,
+  "superuser": true,
+  "has_usable_password": true,
+  "check_password": true
+}

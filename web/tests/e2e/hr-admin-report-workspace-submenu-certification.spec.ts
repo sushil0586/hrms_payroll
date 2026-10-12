@@ -19,7 +19,7 @@ test.describe("HR Admin report workspace submenu certification", () => {
     await expectPageReady(page, "Reports");
 
     const sidebar = page.getByRole("navigation", { name: "HR Admin navigation" });
-    await expect(sidebar.getByRole("link", { name: "Reports Catalog and search" })).toHaveAttribute("href", "/hr-admin/reports");
+    await expect(sidebar.getByRole("link", { name: "Reports", exact: true })).toHaveAttribute("href", "/hr-admin/reports");
     for (const workspace of reportWorkspaces) {
       await expect(sidebar.getByRole("link", { name: new RegExp(`${workspace.navLabel}`) })).toHaveAttribute("href", workspace.href);
       await expect(page.getByRole("link", { name: new RegExp(workspace.navLabel) }).first()).toHaveAttribute("href", workspace.href);

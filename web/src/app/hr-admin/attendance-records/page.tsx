@@ -2,9 +2,8 @@ import Link from "next/link";
 
 import { AttendanceRecordBulkManager } from "@/app/hr-admin/attendance-records/attendance-record-bulk-manager";
 import { AttendanceRecordImportWorkbench } from "@/app/hr-admin/attendance-records/attendance-record-import-workbench";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminAttendanceRecords, getHrAdminAttendanceWorkbenchOptions } from "@/lib/api";
+import { getHrAdminAttendanceOperationOptions, getHrAdminAttendanceRecord, getHrAdminAttendanceRecords, getHrAdminAttendanceWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
@@ -32,8 +31,9 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
   const fromDate = normalizeParam(currentParams.from_date) ?? "";
   const toDate = normalizeParam(currentParams.to_date) ?? "";
   const lateOnly = ["1", "true", "yes"].includes((normalizeParam(currentParams.late_only) ?? "").toLowerCase());
+  const editRecordId = normalizeParam(currentParams.editRecord) ?? "";
 
-  const [result, optionsResult] = await Promise.all([
+  const [result, optionsResult, recordOptionsResult, editRecordResult] = await Promise.all([
     getHrAdminAttendanceRecords({
       page,
       page_size: pageSize,
@@ -48,6 +48,8 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
       late_only: lateOnly || undefined,
     }),
     getHrAdminAttendanceWorkbenchOptions({ include_people: true, include_shifts: true }),
+    getHrAdminAttendanceOperationOptions(),
+    canManageRecords && editRecordId ? getHrAdminAttendanceRecord(editRecordId) : Promise.resolve(null),
   ]);
 
   return (
@@ -68,20 +70,14 @@ export default async function HrAdminAttendanceRecordsPage({ searchParams }: Pag
         secondaryMetricLabel="page"
         secondaryMetricValue={result.data.page}
       />
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Rows in window" value={result.data.total_count} trend="Reviewable attendance rows" />
-          <MetricTile label="Current page" value={result.data.items.length} trend={`Page ${result.data.page}`} />
-          <MetricTile label="Attendance statuses" value={optionsResult.data.attendance_statuses.length} trend="Status options" />
-          <MetricTile label="Attendance sources" value={optionsResult.data.attendance_sources.length} trend="Capture channels" />
-        </div>
-      </section>
       <AttendanceRecordBulkManager
         items={result.data.items}
         state={result.state}
         statusOptions={optionsResult.data.attendance_statuses}
         sourceOptions={optionsResult.data.attendance_sources}
         shiftOptions={optionsResult.data.shifts}
+        recordOptions={recordOptionsResult.data}
+        editRecord={editRecordResult?.data ?? null}
         currentFilters={{
           q,
           status,

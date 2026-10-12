@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReadiness } from "@/lib/api";
 import { reportCatalog } from "@/lib/report-catalog";
@@ -38,7 +37,7 @@ export default async function PayrollReportsPage() {
   const readiness = readinessResult.data.summary;
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui">
       <PageIntro
         eyebrow={readinessResult.state === "live" ? "Live payroll reports" : "Demo payroll reports"}
         title="Payroll Reports"
@@ -68,11 +67,11 @@ export default async function PayrollReportsPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Employees in readiness" value={readiness.total_employees} trend="Payroll population" />
-          <MetricTile label="Blocked employees" value={readiness.blocked} trend="Close risk" />
-          <MetricTile label="Warning employees" value={readiness.warnings} trend="Review queue" />
-          <MetricTile label="Report set" value={reports.length} trend="Payroll coverage" />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll report summary">
+          <span><strong>{readiness.total_employees}</strong> employees in readiness</span>
+          <span><strong>{readiness.blocked}</strong> blocked employees</span>
+          <span><strong>{readiness.warnings}</strong> warning employees</span>
+          <span><strong>{reports.length}</strong> reports</span>
         </div>
       </section>
 

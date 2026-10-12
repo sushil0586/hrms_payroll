@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDashboard } from "@/lib/api";
 import { reportCatalog } from "@/lib/report-catalog";
@@ -36,8 +35,6 @@ export default async function AttendanceReportsPage() {
             <Link className="button button--secondary" href="/hr-admin/leave-balances">Leave balances</Link>
           </>
         }
-        pills={["Attendance", "Exceptions", "Leave"]}
-        showPills
       />
 
       <ReportInsightsStrip
@@ -52,15 +49,6 @@ export default async function AttendanceReportsPage() {
           { label: "employees", value: overview.total_employees, tone: "neutral" },
         ]}
       />
-
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Pending leave" value={operations.pending_leave_requests} trend="Approval load" />
-          <MetricTile label="Attendance corrections" value={operations.pending_regularizations} trend="Exception queue" />
-          <MetricTile label="Employees" value={overview.total_employees} trend="Report population" />
-          <MetricTile label="Report set" value={reports.length} trend="Attendance coverage" />
-        </div>
-      </section>
 
       <ReportFamilyWorkspace reports={reports} groups={groups} />
     </main>

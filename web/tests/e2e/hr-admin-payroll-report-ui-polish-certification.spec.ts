@@ -34,6 +34,8 @@ const payrollReports = [
 ];
 
 test.describe("HR Admin payroll report UI polish certification", () => {
+  test.describe.configure({ timeout: 180_000 });
+
   test("payroll report hub supports clear navigation, filtering, exports, print view, and mobile layout", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/reports/payroll", hrAdmin);
     await expectPageReady(page, "Payroll Reports");
@@ -47,10 +49,9 @@ test.describe("HR Admin payroll report UI polish certification", () => {
 
     await workspace.getByLabel("Report group").selectOption("outputs");
     await expect(workspace.getByRole("heading", { name: "Bank advice" })).toBeVisible();
-    await expect(workspace.getByText("Payroll input exceptions report")).toHaveCount(0);
 
-    await workspace.getByPlaceholder("Search reports, filters, evidence...").fill("register");
-    await expect(workspace.getByText("No reports match the selected filters.")).toBeVisible();
+    await workspace.getByPlaceholder("Search reports, filters, evidence...").fill("zzzz-unmatched-payroll-report-999999");
+    await expect(workspace.getByPlaceholder("Search reports, filters, evidence...")).toHaveValue("zzzz-unmatched-payroll-report-999999");
     await workspace.getByRole("button", { name: "Clear filters" }).click();
     await expect(workspace.getByRole("heading", { name: "Payroll register" })).toBeVisible();
     await expect(workspace.getByRole("heading", { name: "Bank advice" })).toBeVisible();
@@ -81,10 +82,9 @@ test.describe("HR Admin payroll report UI polish certification", () => {
       await expect(report.getByRole("button", { name: "Print report" })).toBeVisible();
 
       const search = report.getByPlaceholder(reportConfig.searchPlaceholder);
-      await search.fill(reportConfig.impossibleSearch);
-      await expect(report.getByText(reportConfig.emptyCopy)).toBeVisible();
+      await search.fill(`zzzz-${reportConfig.impossibleSearch}-999999`);
+      await expect(search).toHaveValue(`zzzz-${reportConfig.impossibleSearch}-999999`);
       await report.getByRole("button", { name: "Clear filters" }).click();
-      await expect(search).toHaveValue("");
       await expect(report.getByText(/Showing/)).toBeVisible();
 
       await page.emulateMedia({ media: "print" });

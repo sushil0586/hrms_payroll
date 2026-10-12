@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { ActionMenu } from "@/components/patterns/action-menu";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminNotificationDiagnostics, getHrAdminNotificationEvents, getHrAdminNotifications, getHrAdminNotificationOptions, getHrAdminNotificationTemplates } from "@/lib/api";
 
@@ -156,14 +155,14 @@ export default async function HrAdminNotificationsAdminPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Enabled channels" value={enabledChannels} trend="Tenant delivery paths" />
-          <MetricTile label="Notification templates" value={templatesResult.data.length} trend="Reusable content blocks" />
-          <MetricTile label="Active notification events" value={activeEvents} trend="Live trigger rules" />
-          <MetricTile label="Notifications in review window" value={notificationsResult.data.total_count} trend="Recent queue volume" />
-          <MetricTile label="Healthy enabled channels" value={healthyEnabledChannels} trend="No recent failures seen" />
-          <MetricTile label="Preview and test sends" value={diagnosticsResult.data.overview.preview_test_notifications} trend="Catalog verification activity" />
-          <MetricTile label="Queued on current page" value={queuedNotifications} trend={`Page ${notificationsResult.data.page}`} />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{enabledChannels}</strong> Enabled channels</span>
+          <span><strong>{templatesResult.data.length}</strong> Notification templates</span>
+          <span><strong>{activeEvents}</strong> Active notification events</span>
+          <span><strong>{notificationsResult.data.total_count}</strong> Notifications in review window</span>
+          <span><strong>{healthyEnabledChannels}</strong> Healthy enabled channels</span>
+          <span><strong>{diagnosticsResult.data.overview.preview_test_notifications}</strong> Preview and test sends</span>
+          <span><strong>{queuedNotifications}</strong> Queued on current page</span>
         </div>
       </section>
 

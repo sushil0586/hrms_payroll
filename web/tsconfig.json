@@ -58,10 +58,11 @@
     ".next/playwright-phase6c2-salary-a11y/types/**/*.ts",
     ".next/playwright-phase6c2-salary-setup/types/**/*.ts",
     ".next/playwright-phase6c3-payroll-rules/types/**/*.ts",
+    ".next/playwright-phase6c3-payroll-ui/types/**/*.ts",
     ".next/playwright/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next/playwright-phase6c3-payroll-ui/types/**/*.ts"
+    ".next/review/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

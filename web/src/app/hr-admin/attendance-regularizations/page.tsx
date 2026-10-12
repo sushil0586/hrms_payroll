@@ -1,9 +1,8 @@
 import Link from "next/link";
 
 import { AttendanceRegularizationQueue } from "@/app/hr-admin/attendance-regularizations/attendance-regularization-queue";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminAttendanceRegularizations, getHrAdminAttendanceWorkbenchOptions } from "@/lib/api";
+import { getHrAdminAttendanceRegularization, getHrAdminAttendanceRegularizations, getHrAdminAttendanceWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
@@ -28,6 +27,7 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
   const currentStatus = normalizeParam(currentParams.current_status) ?? "";
   const fromDate = normalizeParam(currentParams.from_date) ?? "";
   const toDate = normalizeParam(currentParams.to_date) ?? "";
+  const reviewRegularizationId = normalizeParam(currentParams.reviewRegularization) ?? "";
 
   const [result, optionsResult] = await Promise.all([
     getHrAdminAttendanceRegularizations({
@@ -42,6 +42,7 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
     }),
     getHrAdminAttendanceWorkbenchOptions(),
   ]);
+  const reviewResult = canReviewRegularizations && reviewRegularizationId ? await getHrAdminAttendanceRegularization(reviewRegularizationId) : null;
 
   return (
     <main className="shell shell--time-leave hr-admin-compact-ui">
@@ -61,18 +62,11 @@ export default async function HrAdminAttendanceRegularizationsPage({ searchParam
         secondaryMetricLabel="status options"
         secondaryMetricValue={optionsResult.data.regularization_statuses.length}
       />
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Requests in window" value={result.data.total_count} trend="Correction workload" />
-          <MetricTile label="Current page" value={result.data.items.length} trend={`Page ${result.data.page}`} />
-          <MetricTile label="Request statuses" value={optionsResult.data.regularization_statuses.length} trend="Workflow states" />
-          <MetricTile label="Attendance statuses" value={optionsResult.data.attendance_statuses.length} trend="Requested outcomes" />
-        </div>
-      </section>
       <AttendanceRegularizationQueue
         items={result.data.items}
         regularizationStatusOptions={optionsResult.data.regularization_statuses}
         attendanceStatusOptions={optionsResult.data.attendance_statuses}
+        reviewItem={reviewResult?.data ?? null}
         currentFilters={{
           q,
           status,

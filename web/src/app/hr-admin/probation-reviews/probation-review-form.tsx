@@ -6,7 +6,15 @@ import { useRouter } from "next/navigation";
 import { FormSection } from "@/components/patterns/form-section";
 import type { HrAdminLifecycleOptions, HrAdminProbationReviewWriteInput } from "@/lib/types";
 
-type Props = { initialValue: HrAdminProbationReviewWriteInput; mode: "create" | "edit"; options: HrAdminLifecycleOptions; itemId?: string };
+type Props = {
+  initialValue: HrAdminProbationReviewWriteInput;
+  mode: "create" | "edit";
+  options: HrAdminLifecycleOptions;
+  itemId?: string;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
+};
 
 function getErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") return "Unable to save probation review.";
@@ -24,7 +32,7 @@ function ownerOptions(items: Array<{ value: string; label: string }>) {
   return [<option key="blank" value="">Select an owner</option>, ...items.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)];
 }
 
-export function ProbationReviewForm({ initialValue, mode, options, itemId }: Props) {
+export function ProbationReviewForm({ initialValue, mode, options, itemId, cancelHref, successHref, compact = false }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -49,12 +57,25 @@ export function ProbationReviewForm({ initialValue, mode, options, itemId }: Pro
       setIsSubmitting(false);
       return;
     }
-    router.push("/hr-admin/probation-reviews");
+    router.push(successHref ?? "/hr-admin/probation-reviews");
     router.refresh();
   }
 
+  function handleCancel() {
+    if (cancelHref) {
+      router.push(cancelHref);
+      return;
+    }
+    router.back();
+  }
+
   return (
-    <form aria-label="Probation review form" className="section form-layout-modern lifecycle-child-form" data-testid="probation-review-form" onSubmit={handleSubmit}>
+    <form
+      aria-label="Probation review form"
+      className={`section form-layout-modern lifecycle-child-form${compact ? " lifecycle-child-form--modal" : ""}`}
+      data-testid="probation-review-form"
+      onSubmit={handleSubmit}
+    >
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -114,7 +135,7 @@ export function ProbationReviewForm({ initialValue, mode, options, itemId }: Pro
           <span className="muted">This review will immediately reflect in the probation queue and lifecycle inbox.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create probation review" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
           </div>
         </div>
       </section>

@@ -9,7 +9,11 @@ import { getPrimaryWorkspaceHref } from "@/lib/workspace-routing";
 
 type LoginField = "identifier" | "password";
 
-export function LoginForm() {
+type LoginFormProps = {
+  demoModeWithoutBackend?: boolean;
+};
+
+export function LoginForm({ demoModeWithoutBackend = false }: LoginFormProps) {
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -70,7 +74,11 @@ export function LoginForm() {
     <form className="form-shell-card auth-form-shell" noValidate onSubmit={handleSubmit}>
       <div className="form-shell-card__intro">
         <h2 className="section-heading-soft">Sign in</h2>
-        <p className="section-copy section-copy-soft">Use the same account for platform, tenant, HR admin, manager, and employee workspaces.</p>
+        <p className="section-copy section-copy-soft">
+          {demoModeWithoutBackend
+            ? "Local demo mode is running without a backend. Open a workspace directly."
+            : "Use the same account for platform, tenant, HR admin, manager, and employee workspaces."}
+        </p>
       </div>
 
       <div className="auth-role-strip" aria-label="Available workspaces after sign in">
@@ -81,51 +89,73 @@ export function LoginForm() {
         <span className="auth-role-chip">Employee</span>
       </div>
 
-      <label className="auth-field">
-        <span className="muted">Username or email</span>
-        <input
-          required
-          value={identifier}
-          aria-invalid={Boolean(fieldErrors.identifier)}
-          onChange={(event) => {
-            setIdentifier(event.target.value);
-            setFieldErrors((current) => ({ ...current, identifier: undefined }));
-          }}
-          className="auth-input"
-          placeholder="riya.sharma@northstar.example"
-        />
-        {fieldErrors.identifier ? <span className="field-error-text" role="alert">{fieldErrors.identifier}</span> : null}
-      </label>
+      {demoModeWithoutBackend ? (
+        <div className="auth-demo-entry" role="status">
+          <strong>Demo workspace access</strong>
+          <span className="muted">No credentials are needed until a backend API is configured.</span>
+          <div className="auth-demo-entry__actions">
+            <Link className="button button--primary" href="/hr-admin">
+              Open HR Admin
+            </Link>
+            <Link className="button button--secondary" href="/ess">
+              ESS
+            </Link>
+            <Link className="button button--secondary" href="/mss">
+              MSS
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <>
+          <label className="auth-field">
+            <span className="muted">Username or email</span>
+            <input
+              required
+              value={identifier}
+              aria-invalid={Boolean(fieldErrors.identifier)}
+              onChange={(event) => {
+                setIdentifier(event.target.value);
+                setFieldErrors((current) => ({ ...current, identifier: undefined }));
+              }}
+              className="auth-input"
+              placeholder="riya.sharma@northstar.example"
+            />
+            {fieldErrors.identifier ? <span className="field-error-text" role="alert">{fieldErrors.identifier}</span> : null}
+          </label>
 
-      <label className="auth-field">
-        <span className="muted">Password</span>
-        <input
-          required
-          type="password"
-          value={password}
-          aria-invalid={Boolean(fieldErrors.password)}
-          onChange={(event) => {
-            setPassword(event.target.value);
-            setFieldErrors((current) => ({ ...current, password: undefined }));
-          }}
-          className="auth-input"
-          placeholder="Enter your password"
-        />
-        {fieldErrors.password ? <span className="field-error-text" role="alert">{fieldErrors.password}</span> : null}
-      </label>
+          <label className="auth-field">
+            <span className="muted">Password</span>
+            <input
+              required
+              type="password"
+              value={password}
+              aria-invalid={Boolean(fieldErrors.password)}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setFieldErrors((current) => ({ ...current, password: undefined }));
+              }}
+              className="auth-input"
+              placeholder="Enter your password"
+            />
+            {fieldErrors.password ? <span className="field-error-text" role="alert">{fieldErrors.password}</span> : null}
+          </label>
+        </>
+      )}
 
       {error ? <div className="notice notice--error" role="alert"><span className="muted">{error}</span></div> : null}
 
-      <div className="form-actions-bar auth-form-shell__actions">
-        <Link className="auth-recovery-link" href="/forgot-password">
-          Forgot password?
-        </Link>
-        <div className="form-actions-bar__buttons">
-          <button className="button button--primary" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Signing in..." : "Sign in"}
-          </button>
+      {!demoModeWithoutBackend ? (
+        <div className="form-actions-bar auth-form-shell__actions">
+          <Link className="auth-recovery-link" href="/forgot-password">
+            Forgot password?
+          </Link>
+          <div className="form-actions-bar__buttons">
+            <button className="button button--primary" disabled={isSubmitting} type="submit">
+              {isSubmitting ? "Signing in..." : "Sign in"}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
     </form>
   );
 }

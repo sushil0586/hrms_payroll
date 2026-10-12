@@ -161,11 +161,11 @@ export function PayslipPublicationReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Payslip publication report workspace">
       <div className="report-catalog-workspace payroll-register-report" data-testid="payslip-publication-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Payslips</span><strong>{filteredRows.length}</strong><small>{rows.length} total payslips</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Published</span><strong>{filteredRows.filter((row) => row.publicationState !== "Generated").length}</strong><small>Visible or delivered</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Acknowledged</span><strong>{filteredRows.filter((row) => row.acknowledgementState === "Acknowledged").length}</strong><small>Employee read proof</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Access risk</span><strong>{filteredRows.filter((row) => row.accessRisk === "High").length}</strong><small>High-risk rows</small></article>
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <span><strong>{filteredRows.length}</strong> Payslips</span>
+          <span><strong>{filteredRows.filter((row) => row.publicationState !== "Generated").length}</strong> Published</span>
+          <span><strong>{filteredRows.filter((row) => row.acknowledgementState === "Acknowledged").length}</strong> Acknowledged</span>
+          <span><strong>{filteredRows.filter((row) => row.accessRisk === "High").length}</strong> Access risk</span>
         </div>
 
         <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Payslip publication filters">

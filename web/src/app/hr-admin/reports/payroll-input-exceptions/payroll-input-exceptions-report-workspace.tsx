@@ -184,28 +184,28 @@ export function PayrollInputExceptionsReportWorkspace({
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <article>
             <span>Snapshots</span>
             <strong>{filteredRows.length}</strong>
             <small>{snapshots.length} total snapshots</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Blocked inputs</span>
             <strong>{filteredRows.filter((item) => item.issueType === "Blocked").length}</strong>
             <small>Stop close</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Warning inputs</span>
             <strong>{filteredRows.filter((item) => item.issueType === "Warning").length}</strong>
             <small>Review before lock</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Locked snapshots</span>
             <strong>{filteredRows.filter((item) => item.lockState === "Locked").length}</strong>
             <small>Immutable evidence</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Reconciliation risk</span>
             <strong>{filteredRows.filter((item) => item.reconciliationRisk !== "Low").length}</strong>
             <small>Attendance, leave, payroll mismatches</small>

@@ -31,11 +31,11 @@ export default async function HrAdminEditEmployeePage({ params }: PageProps) {
   const state = detailResult.state === "live" && optionsResult.state === "live" ? "live" : "demo";
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui hr-employee-form-page">
       <PageIntro
         eyebrow={state === "live" ? "Live edit mode" : "Demo edit mode"}
         title={`Edit employee: ${detailResult.data.full_name}`}
-        description="Update profile, employment status, and structural mappings in one controlled edit flow."
+        description="Update profile, employment status, and structural mappings in one guided flow."
         actions={<Link className="button button--secondary" href={`/hr-admin/employees?employeeId=${detailResult.data.id}`}>Back to employee detail</Link>}
         pills={["Profile", "Structure", "Readiness"]}
       />

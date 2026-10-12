@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 
 import { ManagerDecisionPanel } from "@/app/mss/approvals/manager-decision-panel";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import type { AttendanceRegularizationItem, LeaveRequestItem } from "@/lib/types";
 
 type Props =
@@ -57,23 +58,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <span className="detail-value">{value}</span>
     </div>
   );
-}
-
-function useEscapeClose(isOpen: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
 }
 
 function ApprovalTrack({ item }: { item: LeaveRequestItem | AttendanceRegularizationItem }) {
@@ -158,20 +142,15 @@ function LeaveReviewModal({
   const isCancellationRequest = item.request_action === "cancellation_request";
 
   return (
-    <div className="modal-shell" role="presentation">
-      <div aria-label="Leave approval review" aria-modal="true" className="modal mss-approval-modal" role="dialog">
-        <div className="modal__header">
-          <div>
-            <span className="eyebrow">{requestActionLabel(item.request_action)}</span>
-            <h2>Review leave approval</h2>
-            <p className="section-copy section-copy-soft">Confirm dates, reason, and policy context before deciding.</p>
-          </div>
-          <button aria-label="Close leave approval review" className="button button--secondary" onClick={onClose} type="button">
-            Close
-          </button>
-        </div>
-
-        <div className="mss-approval-modal__body">
+    <HrAdminActionModal
+      className="mss-approval-modal"
+      closeHref="/mss/approvals"
+      description="Confirm dates, reason, and policy context before deciding."
+      eyebrow={requestActionLabel(item.request_action)}
+      labelledBy={`mss-leave-review-${item.id}`}
+      onClose={onClose}
+      title="Review leave approval"
+    >
           <div className="mss-approval-modal-summary">
             <article>
               <span>Employee</span>
@@ -234,9 +213,7 @@ function LeaveReviewModal({
             status={item.status}
             title={isCancellationRequest ? "Cancellation decision" : "Leave decision"}
           />
-        </div>
-      </div>
-    </div>
+    </HrAdminActionModal>
   );
 }
 
@@ -252,20 +229,15 @@ function AttendanceReviewModal({
   state: "live" | "demo";
 }) {
   return (
-    <div className="modal-shell" role="presentation">
-      <div aria-label="Attendance approval review" aria-modal="true" className="modal mss-approval-modal" role="dialog">
-        <div className="modal__header">
-          <div>
-            <span className="eyebrow">Attendance regularization</span>
-            <h2>Review attendance approval</h2>
-            <p className="section-copy section-copy-soft">Verify the requested correction and payroll impact before deciding.</p>
-          </div>
-          <button aria-label="Close attendance approval review" className="button button--secondary" onClick={onClose} type="button">
-            Close
-          </button>
-        </div>
-
-        <div className="mss-approval-modal__body">
+    <HrAdminActionModal
+      className="mss-approval-modal"
+      closeHref="/mss/approvals"
+      description="Verify the requested correction and payroll impact before deciding."
+      eyebrow="Attendance regularization"
+      labelledBy={`mss-attendance-review-${item.id}`}
+      onClose={onClose}
+      title="Review attendance approval"
+    >
           <div className="mss-approval-modal-summary">
             <article>
               <span>Employee</span>
@@ -314,15 +286,12 @@ function AttendanceReviewModal({
             status={item.status}
             title="Regularization decision"
           />
-        </div>
-      </div>
-    </div>
+    </HrAdminActionModal>
   );
 }
 
 export function ManagerApprovalReviewAction(props: Props) {
   const [isOpen, setIsOpen] = useState(false);
-  useEscapeClose(isOpen, () => setIsOpen(false));
   const buttonClass = props.variant === "primary"
     ? "button button--primary"
     : props.variant === "secondary"

@@ -2449,3 +2449,80 @@ Environment: `backend/db.phase3c_e2e.sqlite3`, PH3C fixture prefix `PH3C_2026101
 Original 32-scenario reconciliation: 29 Passed, 0 Failed, 0 Blocked, 3 Conditional, 0 Not Run. Conditional scenarios are `HRADM-E2E-012`, `HRADM-E2E-013` and `HRADM-E2E-016`.
 
 Certification result: Conditionally Certified for local/sandbox Phase 3C. Mandatory locally executable P0/P1 journeys passed; provider conditionals, missing-bank readiness decision and Phase 4 external/deployed gates remain outside this certification.
+
+## Phase 4B.1 Staging Auth / Security Revalidation - 2026-10-10
+
+Environment: deployed staging target `https://hrms.accerio.in`. No production mutations, password resets, real email/SMS, payments or provider submissions executed.
+
+| Batch | Scenarios | Result | Evidence |
+| --- | ---: | --- | --- |
+| Default persona login probes | 6 usernames | `platform.admin` passed; 5 tenant personas returned HTTP 400 invalid credentials | `docs/qa/evidence/phase4b1/01-stage-default-persona-login-probes.log` |
+| Staging launch signoff preflight-only | 1 posture check | Blocked: missing required staging env posture | `docs/qa/evidence/phase4b1/signoff-preflight/launch-signoff-report.md` |
+| HSTS/header check | 1 deployed header check | HTTPS/security headers captured; `Strict-Transport-Security` absent | `docs/qa/evidence/phase4b1/03-stage-root-headers-hsts-check.log` |
+| Original Phase 4B deployed browser scenarios | 10 | 4 Passed, 0 product Failed, 3 Blocked by credential prerequisite, 3 Not Run after dependent serial credential failure | `docs/qa/evidence/phase4b1/04-stage-deployed-rbac-isolation-rerun.log` |
+
+Conclusion: Phase 4B.1 remains blocked for full deployed RBAC/tenant isolation certification. Root cause is staging persona/provisioning readiness, not a confirmed product RBAC failure.
+
+## Phase 4B.1 Local Dev Rehearsal - 2026-10-10
+
+Environment: clean dedicated local SQLite DB `backend/db.phase4b1_local_rehearsal.sqlite3`, Django API `http://127.0.0.1:8041`, Playwright app `http://127.0.0.1:3141`.
+
+| Batch | Result | Evidence |
+| --- | --- | --- |
+| Migration and supported seed commands | Passed | `docs/qa/evidence/phase4b1-local/01-migrate.log`, `02-bootstrap-demo-workspace.log`, `03-seed-pilot-named-users.log`, `04-seed-staging-launch-data.log` |
+| Persona DB verification | Passed | `docs/qa/evidence/phase4b1-local/05-persona-db-verification.log` |
+| Original 10 Phase 4B browser scenarios | 10 Passed, 0 Failed, 0 Blocked, 0 Not Run | `docs/qa/evidence/phase4b1-local/07-local-rbac-isolation-playwright.log` |
+
+Conclusion: local rehearsal proves the supported provisioning path works and the browser scenarios pass when personas are correctly seeded. This does not change deployed staging gate status.
+
+## Phase 4B.2 Actual Staging Auth / RBAC / Strict Preflight - 2026-10-10
+
+Environment: deployed staging target `https://hrms.accerio.in`, EC2 release `release-20260914023312`. No seed/bootstrap/provisioning mutation, password reset, customer-data mutation, real email/SMS, payment or provider submission was executed.
+
+| Batch | Result | Evidence |
+| --- | --- | --- |
+| Supplied staging persona login probes | 5 authenticated, 1 invalid credentials | `docs/qa/evidence/phase4b2/01-staging-provided-persona-login-probes.json` |
+| Host identity and read-only tenant/account inventory | Host/release/env verified; `accerio-india` sandbox tenant confirmed; platform credential unavailable | `02-stage-host-identity.log`, `03-stage-readonly-account-tenant-inventory.json`, `09-stage-platform-admin-candidate-probes.json` |
+| Target-host strict preflight | Failed: 1 P0 blocker, `auth.basic_disabled` | `04-stage-host-production-preflight-strict.json`, `07-stage-authentication-class-proof.json` |
+| Services, nginx and security headers | Backend/web/Redis/Postgres active; notification timer active; nginx config OK; HSTS absent | `05-stage-host-services-nginx.log`, `06-stage-security-headers.json` |
+| Original 10 deployed browser scenarios | 8 Passed, 2 Failed, 0 Blocked, 0 Not Run | `08-stage-deployed-rbac-isolation-playwright.log` |
+| Credentialed API allow/deny probes | Tenant/security endpoints deny insufficient roles; support console fails closed without support session | `10-stage-credentialed-api-allow-deny-probes.json` |
+
+Scenario result: **8 Passed, 2 Failed, 0 Blocked, 0 Not Run** for the original Phase 4B deployed browser scenarios.
+
+Conclusion: Phase 4B.2 is not certified. Deployed staging has a P0 strict-preflight/auth hardening failure because `BasicAuthentication` is enabled. RBAC is partially verified for supplied HR/Tenant/ESS/MSS personas, but Platform Admin, full role matrix and two-tenant isolation remain blocked. See `docs/qa/19-phase4b2-staging-auth-rbac-preflight-certification.md`.
+
+## Phase 4B.3 Deployed Staging Security Remediation and Final Revalidation - 2026-10-10
+
+Environment: deployed staging target `https://hrms.accerio.in`, EC2 release `release-20260914023312`.
+
+| Batch | Result | Evidence |
+| --- | --- | --- |
+| Local config regression | Passed, 1/1 | `backend/tests/test_production_like_settings.py` |
+| TypeScript validation | Passed | `pnpm exec tsc --noEmit` |
+| Deployed strict preflight | Passed, 0 blockers | `docs/qa/evidence/phase4b2/16-stage-host-production-preflight-strict-after-fix.json` |
+| Auth-class deployed proof | Passed; BasicAuthentication absent | `17-stage-authentication-class-proof-after-fix.json` |
+| HSTS/security headers | Passed; HSTS `max-age=300` present on root/login/API health | `18-stage-security-headers-after-hsts.json` |
+| Original 10 deployed browser scenarios | 10 Passed, 0 Failed, 0 Blocked, 0 Not Run | `19-stage-browser-final-rerun-after-deploy.log` |
+| Platform Admin / two-tenant proof | Focused Platform Admin API allow/deny passed; two-tenant browser isolation passed; broad route-menu suite has 2 stale/timebox failures not counted as product blockers | `29-stage-platform-two-tenant-rbac-final.log`, `31-stage-platform-focused-route-api-proof.json` |
+| Disposable privileged-account cleanup | Passed; 3 disposable platform users deactivated | `32-stage-disposable-platform-admin-cleanup.json` |
+
+Conclusion: Phase 4B.3 is certified for deployed staging authentication/RBAC/tenant-isolation scope. Remaining launch gates are outside Phase 4B.3: bank-account readiness decision, provider conditionals, external email/SMS proof or approved exclusion, backup/restore, monitoring/alerting and final production HSTS policy.
+
+## Phase 3D.2 ESS Functional and Browser Certification - 2026-10-10
+
+Environment: isolated local QA database `backend/db.phase3c_e2e.sqlite3`, tenant `northstar-foods`, ESS employee `EMP-0042` / `riya.sharma`, Django API `http://127.0.0.1:8012/api/v1`, Playwright app port `3120`, Chromium. External email/SMS/payment/provider actions were not executed.
+
+| Batch | Result | Evidence |
+| --- | --- | --- |
+| Environment and ESS bundle | Passed | `docs/qa/evidence/phase3d2/00-backend-health.json`, `01-ess-fixture-inventory.json`, `07-seed-ess-demo-data.log`, `08-seed-ess-payslip-manifest.json`, `09-riya-ess-artifact-db-probe-after-seed.json` |
+| Initial ESS discovery reruns | 17 passed, 5 failed, 2 skipped across diagnostic batches | `02-ess-dashboard-notifications.log`, `03-ess-documents-payslips.log`, `04-ess-leave-attendance.log`, `05-ess-statutory-security-artifacts.log` |
+| Stale assertion and fixture revalidation | Passed after selector/fixture stabilization | `10-ess-focused-revalidation.log`, `11-ess-stale-assertion-revalidation.log`, `13-ess-notification-focused-revalidation-rerun.log` |
+| Roster/leave deterministic cleanup | Passed | `15-roster-fixture-restore.json`, `17-leave-roster-cleanup.json`, `18-ess-roster-calculation-focused-rerun-after-fixture-fix.log`, `19-leave-balance-after-cleanup.json` |
+| Final applicable ESS browser suite | 23 Passed, 0 Failed, 0 Blocked, 1 Skipped | `20-ess-final-applicable-suite-rerun.log` |
+
+Skipped scenario: `ess-leave-policy-resolution-certification.spec.ts` requires `PLAYWRIGHT_LEAVE_FALLBACK_EMPLOYEE_USERNAME/PASSWORD`; this is treated as optional fallback-policy fixture coverage, not a blocker for the primary ESS certification set.
+
+Legacy fixture-specific P100 artifact specs were not counted in the Phase 3D.2 denominator because they require historical `pilot100_20260912` users/runs absent from the certified Phase 3D database. Current ESS payslip/artifact coverage is provided by the deterministic `EMP-0042` published payslip fixture.
+
+Certification result: ESS is certified for the locally applicable Phase 3D.2 browser scope with one optional fixture-gated scenario skipped. No open P0/P1 employee-data isolation, document, payslip, leave, attendance, notification or compact-UX blocker remains from the executed scope.

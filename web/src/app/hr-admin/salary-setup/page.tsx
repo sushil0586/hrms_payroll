@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminSalarySetup } from "@/lib/api";
 import type {
@@ -159,10 +158,12 @@ function PaginationControls({
   const isFirst = page <= 1;
   const isLast = page >= totalPages;
   const className = "button button--secondary payroll-setup-pagination__button";
+  const showPageControls = totalPages > 1;
   return (
     <div className="payroll-setup-pagination" aria-label={`${tab} pagination`}>
       <span className="payroll-setup-count">{total ? `${page} of ${totalPages}` : "0 records"}</span>
       <div className="payroll-setup-page-size" aria-label="Rows per page">
+        <span className="payroll-setup-page-size__label">Rows</span>
         {PAGE_SIZE_OPTIONS.map((option) => (
           <Link
             aria-current={pageSize === option ? "page" : undefined}
@@ -174,20 +175,22 @@ function PaginationControls({
           </Link>
         ))}
       </div>
-      <div className="payroll-setup-pagination__nav">
-        <Link aria-disabled={isFirst} className={`${className}${isFirst ? " is-disabled" : ""}`} href={salaryHref(currentParams, { tab, [pageParam]: 1 })}>
-          First
-        </Link>
-        <Link aria-disabled={isFirst} className={`${className}${isFirst ? " is-disabled" : ""}`} href={salaryHref(currentParams, { tab, [pageParam]: Math.max(1, page - 1) })}>
-          Previous
-        </Link>
-        <Link aria-disabled={isLast} className={`${className}${isLast ? " is-disabled" : ""}`} href={salaryHref(currentParams, { tab, [pageParam]: Math.min(totalPages, page + 1) })}>
-          Next
-        </Link>
-        <Link aria-disabled={isLast} className={`${className}${isLast ? " is-disabled" : ""}`} href={salaryHref(currentParams, { tab, [pageParam]: totalPages })}>
-          Last
-        </Link>
-      </div>
+      {showPageControls ? (
+        <div className="payroll-setup-pagination__nav">
+          <Link aria-disabled={isFirst} className={`${className}${isFirst ? " is-disabled" : ""}`} href={salaryHref(currentParams, { tab, [pageParam]: 1 })}>
+            First
+          </Link>
+          <Link aria-disabled={isFirst} className={`${className}${isFirst ? " is-disabled" : ""}`} href={salaryHref(currentParams, { tab, [pageParam]: Math.max(1, page - 1) })}>
+            Previous
+          </Link>
+          <Link aria-disabled={isLast} className={`${className}${isLast ? " is-disabled" : ""}`} href={salaryHref(currentParams, { tab, [pageParam]: Math.min(totalPages, page + 1) })}>
+            Next
+          </Link>
+          <Link aria-disabled={isLast} className={`${className}${isLast ? " is-disabled" : ""}`} href={salaryHref(currentParams, { tab, [pageParam]: totalPages })}>
+            Last
+          </Link>
+        </div>
+      ) : <span aria-hidden="true" />}
     </div>
   );
 }
@@ -651,11 +654,13 @@ export default async function HrAdminSalarySetupPage({ searchParams }: PageProps
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Components" value={setup.summary.component_count} trend={`${setup.summary.active_component_count} active`} />
-          <MetricTile className="metric-tile-soft" label="Structures" value={setup.summary.structure_count} trend={`${setup.summary.active_structure_count} active`} />
-          <MetricTile className="metric-tile-soft" label="Active versions" value={setup.summary.active_version_count} trend="Effective dated" />
-          <MetricTile className="metric-tile-soft" label="Assigned employees" value={setup.summary.assigned_employee_count} trend="Salary coverage" />
+        <div className="attendance-summary-strip salary-setup-summary-strip" aria-label="Salary setup summary">
+          <span><strong>{setup.summary.component_count}</strong> components</span>
+          <span><strong>{setup.summary.active_component_count}</strong> active components</span>
+          <span><strong>{setup.summary.structure_count}</strong> structures</span>
+          <span><strong>{setup.summary.active_structure_count}</strong> active structures</span>
+          <span><strong>{setup.summary.active_version_count}</strong> active versions</span>
+          <span><strong>{setup.summary.assigned_employee_count}</strong> assigned employees</span>
         </div>
       </section>
 

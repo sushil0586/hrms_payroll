@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminSaasResilienceReadiness } from "@/lib/api";
 import type { HrAdminSaasResilienceReadiness } from "@/lib/types";
@@ -93,13 +92,13 @@ export default async function HrAdminSaasResiliencePage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Resilience posture" value={titleCase(data.summary.status)} trend={`${data.summary.blocker_count} blockers`} />
-          <MetricTile label="Readiness checks" value={`${data.summary.passed_check_count}/${data.summary.check_count}`} trend={`${data.summary.warning_count} warnings`} />
-          <MetricTile label="Backup cadence" value={`${data.backup.frequency_hours}h`} trend={`${data.backup.recovery_point_objective_minutes}m RPO`} />
-          <MetricTile label="Restore test" value={titleCase(data.restore.last_restore_test_status)} trend={formatDateTime(data.restore.last_restore_test_at)} />
-          <MetricTile label="Payroll retention" value={`${data.retention.payroll_retention_days}d`} trend={`${data.retention.minimum_payroll_retention_days}d minimum`} />
-          <MetricTile label="Audit retention" value={`${data.retention.audit_retention_days}d`} trend={`${data.retention.minimum_audit_retention_days}d minimum`} />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{titleCase(data.summary.status)}</strong> Resilience posture</span>
+          <span><strong>{`${data.summary.passed_check_count}/${data.summary.check_count}`}</strong> Readiness checks</span>
+          <span><strong>{`${data.backup.frequency_hours}h`}</strong> Backup cadence</span>
+          <span><strong>{titleCase(data.restore.last_restore_test_status)}</strong> Restore test</span>
+          <span><strong>{`${data.retention.payroll_retention_days}d`}</strong> Payroll retention</span>
+          <span><strong>{`${data.retention.audit_retention_days}d`}</strong> Audit retention</span>
         </div>
       </section>
 

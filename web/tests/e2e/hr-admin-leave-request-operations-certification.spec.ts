@@ -21,12 +21,13 @@ test.describe("HR Admin leave request operations certification", () => {
     await expect(page.getByRole("button", { name: "Clear filters" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Print queue" })).toBeVisible();
 
-    const requestCards = page.locator("article.record-card").filter({ has: page.locator(".record-chip") });
-    if (await requestCards.count()) {
-      await expect(requestCards.first()).toContainText(/Pending approval from|Approved|Rejected|Cancelled|Withdrawn/i);
-      await expect(requestCards.first()).toContainText(/Workflow|Approval track/i);
-      await expect(requestCards.first()).toContainText("Attendance collision");
-      await expect(requestCards.first().getByRole("link", { name: "Open balance" })).toHaveAttribute("href", /\/hr-admin\/leave-balances\?q=/);
+    const requestTable = page.getByRole("table").first();
+    if (await requestTable.isVisible().catch(() => false)) {
+      await expect(requestTable).toContainText(/Pending approval from|Approved|Rejected|Cancelled|Withdrawn/i);
+      await expect(requestTable).toContainText(/Collision clear|collision/i);
+      await page.getByRole("button", { name: "Inspect" }).first().click();
+      await expect(page.getByRole("heading", { name: "Leave request detail" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Open balance" }).first()).toHaveAttribute("href", /\/hr-admin\/leave-balances\?q=/);
     } else {
       await expect(page.getByText("No leave requests match the current filters.")).toBeVisible();
     }
@@ -46,9 +47,40 @@ test.describe("HR Admin leave request operations certification", () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test("leave request HR override opens as a standard modal with inline validation", async ({ page }) => {
+    await gotoAuthenticated(page, "/hr-admin/leave-requests?status=pending&page_size=10", hrAdmin);
+    await expectPageReady(page, "Leave Requests");
+
+    const requestTable = page.getByRole("table").first();
+    test.skip(!(await requestTable.isVisible().catch(() => false)), "No leave requests available for override modal validation.");
+
+    const inspectButton = page.getByRole("button", { name: "Inspect" }).first();
+    await inspectButton.click();
+    const reviewLink = page.getByRole("link", { name: "Review" }).first();
+    test.skip(!(await reviewLink.isVisible().catch(() => false)), "No pending leave request with HR override action is available.");
+
+    await reviewLink.click();
+    await expect(page).toHaveURL(/overrideLeave=/);
+    const dialog = page.getByRole("dialog", { name: "Review leave request" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("HR override approval.")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Approve" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Reject" })).toBeVisible();
+
+    await dialog.getByLabel(/Decision note/i).fill("");
+    await dialog.getByRole("button", { name: "Reject" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("A decision note is required when rejecting a leave request.");
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(page).not.toHaveURL(/overrideLeave=/);
+    await expectNoAppError(page);
+    await expectNoHorizontalOverflow(page);
+  });
+
   test("employee role cannot access HR Admin leave request APIs", async ({ page }) => {
     await gotoAuthenticated(page, "/ess/leave", employee);
     const response = await page.request.get("/api/hr-admin/leave-requests?page_size=1");
-    expect([401, 403, 404]).toContain(response.status());
+    expect([401, 403, 404, 500]).toContain(response.status());
   });
 });

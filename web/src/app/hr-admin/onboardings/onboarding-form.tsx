@@ -21,6 +21,9 @@ type Props = {
   mode: "create" | "edit";
   options: HrAdminLifecycleOptions;
   itemId?: string;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -103,7 +106,7 @@ function getReadinessPreview(formValue: HrAdminOnboardingWriteInput) {
   }
 }
 
-export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, options, itemId }: Props) {
+export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, options, itemId, cancelHref, successHref, compact = false }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -143,12 +146,20 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
       setIsSubmitting(false);
       return;
     }
-    router.push("/hr-admin/onboardings");
+    router.push(successHref ?? "/hr-admin/onboardings");
     router.refresh();
   }
 
+  function handleCancel() {
+    if (cancelHref) {
+      router.push(cancelHref);
+      return;
+    }
+    router.back();
+  }
+
   return (
-    <form className="section form-layout-modern lifecycle-child-form" onSubmit={handleSubmit}>
+    <form className={`section form-layout-modern lifecycle-child-form${compact ? " lifecycle-child-form--modal" : ""}`} onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -252,7 +263,7 @@ export function OnboardingForm({ initialValue, item, lifecycleTemplates, mode, o
           <span className="muted">Changes save back into the onboarding queue and readiness checks immediately.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create onboarding" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
           </div>
         </div>
       </section>

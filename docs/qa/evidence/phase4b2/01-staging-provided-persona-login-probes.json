@@ -1,0 +1,108 @@
+{
+  "phase": "4B.2",
+  "target": "https://hrms.accerio.in",
+  "timestamp_utc": "2026-10-10T11:55:13Z",
+  "request_contract": "POST /api/auth/login with identifier + password",
+  "note": "Sanitized credential probe. Identifiers/passwords/tokens intentionally omitted.",
+  "results": [
+    {
+      "label": "persona_1",
+      "http_status": 200,
+      "authenticated": true,
+      "workspace_access": {
+        "ess": true,
+        "mss": true,
+        "hr_admin": true,
+        "tenant_admin": true,
+        "platform_admin": false
+      },
+      "default_membership": {
+        "tenant_code": "accerio-india",
+        "status": "active"
+      },
+      "role_codes": [],
+      "error_class": null
+    },
+    {
+      "label": "persona_2",
+      "http_status": 200,
+      "authenticated": true,
+      "workspace_access": {
+        "ess": true,
+        "mss": true,
+        "hr_admin": false,
+        "tenant_admin": false,
+        "platform_admin": false
+      },
+      "default_membership": {
+        "tenant_code": "accerio-india",
+        "status": "active"
+      },
+      "role_codes": [],
+      "error_class": null
+    },
+    {
+      "label": "persona_3",
+      "http_status": 400,
+      "authenticated": false,
+      "workspace_access": {},
+      "default_membership": null,
+      "role_codes": [],
+      "error_class": "invalid_credentials"
+    },
+    {
+      "label": "persona_4",
+      "http_status": 200,
+      "authenticated": true,
+      "workspace_access": {
+        "ess": true,
+        "mss": true,
+        "hr_admin": false,
+        "tenant_admin": false,
+        "platform_admin": false
+      },
+      "default_membership": {
+        "tenant_code": "accerio-india",
+        "status": "active"
+      },
+      "role_codes": [],
+      "error_class": null
+    },
+    {
+      "label": "persona_5",
+      "http_status": 200,
+      "authenticated": true,
+      "workspace_access": {
+        "ess": true,
+        "mss": true,
+        "hr_admin": true,
+        "tenant_admin": true,
+        "platform_admin": false
+      },
+      "default_membership": {
+        "tenant_code": "accerio-india",
+        "status": "active"
+      },
+      "role_codes": [],
+      "error_class": null
+    },
+    {
+      "label": "persona_6",
+      "http_status": 200,
+      "authenticated": true,
+      "workspace_access": {
+        "ess": true,
+        "mss": false,
+        "hr_admin": false,
+        "tenant_admin": false,
+        "platform_admin": false
+      },
+      "default_membership": {
+        "tenant_code": "accerio-india",
+        "status": "active"
+      },
+      "role_codes": [],
+      "error_class": null
+    }
+  ]
+}

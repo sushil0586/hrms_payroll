@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLaunchRemediations } from "@/lib/api";
 import type { HrAdminLaunchRemediationAssignment } from "@/lib/types";
@@ -96,13 +95,13 @@ export default async function HrAdminLaunchRemediationPage({ searchParams }: Pag
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Open assignments" value={data.summary.open_count} trend="Current unresolved launch risk" />
-          <MetricTile label="Blockers" value={data.summary.blocker_count} trend="Must clear or decide before launch" />
-          <MetricTile label="Warnings" value={data.summary.warning_count} trend="Pilot acceptance review" />
-          <MetricTile label="Overdue" value={data.summary.overdue_count} trend={`${data.summary.due_soon_count} due within 24 hours`} />
-          <MetricTile label="Ignored decisions" value={data.summary.ignored_count} trend="Accepted with notes" />
-          <MetricTile label="Escalated" value={data.summary.escalated_count} trend={`${data.summary.owner_count} configured owner routes`} />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{data.summary.open_count}</strong> Open assignments</span>
+          <span><strong>{data.summary.blocker_count}</strong> Blockers</span>
+          <span><strong>{data.summary.warning_count}</strong> Warnings</span>
+          <span><strong>{data.summary.overdue_count}</strong> Overdue</span>
+          <span><strong>{data.summary.ignored_count}</strong> Ignored decisions</span>
+          <span><strong>{data.summary.escalated_count}</strong> Escalated</span>
         </div>
       </section>
 

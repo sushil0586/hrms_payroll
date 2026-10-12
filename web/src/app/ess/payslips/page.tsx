@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PayslipDetailAction } from "@/app/ess/payslips/payslip-detail-action";
 import { getEssPayrollPayslips } from "@/lib/api";
+import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -50,7 +51,8 @@ function formatMoney(value: unknown, currency = "INR") {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  return <span className={`readiness-badge readiness-badge--${status}`}>{titleCase(status)}</span>;
+  const tone = status === "published" ? "success" : status === "draft" ? "neutral" : "info";
+  return <WorkspaceStatusBadge tone={tone}>{titleCase(status)}</WorkspaceStatusBadge>;
 }
 
 export default async function EssPayslipsPage({ searchParams }: PageProps) {
@@ -95,27 +97,11 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
           </div>
           <span className="queue-summary-chip">{data.total_count} visible</span>
         </div>
-        <div className="workspace-summary-grid metric-grid-modern payroll-setup-metrics">
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">PS</span><h3>Published payslips</h3></div>
-            <strong>{data.summary.published_payslip_count}</strong>
-            <p>{data.total_count} published payslips visible</p>
-          </article>
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">DL</span><h3>Downloadable</h3></div>
-            <strong>{data.summary.downloadable_payslip_count}</strong>
-            <p>Released files</p>
-          </article>
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">NP</span><h3>Latest net pay</h3></div>
-            <strong>{formatMoney(data.summary.latest_net_pay)}</strong>
-            <p>{data.summary.latest_period_name || "No payroll yet"}</p>
-          </article>
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">PD</span><h3>Latest pay date</h3></div>
-            <strong>{formatDate(data.summary.latest_pay_date)}</strong>
-            <p>Employee portal</p>
-          </article>
+        <div className="attendance-summary-strip" aria-label="Payslip summary">
+          <span><strong>{data.summary.published_payslip_count}</strong> published</span>
+          <span><strong>{data.summary.downloadable_payslip_count}</strong> downloadable</span>
+          <span><strong>{formatMoney(data.summary.latest_net_pay)}</strong> latest net pay</span>
+          <span><strong>{formatDate(data.summary.latest_pay_date)}</strong> latest pay date</span>
         </div>
       </section>
 
@@ -152,12 +138,8 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
               <StatusBadge status={selectedPayslip ? "published" : "draft"} />
             </div>
 
-            <details className="workspace-filter-disclosure" open>
-              <summary>
-                <span>Filters</span>
-                <small>{data.items.length} shown from the loaded page</small>
-              </summary>
-              <form action="/ess/payslips" className="ess-payslip-filter-form">
+            <form action="/ess/payslips" className="ess-payslip-filter-form">
+              <WorkspaceFilterBar>
                 <label className="form-field">
                   <span className="muted">Search payslips</span>
                   <input aria-label="Search payslips" className="input-control" defaultValue={q} name="q" placeholder="Search payslips" />
@@ -181,8 +163,8 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
                   </select>
                 </label>
                 <button className="button button--primary" type="submit">Apply</button>
-              </form>
-            </details>
+              </WorkspaceFilterBar>
+            </form>
 
             <div className="ess-payslip-summary-strip">
               <div>
@@ -203,7 +185,7 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
             </div>
 
             <div className="payroll-table-scroll">
-              <table className="payroll-readiness-table ess-payslip-table">
+              <table className="workspace-table attendance-directory-table ess-payslip-table" aria-label="Published payslips">
                 <thead>
                   <tr>
                     <th>Payslip</th>
@@ -218,7 +200,7 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
                 <tbody>
                   {data.items.map((payslip) => (
                     <tr className={selectedPayslip?.id === payslip.id ? "is-selected" : ""} key={payslip.id}>
-                      <td>
+                      <td className="workspace-table__primary-cell">
                         <Link href={`/ess/payslips${buildQueryString({
                           q,
                           year,
@@ -237,8 +219,8 @@ export default async function EssPayslipsPage({ searchParams }: PageProps) {
                       <td>{formatMoney(payslip.totals_snapshot.net_pay)}</td>
                       <td>
                         <strong>{payslip.access_summary.is_read_acknowledged ? "Read" : "Unread"}</strong>
-                        <span>{payslip.access_summary.download_count} downloads</span>
-                        <span>{payslip.access_summary.notification_count} notifications</span>
+                        <span className="workspace-table__secondary">{payslip.access_summary.download_count} downloads</span>
+                        <span className="workspace-table__secondary">{payslip.access_summary.notification_count} notifications</span>
                       </td>
                       <td>
                         <div className="table-actions">

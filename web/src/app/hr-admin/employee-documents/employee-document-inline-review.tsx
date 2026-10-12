@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -10,6 +9,8 @@ type Props = {
   item: HrAdminEmployeeDocument;
   verificationStatusOptions: HrAdminEnumOption[];
   onSaved?: (message: string) => void;
+  onOpenFullReview?: () => void;
+  reviewHref: string;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -42,7 +43,7 @@ function nextOutcomeText(status: string, reuploadRequested: boolean) {
   return "Document stays in the HR verification queue.";
 }
 
-export function EmployeeDocumentInlineReview({ item, verificationStatusOptions, onSaved }: Props) {
+export function EmployeeDocumentInlineReview({ item, verificationStatusOptions, onSaved, onOpenFullReview, reviewHref }: Props) {
   const router = useRouter();
   const [verificationStatus, setVerificationStatus] = useState(item.verification_status);
   const [reviewNote, setReviewNote] = useState(item.rejection_reason || "");
@@ -95,9 +96,9 @@ export function EmployeeDocumentInlineReview({ item, verificationStatusOptions, 
           <h3>Quick review</h3>
           <p className="section-copy section-copy-soft">Update outcome and follow-up without leaving the queue.</p>
         </div>
-        <Link className="button button--secondary" href={`/hr-admin/employee-documents/${item.id}/review`}>
+        <button className="button button--secondary" onClick={() => onOpenFullReview?.() ?? router.push(reviewHref)} type="button">
           Full review
-        </Link>
+        </button>
       </div>
       <div className="document-inline-status">
         <div>

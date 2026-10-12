@@ -162,23 +162,23 @@ export function BankAdviceReportWorkspace({
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Bank advice files</span>
             <strong>{filteredRows.length}</strong>
             <small>{rows.length} total artifacts</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Payout value</span>
             <strong>{formatMoney(totalAmount)}</strong>
             <small>Filtered total</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Submitted</span>
             <strong>{filteredRows.filter((row) => row.delivery?.submitted_at).length}</strong>
             <small>Provider submissions</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Reconciled</span>
             <strong>{filteredRows.filter((row) => row.delivery?.reconciled_at).length}</strong>
             <small>Bank acknowledgements</small>

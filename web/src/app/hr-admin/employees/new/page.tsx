@@ -15,11 +15,11 @@ export default async function HrAdminNewEmployeePage() {
   const defaultStatus = optionsResult.data.employment_statuses.find((item) => item.value === "draft")?.value || optionsResult.data.employment_statuses[0]?.value || "draft";
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui hr-employee-form-page">
       <PageIntro
         eyebrow={optionsResult.state === "live" ? "Live create mode" : "Demo create mode"}
         title="Create employee"
-        description="Create the master record that downstream access, lifecycle, and payroll workflows use."
+        description="Create the master record used by access, lifecycle, approvals, and payroll."
         actions={<Link className="button button--secondary" href="/hr-admin/employees">Back to employee masters</Link>}
         pills={["Identity", "Structure", "Payroll ready"]}
       />

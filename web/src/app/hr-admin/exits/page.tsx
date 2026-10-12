@@ -1,9 +1,11 @@
 import Link from "next/link";
 
+import { createEmptyExitValue, exitToFormValue } from "@/app/hr-admin/exits/form-values";
+import { ExitForm } from "@/app/hr-admin/exits/exit-form";
 import { ExitQueue } from "@/app/hr-admin/exits/exit-queue";
-import { MetricTile } from "@/components/patterns/metric-tile";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminExits, getHrAdminLifecycleOptions } from "@/lib/api";
+import { getHrAdminExits, getHrAdminLifecycleOptions, getHrAdminWorkflowTemplates } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -21,8 +23,10 @@ export default async function HrAdminExitsPage({ searchParams }: PageProps) {
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
   const rehireEligible = normalizeParam(currentParams.rehire_eligible) ?? "";
+  const exitModal = normalizeParam(currentParams.exitModal) ?? "";
+  const editExit = normalizeParam(currentParams.editExit) ?? "";
 
-  const [result, optionsResult] = await Promise.all([
+  const [result, optionsResult, templatesResult] = await Promise.all([
     getHrAdminExits({
       page,
       page_size: pageSize,
@@ -31,14 +35,18 @@ export default async function HrAdminExitsPage({ searchParams }: PageProps) {
       rehire_eligible: rehireEligible || undefined,
     }),
     getHrAdminLifecycleOptions(),
+    getHrAdminWorkflowTemplates(),
   ]);
+  const modalCloseHref = `/hr-admin/exits${buildQueryString({ q, status, rehire_eligible: rehireEligible, page, page_size: pageSize })}`;
+  const editItem = editExit ? result.data.items.find((item) => item.id === editExit) : undefined;
+  const isCreateModalOpen = exitModal === "create";
 
   return (
     <main className="shell hr-lifecycle-workbench">
       <PageIntro
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/exits/new">Create exit</Link>
+            <Link className="button button--primary" href={`${modalCloseHref}${modalCloseHref.includes("?") ? "&" : "?"}exitModal=create`}>Create exit</Link>
             <Link className="button button--secondary" href="/hr-admin/lifecycle">Back to lifecycle</Link>
           </>
         }
@@ -50,16 +58,11 @@ export default async function HrAdminExitsPage({ searchParams }: PageProps) {
         ]}
         title="Exit operations"
       />
-      <section className="section">
-        <div className="metrics-grid">
-          <MetricTile label="Queue size" trend="Current filtered result" value={result.data.total_count} />
-          <MetricTile label="Page items" trend="Visible right now" value={result.data.items.length} />
-          <MetricTile
-            label="Rehire eligible"
-            trend="Visible on this page"
-            value={result.data.items.filter((item) => item.rehire_eligible).length}
-          />
-        </div>
+      <section className="attendance-summary-strip" aria-label="Exit summary">
+        <span><strong>{result.data.total_count}</strong> records</span>
+        <span><strong>{result.data.items.length}</strong> on page</span>
+        <span><strong>{result.data.items.filter((item) => item.rehire_eligible).length}</strong> rehire eligible</span>
+        <span><strong>{result.data.items.filter((item) => item.clearance_open_count > 0).length}</strong> clearance open</span>
       </section>
       <ExitQueue
         items={result.data.items}
@@ -73,6 +76,43 @@ export default async function HrAdminExitsPage({ searchParams }: PageProps) {
           has_previous: result.data.has_previous,
         }}
       />
+      {isCreateModalOpen ? (
+        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="exit-create-title" title="Create exit" eyebrow="Lifecycle record">
+          <ExitForm
+            compact
+            cancelHref={modalCloseHref}
+            successHref={modalCloseHref}
+            initialValue={createEmptyExitValue(optionsResult.data.exit_statuses[0]?.value ?? "draft")}
+            lifecycleTemplates={templatesResult.data}
+            mode="create"
+            options={optionsResult.data}
+          />
+        </HrAdminActionModal>
+      ) : null}
+      {editItem ? (
+        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="exit-edit-title" title={`Edit exit: ${editItem.employee_name}`} eyebrow="Lifecycle record">
+          <ExitForm
+            compact
+            cancelHref={modalCloseHref}
+            successHref={modalCloseHref}
+            initialValue={exitToFormValue(editItem)}
+            itemId={editItem.id}
+            lifecycleTemplates={templatesResult.data}
+            mode="edit"
+            options={optionsResult.data}
+          />
+        </HrAdminActionModal>
+      ) : null}
     </main>
   );
+}
+
+function buildQueryString(params: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === "") return;
+    query.set(key, String(value));
+  });
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : "";
 }

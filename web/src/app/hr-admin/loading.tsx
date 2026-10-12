@@ -11,9 +11,9 @@ export default function HrAdminLoading() {
         </div>
       </section>
 
-      <section className="metric-grid-modern">
+      <section className="attendance-summary-strip payroll-run-summary-strip">
         {Array.from({ length: 4 }).map((_, index) => (
-          <article className="metric-tile loading-card" key={index}>
+          <article className="loading-card" key={index}>
             <div className="loading-line loading-line--label" />
             <div className="loading-line loading-line--metric" />
             <div className="loading-line loading-line--tiny" />

@@ -81,6 +81,16 @@ async function optionValueByName(select: Locator, pattern: RegExp) {
   }, pattern.source);
 }
 
+async function optionValueByPreferredNames(select: Locator, patterns: RegExp[]) {
+  for (const pattern of patterns) {
+    const value = await optionValueByName(select, pattern);
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
 async function apiJson<T>(page: Page, path: string) {
   const response = await page.request.get(path);
   const payload = await response.json().catch(() => ({}));
@@ -280,12 +290,12 @@ test.describe("ESS Leave launch certification", () => {
 
   test("leave unit calculation follows the employee roster weekly offs instead of a hardcoded weekend", async ({ page }) => {
     test.setTimeout(6 * 60 * 1000);
-    const runOffsetDays = 90 + (Date.now() % 180);
-    const startDate = nextIsoWeekday(runOffsetDays, 6);
+    const startDate = nextIsoWeekday(28, 6);
     const endDate = isoDateOffset(startDate, 4);
     const retiredStartDate = isoDateOffset(endDate, 26_000);
     const retiredEndDate = isoDateOffset(retiredStartDate, 1);
     let createdAssignmentId: string | null = null;
+    let createdLeaveRequestId: string | null = null;
     let restoredShift = false;
 
     await gotoAuthenticated(page, "/hr-admin/employee-shift-assignments", hrAdmin);
@@ -349,7 +359,7 @@ test.describe("ESS Leave launch certification", () => {
 
       const dialog = await openApplyLeave(page);
       const leaveType = field(dialog, "Leave type");
-      const optionalLeaveValue = await optionValueByName(leaveType, /sick|casual|earned|annual/);
+      const optionalLeaveValue = await optionValueByPreferredNames(leaveType, [/earned/i, /sick/i, /annual/i, /casual/i]);
       test.skip(!optionalLeaveValue, "No optional leave type is available for the roster calculation check.");
 
       await leaveType.selectOption(optionalLeaveValue);
@@ -365,6 +375,7 @@ test.describe("ESS Leave launch certification", () => {
         },
       );
       expect(result.ok, `Leave submit should pass for roster QA: ${result.status} ${JSON.stringify(result.payload)}`).toBeTruthy();
+      createdLeaveRequestId = result.payload.id;
       await expect(dialog).toHaveCount(0);
 
       const detail = await authenticatedBackendJson<LeaveSubmission>(page, `/me/leave-requests/${result.payload.id}/`);
@@ -380,6 +391,13 @@ test.describe("ESS Leave launch certification", () => {
       await expectPageReady(page, "Leave");
       await expectNoHorizontalOverflow(page);
     } finally {
+      if (createdLeaveRequestId) {
+        await page.request.post(`/api/me/leave-requests/${createdLeaveRequestId}/withdraw/`, {
+          data: {
+            reason: "Phase 3D ESS roster calculation cleanup",
+          },
+        }).catch(() => undefined);
+      }
       if (createdAssignmentId) {
         await gotoAuthenticated(page, "/hr-admin/employee-shift-assignments", hrAdmin).catch(() => undefined);
         await page.request.patch(`/api/hr-admin/employee-shift-assignments/${createdAssignmentId}`, {

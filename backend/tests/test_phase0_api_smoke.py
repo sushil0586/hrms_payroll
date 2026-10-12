@@ -1552,6 +1552,41 @@ def test_custom_hr_leave_viewer_role_gates_leave_mutations(api_client: APIClient
     assert balance_action_response.status_code == 403
     assert "leave.balances.manage" in str(balance_action_response.json())
 
+    blocked_approval_response = api_client.post(
+        f"/api/v1/hr-admin/leave-requests/{bootstrapped_workspace['pending_leave'].id}/approve/",
+        {"comment": "Blocked HR override without approval permission."},
+        format="json",
+    )
+    assert blocked_approval_response.status_code == 403
+    assert "leave.requests.approve" in str(blocked_approval_response.json())
+
+
+@pytest.mark.django_db
+def test_hr_admin_can_override_pending_leave_request_with_approval_permission(api_client: APIClient, bootstrapped_workspace):
+    pending_leave = bootstrapped_workspace["pending_leave"]
+    token = login(api_client, "nisha.rao")
+    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    approve_response = api_client.post(
+        f"/api/v1/hr-admin/leave-requests/{pending_leave.id}/approve/",
+        {"comment": "Manager unavailable; HR approved as operational override."},
+        format="json",
+    )
+    assert approve_response.status_code == 200, approve_response.json()
+    pending_leave.refresh_from_db()
+    assert approve_response.json()["status"] in [LeaveRequestStatus.APPROVED, LeaveRequestStatus.PARTIALLY_APPROVED]
+    assert pending_leave.status == approve_response.json()["status"]
+    audit_event = SaasCommercialAuditEvent.objects.filter(
+        tenant=pending_leave.tenant,
+        event_type="leave_request_approved",
+        actor_identifier="nisha.rao",
+        event_snapshot__leave_request_id=str(pending_leave.id),
+    ).first()
+    assert audit_event is not None
+    assert audit_event.event_snapshot["decision"] == "approved"
+    assert audit_event.event_snapshot["previous_status"] == LeaveRequestStatus.PENDING
+    assert audit_event.source_hash
+
 
 @pytest.mark.django_db
 def test_custom_leave_approver_role_gates_manager_leave_decisions(api_client: APIClient, bootstrapped_workspace):

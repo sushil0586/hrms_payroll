@@ -1,0 +1,40 @@
+{
+  "cleanup": {
+    "notification_delivery_logs": 0,
+    "notifications": 0,
+    "pay_group_assignments": 0,
+    "pay_groups": 0,
+    "payroll_access_events": 0,
+    "payroll_access_grants": 0,
+    "payroll_artifacts": 0,
+    "payroll_calculations": 0,
+    "payroll_calendars": 0,
+    "payroll_input_snapshots": 0,
+    "payroll_output_batches": 0,
+    "payroll_periods": 0,
+    "payroll_reviews": 0,
+    "payroll_runs": 0
+  },
+  "employee_code": "EMP-0042",
+  "employee_username": "riya.sharma",
+  "export": [
+    "export PLAYWRIGHT_LIVE_RETRY_NOTIFICATION_ID=d916f26d-7a6d-4cd9-a7e8-546c2b2cd7ea",
+    "export PLAYWRIGHT_LIVE_EMPLOYEE_NOTIFICATION_ID=fff31480-1cb5-4bb4-873f-d7bd44098528",
+    "export PLAYWRIGHT_LIVE_PAYSLIP_ID=b4d42093-037d-4d3b-8de5-c673e9035775"
+  ],
+  "handles": {
+    "PLAYWRIGHT_LIVE_EMPLOYEE_NOTIFICATION_ID": "fff31480-1cb5-4bb4-873f-d7bd44098528",
+    "PLAYWRIGHT_LIVE_PAYSLIP_ID": "b4d42093-037d-4d3b-8de5-c673e9035775",
+    "PLAYWRIGHT_LIVE_RETRY_NOTIFICATION_ID": "d916f26d-7a6d-4cd9-a7e8-546c2b2cd7ea"
+  },
+  "hr_admin_username": "nisha.rao",
+  "payroll": {
+    "calendar_code": "pw-test-staging-launch-calendar",
+    "output_batch_id": "0c6d7498-2ce7-4ddf-9fe2-f019fe963c7d",
+    "pay_group_code": "pw-test-staging-launch-pay-group",
+    "period_code": "pw-test-staging-launch-period",
+    "run_code": "pw-test-staging-launch-run"
+  },
+  "seed_ref": "PW_TEST_STAGING_LAUNCH",
+  "tenant_code": "northstar-foods"
+}

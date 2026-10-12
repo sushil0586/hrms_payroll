@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminWorkflowTemplates } from "@/lib/api";
 
@@ -24,10 +23,10 @@ export default async function HrAdminWorkflowTemplatesPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern workflow-metric-grid">
-          <MetricTile label="Templates" trend="Reusable flows" value={result.data.length} />
-          <MetricTile label="Active templates" trend="Visible in this catalog" value={result.data.filter((item) => item.status === "active").length} />
-          <MetricTile label="Steps" trend="Across all templates" value={result.data.reduce((sum, item) => sum + item.steps.length, 0)} />
+        <div className="attendance-summary-strip payroll-run-summary-strip workflow-metric-grid">
+          <span><strong>{result.data.length}</strong> Templates</span>
+          <span><strong>{result.data.filter((item) => item.status === "active").length}</strong> Active templates</span>
+          <span><strong>{result.data.reduce((sum, item) => sum + item.steps.length, 0)}</strong> Steps</span>
         </div>
       </section>
 

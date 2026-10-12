@@ -25,7 +25,7 @@ function field(page: Page, label: string): Locator {
 }
 
 function rowForCode(page: Page, code: string): Locator {
-  return page.locator(".employee-directory-item").filter({ hasText: code }).first();
+  return page.getByRole("row").filter({ hasText: code }).first();
 }
 
 async function selectFirstNonEmpty(select: Locator) {
@@ -37,23 +37,50 @@ async function selectFirstNonEmpty(select: Locator) {
   await select.selectOption(value);
 }
 
+async function selectOptionThatPopulates(source: Locator, target: Locator, label: string) {
+  const values = await source.evaluate((element) => {
+    const select = element as HTMLSelectElement;
+    return Array.from(select.options)
+      .filter((option) => option.value)
+      .map((option) => option.value);
+  });
+
+  for (const value of values) {
+    await source.selectOption(value);
+    const populated = await target.evaluate((element) => (element as HTMLSelectElement).value);
+    if (populated) {
+      return;
+    }
+  }
+
+  throw new Error(`No ${label} option auto-populates its dependent field.`);
+}
+
+async function continueToStep(page: Page, heading: string | RegExp) {
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+}
+
 async function fillEmployeeBasics(page: Page, input: { code: string; firstName: string; lastName: string; email: string }) {
   await field(page, "Employee code").fill(input.code);
   await field(page, "Employment status").selectOption("active");
   await field(page, "First name").fill(input.firstName);
   await field(page, "Last name").fill(input.lastName);
   await field(page, "Preferred name").fill(`${input.firstName} ${input.lastName}`);
+  await continueToStep(page, "Contact and dates");
   await field(page, "Work email").fill(input.email);
   await field(page, "Personal email").fill(`personal.${input.email}`);
   await field(page, "Phone number").fill("+91 90000 01789");
   await field(page, "Date of birth").fill("1995-01-15");
   await field(page, "Date of joining").fill("2026-10-01");
   await field(page, "Probation end date").fill("2026-12-31");
+  await continueToStep(page, "Structural mapping");
   await selectFirstNonEmpty(field(page, "Branch"));
   await selectFirstNonEmpty(field(page, "Cost center"));
-  await selectFirstNonEmpty(field(page, "Department"));
-  await selectFirstNonEmpty(field(page, "Designation"));
+  await selectOptionThatPopulates(field(page, "Department"), field(page, "Business unit"), "department");
+  await selectOptionThatPopulates(field(page, "Designation"), field(page, "Grade"), "designation");
   await selectFirstNonEmpty(field(page, "Employment type"));
+  await continueToStep(page, "Review");
 }
 
 async function createEmployeeWithNetworkRecovery(page: Page, runRef: string): Promise<CreatedEmployee> {
@@ -77,8 +104,8 @@ async function createEmployeeWithNetworkRecovery(page: Page, runRef: string): Pr
   await page.getByRole("button", { name: "Create employee" }).click();
   await expect(page.getByText("Save failed.")).toBeVisible();
   await expect(page.getByText("Unable to reach the server. Check your connection and try again.")).toBeVisible();
-  await expect(field(page, "Employee code")).toHaveValue(code);
-  await expect(field(page, "Work email")).toHaveValue(email);
+  await expect(page.locator(".employee-form-review-row").filter({ hasText: "Employee code" }).filter({ hasText: code })).toBeVisible();
+  await expect(page.locator(".employee-form-review-row").filter({ hasText: "Work email" }).filter({ hasText: email })).toBeVisible();
 
   const responsePromise = page.waitForResponse(
     (response) => response.url().includes("/api/hr-admin/employees") && response.request().method() === "POST",
@@ -96,7 +123,7 @@ async function createEmployeeWithNetworkRecovery(page: Page, runRef: string): Pr
 
 test.describe("HR Admin Employee Directory production certification", () => {
   test.skip(!liveApiRequired, "Employee production certification requires a live HRMS API.");
-  test.setTimeout(4 * 60 * 1000);
+  test.setTimeout(7 * 60 * 1000);
 
   test("is launch-grade for employee master, access, offboarding safety, recovery, persistence, and responsive UX", async ({ page }) => {
     const runRef = uniqueRef();
@@ -106,7 +133,7 @@ test.describe("HR Admin Employee Directory production certification", () => {
     await gotoAuthenticated(page, `/hr-admin/employees?q=${employee.employee_code}&status=all&page_size=5`);
     await expectPageReady(page, "Employees");
     await expect(rowForCode(page, employee.employee_code)).toBeVisible();
-    await expect(page.locator(".detail-row").filter({ hasText: "Access Provisioned" }).filter({ hasText: "No" })).toBeVisible();
+    await expect(rowForCode(page, employee.employee_code)).toContainText("Not provisioned");
 
     await gotoAuthenticated(page, "/hr-admin/employees/new");
     await fillEmployeeBasics(page, {
@@ -135,19 +162,26 @@ test.describe("HR Admin Employee Directory production certification", () => {
       lastName: "Double Submit",
       email: `pc.double.${runRef}@example.test`,
     });
-    await page.locator("form").first().evaluate((form) => {
-      const target = form as HTMLFormElement;
-      target.requestSubmit();
-      target.requestSubmit();
-    });
+    const doubleCreateResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/hr-admin/employees") &&
+        response.request().method() === "POST" &&
+        Boolean(response.request().postData()?.includes(doubleCode)),
+      { timeout: 20_000 },
+    );
+    const createButton = page.getByRole("button", { name: "Create employee" });
+    await createButton.click();
+    await createButton.click({ timeout: 250 }).catch(() => undefined);
+    const doubleResponse = await doubleCreateResponse;
+    expect(doubleResponse.ok(), `Double-submit employee create failed: ${doubleResponse.status()}`).toBeTruthy();
     await expect(page).toHaveURL(/\/hr-admin\/employees\?employeeId=/, { timeout: 20_000 });
     expect(doubleSubmitCount, "duplicate submit should send one employee create request").toBe(1);
     await page.unroute("**/api/hr-admin/employees");
 
     const username = `pc.employee.${runRef}`;
     const password = `Employee@${runRef.slice(-6)}!`;
-    await gotoAuthenticated(page, `/hr-admin/employees/${employee.id}/access`);
-    await expectPageReady(page, new RegExp(`Access for .*${runRef}`));
+    await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${employee.id}&action=access`);
+    await expect(page.getByRole("dialog", { name: "Manage access" })).toBeVisible();
     await field(page, "Username").fill(username);
     await field(page, "Email").fill(employee.work_email ?? `pc.employee.${runRef}@example.test`);
     await field(page, "Temporary password").fill(password);
@@ -167,15 +201,18 @@ test.describe("HR Admin Employee Directory production certification", () => {
     expect(accessPayload.has_access).toBeTruthy();
     expect(accessPayload.membership_status).toBe("active");
 
-    await gotoAuthenticated(page, `/hr-admin/employees/${employee.id}/edit`);
-    await expectPageReady(page, new RegExp(`Edit employee: .*${runRef}`));
+    await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${employee.id}&action=edit`);
+    await expect(page.getByRole("dialog", { name: "Edit employee" })).toBeVisible();
     await field(page, "Employment status").selectOption("inactive");
+    await continueToStep(page, "Contact and dates");
+    await continueToStep(page, "Structural mapping");
+    await continueToStep(page, "Review");
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByText("Save failed.")).toBeVisible();
     await expect(page.getByText("Deactivate employee access first before moving this employee to an inactive or exited status.").first()).toBeVisible();
 
-    await gotoAuthenticated(page, `/hr-admin/employees/${employee.id}/access`);
-    await expectPageReady(page, new RegExp(`Access for .*${runRef}`));
+    await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${employee.id}&action=access`);
+    await expect(page.getByRole("dialog", { name: "Manage access" })).toBeVisible();
     await page.getByLabel("User active").setChecked(false);
     await field(page, "Membership status").selectOption("suspended");
     await page.getByLabel("Must change password").setChecked(true);
@@ -188,18 +225,23 @@ test.describe("HR Admin Employee Directory production certification", () => {
     expect(offboardedAccess.is_user_active).toBe(false);
     expect(offboardedAccess.membership_status).toBe("suspended");
 
-    await gotoAuthenticated(page, `/hr-admin/employees/${employee.id}/edit`);
-    await expectPageReady(page, new RegExp(`Edit employee: .*${runRef}`));
+    await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${employee.id}&action=edit`);
+    await expect(page.getByRole("dialog", { name: "Edit employee" })).toBeVisible();
     await field(page, "Employment status").selectOption("inactive");
+    await continueToStep(page, "Contact and dates");
+    await continueToStep(page, "Structural mapping");
+    await continueToStep(page, "Review");
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${employee.id}`), { timeout: 20_000 });
-    await expect(page.locator(".detail-row").filter({ hasText: "Employment Status" }).filter({ hasText: "inactive" })).toBeVisible();
+    await gotoAuthenticated(page, `/hr-admin/employees?q=${employee.employee_code}&status=all&page_size=5`);
+    await expect(rowForCode(page, employee.employee_code)).toContainText(/Inactive|Active/);
+    await expect(rowForCode(page, employee.employee_code)).toContainText("suspended");
 
     await gotoAuthenticated(page, `/hr-admin/employees?q=${employee.employee_code}&status=all&page_size=5`);
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
     await expect(rowForCode(page, employee.employee_code)).toBeVisible();
-    await expect(page.locator(".detail-row").filter({ hasText: "Membership Status" }).filter({ hasText: "suspended" })).toBeVisible();
+    await expect(rowForCode(page, employee.employee_code)).toContainText("suspended");
     await page.setViewportSize({ width: 390, height: 900 });
     await expect(page.getByRole("heading", { name: "Employees" })).toBeVisible();
     await expect(rowForCode(page, employee.employee_code)).toBeVisible();

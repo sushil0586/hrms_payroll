@@ -1,8 +1,7 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { WorkspaceCard } from "@/components/patterns/workspace-card";
+import { WorkspaceDataTable, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getLaunchConfigChecks, launchConfigSummary, type LaunchConfigSeverity } from "@/lib/launch-config-checks";
 import { hrAdminModuleMetadata } from "@/lib/ui/module-metadata";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
@@ -40,6 +39,16 @@ function actionStatus(value: number) {
     return "warning" as const;
   }
   return "ready" as const;
+}
+
+function badgeTone(status: "ready" | "warning" | "blocked") {
+  if (status === "ready") {
+    return "success" as const;
+  }
+  if (status === "blocked") {
+    return "danger" as const;
+  }
+  return "warning" as const;
 }
 
 function buildHrAdminActions(dashboard: HrAdminDashboard) {
@@ -219,11 +228,11 @@ export default async function HrAdminLandingPage() {
       />
 
       <section className="section hr-admin-kpi-strip">
-        <div className="metric-grid-modern hr-admin-kpi-strip__grid">
-          <MetricTile label="Tenant status" value={launchAuditStatusLabel[launchAudit.status]} trend={`${launchAudit.blocker_count} blockers, ${launchAudit.warning_count} warnings`} />
-          <MetricTile label="Active employees" value={activeEmployees} trend={`${dashboard.overview.total_employees} total profiles`} />
-          <MetricTile label="Configuration setup" value={`${launchAudit.passed_gate_count}/${launchAudit.gate_count}`} trend="Launch gates passed" />
-          <MetricTile label="Action queue" value={openCommandCount} trend="Signals needing review" />
+        <div className="attendance-summary-strip hr-admin-dashboard-summary" aria-label="HR admin summary">
+          <span><strong>{launchAuditStatusLabel[launchAudit.status]}</strong> tenant status</span>
+          <span><strong>{activeEmployees}</strong> active employees</span>
+          <span><strong>{launchAudit.passed_gate_count}/{launchAudit.gate_count}</strong> launch gates</span>
+          <span><strong>{openCommandCount}</strong> active signals</span>
         </div>
       </section>
 
@@ -387,19 +396,37 @@ export default async function HrAdminLandingPage() {
             View all reports
           </Link>
         </div>
-        <div className="workspace-grid-modern hr-admin-workspace-grid">
-          {focusWorkspaces.map((workspace) => (
-            <WorkspaceCard
-              cta={workspace.cta}
-              description={workspace.description}
-              details={workspace.details}
-              eyebrow={workspace.eyebrow}
-              href={workspace.href}
-              key={workspace.title}
-              title={workspace.title}
-            />
-          ))}
-        </div>
+        <WorkspaceDataTable ariaLabel="Focused HR Admin workspaces" className="hr-admin-workspace-table">
+          <thead>
+            <tr>
+              <th>Workspace</th>
+              <th>Focus</th>
+              <th>Signals</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {focusWorkspaces.map((workspace) => (
+              <tr key={workspace.title}>
+                <td>
+                  <strong>{workspace.title}</strong>
+                  <span>{workspace.eyebrow}</span>
+                </td>
+                <td>{workspace.description}</td>
+                <td>
+                  <div className="hr-admin-workspace-table__signals">
+                    {workspace.details.map((detail) => (
+                      <WorkspaceStatusBadge key={detail.label} tone="neutral">
+                        {detail.label}: {detail.value}
+                      </WorkspaceStatusBadge>
+                    ))}
+                  </div>
+                </td>
+                <td><Link className="button button--secondary" href={workspace.href}>{workspace.cta}</Link></td>
+              </tr>
+            ))}
+          </tbody>
+        </WorkspaceDataTable>
       </section>
     </main>
   );

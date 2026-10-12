@@ -15,14 +15,14 @@ function field(page: Page, label: string) {
     .first();
 }
 
-function section(page: Page, heading: string | RegExp) {
-  return page.locator("section, article").filter({ has: page.getByRole("heading", { name: heading }) }).first();
+async function continueToEmployeeStep(page: Page, heading: string) {
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: heading })).toBeVisible();
 }
 
-async function expectNativeRequired(locator: Locator) {
-  await expect
-    .poll(async () => locator.evaluate((element) => (element as HTMLInputElement | HTMLSelectElement).validity.valueMissing))
-    .toBe(true);
+async function backToEmployeeStep(page: Page, heading: string) {
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("heading", { name: heading })).toBeVisible();
 }
 
 async function expectSelectHasOptions(locator: Locator, minimum = 1) {
@@ -133,10 +133,12 @@ async function expectEmployeeFormCertified(page: Page, mode: "create" | "edit") 
   await expect(page.getByRole("heading", { name: mode === "create" ? "Create employee master" : "Edit employee master" })).toBeVisible();
   await expect(page.locator("form.employee-child-form")).toBeVisible();
 
-  for (const heading of ["Identity and employment", "Contact and dates", "Structural mapping"]) {
-    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-  }
+  await expect(page.getByRole("button", { name: /1\.Identity/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /2\.Contact/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /3\.Structure/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /4\.Review/ })).toBeVisible();
 
+  await expect(page.getByRole("heading", { name: "Identity and employment" })).toBeVisible();
   for (const label of [
     "Employee code",
     "Employment status",
@@ -144,44 +146,11 @@ async function expectEmployeeFormCertified(page: Page, mode: "create" | "edit") 
     "Middle name",
     "Last name",
     "Preferred name",
-    "Work email",
-    "Personal email",
-    "Phone number",
-    "Date of birth",
-    "Date of joining",
-    "Probation end date",
-    "Confirmation date",
-    "Legal entity",
-    "Branch",
-    "Location",
-    "Business unit",
-    "Department",
-    "Cost center",
-    "Designation",
-    "Grade",
-    "Employment type",
-    "Reporting manager",
   ]) {
     await expect(field(page, label), `${label} should be visible`).toBeVisible();
   }
-
-  for (const label of [
-    "Employment status",
-    "Legal entity",
-    "Branch",
-    "Location",
-    "Business unit",
-    "Department",
-    "Cost center",
-    "Designation",
-    "Grade",
-    "Employment type",
-    "Reporting manager",
-  ]) {
-    await expectSelectHasOptions(field(page, label));
-  }
-
-  await expect(page.getByRole("button", { name: mode === "create" ? "Create employee" : "Save changes" })).toBeVisible();
+  await expectSelectHasOptions(field(page, "Employment status"));
+  await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 }
@@ -190,7 +159,8 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
   test("employee create warns when selected legal entity has no branch or cost center mapping", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/employees/new");
     await expectPageReady(page, "Create employee");
-    await expect(page.getByRole("heading", { name: "Structural mapping" })).toBeVisible();
+    await continueToEmployeeStep(page, "Contact and dates");
+    await continueToEmployeeStep(page, "Structural mapping");
 
     const missingMapping = await selectLegalEntityWithoutStructuralMappings(page);
     if (!missingMapping) {
@@ -217,10 +187,15 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     await expectPageReady(page, "Create employee");
     await expectEmployeeFormCertified(page, "create");
 
+    await continueToEmployeeStep(page, "Contact and dates");
+    await continueToEmployeeStep(page, "Structural mapping");
+    await continueToEmployeeStep(page, "Review");
     await page.getByRole("button", { name: "Create employee" }).click();
-    await expectNativeRequired(field(page, "Employee code"));
-    await expectNativeRequired(field(page, "First name"));
+    await expect(page.getByText("Review the highlighted employee fields and try again.")).toBeVisible();
+    await expect(page.getByText("Enter the employee code.")).toBeVisible();
+    await expect(page.getByText("Enter the first name.")).toBeVisible();
 
+    await continueToEmployeeStep(page, "Contact and dates");
     await field(page, "Date of birth").fill("2026-01-01");
     await field(page, "Date of joining").fill("2025-01-01");
     await expect(page.getByText("date of birth must be earlier than date of joining")).toBeVisible();
@@ -233,16 +208,19 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     await expect(page.getByText("confirmation date cannot be earlier than probation end date")).toBeVisible();
     await field(page, "Confirmation date").fill("2026-10-01");
 
+    await backToEmployeeStep(page, "Identity and employment");
     await field(page, "Employee code").fill(code);
     await field(page, "Employment status").selectOption("active");
     await field(page, "First name").fill("Priya");
     await field(page, "Middle name").fill("Phase");
     await field(page, "Last name").fill("Tester");
     await field(page, "Preferred name").fill("Priya QA");
+    await continueToEmployeeStep(page, "Contact and dates");
     await field(page, "Work email").fill(workEmail);
     await field(page, "Personal email").fill(`${username}.personal@example.test`);
     await field(page, "Phone number").fill("+91 98765 43210");
 
+    await continueToEmployeeStep(page, "Structural mapping");
     const legalEntity = await selectLegalEntityWithStructuralMappings(page);
     await expectSelectHasOptions(field(page, "Branch"));
     await expectSelectHasOptions(field(page, "Cost center"));
@@ -257,6 +235,7 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     await selectFirstNonEmptyOption(field(page, "Employment type"));
     await selectFirstNonEmptyOption(field(page, "Reporting manager"));
 
+    await continueToEmployeeStep(page, "Review");
     const createResult = await submitAndCapture<{ id: string; employee_code: string; full_name?: string }>(
       page,
       "employees",
@@ -267,7 +246,7 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     );
     expect(createResult.ok).toBeTruthy();
     expect(createResult.payload.id).toBeTruthy();
-    await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${createResult.payload.id}`));
+    await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${createResult.payload.id}`), { timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "Employees" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Employee directory" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Employee master detail" })).toBeVisible();
@@ -277,6 +256,9 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     await gotoAuthenticated(page, "/hr-admin/employees/new");
     await field(page, "Employee code").fill(code);
     await field(page, "First name").fill("Duplicate");
+    await continueToEmployeeStep(page, "Contact and dates");
+    await continueToEmployeeStep(page, "Structural mapping");
+    await continueToEmployeeStep(page, "Review");
     const duplicateResult = await submitAndCapture(page, "employees", "POST", async () => {
       await page.getByRole("button", { name: "Create employee" }).click();
     });
@@ -288,23 +270,30 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     await expectEmployeeFormCertified(page, "edit");
     await expect(field(page, "Employee code")).toHaveValue(code);
     await field(page, "Preferred name").fill("Priya Certified");
+    await continueToEmployeeStep(page, "Contact and dates");
     await field(page, "Phone number").fill("+91 98765 43211");
+    await backToEmployeeStep(page, "Identity and employment");
     await field(page, "Employment status").selectOption("on_notice");
+    await continueToEmployeeStep(page, "Contact and dates");
+    await continueToEmployeeStep(page, "Structural mapping");
+    await continueToEmployeeStep(page, "Review");
     const updateResult = await submitAndCapture(page, `employees/${createResult.payload.id}`, "PATCH", async () => {
       await page.getByRole("button", { name: "Save changes" }).click();
     });
     expect(updateResult.ok).toBeTruthy();
-    await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${createResult.payload.id}`));
-    await expect(page.getByText("Priya Certified").first()).toBeVisible();
-    await expect(page.getByText("on notice").first()).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${createResult.payload.id}`), { timeout: 30_000 });
+    const detailPanel = page.locator("article").filter({ has: page.getByRole("heading", { name: "Employee master detail" }) });
+    await expect(detailPanel.getByText("Priya Certified").first()).toBeVisible();
+    await expect(detailPanel.getByText("On Notice").first()).toBeVisible();
 
-    const actionsMenu = page.locator("details.action-menu").filter({ hasText: "Actions" }).first();
+    const actionsMenu = detailPanel.locator("details.action-menu").filter({ hasText: "Actions" }).first();
     await expect(actionsMenu.locator("summary")).toBeVisible();
     await actionsMenu.locator("summary").click();
-    await expect(page.getByRole("link", { name: "Edit employee" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Manage access" })).toBeVisible();
-    await page.getByRole("link", { name: "Manage access" }).click();
-    await expectPageReady(page, /Access for/);
+    await expect(actionsMenu.getByRole("link", { name: "Edit employee" })).toBeVisible();
+    await expect(actionsMenu.getByRole("link", { name: "Manage access" })).toBeVisible();
+    await detailPanel.getByRole("link", { name: "Access", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${createResult.payload.id}&action=access`), { timeout: 30_000 });
+    await expect(page.getByRole("dialog", { name: "Manage access" })).toBeVisible();
     await expect(page.locator("form.employee-child-form")).toBeVisible();
 
     for (const heading of ["Identity and membership", "Access controls", "Role assignment"]) {
@@ -318,7 +307,7 @@ test.describe("Phase 3 employee lifecycle page certification", () => {
     await expect(page.getByText("Must change password")).toBeVisible();
     await expect(page.getByText("Default membership")).toBeVisible();
     await expect(page.getByText("At least one role is required.")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Create access" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Create access" })).toBeEnabled();
 
     await field(page, "Username").fill(username);
     await field(page, "Email").fill(workEmail);

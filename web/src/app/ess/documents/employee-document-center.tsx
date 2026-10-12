@@ -6,7 +6,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { EssDocumentCenterResponse, EssDocumentRequirementItem, HrAdminEmployeeDocument } from "@/lib/types";
 import {
   hasFieldErrors,
@@ -127,19 +129,6 @@ function validateUploadForm(
   return errors;
 }
 
-function useEscapeClose(onClose: () => void) {
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-}
-
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="detail-row">
@@ -187,29 +176,44 @@ function getRequirementSummary(item: EssDocumentRequirementItem) {
   return item.current_review_status_label || "HR review is pending.";
 }
 
+function requirementTone(item: EssDocumentRequirementItem) {
+  if (item.is_compliant) return "success";
+  if (item.current_rejection_reason || item.current_is_expired || !item.current_document_id) return "danger";
+  if (item.current_is_expiring_soon) return "warning";
+  return "info";
+}
+
+function documentTone(item: HrAdminEmployeeDocument) {
+  if (item.reupload_requested || item.verification_status === "rejected") return "danger";
+  if (item.verification_status === "verified") return "success";
+  if (item.expiry_label?.toLowerCase().includes("expir")) return "warning";
+  return "info";
+}
+
 function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument; onClose: () => void }) {
-  useEscapeClose(onClose);
-
   return (
-    <div className="modal-shell" role="presentation">
-      <div aria-label="Document detail" aria-modal="true" className="modal ess-document-modal ess-document-modal--wide" role="dialog">
-        <div className="modal__header">
-          <div>
-            <h2>{item.title}</h2>
-            <p>{item.category_name} • Uploaded {formatDate(item.created_at)}</p>
-          </div>
-          <button aria-label="Close document detail" className="button button--secondary" onClick={onClose} type="button">Close</button>
-        </div>
-
+    <HrAdminActionModal
+      className="ess-document-modal ess-document-modal--wide"
+      closeHref="/ess/documents"
+      description={`${item.category_name} - Uploaded ${formatDate(item.created_at)}`}
+      eyebrow="Document detail"
+      footer={(
+        <>
+          {item.artifact_id ? <Link className="button button--secondary" href={`/api/me/employee-documents/${item.id}/download`}>Download file</Link> : null}
+          <button className="button button--primary" onClick={onClose} type="button">Close</button>
+        </>
+      )}
+      labelledBy="ess-document-detail-title"
+      onClose={onClose}
+      title={item.title}
+    >
         <section className="ess-modal-section">
           <div className="ess-documents-detail-header">
             <div>
               <span className="workspace-card__eyebrow">Current review</span>
               <h3>{item.review_status_label || item.verification_status}</h3>
             </div>
-            <div className="record-card__actions">
-              {item.artifact_id ? <Link className="button button--secondary" href={`/api/me/employee-documents/${item.id}/download`}>Download file</Link> : null}
-            </div>
+            <WorkspaceStatusBadge tone={documentTone(item)}>{item.review_status_label || item.verification_status}</WorkspaceStatusBadge>
           </div>
           <div className="detail-grid">
             <DetailRow label="Version" value={`v${item.version_number}`} />
@@ -257,8 +261,7 @@ function DocumentDetailModal({ item, onClose }: { item: HrAdminEmployeeDocument;
             </div>
           )}
         </section>
-      </div>
-    </div>
+    </HrAdminActionModal>
   );
 }
 
@@ -283,19 +286,28 @@ function UploadDocumentModal({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   selectedRequirement: EssDocumentRequirementItem | undefined;
 }) {
-  useEscapeClose(onClose);
   const canSubmit = Boolean(formValue.category_id && formValue.title.trim() && formValue.file && !isSubmitting);
+  const formId = "ess-document-upload-form";
 
   return (
-    <div className="modal-shell" role="presentation">
-      <div aria-label="Upload document" aria-modal="true" className="modal ess-document-modal" role="dialog">
-        <div className="modal__header">
-          <div>
-            <h2>{selectedRequirement?.current_document_id && !selectedRequirement.is_compliant ? "Replace document" : "Upload document"}</h2>
-            <p>Choose the document type, attach the latest file, and send it to HR for review.</p>
-          </div>
-          <button aria-label="Close upload document dialog" className="button button--secondary" onClick={onClose} type="button">Close</button>
-        </div>
+    <HrAdminActionModal
+      className="ess-document-modal"
+      closeHref="/ess/documents"
+      description="Required fields are marked with *."
+      eyebrow="Employee documents"
+      footer={(
+        <>
+          {data.uploadable_categories.length === 0 ? <span className="muted">No self-upload categories are available right now.</span> : null}
+          <button className="button button--secondary" disabled={isSubmitting} onClick={onClose} type="button">Cancel</button>
+          <button className="button button--primary" disabled={!canSubmit || data.uploadable_categories.length === 0} form={formId} type="submit">
+            {isSubmitting ? "Uploading..." : "Submit for review"}
+          </button>
+        </>
+      )}
+      labelledBy="ess-document-upload-title"
+      onClose={onClose}
+      title={selectedRequirement?.current_document_id && !selectedRequirement.is_compliant ? "Replace document" : "Upload document"}
+    >
 
         {selectedRequirement ? (
           <div className="notice notice--quiet">
@@ -307,9 +319,9 @@ function UploadDocumentModal({
           </div>
         ) : null}
 
-        <form className="ess-document-modal-form" onSubmit={onSubmit}>
+        <form className="ess-document-modal-form" id={formId} onSubmit={onSubmit}>
           <label className="form-field">
-            <span className="muted">Category</span>
+            <span className="muted">Category <strong aria-hidden="true">*</strong></span>
             <select
               aria-invalid={Boolean(fieldErrors.category_id)}
               className="input-control"
@@ -326,7 +338,7 @@ function UploadDocumentModal({
             {fieldErrors.category_id ? <span className="field-error-text" role="alert">{fieldErrors.category_id}</span> : null}
           </label>
           <label className="form-field">
-            <span className="muted">Title</span>
+            <span className="muted">Title <strong aria-hidden="true">*</strong></span>
             <input
               aria-invalid={Boolean(fieldErrors.title)}
               className="input-control"
@@ -367,7 +379,7 @@ function UploadDocumentModal({
             {fieldErrors.expires_on ? <span className="field-error-text" role="alert">{fieldErrors.expires_on}</span> : null}
           </label>
           <label className="form-field form-field--full">
-            <span className="muted">File</span>
+            <span className="muted">File <strong aria-hidden="true">*</strong></span>
             <input
               accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv"
               aria-invalid={Boolean(fieldErrors.file)}
@@ -394,16 +406,8 @@ function UploadDocumentModal({
               <span className="muted">Select a category, enter a title, and attach the file HR needs.</span>
             </div>
           ) : null}
-
-          <div className="ess-document-modal-actions">
-            {data.uploadable_categories.length === 0 ? <span className="muted">No self-upload categories are available right now.</span> : null}
-            <button className="button button--primary" disabled={!canSubmit || data.uploadable_categories.length === 0} type="submit">
-              {isSubmitting ? "Uploading..." : "Submit for review"}
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </HrAdminActionModal>
   );
 }
 
@@ -418,20 +422,27 @@ function RequirementDetailModal({
   onClose: () => void;
   onUpload: () => void;
 }) {
-  useEscapeClose(onClose);
-
   return (
-    <div className="modal-shell" role="presentation">
-      <div aria-label="Required document detail" aria-modal="true" className="modal ess-document-modal ess-document-modal--wide" role="dialog">
-        <div className="modal__header">
-          <div>
-            <span className="workspace-card__eyebrow">Required document</span>
-            <h2>{item.category_name}</h2>
-            <p>{getRequirementSummary(item)}</p>
-          </div>
-          <button aria-label="Close required document detail" className="button button--secondary" onClick={onClose} type="button">Close</button>
-        </div>
-
+    <HrAdminActionModal
+      className="ess-document-modal ess-document-modal--wide"
+      closeHref="/ess/documents"
+      description={getRequirementSummary(item)}
+      eyebrow="Required document"
+      footer={(
+        <>
+          {item.current_document_id ? <Link className="button button--secondary" href={`/api/me/employee-documents/${item.current_document_id}/download`}>Download</Link> : null}
+          <button className="button button--secondary" onClick={onClose} type="button">Close</button>
+          {item.allow_employee_upload ? (
+            <button className="button button--primary" onClick={onUpload} type="button">
+              {item.current_document_id && !item.is_compliant ? "Replace" : "Upload"}
+            </button>
+          ) : null}
+        </>
+      )}
+      labelledBy="ess-requirement-detail-title"
+      onClose={onClose}
+      title={item.category_name}
+    >
         <div className="ess-document-requirement-detail">
           <section className="ess-modal-section">
             <div className="ess-documents-detail-header">
@@ -439,14 +450,7 @@ function RequirementDetailModal({
                 <span className="workspace-card__eyebrow">Current state</span>
                 <h3>{getRequirementStatus(item)}</h3>
               </div>
-              <div className="record-card__actions">
-                {item.allow_employee_upload ? (
-                  <button className="button button--primary" onClick={onUpload} type="button">
-                    {item.current_document_id && !item.is_compliant ? "Replace" : "Upload"}
-                  </button>
-                ) : null}
-                {item.current_document_id ? <Link className="button button--secondary" href={`/api/me/employee-documents/${item.current_document_id}/download`}>Download</Link> : null}
-              </div>
+              <WorkspaceStatusBadge tone={requirementTone(item)}>{getRequirementStatus(item)}</WorkspaceStatusBadge>
             </div>
             <div className="detail-grid">
               <DetailRow label="Current file" value={item.current_document_title || "Not uploaded"} />
@@ -489,8 +493,7 @@ function RequirementDetailModal({
             </section>
           ) : null}
         </div>
-      </div>
-    </div>
+    </HrAdminActionModal>
   );
 }
 
@@ -675,27 +678,11 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
             <span className="muted">{pageFeedback.message}</span>
           </div>
         ) : null}
-        <div className="workspace-summary-grid metric-grid-modern">
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">RD</span><h3>Required</h3></div>
-            <strong>{data.summary.required_document_count}</strong>
-            <p>Required documents mapped to your profile</p>
-          </article>
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">MS</span><h3>Missing now</h3></div>
-            <strong>{data.summary.missing_required_document_count}</strong>
-            <p>Needs your upload</p>
-          </article>
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">EX</span><h3>Expiring soon</h3></div>
-            <strong>{data.summary.expiring_documents}</strong>
-            <p>Review before deadline</p>
-          </article>
-          <article className="workspace-summary-card metric-tile metric-tile-soft">
-            <div><span className="workspace-summary-card__icon" aria-hidden="true">ER</span><h3>Expired</h3></div>
-            <strong>{data.summary.expired_documents}</strong>
-            <p>Replace immediately</p>
-          </article>
+        <div className="attendance-summary-strip" aria-label="Document summary">
+          <span><strong>{data.summary.required_document_count}</strong> required</span>
+          <span><strong>{data.summary.missing_required_document_count}</strong> missing</span>
+          <span><strong>{data.summary.expiring_documents}</strong> expiring soon</span>
+          <span><strong>{data.summary.expired_documents}</strong> expired</span>
         </div>
       </section>
 
@@ -719,7 +706,6 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               <div><strong>Expiry date</strong><span>Add expiry when HR tracks renewals.</span></div>
               <div><strong>Re-upload note</strong><span>Read HR comments before replacing a returned file.</span></div>
             </div>
-            <div className="ess-document-requirement-table workspace-table" role="table" aria-label="Required documents">
           {reuploadItems.length > 0 ? (
             <div className="notice">
               <strong>Re-upload requested.</strong>
@@ -730,43 +716,52 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               </span>
             </div>
           ) : null}
-          <div className="workspace-table__row workspace-table__row--head ess-document-requirement-row" role="row">
-            <span role="columnheader">Document</span>
-            <span role="columnheader">Status</span>
-            <span role="columnheader">Due / expiry</span>
-            <span role="columnheader">Current file</span>
-            <span role="columnheader">Actions</span>
-          </div>
-          {data.requirement_items.map((item) => (
-            <div className="workspace-table__row ess-document-requirement-row" key={item.rule_id} role="row">
-              <span role="cell">
-                <strong>{item.category_name}</strong>
-                <small>{item.requires_verification ? "Review required" : "Auto accepted"}{item.is_future_due ? " • Future due" : ""}</small>
-              </span>
-              <span role="cell">
-                <span className={`record-chip ${item.is_compliant ? "record-chip--accent" : ""}`}>{getRequirementStatus(item)}</span>
-                <small>{item.current_rejection_reason ? "Re-upload requested" : item.current_review_status_label || item.current_verification_status || "Pending upload"}</small>
-              </span>
-              <span role="cell">
-                <strong>{item.due_on || "No deadline"}</strong>
-                <small>{item.current_expiry_label || (item.requires_expiry_date ? "Expiry required" : "No expiry required")}</small>
-              </span>
-              <span role="cell">
-                <strong>{item.current_document_title || "Not uploaded"}</strong>
-                <small>{item.current_uploaded_at ? `Uploaded ${formatDate(item.current_uploaded_at)}` : getRequirementSummary(item)}</small>
-              </span>
-              <span role="cell">
-                <span className="ess-document-row-actions">
-                  <button className="button button--secondary" onClick={() => setSelectedRequirementDetail(item)} type="button">View</button>
-                  {item.allow_employee_upload ? (
-                    <button className="button button--primary" onClick={() => openUpload(item)} type="button">
-                      {item.current_document_id && !item.is_compliant ? "Replace" : "Upload"}
-                    </button>
-                  ) : null}
-                </span>
-              </span>
-            </div>
-          ))}
+            <div className="workspace-table-scroll">
+              <table className="workspace-table attendance-directory-table ess-document-requirement-table" aria-label="Required documents">
+                <thead>
+                  <tr>
+                    <th>Document</th>
+                    <th>Status</th>
+                    <th>Due / expiry</th>
+                    <th>Current file</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.requirement_items.map((item) => (
+                    <tr key={item.rule_id}>
+                      <td className="workspace-table__primary-cell">
+                        <div>
+                          <strong>{item.category_name}</strong>
+                          <span>{item.requires_verification ? "Review required" : "Auto accepted"}{item.is_future_due ? " - Future due" : ""}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <WorkspaceStatusBadge tone={requirementTone(item)}>{getRequirementStatus(item)}</WorkspaceStatusBadge>
+                        <span className="workspace-table__secondary">{item.current_rejection_reason ? "Re-upload requested" : item.current_review_status_label || item.current_verification_status || "Pending upload"}</span>
+                      </td>
+                      <td>
+                        <strong>{item.due_on || "No deadline"}</strong>
+                        <span className="workspace-table__secondary">{item.current_expiry_label || (item.requires_expiry_date ? "Expiry required" : "No expiry required")}</span>
+                      </td>
+                      <td>
+                        <strong>{item.current_document_title || "Not uploaded"}</strong>
+                        <span className="workspace-table__secondary">{item.current_uploaded_at ? `Uploaded ${formatDate(item.current_uploaded_at)}` : getRequirementSummary(item)}</span>
+                      </td>
+                      <td>
+                        <span className="ess-document-row-actions">
+                          <button className="button button--secondary" onClick={() => setSelectedRequirementDetail(item)} type="button">View</button>
+                          {item.allow_employee_upload ? (
+                            <button className="button button--primary" onClick={() => openUpload(item)} type="button">
+                              {item.current_document_id && !item.is_compliant ? "Replace" : "Upload"}
+                            </button>
+                          ) : null}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
         </div>
@@ -784,12 +779,7 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               <span className="queue-summary-chip"><strong>{data.items.length}</strong> shown on this page</span>
             </div>
           </div>
-          <details className="workspace-filter-disclosure" open>
-            <summary>
-              <span>Filters</span>
-              <small>{data.items.length} shown from the loaded page</small>
-            </summary>
-            <div className="ess-document-filter-grid">
+          <WorkspaceFilterBar className="ess-document-filter-grid">
               <label className="form-field">
                 <span className="muted">Search</span>
                 <input className="input-control" onChange={(event) => setSearch(event.target.value)} placeholder="Category, title, file, note" value={search} />
@@ -844,52 +834,59 @@ export function EmployeeDocumentCenter({ data, currentFilters }: Props) {
               >
                 Clear filters
               </button>
-            </div>
-          </details>
+          </WorkspaceFilterBar>
 
-          <div className="workspace-table ess-document-history-table" role="table" aria-label="Document history">
-            <div className="workspace-table__row workspace-table__row--head" role="row">
-              <span role="columnheader">Document</span>
-              <span role="columnheader">Category</span>
-              <span role="columnheader">Review</span>
-              <span role="columnheader">Expiry</span>
-              <span role="columnheader">Uploaded</span>
-              <span role="columnheader">Actions</span>
-            </div>
-            {data.items.map((item) => (
-              <div className="workspace-table__row ess-document-history-row" key={item.id} role="row">
-                <span role="cell">
-                  <strong>{item.title}</strong>
-                  <small>{item.file_name || "File name pending"} • v{item.version_number}</small>
-                </span>
-                <span role="cell">
-                  <strong>{item.category_name}</strong>
-                  <small>{item.status}</small>
-                </span>
-                <span role="cell">
-                  <strong>{item.review_status_label || item.verification_status}</strong>
-                  <small>{item.reupload_requested ? "Re-upload requested" : item.review_owner_label || "Owner pending"}</small>
-                </span>
-                <span role="cell">
-                  <strong>{item.expiry_label}</strong>
-                  <small>{item.expires_on ? formatDate(item.expires_on) : "No expiry"}</small>
-                </span>
-                <span role="cell">{formatDate(item.created_at)}</span>
-                <span role="cell">
-                  <span className="ess-document-history-actions">
-                    <button className="button button--secondary" onClick={() => setSelectedDocument(item)} type="button">Review</button>
-                    {item.artifact_id ? <Link className="button button--ghost" href={`/api/me/employee-documents/${item.id}/download`}>Download</Link> : null}
-                  </span>
-                </span>
-              </div>
-            ))}
-            {data.items.length === 0 ? (
+          <div className="workspace-table-scroll">
+            <table className="workspace-table attendance-directory-table ess-document-history-table" aria-label="Document history">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Category</th>
+                  <th>Review</th>
+                  <th>Expiry</th>
+                  <th>Uploaded</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((item) => (
+                  <tr key={item.id}>
+                    <td className="workspace-table__primary-cell">
+                      <div>
+                        <strong>{item.title}</strong>
+                        <span>{item.file_name || "File name pending"} - v{item.version_number}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <strong>{item.category_name}</strong>
+                      <span className="workspace-table__secondary">{item.status}</span>
+                    </td>
+                    <td>
+                      <WorkspaceStatusBadge tone={documentTone(item)}>{item.review_status_label || item.verification_status}</WorkspaceStatusBadge>
+                      <span className="workspace-table__secondary">{item.reupload_requested ? "Re-upload requested" : item.review_owner_label || "Owner pending"}</span>
+                    </td>
+                    <td>
+                      <strong>{item.expiry_label}</strong>
+                      <span className="workspace-table__secondary">{item.expires_on ? formatDate(item.expires_on) : "No expiry"}</span>
+                    </td>
+                    <td>{formatDate(item.created_at)}</td>
+                    <td>
+                      <span className="ess-document-history-actions">
+                        <button className="button button--secondary" onClick={() => setSelectedDocument(item)} type="button">Review</button>
+                        {item.artifact_id ? <Link className="button button--ghost" href={`/api/me/employee-documents/${item.id}/download`}>Download</Link> : null}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {data.items.length === 0 ? (
               <div className="notice workspace-empty-state">
                 <strong>No documents match the current filters.</strong>
                 <span className="muted">Clear one or more filters to review the full submission history.</span>
               </div>
             ) : null}
-          </div>
         </section>
 
         <PaginationBar

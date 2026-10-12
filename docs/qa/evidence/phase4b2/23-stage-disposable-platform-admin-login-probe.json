@@ -1,0 +1,8 @@
+{
+  "label": "p4b2_platform_admin_v2",
+  "timestamp_utc": "2026-10-10T12:15:22Z",
+  "http_status": 400,
+  "authenticated": false,
+  "workspace_access": {},
+  "error_class": "http_error"
+}

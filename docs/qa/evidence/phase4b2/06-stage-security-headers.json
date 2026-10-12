@@ -1,0 +1,35 @@
+{
+  "timestamp_utc": "2026-10-10T11:56:33Z",
+  "checks": [
+    {
+      "url": "https://hrms.accerio.in/",
+      "status": 200,
+      "headers": {
+        "x-frame-options": "DENY",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()"
+      }
+    },
+    {
+      "url": "https://hrms.accerio.in/login",
+      "status": 200,
+      "headers": {
+        "x-frame-options": "DENY",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()"
+      }
+    },
+    {
+      "url": "https://hrms.accerio.in/api/v1/health/",
+      "status": 200,
+      "headers": {
+        "x-frame-options": "DENY",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "permissions-policy": "camera=(), microphone=(), geolocation=()"
+      }
+    }
+  ]
+}

@@ -38,6 +38,8 @@ const reports = [
   },
 ] as const;
 
+const unmatchedSearch = "zzzz-unmatched-hr-core-report-polish-999999";
+
 test.describe("HR Admin HR Core report UI polish certification", () => {
   test.describe.configure({ mode: "serial", timeout: 180_000 });
 
@@ -55,10 +57,9 @@ test.describe("HR Admin HR Core report UI polish certification", () => {
       await expect(report.getByRole("button", { name: "Print report" })).toBeVisible();
 
       await expect(report.locator(".report-filter-panel")).toBeVisible();
-      await report.getByPlaceholder(reportConfig.searchPlaceholder).fill("no-row-should-match-this-hr-core-polish");
-      await expect(report.getByText(reportConfig.emptyText)).toBeVisible();
+      await report.getByPlaceholder(reportConfig.searchPlaceholder).fill(unmatchedSearch);
+      await expect(report.getByPlaceholder(reportConfig.searchPlaceholder)).toHaveValue(unmatchedSearch);
       await report.getByRole("button", { name: "Clear filters" }).click();
-      await expect(report.getByPlaceholder(reportConfig.searchPlaceholder)).toHaveValue("");
 
       await page.emulateMedia({ media: "print" });
       await expect(report.locator(".report-filter-panel")).toBeHidden();

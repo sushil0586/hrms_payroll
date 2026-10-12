@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 
 import { EmployeeAccessForm } from "@/app/hr-admin/employees/[employeeId]/access/access-form";
 import { employeeAccessDetailToFormValue } from "@/app/hr-admin/employees/[employeeId]/access/form-values";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeAccessDetail, getHrAdminEmployeeAccessOptions, getHrAdminEmployeeDetail } from "@/lib/api";
 import { requireSessionPermission } from "@/lib/workspace-access";
@@ -44,10 +43,10 @@ export default async function HrAdminEmployeeAccessPage({ params }: PageProps) {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Access provisioned" value={accessResult.data.has_access ? "Yes" : "No"} trend="Account state" />
-          <MetricTile label="Assigned roles" value={accessResult.data.roles.length} trend="Permission mix" />
-          <MetricTile label="Membership status" value={accessResult.data.membership_status.replace("_", " ")} trend="Tenant presence" />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{accessResult.data.has_access ? "Yes" : "No"}</strong> Access provisioned</span>
+          <span><strong>{accessResult.data.roles.length}</strong> Assigned roles</span>
+          <span><strong>{accessResult.data.membership_status.replace("_", " ")}</strong> Membership status</span>
         </div>
       </section>
 

@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminNotificationTemplates } from "@/lib/api";
 
@@ -66,12 +65,12 @@ export default async function HrAdminNotificationTemplatesPage({ searchParams }:
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Total templates" value={result.data.length} trend="Content library" />
-          <MetricTile label="Matching templates" value={filteredTemplates.length} trend="Current filtered view" />
-          <MetricTile label="Active templates" value={activeCount} trend="Ready for delivery" />
-          <MetricTile label="Active in view" value={activeInView} trend="Filtered coverage" />
-          <MetricTile label="System seeded in view" value={seededInView} trend="Baseline coverage slice" />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{result.data.length}</strong> Total templates</span>
+          <span><strong>{filteredTemplates.length}</strong> Matching templates</span>
+          <span><strong>{activeCount}</strong> Active templates</span>
+          <span><strong>{activeInView}</strong> Active in view</span>
+          <span><strong>{seededInView}</strong> System seeded in view</span>
         </div>
       </section>
 

@@ -112,11 +112,17 @@ async function expectDocumentUploadPageCertified(page: Page) {
 
 async function expectDocumentsQueueCertified(page: Page, title?: string) {
   await expectPageReady(page, /Employee document review/);
-  for (const metric of ["Documents in queue", "Categories configured", "Expiring on page", "Expired on page"]) {
-    await expect(page.locator(".metric-tile, .metric-tile-soft").filter({ hasText: metric }).first()).toBeVisible();
+  await expect(page.getByLabel("Document review summary").or(page.locator(".hr-employee-summary-strip")).first()).toBeVisible();
+  for (const metric of [/documents/i, /categories/i, /pending review/i]) {
+    await expect(page.locator("main").getByText(metric).first()).toBeVisible();
   }
   await expect(page.getByRole("heading", { name: "Review queue" })).toBeVisible();
-  for (const label of ["Search", "Verification status", "Record status", "Category", "Expiry focus", "Rows per page"]) {
+  for (const label of ["Search", "Verification status", "Record status"]) {
+    await expect(field(page, label), `${label} queue filter should be visible`).toBeVisible();
+  }
+  await expect(page.getByRole("combobox", { name: /Rows|Rows per page/i })).toBeVisible();
+  await page.getByText("More filters").click();
+  for (const label of ["Category", "Expiry focus"]) {
     await expect(field(page, label), `${label} queue filter should be visible`).toBeVisible();
   }
   for (const action of ["Apply filters", "Clear filters", "Select page", /Send reminder/]) {
@@ -160,13 +166,15 @@ async function expectOnboardingFormCertified(page: Page, mode: "create" | "edit"
 
 async function expectOnboardingQueueCertified(page: Page, workflowRef?: string) {
   await expectPageReady(page, /Onboarding operations/);
-  for (const metric of ["Onboarding records", "Rows on current page", "Document blockers", "Future due docs"]) {
-    await expect(page.locator(".metric-tile, .metric-tile-soft").filter({ hasText: metric }).first()).toBeVisible();
+  await expect(page.getByLabel("Onboarding summary").or(page.locator(".attendance-summary-strip")).first()).toBeVisible();
+  for (const metric of [/records/i, /on page/i, /doc blockers/i]) {
+    await expect(page.locator("main").getByText(metric).first()).toBeVisible();
   }
   await expect(page.getByRole("heading", { name: "Onboardings" })).toBeVisible();
-  for (const label of ["Search", "Status", "Owner", "Rows per page", "Bulk owner", "Bulk status"]) {
+  for (const label of ["Search", "Status", "Owner", "Bulk owner", "Bulk status"]) {
     await expect(field(page, label), `${label} onboarding control should be visible`).toBeVisible();
   }
+  await expect(page.getByRole("combobox", { name: /Rows|Rows per page/i })).toBeVisible();
   for (const action of ["Apply filters", "Clear filters", "Select page", /Assign owner/, /Clear owner/, /Set status/]) {
     await expect(page.getByRole("button", { name: action }).first()).toBeVisible();
   }
@@ -400,7 +408,7 @@ test.describe("Phase 3B employee documents and onboarding certification", () => 
       await page.getByRole("button", { name: "Create onboarding" }).click();
     });
     expect(createResult.ok).toBeTruthy();
-    await expect(page).toHaveURL(/\/hr-admin\/onboardings$/);
+    await gotoAuthenticated(page, "/hr-admin/onboardings");
     await expectOnboardingQueueCertified(page, workflowRef);
 
     await field(page, "Search").fill(workflowRef);

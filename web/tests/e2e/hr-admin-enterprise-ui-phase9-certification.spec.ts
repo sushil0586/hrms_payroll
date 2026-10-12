@@ -12,15 +12,15 @@ type RouteExpectation = {
 const routeExpectations: RouteExpectation[] = [
   {
     path: "/hr-admin",
-    heading: "People Operations Control Center",
-    selectors: ["[data-testid='hr-admin-control-center']", ".hr-admin-kpi-strip", ".hr-admin-workspace-grid"],
-    visibleText: ["Items that need your attention", "Operational readiness", "Focused workspaces"],
+    heading: "HR Control Center",
+    selectors: ["[data-testid='hr-admin-control-center']", ".hr-admin-kpi-strip", ".hr-admin-enterprise-dashboard"],
+    visibleText: ["Action queue", "Operational readiness", "Workspaces"],
   },
   {
     path: "/hr-admin/employees",
     heading: /Employee/i,
-    selectors: [".hr-employee-workbench", ".hr-employee-command-panel", ".hr-employee-kpi-grid"],
-    visibleText: [/Search/i],
+    selectors: [".hr-employee-workbench", ".hr-employee-summary-strip", ".employee-directory-table"],
+    visibleText: ["Employee directory", "access provisioned"],
   },
   {
     path: "/hr-admin/payroll-readiness",
@@ -68,19 +68,19 @@ const routeExpectations: RouteExpectation[] = [
     path: "/hr-admin/saas-control-plane",
     heading: /SaaS Control Plane/i,
     selectors: [".operations-governance-strip"],
-    visibleText: ["Commercial and entitlement control", "Control plane"],
+    visibleText: ["Commercial and entitlement control", "Plan, usage, entitlements"],
   },
   {
     path: "/hr-admin/saas-resilience",
     heading: /SaaS Resilience/i,
     selectors: [".operations-governance-strip"],
-    visibleText: ["Backup, restore, and retention proof", "Resilience"],
+    visibleText: ["Backup, restore, and retention proof", "Backup, restore, retention"],
   },
   {
     path: "/hr-admin/saas-sla-operations",
     heading: /SaaS SLA Ops/i,
     selectors: [".operations-governance-strip"],
-    visibleText: ["Incident and SLA operating view", "SLA ops"],
+    visibleText: ["Incident and SLA operating view", "Incidents and escalation"],
   },
   {
     path: "/hr-admin/notifications-admin",
@@ -90,9 +90,9 @@ const routeExpectations: RouteExpectation[] = [
   },
   {
     path: "/hr-admin/launch-remediation",
-    heading: /Launch Remediation/i,
+    heading: /Launch Blockers/i,
     selectors: [".operations-governance-strip", ".launch-remediation-toolbar"],
-    visibleText: ["Launch blocker command desk", "Assignment filters"],
+    visibleText: ["Blocker routing", "2 launch remediation rows"],
   },
   {
     path: "/hr-admin/import-history",
@@ -136,26 +136,26 @@ async function expectEnterpriseRoute(page: Page, expectation: RouteExpectation) 
 }
 
 test.describe("HR Admin enterprise UI phase 9 certification", () => {
-  test("certifies premium HR Admin routes and shared control patterns on desktop", async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 960 });
-    for (const expectation of routeExpectations) {
-      await expectEnterpriseRoute(page, expectation);
-    }
-  });
+  test.describe.configure({ timeout: 60_000 });
 
-  test("certifies premium HR Admin routes stay usable at 1366px", async ({ page }) => {
-    await page.setViewportSize({ width: 1366, height: 900 });
-    for (const expectation of routeExpectations) {
+  for (const expectation of routeExpectations) {
+    test(`certifies ${expectation.path} shared control patterns on desktop`, async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 960 });
       await expectEnterpriseRoute(page, expectation);
-    }
-  });
+    });
 
-  test("certifies shared strips stack cleanly on tablet width", async ({ page }) => {
-    await page.setViewportSize({ width: 820, height: 1180 });
-    for (const expectation of routeExpectations.filter((item) =>
-      ["/hr-admin", "/hr-admin/reports", "/hr-admin/saas-operations", "/hr-admin/import-history", "/hr-admin/payroll-statutory"].includes(item.path),
-    )) {
+    test(`certifies ${expectation.path} stays usable at 1366px`, async ({ page }) => {
+      await page.setViewportSize({ width: 1366, height: 900 });
       await expectEnterpriseRoute(page, expectation);
-    }
-  });
+    });
+  }
+
+  for (const expectation of routeExpectations.filter((item) =>
+    ["/hr-admin", "/hr-admin/reports", "/hr-admin/saas-operations", "/hr-admin/import-history", "/hr-admin/payroll-statutory"].includes(item.path),
+  )) {
+    test(`certifies ${expectation.path} shared strips stack cleanly on tablet width`, async ({ page }) => {
+      await page.setViewportSize({ width: 820, height: 1180 });
+      await expectEnterpriseRoute(page, expectation);
+    });
+  }
 });

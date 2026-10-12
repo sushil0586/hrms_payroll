@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 const nextDistDir = process.env.NEXT_DIST_DIR ?? ".next/playwright";
+const skipWebServer = process.env.PLAYWRIGHT_SKIP_WEB_SERVER === "1";
 const webServerEnv: Record<string, string> = {
   HRMS_ENABLE_DEMO_DATA: process.env.HRMS_ENABLE_DEMO_DATA ?? "true",
 };
@@ -38,13 +39,15 @@ export default defineConfig({
       maxDiffPixels: 120,
     },
   },
-  webServer: {
-    command: `NEXT_DIST_DIR=${nextDistDir} pnpm exec next dev --hostname 127.0.0.1 --port ${PORT}`,
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    env: webServerEnv,
-  },
+  webServer: skipWebServer
+    ? undefined
+    : {
+        command: `NEXT_DIST_DIR=${nextDistDir} pnpm exec next dev --hostname 127.0.0.1 --port ${PORT}`,
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+        env: webServerEnv,
+      },
   projects: [
     {
       name: "chromium",

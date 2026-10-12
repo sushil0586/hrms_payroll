@@ -75,23 +75,23 @@ export default async function ComplianceReportHubPage() {
 
       <section className="section section--tight" aria-label="Compliance report hub">
         <div className="report-catalog-workspace compliance-report-hub" data-testid="compliance-report-hub">
-          <div className="metric-grid-modern payroll-setup-metrics">
-            <article className="metric-tile metric-tile-soft">
+          <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+            <article>
               <span>Filing calendars</span>
               <strong>{statutory.summary.filing_calendar_count}</strong>
               <small>{statutory.summary.due_filing_calendar_count} due</small>
             </article>
-            <article className="metric-tile metric-tile-soft">
+            <article>
               <span>Statutory artifacts</span>
               <strong>{handoff.summary.statutory_filing_artifact_count ?? 0}</strong>
               <small>{handoff.summary.statutory_filing_count ?? 0} filing rows</small>
             </article>
-            <article className="metric-tile metric-tile-soft">
+            <article>
               <span>Provider callbacks</span>
               <strong>{handoff.summary.provider_callback_event_count ?? 0}</strong>
               <small>{handoff.summary.rejected_provider_callback_event_count ?? 0} rejected</small>
             </article>
-            <article className="metric-tile metric-tile-soft">
+            <article>
               <span>Provider retries</span>
               <strong>{handoff.summary.provider_retry_event_count ?? 0}</strong>
               <small>{handoff.summary.scheduled_provider_retry_event_count ?? 0} scheduled</small>

@@ -1,8 +1,8 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 
 import { LogoutButton } from "@/app/components/logout-button";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { ManagerApprovalReviewAction } from "@/app/mss/approvals/manager-approval-review-action";
 import { getMssApprovalInbox, getMssAttendanceRegularizationDetail, getMssLeaveRequestDetail } from "@/lib/api";
 import { requireWorkspaceAccess, sessionHasPermission } from "@/lib/workspace-access";
@@ -45,8 +45,11 @@ function formatDateTime(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-function statusClass(status: string) {
-  return `status status--${status}`;
+function statusTone(status: string) {
+  if (status === "approved" || status === "completed") return "success";
+  if (status === "rejected" || status === "cancelled") return "danger";
+  if (status === "pending" || status === "partially_approved") return "warning";
+  return "info";
 }
 
 function requestActionLabel(requestAction?: string) {
@@ -123,18 +126,6 @@ function QueueAccessNotice({
   );
 }
 
-function SummaryCard({ label, value, hint }: { label: string; value: ReactNode; hint: string }) {
-  return (
-    <article className="workspace-summary-card metric-tile">
-      <div className="workspace-summary-card__meta">
-        <span>{label}</span>
-        <strong>{value}</strong>
-        <small>{hint}</small>
-      </div>
-    </article>
-  );
-}
-
 function LeaveApprovalSection({
   currentParams,
   response,
@@ -173,48 +164,57 @@ function LeaveApprovalSection({
             <p className="section-copy section-copy-soft">Pending queue for manager decisions.</p>
           </div>
         </div>
-        <div className="workspace-table tableish mss-approval-table">
+        <div className="workspace-table-scroll">
           {items.length ? (
-            items.map((request) => (
-              <article
-                className={`workspace-table__row tableish__row mss-approval-row ${selected?.id === request.id ? "tableish__row--active" : ""}`}
-                key={request.id}
-              >
-                <div className="tableish__head">
-                  <strong>{request.employee_name}</strong>
-                  <span className={statusClass(request.status)}>{request.status.replace("_", " ")}</span>
-                </div>
-                <div className="tableish__meta">
-                  <span>{requestActionLabel(request.request_action)}</span>
-                  <span>{request.employee_code}</span>
-                  <span>{request.department}</span>
-                  <span>{request.designation}</span>
-                </div>
-                <div className="tableish__meta">
-                  <span>{request.leave_type}</span>
-                  <span>{formatDate(request.start_date)} to {formatDate(request.end_date)}</span>
-                  <span>{request.requested_units} units</span>
-                </div>
-                <span className="muted">
-                  {request.request_action === "cancellation_request"
-                    ? `Cancel reason: ${request.reason || "No reason provided."}`
-                    : request.reason || "No reason provided."}
-                </span>
-                <div className="table-actions">
-                  <Link
-                    className="button button--ghost"
-                    href={buildHref("/mss/approvals", currentParams, {
-                      queue: "leave",
-                      leaveId: request.id,
-                      regId: undefined,
-                    })}
-                  >
-                    Select
-                  </Link>
-                  <ManagerApprovalReviewAction canDecide={canApproveLeave} item={request} kind="leave" state={state} />
-                </div>
-              </article>
-            ))
+            <table className="workspace-table attendance-directory-table mss-approval-table" aria-label="Pending leave requests">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Leave</th>
+                  <th>Period</th>
+                  <th>Status</th>
+                  <th>Reason</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((request) => (
+                  <tr className={selected?.id === request.id ? "is-selected" : ""} key={request.id}>
+                    <td className="workspace-table__primary-cell">
+                      <div>
+                        <strong>{request.employee_name}</strong>
+                        <span>{request.employee_code} - {request.department || "No department"}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <strong>{request.leave_type}</strong>
+                      <span className="workspace-table__secondary">{requestActionLabel(request.request_action)} - {request.requested_units} units</span>
+                    </td>
+                    <td>
+                      <strong>{formatDate(request.start_date)}</strong>
+                      <span className="workspace-table__secondary">to {formatDate(request.end_date)}</span>
+                    </td>
+                    <td><WorkspaceStatusBadge tone={statusTone(request.status)}>{request.status.replace("_", " ")}</WorkspaceStatusBadge></td>
+                    <td><span className="workspace-table__secondary">{request.reason || "No reason provided."}</span></td>
+                    <td>
+                      <div className="table-actions">
+                        <Link
+                          className="button button--ghost"
+                          href={buildHref("/mss/approvals", currentParams, {
+                            queue: "leave",
+                            leaveId: request.id,
+                            regId: undefined,
+                          })}
+                        >
+                          Select
+                        </Link>
+                        <ManagerApprovalReviewAction canDecide={canApproveLeave} item={request} kind="leave" state={state} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : (
             <div className="notice">
               <strong>No pending leave approvals.</strong>
@@ -337,43 +337,57 @@ function RegularizationApprovalSection({
             <p className="section-copy section-copy-soft">Attendance exception queue.</p>
           </div>
         </div>
-        <div className="workspace-table tableish mss-approval-table">
+        <div className="workspace-table-scroll">
           {items.length ? (
-            items.map((item) => (
-              <article
-                className={`workspace-table__row tableish__row mss-approval-row ${selected?.id === item.id ? "tableish__row--active" : ""}`}
-                key={item.id}
-              >
-                <div className="tableish__head">
-                  <strong>{item.employee_name}</strong>
-                  <span className={statusClass(item.status)}>{item.status.replace("_", " ")}</span>
-                </div>
-                <div className="tableish__meta">
-                  <span>{item.employee_code}</span>
-                  <span>{item.department}</span>
-                  <span>{item.designation}</span>
-                </div>
-                <div className="tableish__meta">
-                  <span>{formatDate(item.attendance_date)}</span>
-                  <span>Current: {item.current_status.replace("_", " ")}</span>
-                  <span>Requested: {item.requested_status.replace("_", " ")}</span>
-                </div>
-                <span className="muted">{item.reason || "No reason provided."}</span>
-                <div className="table-actions">
-                  <Link
-                    className="button button--ghost"
-                    href={buildHref("/mss/approvals", currentParams, {
-                      queue: "attendance",
-                      regId: item.id,
-                      leaveId: undefined,
-                    })}
-                  >
-                    Select
-                  </Link>
-                  <ManagerApprovalReviewAction canDecide={canReviewAttendance} item={item} kind="attendance" state={state} />
-                </div>
-              </article>
-            ))
+            <table className="workspace-table attendance-directory-table mss-approval-table" aria-label="Pending attendance fixes">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Date</th>
+                  <th>Correction</th>
+                  <th>Status</th>
+                  <th>Reason</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr className={selected?.id === item.id ? "is-selected" : ""} key={item.id}>
+                    <td className="workspace-table__primary-cell">
+                      <div>
+                        <strong>{item.employee_name}</strong>
+                        <span>{item.employee_code} - {item.department || "No department"}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <strong>{formatDate(item.attendance_date)}</strong>
+                      <span className="workspace-table__secondary">{item.designation || "No designation"}</span>
+                    </td>
+                    <td>
+                      <strong>{item.requested_status.replace("_", " ")}</strong>
+                      <span className="workspace-table__secondary">from {item.current_status.replace("_", " ")}</span>
+                    </td>
+                    <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{item.status.replace("_", " ")}</WorkspaceStatusBadge></td>
+                    <td><span className="workspace-table__secondary">{item.reason || "No reason provided."}</span></td>
+                    <td>
+                      <div className="table-actions">
+                        <Link
+                          className="button button--ghost"
+                          href={buildHref("/mss/approvals", currentParams, {
+                            queue: "attendance",
+                            regId: item.id,
+                            leaveId: undefined,
+                          })}
+                        >
+                          Select
+                        </Link>
+                        <ManagerApprovalReviewAction canDecide={canReviewAttendance} item={item} kind="attendance" state={state} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : (
             <div className="notice">
               <strong>No pending regularizations.</strong>
@@ -580,11 +594,13 @@ export default async function MssApprovalsPage({ searchParams }: PageProps) {
         </div>
       </header>
 
-      <section className="workspace-summary-grid mss-approval-summary-grid" aria-label="Manager approval metrics">
-        <SummaryCard label="Team members" value={summary.team_size} hint="Current span" />
-        <SummaryCard label="Leave approvals" value={summary.pending_leave_approvals_count} hint="Pending decisions" />
-        <SummaryCard label="Regularizations" value={summary.pending_attendance_regularizations_count} hint="Attendance fixes" />
-        <SummaryCard label="Exceptions today" value={summary.attendance_exceptions_today} hint="Daily pulse" />
+      <section className="workspace-section" aria-label="Manager approval metrics">
+        <div className="attendance-summary-strip">
+          <span><strong>{summary.team_size}</strong> team members</span>
+          <span><strong>{summary.pending_leave_approvals_count}</strong> leave approvals</span>
+          <span><strong>{summary.pending_attendance_regularizations_count}</strong> regularizations</span>
+          <span><strong>{summary.attendance_exceptions_today}</strong> exceptions today</span>
+        </div>
       </section>
 
       <section className="workspace-section">

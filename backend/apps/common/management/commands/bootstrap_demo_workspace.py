@@ -13,6 +13,7 @@ from apps.attendance.models import AttendanceRecord, AttendanceSource, Attendanc
 from apps.attendance.services import resolve_regularization, submit_regularization
 from apps.employees.models import Employee, EmploymentStatus
 from apps.iam.models import MembershipStatus, Role, TenantMembership, User
+from apps.iam.permission_catalog import get_permission_catalog
 from apps.leave_management.models import (
     AccrualFrequency,
     LeaveBalance,
@@ -252,6 +253,7 @@ class Command(BaseCommand):
         return memberships
 
     def _seed_roles(self, *, tenant, memberships):
+        permission_catalog = get_permission_catalog()
         for code, name, membership_key in [
             ("tenant-admin", "Tenant Admin", "hr_admin"),
             ("hr-admin", "HR Admin", "hr_admin"),
@@ -267,6 +269,13 @@ class Command(BaseCommand):
                 role=role,
                 defaults={"is_primary": True},
             )
+            for permission in permission_catalog:
+                if code not in permission.get("default_role_codes", []):
+                    continue
+                role.permissions.update_or_create(
+                    permission_key=permission["key"],
+                    defaults={"description": "Demo workspace default permission."},
+                )
 
     def _seed_employees(self, *, tenant, org, memberships, today):
         manager, _ = Employee.objects.update_or_create(

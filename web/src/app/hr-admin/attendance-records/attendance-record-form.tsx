@@ -13,6 +13,9 @@ type Props = {
   initialValue: HrAdminAttendanceRecordWriteInput;
   options: HrAdminAttendanceOperationOptions;
   itemId: string;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -30,7 +33,7 @@ function selectOptions(items: Array<{ id: string; name: string }>) {
   ];
 }
 
-export function AttendanceRecordForm({ initialValue, options, itemId }: Props) {
+export function AttendanceRecordForm({ initialValue, options, itemId, cancelHref, successHref = "/hr-admin/attendance-records", compact = false }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -73,12 +76,20 @@ export function AttendanceRecordForm({ initialValue, options, itemId }: Props) {
       submittingRef.current = false;
       return;
     }
-    router.push("/hr-admin/attendance-records");
+    router.push(successHref);
     router.refresh();
   }
 
+  function handleCancel() {
+    if (cancelHref) {
+      router.push(cancelHref);
+      return;
+    }
+    router.back();
+  }
+
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className={`section form-layout-modern attendance-record-form${compact ? " attendance-record-form--modal" : ""}`} onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -119,7 +130,7 @@ export function AttendanceRecordForm({ initialValue, options, itemId }: Props) {
           <span className="muted">Changes go straight back into the attendance record queue and affect downstream review state immediately.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : "Save attendance record"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
           </div>
         </div>
       </section>

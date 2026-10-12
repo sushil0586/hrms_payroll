@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormSection } from "@/components/patterns/form-section";
@@ -75,6 +75,12 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setIsHydrated(true), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   const sortedEmployees = useMemo(
     () => [...employees].sort((left, right) => left.full_name.localeCompare(right.full_name)),
@@ -141,11 +147,10 @@ export function EmployeeDocumentUploadForm({ employees, options }: Props) {
     }
 
     router.push("/hr-admin/employee-documents");
-    router.refresh();
   }
 
   return (
-    <form className="section form-layout-modern document-child-form" noValidate onSubmit={handleSubmit}>
+    <form className="section form-layout-modern document-child-form" data-hydrated={isHydrated ? "true" : "false"} noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>Employee document upload</h2>

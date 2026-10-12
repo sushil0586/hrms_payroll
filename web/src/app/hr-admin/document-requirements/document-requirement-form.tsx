@@ -11,6 +11,8 @@ type Props = {
   mode: "create" | "edit";
   options: HrAdminDocumentOptions;
   itemId?: string;
+  compact?: boolean;
+  returnPath?: string;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -47,7 +49,7 @@ function selectedName(items: Array<{ id: string; name: string }>, value: string 
   return items.find((item) => item.id === value)?.name ?? "Selected record";
 }
 
-export function DocumentRequirementForm({ initialValue, mode, options, itemId }: Props) {
+export function DocumentRequirementForm({ initialValue, mode, options, itemId, compact = false, returnPath = "/hr-admin/document-requirements" }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -108,17 +110,17 @@ export function DocumentRequirementForm({ initialValue, mode, options, itemId }:
       setIsSubmitting(false);
       return;
     }
-    router.push("/hr-admin/document-requirements");
+    router.push(returnPath);
     router.refresh();
   }
 
   return (
-    <form className="section form-layout-modern document-child-form" onSubmit={handleSubmit}>
-      <section className="form-shell-card">
-        <div className="form-shell-card__intro">
+    <form className={`${compact ? "" : "section "}form-layout-modern document-child-form`} onSubmit={handleSubmit}>
+      <section className={compact ? "form-shell-card form-shell-card--compact" : "form-shell-card"}>
+        {!compact ? <div className="form-shell-card__intro">
           <h2>{mode === "create" ? "Create document requirement" : "Edit document requirement"}</h2>
           <p className="section-copy">Scope the requirement by organization and employment context.</p>
-        </div>
+        </div> : null}
 
         <FormSection description="Choose the category and the org filters where the rule should apply." title="Requirement scope">
           <div className="form-grid">
@@ -156,7 +158,7 @@ export function DocumentRequirementForm({ initialValue, mode, options, itemId }:
         <div className="form-actions-bar">
           <span className="muted">Requirement changes affect compliance checks for matching employees.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--secondary" onClick={() => router.back()} type="button">
+            <button className="button button--secondary" onClick={() => router.push(returnPath)} type="button">
               Cancel
             </button>
             <button className="button button--primary" disabled={isSubmitting} type="submit">

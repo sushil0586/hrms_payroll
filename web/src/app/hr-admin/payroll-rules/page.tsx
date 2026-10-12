@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollRulesSetup } from "@/lib/api";
 import type { HrAdminPayrollRuleDefinition, HrAdminPayrollRuleEvaluation, HrAdminPayrollRulesSetupResponse, HrAdminPayrollRuleVersion } from "@/lib/types";
@@ -716,11 +715,13 @@ export default async function HrAdminPayrollRulesPage({ searchParams }: PageProp
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Rules" value={setup.summary.rule_count} trend={`${setup.summary.formula_rule_count} formulas`} />
-          <MetricTile className="metric-tile-soft" label="Active versions" value={setup.summary.active_version_count} trend={`${setup.summary.draft_version_count} draft`} />
-          <MetricTile className="metric-tile-soft" label="Previews" value={setup.summary.evaluation_count} trend="Stored traces" />
-          <MetricTile className="metric-tile-soft" label="Locked snapshots" value={setup.summary.locked_snapshot_count} trend="Preview-ready inputs" />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll rule summary">
+          <span><strong>{setup.summary.rule_count}</strong> rules</span>
+          <span><strong>{setup.summary.formula_rule_count}</strong> formulas</span>
+          <span><strong>{setup.summary.active_version_count}</strong> active versions</span>
+          <span><strong>{setup.summary.draft_version_count}</strong> drafts</span>
+          <span><strong>{setup.summary.evaluation_count}</strong> previews</span>
+          <span><strong>{setup.summary.locked_snapshot_count}</strong> locked snapshots</span>
         </div>
       </section>
 

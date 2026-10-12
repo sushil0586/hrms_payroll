@@ -188,23 +188,23 @@ export function EsicContributionReadinessWorkspace({
   return (
     <section className="section section--tight" aria-label="ESIC contribution readiness workspace">
       <div className="report-catalog-workspace statutory-filing-status-report" data-testid="esic-contribution-readiness-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Readiness</span>
             <strong>{readiness}</strong>
             <small>{readyCount}/{rows.length} gates ready</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Warnings</span>
             <strong>{warningCount}</strong>
             <small>Partial evidence</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Blocked gates</span>
             <strong>{blockedCount}</strong>
             <small>Must close before filing</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>ESIC artifacts</span>
             <strong>{artifacts.filter(artifactLooksEsi).length}</strong>
             <small>Source evidence</small>

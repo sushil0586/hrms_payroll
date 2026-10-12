@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDashboard } from "@/lib/api";
 import { reportCatalog } from "@/lib/report-catalog";
@@ -53,11 +52,11 @@ export default async function HrCoreReportsPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Active employees" value={overview.active_employees} trend="Workforce base" />
-          <MetricTile label="Departments" value={workforce.department_headcount.length} trend="Reporting slices" />
-          <MetricTile label="Pending approvals" value={overview.pending_approvals} trend="Workflow load" />
-          <MetricTile label="Expiring documents" value={documents.expiring_in_30_days} trend="Compliance follow-up" />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{overview.active_employees}</strong> Active employees</span>
+          <span><strong>{workforce.department_headcount.length}</strong> Departments</span>
+          <span><strong>{overview.pending_approvals}</strong> Pending approvals</span>
+          <span><strong>{documents.expiring_in_30_days}</strong> Expiring documents</span>
         </div>
       </section>
 

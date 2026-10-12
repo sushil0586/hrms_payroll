@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { WorkspaceCard } from "@/components/patterns/workspace-card";
 import { getHrAdminWorkflowTemplateAssignments, getHrAdminWorkflowTemplates, getHrAdminWorkflowTraces } from "@/lib/api";
@@ -71,18 +70,18 @@ export default async function HrAdminWorkflowsPage({ searchParams }: PageProps) 
       />
 
       <section className="section">
-        <div className="metric-grid-modern workflow-metric-grid">
-          <MetricTile label="Templates" trend="Configured approval blueprints" value={templatesResult.data.length} />
-          <MetricTile label="Assignments" trend="Scoped rollout rules" value={assignmentsResult.data.length} />
-          <MetricTile label="Approval steps" trend="Across all templates" value={templatesResult.data.reduce((sum, item) => sum + item.steps.length, 0)} />
-          <MetricTile label="Open traces" trend="Runtime approval work" value={activeTraces} />
-          <MetricTile label="Overdue steps" trend="SLA attention needed" value={overdueSteps} />
-          <MetricTile label="Timeline events" trend="Visible trace markers" value={timelineEvents} />
+        <div className="attendance-summary-strip payroll-run-summary-strip workflow-metric-grid">
+          <span><strong>{templatesResult.data.length}</strong> Templates</span>
+          <span><strong>{assignmentsResult.data.length}</strong> Assignments</span>
+          <span><strong>{templatesResult.data.reduce((sum, item) => sum + item.steps.length, 0)}</strong> Approval steps</span>
+          <span><strong>{activeTraces}</strong> Open traces</span>
+          <span><strong>{overdueSteps}</strong> Overdue steps</span>
+          <span><strong>{timelineEvents}</strong> Timeline events</span>
         </div>
       </section>
 
       <section className="section">
-        <div className="workspace-grid-modern workflow-workspace-grid">
+        <div className="report-workspace-grid workflow-workspace-grid">
           <WorkspaceCard
             description="Design approval chains with escalation timing, actor rules, and module-specific triggers."
             details={[

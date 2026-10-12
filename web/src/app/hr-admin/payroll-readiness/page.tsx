@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReadiness } from "@/lib/api";
@@ -381,12 +380,13 @@ export default async function HrAdminPayrollReadinessPage({ searchParams }: Page
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-readiness-metrics">
-          <MetricTile className="metric-tile-soft" label="Employees in scope" value={readiness.summary.total_employees} trend={readiness.period.label} />
-          <MetricTile className="metric-tile-soft" label="Ready" value={readiness.summary.ready} trend={`${readyPercent}% clear`} />
-          <MetricTile className="metric-tile-soft" label="Warnings" value={readiness.summary.warnings} trend="Can proceed with review" />
-          <MetricTile className="metric-tile-soft" label="Blocked" value={readiness.summary.blocked} trend="Must fix before payroll" />
-          <MetricTile className="metric-tile-soft" label="Pending approvals" value={pendingApprovals} trend="Leave and attendance" />
+        <div className="attendance-summary-strip payroll-readiness-summary-strip" aria-label="Payroll readiness summary">
+          <span><strong>{readiness.summary.total_employees}</strong> employees in scope</span>
+          <span><strong>{readiness.summary.ready}</strong> ready</span>
+          <span><strong>{readyPercent}%</strong> clear</span>
+          <span><strong>{readiness.summary.warnings}</strong> warnings</span>
+          <span><strong>{readiness.summary.blocked}</strong> blocked</span>
+          <span><strong>{pendingApprovals}</strong> pending approvals</span>
         </div>
       </section>
 

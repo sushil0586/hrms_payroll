@@ -146,23 +146,23 @@ export function DocumentComplianceReportWorkspace({ documents }: { documents: Hr
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Documents</span>
             <strong>{filteredRows.length}</strong>
             <small>{documents.length} total records</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Pending verification</span>
             <strong>{filteredRows.filter((item) => item.verification_status === "pending").length}</strong>
             <small>Needs reviewer action</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Expiry risk</span>
             <strong>{filteredRows.filter((item) => item.is_expired || item.is_expiring_soon).length}</strong>
             <small>Expired or expiring</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Re-upload requests</span>
             <strong>{filteredRows.filter((item) => item.reupload_requested).length}</strong>
             <small>Employee follow-up</small>

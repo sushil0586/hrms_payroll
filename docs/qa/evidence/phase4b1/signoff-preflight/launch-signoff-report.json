@@ -1,0 +1,133 @@
+{
+  "decision": "STAGING PREFLIGHT BLOCKED",
+  "environment_posture": [
+    {
+      "expected": "",
+      "key": "HRMS_API_BASE_URL",
+      "purpose": "Live backend API target for browser proxy routes.",
+      "required_for_mode": true,
+      "status": "missing"
+    },
+    {
+      "expected": "",
+      "key": "HRMS_API_BEARER_TOKEN",
+      "purpose": "Optional API bearer token for non-cookie automation.",
+      "required_for_mode": false,
+      "status": "not_required_for_mode"
+    },
+    {
+      "expected": "",
+      "key": "PLAYWRIGHT_LIVE_SEED_PASSWORD",
+      "purpose": "Seeded operator password for staging browser runs.",
+      "required_for_mode": true,
+      "status": "missing"
+    },
+    {
+      "expected": "true",
+      "key": "PLAYWRIGHT_LIVE_MUTATIONS",
+      "purpose": "Opt-in flag for disposable live mutation execution.",
+      "required_for_mode": false,
+      "status": "not_required_for_mode"
+    },
+    {
+      "expected": "",
+      "key": "PLAYWRIGHT_LIVE_RETRY_NOTIFICATION_ID",
+      "purpose": "Disposable failed notification id for live mutation opt-in.",
+      "required_for_mode": false,
+      "status": "not_required_for_mode"
+    },
+    {
+      "expected": "",
+      "key": "PLAYWRIGHT_LIVE_EMPLOYEE_NOTIFICATION_ID",
+      "purpose": "Disposable employee notification id for live mutation opt-in.",
+      "required_for_mode": false,
+      "status": "not_required_for_mode"
+    },
+    {
+      "expected": "",
+      "key": "PLAYWRIGHT_LIVE_PAYSLIP_ID",
+      "purpose": "Disposable payslip id for live read-receipt opt-in.",
+      "required_for_mode": false,
+      "status": "not_required_for_mode"
+    },
+    {
+      "expected": "",
+      "key": "HRMS_PAYROLL_PROVIDER_CREDENTIALS_JSON",
+      "purpose": "Runtime payroll provider credential refs loaded from a secret manager.",
+      "required_for_mode": false,
+      "status": "not_required_for_mode"
+    },
+    {
+      "expected": "",
+      "key": "HRMS_PAYROLL_ARTIFACT_STORAGE_CREDENTIALS_JSON",
+      "purpose": "Runtime payroll artifact storage credential refs.",
+      "required_for_mode": false,
+      "status": "not_required_for_mode"
+    },
+    {
+      "expected": "",
+      "key": "HRMS_PAYROLL_ARTIFACT_STORAGE_POLICIES_JSON",
+      "purpose": "Tenant payroll artifact storage policy registry.",
+      "required_for_mode": false,
+      "status": "not_required_for_mode"
+    },
+    {
+      "expected": "true",
+      "key": "HRMS_PAYROLL_PROVIDER_WORKER_ENABLED",
+      "purpose": "Confirms a payroll provider worker process/timer is deployed.",
+      "required_for_mode": true,
+      "status": "missing"
+    },
+    {
+      "expected": "true",
+      "key": "HRMS_NOTIFICATION_PROCESSOR_ENABLED",
+      "purpose": "Enables Celery Beat notification scheduling when Celery Beat is the scheduler.",
+      "required_for_mode": false,
+      "status": "not_required_for_mode"
+    },
+    {
+      "expected": "true",
+      "key": "HRMS_NOTIFICATION_WORKER_ENABLED",
+      "purpose": "Confirms a notification worker process/timer is deployed.",
+      "required_for_mode": true,
+      "status": "missing"
+    },
+    {
+      "expected": "",
+      "key": "HRMS_ENTERPRISE_IDENTITY_STATUS",
+      "purpose": "MFA/SSO/SCIM launch posture; set to verified or not_in_scope.",
+      "required_for_mode": true,
+      "status": "missing"
+    },
+    {
+      "expected": "strict",
+      "key": "PAYROLL_ARTIFACT_STORAGE_CONTROL_VERIFICATION_MODE",
+      "purpose": "Strict storage/IAM/KMS/lifecycle/malware/durability verification mode.",
+      "required_for_mode": false,
+      "status": "not_required_for_mode"
+    }
+  ],
+  "generated_at": "2026-10-10T11:30:07Z",
+  "json_report_path": "docs/qa/evidence/phase4b1/signoff-preflight/launch-signoff-report.json",
+  "logs_dir": "docs/qa/evidence/phase4b1/signoff-preflight/logs",
+  "management_outputs_dir": "docs/qa/evidence/phase4b1/signoff-preflight/management-outputs",
+  "markdown_report_path": "docs/qa/evidence/phase4b1/signoff-preflight/launch-signoff-report.md",
+  "mode": "staging",
+  "preflight_only": true,
+  "production_exceptions": [
+    "Real payroll provider credentials/transports must be validated with official sandbox or production runbooks.",
+    "Real SSO/MFA/SCIM identity-provider execution must be validated for enabled enterprise tenants.",
+    "Real email/SMS/notification provider delivery must be validated outside local demo mode.",
+    "Object storage IAM, KMS, lifecycle, malware scan, durability, and signed URL behavior must be verified in the target environment.",
+    "Backup/restore, monitoring, alerting, and incident-response runbooks must be executed in the target environment."
+  ],
+  "seed_manifest": {
+    "configured_keys": [],
+    "live_mutations_source": "",
+    "missing_keys": [],
+    "path": "",
+    "status": "not_requested"
+  },
+  "steps": [],
+  "tenant_code": "northstar-foods"
+}

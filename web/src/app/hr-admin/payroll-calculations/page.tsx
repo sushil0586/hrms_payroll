@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollCalculationSetup } from "@/lib/api";
 import type { HrAdminPayrollCalculationLineListItem, HrAdminPayrollRun, HrAdminPayrollRunCalculation, HrAdminPayrollValidationIssue } from "@/lib/types";
@@ -631,12 +630,16 @@ export default async function HrAdminPayrollCalculationsPage({ searchParams }: P
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Calculable runs" value={setup.summary.calculable_run_count} trend={`${setup.summary.run_count} total runs`} />
-          <MetricTile className="metric-tile-soft" label="Calculations" value={setup.summary.calculation_count} trend={`${setup.summary.completed_calculation_count} completed`} />
-          <MetricTile className="metric-tile-soft" label="Lines" value={setup.summary.line_count} trend={`${setup.summary.error_line_count} errors`} />
-          <MetricTile className="metric-tile-soft" label="Validation" value={setup.summary.open_validation_issue_count} trend={`${setup.summary.validation_warning_count} warnings / ${setup.summary.validation_blocker_count} blockers`} />
-          <MetricTile className="metric-tile-soft" label="Latest net pay" value={formatMoney(setup.summary.latest_net_pay)} trend="Draft total" />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll calculation summary">
+          <span><strong>{setup.summary.calculable_run_count}</strong> calculable runs</span>
+          <span><strong>{setup.summary.run_count}</strong> total runs</span>
+          <span><strong>{setup.summary.calculation_count}</strong> calculations</span>
+          <span><strong>{setup.summary.completed_calculation_count}</strong> completed</span>
+          <span><strong>{setup.summary.line_count}</strong> lines</span>
+          <span><strong>{setup.summary.error_line_count}</strong> errors</span>
+          <span><strong>{setup.summary.open_validation_issue_count}</strong> open checks</span>
+          <span><strong>{setup.summary.validation_blocker_count}</strong> blockers</span>
+          <span><strong>{formatMoney(setup.summary.latest_net_pay)}</strong> latest net pay</span>
         </div>
       </section>
 

@@ -6,7 +6,9 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateUploadFile } from "@/lib/ui/validation";
 import type {
   EssStatutoryDeclaration,
@@ -118,7 +120,8 @@ function isEditable(declaration: EssStatutoryDeclaration | null) {
 }
 
 function StatusBadge({ status, label }: { status: string; label?: string }) {
-  return <span className={`readiness-badge readiness-badge--${status}`}>{label || titleCase(status)}</span>;
+  const tone = status === "verified" || status === "locked" ? "success" : status === "rejected" ? "danger" : status === "submitted" ? "info" : "warning";
+  return <WorkspaceStatusBadge tone={tone}>{label || titleCase(status)}</WorkspaceStatusBadge>;
 }
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
@@ -127,43 +130,6 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
       <span className="detail-label">{label}</span>
       <span className="detail-value">{value}</span>
     </div>
-  );
-}
-
-function ModalShell({
-  children,
-  label,
-  onClose,
-  wide = false,
-}: {
-  children: ReactNode;
-  label: string;
-  onClose: () => void;
-  wide?: boolean;
-}) {
-  if (typeof document === "undefined") {
-    return null;
-  }
-
-  return createPortal(
-    <div className="modal-shell" role="presentation">
-      <div aria-label={label} aria-modal="true" className={`modal ess-tax-modal${wide ? " ess-tax-modal--wide" : ""}`} role="dialog">
-        {children}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-function SummaryCard({ label, value, hint }: { label: string; value: ReactNode; hint: string }) {
-  return (
-    <article className="workspace-summary-card">
-      <div className="workspace-summary-card__meta">
-        <span>{label}</span>
-        <strong>{value}</strong>
-        <small>{hint}</small>
-      </div>
-    </article>
   );
 }
 
@@ -357,9 +323,7 @@ function ProofRegister({
         </div>
         <span className="payroll-setup-count">{filteredItems.length} shown</span>
       </div>
-      <details className="workspace-filter-disclosure ess-tax-register-filters" open>
-        <summary>Refine proof register</summary>
-        <div className="workspace-filter-disclosure__content ess-tax-register-filter-grid">
+      <WorkspaceFilterBar className="ess-tax-register-filter-grid">
           <label className="form-field">
             <span>Search proofs</span>
             <input className="input-control" onChange={(event) => setQuery(event.target.value)} placeholder="Section, item, status" value={query} />
@@ -374,37 +338,42 @@ function ProofRegister({
               <option value="rejected">Rejected</option>
             </select>
           </label>
-        </div>
-      </details>
-      <div className="workspace-table ess-tax-proof-list">
-        <div className="workspace-table__row workspace-table__row--head ess-tax-proof-row">
-          <span>Proof</span>
-          <span>Status</span>
-          <span>Declared</span>
-          <span>Accepted</span>
-          <span>Action</span>
-        </div>
-        {filteredItems.map((item) => (
-          <button className="workspace-table__row ess-tax-proof-row ess-tax-proof-card" key={item.id} onClick={() => onOpenProof(item)} type="button">
-            <span>
-              <strong>{item.name}</strong>
-              <small>
-                {item.section_code} / {item.component_code || item.item_kind_label}
-              </small>
-            </span>
-            <StatusBadge status={item.proof_status} label={item.proof_status_label} />
-            <span>{formatMoney(item.declared_amount)}</span>
-            <span>{formatMoney(item.verified_amount)}</span>
-            <span className="table-action-link">View details</span>
-          </button>
-        ))}
-        {filteredItems.length === 0 ? (
+      </WorkspaceFilterBar>
+      <table className="workspace-table attendance-directory-table ess-tax-proof-list" aria-label="Declared proof items">
+        <thead>
+          <tr>
+            <th>Proof</th>
+            <th>Status</th>
+            <th>Declared</th>
+            <th>Accepted</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredItems.map((item) => (
+            <tr key={item.id}>
+              <td className="workspace-table__primary-cell">
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>{item.section_code} / {item.component_code || item.item_kind_label}</span>
+                </div>
+              </td>
+              <td><StatusBadge status={item.proof_status} label={item.proof_status_label} /></td>
+              <td>{formatMoney(item.declared_amount)}</td>
+              <td>{formatMoney(item.verified_amount)}</td>
+              <td>
+                <button className="button button--secondary" onClick={() => onOpenProof(item)} type="button">View details</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {filteredItems.length === 0 ? (
           <div className="ess-tax-empty-card">
             <strong>No proof rows match</strong>
             <span>Clear filters or add a proof to this declaration.</span>
           </div>
         ) : null}
-      </div>
     </section>
   );
 }
@@ -520,21 +489,6 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
     q: filters.q,
     status: filters.status,
   };
-
-  useEffect(() => {
-    if (!activeModal) {
-      return undefined;
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setActiveModal(null);
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activeModal]);
 
   function openProofDetail(item: EssStatutoryDeclarationItem) {
     setSelectedProof(item);
@@ -729,13 +683,13 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
         </div>
       </header>
 
-      <section className="workspace-summary-grid ess-tax-summary-grid--metrics" aria-label="Tax declaration metrics">
-        <SummaryCard label="Declarations" value={data.summary.declaration_count} hint="Tax years in view" />
-        <SummaryCard label="Draft" value={data.summary.draft_declaration_count} hint="Editable declarations" />
-        <SummaryCard label="Proofs" value={data.summary.declaration_item_count} hint="Declared proof rows" />
-        <SummaryCard label="Rejected" value={data.summary.rejected_item_count} hint="Need correction" />
-        <SummaryCard label="Declared" value={formatMoney(data.summary.declared_total_amount)} hint="Employee total" />
-        <SummaryCard label="Accepted" value={formatMoney(data.summary.verified_total_amount)} hint="Payroll accepted" />
+      <section className="attendance-summary-strip" aria-label="Tax declaration summary">
+        <span><strong>{data.summary.declaration_count}</strong> declarations</span>
+        <span><strong>{data.summary.draft_declaration_count}</strong> draft</span>
+        <span><strong>{data.summary.declaration_item_count}</strong> proofs</span>
+        <span><strong>{data.summary.rejected_item_count}</strong> rejected</span>
+        <span><strong>{formatMoney(data.summary.declared_total_amount)}</strong> declared</span>
+        <span><strong>{formatMoney(data.summary.verified_total_amount)}</strong> accepted</span>
       </section>
 
       <section className="workspace-section">
@@ -752,9 +706,8 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
 
           <section className="workspace-data-panel ess-tax-main" aria-label="Tax declaration workspace">
             <div className="ess-tax-toolbar">
-              <details className="workspace-filter-disclosure" open>
-                <summary>Refine declarations</summary>
-                <form action="/ess/statutory-declarations" className="workspace-filter-disclosure__content ess-tax-filter-form">
+              <form action="/ess/statutory-declarations" className="ess-tax-filter-form">
+                <WorkspaceFilterBar>
                   <label className="form-field">
                     <span>Search</span>
                     <input aria-label="Search declarations" className="input-control" defaultValue={filters.q} name="q" placeholder="Year, regime, proof" />
@@ -792,8 +745,8 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
                   <button className="button button--primary" type="submit">
                     Apply
                   </button>
-                </form>
-              </details>
+                </WorkspaceFilterBar>
+              </form>
               {notice ? <div className={`notice notice--${noticeTone}`}>{notice}</div> : null}
             </div>
 
@@ -824,24 +777,32 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
       </section>
 
       {activeModal === "declaration" ? (
-        <ModalShell label={editableDeclaration ? "Update declaration" : "Start declaration"} onClose={() => setActiveModal(null)}>
-          <div className="modal__header">
-            <div>
-              <h2>{editableDeclaration ? "Update declaration" : "Start declaration"}</h2>
-              <p>Choose financial year and tax regime. This keeps proof work tied to the right payroll year.</p>
-            </div>
-            <button className="button button--secondary" onClick={() => setActiveModal(null)} type="button">
-              Close
-            </button>
-          </div>
-          <form className="ess-tax-modal-form" noValidate onSubmit={handleDeclarationSubmit}>
+        <HrAdminActionModal
+          className="ess-tax-modal"
+          closeHref="/ess/statutory-declarations"
+          description="Required fields are marked with *."
+          eyebrow="Statutory declaration"
+          footer={(
+            <>
+              <span className={`notice notice--${noticeTone}`}>{notice}</span>
+              <button className="button button--secondary" disabled={isSavingDeclaration} onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="button button--primary" disabled={!data.profile || isSavingDeclaration} form="ess-tax-declaration-form" type="submit">
+                {isSavingDeclaration ? "Saving" : editableDeclaration ? "Update declaration" : "Create declaration"}
+              </button>
+            </>
+          )}
+          labelledBy="ess-tax-declaration-modal-title"
+          onClose={() => setActiveModal(null)}
+          title={editableDeclaration ? "Update declaration" : "Start declaration"}
+        >
+          <form className="ess-tax-modal-form" id="ess-tax-declaration-form" noValidate onSubmit={handleDeclarationSubmit}>
             <label className="form-field">
-              <span>Financial year</span>
+              <span>Financial year <strong aria-hidden="true">*</strong></span>
               <input aria-invalid={Boolean(declarationFieldErrors.financial_year_code)} className="input-control" onChange={(event) => { setFinancialYearCode(event.target.value); clearDeclarationFieldError("financial_year_code"); }} placeholder="FY2027-28" required value={financialYearCode} />
               {declarationFieldErrors.financial_year_code ? <span className="field-error-text" role="alert">{declarationFieldErrors.financial_year_code}</span> : null}
             </label>
             <label className="form-field">
-              <span>Tax regime</span>
+              <span>Tax regime <strong aria-hidden="true">*</strong></span>
               <select aria-invalid={Boolean(declarationFieldErrors.tax_regime)} className="input-control" onChange={(event) => { setTaxRegime(event.target.value); clearDeclarationFieldError("tax_regime"); }} value={taxRegime}>
                 {data.options.tax_regimes.map((option) => (
                   <option value={option.value} key={option.value}>
@@ -867,28 +828,30 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
                   : "Under the old regime, add relevant proof for 80C, 80D, HRA, home loan, NPS, and previous employer items."}
               </span>
             </div>
-            <div className="ess-tax-modal-actions">
-              <span className={`notice notice--${noticeTone}`}>{notice}</span>
-              <button className="button button--primary" disabled={!data.profile || isSavingDeclaration} type="submit">
-                {isSavingDeclaration ? "Saving" : editableDeclaration ? "Update declaration" : "Create declaration"}
-              </button>
-            </div>
           </form>
-        </ModalShell>
+        </HrAdminActionModal>
       ) : null}
 
       {activeModal === "proof" ? (
-        <ModalShell label="Add proof" onClose={() => setActiveModal(null)} wide>
-          <div className="modal__header">
-            <div>
-              <h2>Add proof</h2>
-              <p>Add one proof row at a time. Upload a file when available, or record a proof reference for HR review.</p>
-            </div>
-            <button className="button button--secondary" onClick={() => setActiveModal(null)} type="button">
-              Close
-            </button>
-          </div>
-          <form className="ess-tax-modal-form ess-tax-modal-form--wide" noValidate onSubmit={handleItemSubmit}>
+        <HrAdminActionModal
+          className="ess-tax-modal ess-tax-modal--wide"
+          closeHref="/ess/statutory-declarations"
+          description="Required fields are marked with *."
+          eyebrow="Declaration proof"
+          footer={(
+            <>
+              <span className={`notice notice--${notice ? noticeTone : "info"}`}>{notice || (editableDeclaration ? `${editableDeclaration.financial_year_code} accepts draft proof rows.` : "Create or select a draft declaration first.")}</span>
+              <button className="button button--secondary" disabled={isSavingItem} onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="button button--primary" disabled={!editableDeclaration || isSavingItem} form="ess-tax-proof-form" type="submit">
+                {isSavingItem ? "Saving" : proofFile ? "Upload proof" : "Add proof"}
+              </button>
+            </>
+          )}
+          labelledBy="ess-tax-proof-modal-title"
+          onClose={() => setActiveModal(null)}
+          title="Add proof"
+        >
+          <form className="ess-tax-modal-form ess-tax-modal-form--wide" id="ess-tax-proof-form" noValidate onSubmit={handleItemSubmit}>
             <label className="form-field">
               <span>Section</span>
               <select className="input-control" disabled={!editableDeclaration} onChange={(event) => setSectionCode(event.target.value)} value={sectionCode}>
@@ -915,12 +878,12 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
               <input className="input-control" disabled={!editableDeclaration} onChange={(event) => setComponentCode(event.target.value)} placeholder="LIC, ELSS, HRA" value={componentCode} />
             </label>
             <label className="form-field">
-              <span>Item name</span>
+              <span>Item name <strong aria-hidden="true">*</strong></span>
               <input aria-invalid={Boolean(proofFieldErrors.name)} className="input-control" disabled={!editableDeclaration} onChange={(event) => { setItemName(event.target.value); clearProofFieldError("name"); }} placeholder="Bengaluru rent receipts" required value={itemName} />
               {proofFieldErrors.name ? <span className="field-error-text" role="alert">{proofFieldErrors.name}</span> : null}
             </label>
             <label className="form-field">
-              <span>Amount</span>
+              <span>Amount <strong aria-hidden="true">*</strong></span>
               <input aria-invalid={Boolean(proofFieldErrors.declared_amount)} className="input-control" disabled={!editableDeclaration} inputMode="decimal" onChange={(event) => { setDeclaredAmount(event.target.value); clearProofFieldError("declared_amount"); }} placeholder="0.00" required value={declaredAmount} />
               {proofFieldErrors.declared_amount ? <span className="field-error-text" role="alert">{proofFieldErrors.declared_amount}</span> : null}
             </label>
@@ -949,53 +912,49 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
               <strong>Proof quality check</strong>
               <span>Use clear files with employee name, financial year, amount, and issuer details visible. HR may reject incomplete or unreadable evidence.</span>
             </div>
-            <div className="ess-tax-modal-actions">
-              <span className={`notice notice--${notice ? noticeTone : "info"}`}>{notice || (editableDeclaration ? `${editableDeclaration.financial_year_code} accepts draft proof rows.` : "Create or select a draft declaration first.")}</span>
-              <button className="button button--primary" disabled={!editableDeclaration || isSavingItem} type="submit">
-                {isSavingItem ? "Saving" : proofFile ? "Upload proof" : "Add proof"}
-              </button>
-            </div>
           </form>
-        </ModalShell>
+        </HrAdminActionModal>
       ) : null}
 
       {activeModal === "submit" ? (
-        <ModalShell label="Submit declaration" onClose={() => setActiveModal(null)}>
-          <div className="modal__header">
-            <div>
-              <h2>Submit declaration</h2>
-              <p>After submission, HR can verify proof and payroll may lock the declaration for the cycle.</p>
-            </div>
-            <button className="button button--secondary" onClick={() => setActiveModal(null)} type="button">
-              Close
-            </button>
-          </div>
+        <HrAdminActionModal
+          className="ess-tax-modal"
+          closeHref="/ess/statutory-declarations"
+          description="After submission, HR can verify proof and payroll may lock the declaration for the cycle."
+          eyebrow="Statutory declaration"
+          footer={(
+            <>
+              <span className={`notice notice--${notice ? noticeTone : "info"}`}>{notice || "Confirm only after proof rows are correct."}</span>
+              <button className="button button--secondary" disabled={isSubmitting} onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="button button--primary" disabled={!editableDeclaration || isSubmitting} onClick={handleSubmitDeclaration} type="button">
+                {isSubmitting ? "Submitting" : "Submit declaration"}
+              </button>
+            </>
+          )}
+          labelledBy="ess-tax-submit-modal-title"
+          onClose={() => setActiveModal(null)}
+          title="Submit declaration"
+        >
           <div className="ess-tax-submit-summary">
             <DetailRow label="Financial year" value={editableDeclaration?.financial_year_code || "Pending"} />
             <DetailRow label="Declared amount" value={formatMoney(editableDeclaration?.declared_total_amount)} />
             <DetailRow label="Proof rows" value={editableDeclaration?.item_count ?? 0} />
             <DetailRow label="Rejected rows" value={editableDeclaration?.rejected_item_count ?? 0} />
           </div>
-          <div className="ess-tax-modal-actions">
-            <span className={`notice notice--${notice ? noticeTone : "info"}`}>{notice || "Confirm only after proof rows are correct."}</span>
-            <button className="button button--primary" disabled={!editableDeclaration || isSubmitting} onClick={handleSubmitDeclaration} type="button">
-              {isSubmitting ? "Submitting" : "Submit declaration"}
-            </button>
-          </div>
-        </ModalShell>
+        </HrAdminActionModal>
       ) : null}
 
       {activeModal === "proofDetail" && selectedProof ? (
-        <ModalShell label="Proof detail" onClose={() => setActiveModal(null)}>
-          <div className="modal__header">
-            <div>
-              <h2>Proof detail</h2>
-              <p>{selectedProof.name}</p>
-            </div>
-            <button className="button button--secondary" onClick={() => setActiveModal(null)} type="button">
-              Close
-            </button>
-          </div>
+        <HrAdminActionModal
+          className="ess-tax-modal"
+          closeHref="/ess/statutory-declarations"
+          description={selectedProof.name}
+          eyebrow="Proof detail"
+          footer={<button className="button button--primary" onClick={() => setActiveModal(null)} type="button">Close</button>}
+          labelledBy="ess-tax-proof-detail-modal-title"
+          onClose={() => setActiveModal(null)}
+          title="Proof detail"
+        >
           <div className="detail-grid detail-grid-soft">
             <DetailRow label="Section" value={selectedProof.section_code} />
             <DetailRow label="Component" value={selectedProof.component_code || selectedProof.item_kind_label} />
@@ -1012,7 +971,7 @@ export function StatutoryDeclarationWorkspace({ data, filters, isDemo, selectedD
               <span>{selectedProof.rejection_reason}</span>
             </div>
           ) : null}
-        </ModalShell>
+        </HrAdminActionModal>
       ) : null}
     </main>
   );

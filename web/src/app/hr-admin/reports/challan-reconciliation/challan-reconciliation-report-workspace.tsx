@@ -199,23 +199,23 @@ export function ChallanReconciliationReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Challan reconciliation report workspace">
       <div className="report-catalog-workspace challan-reconciliation-report" data-testid="challan-reconciliation-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Filing calendars</span>
             <strong>{filteredRows.length}</strong>
             <small>{filings.length} configured</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Mapped challans</span>
             <strong>{mappedRows}</strong>
             <small>Artifact, registration, provider, hash</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Deduction amount</span>
             <strong>{formatMoney(filteredRows.reduce((sum, row) => sum + row.amount, 0))}</strong>
             <small>Matched artifacts</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Provider routes</span>
             <strong>{unique(filteredRows.map((row) => row.providerRef)).length}</strong>
             <small>Configurable filing paths</small>

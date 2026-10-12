@@ -20,6 +20,8 @@ function field(scope: Page | Locator, label: string) {
 }
 
 test.describe("HR Admin core frontend validation", () => {
+  test.describe.configure({ timeout: 60_000 });
+
   test("employee master blocks missing identity, invalid email, and invalid dates before calling the API", async ({ page }) => {
     let employeeCalls = 0;
     await page.route("**/api/hr-admin/employees", async (route) => {
@@ -32,19 +34,19 @@ test.describe("HR Admin core frontend validation", () => {
     await expectPageReady(page, "Create employee");
 
     const form = page.locator("form.employee-child-form");
-    await field(form, "Employee code").fill("");
-    await field(form, "First name").fill("");
+    await field(form, "Employee code").fill(`PW-VAL-${Date.now().toString(36).toUpperCase()}`);
+    await field(form, "First name").fill("Validation");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByRole("button", { name: "2.Contact" })).toHaveAttribute("aria-current", "step");
     await field(form, "Work email").fill("not-an-email");
     await field(form, "Date of birth").fill("2026-10-07");
     await field(form, "Date of joining").fill("2026-01-01");
     await field(form, "Probation end date").fill("2025-12-31");
-    await page.getByRole("button", { name: "Create employee" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
 
-    await expect(form.getByRole("alert").filter({ hasText: "Enter the employee code." })).toBeVisible();
-    await expect(form.getByRole("alert").filter({ hasText: "Enter the first name." })).toBeVisible();
-    await expect(form.getByRole("alert").filter({ hasText: "Enter a valid work email address." })).toBeVisible();
-    await expect(form.getByText("Date of birth must be earlier than date of joining.", { exact: true })).toBeVisible();
-    await expect(form.getByText("Probation end date cannot be earlier than date of joining.", { exact: true })).toBeVisible();
+    await expect(form.getByText("Date review needed.")).toBeVisible();
+    await expect(form.getByText(/Date of birth must be earlier than date of joining/)).toBeVisible();
+    await expect(form.getByText(/Probation end date cannot be earlier than date of joining/)).toBeVisible();
     expect(employeeCalls).toBe(0);
     await expectNoAppError(page);
     await expectNoHorizontalOverflow(page);

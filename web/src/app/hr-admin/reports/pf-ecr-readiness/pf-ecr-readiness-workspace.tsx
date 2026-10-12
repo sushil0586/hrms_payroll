@@ -200,23 +200,23 @@ export function PfEcrReadinessWorkspace({
   return (
     <section className="section section--tight" aria-label="PF ECR readiness workspace">
       <div className="report-catalog-workspace statutory-filing-status-report" data-testid="pf-ecr-readiness-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Readiness</span>
             <strong>{readiness}</strong>
             <small>{readyCount}/{rows.length} gates ready</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Warnings</span>
             <strong>{warningCount}</strong>
             <small>Partial evidence</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Blocked gates</span>
             <strong>{blockedCount}</strong>
             <small>Must close before ECR</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>PF artifacts</span>
             <strong>{artifacts.filter(artifactLooksPf).length}</strong>
             <small>Source evidence</small>

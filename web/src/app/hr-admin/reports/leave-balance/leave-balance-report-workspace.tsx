@@ -168,23 +168,23 @@ export function LeaveBalanceReportWorkspace({ items }: { items: HrAdminLeaveBala
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Balance rows</span>
             <strong>{filteredRows.length}</strong>
             <small>{items.length} total employee-policy rows</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Closing liability</span>
             <strong>{formatUnits(filteredRows.reduce((sum, item) => sum + numeric(item.closing_balance), 0))}</strong>
             <small>Total closing units</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Reserved units</span>
             <strong>{formatUnits(filteredRows.reduce((sum, item) => sum + numeric(item.reserved_amount), 0))}</strong>
             <small>Leave already reserved</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>High liability risk</span>
             <strong>{filteredRows.filter((item) => item.liabilityRisk === "High").length}</strong>
             <small>Overdrawn balances</small>

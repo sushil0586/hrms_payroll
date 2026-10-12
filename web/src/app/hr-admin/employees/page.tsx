@@ -1,16 +1,27 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { EmployeeAccessForm } from "@/app/hr-admin/employees/[employeeId]/access/access-form";
+import { employeeAccessDetailToFormValue } from "@/app/hr-admin/employees/[employeeId]/access/form-values";
+import { BankAccountManager } from "@/app/hr-admin/employees/[employeeId]/bank-accounts/bank-account-manager";
 import { ActionMenu } from "@/components/patterns/action-menu";
-import { MetricTile } from "@/components/patterns/metric-tile";
-import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminEmployeeDetail, getHrAdminEmployeeFormOptions, getHrAdminEmployees } from "@/lib/api";
+import {
+  getHrAdminEmployeeAccessDetail,
+  getHrAdminEmployeeAccessOptions,
+  getHrAdminEmployeeBankAccounts,
+  getHrAdminEmployeeDetail,
+  getHrAdminEmployeeFormOptions,
+  getHrAdminEmployees,
+} from "@/lib/api";
 import type { HrAdminEmployeeDetail, HrAdminEmployeeListItem } from "@/lib/types";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { EmployeeBankImportWorkbench } from "./employee-bank-import-workbench";
+import { EmployeeForm } from "./employee-form";
 import { EmployeeImportWorkbench } from "./employee-import-workbench";
 import { EmployeeManagerImportWorkbench } from "./employee-manager-import-workbench";
+import { createEmptyEmployeeFormValue, employeeDetailToFormValue } from "./form-values";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -88,12 +99,37 @@ function needsOperationalAccess(item: HrAdminEmployeeDetail | HrAdminEmployeeLis
   return item.employment_status === "active" || item.employment_status === "on_notice";
 }
 
-function countManagersNeedingReview(items: HrAdminEmployeeListItem[]) {
-  return items.filter((item) => getEmployeeManagerWarnings(item).length > 0).length;
-}
-
 function formatMembershipStatus(value: string) {
   return value ? value.replaceAll("_", " ") : "Not provisioned";
+}
+
+function formatStatusLabel(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function employeeStatusChipClass(status: string) {
+  if (status === "active") {
+    return "record-chip record-chip--success employee-status-chip employee-status-chip--active";
+  }
+  if (status === "on_notice") {
+    return "record-chip record-chip--warning employee-status-chip employee-status-chip--on-notice";
+  }
+  if (status === "inactive") {
+    return "record-chip record-chip--neutral employee-status-chip employee-status-chip--inactive";
+  }
+  if (status === "exited") {
+    return "record-chip record-chip--danger employee-status-chip employee-status-chip--exited";
+  }
+  return "record-chip record-chip--neutral employee-status-chip";
+}
+
+function formatReviewReason(warnings: string[]) {
+  if (!warnings.length) {
+    return "Ready";
+  }
+  return warnings[0].charAt(0).toUpperCase() + warnings[0].slice(1);
 }
 
 function filterByStatus(items: HrAdminEmployeeListItem[], status: string) {
@@ -218,13 +254,10 @@ function getEmployeeWarnings(detail: HrAdminEmployeeDetail | HrAdminEmployeeList
 }
 
 function resolveSelectedItem(items: HrAdminEmployeeListItem[], selectedId?: string) {
-  if (selectedId) {
-    const selected = items.find((item) => item.id === selectedId);
-    if (selected) {
-      return selected;
-    }
+  if (!selectedId) {
+    return null;
   }
-  return items[0] ?? null;
+  return items.find((item) => item.id === selectedId) ?? null;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -298,8 +331,8 @@ function EmployeeDetailPanel({ detail }: { detail: HrAdminEmployeeDetail | null 
             {detail.employee_code} • {detail.department || "No department"} • {detail.designation || "No designation"}
           </p>
         </div>
-        <span className={`record-chip${detail.employment_status === "active" ? " record-chip--accent" : ""}`}>
-          {detail.employment_status.replace("_", " ")}
+        <span className={employeeStatusChipClass(detail.employment_status)}>
+          {formatStatusLabel(detail.employment_status)}
         </span>
       </div>
       <div className="hr-employee-readiness-strip">
@@ -323,12 +356,12 @@ function EmployeeDetailPanel({ detail }: { detail: HrAdminEmployeeDetail | null 
         <DetailSection title="Profile" defaultOpen>
           <DetailRow label="Employee" value={`${detail.full_name} (${detail.employee_code})`} />
           <DetailRow label="Preferred Name" value={detail.preferred_name || "Not available"} />
-          <DetailRow label="Employment Status" value={detail.employment_status.replace("_", " ")} />
+          <DetailRow label="Employment Status" value={formatStatusLabel(detail.employment_status)} />
           <DetailRow label="Work Email" value={detail.work_email || "Not available"} />
           <DetailRow label="Personal Email" value={detail.personal_email || "Not available"} />
           <DetailRow label="Phone Number" value={detail.phone_number || "Not available"} />
         </DetailSection>
-        <DetailSection title="Structure" defaultOpen>
+        <DetailSection title="Structure">
           <DetailRow label="Legal Entity" value={detail.legal_entity || "Not mapped"} />
           <DetailRow label="Branch" value={detail.branch || "Not mapped"} />
           <DetailRow label="Location" value={detail.location || "Not mapped"} />
@@ -341,7 +374,7 @@ function EmployeeDetailPanel({ detail }: { detail: HrAdminEmployeeDetail | null 
           <DetailRow label="Reporting Manager" value={detail.reporting_manager || "Not assigned"} />
           <DetailRow label="Direct Reports" value={String(detail.direct_reports_count)} />
         </DetailSection>
-        <DetailSection title="Access and dates" defaultOpen>
+        <DetailSection title="Access and dates">
           <DetailRow label="Access Provisioned" value={detail.has_access ? "Yes" : "No"} />
           <DetailRow label="Membership Status" value={formatMembershipStatus(detail.membership_status)} />
           <DetailRow label="Assigned Roles" value={String(detail.assigned_role_count)} />
@@ -366,6 +399,8 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const department = normalizeParam(currentParams.department) ?? "all";
   const managerView = normalizeParam(currentParams.managerView) ?? "all";
   const readiness = normalizeParam(currentParams.readiness) ?? "all";
+  const createMode = normalizeParam(currentParams.create) === "1";
+  const actionMode = normalizeParam(currentParams.action);
   const page = Math.max(Number(normalizeParam(currentParams.page) ?? "1") || 1, 1);
   const pageSize = Math.min(Math.max(Number(normalizeParam(currentParams.page_size) ?? "8") || 8, 1), 50);
 
@@ -383,40 +418,53 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
   const pagedEmployees = filteredEmployees.slice((safePage - 1) * pageSize, safePage * pageSize);
   const selectedListItem = resolveSelectedItem(
     filteredEmployees,
-    normalizeParam(currentParams.employeeId) ?? pagedEmployees[0]?.id,
+    normalizeParam(currentParams.employeeId),
   );
   const detailResult = selectedListItem ? await getHrAdminEmployeeDetail(selectedListItem.id) : null;
   const detail = detailResult?.data ?? null;
+  const editMode = actionMode === "edit" && Boolean(detail);
+  const accessMode = actionMode === "access" && Boolean(detail);
+  const bankMode = actionMode === "bank" && Boolean(detail);
   const state =
     employeesResult.state === "live" && (!detailResult || detailResult.state === "live") ? "live" : "demo";
-  const canCreateEmployees = sessionHasPermission(sessionUser, "employees.create");
-  const canEditEmployees = sessionHasPermission(sessionUser, "employees.edit");
-  const canImportEmployees = sessionHasPermission(sessionUser, "employees.import");
-  const canManageEmployeeAccess = sessionHasPermission(sessionUser, "employees.access.manage");
+  const demoPermissionPreview = !sessionUser && state === "demo";
+  const canCreateEmployees = demoPermissionPreview || sessionHasPermission(sessionUser, "employees.create");
+  const canEditEmployees = demoPermissionPreview || sessionHasPermission(sessionUser, "employees.edit");
+  const canImportEmployees = demoPermissionPreview || sessionHasPermission(sessionUser, "employees.import");
+  const canManageEmployeeAccess = demoPermissionPreview || sessionHasPermission(sessionUser, "employees.access.manage");
   const accessReadyCount = employeesResult.data.filter((item) => getEmployeeAccessWarnings(item).length === 0).length;
   const accessReviewCount = employeesResult.data.length - accessReadyCount;
   const accessReadinessPercent = employeesResult.data.length ? Math.round((accessReadyCount / employeesResult.data.length) * 100) : 0;
-  const structureReviewCount = employeesResult.data.filter((item) => getEmployeeStructuralWarnings(item).length > 0).length;
-  const managerReviews = countManagersNeedingReview(employeesResult.data);
+  const recordsNeedingReview = employeesResult.data.filter((item) => getEmployeeWarnings(item).length > 0).length;
+  const defaultStatus = optionsResult.data.employment_statuses.find((item) => item.value === "draft")?.value || optionsResult.data.employment_statuses[0]?.value || "draft";
+  const [accessResult, accessOptionsResult, bankAccountsResult] = await Promise.all([
+    accessMode && canManageEmployeeAccess && detail ? getHrAdminEmployeeAccessDetail(detail.id) : Promise.resolve(null),
+    accessMode && canManageEmployeeAccess ? getHrAdminEmployeeAccessOptions() : Promise.resolve(null),
+    bankMode && canEditEmployees && detail ? getHrAdminEmployeeBankAccounts(detail.id) : Promise.resolve(null),
+  ]);
 
   const tabs = ["all", "active", "on_notice", "inactive", "exited"];
+  const closeActionHref = buildHref("/hr-admin/employees", currentParams, { action: undefined, create: undefined });
 
   return (
-    <main className="shell hr-employee-workbench">
+    <main className="shell hr-admin-compact-ui hr-employee-workbench">
       <PageIntro
         eyebrow={state === "live" ? "Live employees" : "Demo employees"}
         title="Employees"
-        description="Operate the employee master, access readiness, manager structure, and payroll prerequisites from one focused workbench."
+        description="Operate employee master data, access readiness, manager structure, and payroll prerequisites."
         className="page-header-surface page-header-surface--compact hr-employee-page-header"
         titleClassName="text-heading-premium page-title-soft"
         descriptionClassName="text-body-premium"
         actions={
           <>
             <Link className="button button--secondary" href="/hr-admin">
-              Admin
+              Back to dashboard
             </Link>
             {canCreateEmployees ? (
-              <Link className="button button--primary" href="/hr-admin/employees/new">
+              <Link
+                className="button button--primary"
+                href={buildHref("/hr-admin/employees", currentParams, { create: "1", employeeId: undefined })}
+              >
                 New employee
               </Link>
             ) : null}
@@ -427,18 +475,6 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
       />
 
       <section className="section hr-employee-command-grid">
-        <div className="hr-employee-command-panel panel-card-soft">
-          <div>
-            <span className="eyebrow-soft">Workforce command</span>
-            <h2 className="section-heading-soft">Keep employee data ready for access, payroll, and approvals.</h2>
-            <p className="section-copy section-copy-soft">
-              Use the directory for daily lookup and selected profile corrections.
-            </p>
-          </div>
-          <div className="hr-employee-command-actions">
-            {canImportEmployees ? <a className="button button--secondary" href="#employee-imports">Bulk imports</a> : null}
-          </div>
-        </div>
         <div className="hr-employee-health-panel panel-card-soft">
           <div
             className={`hr-employee-health-ring${accessReviewCount ? " hr-employee-health-ring--warn" : " hr-employee-health-ring--ready"}`}
@@ -465,30 +501,30 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
               <Link className="button button--ghost button--compact" href="/hr-admin/employees?readiness=structure_review&page_size=25">
                 Structure
               </Link>
+              {canImportEmployees ? <a className="button button--secondary button--compact" href="#employee-imports">Bulk imports</a> : null}
             </div>
           </div>
         </div>
       </section>
 
       <section className="section">
-        <div className="hr-employee-kpi-grid">
-          <MetricTile className="metric-tile-soft" label="Employees in scope" labelClassName="metric-label-soft" value={employeesResult.data.length} valueClassName="metric-value-soft" trend="Master coverage" trendClassName="metric-trend-soft" />
-          <MetricTile className="metric-tile-soft" label="Active employees" labelClassName="metric-label-soft" value={countByStatus(employeesResult.data, "active")} valueClassName="metric-value-soft" trend="Current workforce" trendClassName="metric-trend-soft" />
-          <MetricTile className="metric-tile-soft" label="Access provisioned" labelClassName="metric-label-soft" value={countProvisioned(employeesResult.data)} valueClassName="metric-value-soft" trend="Login-ready employees" trendClassName="metric-trend-soft" />
-          <MetricTile className="metric-tile-soft" label="Departments represented" labelClassName="metric-label-soft" value={departmentOptions.length} valueClassName="metric-value-soft" trend="Org spread" trendClassName="metric-trend-soft" />
-          <MetricTile
-            className="metric-tile-soft"
-            label="Manager reviews"
-            labelClassName="metric-label-soft"
-            value={managerReviews}
-            valueClassName="metric-value-soft"
-            trend={`${structureReviewCount} structure reviews`}
-            trendClassName="metric-trend-soft"
-          />
+        <div className="hr-employee-summary-strip" aria-label="Employee directory summary">
+          <span>
+            <strong>{employeesResult.data.length}</strong>
+            <em>employees</em>
+          </span>
+          <span>
+            <strong>{countProvisioned(employeesResult.data)}</strong>
+            <em>access provisioned</em>
+          </span>
+          <span className={recordsNeedingReview ? "hr-employee-summary-strip__review" : ""}>
+            <strong>{recordsNeedingReview}</strong>
+            <em>need review</em>
+          </span>
         </div>
       </section>
 
-      <section className="section employee-master-layout">
+      <section className={`section employee-master-layout${detail ? " employee-master-layout--drawer-open" : " employee-master-layout--drawer-closed"}`}>
         <article className="queue-toolbar panel-card-soft">
           <div className="queue-toolbar__header">
             <div>
@@ -506,8 +542,8 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
           </div>
 
           <form action="/hr-admin/employees" className="directory-filter-bar">
-            <input name="status" type="hidden" value={status} />
             <input name="page" type="hidden" value="1" />
+            <input name="page_size" type="hidden" value={String(pageSize)} />
             <label className="form-field">
               <span className="text-label-premium">Search</span>
               <input className="input-control" defaultValue={q} name="q" placeholder="Name, code, email, manager" />
@@ -524,33 +560,38 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
               </select>
             </label>
             <label className="form-field">
-              <span className="text-label-premium">Manager review</span>
-              <select className="input-control" defaultValue={managerView} name="managerView">
-                <option value="all">All employees</option>
-                <option value="managers">Managers only</option>
-                <option value="needs_reassignment">Needs reassignment</option>
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="text-label-premium">Readiness</span>
-              <select className="input-control" defaultValue={readiness} name="readiness">
-                <option value="all">All readiness</option>
-                <option value="access_review">Access review</option>
-                <option value="structure_review">Structure review</option>
-                <option value="manager_review">Manager review</option>
-                <option value="ready">Ready records</option>
-              </select>
-            </label>
-            <label className="form-field">
-              <span className="text-label-premium">Page size</span>
-              <select className="input-control" defaultValue={String(pageSize)} name="page_size">
-                {[5, 8, 10, 25, 50].map((size) => (
-                  <option key={size} value={size}>
-                    {size} / page
+              <span className="text-label-premium">Status</span>
+              <select className="input-control" defaultValue={status} name="status">
+                {tabs.map((tabStatus) => (
+                  <option key={tabStatus} value={tabStatus}>
+                    {formatStatusLabel(tabStatus)}
                   </option>
                 ))}
               </select>
             </label>
+            <details className="directory-more-filters">
+              <summary className="button button--secondary button--compact">More filters</summary>
+              <div className="directory-more-filters__panel">
+                <label className="form-field">
+                  <span className="text-label-premium">Manager review</span>
+                  <select className="input-control" defaultValue={managerView} name="managerView">
+                    <option value="all">All employees</option>
+                    <option value="managers">Managers only</option>
+                    <option value="needs_reassignment">Needs reassignment</option>
+                  </select>
+                </label>
+                <label className="form-field">
+                  <span className="text-label-premium">Readiness</span>
+                  <select className="input-control" defaultValue={readiness} name="readiness">
+                    <option value="all">All readiness</option>
+                    <option value="access_review">Access review</option>
+                    <option value="structure_review">Structure review</option>
+                    <option value="manager_review">Manager review</option>
+                    <option value="ready">Ready records</option>
+                  </select>
+                </label>
+              </div>
+            </details>
             <div className="directory-filter-bar__actions">
               <button className="button button--primary" type="submit">Apply</button>
               <Link className="button button--ghost" href="/hr-admin/employees">Reset</Link>
@@ -573,64 +614,78 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                   })}
                   key={tabStatus}
                 >
-                  <span>{tabStatus.replace("_", " ")}</span>
+                  <span>{formatStatusLabel(tabStatus)}</span>
                   <strong>{countByStatus(employeesResult.data, tabStatus)}</strong>
                 </Link>
               ))}
           </div>
 
-          <div className="employee-directory-list">
+          <div className="employee-directory-table-wrap">
             {filteredEmployees.length ? (
-              pagedEmployees.map((employee) => {
-                const warnings = getEmployeeWarnings(employee);
-                return (
-                <Link
-                  className={`employee-directory-item directory-item-soft${selectedListItem?.id === employee.id ? " employee-directory-item--active" : ""}`}
-                  href={buildHref("/hr-admin/employees", currentParams, { employeeId: employee.id })}
-                  key={employee.id}
-                >
-                  <div className="employee-directory-item__header">
-                    <div className="hr-employee-list-identity">
-                      <span className="hr-employee-avatar hr-employee-avatar--small" aria-hidden="true">
-                        {employee.full_name
-                          .split(" ")
-                          .map((part) => part[0])
-                          .join("")
-                          .slice(0, 2)
-                          .toUpperCase()}
-                      </span>
-                      <div>
-                        <strong>{employee.full_name}</strong>
-                        <p className="section-copy">
-                          {employee.employee_code} • {employee.department || "No department"} • {employee.designation || "No designation"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="hr-employee-row-status">
-                      {warnings.length ? <span className="record-chip record-chip--warning">{warnings.length} review</span> : null}
-                      <span className={`record-chip${employee.employment_status === "active" ? " record-chip--accent" : ""}`}>
-                        {employee.employment_status.replace("_", " ")}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="employee-directory-item__meta employee-directory-item__meta--compact">
-                    <span>{employee.branch || "No branch"}</span>
-                    <span>{employee.location || "No location"}</span>
-                    <span>{employee.reporting_manager || "No manager"}</span>
-                    <span>{employee.has_access ? "Access provisioned" : "No access yet"}</span>
-                    <span>{employee.assigned_role_count} roles</span>
-                    <span>{employee.direct_reports_count} direct reports</span>
-                  </div>
-                  {warnings.length ? (
-                    <div className="employee-directory-warning-line">
-                      <span>{warnings.length} review warnings</span>
-                      <span>{warnings.slice(0, 2).join(" • ")}</span>
-                    </div>
-                  ) : null}
-                  <span className="muted">{employee.work_email}</span>
-                </Link>
-                );
-              })
+              <table className="employee-directory-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Structure</th>
+                    <th>Manager</th>
+                    <th>Access</th>
+                    <th>Status</th>
+                    <th>Review</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedEmployees.map((employee) => {
+                    const warnings = getEmployeeWarnings(employee);
+                    const isSelected = selectedListItem?.id === employee.id;
+                    return (
+                      <tr className={isSelected ? "employee-directory-table__row--active" : ""} key={employee.id}>
+                        <td>
+                          <Link className="employee-directory-table__identity" href={buildHref("/hr-admin/employees", currentParams, { employeeId: employee.id })}>
+                            <span className="hr-employee-avatar hr-employee-avatar--small" aria-hidden="true">
+                              {employee.full_name
+                                .split(" ")
+                                .map((part) => part[0])
+                                .join("")
+                                .slice(0, 2)
+                                .toUpperCase()}
+                            </span>
+                            <span>
+                              <strong>{employee.full_name}</strong>
+                              <small>{employee.employee_code}</small>
+                            </span>
+                          </Link>
+                        </td>
+                        <td>
+                          <strong>{employee.department || "No department"}</strong>
+                          <small>{employee.designation || "No designation"} - {employee.location || "No location"}</small>
+                        </td>
+                        <td>
+                          <strong>{employee.reporting_manager || "No manager"}</strong>
+                          <small>{employee.direct_reports_count} direct reports</small>
+                        </td>
+                        <td>
+                          <strong>{employee.has_access ? "Provisioned" : "Not provisioned"}</strong>
+                          <small>{formatMembershipStatus(employee.membership_status)} - {employee.assigned_role_count} roles</small>
+                        </td>
+                        <td>
+                          <span className={employeeStatusChipClass(employee.employment_status)}>
+                            {formatStatusLabel(employee.employment_status)}
+                          </span>
+                        </td>
+                        <td>
+                          <Link
+                            className={`employee-review-chip record-chip${warnings.length ? " record-chip--warning employee-review-chip--warning" : " record-chip--success"}`}
+                            href={buildHref("/hr-admin/employees", currentParams, { employeeId: employee.id })}
+                          >
+                            <strong>{warnings.length ? "Needs review" : "Ready"}</strong>
+                            {warnings.length ? <small>{formatReviewReason(warnings)}</small> : null}
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             ) : (
               <div className="notice">
                 <strong>No employees in this view.</strong>
@@ -639,20 +694,48 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
             )}
           </div>
 
-          <PaginationBar
-            firstHref={buildHref("/hr-admin/employees", currentParams, { page: "1", page_size: String(pageSize), employeeId: undefined })}
-            hasNext={safePage < totalPages}
-            hasPrevious={safePage > 1}
-            lastHref={buildHref("/hr-admin/employees", currentParams, { page: String(totalPages), page_size: String(pageSize), employeeId: undefined })}
-            nextHref={buildHref("/hr-admin/employees", currentParams, { page: String(safePage + 1), page_size: String(pageSize), employeeId: undefined })}
-            page={safePage}
-            pageSize={pageSize}
-            previousHref={buildHref("/hr-admin/employees", currentParams, { page: String(safePage - 1), page_size: String(pageSize), employeeId: undefined })}
-            totalCount={filteredEmployees.length}
-          />
+          <section className="card panel pagination-panel employee-directory-pagination">
+            <div className="pagination-bar">
+              <div className="pagination-bar__summary">
+                <span className="queue-summary-chip">
+                  <strong>
+                    {filteredEmployees.length === 0 ? 0 : ((safePage - 1) * pageSize) + 1}-{filteredEmployees.length === 0 ? 0 : Math.min(safePage * pageSize, filteredEmployees.length)}
+                  </strong>
+                  of {filteredEmployees.length} records
+                </span>
+                <form action="/hr-admin/employees" className="employee-page-size-form">
+                  <input name="status" type="hidden" value={status} />
+                  <input name="page" type="hidden" value="1" />
+                  {q ? <input name="q" type="hidden" value={q} /> : null}
+                  {department !== "all" ? <input name="department" type="hidden" value={department} /> : null}
+                  {managerView !== "all" ? <input name="managerView" type="hidden" value={managerView} /> : null}
+                  {readiness !== "all" ? <input name="readiness" type="hidden" value={readiness} /> : null}
+                  <label>
+                    <span>Rows</span>
+                    <select className="input-control" defaultValue={String(pageSize)} name="page_size">
+                      {[5, 8, 10, 25, 50].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="button button--secondary button--compact" type="submit">Apply</button>
+                </form>
+              </div>
+              {totalPages > 1 ? (
+                <div className="pagination-bar__actions">
+                  <Link className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { page: "1", page_size: String(pageSize), employeeId: undefined })}>First</Link>
+                  <Link className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { page: String(Math.max(1, safePage - 1)), page_size: String(pageSize), employeeId: undefined })}>Previous</Link>
+                  <Link className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { page: String(Math.min(totalPages, safePage + 1)), page_size: String(pageSize), employeeId: undefined })}>Next</Link>
+                  <Link className="button button--secondary" href={buildHref("/hr-admin/employees", currentParams, { page: String(totalPages), page_size: String(pageSize), employeeId: undefined })}>Last</Link>
+                </div>
+              ) : null}
+            </div>
+          </section>
         </article>
 
-        <article className="record-card panel-card-soft">
+        {detail ? <article className="record-card panel-card-soft employee-detail-drawer">
           <div className="record-card__header">
             <div className="record-card__title-wrap">
               <div className="record-card__title">
@@ -660,27 +743,35 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
               </div>
               <p className="section-copy section-copy-soft">Focused detail for the selected employee.</p>
             </div>
-            {detail && (canEditEmployees || canManageEmployeeAccess) ? (
-              <div className="record-card__actions">
-                <div className="employee-detail-primary-actions">
-                  {canEditEmployees ? (
-                    <Link className="button button--secondary button--compact" href={`/hr-admin/employees/${detail.id}/edit`}>
-                      Edit
-                    </Link>
-                  ) : null}
-                  {canManageEmployeeAccess ? (
-                    <Link className="button button--secondary button--compact" href={`/hr-admin/employees/${detail.id}/access`}>
-                      Access
-                    </Link>
-                  ) : null}
-                </div>
+            <div className="record-card__actions">
+              <Link className="button button--ghost button--compact" href={buildHref("/hr-admin/employees", currentParams, { employeeId: undefined, action: undefined })}>
+                Close
+              </Link>
+              {(canEditEmployees || canManageEmployeeAccess) ? (
+              <div className="employee-detail-primary-actions">
+                {canEditEmployees ? (
+                  <Link
+                    className="button button--secondary button--compact"
+                    href={buildHref("/hr-admin/employees", currentParams, { action: "edit", employeeId: detail.id })}
+                  >
+                    Edit
+                  </Link>
+                ) : null}
+                {canManageEmployeeAccess ? (
+                  <Link
+                    className="button button--secondary button--compact"
+                    href={buildHref("/hr-admin/employees", currentParams, { action: "access", employeeId: detail.id })}
+                  >
+                    Access
+                  </Link>
+                ) : null}
                 <ActionMenu
                   label="Actions"
                   items={[
                     ...(canEditEmployees
                       ? [
                           {
-                            href: `/hr-admin/employees/${detail.id}/edit`,
+                            href: buildHref("/hr-admin/employees", currentParams, { action: "edit", employeeId: detail.id }),
                             title: "Edit employee",
                             description: "Update profile, org mapping, and employment data.",
                           },
@@ -689,7 +780,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                     ...(canManageEmployeeAccess
                       ? [
                           {
-                            href: `/hr-admin/employees/${detail.id}/access`,
+                            href: buildHref("/hr-admin/employees", currentParams, { action: "access", employeeId: detail.id }),
                             title: "Manage access",
                             description: "Review roles, login state, and membership access.",
                           },
@@ -698,7 +789,7 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                     ...(canEditEmployees
                       ? [
                           {
-                            href: `/hr-admin/employees/${detail.id}/bank-accounts`,
+                            href: buildHref("/hr-admin/employees", currentParams, { action: "bank", employeeId: detail.id }),
                             title: "Manage bank accounts",
                             description: "Maintain payout account coverage for payroll readiness.",
                           },
@@ -707,12 +798,13 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
                   ]}
                 />
               </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
           <div className="detail-grid-soft">
             <EmployeeDetailPanel detail={detail} />
           </div>
-        </article>
+        </article> : null}
       </section>
 
       {canImportEmployees ? (
@@ -732,6 +824,78 @@ export default async function HrAdminEmployeesPage({ searchParams }: PageProps) 
             </div>
           </details>
         </section>
+      ) : null}
+
+      {createMode && canCreateEmployees ? (
+        <HrAdminActionModal
+          closeHref={buildHref("/hr-admin/employees", currentParams, { create: undefined })}
+          description="A guided setup. Fields marked * are required."
+          eyebrow="Employee master"
+          labelledBy="employee-create-modal-title"
+          title="Create employee"
+        >
+          <EmployeeForm
+            cancelHref={buildHref("/hr-admin/employees", currentParams, { create: undefined })}
+            initialValue={createEmptyEmployeeFormValue(defaultStatus)}
+            mode="create"
+            options={optionsResult.data}
+          />
+        </HrAdminActionModal>
+      ) : null}
+
+      {editMode && canEditEmployees && detail ? (
+        <HrAdminActionModal
+          closeHref={closeActionHref}
+          description="Update profile, contact, structure, and review before saving."
+          eyebrow={detail.employee_code}
+          labelledBy="employee-edit-modal-title"
+          title="Edit employee"
+        >
+          <EmployeeForm
+            cancelHref={closeActionHref}
+            employeeId={detail.id}
+            initialValue={employeeDetailToFormValue(detail)}
+            mode="edit"
+            options={optionsResult.data}
+          />
+        </HrAdminActionModal>
+      ) : null}
+
+      {accessMode && canManageEmployeeAccess && detail && accessResult?.data?.employee_id && accessOptionsResult ? (
+        <HrAdminActionModal
+          closeHref={closeActionHref}
+          eyebrow={detail.employee_code}
+          labelledBy="employee-access-modal-title"
+          tabs={["Identity", "Controls", "Roles", "Review"]}
+          title="Manage access"
+        >
+          <EmployeeAccessForm
+            employeeId={detail.id}
+            existingAccess={accessResult.data.has_access}
+            cancelHref={closeActionHref}
+            employeeStatus={detail.employment_status}
+            initialValue={employeeAccessDetailToFormValue(accessResult.data)}
+            options={accessOptionsResult.data}
+          />
+        </HrAdminActionModal>
+      ) : null}
+
+      {bankMode && canEditEmployees && detail && bankAccountsResult ? (
+        <HrAdminActionModal
+          className="employee-bank-modal"
+          closeHref={closeActionHref}
+          eyebrow={detail.employee_code}
+          labelledBy="employee-bank-modal-title"
+          tabs={["Accounts", "Payout", "Primary", "Review"]}
+          title="Manage bank accounts"
+        >
+          <BankAccountManager
+            cancelHref={closeActionHref}
+            employeeId={detail.id}
+            employeeName={detail.full_name}
+            initialAccounts={bankAccountsResult.data ?? []}
+          />
+        </HrAdminActionModal>
       ) : null}
     </main>
   );

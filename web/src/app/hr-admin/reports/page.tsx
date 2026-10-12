@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { ActionMenu } from "@/components/patterns/action-menu";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDashboard } from "@/lib/api";
 import { reportCatalog } from "@/lib/report-catalog";
@@ -56,11 +55,11 @@ export default async function HrAdminReportsPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Total employees" value={overview.total_employees} trend="Tenant workforce" />
-          <MetricTile label="Active employees" value={overview.active_employees} trend="Currently engaged" />
-          <MetricTile label="Pending approvals" value={overview.pending_approvals} trend="Operational backlog" />
-          <MetricTile label="Failed notifications" value={delivery.failed_notifications} trend="Delivery health" />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{overview.total_employees}</strong> Total employees</span>
+          <span><strong>{overview.active_employees}</strong> Active employees</span>
+          <span><strong>{overview.pending_approvals}</strong> Pending approvals</span>
+          <span><strong>{delivery.failed_notifications}</strong> Failed notifications</span>
         </div>
       </section>
 
@@ -82,7 +81,7 @@ export default async function HrAdminReportsPage() {
       </section>
 
       <section className="section">
-        <div className="workspace-grid-modern">
+        <div className="report-workspace-grid">
           <article className="workspace-card workspace-card--feature reports-export-card">
             <div className="workspace-card__header">
               <span className="workspace-card__eyebrow">Evidence</span>

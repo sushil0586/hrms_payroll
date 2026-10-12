@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceDataTable, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getOnboardingChecklistStats, getOnboardingCompletionWarning } from "@/lib/onboarding-readiness";
 import type { HrAdminEnumOption, HrAdminLifecycleOwnerBulkActionInput, HrAdminLifecycleOwnerOption, HrAdminLifecycleStatusBulkActionInput, HrAdminOnboarding } from "@/lib/types";
 
@@ -83,6 +84,24 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
       page,
       page_size: Number(pageSize) || currentFilters.page_size,
     })}`);
+  }
+
+  function queueHref(params: Record<string, string | number | boolean | undefined>) {
+    return `${pathname}${buildQueryString({
+      q: search.trim() || undefined,
+      status: status !== "all" ? status : undefined,
+      owner: owner !== "all" ? owner : undefined,
+      page: pagination.page,
+      page_size: Number(pageSize) || currentFilters.page_size,
+      ...params,
+    })}`;
+  }
+
+  function statusTone(value: string) {
+    if (value === "completed") return "success";
+    if (value === "blocked") return "danger";
+    if (value === "in_progress") return "info";
+    return "neutral";
   }
 
   async function handleBulkOwnerAction(nextOwnerValue: string) {
@@ -172,12 +191,6 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
             <select className="input-control" onChange={(event) => setOwner(event.target.value)} value={owner}>
               <option value="all">All owners</option>
               {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <label className="form-field">
-            <span className="muted">Rows per page</span>
-            <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
-              {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
             </select>
           </label>
         </div>
@@ -275,7 +288,20 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
         {error ? <div className="notice notice--error" role="alert"><strong>Bulk action failed.</strong><span className="muted">{error}</span></div> : null}
       </section>
 
-      <div className="queue-list lifecycle-record-list">
+      <WorkspaceDataTable ariaLabel="Onboarding records" className="lifecycle-table">
+        <thead>
+          <tr>
+            <th><input aria-label="Select all onboarding records on this page" checked={allSelected} onChange={toggleAll} type="checkbox" /></th>
+            <th>Employee</th>
+            <th>Owner</th>
+            <th>Status</th>
+            <th>Joining</th>
+            <th>Checklist</th>
+            <th>Documents</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
         {items.map((item) => {
           const isSelected = selectedIds.includes(item.id);
           const checklistStats = getOnboardingChecklistStats(item);
@@ -286,68 +312,32 @@ export function OnboardingQueue({ items, state, onboardingStatusOptions, lifecyc
                 ? `${item.future_due_document_count} required document${item.future_due_document_count === 1 ? "" : "s"} due later`
                 : "All due required documents are present";
           return (
-          <article className="record-card panel-card-soft lifecycle-record-card" key={item.id}>
-            <div className="record-card__header">
-              <div className="record-card__title-wrap">
-                <label className="record-card__title">
-                  <input checked={isSelected} onChange={() => toggleOne(item.id)} type="checkbox" />
-                  <h2>{item.employee_name}</h2>
-                </label>
-                <div className="record-card__eyebrow">
-                  <span className="record-chip record-chip--accent">{item.status}</span>
-                  <span className="record-chip">{item.employee_code}</span>
-                  <span className="record-chip">{item.attention_state || "on_track"}</span>
-                  {item.missing_required_document_count > 0 ? <span className="record-chip record-chip--danger">Doc blocker</span> : null}
-                  {item.missing_required_document_count === 0 && item.future_due_document_count > 0 ? <span className="record-chip record-chip--accent">Docs upcoming</span> : null}
-                  <span className="record-chip">{item.onboarding_template_code || "No template code"}</span>
-                  {item.is_rehire_journey ? <span className="record-chip">Rehire journey</span> : null}
-                </div>
-                <p className="section-copy section-copy-soft">{item.workflow_reference || "Workflow not linked"} • Owner {item.assigned_owner_identifier || "unassigned"}</p>
-              </div>
-              <div className="record-card__actions">
-                <Link className="button button--secondary" href={`/hr-admin/onboardings/${item.id}/edit`}>Edit</Link>
-              </div>
-            </div>
-            <div className="detail-grid lifecycle-detail-grid">
-              <div className="detail-row"><span className="detail-label">Status</span><span className="detail-value">{item.status}</span></div>
-              <div className="detail-row"><span className="detail-label">Expected joining</span><span className="detail-value">{item.expected_joining_date || "TBD"}</span></div>
-              <div className="detail-row"><span className="detail-label">Actual joining</span><span className="detail-value">{item.actual_joining_date || "Pending"}</span></div>
-              <div className="detail-row"><span className="detail-label">Assigned owner</span><span className="detail-value">{item.assigned_owner_identifier || "Unassigned"}</span></div>
-              <div className="detail-row"><span className="detail-label">Checklist items</span><span className="detail-value">{checklistStats.totalCount}</span></div>
-              <div className="detail-row"><span className="detail-label">Attention summary</span><span className="detail-value">{item.attention_summary || "No active lifecycle pressure."}</span></div>
-              <div className="detail-row"><span className="detail-label">Next due</span><span className="detail-value">{item.next_due_on || "None"}</span></div>
-              <div className="detail-row"><span className="detail-label">Next escalation</span><span className="detail-value">{item.next_escalation_on || "None"}</span></div>
-              <div className="detail-row"><span className="detail-label">Documents</span><span className="detail-value">{missingDocumentSummary}</span></div>
-              <div className="detail-row"><span className="detail-label">Missing required</span><span className="detail-value">{item.missing_required_document_count}</span></div>
-              <div className="detail-row"><span className="detail-label">Future due required</span><span className="detail-value">{item.future_due_document_count}</span></div>
-            </div>
-            <div className="record-card__notes">
-              {item.missing_required_document_count > 0 ? (
-                <div className="notice">
-                  <strong>Completion blocker.</strong>
-                  <span className="muted">{missingDocumentSummary}.</span>
-                </div>
-              ) : null}
-              <p className="muted" style={{ margin: 0 }}>
-                {checklistStats.totalCount === 0
-                  ? "No checklist items added yet."
-                  : `${checklistStats.completedCount}/${checklistStats.totalCount} checklist items complete, ${checklistStats.openCount} open.`}
-              </p>
-              {item.checklist_overdue_count > 0 || item.checklist_escalation_due_count > 0 ? (
-                <p className="muted" style={{ margin: 0 }}>
-                  {item.checklist_overdue_count} overdue, {item.checklist_escalation_due_count} escalation due.
-                </p>
-              ) : null}
-              {item.missing_required_document_names.length > 0 ? (
-                <p className="muted" style={{ margin: 0 }}>
-                  Missing documents: {item.missing_required_document_names.join(", ")}.
-                </p>
-              ) : null}
-              {getOnboardingCompletionWarning(item) ? <p className="muted" style={{ margin: 0 }}>{getOnboardingCompletionWarning(item)}</p> : null}
-            </div>
-          </article>
-        );
+            <tr className={isSelected ? "is-selected" : ""} key={item.id}>
+              <td><input aria-label={`Select ${item.employee_name}`} checked={isSelected} onChange={() => toggleOne(item.id)} type="checkbox" /></td>
+              <td><strong>{item.employee_name}</strong><span>{item.employee_code} · {item.workflow_reference || "No workflow"}</span></td>
+              <td><strong>{item.assigned_owner_identifier || "Unassigned"}</strong><span>{item.onboarding_template_code || "No template"}</span></td>
+              <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{item.status}</WorkspaceStatusBadge><span>{item.attention_summary || "On track"}</span></td>
+              <td><strong>{item.expected_joining_date || "TBD"}</strong><span>Actual {item.actual_joining_date || "Pending"}</span></td>
+              <td><strong>{checklistStats.completedCount}/{checklistStats.totalCount}</strong><span>{checklistStats.openCount} open</span></td>
+              <td>
+                <WorkspaceStatusBadge tone={item.missing_required_document_count > 0 ? "danger" : item.future_due_document_count > 0 ? "warning" : "success"}>
+                  {item.missing_required_document_count > 0 ? "Doc blocker" : item.future_due_document_count > 0 ? "Docs upcoming" : "Docs ready"}
+                </WorkspaceStatusBadge>
+                <span>{missingDocumentSummary}</span>
+              </td>
+              <td><Link className="button button--secondary" href={queueHref({ editOnboarding: item.id })}>Edit</Link></td>
+            </tr>
+          );
         })}
+        </tbody>
+      </WorkspaceDataTable>
+      <div className="lifecycle-pagination-row">
+        <label className="form-field form-field--inline">
+          <span className="muted">Rows</span>
+          <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+            {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
+          </select>
+        </label>
         {items.length === 0 ? (
           <div className="card panel">
             <strong>No onboarding records match the current filters.</strong>

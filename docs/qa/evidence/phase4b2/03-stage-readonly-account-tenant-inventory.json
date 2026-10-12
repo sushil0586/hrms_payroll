@@ -1,0 +1,150 @@
+{
+  "tenants": [
+    {
+      "code": "accerio-india",
+      "status": "active",
+      "is_sandbox": true
+    },
+    {
+      "code": "reliance",
+      "status": "draft",
+      "is_sandbox": true
+    },
+    {
+      "code": "reliance-industries",
+      "status": "active",
+      "is_sandbox": false
+    }
+  ],
+  "users": [
+    {
+      "label": "persona_1",
+      "exists": true,
+      "active": true,
+      "staff": false,
+      "superuser": false,
+      "memberships": [
+        {
+          "tenant_code": "accerio-india",
+          "status": "active",
+          "roles": [
+            "hr-admin",
+            "qa-payroll-setup-1791429491009",
+            "qa-payroll-setup-1791429553945",
+            "qa-payroll-setup-1791429605022",
+            "qa-payroll-setup-1791429766663",
+            "qa-payroll-setup-1791431061966",
+            "qa-payroll-setup-1791431245424",
+            "qa-payroll-setup-1791431458694",
+            "qa-payroll-setup-1791431621447",
+            "qa-payroll-setup-1791431677773",
+            "qa-payroll-setup-1791431823578",
+            "qa-payroll-setup-1791431911852",
+            "qa-payroll-setup-1791432080622",
+            "qa-payroll-setup-1791432209091",
+            "qa-payroll-setup-1791433520077",
+            "qa-payroll-setup-1791433697732",
+            "qa-payroll-setup-1791433866590",
+            "qa-payroll-setup-1791433981569",
+            "qa-payroll-setup-1791443689945",
+            "qa-payroll-setup-1791443867634"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "persona_2",
+      "exists": true,
+      "active": true,
+      "staff": false,
+      "superuser": false,
+      "memberships": [
+        {
+          "tenant_code": "accerio-india",
+          "status": "active",
+          "roles": [
+            "employee",
+            "manager"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "persona_3",
+      "exists": false,
+      "active": null,
+      "staff": null,
+      "superuser": null,
+      "memberships": []
+    },
+    {
+      "label": "persona_4",
+      "exists": true,
+      "active": true,
+      "staff": false,
+      "superuser": false,
+      "memberships": [
+        {
+          "tenant_code": "accerio-india",
+          "status": "active",
+          "roles": [
+            "employee",
+            "manager"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "persona_5",
+      "exists": true,
+      "active": true,
+      "staff": false,
+      "superuser": false,
+      "memberships": [
+        {
+          "tenant_code": "accerio-india",
+          "status": "active",
+          "roles": [
+            "employee",
+            "manager",
+            "payroll-finance-manager",
+            "hr-admin",
+            "qa-limited-tenant-viewer-1790873011996",
+            "qa-reviewer-1790872295278",
+            "qa-reviewer-1790872958766",
+            "ta-final-evidence-20261001162221",
+            "ta-final-evidence-20261001164017",
+            "ta-final-evidence-20261001165551",
+            "ta-final-evidence-20261002043210",
+            "ta-final-evidence-20261002051647",
+            "tenant-admin"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "persona_6",
+      "exists": true,
+      "active": true,
+      "staff": false,
+      "superuser": false,
+      "memberships": [
+        {
+          "tenant_code": "accerio-india",
+          "status": "active",
+          "roles": [
+            "employee"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "default_platform",
+      "exists": true,
+      "active": true,
+      "staff": true,
+      "superuser": true,
+      "memberships": []
+    }
+  ]
+}

@@ -8,8 +8,8 @@ test.describe("Employee self-service payslip flows", () => {
     await gotoAuthenticated(page, "/ess/payslips");
     await expectPageReady(page, "Payslips");
 
-    await expect(page.getByRole("heading", { name: "Published payslips" })).toBeVisible();
-    await expect(page.getByText("Published only").or(page.getByText("No payslips found")).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Published payslips" }).first()).toBeVisible();
+    await expect(page.getByText(/Published payslips only|No payslips found/).first()).toBeVisible();
 
     const reviewPayslip = page.getByRole("button", { name: "Review payslip" }).first();
     if (await reviewPayslip.isVisible().catch(() => false)) {

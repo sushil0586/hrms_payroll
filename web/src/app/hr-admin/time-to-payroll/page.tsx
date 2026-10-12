@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import {
   getHrAdminAttendanceRecords,
@@ -240,11 +239,15 @@ export default async function TimeToPayrollControlPage() {
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Journey status" value={titleCase(overallStatus)} trend={`${blockerCount} blockers / ${warningCount} warnings`} />
-          <MetricTile className="metric-tile-soft" label="Payroll findings" value={reconciliationFindings} trend={`${highReconciliationFindings} high risk`} />
-          <MetricTile className="metric-tile-soft" label="Attendance exceptions" value={derivationExceptionCount} trend={`${pendingRegularizations} pending corrections`} />
-          <MetricTile className="metric-tile-soft" label="Post-lock impacts" value={postLockImpacts} trend="Arrears candidates" />
+        <div className="attendance-summary-strip time-to-payroll-summary-strip" aria-label="Time to payroll summary">
+          <span><strong>{titleCase(overallStatus)}</strong> journey status</span>
+          <span><strong>{blockerCount}</strong> blockers</span>
+          <span><strong>{warningCount}</strong> warnings</span>
+          <span><strong>{reconciliationFindings}</strong> payroll findings</span>
+          <span><strong>{highReconciliationFindings}</strong> high risk</span>
+          <span><strong>{derivationExceptionCount}</strong> attendance exceptions</span>
+          <span><strong>{pendingRegularizations}</strong> pending corrections</span>
+          <span><strong>{postLockImpacts}</strong> post-lock impacts</span>
         </div>
       </section>
 

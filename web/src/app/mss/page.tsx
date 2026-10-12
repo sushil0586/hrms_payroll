@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
+import { WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { getMssApprovalInbox } from "@/lib/api";
 import type { ManagerTeamSummary } from "@/lib/types";
 import { requireWorkspaceAccess, sessionHasPermission } from "@/lib/workspace-access";
@@ -14,14 +14,10 @@ const statusLabel: Record<ManagerActionStatus, string> = {
   blocked: "Blocked",
 };
 
-function chipClass(status: ManagerActionStatus) {
-  if (status === "ready") {
-    return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--ready";
-  }
-  if (status === "blocked") {
-    return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--blocked";
-  }
-  return "hr-admin-launch-audit__chip hr-admin-launch-audit__chip--warning";
+function statusTone(status: ManagerActionStatus) {
+  if (status === "ready") return "success";
+  if (status === "blocked") return "danger";
+  return "warning";
 }
 
 function actionStatus(value: number, blocked = false): ManagerActionStatus {
@@ -147,13 +143,13 @@ export default async function MssControlCenterPage() {
         showPills
       />
 
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Team members" value={summary.team_size} trend="Direct and routed reports" />
-          <MetricTile label="Pending decisions" value={totalPending} trend="Leave and attendance" />
-          {canApproveLeave ? <MetricTile label="Leave approvals" value={summary.pending_leave_approvals_count} trend="Queue waiting" /> : null}
-          {canReviewAttendance ? <MetricTile label="Attendance fixes" value={summary.pending_attendance_regularizations_count} trend="Regularization queue" /> : null}
-          <MetricTile label="On leave today" value={summary.employees_on_leave_today} trend="Coverage snapshot" />
+      <section className="workspace-section">
+        <div className="attendance-summary-strip" aria-label="Manager summary">
+          <span><strong>{summary.team_size}</strong> team members</span>
+          <span><strong>{totalPending}</strong> pending decisions</span>
+          {canApproveLeave ? <span><strong>{summary.pending_leave_approvals_count}</strong> leave approvals</span> : null}
+          {canReviewAttendance ? <span><strong>{summary.pending_attendance_regularizations_count}</strong> attendance fixes</span> : null}
+          <span><strong>{summary.employees_on_leave_today}</strong> on leave today</span>
         </div>
       </section>
 
@@ -165,7 +161,7 @@ export default async function MssControlCenterPage() {
               <h2>{dailyPriority.title}</h2>
               <p className="section-copy section-copy-soft">{dailyPriority.body}</p>
             </div>
-            <span className={chipClass(dailyPriority.tone)}>{statusLabel[dailyPriority.tone]}</span>
+            <WorkspaceStatusBadge tone={statusTone(dailyPriority.tone)}>{statusLabel[dailyPriority.tone]}</WorkspaceStatusBadge>
           </div>
         </article>
 
@@ -178,21 +174,37 @@ export default async function MssControlCenterPage() {
             </div>
             <span className="queue-summary-chip"><strong>{activeSignals}</strong> active signals</span>
           </div>
-          <div className="mss-action-list">
+          <div className="workspace-table-scroll">
             {actions.length ? (
-              actions.map((item) => (
-                <div className="mss-action-row" key={item.label}>
-                  <span className={chipClass(item.status)}>{statusLabel[item.status]}</span>
-                  <div className="mss-action-row__body">
-                    <strong>{item.label}</strong>
-                    <span>{item.detail}</span>
-                  </div>
-                  <span className="record-chip">{item.value}</span>
-                  <Link className={item.status === "warning" ? "button button--primary" : "button button--secondary"} href={item.href}>
-                    {item.action}
-                  </Link>
-                </div>
-              ))
+              <table className="workspace-table attendance-directory-table mss-action-table" aria-label="Manager actions">
+                <thead>
+                  <tr>
+                    <th>State</th>
+                    <th>Action</th>
+                    <th>Count</th>
+                    <th>Open</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {actions.map((item) => (
+                    <tr key={item.label}>
+                      <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{statusLabel[item.status]}</WorkspaceStatusBadge></td>
+                      <td className="workspace-table__primary-cell">
+                        <div>
+                          <strong>{item.label}</strong>
+                          <span>{item.detail}</span>
+                        </div>
+                      </td>
+                      <td><span className="record-chip">{item.value}</span></td>
+                      <td>
+                        <Link className={item.status === "warning" ? "button button--primary" : "button button--secondary"} href={item.href}>
+                          {item.action}
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             ) : (
               <div className="notice notice--compact">
                 <strong>No manager approval queues are enabled.</strong>

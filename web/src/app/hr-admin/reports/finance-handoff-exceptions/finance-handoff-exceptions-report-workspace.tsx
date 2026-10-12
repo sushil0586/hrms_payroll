@@ -242,11 +242,11 @@ export function FinanceHandoffExceptionsReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Finance handoff exceptions report workspace">
       <div className="report-catalog-workspace bank-advice-report" data-testid="finance-handoff-exceptions-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Handoff rows</span><strong>{filteredRows.length}</strong><small>{rows.length} total rows</small></article>
-          <article className="metric-tile metric-tile-soft"><span>High risk</span><strong>{filteredRows.filter((row) => row.risk === "High").length}</strong><small>Requires attention</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Retries</span><strong>{filteredRows.reduce((sum, row) => sum + row.retries.length, 0)}</strong><small>Retry events</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Queued jobs</span><strong>{filteredRows.reduce((sum, row) => sum + row.jobs.filter((job) => job.status === "queued").length, 0)}</strong><small>Worker backlog</small></article>
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{filteredRows.length}</strong> Handoff rows</span>
+          <span><strong>{filteredRows.filter((row) => row.risk === "High").length}</strong> High risk</span>
+          <span><strong>{filteredRows.reduce((sum, row) => sum + row.retries.length, 0)}</strong> Retries</span>
+          <span><strong>{filteredRows.reduce((sum, row) => sum + row.jobs.filter((job) => job.status === "queued").length, 0)}</strong> Queued jobs</span>
         </div>
 
         <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Finance handoff exception filters">

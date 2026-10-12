@@ -165,11 +165,12 @@ export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: Lea
   return (
     <section className="section section--tight" aria-label="Leave-attendance collision report workspace">
       <div className="report-catalog-workspace leave-attendance-collisions-report" data-testid="leave-attendance-collisions-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Collisions</span><strong>{filteredRows.length}</strong><small>{rows.length} total rows</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Payroll blocking</span><strong>{filteredRows.filter((row) => row.payroll_blocking).length}</strong><small>Needs payroll review</small></article>
-          <article className="metric-tile metric-tile-soft"><span>High severity</span><strong>{filteredRows.filter((row) => row.severity === "high").length}</strong><small>Approved leave overlap</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Employees</span><strong>{unique(filteredRows.map((row) => row.employee_code)).length}</strong><small>Impacted population</small></article>
+        <div className="attendance-summary-strip report-summary-strip" aria-label="Leave attendance collision summary">
+          <span><strong>{filteredRows.length}</strong> collisions</span>
+          <span><strong>{rows.length}</strong> total rows</span>
+          <span><strong>{filteredRows.filter((row) => row.payroll_blocking).length}</strong> payroll blocking</span>
+          <span><strong>{filteredRows.filter((row) => row.severity === "high").length}</strong> high severity</span>
+          <span><strong>{unique(filteredRows.map((row) => row.employee_code)).length}</strong> employees</span>
         </div>
 
         <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Leave attendance collision filters">
@@ -200,7 +201,7 @@ export function LeaveAttendanceCollisionsReportWorkspace({ items }: { items: Lea
                   <td><div className="payroll-register-stack"><strong>{row.collision_date}</strong><span>{titleCase(row.attendance_status)}</span><span>{row.shift || "No shift"}</span><span>{row.check_in_at || "No in"} / {row.check_out_at || "No out"}</span></div></td>
                   <td><div className="payroll-register-stack"><span className={statusClass(row.severity)}>{titleCase(row.severity)}</span><span className={statusClass(String(row.payroll_blocking))}>{row.payroll_blocking ? "Payroll blocking" : "Not blocking"}</span><span>{row.leave_units} leave units</span></div></td>
                   <td><div className="payroll-register-stack"><code>{row.workflow_reference}</code><code>{row.attendance_record_id}</code><span>{row.message}</span></div></td>
-                  <td><div className="report-row-actions"><Link className="button button--secondary" href={`/hr-admin/leave-requests/${row.leave_request_id}/review`}>Review</Link><Link className="button button--ghost" href={`/hr-admin/attendance-records/${row.attendance_record_id}/edit`}>Attendance</Link></div></td>
+                  <td><div className="report-row-actions"><Link className="button button--secondary" href={`/hr-admin/leave-requests?selectedLeave=${row.leave_request_id}`}>Review</Link><Link className="button button--ghost" href={`/hr-admin/attendance-records?editRecord=${row.attendance_record_id}`}>Attendance</Link></div></td>
                 </tr>
               ))}
               {visibleRows.length === 0 ? <tr><td colSpan={6}><div className="empty-state">No leave-attendance collision rows match the selected filters.</div></td></tr> : null}

@@ -237,23 +237,23 @@ export function TdsEfileReadinessWorkspace({
   return (
     <section className="section section--tight" aria-label="TDS e-file readiness workspace">
       <div className="report-catalog-workspace statutory-filing-status-report" data-testid="tds-efile-readiness-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Readiness</span>
             <strong>{readiness}</strong>
             <small>{readyCount}/{rows.length} gates ready</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Warnings</span>
             <strong>{warningCount}</strong>
             <small>Partial evidence</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Blocked gates</span>
             <strong>{blockedCount}</strong>
             <small>Must close before e-file</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>TDS artifacts</span>
             <strong>{artifacts.filter(artifactLooksTds).length}</strong>
             <small>Source evidence</small>

@@ -7,6 +7,9 @@ import type { AttendanceRegularizationItem } from "@/lib/types";
 
 type Props = {
   item: AttendanceRegularizationItem;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -41,7 +44,7 @@ function getWaitingLabel(item: AttendanceRegularizationItem) {
   return "Pending approval from configured approver";
 }
 
-export function AttendanceRegularizationReviewForm({ item }: Props) {
+export function AttendanceRegularizationReviewForm({ item, cancelHref, successHref, compact = false }: Props) {
   const router = useRouter();
   const [comment, setComment] = useState(item.status === "approved" ? item.manager_comment || "" : item.rejection_reason || item.manager_comment || "");
   const [error, setError] = useState("");
@@ -75,12 +78,20 @@ export function AttendanceRegularizationReviewForm({ item }: Props) {
       submittingRef.current = false;
       return;
     }
-    router.push("/hr-admin/attendance-regularizations");
+    router.push(successHref ?? "/hr-admin/attendance-regularizations");
     router.refresh();
   }
 
+  function handleCancel() {
+    if (cancelHref) {
+      router.push(cancelHref);
+      return;
+    }
+    router.back();
+  }
+
   return (
-    <section className="section form-layout-modern">
+    <section className={`section form-layout-modern attendance-regularization-review-form${compact ? " attendance-regularization-review-form--modal" : ""}`}>
       <article className="record-card">
         <div className="record-card__title-wrap">
           <div className="record-card__title">
@@ -161,7 +172,7 @@ export function AttendanceRegularizationReviewForm({ item }: Props) {
             <button className="button button--secondary" disabled={isSubmitting || item.status !== "pending"} onClick={() => handleDecision("reject")} type="button">
               Reject request
             </button>
-            <button className="button button--ghost" onClick={() => router.back()} type="button">
+            <button className="button button--ghost" onClick={handleCancel} type="button">
               Back
             </button>
           </div>

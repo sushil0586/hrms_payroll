@@ -13,6 +13,9 @@ type Props = {
   mode: "create" | "edit";
   itemId?: string;
   item?: HrAdminShift;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 const DAYS = [
@@ -33,7 +36,7 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to save shift.");
 }
 
-export function ShiftForm({ initialValue, mode, itemId, item }: Props) {
+export function ShiftForm({ initialValue, mode, itemId, item, cancelHref, successHref = "/hr-admin/shifts", compact = false }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -83,12 +86,20 @@ export function ShiftForm({ initialValue, mode, itemId, item }: Props) {
       setIsSubmitting(false);
       return;
     }
-    router.push("/hr-admin/shifts");
+    router.push(successHref);
     router.refresh();
   }
 
+  function handleCancel() {
+    if (cancelHref) {
+      router.push(cancelHref);
+      return;
+    }
+    router.back();
+  }
+
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className={`section form-layout-modern shift-form${compact ? " shift-form--modal" : ""}`} onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -144,7 +155,7 @@ export function ShiftForm({ initialValue, mode, itemId, item }: Props) {
           <span className="muted">Shift changes save back into attendance operations immediately.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting || (mode === "edit" && item?.can_edit_directly === false)} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create shift" : item && item.can_edit_directly === false ? "Direct edit unavailable" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
           </div>
         </div>
       </section>

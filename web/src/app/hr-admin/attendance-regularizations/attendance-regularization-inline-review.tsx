@@ -8,6 +8,7 @@ import type { AttendanceRegularizationItem } from "@/lib/types";
 
 type Props = {
   item: AttendanceRegularizationItem;
+  reviewHref: string;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -18,7 +19,7 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to update attendance regularization.");
 }
 
-export function AttendanceRegularizationInlineReview({ item }: Props) {
+export function AttendanceRegularizationInlineReview({ item, reviewHref }: Props) {
   const router = useRouter();
   const [comment, setComment] = useState(item.status === "approved" ? item.manager_comment || "" : item.rejection_reason || item.manager_comment || "");
   const [error, setError] = useState("");
@@ -67,7 +68,7 @@ export function AttendanceRegularizationInlineReview({ item }: Props) {
           <h3>Quick review</h3>
           <p className="section-copy section-copy-soft">Approve or reject in queue, or open the full review screen.</p>
         </div>
-        <Link className="button button--secondary" href={`/hr-admin/attendance-regularizations/${item.id}/review`}>
+        <Link className="button button--secondary" href={reviewHref}>
           Full review
         </Link>
       </div>

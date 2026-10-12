@@ -6,7 +6,9 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import { type FieldErrors, hasFieldErrors, requireText, requireValue, validateDateOrder } from "@/lib/ui/validation";
 import type {
   AttendanceRegularizationItem,
@@ -45,6 +47,14 @@ function formatDateTime(value: string | null | undefined) {
 
 function formatStatus(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function statusTone(status: string): "success" | "warning" | "danger" | "info" | "neutral" {
+  if (["approved", "present", "regularized"].includes(status)) return "success";
+  if (["pending", "late", "half_day", "open"].includes(status)) return "warning";
+  if (["rejected", "absent", "locked"].includes(status)) return "danger";
+  if (["remote", "submitted"].includes(status)) return "info";
+  return "neutral";
 }
 
 function statusClass(status: string) {
@@ -205,7 +215,6 @@ function AttendanceRegularizationModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  useEscapeClose(onClose);
   const defaultAttendanceRecord = attendanceRecords.find((record) => !record.is_locked)?.id ?? attendanceRecords[0]?.id ?? "";
   const [selectedRecordId, setSelectedRecordId] = useState(defaultAttendanceRecord);
   const [requestedStatus, setRequestedStatus] = useState("present");
@@ -218,6 +227,7 @@ function AttendanceRegularizationModal({
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const selectedRecord = attendanceRecords.find((record) => record.id === selectedRecordId) ?? null;
+  const selectedPayrollImpact = selectedRecord?.derivation_summary?.payroll_impact;
   const hasTimeOrderRisk = Boolean(checkIn && checkOut && new Date(checkOut) < new Date(checkIn));
   const isSubmitBlocked = submitting || !attendanceRecords.length || Boolean(selectedRecord?.is_locked) || !reason.trim() || hasTimeOrderRisk;
 
@@ -307,16 +317,15 @@ function AttendanceRegularizationModal({
   }, [toast]);
 
   return (
-    <div className="modal-shell" role="presentation">
+    <HrAdminActionModal
+      closeHref="/ess/attendance"
+      description="Choose the day that needs correction, explain what changed, and send it for approval."
+      eyebrow="ESS attendance"
+      labelledBy="ess-attendance-regularize-modal"
+      onClose={onClose}
+      title="Regularize attendance"
+    >
       {toast ? <ActionToast message={toast.message} title={toast.title} tone={toast.tone} /> : null}
-      <div aria-label="Regularize attendance" aria-modal="true" className="modal ess-attendance-modal" role="dialog">
-        <div className="modal__header">
-          <div>
-            <h2>Regularize attendance</h2>
-            <p>Choose the day that needs correction, explain what changed, and send it for approval.</p>
-          </div>
-          <button aria-label="Close regularize attendance dialog" className="button button--secondary" onClick={onClose} type="button">Close</button>
-        </div>
         <form className="attendance-regularize-layout" noValidate onSubmit={submitRegularization}>
           <div className="form-grid attendance-regularize-form">
             <label className="form-field form-field--full">
@@ -395,11 +404,11 @@ function AttendanceRegularizationModal({
               <DetailRow label="Why this status" value={getDerivationReason(selectedRecord)} />
               <DetailRow
                 label="Payroll impact"
-                value={selectedRecord ? `Payable ${selectedRecord.derivation_summary.payroll_impact.payable_units} / LOP ${selectedRecord.derivation_summary.payroll_impact.lop_units}` : "Pending"}
+                value={selectedPayrollImpact ? `Payable ${selectedPayrollImpact.payable_units} / LOP ${selectedPayrollImpact.lop_units}` : "Pending"}
               />
               <DetailRow
                 label="Leave collision"
-                value={selectedRecord?.derivation_summary.leave_collision_count ? `${selectedRecord.derivation_summary.leave_collision_count} overlapping leave request` : "Clear"}
+                value={selectedRecord?.derivation_summary?.leave_collision_count ? `${selectedRecord.derivation_summary.leave_collision_count} overlapping leave request` : "Clear"}
               />
             </div>
             <div className="leave-policy-helper">
@@ -415,24 +424,20 @@ function AttendanceRegularizationModal({
             ) : null}
           </aside>
         </form>
-      </div>
-    </div>
+    </HrAdminActionModal>
   );
 }
 
 function AttendanceDetailModal({ item, onClose }: { item: AttendanceRegularizationItem; onClose: () => void }) {
-  useEscapeClose(onClose);
-
   return (
-    <div className="modal-shell" role="presentation">
-      <div aria-label="Regularization detail" aria-modal="true" className="modal ess-attendance-modal ess-attendance-modal--wide" role="dialog">
-        <div className="modal__header">
-          <div>
-            <h2>{formatDate(item.attendance_date)}</h2>
-            <p>{formatStatus(item.current_status)} to {formatStatus(item.requested_status)} • {formatStatus(item.status)}</p>
-          </div>
-          <button aria-label="Close regularization detail" className="button button--secondary" onClick={onClose} type="button">Close</button>
-        </div>
+    <HrAdminActionModal
+      closeHref="/ess/attendance"
+      description={`${formatStatus(item.current_status)} to ${formatStatus(item.requested_status)} - ${formatStatus(item.status)}`}
+      eyebrow="Regularization detail"
+      labelledBy={`ess-attendance-regularization-${item.id}`}
+      onClose={onClose}
+      title={formatDate(item.attendance_date)}
+    >
         <AttendanceDecisionCard item={item} />
         <section className="ess-modal-section">
           <h3 className="section-heading-soft">Timeline</h3>
@@ -452,8 +457,7 @@ function AttendanceDetailModal({ item, onClose }: { item: AttendanceRegularizati
             <DetailRow label="Workflow" value={item.workflow_reference || "Not available"} />
           </div>
         </section>
-      </div>
-    </div>
+    </HrAdminActionModal>
   );
 }
 
@@ -525,13 +529,14 @@ export function AttendanceWorkspace({ attendanceRecords, currentParams, dashboar
           <button className="button button--primary" onClick={() => setRegularizeOpen(true)} type="button">Regularize attendance</button>
           <Link className="button button--secondary" href="/ess">Overview</Link>
         </div>
-        <div className="workspace-control-header__metrics" aria-label="Attendance summary">
-          <span className="queue-summary-chip"><strong>{formatStatus(dashboard.attendance.today.status)}</strong> today</span>
-          <span className="queue-summary-chip"><strong>{pendingCount}</strong> pending</span>
-          <span className="queue-summary-chip"><strong>{approvedCount}</strong> approved</span>
-          <span className="queue-summary-chip"><strong>{unlockedRecordCount}</strong> days editable</span>
-        </div>
       </section>
+
+      <div className="attendance-summary-strip" aria-label="Attendance summary">
+        <span><strong>{formatStatus(dashboard.attendance.today.status)}</strong> today</span>
+        <span><strong>{pendingCount}</strong> pending</span>
+        <span><strong>{approvedCount}</strong> approved</span>
+        <span><strong>{unlockedRecordCount}</strong> days editable</span>
+      </div>
 
       <section className="workspace-section">
         <div className="workspace-section__header">
@@ -599,14 +604,13 @@ export function AttendanceWorkspace({ attendanceRecords, currentParams, dashboar
               </Link>
             ))}
           </div>
-          <details className="workspace-filter-disclosure" open={Boolean(historyQuery.trim())}>
-            <summary>
-              <span>Filters</span>
-              <small>{visibleRegularizations.length} shown from the loaded page</small>
-            </summary>
-            <div className="attendance-history-filter">
+          <div className="workspace-filter-disclosure">
+            <div className="queue-toolbar__header">
+              <span className="queue-summary-chip"><strong>{visibleRegularizations.length}</strong> shown</span>
+            </div>
+            <WorkspaceFilterBar>
               <label className="form-field">
-                <span className="muted">Search regularizations</span>
+                <span>Search</span>
                 <input
                   className="input-control"
                   onChange={(event) => setHistoryQuery(event.target.value)}
@@ -615,63 +619,73 @@ export function AttendanceWorkspace({ attendanceRecords, currentParams, dashboar
                 />
               </label>
               <button className="button button--secondary" disabled={!historyQuery.trim()} onClick={() => setHistoryQuery("")} type="button">Clear search</button>
-            </div>
-          </details>
-          <div className="workspace-table attendance-request-table" role="table" aria-label="Attendance regularization history">
-            <div className="workspace-table__row workspace-table__row--head" role="row">
-              <span role="columnheader">Date</span>
-              <span role="columnheader">Correction</span>
-              <span role="columnheader">Status</span>
-              <span role="columnheader">Submitted</span>
-              <span role="columnheader">Approver</span>
-              <span role="columnheader">Actions</span>
-            </div>
-            {visibleRegularizations.length ? (
-              visibleRegularizations.map((item) => {
-                const waitingLabel = getApprovalWaitingLabel(item);
-                return (
-                  <div
-                    className="workspace-table__row attendance-request-row"
-                    key={item.id}
-                    role="row"
-                  >
-                    <span role="cell">
-                      <strong>{formatDate(item.attendance_date)}</strong>
-                      <small>{item.workflow_reference || "Workflow pending"}</small>
-                    </span>
-                    <span role="cell">
-                      <strong>{formatStatus(item.current_status)} to {formatStatus(item.requested_status)}</strong>
-                      <small>{item.reason || "No reason provided."}</small>
-                    </span>
-                    <span role="cell">
-                      <span className={statusClass(item.status)}>{formatStatus(item.status)}</span>
-                    </span>
-                    <span role="cell">{formatDateTime(item.applied_at ?? item.created_at)}</span>
-                    <span role="cell">
-                      <strong>{getRegularizationOwnerLabel(item)}</strong>
-                      <small>{waitingLabel || item.manager_comment || item.rejection_reason || "Decision history available"}</small>
-                    </span>
-                    <span role="cell">
-                      <button
-                        className="button button--secondary"
-                        onClick={() => {
-                          setDismissedRegularizationId(null);
-                          setClickedRegularization(item);
-                        }}
-                        type="button"
-                      >
-                        View
-                      </button>
-                    </span>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="notice workspace-empty-state">
-                <strong>{regularizations.items.length ? "No regularizations match this search." : "No regularizations in this view."}</strong>
-                <span className="muted">{regularizations.items.length ? "Clear search or try another status tab." : "Try another status tab once more data is available."}</span>
-              </div>
-            )}
+            </WorkspaceFilterBar>
+          </div>
+          <div className="employee-directory-table-wrap">
+            <table className="workspace-table attendance-directory-table attendance-request-table" aria-label="Attendance regularization history">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Correction</th>
+                  <th>Status</th>
+                  <th>Submitted</th>
+                  <th>Approver</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRegularizations.length ? (
+                  visibleRegularizations.map((item) => {
+                    const waitingLabel = getApprovalWaitingLabel(item);
+                    return (
+                      <tr key={item.id}>
+                        <td>
+                          <div className="workspace-table__primary-cell">
+                            <strong>{formatDate(item.attendance_date)}</strong>
+                            <span>{item.workflow_reference || "Workflow pending"}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="workspace-table__primary-cell">
+                            <strong>{formatStatus(item.current_status)} to {formatStatus(item.requested_status)}</strong>
+                            <span>{item.reason || "No reason provided."}</span>
+                          </div>
+                        </td>
+                        <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{formatStatus(item.status)}</WorkspaceStatusBadge></td>
+                        <td>{formatDateTime(item.applied_at ?? item.created_at)}</td>
+                        <td>
+                          <div className="workspace-table__primary-cell">
+                            <strong>{getRegularizationOwnerLabel(item)}</strong>
+                            <span>{waitingLabel || item.manager_comment || item.rejection_reason || "Decision history available"}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <button
+                            className="button button--secondary"
+                            onClick={() => {
+                              setDismissedRegularizationId(null);
+                              setClickedRegularization(item);
+                            }}
+                            type="button"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={6}>
+                      <div className="notice workspace-empty-state">
+                        <strong>{regularizations.items.length ? "No regularizations match this search." : "No regularizations in this view."}</strong>
+                        <span className="muted">{regularizations.items.length ? "Clear search or try another status tab." : "Try another status tab once more data is available."}</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </article>
         <PaginationBar

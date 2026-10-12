@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED_PATH_PREFIXES = ["/ess", "/mss", "/hr-admin", "/finance-manager", "/tenant-admin", "/platform-admin", "/support"];
 const PUBLIC_APP_URL = process.env.HRMS_PUBLIC_APP_URL;
+const DEMO_DATA_ENABLED = process.env.HRMS_ENABLE_DEMO_DATA === "true";
+const API_BASE_URL = process.env.HRMS_API_BASE_URL;
 
 function buildLoginUrl(request: NextRequest) {
   if (PUBLIC_APP_URL) {
@@ -30,7 +32,7 @@ export function middleware(request: NextRequest) {
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 
-  if (!isProtectedPath || request.cookies.has("hrms_access_token")) {
+  if (!isProtectedPath || request.cookies.has("hrms_access_token") || (DEMO_DATA_ENABLED && !API_BASE_URL)) {
     return NextResponse.next();
   }
 

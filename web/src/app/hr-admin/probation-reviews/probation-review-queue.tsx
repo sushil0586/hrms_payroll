@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceDataTable, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { HrAdminEnumOption, HrAdminLifecycleOwnerBulkActionInput, HrAdminLifecycleOwnerOption, HrAdminLifecycleStatusBulkActionInput, HrAdminProbationReview } from "@/lib/types";
 
 type Props = {
@@ -81,6 +82,25 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
       page,
       page_size: Number(pageSize) || currentFilters.page_size,
     })}`);
+  }
+
+  function queueHref(params: Record<string, string | number | boolean | undefined>) {
+    return `${pathname}${buildQueryString({
+      q: search.trim() || undefined,
+      decision: decision !== "all" ? decision : undefined,
+      owner: owner !== "all" ? owner : undefined,
+      page: pagination.page,
+      page_size: Number(pageSize) || currentFilters.page_size,
+      ...params,
+    })}`;
+  }
+
+  function decisionTone(value: string) {
+    if (value === "confirmed" || value === "completed") return "success";
+    if (value === "terminate" || value === "rejected") return "danger";
+    if (value === "extend") return "warning";
+    if (value === "pending") return "info";
+    return "neutral";
   }
 
   async function handleBulkOwnerAction(nextOwnerValue: string) {
@@ -172,12 +192,6 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
               {lifecycleOwners.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
-          <label className="form-field">
-            <span className="muted">Rows per page</span>
-            <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
-              {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
-            </select>
-          </label>
         </div>
         <div className="queue-toolbar__actions">
           <button className="button button--primary" onClick={() => goToPage(1)} type="button">Apply filters</button>
@@ -263,37 +277,44 @@ export function ProbationReviewQueue({ items, state, probationDecisionOptions, l
         {error ? <div className="notice notice--error" role="alert"><strong>Bulk action failed.</strong><span className="muted">{error}</span></div> : null}
       </section>
 
-      <div className="queue-list lifecycle-record-list">
+      <WorkspaceDataTable ariaLabel="Probation review records" className="lifecycle-table">
+        <thead>
+          <tr>
+            <th><input aria-label="Select all probation reviews on this page" checked={allSelected} onChange={toggleAll} type="checkbox" /></th>
+            <th>Employee</th>
+            <th>Decision</th>
+            <th>Review date</th>
+            <th>Probation end</th>
+            <th>Reviewer</th>
+            <th>Extension</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
         {items.map((item) => {
           const isSelected = selectedIds.includes(item.id);
           return (
-          <article className="record-card panel-card-soft lifecycle-record-card" key={item.id}>
-            <div className="record-card__header">
-              <div className="record-card__title-wrap">
-                <label className="record-card__title">
-                  <input checked={isSelected} onChange={() => toggleOne(item.id)} type="checkbox" />
-                  <h2>{item.employee_name}</h2>
-                </label>
-                <div className="record-card__eyebrow">
-                  <span className="record-chip record-chip--accent">{item.decision}</span>
-                  <span className="record-chip">{item.employee_code}</span>
-                  <span className="record-chip">Review {item.review_date}</span>
-                </div>
-                <p className="section-copy section-copy-soft">{item.workflow_reference || "Workflow not linked"} • Reviewer {item.reviewer_identifier || "unassigned"}</p>
-              </div>
-              <div className="record-card__actions">
-                <Link className="button button--secondary" href={`/hr-admin/probation-reviews/${item.id}/edit`}>Edit</Link>
-              </div>
-            </div>
-            <div className="detail-grid lifecycle-detail-grid">
-              <div className="detail-row"><span className="detail-label">Decision</span><span className="detail-value">{item.decision}</span></div>
-              <div className="detail-row"><span className="detail-label">Probation end</span><span className="detail-value">{item.probation_end_date || "TBD"}</span></div>
-              <div className="detail-row"><span className="detail-label">Reviewer</span><span className="detail-value">{item.reviewer_identifier || "Unassigned"}</span></div>
-              <div className="detail-row"><span className="detail-label">Extension end</span><span className="detail-value">{item.extension_end_date || "No extension"}</span></div>
-            </div>
-          </article>
-        );
+            <tr className={isSelected ? "is-selected" : ""} key={item.id}>
+              <td><input aria-label={`Select ${item.employee_name}`} checked={isSelected} onChange={() => toggleOne(item.id)} type="checkbox" /></td>
+              <td><strong>{item.employee_name}</strong><span>{item.employee_code} · {item.workflow_reference || "No workflow"}</span></td>
+              <td><WorkspaceStatusBadge tone={decisionTone(item.decision)}>{item.decision}</WorkspaceStatusBadge></td>
+              <td><strong>{item.review_date}</strong><span>{item.remarks || "No remarks"}</span></td>
+              <td><strong>{item.probation_end_date || "TBD"}</strong></td>
+              <td><strong>{item.reviewer_identifier || "Unassigned"}</strong><span>{item.owner_value || "No owner value"}</span></td>
+              <td><strong>{item.extension_end_date || "No extension"}</strong></td>
+              <td><Link className="button button--secondary" href={queueHref({ editReview: item.id })}>Edit</Link></td>
+            </tr>
+          );
         })}
+        </tbody>
+      </WorkspaceDataTable>
+      <div className="lifecycle-pagination-row">
+        <label className="form-field form-field--inline">
+          <span className="muted">Rows</span>
+          <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+            {[10, 25, 50, 100].map((value) => <option key={value} value={String(value)}>{value}</option>)}
+          </select>
+        </label>
         {items.length === 0 ? (
           <div className="card panel">
             <strong>No probation reviews match the current filters.</strong>

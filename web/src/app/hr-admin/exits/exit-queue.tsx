@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceDataTable, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type { HrAdminEnumOption, HrAdminExit } from "@/lib/types";
 
 type Props = {
@@ -58,6 +59,24 @@ export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination
     );
   }
 
+  function queueHref(params: Record<string, string | number | boolean | undefined>) {
+    return `${pathname}${buildQueryString({
+      q: search.trim() || undefined,
+      status: status !== "all" ? status : undefined,
+      rehire_eligible: rehireEligible !== "all" ? rehireEligible : undefined,
+      page: pagination.page,
+      page_size: Number(pageSize) || currentFilters.page_size,
+      ...params,
+    })}`;
+  }
+
+  function statusTone(value: string) {
+    if (value === "completed" || value === "closed") return "success";
+    if (value === "cancelled" || value === "blocked") return "danger";
+    if (value === "active" || value === "pending") return "info";
+    return "neutral";
+  }
+
   return (
     <section className="section queue-layout lifecycle-queue-layout">
       <section className="card panel queue-toolbar panel-card-soft lifecycle-queue-toolbar">
@@ -104,16 +123,6 @@ export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination
               <option value="no">Not eligible</option>
             </select>
           </label>
-          <label className="form-field">
-            <span className="muted">Rows per page</span>
-            <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
-              {[10, 25, 50, 100].map((value) => (
-                <option key={value} value={String(value)}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
         <div className="queue-toolbar__actions">
@@ -140,64 +149,45 @@ export function ExitQueue({ items, exitStatusOptions, currentFilters, pagination
         </div>
       </section>
 
-      <div className="queue-list lifecycle-record-list">
+      <WorkspaceDataTable ariaLabel="Exit records" className="lifecycle-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Status</th>
+            <th>Exit reason</th>
+            <th>Last working day</th>
+            <th>Clearance</th>
+            <th>Rehire</th>
+            <th>Attention</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
         {items.map((item) => (
-          <article className="record-card panel-card-soft lifecycle-record-card" key={item.id}>
-            <div className="record-card__header">
-              <div className="record-card__title-block">
-                <h3>{item.employee_name}</h3>
-                <p>{item.employee_code} • {item.exit_reason || "No exit reason"}</p>
-              </div>
-              <div className="record-card__actions">
-                <span className="record-chip">{item.status}</span>
-                <span className="record-chip">{item.attention_state || "on_track"}</span>
-                <span className="record-chip">{item.rehire_eligible ? "Rehire eligible" : "No rehire"}</span>
-                <Link className="button button--secondary" href={`/hr-admin/exits/${item.id}/edit`}>
-                  Edit
-                </Link>
-              </div>
-            </div>
-
-            <div className="record-card__details lifecycle-detail-grid">
-              <div>
-                <span className="record-card__label">Resignation date</span>
-                <strong>{item.resignation_date || "TBD"}</strong>
-              </div>
-              <div>
-                <span className="record-card__label">Approved LWD</span>
-                <strong>{item.approved_last_working_date || "Pending"}</strong>
-              </div>
-              <div>
-                <span className="record-card__label">Notice end</span>
-                <strong>{item.notice_end_date || "Not set"}</strong>
-              </div>
-              <div>
-                <span className="record-card__label">Workflow reference</span>
-                <strong>{item.workflow_reference || "Not linked"}</strong>
-              </div>
-              <div>
-                <span className="record-card__label">Clearance progress</span>
-                <strong>{item.clearance_completed_count}/{item.clearance_total_count} complete</strong>
-              </div>
-              <div>
-                <span className="record-card__label">Next due</span>
-                <strong>{item.next_due_on || "None"}</strong>
-              </div>
-              <div>
-                <span className="record-card__label">Next escalation</span>
-                <strong>{item.next_escalation_on || "None"}</strong>
-              </div>
-            </div>
-
-            <div className="record-card__notes">
-              <strong>{item.attention_summary || "Exit work is on track."}</strong>
-              <p className="muted" style={{ margin: "6px 0 0" }}>
-                {item.clearance_open_count} open, {item.clearance_overdue_count} overdue, {item.clearance_escalation_due_count} escalation due.
-              </p>
-              {item.handover_notes ? <p>{item.handover_notes}</p> : null}
-            </div>
-          </article>
+          <tr key={item.id}>
+            <td><strong>{item.employee_name}</strong><span>{item.employee_code} · {item.workflow_reference || "No workflow"}</span></td>
+            <td><WorkspaceStatusBadge tone={statusTone(item.status)}>{item.status}</WorkspaceStatusBadge></td>
+            <td><strong>{item.exit_reason || "No reason"}</strong><span>{item.exit_reason_detail || item.handover_notes || "No detail"}</span></td>
+            <td><strong>{item.approved_last_working_date || item.proposed_last_working_date || "Pending"}</strong><span>Notice end {item.notice_end_date || "Not set"}</span></td>
+            <td><strong>{item.clearance_completed_count}/{item.clearance_total_count}</strong><span>{item.clearance_open_count} open, {item.clearance_overdue_count} overdue</span></td>
+            <td><WorkspaceStatusBadge tone={item.rehire_eligible ? "success" : "neutral"}>{item.rehire_eligible ? "Eligible" : "No rehire"}</WorkspaceStatusBadge></td>
+            <td><strong>{item.attention_state || "on_track"}</strong><span>{item.attention_summary || "Exit work is on track."}</span></td>
+            <td><Link className="button button--secondary" href={queueHref({ editExit: item.id })}>Edit</Link></td>
+          </tr>
         ))}
+        </tbody>
+      </WorkspaceDataTable>
+      <div className="lifecycle-pagination-row">
+        <label className="form-field form-field--inline">
+          <span className="muted">Rows</span>
+          <select className="input-control" onChange={(event) => setPageSize(event.target.value)} value={pageSize}>
+            {[10, 25, 50, 100].map((value) => (
+              <option key={value} value={String(value)}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {items.length === 0 ? (
           <div className="card panel panel-card-soft">

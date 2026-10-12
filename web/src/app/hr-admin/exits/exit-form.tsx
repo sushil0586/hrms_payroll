@@ -19,6 +19,9 @@ type Props = {
   mode: "create" | "edit";
   options: HrAdminLifecycleOptions;
   itemId?: string;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -129,7 +132,7 @@ function getClearancePreview(formValue: HrAdminExitWriteInput) {
   }
 }
 
-export function ExitForm({ initialValue, lifecycleTemplates, mode, options, itemId }: Props) {
+export function ExitForm({ initialValue, lifecycleTemplates, mode, options, itemId, cancelHref, successHref, compact = false }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -177,12 +180,20 @@ export function ExitForm({ initialValue, lifecycleTemplates, mode, options, item
       return;
     }
 
-    router.push("/hr-admin/exits");
+    router.push(successHref ?? "/hr-admin/exits");
     router.refresh();
   }
 
+  function handleCancel() {
+    if (cancelHref) {
+      router.push(cancelHref);
+      return;
+    }
+    router.back();
+  }
+
   return (
-    <form aria-label="Exit record form" className="section form-layout-modern lifecycle-child-form" data-testid="exit-record-form" onSubmit={handleSubmit}>
+    <form aria-label="Exit record form" className={`section form-layout-modern lifecycle-child-form${compact ? " lifecycle-child-form--modal" : ""}`} data-testid="exit-record-form" onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>{mode === "create" ? "Create exit record" : "Edit exit record"}</h2>
@@ -362,7 +373,7 @@ export function ExitForm({ initialValue, lifecycleTemplates, mode, options, item
             <button className="button button--primary" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : mode === "create" ? "Create exit" : "Save changes"}
             </button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">
+            <button className="button button--secondary" onClick={handleCancel} type="button">
               Cancel
             </button>
           </div>

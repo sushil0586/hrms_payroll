@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminNotificationEvents } from "@/lib/api";
 
@@ -77,14 +76,14 @@ export default async function HrAdminNotificationEventsPage({ searchParams }: Pa
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Total events" value={result.data.length} trend="Configured triggers" />
-          <MetricTile label="Matching events" value={filteredEvents.length} trend="Current filtered view" />
-          <MetricTile label="Active events" value={activeCount} trend="Currently routing" />
-          <MetricTile label="Active in view" value={activeInView} trend="Filtered routing coverage" />
-          <MetricTile label="Document events" value={documentEventCount} trend="Expiry and onboarding coverage" />
-          <MetricTile label="Lifecycle events" value={lifecycleEventCount} trend="Operational workflow routing" />
-          <MetricTile label="Templated in view" value={templatedInView} trend={`${templatedCount} templated overall`} />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{result.data.length}</strong> Total events</span>
+          <span><strong>{filteredEvents.length}</strong> Matching events</span>
+          <span><strong>{activeCount}</strong> Active events</span>
+          <span><strong>{activeInView}</strong> Active in view</span>
+          <span><strong>{documentEventCount}</strong> Document events</span>
+          <span><strong>{lifecycleEventCount}</strong> Lifecycle events</span>
+          <span><strong>{templatedInView}</strong> Templated in view</span>
         </div>
       </section>
 

@@ -143,23 +143,23 @@ export function LifecycleQueueReportWorkspace({ items }: { items: HrAdminLifecyc
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Lifecycle records</span>
             <strong>{filteredRows.length}</strong>
             <small>{items.length} total records</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>High risk</span>
             <strong>{filteredRows.filter((item) => lifecycleRisk(item) === "High").length}</strong>
             <small>Attention required</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Owner gaps</span>
             <strong>{filteredRows.filter((item) => !item.owner_value).length}</strong>
             <small>Unassigned records</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Document blockers</span>
             <strong>{filteredRows.filter((item) => item.document_attention_state === "blocked").length}</strong>
             <small>Required docs missing</small>

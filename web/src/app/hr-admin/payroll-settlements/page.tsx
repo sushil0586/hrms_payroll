@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollSettlementSetup } from "@/lib/api";
 import type { HrAdminPayrollRun, HrAdminPayrollSettlement, HrAdminPayrollSettlementLine } from "@/lib/types";
@@ -218,11 +217,13 @@ export default async function HrAdminPayrollSettlementsPage({ searchParams }: Pa
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Settlements" value={setup.summary.settlement_count} trend={`${setup.summary.applied_count} applied`} />
-          <MetricTile className="metric-tile-soft" label="Submitted" value={setup.summary.submitted_count} trend={`${setup.summary.approved_count} approved`} />
-          <MetricTile className="metric-tile-soft" label="Lines" value={setup.summary.line_count} trend="Settlement components" />
-          <MetricTile className="metric-tile-soft" label="Net settlement" value={formatMoney(selectedSettlement?.totals_snapshot.net_settlement)} trend="Selected package" />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll settlement summary">
+          <span><strong>{setup.summary.settlement_count}</strong> settlements</span>
+          <span><strong>{setup.summary.applied_count}</strong> applied</span>
+          <span><strong>{setup.summary.submitted_count}</strong> submitted</span>
+          <span><strong>{setup.summary.approved_count}</strong> approved</span>
+          <span><strong>{setup.summary.line_count}</strong> lines</span>
+          <span><strong>{formatMoney(selectedSettlement?.totals_snapshot.net_settlement)}</strong> selected net</span>
         </div>
       </section>
 

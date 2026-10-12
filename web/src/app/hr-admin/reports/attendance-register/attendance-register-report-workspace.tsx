@@ -182,27 +182,12 @@ export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAtt
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
-            <span>Attendance rows</span>
-            <strong>{filteredRows.length}</strong>
-            <small>{items.length} total records</small>
-          </article>
-          <article className="metric-tile metric-tile-soft">
-            <span>Late marks</span>
-            <strong>{filteredRows.filter((item) => item.late_minutes > 0).length}</strong>
-            <small>Rows with late minutes</small>
-          </article>
-          <article className="metric-tile metric-tile-soft">
-            <span>Regularized</span>
-            <strong>{filteredRows.filter((item) => item.is_regularized).length}</strong>
-            <small>Approved correction rows</small>
-          </article>
-          <article className="metric-tile metric-tile-soft">
-            <span>Payroll ready</span>
-            <strong>{filteredRows.filter((item) => item.payrollReadiness.startsWith("Ready")).length}</strong>
-            <small>Locked or resolved records</small>
-          </article>
+        <div className="attendance-summary-strip report-summary-strip" aria-label="Attendance register summary">
+          <span><strong>{filteredRows.length}</strong> attendance rows</span>
+          <span><strong>{items.length}</strong> total records</span>
+          <span><strong>{filteredRows.filter((item) => item.late_minutes > 0).length}</strong> late marks</span>
+          <span><strong>{filteredRows.filter((item) => item.is_regularized).length}</strong> regularized</span>
+          <span><strong>{filteredRows.filter((item) => item.payrollReadiness.startsWith("Ready")).length}</strong> payroll ready</span>
         </div>
 
         <div className="report-filter-panel" aria-label="Attendance register filters">
@@ -336,7 +321,7 @@ export function AttendanceRegisterReportWorkspace({ items }: { items: HrAdminAtt
                   </td>
                   <td>
                     <div className="report-row-actions">
-                      <Link className="button button--secondary" href={`/hr-admin/attendance-records/${item.id}/edit`}>
+                      <Link className="button button--secondary" href={`/hr-admin/attendance-records?editRecord=${item.id}`}>
                         Open
                       </Link>
                       <Link className="button button--ghost" href={`/hr-admin/attendance-records?q=${encodeURIComponent(item.employee_code)}`}>

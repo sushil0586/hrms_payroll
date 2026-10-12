@@ -14,7 +14,7 @@ function field(scope: Page | Locator, label: string) {
 }
 
 function bankForm(page: Page) {
-  return page.locator("form").filter({ has: page.getByRole("heading", { name: /Create bank account|Edit bank account/ }) }).first();
+  return page.locator("form.employee-bank-account-form").first();
 }
 
 function bankRecords(page: Page) {
@@ -23,6 +23,11 @@ function bankRecords(page: Page) {
 
 function bankRecord(page: Page, bankName: string) {
   return bankRecords(page).getByRole("button", { name: new RegExp(bankName) });
+}
+
+async function continueToEmployeeStep(page: Page, heading: string) {
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: heading })).toBeVisible();
 }
 
 async function selectFirstNonEmptyOption(locator: Locator) {
@@ -73,6 +78,7 @@ async function createDisposableEmployee(page: Page) {
   await field(page, "First name").fill("Bank");
   await field(page, "Last name").fill("Certified");
   await field(page, "Preferred name").fill("Bank Certified");
+  await continueToEmployeeStep(page, "Contact and dates");
   await field(page, "Work email").fill(`pw.bank.${PASSWORDLESS_RUN.toLowerCase()}@example.test`);
   await field(page, "Personal email").fill(`pw.bank.personal.${PASSWORDLESS_RUN.toLowerCase()}@example.test`);
   await field(page, "Phone number").fill("+91 98765 43123");
@@ -80,6 +86,7 @@ async function createDisposableEmployee(page: Page) {
   await field(page, "Date of joining").fill("2026-01-01");
   await field(page, "Probation end date").fill("2026-06-30");
   await field(page, "Confirmation date").fill("2026-07-01");
+  await continueToEmployeeStep(page, "Structural mapping");
   await selectFirstNonEmptyOption(field(page, "Branch"));
   await expect(field(page, "Legal entity")).not.toHaveValue("");
   await selectFirstNonEmptyOption(field(page, "Cost center"));
@@ -90,11 +97,12 @@ async function createDisposableEmployee(page: Page) {
   await selectFirstNonEmptyOption(field(page, "Employment type"));
   await selectFirstNonEmptyOption(field(page, "Reporting manager"));
 
+  await continueToEmployeeStep(page, "Review");
   const created = await submitAndCapture<{ id: string; employee_code: string }>(page, "/api/hr-admin/employees", "POST", async () => {
     await page.getByRole("button", { name: "Create employee" }).click();
   });
   expect(created.id).toBeTruthy();
-  await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${created.id}`));
+  await expect(page).toHaveURL(new RegExp(`/hr-admin/employees\\?employeeId=${created.id}`), { timeout: 30_000 });
   await expect(page.getByText(code).first()).toBeVisible();
   return created;
 }
@@ -125,22 +133,22 @@ test.describe("Phase 3H employee bank account certification", () => {
     test.setTimeout(5 * 60 * 1000);
     const employee = await createDisposableEmployee(page);
 
+    await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${employee.id}`);
+    await expect(page.getByText("Bank Certified").first()).toBeVisible();
     await page.locator("details.action-menu summary").click();
     await expect(page.getByRole("link", { name: "Manage bank accounts" })).toBeVisible();
-    await page.getByRole("link", { name: "Manage bank accounts" }).click();
-    await expectPageReady(page, /Bank accounts for Bank Certified/);
-    await expect(page.getByRole("link", { name: "Back to employee detail" })).toHaveAttribute("href", `/hr-admin/employees?employeeId=${employee.id}`);
+    await gotoAuthenticated(page, `/hr-admin/employees?employeeId=${employee.id}&action=bank`);
+    await expectPageReady(page, "Employees");
+    await expect(page.getByRole("heading", { name: "Manage bank accounts" })).toBeVisible();
+    await expect(page.getByText("Bank Certified").first()).toBeVisible();
 
-    for (const metric of ["Bank accounts", "Primary accounts", "Employee status"]) {
-      await expect(page.locator(".metric-tile, .metric-tile-soft").filter({ hasText: metric }).first()).toBeVisible();
-    }
     await expect(page.getByRole("heading", { name: "Bank accounts", exact: true })).toBeVisible();
     await expect(page.getByText("No bank account configured.")).toBeVisible();
     await expect(page.getByRole("button", { name: "New account" })).toBeVisible();
-    await expect(page.locator("form.employee-child-form")).toBeVisible();
+    await page.getByRole("button", { name: "New account" }).click();
 
     const form = bankForm(page);
-    await expect(page.getByRole("heading", { name: "Create bank account" })).toBeVisible();
+    await expect(form).toBeVisible();
     for (const label of ["Account holder name", "Bank name", "Account number", "IFSC code", "Branch name"]) {
       await expect(field(form, label), `${label} should be visible`).toBeVisible();
     }
@@ -177,7 +185,7 @@ test.describe("Phase 3H employee bank account certification", () => {
     await expect(bankRecords(page).getByText(secondary.account_number.slice(-4))).toBeVisible();
 
     await page.getByRole("button", { name: "New account" }).click();
-    await expect(page.getByRole("heading", { name: "Create bank account" })).toBeVisible();
+    await expect(form.getByRole("button", { name: "Create account" })).toBeVisible();
     await fillBankAccount(form, {
       holder: "Bank Certified",
       bank: `Phase 3H Primary Bank ${PASSWORDLESS_RUN}`,
@@ -198,7 +206,7 @@ test.describe("Phase 3H employee bank account certification", () => {
     await expect(bankRecord(page, primary.bank_name).getByText("primary", { exact: true })).toBeVisible();
 
     await bankRecord(page, secondary.bank_name).click();
-    await expect(page.getByRole("heading", { name: "Edit bank account" })).toBeVisible();
+    await expect(form.getByRole("button", { name: "Save account" })).toBeVisible();
     await expect(field(form, "Bank name")).toHaveValue(secondary.bank_name);
     await fillBankAccount(form, {
       holder: "Bank Certified Updated",

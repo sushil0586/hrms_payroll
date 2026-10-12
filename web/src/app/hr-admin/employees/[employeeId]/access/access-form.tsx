@@ -18,6 +18,7 @@ type AccessFormProps = {
   options: HrAdminEmployeeAccessOptions;
   existingAccess: boolean;
   employeeStatus: string;
+  cancelHref?: string;
 };
 
 type AccessFieldErrors = Partial<Record<keyof HrAdminEmployeeAccessWriteInput, string>>;
@@ -54,7 +55,7 @@ function FieldError({ message }: { message?: string }) {
   return message ? <span className="field-error-text" role="alert">{message}</span> : null;
 }
 
-export function EmployeeAccessForm({ employeeId, initialValue, options, existingAccess, employeeStatus }: AccessFormProps) {
+export function EmployeeAccessForm({ employeeId, initialValue, options, existingAccess, employeeStatus, cancelHref }: AccessFormProps) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -321,7 +322,11 @@ export function EmployeeAccessForm({ employeeId, initialValue, options, existing
             <button className="button button--primary" disabled={isSubmitting} type="submit">
               {isSubmitting ? "Saving..." : existingAccess ? "Update access" : "Create access"}
             </button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">
+            <button
+              className="button button--secondary"
+              onClick={() => cancelHref ? window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close")) : router.back()}
+              type="button"
+            >
               Cancel
             </button>
           </div>

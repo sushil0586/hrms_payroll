@@ -169,23 +169,23 @@ export function SalaryVarianceReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Salary variance report workspace">
       <div className="report-catalog-workspace salary-variance-report" data-testid="salary-variance-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Employees compared</span>
             <strong>{filteredRows.length}</strong>
             <small>{rows.length} calculation rows</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Current net pay</span>
             <strong>{formatMoney(totalCurrentNet)}</strong>
             <small>Filtered total</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Variance amount</span>
             <strong>{formatMoney(totalVariance)}</strong>
             <small>Configured baselines only</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Baseline pending</span>
             <strong>{filteredRows.filter((row) => row.band === "Baseline pending").length}</strong>
             <small>No prior-period value</small>

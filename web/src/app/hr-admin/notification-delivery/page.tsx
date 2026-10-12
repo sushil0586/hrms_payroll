@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { NotificationDeliveryManager } from "@/app/hr-admin/notification-delivery/notification-delivery-manager";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminNotificationDiagnostics, getHrAdminNotificationOptions } from "@/lib/api";
 import { formatNotificationDateTime } from "@/lib/notification-observability";
@@ -29,13 +28,13 @@ export default async function HrAdminNotificationDeliveryPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Configured channels" value={result.data.channel_configurations.length} trend="Tenant delivery paths" />
-          <MetricTile label="Enabled channels" value={enabledChannels} trend="Currently routable" />
-          <MetricTile label="Channels with failures" value={channelsWithFailures} trend="Recent delivery risk" />
-          <MetricTile label="Retry capped items" value={retryCapped} trend="Needs operator recovery" />
-          <MetricTile label="Backend options" value={result.data.notification_delivery_backends.length} trend="Extensible provider keys" />
-          <MetricTile label="Email readiness" value={emailEnabled ? 1 : 0} trend={emailEnabled ? "Email channel enabled" : "Email channel disabled"} />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{result.data.channel_configurations.length}</strong> Configured channels</span>
+          <span><strong>{enabledChannels}</strong> Enabled channels</span>
+          <span><strong>{channelsWithFailures}</strong> Channels with failures</span>
+          <span><strong>{retryCapped}</strong> Retry capped items</span>
+          <span><strong>{result.data.notification_delivery_backends.length}</strong> Backend options</span>
+          <span><strong>{emailEnabled ? 1 : 0}</strong> Email readiness</span>
         </div>
       </section>
 

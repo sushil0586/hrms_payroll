@@ -140,11 +140,11 @@ export function ComplianceSummaryReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Compliance summary workspace">
       <div className="report-catalog-workspace statutory-filing-status-report" data-testid="compliance-summary-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Overall readiness</span><strong>{readiness}</strong><small>{readyCount}/{rows.length} areas ready</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Warnings</span><strong>{warningCount}</strong><small>Partial evidence</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Blocked areas</span><strong>{blockedCount}</strong><small>Launch gate blockers</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Filing calendars</span><strong>{statutory.summary.filing_calendar_count}</strong><small>{statutory.summary.overdue_filing_calendar_count} overdue</small></article>
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <span><strong>{readiness}</strong> Overall readiness</span>
+          <span><strong>{warningCount}</strong> Warnings</span>
+          <span><strong>{blockedCount}</strong> Blocked areas</span>
+          <span><strong>{statutory.summary.filing_calendar_count}</strong> Filing calendars</span>
         </div>
 
         <div className="report-catalog-toolbar statutory-deductions-toolbar" aria-label="Compliance summary filters">

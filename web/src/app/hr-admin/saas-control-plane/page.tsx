@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminSaasCommercialControl } from "@/lib/api";
 import type { HrAdminSaasCommercialUsageLimit } from "@/lib/types";
@@ -84,13 +83,13 @@ export default async function HrAdminSaasControlPlanePage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Launch commercial gate" value={data.summary.can_launch ? "Ready" : "Blocked"} trend={`${data.summary.missing_required_entitlement_count} missing entitlements`} />
-          <MetricTile label="Plan" value={titleCase(data.plan.plan_ref || "Missing")} trend={`Edition ${titleCase(data.plan.edition)}`} />
-          <MetricTile label="Subscription" value={titleCase(data.subscription.status)} trend={data.subscription.billing_provider_ref || "No provider ref"} />
-          <MetricTile label="Usage exceptions" value={data.summary.exceeded_usage_limit_count} trend={`${data.summary.near_usage_limit_count} near limit`} />
-          <MetricTile label="Entitlements" value={`${data.summary.enabled_entitlement_count}/${data.summary.entitlement_count}`} trend={`${data.summary.required_entitlement_count} required for launch`} />
-          <MetricTile label="Enforcement scopes" value={data.enforcement.scope_count} trend={`${data.enforcement.blocking_scope_count} blocked`} />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{data.summary.can_launch ? "Ready" : "Blocked"}</strong> Launch commercial gate</span>
+          <span><strong>{titleCase(data.plan.plan_ref || "Missing")}</strong> Plan</span>
+          <span><strong>{titleCase(data.subscription.status)}</strong> Subscription</span>
+          <span><strong>{data.summary.exceeded_usage_limit_count}</strong> Usage exceptions</span>
+          <span><strong>{`${data.summary.enabled_entitlement_count}/${data.summary.entitlement_count}`}</strong> Entitlements</span>
+          <span><strong>{data.enforcement.scope_count}</strong> Enforcement scopes</span>
         </div>
       </section>
 

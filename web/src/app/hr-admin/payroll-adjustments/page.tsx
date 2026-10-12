@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollAdjustmentSetup } from "@/lib/api";
 import type { HrAdminPayrollAdjustment, HrAdminPayrollRun } from "@/lib/types";
@@ -216,12 +215,14 @@ export default async function HrAdminPayrollAdjustmentsPage({ searchParams }: Pa
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Adjustments" value={setup.summary.adjustment_count} trend={`${setup.summary.applied_count} applied`} />
-          <MetricTile className="metric-tile-soft" label="Submitted" value={setup.summary.submitted_count} trend={`${setup.summary.approved_count} approved`} />
-          <MetricTile className="metric-tile-soft" label="Draft" value={setup.summary.draft_count} trend="Needs review" />
-          <MetricTile className="metric-tile-soft" label="Total value" value={formatMoney(setup.summary.total_amount)} trend="All directions" />
-          <MetricTile className="metric-tile-soft" label="Post-lock impacts" value={setup.summary.post_lock_impact_count} trend="Arrears review" />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll adjustment summary">
+          <span><strong>{setup.summary.adjustment_count}</strong> adjustments</span>
+          <span><strong>{setup.summary.applied_count}</strong> applied</span>
+          <span><strong>{setup.summary.submitted_count}</strong> submitted</span>
+          <span><strong>{setup.summary.approved_count}</strong> approved</span>
+          <span><strong>{setup.summary.draft_count}</strong> drafts</span>
+          <span><strong>{formatMoney(setup.summary.total_amount)}</strong> total value</span>
+          <span><strong>{setup.summary.post_lock_impact_count}</strong> post-lock impacts</span>
         </div>
       </section>
 

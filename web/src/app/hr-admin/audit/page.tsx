@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import {
   getHrAdminAttendanceRegularizations,
@@ -223,13 +222,13 @@ export default async function HrAdminAuditPage({ searchParams }: PageProps) {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Recent events" value={events.length} trend="Current filtered timeline" />
-          <MetricTile label="Approval actions" value={attendanceApprovalCount} trend="Regularization review trace" />
-          <MetricTile label="Document reviews" value={documentEventCount} trend="Verification decisions" />
-          <MetricTile label="Onboarding actions" value={onboardingEventCount} trend="Checklist history" />
-          <MetricTile label="Exit actions" value={exitEventCount} trend="Clearance history" />
-          <MetricTile label="Delivery logs" value={notificationEventCount} trend="Notification attempts" />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{events.length}</strong> Recent events</span>
+          <span><strong>{attendanceApprovalCount}</strong> Approval actions</span>
+          <span><strong>{documentEventCount}</strong> Document reviews</span>
+          <span><strong>{onboardingEventCount}</strong> Onboarding actions</span>
+          <span><strong>{exitEventCount}</strong> Exit actions</span>
+          <span><strong>{notificationEventCount}</strong> Delivery logs</span>
         </div>
       </section>
 

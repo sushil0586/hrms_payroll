@@ -55,10 +55,12 @@ export function BankAccountManager({
   employeeId,
   employeeName,
   initialAccounts,
+  cancelHref,
 }: {
   employeeId: string;
   employeeName: string;
   initialAccounts: HrAdminEmployeeBankAccount[];
+  cancelHref?: string;
 }) {
   const router = useRouter();
   const [accounts, setAccounts] = useState(initialAccounts);
@@ -231,6 +233,15 @@ export function BankAccountManager({
               <button className="button button--primary" disabled={isSubmitting} type="submit">
                 {isSubmitting ? "Saving..." : selected ? "Save account" : "Create account"}
               </button>
+              {cancelHref ? (
+                <button
+                  className="button button--secondary"
+                  onClick={() => window.dispatchEvent(new CustomEvent("hr-admin-modal:request-close"))}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              ) : null}
               <button className="button button--secondary" onClick={startNew} type="button">Reset</button>
             </div>
           </div>

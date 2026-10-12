@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ActionToast } from "@/components/patterns/action-toast";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 
 type Props = {
   assignmentId: string;
@@ -35,18 +36,6 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
     const timeout = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(timeout);
   }, [toast]);
-
-  useEffect(() => {
-    if (!dialogOpen) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isSubmitting) {
-        setDialogOpen(false);
-        setError("");
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [dialogOpen, isSubmitting]);
 
   async function submit(action: "deactivate" | "delete") {
     setIsSubmitting(true);
@@ -84,16 +73,14 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
         Remove
       </button>
       {dialogOpen ? (
-        <div className="modal-backdrop" role="presentation">
-          <section aria-label={`Remove ${policyName} assignment`} aria-modal="true" className="modal-panel" role="dialog">
-            <div className="modal-panel__header">
-              <div>
-                <p className="section-eyebrow">Assignment removal</p>
-                <h2 className="section-heading-soft">{policyName}</h2>
-                <p className="section-copy section-copy-soft">Deactivate when HR may need the scope history. Delete only when this assignment was created by mistake.</p>
-              </div>
-              <button className="button button--secondary" disabled={isSubmitting} onClick={closeDialog} type="button">Close</button>
-            </div>
+        <HrAdminActionModal
+          closeHref="/hr-admin/leave-policy-assignments"
+          description="Deactivate when HR may need the scope history. Delete only when this assignment was created by mistake."
+          eyebrow="Assignment removal"
+          labelledBy={`leave-assignment-remove-${assignmentId}`}
+          onClose={closeDialog}
+          title={policyName}
+        >
             <div className="notice">
               <strong>{isActive ? "Active assignment" : "Inactive assignment"}</strong>
               <span className="muted">
@@ -119,8 +106,7 @@ export function LeavePolicyAssignmentActions({ assignmentId, isActive, policyNam
                 </button>
               </div>
             </div>
-          </section>
-        </div>
+        </HrAdminActionModal>
       ) : null}
     </>
   );

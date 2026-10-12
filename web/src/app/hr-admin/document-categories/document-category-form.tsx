@@ -12,6 +12,8 @@ type Props = {
   mode: "create" | "edit";
   options: HrAdminDocumentOptions;
   itemId?: string;
+  compact?: boolean;
+  returnPath?: string;
 };
 
 type DocumentCategoryField = "code" | "name" | "visibility_rules";
@@ -34,7 +36,7 @@ function categoryOutcomeLabel(formValue: HrAdminDocumentCategoryWriteInput) {
   return outcomes.join(" • ");
 }
 
-export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Props) {
+export function DocumentCategoryForm({ initialValue, mode, options, itemId, compact = false, returnPath = "/hr-admin/document-categories" }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -89,17 +91,17 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Pr
       return;
     }
 
-    router.push("/hr-admin/document-categories");
+    router.push(returnPath);
     router.refresh();
   }
 
   return (
-    <form className="section form-layout-modern document-child-form" noValidate onSubmit={handleSubmit}>
-      <section className="form-shell-card">
-        <div className="form-shell-card__intro">
+    <form className={`${compact ? "" : "section "}form-layout-modern document-child-form`} noValidate onSubmit={handleSubmit}>
+      <section className={compact ? "form-shell-card form-shell-card--compact" : "form-shell-card"}>
+        {!compact ? <div className="form-shell-card__intro">
           <h2>{mode === "create" ? "Create document category" : "Edit document category"}</h2>
           <p className="section-copy">Control validation, upload behavior, and reuse rules for one document type.</p>
-        </div>
+        </div> : null}
 
         <FormSection description="Set the category identity and any visibility rules that control where it appears." title="Category setup">
           <div className="form-grid">
@@ -147,7 +149,7 @@ export function DocumentCategoryForm({ initialValue, mode, options, itemId }: Pr
         <div className="form-actions-bar">
           <span className="muted">Category changes apply to future document uploads and requirements.</span>
           <div className="form-actions-bar__buttons">
-            <button className="button button--secondary" onClick={() => router.back()} type="button">
+            <button className="button button--secondary" onClick={() => router.push(returnPath)} type="button">
               Cancel
             </button>
             <button className="button button--primary" disabled={isSubmitting} type="submit">

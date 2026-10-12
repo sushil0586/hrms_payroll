@@ -16,6 +16,7 @@ type Props = {
   options: HrAdminPolicyOptions;
   itemId?: string;
   item?: HrAdminLeaveType;
+  returnPath?: string;
 };
 
 type LeaveTypeField = "code" | "name" | "color_code";
@@ -32,7 +33,7 @@ function getErrorMessage(payload: unknown) {
   return String((payload as Record<string, unknown>).detail || "Unable to save leave type.");
 }
 
-export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Props) {
+export function LeaveTypeForm({ initialValue, mode, options, itemId, item, returnPath = "/hr-admin/leave-types" }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -122,7 +123,7 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Pro
     setIsSubmitting(false);
     isSubmittingRef.current = false;
     window.setTimeout(() => {
-      router.push("/hr-admin/leave-types");
+      router.push(returnPath);
       router.refresh();
     }, 700);
   }
@@ -209,7 +210,7 @@ export function LeaveTypeForm({ initialValue, mode, options, itemId, item }: Pro
             <button className="button button--primary" disabled={isSubmitting || (mode === "edit" && item?.can_edit_directly === false)} type="submit">
               {isSubmitting ? "Saving..." : mode === "create" ? "Create leave type" : item && item.can_edit_directly === false ? "Direct edit unavailable" : "Save changes"}
             </button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">
+            <button className="button button--secondary" onClick={() => router.push(returnPath)} type="button">
               Cancel
             </button>
           </div>

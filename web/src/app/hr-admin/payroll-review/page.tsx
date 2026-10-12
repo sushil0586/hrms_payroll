@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollReviewSetup } from "@/lib/api";
 import { PayrollCloseActionsPanel } from "../payroll-close-actions-panel";
@@ -412,11 +411,14 @@ export default async function HrAdminPayrollReviewPage({ searchParams }: PagePro
       />
 
       <section className="section section--tight">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Reviews" value={setup.summary.review_count} trend={`${setup.summary.locked_review_count} locked`} />
-          <MetricTile className="metric-tile-soft" label="Open reviews" value={setup.summary.open_review_count} trend={`${setup.summary.approved_review_count} approved`} />
-          <MetricTile className="metric-tile-soft" label="Open blockers" value={setup.summary.open_blocker_count} trend={`${setup.summary.open_exception_count} open exceptions`} />
-          <MetricTile className="metric-tile-soft" label="Latest net pay" value={formatMoney(setup.summary.latest_net_pay)} trend="Approved total" />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll review summary">
+          <span><strong>{setup.summary.review_count}</strong> reviews</span>
+          <span><strong>{setup.summary.open_review_count}</strong> open</span>
+          <span><strong>{setup.summary.approved_review_count}</strong> approved</span>
+          <span><strong>{setup.summary.locked_review_count}</strong> locked</span>
+          <span><strong>{setup.summary.open_exception_count}</strong> open exceptions</span>
+          <span><strong>{setup.summary.open_blocker_count}</strong> blockers</span>
+          <span><strong>{formatMoney(setup.summary.latest_net_pay)}</strong> latest net pay</span>
         </div>
       </section>
 

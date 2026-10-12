@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { EmployeeSearchSelect } from "@/components/patterns/employee-search-select";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
+import { WorkspaceFilterBar, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type {
   HrAdminLeaveBalance,
   HrAdminLeaveBalanceActionInput,
@@ -429,6 +430,8 @@ export function LeaveBalanceOperations({
   const [reviewReasonById, setReviewReasonById] = useState<Record<string, string>>({});
   const [reviewingTransactionId, setReviewingTransactionId] = useState<string | null>(null);
   const reviewingTransactionRef = useRef<string | null>(null);
+  const [selectedBalanceId, setSelectedBalanceId] = useState(balancesPage.items[0]?.id ?? "");
+  const [selectedTransactionId, setSelectedTransactionId] = useState("");
   const pageSize = initialFilters?.pageSize ?? balancesPage.page_size;
   const safeBalancePage = Math.min(balancesPage.page, balancesPage.total_pages ?? Math.max(1, Math.ceil(balancesPage.total_count / balancesPage.page_size)));
   const safeTransactionPage = Math.min(transactionsPage.page, transactionsPage.total_pages ?? Math.max(1, Math.ceil(transactionsPage.total_count / transactionsPage.page_size)));
@@ -437,6 +440,8 @@ export function LeaveBalanceOperations({
     name: item.employee_name,
     employee_code: item.employee_code,
   }));
+  const selectedBalance = balances.find((item) => item.id === selectedBalanceId) ?? null;
+  const selectedTransaction = transactions.find((item) => item.id === selectedTransactionId) ?? null;
 
   function filterHref(updates: Record<string, string | undefined> = {}) {
     return buildLeaveBalanceHref({
@@ -577,7 +582,18 @@ export function LeaveBalanceOperations({
 
   return (
     <>
-      <LeaveBalanceImportWorkbench balances={balances} canManageBalances={canManageBalances} onResult={applyActionResult} />
+      <section className="section">
+        <details className="panel-card-soft" data-testid="leave-balance-import-workbench">
+          <summary className="bulk-tools-summary">
+            <span>
+              <strong>Bulk imports</strong>
+              <small>Open only for CSV balance corrections, encashments, or carry-forward loads.</small>
+            </span>
+            <span className="button button--secondary">Open tools</span>
+          </summary>
+          <LeaveBalanceImportWorkbench balances={balances} canManageBalances={canManageBalances} onResult={applyActionResult} />
+        </details>
+      </section>
 
       <section className="section">
         <div className="workspace-card workspace-card--compact">
@@ -643,7 +659,7 @@ export function LeaveBalanceOperations({
 
       <section className="section">
         <div className="queue-toolbar panel-card-soft">
-          <div className="queue-toolbar__grid">
+          <WorkspaceFilterBar className="attendance-record-filter-bar">
             <label className="queue-toolbar__search">
               <span className="muted">Search</span>
               <input
@@ -669,28 +685,25 @@ export function LeaveBalanceOperations({
                 {selectOptions(options.leave_policies, "All leave policies")}
               </select>
             </label>
-            <label className="queue-toolbar__search">
-              <span className="muted">Transaction status</span>
-              <select
-                className="input-control"
-                value={transactionStatusFilter}
-                onChange={(event) => setTransactionStatusFilter(event.target.value)}
-              >
-                <option value="">All statuses</option>
-                <option value="pending">Pending review</option>
-                <option value="applied">Applied</option>
-                <option value="rejected">Rejected</option>
-              </select>
-            </label>
-            <label className="queue-toolbar__search">
-              <span className="muted">Rows</span>
-              <select className="input-control" value={String(pageSize)} onChange={(event) => router.push(filterHref({ page_size: event.target.value }))}>
-                <option value="12">12</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-              </select>
-            </label>
-          </div>
+            <details className="attendance-more-filters">
+              <summary className="button button--secondary">More filters</summary>
+              <div className="attendance-more-filters__panel">
+                <label className="form-field">
+                  <span className="muted">Transaction status</span>
+                  <select
+                    className="input-control"
+                    value={transactionStatusFilter}
+                    onChange={(event) => setTransactionStatusFilter(event.target.value)}
+                  >
+                    <option value="">All statuses</option>
+                    <option value="pending">Pending review</option>
+                    <option value="applied">Applied</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </label>
+              </div>
+            </details>
+          </WorkspaceFilterBar>
           <div className="queue-toolbar__actions">
             <button className="button button--primary" onClick={() => router.push(filterHref())} type="button">Apply filters</button>
             <button className="button button--secondary" onClick={() => router.push("/hr-admin/leave-balances")} type="button">Clear</button>
@@ -715,72 +728,102 @@ export function LeaveBalanceOperations({
             </span>
           </div>
         </div>
-        <div className="queue-list">
-          {balances.map((item) => (
-            <article className="record-card panel-card-soft" key={item.id}>
-              <div className="record-card__header">
-                <div className="record-card__title-wrap">
-                  <div className="record-card__title">
-                    <h2>{item.employee_name}</h2>
-                  </div>
-                  <div className="record-card__eyebrow">
-                    <span className="record-chip">{item.employee_code}</span>
-                    <span className="record-chip">{item.leave_type_name}</span>
-                    <span className="record-chip">FY {item.period_year}</span>
-                  </div>
-                </div>
+        <div className={`attendance-review-workbench${selectedBalance ? " attendance-review-workbench--with-detail" : ""}`}>
+          <section className="panel-card-soft attendance-directory-panel">
+            <div className="attendance-directory-table-wrap">
+              <table className="workspace-table attendance-directory-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Policy</th>
+                    <th>Closing</th>
+                    <th>Consumed</th>
+                    <th>Reserved</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {balances.map((item) => {
+                    const isSelected = selectedBalance?.id === item.id;
+                    return (
+                      <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id} onClick={() => setSelectedBalanceId(item.id)}>
+                        <td><strong>{item.employee_name}</strong><span>{item.employee_code}</span></td>
+                        <td><strong>{item.leave_policy_name}</strong><span>{item.leave_type_name} · FY {item.period_year}</span></td>
+                        <td><strong>{item.closing_balance}</strong><span>{item.opening_balance} opening</span></td>
+                        <td><strong>{item.consumed_amount}</strong><span>{item.accrued_amount} accrued</span></td>
+                        <td><strong>{item.reserved_amount}</strong><span>{item.encashed_amount} encashed</span></td>
+                        <td><button className="button button--secondary button--compact" onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedBalanceId(item.id);
+                        }} type="button">Inspect</button></td>
+                      </tr>
+                    );
+                  })}
+                  {balances.length === 0 ? (
+                    <tr><td colSpan={6}><strong>No leave balances match these filters.</strong><span>Clear filters or search by employee, code, policy, or leave type.</span></td></tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+            <div className="panel-card-soft attendance-pagination-panel">
+              <PaginationBar
+                firstHref={pageHref({ balance_page: "1", transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
+                hasNext={balancesPage.has_next}
+                hasPrevious={balancesPage.has_previous}
+                lastHref={pageHref({ balance_page: String(balancesPage.total_pages ?? 1), transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
+                nextHref={pageHref({ balance_page: String(safeBalancePage + 1), transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
+                page={safeBalancePage}
+                pageSize={balancesPage.page_size}
+                previousHref={pageHref({ balance_page: String(safeBalancePage - 1), transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
+                totalCount={balancesPage.total_count}
+              />
+              <div className="attendance-pagination-panel__controls">
+                <label className="form-field attendance-pagination-rows">
+                  <span className="muted">Rows</span>
+                  <select className="input-control" value={String(pageSize)} onChange={(event) => router.push(filterHref({ page_size: event.target.value }))}>
+                    <option value="12">12</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                  </select>
+                </label>
               </div>
-              <div className="detail-grid">
-                <div className="detail-row">
-                  <span className="detail-label">Policy</span>
-                  <span className="detail-value">{item.leave_policy_name}</span>
+            </div>
+          </section>
+          {selectedBalance ? (
+            <aside className="panel-card-soft attendance-detail-drawer" aria-label="Leave balance detail">
+              <div className="queue-toolbar__header">
+                <div>
+                  <h2 className="section-heading-soft">Balance detail</h2>
+                  <p className="section-copy section-copy-soft">Focused employee-policy ledger context.</p>
                 </div>
-                <div className="detail-row">
-                  <span className="detail-label">Closing balance</span>
-                  <span className="detail-value">{item.closing_balance}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Accrued</span>
-                  <span className="detail-value">{item.accrued_amount}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Carry forward</span>
-                  <span className="detail-value">{item.carry_forward_amount}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Consumed</span>
-                  <span className="detail-value">{item.consumed_amount}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Reserved</span>
-                  <span className="detail-value">{item.reserved_amount}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Encashed</span>
-                  <span className="detail-value">{item.encashed_amount}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Adjustment</span>
-                  <span className="detail-value">{item.adjustment_amount}</span>
-                </div>
+                <button className="button button--secondary button--compact" onClick={() => setSelectedBalanceId("")} type="button">Close</button>
               </div>
-            </article>
-          ))}
-          {balances.length === 0 ? (
-            <div className="payroll-setup-empty-state"><strong>No leave balances match these filters.</strong><span>Clear filters or search by employee, code, policy, or leave type.</span></div>
+              <article className="record-card record-card--compact">
+                <div className="record-card__header">
+                  <div>
+                    <h3>{selectedBalance.employee_name}</h3>
+                    <p className="section-copy section-copy-soft">{selectedBalance.employee_code} · {selectedBalance.leave_type_name}</p>
+                  </div>
+                  <WorkspaceStatusBadge tone="info">FY {selectedBalance.period_year}</WorkspaceStatusBadge>
+                </div>
+              </article>
+              <details className="record-card" open>
+                <summary>Ledger</summary>
+                <div className="detail-grid">
+                  <div className="detail-row"><span className="detail-label">Policy</span><span className="detail-value">{selectedBalance.leave_policy_name}</span></div>
+                  <div className="detail-row"><span className="detail-label">Opening balance</span><span className="detail-value">{selectedBalance.opening_balance}</span></div>
+                  <div className="detail-row"><span className="detail-label">Accrued</span><span className="detail-value">{selectedBalance.accrued_amount}</span></div>
+                  <div className="detail-row"><span className="detail-label">Carry forward</span><span className="detail-value">{selectedBalance.carry_forward_amount}</span></div>
+                  <div className="detail-row"><span className="detail-label">Consumed</span><span className="detail-value">{selectedBalance.consumed_amount}</span></div>
+                  <div className="detail-row"><span className="detail-label">Reserved</span><span className="detail-value">{selectedBalance.reserved_amount}</span></div>
+                  <div className="detail-row"><span className="detail-label">Encashed</span><span className="detail-value">{selectedBalance.encashed_amount}</span></div>
+                  <div className="detail-row"><span className="detail-label">Adjustment</span><span className="detail-value">{selectedBalance.adjustment_amount}</span></div>
+                  <div className="detail-row"><span className="detail-label">Closing balance</span><span className="detail-value">{selectedBalance.closing_balance}</span></div>
+                </div>
+              </details>
+            </aside>
           ) : null}
         </div>
-        <PaginationBar
-          firstHref={pageHref({ balance_page: "1", transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
-          hasNext={balancesPage.has_next}
-          hasPrevious={balancesPage.has_previous}
-          lastHref={pageHref({ balance_page: String(balancesPage.total_pages ?? 1), transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
-          nextHref={pageHref({ balance_page: String(safeBalancePage + 1), transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
-          page={safeBalancePage}
-          pageSize={balancesPage.page_size}
-          previousHref={pageHref({ balance_page: String(safeBalancePage - 1), transaction_page: String(safeTransactionPage), page_size: String(pageSize) })}
-          totalCount={balancesPage.total_count}
-        />
       </section>
 
       <section className="section queue-layout">
@@ -800,96 +843,110 @@ export function LeaveBalanceOperations({
             </span>
           </div>
         </div>
-        <div className="queue-list">
-          {transactions.map((item) => (
-            <article className="record-card panel-card-soft" key={item.id}>
-              <div className="record-card__header">
-                <div className="record-card__title-wrap">
-                  <div className="record-card__title">
-                    <h2>{item.employee_name}</h2>
-                  </div>
-                  <div className="record-card__eyebrow">
-                    <span className="record-chip">{item.status}</span>
-                    <span className="record-chip">{item.action.replaceAll("_", " ")}</span>
-                    <span className="record-chip">{item.units} units</span>
-                    <span className="record-chip">{item.effective_date}</span>
-                  </div>
+        <div className={`attendance-review-workbench${selectedTransaction ? " attendance-review-workbench--with-detail" : ""}`}>
+          <section className="panel-card-soft attendance-directory-panel">
+            <div className="attendance-directory-table-wrap">
+              <table className="workspace-table attendance-directory-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Action</th>
+                    <th>Units</th>
+                    <th>Status</th>
+                    <th>Impact</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((item) => {
+                    const isSelected = selectedTransaction?.id === item.id;
+                    const tone = item.status === "applied" ? "success" : item.status === "pending" ? "warning" : item.status === "rejected" ? "danger" : "neutral";
+                    return (
+                      <tr aria-selected={isSelected} className={isSelected ? "is-selected" : ""} key={item.id} onClick={() => setSelectedTransactionId(item.id)}>
+                        <td><strong>{item.employee_name}</strong><span>{item.employee_code}</span></td>
+                        <td><strong>{item.action.replaceAll("_", " ")}</strong><span>{item.effective_date}</span></td>
+                        <td><strong>{item.units}</strong><span>{item.leave_policy_name}</span></td>
+                        <td><WorkspaceStatusBadge tone={tone}>{item.status.replaceAll("_", " ")}</WorkspaceStatusBadge><span>{item.can_current_actor_review ? "Reviewable" : "Shared state"}</span></td>
+                        <td><strong>{item.closing_balance_before} to {item.closing_balance_after}</strong><span>{item.reason || "No reason"}</span></td>
+                        <td><button className="button button--secondary button--compact" onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedTransactionId(item.id);
+                        }} type="button">Inspect</button></td>
+                      </tr>
+                    );
+                  })}
+                  {transactions.length === 0 ? (
+                    <tr><td colSpan={6}><strong>No leave balance transactions match these filters.</strong><span>Clear filters or search by employee, policy, action, reason, or status.</span></td></tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+            <div className="panel-card-soft attendance-pagination-panel">
+              <PaginationBar
+                firstHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: "1", page_size: String(pageSize) })}
+                hasNext={transactionsPage.has_next}
+                hasPrevious={transactionsPage.has_previous}
+                lastHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: String(transactionsPage.total_pages ?? 1), page_size: String(pageSize) })}
+                nextHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: String(safeTransactionPage + 1), page_size: String(pageSize) })}
+                page={safeTransactionPage}
+                pageSize={transactionsPage.page_size}
+                previousHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: String(safeTransactionPage - 1), page_size: String(pageSize) })}
+                totalCount={transactionsPage.total_count}
+              />
+            </div>
+          </section>
+          {selectedTransaction ? (
+            <aside className="panel-card-soft attendance-detail-drawer" aria-label="Leave balance transaction detail">
+              <div className="queue-toolbar__header">
+                <div>
+                  <h2 className="section-heading-soft">Transaction detail</h2>
+                  <p className="section-copy section-copy-soft">Review evidence and maker-checker state.</p>
                 </div>
+                <button className="button button--secondary button--compact" onClick={() => setSelectedTransactionId("")} type="button">Close</button>
               </div>
-              <div className="detail-grid">
-                <div className="detail-row">
-                  <span className="detail-label">Policy</span>
-                  <span className="detail-value">{item.leave_policy_name}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Before</span>
-                  <span className="detail-value">{item.closing_balance_before}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">After</span>
-                  <span className="detail-value">{item.closing_balance_after}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Performed by</span>
-                  <span className="detail-value">{item.performed_by_name || "System"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Reviewer</span>
-                  <span className="detail-value">{item.reviewed_by_name || item.reviewer_employee_name || "Not assigned"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Projected impact</span>
-                  <span className="detail-value">
-                    {item.closing_balance_before} to {item.closing_balance_after}
-                  </span>
-                </div>
-                <div className="detail-row detail-row--full">
-                  <span className="detail-label">Reason</span>
-                  <span className="detail-value">{item.reason || "No reason captured."}</span>
-                </div>
-                {item.approval_reason ? (
-                  <div className="detail-row detail-row--full">
-                    <span className="detail-label">Approval rule</span>
-                    <span className="detail-value">{item.approval_reason}</span>
+              <article className="record-card record-card--compact">
+                <div className="record-card__header">
+                  <div>
+                    <h3>{selectedTransaction.employee_name}</h3>
+                    <p className="section-copy section-copy-soft">{selectedTransaction.action.replaceAll("_", " ")} · {selectedTransaction.units} units</p>
                   </div>
-                ) : null}
-                {item.rejection_reason ? (
-                  <div className="detail-row detail-row--full">
-                    <span className="detail-label">Rejection reason</span>
-                    <span className="detail-value">{item.rejection_reason}</span>
-                  </div>
-                ) : null}
-              </div>
-              {item.status === "pending" ? (
-                <div className="queue-toolbar__actions">
-                  {canManageBalances && item.can_current_actor_review ? (
+                  <WorkspaceStatusBadge tone={selectedTransaction.status === "applied" ? "success" : selectedTransaction.status === "pending" ? "warning" : selectedTransaction.status === "rejected" ? "danger" : "neutral"}>{selectedTransaction.status.replaceAll("_", " ")}</WorkspaceStatusBadge>
+                </div>
+              </article>
+              <details className="record-card" open>
+                <summary>Review context</summary>
+                <div className="detail-grid">
+                  <div className="detail-row"><span className="detail-label">Policy</span><span className="detail-value">{selectedTransaction.leave_policy_name}</span></div>
+                  <div className="detail-row"><span className="detail-label">Effective date</span><span className="detail-value">{selectedTransaction.effective_date}</span></div>
+                  <div className="detail-row"><span className="detail-label">Before</span><span className="detail-value">{selectedTransaction.closing_balance_before}</span></div>
+                  <div className="detail-row"><span className="detail-label">After</span><span className="detail-value">{selectedTransaction.closing_balance_after}</span></div>
+                  <div className="detail-row"><span className="detail-label">Performed by</span><span className="detail-value">{selectedTransaction.performed_by_name || "System"}</span></div>
+                  <div className="detail-row"><span className="detail-label">Reviewer</span><span className="detail-value">{selectedTransaction.reviewed_by_name || selectedTransaction.reviewer_employee_name || "Not assigned"}</span></div>
+                  <div className="detail-row detail-row--full"><span className="detail-label">Reason</span><span className="detail-value">{selectedTransaction.reason || "No reason captured."}</span></div>
+                  {selectedTransaction.approval_reason ? <div className="detail-row detail-row--full"><span className="detail-label">Approval rule</span><span className="detail-value">{selectedTransaction.approval_reason}</span></div> : null}
+                  {selectedTransaction.rejection_reason ? <div className="detail-row detail-row--full"><span className="detail-label">Rejection reason</span><span className="detail-value">{selectedTransaction.rejection_reason}</span></div> : null}
+                </div>
+              </details>
+              {selectedTransaction.status === "pending" ? (
+                <div className="record-card__actions">
+                  {canManageBalances && selectedTransaction.can_current_actor_review ? (
                     <>
                       <input
                         className="input-control"
                         placeholder="Reason if rejecting"
-                        value={reviewReasonById[item.id] ?? ""}
+                        value={reviewReasonById[selectedTransaction.id] ?? ""}
                         onChange={(event) =>
                           setReviewReasonById((current) => ({
                             ...current,
-                            [item.id]: event.target.value,
+                            [selectedTransaction.id]: event.target.value,
                           }))
                         }
                       />
-                      <button
-                        className="button button--secondary"
-                        disabled={reviewingTransactionId === item.id}
-                        onClick={() => handleReview(item.id, "reject")}
-                        type="button"
-                      >
-                        {reviewingTransactionId === item.id ? "Saving..." : "Reject"}
+                      <button className="button button--secondary" disabled={reviewingTransactionId === selectedTransaction.id} onClick={() => handleReview(selectedTransaction.id, "reject")} type="button">
+                        {reviewingTransactionId === selectedTransaction.id ? "Saving..." : "Reject"}
                       </button>
-                      <button
-                        className="button button--primary"
-                        disabled={reviewingTransactionId === item.id}
-                        onClick={() => handleReview(item.id, "approve")}
-                        type="button"
-                      >
-                        {reviewingTransactionId === item.id ? "Saving..." : "Approve"}
+                      <button className="button button--primary" disabled={reviewingTransactionId === selectedTransaction.id} onClick={() => handleReview(selectedTransaction.id, "approve")} type="button">
+                        {reviewingTransactionId === selectedTransaction.id ? "Saving..." : "Approve"}
                       </button>
                     </>
                   ) : (
@@ -897,23 +954,9 @@ export function LeaveBalanceOperations({
                   )}
                 </div>
               ) : null}
-            </article>
-          ))}
-          {transactions.length === 0 ? (
-            <div className="payroll-setup-empty-state"><strong>No leave balance transactions match these filters.</strong><span>Clear filters or search by employee, policy, action, reason, or status.</span></div>
+            </aside>
           ) : null}
         </div>
-        <PaginationBar
-          firstHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: "1", page_size: String(pageSize) })}
-          hasNext={transactionsPage.has_next}
-          hasPrevious={transactionsPage.has_previous}
-          lastHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: String(transactionsPage.total_pages ?? 1), page_size: String(pageSize) })}
-          nextHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: String(safeTransactionPage + 1), page_size: String(pageSize) })}
-          page={safeTransactionPage}
-          pageSize={transactionsPage.page_size}
-          previousHref={pageHref({ balance_page: String(safeBalancePage), transaction_page: String(safeTransactionPage - 1), page_size: String(pageSize) })}
-          totalCount={transactionsPage.total_count}
-        />
       </section>
     </>
   );

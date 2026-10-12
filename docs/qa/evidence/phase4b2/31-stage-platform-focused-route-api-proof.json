@@ -1,0 +1,80 @@
+{
+  "phase": "4B.3",
+  "target": "https://hrms.accerio.in",
+  "timestamp_utc": "2026-10-10T12:25:27Z",
+  "note": "Sanitized focused Platform Admin route/API probe. Credentials/tokens omitted.",
+  "results": [
+    {
+      "label": "platform_admin_focus",
+      "login_status": 200,
+      "checks": [
+        {
+          "method": "GET",
+          "path": "/platform-admin",
+          "status": 200,
+          "contains_platform_marker": false
+        },
+        {
+          "method": "GET",
+          "path": "/platform-admin/tenants",
+          "status": 200,
+          "contains_platform_marker": false
+        },
+        {
+          "method": "GET",
+          "path": "/platform-admin/permissions",
+          "status": 200,
+          "contains_platform_marker": false
+        },
+        {
+          "method": "GET",
+          "path": "/api/platform/summary",
+          "status": 200,
+          "contains_platform_marker": false
+        },
+        {
+          "method": "GET",
+          "path": "/api/platform/tenants",
+          "status": 200,
+          "contains_platform_marker": false
+        },
+        {
+          "method": "GET",
+          "path": "/api/platform/permission-catalog",
+          "status": 200,
+          "contains_platform_marker": false
+        }
+      ]
+    },
+    {
+      "label": "hr_tenant_persona",
+      "login_status": 200,
+      "checks": [
+        {
+          "method": "GET",
+          "path": "/api/platform/summary",
+          "status": 403,
+          "contains_sensitive_terms": false
+        },
+        {
+          "method": "GET",
+          "path": "/api/platform/tenants",
+          "status": 403,
+          "contains_sensitive_terms": false
+        },
+        {
+          "method": "GET",
+          "path": "/api/platform/permission-catalog",
+          "status": 403,
+          "contains_sensitive_terms": false
+        },
+        {
+          "method": "POST",
+          "path": "/api/platform/tenants",
+          "status": 403,
+          "contains_sensitive_terms": false
+        }
+      ]
+    }
+  ]
+}

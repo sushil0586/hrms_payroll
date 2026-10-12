@@ -16,11 +16,14 @@ function codeFor(prefix: string, intent = "main") {
   return `PW_TEST_${prefix}_${intent}_${runSuffix}`.toUpperCase();
 }
 
-function field(page: Page, label: string, index = 0) {
-  return page
+function field(scope: Page | Locator, label: string, index = 0) {
+  const labelPattern = new RegExp(`^${label}(?: \\*)?$`);
+  const accessibleControl = scope.getByRole("textbox", { name: labelPattern }).or(scope.getByRole("combobox", { name: labelPattern })).or(scope.getByRole("spinbutton", { name: labelPattern }));
+  return accessibleControl
+    .or(scope
     .locator("label.form-field")
-    .filter({ has: page.locator("span", { hasText: new RegExp(`^${label}$`) }) })
-    .locator("input, select, textarea")
+    .filter({ has: scope.locator("span", { hasText: labelPattern }) })
+    .locator("input, select, textarea"))
     .nth(index);
 }
 
@@ -33,7 +36,20 @@ function toggle(page: Page, label: string) {
 }
 
 function recordCard(page: Page, text: string) {
-  return page.locator("article.record-card").filter({ hasText: text }).first();
+  return page.locator("article.record-card, table.workspace-table tbody tr").filter({ hasText: text }).first();
+}
+
+async function filterListToRecord(page: Page, listPath: string, code: string) {
+  await gotoAuthenticated(page, listPath);
+  const search = field(page, "Search");
+  if (await search.isVisible().catch(() => false)) {
+    await search.fill(code);
+    const applyButton = page.getByRole("button", { name: /Apply filters|Apply/i }).first();
+    if (await applyButton.isVisible().catch(() => false)) {
+      await applyButton.click();
+    }
+  }
+  await expect(recordCard(page, code)).toBeVisible();
 }
 
 async function expectNativeRequired(fieldLocator: Locator) {
@@ -69,20 +85,33 @@ async function selectRecordOption(page: Page, label: string, record: CreatedReco
 }
 
 async function submitAndExpectList(page: Page, listPath: string) {
-  await expect(page).toHaveURL(new RegExp(`${listPath}$`), { timeout: 20_000 });
+  await expect(page).toHaveURL(new RegExp(`${listPath}$`), { timeout: 60_000 });
 }
 
 async function openEditByCode(page: Page, listPath: string, code: string, heading: string | RegExp) {
-  await gotoAuthenticated(page, listPath);
-  await expect(recordCard(page, code)).toBeVisible();
-  const editLink = recordCard(page, code).getByRole("link", { name: "Edit" }).first();
+  await filterListToRecord(page, listPath, code);
+  const rowEditLink = recordCard(page, code).getByRole("link", { name: /^Edit/ }).first();
+  if (!(await rowEditLink.isVisible().catch(() => false))) {
+    const inspectButton = recordCard(page, code).getByRole("button", { name: "Inspect" }).first();
+    if (await inspectButton.isVisible().catch(() => false)) {
+      await inspectButton.click();
+    }
+  }
+  const editLink = (await rowEditLink.isVisible().catch(() => false))
+    ? rowEditLink
+    : page.getByRole("link", { name: /^Edit/ }).first();
   await expect(editLink).toBeVisible();
   const href = await editLink.getAttribute("href");
   expect(href).toBeTruthy();
   await editLink.scrollIntoViewIfNeeded();
   await Promise.all([page.waitForURL(new RegExp(`${href!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`)), editLink.click()]);
-  await expectPageReady(page, heading);
-  const id = href!.match(/\/([^/]+)\/edit$/)?.[1] ?? "";
+  const expectedHeading = page.getByRole("heading", { name: heading }).first();
+  if (await expectedHeading.isVisible().catch(() => false)) {
+    await expectPageReady(page, heading);
+  } else {
+    await expect(page.getByRole("dialog", { name: /Edit / })).toBeVisible();
+  }
+  const id = href!.match(/\/([^/]+)\/edit$/)?.[1] ?? href!.match(/[?&](?:editLeaveType|editLeavePolicy|editPolicy|editCalendar)=([^&]+)/)?.[1] ?? "";
   expect(id).not.toBe("");
   return { href: href!, id };
 }
@@ -162,7 +191,7 @@ async function createLeaveType(page: Page, prefix = "LT"): Promise<CreatedRecord
   await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: "Create leave type" }).click();
   await submitAndExpectList(page, "/hr-admin/leave-types");
-  await expect(recordCard(page, code)).toBeVisible();
+  await filterListToRecord(page, "/hr-admin/leave-types", code);
 
   const edit = await openEditByCode(page, "/hr-admin/leave-types", code, /Edit leave type/);
   return { code, name, editHref: edit.href, id: edit.id };
@@ -230,7 +259,7 @@ async function createHolidayCalendar(page: Page, prefix = "HC"): Promise<Created
   await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: "Create holiday calendar" }).click();
   await submitAndExpectList(page, "/hr-admin/holiday-calendars");
-  await expect(recordCard(page, code)).toBeVisible();
+  await filterListToRecord(page, "/hr-admin/holiday-calendars", code);
 
   const edit = await openEditByCode(page, "/hr-admin/holiday-calendars", code, "Edit holiday calendar");
   return { code, name, editHref: edit.href, id: edit.id };
@@ -282,7 +311,7 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await toggle(page, "Active").uncheck();
     await page.getByRole("button", { name: "Save changes" }).click();
     await submitAndExpectList(page, "/hr-admin/leave-types");
-    await expect(recordCard(page, record.code)).toContainText("inactive");
+    await expect(recordCard(page, record.code)).toContainText(/Inactive/i);
   });
 
   test("shift page supports granular browser CRUD, weekly-off controls, and duplicate validation", async ({ page }) => {
@@ -302,7 +331,7 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await toggle(page, "Active").uncheck();
     await page.getByRole("button", { name: "Save changes" }).click();
     await submitAndExpectList(page, "/hr-admin/shifts");
-    await expect(recordCard(page, record.code)).toContainText("inactive");
+    await expect(recordCard(page, record.code)).toContainText(/Inactive/i);
   });
 
   test("holiday calendar page supports granular browser CRUD with holiday row operations", async ({ page }) => {
@@ -325,7 +354,7 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await toggle(page, "Active").uncheck();
     await page.getByRole("button", { name: "Save changes" }).click();
     await submitAndExpectList(page, "/hr-admin/holiday-calendars");
-    await expect(recordCard(page, record.code)).toContainText("inactive");
+    await expect(recordCard(page, record.code)).toContainText(/Inactive/i);
   });
 
   test("leave policy page supports granular browser CRUD, advanced controls, preview validation, and duplicate validation", async ({ page }) => {
@@ -407,15 +436,18 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await expectNoHorizontalOverflow(page);
     await page.getByRole("button", { name: "Create leave policy" }).click();
     await submitAndExpectList(page, "/hr-admin/leave-policies");
-    await expect(recordCard(page, code)).toBeVisible();
+    await filterListToRecord(page, "/hr-admin/leave-policies", code);
 
     const edit = await openEditByCode(page, "/hr-admin/leave-policies", code, "Edit leave policy");
-    await field(page, "Name").fill(`${name} Updated`);
-    await field(page, "Notice days required").fill("3");
-    await field(page, "Status").selectOption("archived");
+    const editDialog = page.getByRole("dialog", { name: /Edit / }).first();
+    const editScope = (await editDialog.isVisible().catch(() => false)) ? editDialog : page;
+    await field(editScope, "Name").fill(`${name} Updated`);
+    await field(editScope, "Notice days required").fill("3");
+    await field(editScope, "Status").selectOption("archived");
     await page.getByRole("button", { name: "Save changes" }).click();
     await submitAndExpectList(page, "/hr-admin/leave-policies");
-    await expect(recordCard(page, code)).toContainText("archived");
+    await filterListToRecord(page, "/hr-admin/leave-policies", code);
+    await expect(recordCard(page, code)).toContainText(/Archived/i);
 
     await gotoAuthenticated(page, "/hr-admin/leave-policies/new");
     await selectRecordOption(page, "Leave type", leaveType);
@@ -507,7 +539,7 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await field(page, "Status").selectOption("archived");
     await page.getByRole("button", { name: "Save changes" }).click();
     await submitAndExpectList(page, "/hr-admin/attendance-policies");
-    await expect(recordCard(page, code)).toContainText("archived");
+    await expect(recordCard(page, code)).toContainText(/Archived/i);
 
     await gotoAuthenticated(page, "/hr-admin/attendance-policies/new");
     await field(page, "Code").fill(code);
@@ -581,7 +613,7 @@ test.describe("HR admin policy and governance master CRUD", () => {
     await field(page, "Status").selectOption("archived");
     await page.getByRole("button", { name: "Save changes" }).click();
     await submitAndExpectList(page, "/hr-admin/workflow-templates");
-    await expect(recordCard(page, code)).toContainText("archived");
+    await expect(recordCard(page, code)).toContainText(/Archived/i);
   });
 
   test("document category page supports granular browser CRUD, JSON validation, and duplicate validation", async ({ page }) => {

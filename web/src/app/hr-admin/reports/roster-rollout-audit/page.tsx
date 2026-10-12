@@ -33,8 +33,6 @@ export default async function RosterRolloutAuditReportPage() {
             <Link className="button button--primary" href="/hr-admin/shift-roster-templates">Roster templates</Link>
           </>
         }
-        pills={["Roster audit", "Pattern evidence", "Scope linked"]}
-        showPills
       />
 
       <ReportInsightsStrip

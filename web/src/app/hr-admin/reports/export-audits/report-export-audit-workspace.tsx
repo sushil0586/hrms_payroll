@@ -154,23 +154,23 @@ export function ReportExportAuditWorkspace() {
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Audit records</span>
             <strong>{filteredItems.length}</strong>
             <small>Current workspace exports</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>CSV exports</span>
             <strong>{filteredItems.filter((item) => item.export_type === "csv").length}</strong>
             <small>Report downloads</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Manifests</span>
             <strong>{filteredItems.filter((item) => item.export_type === "manifest").length}</strong>
             <small>Audit proof requests</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Reports</span>
             <strong>{new Set(filteredItems.map((item) => item.report_key)).size}</strong>
             <small>Distinct report keys</small>

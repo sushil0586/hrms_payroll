@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { PayslipReadReceiptAction } from "@/app/ess/payslips/payslip-read-receipt-action";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import type { EssPayrollPayslip } from "@/lib/types";
 
 function titleCase(value: string) {
@@ -70,24 +71,8 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-function useEscapeClose(isOpen: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
-}
-
 export function PayslipDetailAction({ payslip, variant = "secondary" }: { payslip: EssPayrollPayslip; variant?: "primary" | "secondary" }) {
   const [isOpen, setIsOpen] = useState(false);
-  useEscapeClose(isOpen, () => setIsOpen(false));
   const renderModel = payslip.render_model;
   const taxSheet = renderModel?.tax_sheet;
   const dayCountBasis = renderModel?.day_count_basis;
@@ -97,19 +82,31 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
     .join(", ") : "";
   const modal = isOpen && typeof document !== "undefined"
     ? createPortal(
-        <div className="modal-shell" role="presentation">
-          <div aria-label={`Payslip detail for ${payslip.period_name}`} aria-modal="true" className="modal ess-payslip-modal" role="dialog">
-            <div className="modal__header">
-              <div>
-                <span className="workspace-card__eyebrow">Payslip detail</span>
-                <h2 id={`payslip-detail-${payslip.id}`}>{payslip.period_name}</h2>
-                <p className="section-copy section-copy-soft">{payslip.title} / Paid {formatDate(payslip.pay_date)}</p>
-              </div>
-              <button className="button button--secondary" onClick={() => setIsOpen(false)} type="button">
-                Close
-              </button>
-            </div>
-
+        <HrAdminActionModal
+          className="ess-payslip-modal"
+          closeHref="/ess/payslips"
+          description={`${payslip.title} / Paid ${formatDate(payslip.pay_date)}`}
+          eyebrow="Payslip detail"
+          footer={(
+            <>
+              {payslip.download_url ? (
+                <a className="button button--primary" href={`/api/me/payroll-payslips/${payslip.id}/download`}>
+                  Download payslip
+                </a>
+              ) : (
+                <span className="payroll-output-download-state">Download blocked</span>
+              )}
+              <PayslipReadReceiptAction
+                endpoint={`/api/me/payroll-payslips/${payslip.id}/read`}
+                isReadAcknowledged={payslip.access_summary.is_read_acknowledged}
+              />
+              <button className="button button--secondary" onClick={() => setIsOpen(false)} type="button">Close</button>
+            </>
+          )}
+          labelledBy={`payslip-detail-${payslip.id}`}
+          onClose={() => setIsOpen(false)}
+          title={payslip.period_name}
+        >
             <div className="ess-payslip-modal-summary">
               <article>
                 <span>Gross earnings</span>
@@ -123,20 +120,6 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
                 <span>Net pay</span>
                 <strong>{formatMoney(payslip.totals_snapshot.net_pay)}</strong>
               </article>
-            </div>
-
-            <div className="ess-payslip-modal-actions">
-              {payslip.download_url ? (
-                <a className="button button--primary" href={`/api/me/payroll-payslips/${payslip.id}/download`}>
-                  Download payslip
-                </a>
-              ) : (
-                <span className="payroll-output-download-state">Download blocked</span>
-              )}
-              <PayslipReadReceiptAction
-                endpoint={`/api/me/payroll-payslips/${payslip.id}/read`}
-                isReadAcknowledged={payslip.access_summary.is_read_acknowledged}
-              />
             </div>
 
             <div className="ess-payslip-modal-grid">
@@ -255,8 +238,7 @@ export function PayslipDetailAction({ payslip, variant = "secondary" }: { paysli
                 <code>{payslip.source_hash}</code>
               </section>
             </div>
-          </div>
-        </div>,
+        </HrAdminActionModal>,
         document.body,
       )
     : null;

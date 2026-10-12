@@ -21,6 +21,28 @@ async function expectFields(scope: Locator, labels: string[]) {
   }
 }
 
+async function expectSummaryMetrics(page: Page, metrics: string[]) {
+  const summary = page.locator(".payroll-run-summary-strip").first();
+  await expect(summary).toBeVisible();
+  for (const metric of metrics) {
+    await expect(summary).toContainText(new RegExp(metric, "i"));
+  }
+}
+
+async function gotoRuleRoute(page: Page, href: string) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await page.goto(href, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      return;
+    } catch (error) {
+      if (attempt === 2 || !String(error).includes("ERR_ABORTED")) {
+        throw error;
+      }
+      await page.waitForTimeout(500);
+    }
+  }
+}
+
 async function openRuleActionTab(page: Page, name: RegExp | string) {
   await page.getByRole("navigation", { name: "Payroll rule action groups" }).getByRole("button", { name }).click();
 }
@@ -36,22 +58,23 @@ async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "P
 
 test.describe("HR admin payroll rule engine flows", () => {
   test("rule workspace exposes formulas, locked snapshot options, and live rule detail", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/payroll-rules");
     await expectPageReady(page, "Payroll Rules");
 
+    const main = page.getByRole("main");
     for (const link of ["Salary Setup", "Payroll Setup", "Calculations", "Add rule"]) {
-      await expect(page.getByRole("link", { name: link, exact: true })).toBeVisible();
+      await expect(main.getByRole("link", { name: link, exact: true })).toBeVisible();
     }
 
-    for (const metric of ["Rules", "Active versions", "Previews", "Locked snapshots"]) {
-      await expect(page.locator(".metric-tile-soft").filter({ hasText: metric })).toBeVisible();
-    }
+    await expectSummaryMetrics(page, ["Rules", "Active versions", "Previews", "Locked snapshots"]);
 
     const tabs = page.getByLabel("Payroll rule sections");
     await expect(tabs.getByRole("link", { name: /Overview/ })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", { name: "Rule engine summary" })).toBeVisible();
 
-    await tabs.getByRole("link", { name: /Rules/ }).click();
+    await expect(tabs.getByRole("link", { name: /Rules/ })).toHaveAttribute("href", /tab=rules/);
+    await page.goto("/hr-admin/payroll-rules?tab=rules");
     await expect(page).toHaveURL(/tab=rules/);
     await expect(page.getByRole("heading", { name: "Rule catalog" })).toBeVisible();
     await expect(page.getByLabel("rules pagination")).toBeVisible();
@@ -59,7 +82,7 @@ test.describe("HR admin payroll rule engine flows", () => {
       await expect(page.getByRole("columnheader", { name: header }).first()).toBeVisible();
     }
 
-    await tabs.getByRole("link", { name: /Versions/ }).click();
+    await page.goto("/hr-admin/payroll-rules?tab=versions");
     await expect(page).toHaveURL(/tab=versions/);
     await expect(page.getByRole("region", { name: "Rule version review" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Catalog" })).toBeVisible();
@@ -70,19 +93,23 @@ test.describe("HR admin payroll rule engine flows", () => {
 
     const versionInspect = page.getByRole("link", { name: "Inspect" }).first();
     if ((await versionInspect.count()) > 0) {
-      await versionInspect.click();
+      const href = await versionInspect.getAttribute("href");
+      expect(href).toContain("versionId=");
+      await gotoRuleRoute(page, href!);
       await expect(page).toHaveURL(/versionId=/);
       await expect(page.getByText("Safe expression").first()).toBeVisible();
     }
 
     const ruleLink = page.locator("main a[href*='ruleId=']").first();
     if ((await ruleLink.count()) > 0) {
-      await ruleLink.click();
+      const href = await ruleLink.getAttribute("href");
+      expect(href).toContain("ruleId=");
+      await gotoRuleRoute(page, href!);
       await expect(page).toHaveURL(/ruleId=/);
       await expect(page.getByText("Safe expression").or(page.getByText("No evaluation trace")).first()).toBeVisible();
     }
 
-    await tabs.getByRole("link", { name: /Trace/ }).click();
+    await page.goto("/hr-admin/payroll-rules?tab=trace");
     await expect(page).toHaveURL(/tab=trace/);
     await expect(page.getByRole("region", { name: "Rule trace review" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Locked snapshot options" })).toBeVisible();
@@ -92,12 +119,14 @@ test.describe("HR admin payroll rule engine flows", () => {
 
     const traceInspect = page.getByRole("link", { name: "Inspect" }).first();
     if ((await traceInspect.count()) > 0) {
-      await traceInspect.click();
+      const href = await traceInspect.getAttribute("href");
+      expect(href).toContain("evaluationId=");
+      await gotoRuleRoute(page, href!);
       await expect(page).toHaveURL(/evaluationId=/);
       await expect(page.getByRole("complementary", { name: "Evaluation trace detail" })).toContainText("Expression");
     }
 
-    await tabs.getByRole("link", { name: /Setup Actions/ }).click();
+    await page.goto("/hr-admin/payroll-rules?tab=actions");
     await expect(page).toHaveURL(/tab=actions/);
     await expect(page.getByRole("heading", { name: "Payroll rule controls" })).toBeVisible();
     await expect(page.getByTestId("payroll-rule-definition-form")).toBeVisible();
@@ -108,6 +137,7 @@ test.describe("HR admin payroll rule engine flows", () => {
   });
 
   test("payroll rule setup actions create definitions and versions from browser", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/payroll-rules?tab=actions");
     await expectPageReady(page, "Payroll Rules");
 
@@ -170,7 +200,8 @@ test.describe("HR admin payroll rule engine flows", () => {
     await expect(page.getByText("payroll rule version saved.").first()).toBeVisible();
 
     await gotoAuthenticated(page, `/hr-admin/payroll-rules?tab=versions&ruleId=${rule.id}`);
-    await expect(page.getByText(ruleCode).first()).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`ruleId=${rule.id}`));
+    await expect(page.getByRole("region", { name: "Rule version review" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 });

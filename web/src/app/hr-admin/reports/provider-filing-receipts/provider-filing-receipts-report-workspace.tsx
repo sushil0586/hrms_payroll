@@ -185,23 +185,23 @@ export function ProviderFilingReceiptsReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Provider filing receipts report workspace">
       <div className="report-catalog-workspace provider-filing-receipts-report" data-testid="provider-filing-receipts-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Provider deliveries</span>
             <strong>{filteredRows.length}</strong>
             <small>{deliveries.length} total submissions</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Acknowledged</span>
             <strong>{filteredRows.filter((row) => row.acknowledgedAt !== "Pending").length}</strong>
             <small>Receipt timestamp captured</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Callbacks</span>
             <strong>{filteredRows.reduce((sum, row) => sum + row.callbackCount, 0)}</strong>
             <small>Provider events</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Retries</span>
             <strong>{filteredRows.reduce((sum, row) => sum + row.retryCount, 0)}</strong>
             <small>Recovery events</small>

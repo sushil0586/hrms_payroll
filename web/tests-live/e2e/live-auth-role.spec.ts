@@ -51,7 +51,7 @@ test.describe.serial("live backend auth and role access", () => {
 
     await page.goto("/hr-admin");
     await expect(page).toHaveURL(/\/ess$/);
-    await expectPageReady(page, "Self service");
+    await expectPageReady(page, "My workspace");
     await expectLiveWorkspace(page, "Live ESS");
   });
 
@@ -67,11 +67,13 @@ test.describe.serial("live backend auth and role access", () => {
 
     await loginAs(page, "manager");
     await page.goto(`/mss/approvals?queue=leave&leaveId=${target.id}`);
-    await expectPageReady(page, "Manager inbox");
+    await expectPageReady(page, "Manager approvals");
     await expectLiveWorkspace(page, "Live MSS");
-    await expect(page.getByRole("heading", { name: "Leave approval detail" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Selected leave request" })).toBeVisible();
     await expect(page.getByText(target.employee_name).first()).toBeVisible();
 
+    await page.locator(".mss-selected-review-band").getByRole("button", { name: "Review" }).click();
+    await expect(page.getByRole("dialog", { name: "Review leave approval" })).toBeVisible();
     const rejectButton = page.getByRole("button", { name: /Reject request|Reject cancellation/ });
     await expect(rejectButton).toBeEnabled();
     await page.getByLabel("Decision note").fill("Live browser regression check.");
@@ -81,7 +83,6 @@ test.describe.serial("live backend auth and role access", () => {
     );
     await rejectButton.click();
     await expect((await decisionResponse).ok()).toBeTruthy();
-    await expect(page.getByText("Action saved.")).toBeVisible();
 
     const pendingAfter = await liveApiGet<ManagerLeaveApprovalListResponse>(
       "/manager/leave-requests/pending/?page=1&page_size=10",

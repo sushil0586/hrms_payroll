@@ -4,7 +4,7 @@ from .base import *  # noqa: F403,F401
 
 
 DEBUG = True
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = sorted(set(ALLOWED_HOSTS + ["localhost", "127.0.0.1"]))  # noqa: F405
 
 # Use SQLite locally unless a Postgres engine is explicitly configured.
 if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":  # noqa: F405

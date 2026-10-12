@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { GeneratedLetterWorkspace } from "@/app/hr-admin/generated-letters/generated-letter-workspace";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminDocumentOptions, getHrAdminEmployees, getHrAdminGeneratedLetters } from "@/lib/api";
 
@@ -27,12 +26,10 @@ export default async function HrAdminGeneratedLettersPage() {
         }
         pills={["Preview first", "Stored artifacts", "Workflow reference"]}
       />
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Generated letters" value={lettersResult.data.total_count} trend="Employee artifacts" />
-          <MetricTile label="Stored files" value={generatedWithArtifacts} trend="Downloadable records" />
-          <MetricTile label="Letter types" value={optionsResult.data.letter_types.length} trend="Configured options" />
-        </div>
+      <section className="attendance-summary-strip" aria-label="Generated letter summary">
+        <span><strong>{lettersResult.data.total_count}</strong> generated letters</span>
+        <span><strong>{generatedWithArtifacts}</strong> stored files</span>
+        <span><strong>{optionsResult.data.letter_types.length}</strong> letter types</span>
       </section>
       <GeneratedLetterWorkspace
         employees={employeesResult.data}

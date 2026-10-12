@@ -15,6 +15,9 @@ type Props = {
   options: HrAdminPolicyOptions;
   itemId?: string;
   item?: HrAdminAttendancePolicy;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 type AttendancePolicyField =
@@ -47,7 +50,7 @@ function selectOptions(items: Array<{ id: string; name: string }>) {
   ];
 }
 
-export function AttendancePolicyForm({ initialValue, mode, options, itemId, item }: Props) {
+export function AttendancePolicyForm({ initialValue, mode, options, itemId, item, cancelHref, successHref = "/hr-admin/attendance-policies", compact = false }: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -159,8 +162,16 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
       submittingRef.current = false;
       return;
     }
-    router.push("/hr-admin/attendance-policies");
+    router.push(successHref);
     router.refresh();
+  }
+
+  function handleCancel() {
+    if (cancelHref) {
+      router.push(cancelHref);
+      return;
+    }
+    router.back();
   }
 
   async function handlePreview() {
@@ -222,7 +233,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
   }
 
   return (
-    <form className="section form-layout-modern" noValidate onSubmit={handleSubmit}>
+    <form className={`section form-layout-modern attendance-policy-form${compact ? " attendance-policy-form--modal" : ""}`} noValidate onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -436,7 +447,7 @@ export function AttendancePolicyForm({ initialValue, mode, options, itemId, item
           <span className="muted">Policy changes save back into the attendance policy catalog and stay ready for scoped assignments.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting || (mode === "edit" && item?.can_edit_directly === false)} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create attendance policy" : item && item.can_edit_directly === false ? "Direct edit unavailable" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={handleCancel} type="button">Cancel</button>
           </div>
         </div>
       </section>

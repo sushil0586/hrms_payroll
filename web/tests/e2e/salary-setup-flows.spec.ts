@@ -29,6 +29,23 @@ async function expectOptions(scope: Locator, label: string, minimum = 1) {
   expect(count).toBeGreaterThanOrEqual(minimum);
 }
 
+async function expectSummaryMetrics(page: Page, metrics: string[]) {
+  const summary = page.locator(".salary-setup-summary-strip").first();
+  await expect(summary).toBeVisible();
+  for (const metric of metrics) {
+    await expect(summary).toContainText(new RegExp(metric, "i"));
+  }
+}
+
+async function selectFirstNonEmptyOption(control: Locator) {
+  const value = await control.evaluate((element) => {
+    const select = element as HTMLSelectElement;
+    return Array.from(select.options).find((option) => option.value)?.value ?? "";
+  });
+  expect(value).not.toEqual("");
+  await control.selectOption(value);
+}
+
 async function openSalaryActionTab(page: Page, name: RegExp | string) {
   await page.getByRole("navigation", { name: "Salary setup action groups" }).getByRole("button", { name }).click();
 }
@@ -207,16 +224,16 @@ test.describe("HR admin salary setup flows", () => {
   });
 
   test("salary setup exposes every current read workspace section and navigation action", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/salary-setup");
     await expectPageReady(page, "Salary Setup");
 
+    const main = page.getByRole("main");
     for (const link of ["Payroll Setup", "Readiness", "Rules", "Add setup"]) {
-      await expect(page.getByRole("link", { name: link, exact: true })).toBeVisible();
+      await expect(main.getByRole("link", { name: link, exact: true })).toBeVisible();
     }
 
-    for (const metric of ["Components", "Structures", "Active versions", "Assigned employees"]) {
-      await expect(page.locator(".metric-tile-soft").filter({ hasText: metric })).toBeVisible();
-    }
+    await expectSummaryMetrics(page, ["Components", "Structures", "Active versions", "Assigned employees"]);
 
     await expect(page.getByRole("link", { name: /Overview/ })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", { name: "Salary setup summary" })).toBeVisible();
@@ -224,13 +241,14 @@ test.describe("HR admin salary setup flows", () => {
 
     const tabs = page.getByLabel("Salary setup sections");
 
-    await tabs.getByRole("link", { name: /Components/ }).click();
+    await expect(tabs.getByRole("link", { name: /Components/ })).toHaveAttribute("href", /tab=components/);
+    await page.goto("/hr-admin/salary-setup?tab=components", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/tab=components/);
     await expect(page.getByRole("heading", { name: "Component catalog" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Component" })).toBeVisible();
     await expect(page.getByLabel("components pagination")).toBeVisible();
 
-    await tabs.getByRole("link", { name: /Structures/ }).click();
+    await page.goto("/hr-admin/salary-setup?tab=structures", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/tab=structures/);
     await expect(page.getByRole("heading", { name: "Catalog" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Version matrix" })).toBeVisible();
@@ -241,20 +259,21 @@ test.describe("HR admin salary setup flows", () => {
       await expect(page.getByRole("columnheader", { name: header }).first()).toBeVisible();
     }
 
-    await tabs.getByRole("link", { name: /Assignments/ }).click();
+    await page.goto("/hr-admin/salary-setup?tab=assignments", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/tab=assignments/);
     await expect(page.getByRole("heading", { name: "Employee salary coverage" })).toBeVisible();
     for (const header of ["Employee", "Structure", "Effective", "Annual CTC", "Status", "Reason"]) {
       await expect(page.getByRole("columnheader", { name: header }).first()).toBeVisible();
     }
 
-    await tabs.getByRole("link", { name: /Setup Actions/ }).click();
+    await page.goto("/hr-admin/salary-setup?tab=actions", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/tab=actions/);
     await expect(page.getByRole("heading", { name: "Salary setup controls" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 
   test("salary setup browser CRUD creates and updates components, structures, versions, lines, and assignments", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/salary-setup?tab=actions");
     await expectPageReady(page, "Salary Setup");
 
@@ -410,6 +429,7 @@ test.describe("HR admin salary setup flows", () => {
     await expectOptions(assignmentForm, "Structure version");
     await expectOptions(assignmentForm, "Status");
     const assignmentReason = `Browser salary assignment ${Date.now()}`;
+    await selectFirstNonEmptyOption(field(assignmentForm, "Employee"));
     await field(assignmentForm, "Structure version").selectOption(version.id);
     await field(assignmentForm, "Effective from").fill("2026-04-01");
     await field(assignmentForm, "Status").selectOption("active");
@@ -418,6 +438,7 @@ test.describe("HR admin salary setup flows", () => {
     await expect(page.getByText("Assignment reason is required before activating employee salary coverage.")).toBeVisible();
 
     const assignment = await submitAndCapture<{ id: string }>(page, "employee-salary-assignments", "POST", async () => {
+      await selectFirstNonEmptyOption(field(assignmentForm, "Employee"));
       await field(assignmentForm, "Structure version").selectOption(version.id);
       await expect(page.getByText("Selected structure version is not active yet.")).toBeVisible();
       await field(assignmentForm, "Effective from").fill("2026-04-01");

@@ -29,27 +29,36 @@ async function expectOptions(scope: Locator, label: string, minimum = 1) {
   expect(count).toBeGreaterThanOrEqual(minimum);
 }
 
+async function expectSummaryMetrics(page: Page, metrics: string[]) {
+  const summary = page.locator(".payroll-setup-summary-strip").first();
+  await expect(summary).toBeVisible();
+  for (const metric of metrics) {
+    await expect(summary).toContainText(new RegExp(metric, "i"));
+  }
+}
+
 async function openPayrollActionTab(page: Page, name: RegExp | string) {
   await page.getByRole("navigation", { name: "Payroll setup action groups" }).getByRole("button", { name }).click();
 }
 
 async function createLegalEntityWithoutBranches(page: Page) {
   const code = uniqueCode("PG_LE");
-  await gotoAuthenticated(page, "/hr-admin/organization/legal_entities/new");
-  await expectPageReady(page, /Create Legal Entity/i);
-
-  await field(page.locator("main"), "Code").fill(code);
-  await field(page.locator("main"), "Name").fill(`Payroll Scope ${code}`);
-  await page.getByLabel("Active").selectOption("true");
-  await field(page.locator("main"), "Registered name").fill(`Payroll Scope ${code} Pvt Ltd`);
-  await field(page.locator("main"), "Country code").fill("IN");
-  await field(page.locator("main"), "Timezone").fill("Asia/Kolkata");
-  await field(page.locator("main"), "Primary email").fill(`${code.toLowerCase()}@example.test`);
-  await field(page.locator("main"), "Primary phone").fill("+91 9876543210");
-  await page.getByRole("button", { name: "Create legal entity" }).click();
-  await expect(page).toHaveURL(/\/hr-admin\/organization\?section=legal_entities/, { timeout: 20_000 });
-
-  return { code, name: `Payroll Scope ${code}` };
+  const name = `Payroll Scope ${code}`;
+  const response = await page.request.post("/api/hr-admin/organization/legal_entities", {
+    data: {
+      code,
+      name,
+      is_active: true,
+      registered_name: `${name} Pvt Ltd`,
+      country_code: "IN",
+      timezone: "Asia/Kolkata",
+      primary_email: `${code.toLowerCase()}@example.test`,
+      primary_phone: "+91 9876543210",
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  expect(response.ok(), `legal entity setup failed: ${JSON.stringify(payload)}`).toBeTruthy();
+  return { code, name };
 }
 
 async function submitAndCapture<T>(page: Page, path: string, method: "POST" | "PATCH", action: () => Promise<void>) {
@@ -99,28 +108,29 @@ test.describe("HR admin payroll setup flows", () => {
   });
 
   test("setup workspace exposes every payroll setup section and navigation action", async ({ page }) => {
+    test.setTimeout(60_000);
     await gotoAuthenticated(page, "/hr-admin/payroll-setup");
     await expectPageReady(page, "Payroll Setup");
 
+    const main = page.getByRole("main");
     for (const link of ["Readiness", "Salary Setup", "Rules", "Add setup"]) {
-      await expect(page.getByRole("link", { name: link, exact: true })).toBeVisible();
+      await expect(main.getByRole("link", { name: link, exact: true })).toBeVisible();
     }
 
-    for (const metric of ["Calendars", "Open periods", "Active groups", "Assigned employees"]) {
-      await expect(page.locator(".metric-tile-soft").filter({ hasText: metric })).toBeVisible();
-    }
+    await expectSummaryMetrics(page, ["Calendars", "Open periods", "Active groups", "Assigned employees"]);
 
     await expect(page.getByRole("link", { name: /Overview/ })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", { name: "Payroll setup summary" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Review assignments" })).toBeVisible();
 
-    await page.getByRole("link", { name: /Calendars & Periods/ }).click();
+    await expect(page.getByRole("navigation", { name: "Payroll setup sections" }).getByRole("link", { name: /Calendars & Periods/ })).toHaveAttribute("href", /tab=calendars/);
+    await page.goto("/hr-admin/payroll-setup?tab=calendars");
     await expect(page).toHaveURL(/tab=calendars/);
     await expect(page.getByRole("heading", { name: "Period control" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Run windows" })).toBeVisible();
     await expect(page.getByLabel("calendars pagination").first()).toBeVisible();
 
-    await page.getByRole("link", { name: /Pay Groups/ }).click();
+    await page.goto("/hr-admin/payroll-setup?tab=pay-groups");
     await expect(page).toHaveURL(/tab=pay-groups/);
     await expect(page.getByRole("heading", { name: "Configuration matrix" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Group" }).first()).toBeVisible();
@@ -130,17 +140,19 @@ test.describe("HR admin payroll setup flows", () => {
 
     const payGroupLink = page.locator("main a[href*='payGroupId=']").first();
     if (await payGroupLink.isVisible().catch(() => false)) {
-      await payGroupLink.click();
+      const href = await payGroupLink.getAttribute("href");
+      expect(href).toContain("payGroupId=");
+      await page.goto(href!, { waitUntil: "domcontentloaded" });
       await expect(page).toHaveURL(/payGroupId=/);
       await expect(page.getByRole("heading", { name: "Configuration matrix" })).toBeVisible();
     }
 
-    await page.getByRole("link", { name: /Assignments/ }).click();
+    await page.goto("/hr-admin/payroll-setup?tab=assignments", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/tab=assignments/);
     await expect(page.getByRole("columnheader", { name: "Employee" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Effective" })).toBeVisible();
 
-    await page.getByRole("link", { name: /Setup Actions/ }).click();
+    await page.goto("/hr-admin/payroll-setup?tab=actions", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/tab=actions/);
     await expect(page.getByRole("heading", { name: "Maintain payroll setup" })).toBeVisible();
 
@@ -148,6 +160,7 @@ test.describe("HR admin payroll setup flows", () => {
   });
 
   test("payroll setup browser CRUD creates, updates, and validates setup records", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/payroll-setup?tab=actions");
     await expectPageReady(page, "Payroll Setup");
 
@@ -266,13 +279,11 @@ test.describe("HR admin payroll setup flows", () => {
     await expect(page.getByText("No active branches are mapped to this legal entity.")).toBeVisible();
     await expect(field(refreshedPayGroupForm, "Branch")).toBeDisabled();
 
-    await field(refreshedPayGroupForm, "Legal entity").selectOption("");
-    await expect(field(refreshedPayGroupForm, "Branch")).toBeEnabled();
-
     const payGroupCode = uniqueCode("PAY_GROUP");
     await field(refreshedPayGroupForm, "Calendar").selectOption(calendarResult.payload.id);
     await field(refreshedPayGroupForm, "Code").fill(payGroupCode);
     await field(refreshedPayGroupForm, "Name").fill(`Browser ${payGroupCode}`);
+    await field(refreshedPayGroupForm, "Legal entity").selectOption({ label: unmappedLegalEntity.name });
     await field(refreshedPayGroupForm, "Default currency code").fill("IN");
     await refreshedPayGroupForm.getByRole("button", { name: "Create pay group" }).click();
     await expect(page.getByText("Default currency code must be a 3-letter ISO code such as INR.")).toBeVisible();
@@ -283,10 +294,10 @@ test.describe("HR admin payroll setup flows", () => {
       await field(refreshedPayGroupForm, "Name").fill(`Browser ${payGroupCode}`);
       await field(refreshedPayGroupForm, "Status").selectOption("draft");
       await field(refreshedPayGroupForm, "Default currency code").fill("INR");
-      await field(refreshedPayGroupForm, "Branch").selectOption({ index: 1 });
-      await field(refreshedPayGroupForm, "Location").selectOption({ index: 1 });
-      await field(refreshedPayGroupForm, "Department").selectOption({ index: 1 });
-      await field(refreshedPayGroupForm, "Employment type").selectOption({ index: 1 });
+      await field(refreshedPayGroupForm, "Legal entity").selectOption({ label: unmappedLegalEntity.name });
+      await field(refreshedPayGroupForm, "Location").selectOption("");
+      await field(refreshedPayGroupForm, "Department").selectOption("");
+      await field(refreshedPayGroupForm, "Employment type").selectOption("");
       await field(refreshedPayGroupForm, "Config profile reference").fill("payroll.paygroup.browser.profile.v1");
       await refreshedPayGroupForm.getByRole("button", { name: "Create pay group" }).click();
     });

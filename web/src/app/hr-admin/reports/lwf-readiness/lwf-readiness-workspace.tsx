@@ -188,11 +188,11 @@ export function LwfReadinessWorkspace({
   return (
     <section className="section section--tight" aria-label="Labour Welfare Fund readiness workspace">
       <div className="report-catalog-workspace statutory-filing-status-report" data-testid="lwf-readiness-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Readiness</span><strong>{readiness}</strong><small>{readyCount}/{rows.length} gates ready</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Warnings</span><strong>{warningCount}</strong><small>Partial evidence</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Blocked gates</span><strong>{blockedCount}</strong><small>Must close before return</small></article>
-          <article className="metric-tile metric-tile-soft"><span>LWF artifacts</span><strong>{artifacts.filter(artifactLooksLwf).length}</strong><small>Source evidence</small></article>
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <span><strong>{readiness}</strong> Readiness</span>
+          <span><strong>{warningCount}</strong> Warnings</span>
+          <span><strong>{blockedCount}</strong> Blocked gates</span>
+          <span><strong>{artifacts.filter(artifactLooksLwf).length}</strong> LWF artifacts</span>
         </div>
 
         <div className="report-catalog-toolbar statutory-deductions-toolbar" aria-label="Labour Welfare Fund readiness filters">

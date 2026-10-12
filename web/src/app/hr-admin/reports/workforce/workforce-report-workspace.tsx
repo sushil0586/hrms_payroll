@@ -132,23 +132,23 @@ export function WorkforceReportWorkspace({ employees }: { employees: HrAdminEmpl
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip payroll-setup-metrics">
+          <article>
             <span>Employees</span>
             <strong>{filteredRows.length}</strong>
             <small>{employees.length} total records</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Active</span>
             <strong>{filteredRows.filter((employee) => employee.employment_status === "active").length}</strong>
             <small>In selected view</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Manager coverage</span>
             <strong>{managerCoverage}</strong>
             <small>Mapped or manager role</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Access provisioned</span>
             <strong>{accessProvisioned}</strong>
             <small>Login-ready employees</small>

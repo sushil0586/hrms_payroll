@@ -9,8 +9,11 @@ import type { HrAdminPolicyOptions, HrAdminShiftRosterTemplateWriteInput } from 
 type Props = {
   initialValue: HrAdminShiftRosterTemplateWriteInput;
   mode: "create" | "edit";
-  options: HrAdminPolicyOptions;
+  options: Pick<HrAdminPolicyOptions, "shifts">;
   itemId?: string;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 function selectOptions(items: Array<{ id: string; name: string }>) {
@@ -50,7 +53,15 @@ const guidedPatternEntries: Record<string, Array<{ entry_kind: "work" | "off"; s
   two_two_three: [{ entry_kind: "work", span_days: 2 }, { entry_kind: "off", span_days: 2 }, { entry_kind: "work", span_days: 3 }],
 };
 
-export function ShiftRosterTemplateForm({ initialValue, mode, options, itemId }: Props) {
+export function ShiftRosterTemplateForm({
+  initialValue,
+  mode,
+  options,
+  itemId,
+  cancelHref,
+  successHref = "/hr-admin/shift-roster-templates",
+  compact = false,
+}: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -147,12 +158,12 @@ export function ShiftRosterTemplateForm({ initialValue, mode, options, itemId }:
       setIsSubmitting(false);
       return;
     }
-    router.push("/hr-admin/shift-roster-templates");
+    router.push(successHref);
     router.refresh();
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className={`section form-layout-modern shift-roster-template-form${compact ? " shift-roster-template-form--modal" : ""}`} onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -230,7 +241,7 @@ export function ShiftRosterTemplateForm({ initialValue, mode, options, itemId }:
           <span className="muted">Draft templates can be tested in rollout preview first. Published and locked templates are safer for operational rollout.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create template" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={() => (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
           </div>
         </div>
       </section>

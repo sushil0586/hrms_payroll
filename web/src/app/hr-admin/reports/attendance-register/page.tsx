@@ -16,7 +16,7 @@ export default async function AttendanceRegisterReportPage() {
   const lockedCount = items.filter((item) => item.is_locked).length;
 
   return (
-    <main className="shell">
+    <main className="shell hr-admin-compact-ui">
       <PageIntro
         eyebrow={result.state === "live" ? "Live attendance report" : "Demo attendance report"}
         title="Daily Attendance Register"
@@ -37,8 +37,6 @@ export default async function AttendanceRegisterReportPage() {
             </Link>
           </>
         }
-        pills={["Daily register", "Exceptions", "Payroll readiness"]}
-        showPills
       />
 
       <ReportInsightsStrip

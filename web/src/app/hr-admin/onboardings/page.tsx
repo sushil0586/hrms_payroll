@@ -1,9 +1,11 @@
 import Link from "next/link";
 
+import { createEmptyOnboardingValue, onboardingToFormValue } from "@/app/hr-admin/onboardings/form-values";
+import { OnboardingForm } from "@/app/hr-admin/onboardings/onboarding-form";
 import { OnboardingQueue } from "@/app/hr-admin/onboardings/onboarding-queue";
-import { MetricTile } from "@/components/patterns/metric-tile";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminLifecycleOptions, getHrAdminOnboardings } from "@/lib/api";
+import { getHrAdminLifecycleOptions, getHrAdminOnboardings, getHrAdminWorkflowTemplates } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -21,8 +23,10 @@ export default async function HrAdminOnboardingsPage({ searchParams }: PageProps
   const q = normalizeParam(currentParams.q) ?? "";
   const status = normalizeParam(currentParams.status) ?? "";
   const owner = normalizeParam(currentParams.owner) ?? "";
+  const onboardingModal = normalizeParam(currentParams.onboardingModal) ?? "";
+  const editOnboarding = normalizeParam(currentParams.editOnboarding) ?? "";
 
-  const [result, optionsResult] = await Promise.all([
+  const [result, optionsResult, templatesResult] = await Promise.all([
     getHrAdminOnboardings({
       page,
       page_size: pageSize,
@@ -31,9 +35,13 @@ export default async function HrAdminOnboardingsPage({ searchParams }: PageProps
       owner: owner || undefined,
     }),
     getHrAdminLifecycleOptions(),
+    getHrAdminWorkflowTemplates(),
   ]);
   const documentBlockedCount = result.data.items.filter((item) => item.missing_required_document_count > 0).length;
   const futureDueDocumentCount = result.data.items.reduce((total, item) => total + item.future_due_document_count, 0);
+  const modalCloseHref = `/hr-admin/onboardings${buildQueryString({ q, status, owner, page, page_size: pageSize })}`;
+  const editItem = editOnboarding ? result.data.items.find((item) => item.id === editOnboarding) : undefined;
+  const isCreateModalOpen = onboardingModal === "create";
 
   return (
     <main className="shell hr-lifecycle-workbench">
@@ -43,7 +51,7 @@ export default async function HrAdminOnboardingsPage({ searchParams }: PageProps
         description="Track joiners, checklist completion, documents, and owner load."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/onboardings/new">Create onboarding</Link>
+            <Link className="button button--primary" href={`${modalCloseHref}${modalCloseHref.includes("?") ? "&" : "?"}onboardingModal=create`}>Create onboarding</Link>
             <Link className="button button--secondary" href="/hr-admin/lifecycle">Back to lifecycle</Link>
           </>
         }
@@ -53,13 +61,11 @@ export default async function HrAdminOnboardingsPage({ searchParams }: PageProps
           "URL-driven queue state",
         ]}
       />
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Onboarding records" value={result.data.total_count} trend="Joiner queue" />
-          <MetricTile label="Rows on current page" value={result.data.items.length} trend={`Page ${result.data.page}`} />
-          <MetricTile label="Document blockers" value={documentBlockedCount} trend="Missing due requirements" />
-          <MetricTile label="Future due docs" value={futureDueDocumentCount} trend="Upcoming onboarding requirements" />
-        </div>
+      <section className="attendance-summary-strip" aria-label="Onboarding summary">
+        <span><strong>{result.data.total_count}</strong> records</span>
+        <span><strong>{result.data.items.length}</strong> on page</span>
+        <span><strong>{documentBlockedCount}</strong> doc blockers</span>
+        <span><strong>{futureDueDocumentCount}</strong> future due docs</span>
       </section>
       <OnboardingQueue
         items={result.data.items}
@@ -75,6 +81,44 @@ export default async function HrAdminOnboardingsPage({ searchParams }: PageProps
           has_previous: result.data.has_previous,
         }}
       />
+      {isCreateModalOpen ? (
+        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="onboarding-create-title" title="Create onboarding" eyebrow="Lifecycle record">
+          <OnboardingForm
+            compact
+            cancelHref={modalCloseHref}
+            successHref={modalCloseHref}
+            initialValue={createEmptyOnboardingValue(optionsResult.data.onboarding_statuses[0]?.value ?? "not_started")}
+            lifecycleTemplates={templatesResult.data}
+            mode="create"
+            options={optionsResult.data}
+          />
+        </HrAdminActionModal>
+      ) : null}
+      {editItem ? (
+        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="onboarding-edit-title" title={`Edit onboarding: ${editItem.employee_name}`} eyebrow="Lifecycle record">
+          <OnboardingForm
+            compact
+            cancelHref={modalCloseHref}
+            successHref={modalCloseHref}
+            initialValue={onboardingToFormValue(editItem)}
+            item={editItem}
+            itemId={editItem.id}
+            lifecycleTemplates={templatesResult.data}
+            mode="edit"
+            options={optionsResult.data}
+          />
+        </HrAdminActionModal>
+      ) : null}
     </main>
   );
+}
+
+function buildQueryString(params: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === "") return;
+    query.set(key, String(value));
+  });
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : "";
 }

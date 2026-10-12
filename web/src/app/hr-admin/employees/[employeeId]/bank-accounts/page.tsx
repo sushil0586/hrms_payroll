@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BankAccountManager } from "@/app/hr-admin/employees/[employeeId]/bank-accounts/bank-account-manager";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminEmployeeBankAccounts, getHrAdminEmployeeDetail } from "@/lib/api";
 import { requireSessionPermission } from "@/lib/workspace-access";
@@ -43,10 +42,10 @@ export default async function HrAdminEmployeeBankAccountsPage({ params }: PagePr
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Bank accounts" value={accounts.length} trend="Employee payout records" />
-          <MetricTile label="Primary accounts" value={primaryCount} trend="Payroll readiness coverage" />
-          <MetricTile label="Employee status" value={employeeResult.data.employment_status.replace("_", " ")} trend={employeeResult.data.employee_code} />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{accounts.length}</strong> Bank accounts</span>
+          <span><strong>{primaryCount}</strong> Primary accounts</span>
+          <span><strong>{employeeResult.data.employment_status.replace("_", " ")}</strong> Employee status</span>
         </div>
       </section>
 

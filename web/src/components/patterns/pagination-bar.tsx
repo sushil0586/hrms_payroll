@@ -77,12 +77,14 @@ export function PaginationBar({
             of {totalPages}
           </span>
         </div>
-        <div className="pagination-bar__actions">
-          <PaginationAction disabled={!hasPrevious} href={firstHref} label="First" onClick={onFirst} />
-          <PaginationAction disabled={!hasPrevious} href={previousHref} label="Previous" onClick={onPrevious} />
-          <PaginationAction disabled={!hasNext} href={nextHref} label="Next" onClick={onNext} />
-          <PaginationAction disabled={!hasNext} href={lastHref} label="Last" onClick={onLast} />
-        </div>
+        {totalPages > 1 ? (
+          <div className="pagination-bar__actions">
+            <PaginationAction disabled={!hasPrevious} href={firstHref} label="First" onClick={onFirst} />
+            <PaginationAction disabled={!hasPrevious} href={previousHref} label="Previous" onClick={onPrevious} />
+            <PaginationAction disabled={!hasNext} href={nextHref} label="Next" onClick={onNext} />
+            <PaginationAction disabled={!hasNext} href={lastHref} label="Last" onClick={onLast} />
+          </div>
+        ) : null}
       </div>
     </section>
   );

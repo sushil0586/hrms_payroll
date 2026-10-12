@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { gotoAuthenticated } from "../helpers/staging-auth";
@@ -6,6 +6,19 @@ import { createPayrollLifecycleOperator } from "../helpers/tenant-rbac";
 
 test.describe("HR admin payroll calculation flows", () => {
   test.setTimeout(60_000);
+
+  async function openFirstVisibleLine(page: Page) {
+    const lineLink = page.locator("main table.payroll-calc-line-table a[href*='lineId=']").first();
+    if (!(await lineLink.isVisible().catch(() => false))) {
+      return false;
+    }
+    await lineLink.scrollIntoViewIfNeeded();
+    const href = await lineLink.getAttribute("href");
+    expect(href).toContain("lineId=");
+    await page.goto(href!);
+    await expectPageReady(page, "Payroll Calculations");
+    return true;
+  }
 
   test("calculation workspace exposes draft attempts, lines, totals, and traces", async ({ page }) => {
     const payrollOperator = await createPayrollLifecycleOperator(page);
@@ -31,9 +44,7 @@ test.describe("HR admin payroll calculation flows", () => {
     await expect(page.getByText("Latest net pay").or(page.getByText("No calculations")).first()).toBeVisible();
     await expect(page.getByText("Validation").or(page.getByText("Calculation validation")).first()).toBeVisible();
 
-    const lineLink = page.locator("main a[href*='lineId=']").first();
-    if (await lineLink.isVisible().catch(() => false)) {
-      await lineLink.click();
+    if (await openFirstVisibleLine(page)) {
       await expect(page).toHaveURL(/lineId=/);
       await expect(page.getByText("Source hash").or(page.getByText("Formula")).or(page.getByText("Source")).first()).toBeVisible();
     }
@@ -46,10 +57,7 @@ test.describe("HR admin payroll calculation flows", () => {
     await gotoAuthenticated(page, "/hr-admin/payroll-calculations", payrollOperator);
     await expectPageReady(page, "Payroll Calculations");
 
-    const lineLink = page.locator("main a[href*='lineId=']").first();
-    if (await lineLink.isVisible().catch(() => false)) {
-      await lineLink.scrollIntoViewIfNeeded();
-      await lineLink.click();
+    if (await openFirstVisibleLine(page)) {
       await expect(page).toHaveURL(/lineId=/);
       await expect(page.getByText("Selected line")).toBeVisible();
 
@@ -79,10 +87,7 @@ test.describe("HR admin payroll calculation flows", () => {
     await expect(page.getByRole("region", { name: "Calculation readiness" })).toBeVisible();
     await expect(page.getByText("Calculation controls").first()).toBeVisible();
 
-    const lineLink = page.locator("main a[href*='lineId=']").first();
-    if (await lineLink.isVisible().catch(() => false)) {
-      await lineLink.scrollIntoViewIfNeeded();
-      await lineLink.click();
+    if (await openFirstVisibleLine(page)) {
       await expect(page).toHaveURL(/lineId=/);
       await expect(page.getByText("Selected line")).toBeVisible();
     }

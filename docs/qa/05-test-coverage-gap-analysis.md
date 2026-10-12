@@ -432,6 +432,15 @@ Coverage conclusion: Command Center, Launch Readiness and Operations are functio
 
 Coverage conclusion: `HRADM-DEF-20261010-028` is remediated for the payroll handoff route. Phase 3C readiness is acceptable for the handoff blocker, but a broader performance stability pass should be scheduled if the release gate requires every launch-critical route to pass repeatedly, not just the remediated handoff route.
 
+## Phase 4B.1 Deployed Staging Coverage Gaps - 2026-10-10
+
+| Gap / Gate | Status | Evidence | Required closure |
+| --- | --- | --- | --- |
+| Deployed tenant persona RBAC matrix | Blocked | `docs/qa/evidence/phase4b1/01-stage-default-persona-login-probes.log`, `04-stage-deployed-rbac-isolation-rerun.log` | Provision valid staging personas for HR Admin, Tenant Admin, ESS, MSS, Payroll/Finance, Support and Restricted roles; rerun original deployed scenarios. |
+| Deployed two-tenant isolation | Blocked | Same evidence plus `docs/qa/18-phase4b1-staging-auth-preflight-revalidation.md` | Create/approve second disposable staging tenant with distinct users and records; execute negative cross-tenant browser/API checks. |
+| Target-host strict preflight | Not Verified | `docs/qa/evidence/phase4b1/signoff-preflight/launch-signoff-report.md` | Run `production_preflight --strict --json` on staging host with real env and archive sanitized output. |
+| HSTS production posture | Partially Verified | `docs/qa/evidence/phase4b1/03-stage-root-headers-hsts-check.log` | Approve staged HSTS rollout after subdomain/rollback review and capture deployed header proof. |
+
 ## Phase 3C.3 Coverage Impact - 2026-10-10
 
 | Area | Phase 3C.3 Status | Remaining Risk |
@@ -541,3 +550,53 @@ Remaining non-certified gates:
 | Real external email/SMS, deployed RBAC, backup/restore, real-tenant handoff | Phase 4 gates | Explicitly excluded from local Phase 3C certification. |
 
 Coverage conclusion: Phase 3C.7 closes all locally executable cross-module coverage gaps. The product is conditionally certified for local/sandbox cross-module E2E scope, with remaining gaps limited to documented release/product/provider gates.
+
+## Phase 4B.2 Deployed Staging Coverage Impact - 2026-10-10
+
+| Coverage area | Phase 4B.2 status | Remaining gap |
+| --- | --- | --- |
+| Target strict preflight | Failed | Deployed `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES` includes `BasicAuthentication`; strict preflight blocker remains open. |
+| Supplied staging personas | Partially covered | 5 of 6 supplied personas authenticate; one supplied candidate invalid; Platform Admin credential unavailable. |
+| Original deployed auth/RBAC browser scenarios | Partially covered | 8 of 10 passed. ESS payslip download proof lacks deterministic published-payslip fixture; Tenant Admin support-access dashboard assertion needs requirement-aligned update or dedicated route proof. |
+| Credentialed API denial behavior | Partially covered | Employee/restricted-style persona denied tenant-admin/security routes; support console denied without support session. Full role matrix still not covered. |
+| Two-tenant deployed isolation | Not covered | Multiple tenants exist, including a non-sandbox active tenant, but no second authorized disposable tenant persona was available. Cross-tenant mutation/probe was intentionally not attempted. |
+| HTTPS/security headers | Partially covered | HTTPS and standard defensive headers present; HSTS absent. |
+
+New/remaining Phase 4B.2 coverage gaps:
+
+| Gap / Defect ID | Status | Required evidence |
+| --- | --- | --- |
+| `HRADM-DEF-20261010-033` | Open P0 | Remove BasicAuthentication from deployed staging/prod auth settings and rerun `production_preflight --strict --json` with 0 blockers. |
+| `HRADM-DEF-20261010-034` | Open P1 | Deterministic published payslip for disposable ESS staging persona, or explicit empty-state security scenario separated from download proof. |
+| `HRADM-DEF-20261010-035` | Open P1 | Product-approved Tenant Admin compact IA expectation and dedicated support-access route/RBAC proof. |
+| `P4B2-GATE-PLATFORM-001` | Open P0 prerequisite | Approved Platform Admin staging credentials and positive/negative platform route/API proof. |
+| `P4B2-GATE-XTENANT-001` | Open P0 prerequisite | Two disposable staging tenants with authorized personas and negative cross-tenant API/UI evidence. |
+| `P4B1-GATE-HSTS-001` | Open P1/P0 policy-dependent | Approved HSTS policy deployed and captured in public responses. |
+
+Coverage conclusion: Phase 4B.2 improves deployed staging evidence but does not certify production security. The deployed strict-preflight BasicAuth blocker and missing Platform/two-tenant proofs are launch blockers.
+
+## Phase 4B.3 Deployed Staging Coverage Closure - 2026-10-10
+
+| Gap / Defect ID | Phase 4B.3 Status | Evidence |
+| --- | --- | --- |
+| `HRADM-DEF-20261010-033` | Closed for staging | `docs/qa/evidence/phase4b2/16-stage-host-production-preflight-strict-after-fix.json`, `17-stage-authentication-class-proof-after-fix.json` |
+| `HRADM-DEF-20261010-034` | Closed for deployed security scope | `19-stage-browser-final-rerun-after-deploy.log` |
+| `HRADM-DEF-20261010-035` | Closed | `19-stage-browser-final-rerun-after-deploy.log`, `31-stage-platform-focused-route-api-proof.json` |
+| `P4B2-GATE-PLATFORM-001` | Closed for staging | `25-stage-disposable-platform-admin-login-probe.json`, `31-stage-platform-focused-route-api-proof.json`, `32-stage-disposable-platform-admin-cleanup.json` |
+| `P4B2-GATE-XTENANT-001` | Closed for staging | `29-stage-platform-two-tenant-rbac-final.log` |
+| `P4B1-GATE-HSTS-001` | Closed for staging pilot posture | `18-stage-security-headers-after-hsts.json` |
+
+Coverage conclusion: Phase 4B.3 closes the deployed staging authentication, RBAC, strict-preflight and tenant-isolation coverage gaps. Remaining launch coverage gaps are not Phase 4B.3 blockers: payroll bank-account decision, provider conditionals, external email/SMS proof or exclusion, backup/restore, monitoring/alerting and production HSTS policy hardening.
+
+## Phase 3D.2 ESS Coverage Closure - 2026-10-10
+
+| Area | Status | Evidence |
+| --- | --- | --- |
+| ESS dashboard/navigation/profile shell | Covered | `docs/qa/evidence/phase3d2/20-ess-final-applicable-suite-rerun.log` |
+| ESS leave and attendance | Covered for primary employee scope | `04-ess-leave-attendance.log`, `18-ess-roster-calculation-focused-rerun-after-fixture-fix.log`, `20-ess-final-applicable-suite-rerun.log` |
+| ESS documents | Covered with deterministic document bundle and browser upload validation | `07-seed-ess-demo-data.log`, `20-ess-final-applicable-suite-rerun.log` |
+| ESS payslips / payroll artifacts | Covered with deterministic published payslip fixture | `08-seed-ess-payslip-manifest.json`, `09-riya-ess-artifact-db-probe-after-seed.json`, `20-ess-final-applicable-suite-rerun.log` |
+| ESS statutory declarations | Covered for workspace/dialog/proof-register visibility with seeded draft and locked declarations; API-level submit/locked mutation proof remains useful hardening coverage | `07-seed-ess-demo-data.log`, `20-ess-final-applicable-suite-rerun.log` |
+| ESS notifications and compact UX | Covered | `13-ess-notification-focused-revalidation-rerun.log`, `20-ess-final-applicable-suite-rerun.log` |
+
+Remaining ESS-specific gap: `P3D-ESS-GAP-FALLBACK-POLICY-001` is optional fallback-policy persona coverage and is not a primary ESS blocker. Future hardening should add API/database proof for statutory declaration submit and locked-edit denial as a narrow regression, even though the current browser workspace and seeded declaration states passed.

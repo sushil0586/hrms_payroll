@@ -1,11 +1,29 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { gotoAuthenticated } from "../helpers/staging-auth";
 
+function field(page: Page, label: string | RegExp) {
+  return page.locator("label.form-field").filter({ hasText: label }).locator("input, select, textarea").first();
+}
+
+async function clickButton(page: Page, name: string | RegExp) {
+  const button = page.getByRole("button", { name }).first();
+  await button.scrollIntoViewIfNeeded();
+  await expect(button).toBeVisible();
+  await expect(button).toBeEnabled();
+  await button.click();
+}
+
+async function expectGeneratedLetterWorkspaceReady(page: Page) {
+  await expect(page.locator(".document-letter-workspace[data-hydrated='true']")).toBeVisible();
+}
+
 test.describe("HR admin generated letter flows", () => {
+  test.describe.configure({ timeout: 90_000 });
+
   test("letter workspace previews and generates stored artifacts", async ({ page }) => {
-    await page.route("**/api/hr-admin/generated-letters/preview", async (route) => {
+    await page.route(/\/api\/hr-admin\/generated-letters\/preview\/?$/, async (route) => {
       await route.fulfill({
         contentType: "application/json",
         status: 200,
@@ -18,7 +36,7 @@ test.describe("HR admin generated letter flows", () => {
         }),
       });
     });
-    await page.route("**/api/hr-admin/generated-letters", async (route) => {
+    await page.route(/\/api\/hr-admin\/generated-letters\/?$/, async (route) => {
       await route.fulfill({
         contentType: "application/json",
         status: 201,
@@ -48,17 +66,18 @@ test.describe("HR admin generated letter flows", () => {
 
     await gotoAuthenticated(page, "/hr-admin/generated-letters");
     await expectPageReady(page, "Generated HR letters");
+    await expectGeneratedLetterWorkspaceReady(page);
 
-    await page.getByRole("combobox", { name: /^Employee/ }).selectOption({ label: "Riya Sharma (EMP-0042)" });
-    await page.getByRole("combobox", { name: /^Letter type/ }).selectOption("confirmation");
-    await page.getByLabel("Title").fill("Riya Confirmation Letter");
-    await page.getByLabel("Workflow reference").fill("WF-CONF-0042");
-    await page.getByRole("button", { name: "Preview letter" }).click();
+    await field(page, "Employee").selectOption({ label: "Riya Sharma (EMP-0042)" });
+    await field(page, "Letter type").selectOption("confirmation");
+    await field(page, "Title").fill("Riya Confirmation Letter");
+    await field(page, "Workflow reference").fill("WF-CONF-0042");
+    await clickButton(page, "Preview letter");
 
     await expect(page.getByText("Riya Sharma as Assistant Manager")).toBeVisible();
     await expect(page.getByText("Preview ready.")).toBeVisible();
     await expect(page.getByText("No missing variables were reported for this draft.")).toBeVisible();
-    await page.getByRole("button", { name: "Generate letter" }).click();
+    await clickButton(page, "Generate letter");
     await expect(page.getByText("Letter generated.")).toBeVisible();
     await expect(page.getByRole("link", { name: "Download generated letter" })).toHaveAttribute("href", /\/api\/hr-admin\/generated-letters\/generated-test-letter\/download/);
     await expect(page.getByText("Riya Confirmation Letter").or(page.getByText("riya-confirmation-letter-2026-06-07.txt")).first()).toBeVisible();
@@ -66,7 +85,7 @@ test.describe("HR admin generated letter flows", () => {
   });
 
   test("letter preview surfaces missing variable validation", async ({ page }) => {
-    await page.route("**/api/hr-admin/generated-letters/preview", async (route) => {
+    await page.route(/\/api\/hr-admin\/generated-letters\/preview\/?$/, async (route) => {
       await route.fulfill({
         contentType: "application/json",
         status: 400,
@@ -76,9 +95,10 @@ test.describe("HR admin generated letter flows", () => {
 
     await gotoAuthenticated(page, "/hr-admin/generated-letters");
     await expectPageReady(page, "Generated HR letters");
+    await expectGeneratedLetterWorkspaceReady(page);
 
-    await page.getByLabel("Template body").fill("Experience certified for {{ employee_name }} until {{ end_date }}.");
-    await page.getByRole("button", { name: "Preview letter" }).click();
+    await field(page, "Template body").fill("Experience certified for {{ employee_name }} until {{ end_date }}.");
+    await clickButton(page, "Preview letter");
 
     await expect(page.getByText("Letter action failed.")).toBeVisible();
     await expect(page.getByText("Missing value for: end_date.")).toBeVisible();
@@ -88,17 +108,18 @@ test.describe("HR admin generated letter flows", () => {
   test("letter workspace handles network failure and invalid payload JSON without losing the draft", async ({ page }) => {
     await gotoAuthenticated(page, "/hr-admin/generated-letters");
     await expectPageReady(page, "Generated HR letters");
+    await expectGeneratedLetterWorkspaceReady(page);
 
-    await page.getByLabel("Payload values JSON").fill("{bad-json");
-    await page.getByRole("button", { name: "Preview letter" }).click();
+    await field(page, "Payload values JSON").fill("{bad-json");
+    await clickButton(page, "Preview letter");
     await expect(page.getByText("Payload values must be valid JSON.").or(page.getByText("Expected property name")).first()).toBeVisible();
 
-    await page.getByLabel("Payload values JSON").fill("{\n  \"reference_number\": \"HR/CONF/0042\"\n}");
-    await page.route("**/api/hr-admin/generated-letters/preview", async (route) => route.abort("failed"));
-    await page.getByRole("button", { name: "Preview letter" }).click();
+    await field(page, "Payload values JSON").fill("{\n  \"reference_number\": \"HR/CONF/0042\"\n}");
+    await page.route(/\/api\/hr-admin\/generated-letters\/preview\/?$/, async (route) => route.abort("failed"));
+    await clickButton(page, "Preview letter");
     await expect(page.getByText("Unable to reach the server. Check your connection and try again.")).toBeVisible();
-    await expect(page.getByLabel("Template body")).toHaveValue(/employee_name/);
+    await expect(field(page, "Template body")).toHaveValue(/employee_name/);
     await expectNoHorizontalOverflow(page);
-    await page.unroute("**/api/hr-admin/generated-letters/preview");
+    await page.unroute(/\/api\/hr-admin\/generated-letters\/preview\/?$/);
   });
 });

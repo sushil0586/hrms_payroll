@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminNotificationDiagnostics } from "@/lib/api";
 import { formatNotificationDateTime } from "@/lib/notification-observability";
@@ -24,18 +23,18 @@ export default async function HrAdminNotificationDiagnosticsPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Templates" value={result.data.overview.total_templates} trend={`${result.data.overview.active_templates} active`} />
-          <MetricTile label="Events" value={result.data.overview.total_events} trend={`${result.data.overview.active_events} active`} />
-          <MetricTile label="Live notifications" value={result.data.overview.live_notifications} trend="Tracked delivery volume" />
-          <MetricTile label="Failed notifications" value={result.data.overview.failed_notifications} trend="Attention needed" />
-          <MetricTile label="Channels with failures" value={channelsWithFailures} trend="Delivery routing watchlist" />
-          <MetricTile label="Preview and test sends" value={result.data.overview.preview_test_notifications} trend="Authoring verification activity" />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{result.data.overview.total_templates}</strong> Templates</span>
+          <span><strong>{result.data.overview.total_events}</strong> Events</span>
+          <span><strong>{result.data.overview.live_notifications}</strong> Live notifications</span>
+          <span><strong>{result.data.overview.failed_notifications}</strong> Failed notifications</span>
+          <span><strong>{channelsWithFailures}</strong> Channels with failures</span>
+          <span><strong>{result.data.overview.preview_test_notifications}</strong> Preview and test sends</span>
         </div>
       </section>
 
       <section className="section">
-        <div className="workspace-grid-modern">
+        <div className="report-workspace-grid">
           <article className="workspace-card workspace-card--compact">
             <div className="workspace-card__eyebrow">Queue focus</div>
             <h2 className="workspace-card__title">Failed delivery</h2>

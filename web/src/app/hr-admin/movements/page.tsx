@@ -1,7 +1,9 @@
 import Link from "next/link";
 
+import { createEmptyMovementValue, movementToFormValue } from "@/app/hr-admin/movements/form-values";
+import { MovementForm } from "@/app/hr-admin/movements/movement-form";
 import { MovementQueue } from "@/app/hr-admin/movements/movement-queue";
-import { MetricTile } from "@/components/patterns/metric-tile";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLifecycleOptions, getHrAdminMovements } from "@/lib/api";
 
@@ -22,6 +24,8 @@ export default async function HrAdminMovementsPage({ searchParams }: PageProps) 
   const status = normalizeParam(currentParams.status) ?? "";
   const movementType = normalizeParam(currentParams.movement_type) ?? "";
   const owner = normalizeParam(currentParams.owner) ?? "";
+  const movementModal = normalizeParam(currentParams.movementModal) ?? "";
+  const editMovement = normalizeParam(currentParams.editMovement) ?? "";
 
   const [result, optionsResult] = await Promise.all([
     getHrAdminMovements({
@@ -34,6 +38,9 @@ export default async function HrAdminMovementsPage({ searchParams }: PageProps) 
     }),
     getHrAdminLifecycleOptions(),
   ]);
+  const modalCloseHref = `/hr-admin/movements${buildQueryString({ q, status, movement_type: movementType, owner, page, page_size: pageSize })}`;
+  const editItem = editMovement ? result.data.items.find((item) => item.id === editMovement) : undefined;
+  const isCreateModalOpen = movementModal === "create";
 
   return (
     <main className="shell hr-lifecycle-workbench">
@@ -43,7 +50,7 @@ export default async function HrAdminMovementsPage({ searchParams }: PageProps) 
         description="Track transfers, promotions, reporting changes, and owner follow-up."
         actions={
           <>
-            <Link className="button button--primary" href="/hr-admin/movements/new">Create movement</Link>
+            <Link className="button button--primary" href={`${modalCloseHref}${modalCloseHref.includes("?") ? "&" : "?"}movementModal=create`}>Create movement</Link>
             <Link className="button button--secondary" href="/hr-admin/lifecycle">Back to lifecycle</Link>
           </>
         }
@@ -53,13 +60,11 @@ export default async function HrAdminMovementsPage({ searchParams }: PageProps) 
           "Shareable queue state",
         ]}
       />
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Movement records" value={result.data.total_count} trend="People movement queue" />
-          <MetricTile label="Rows on current page" value={result.data.items.length} trend={`Page ${result.data.page}`} />
-          <MetricTile label="Movement types" value={optionsResult.data.movement_types.length} trend="Change taxonomy" />
-          <MetricTile label="Lifecycle states" value={optionsResult.data.lifecycle_event_statuses.length} trend="Workflow states" />
-        </div>
+      <section className="attendance-summary-strip" aria-label="Movement summary">
+        <span><strong>{result.data.total_count}</strong> records</span>
+        <span><strong>{result.data.items.length}</strong> on page</span>
+        <span><strong>{optionsResult.data.movement_types.length}</strong> movement types</span>
+        <span><strong>{optionsResult.data.lifecycle_event_statuses.length}</strong> lifecycle states</span>
       </section>
       <MovementQueue
         items={result.data.items}
@@ -76,6 +81,41 @@ export default async function HrAdminMovementsPage({ searchParams }: PageProps) 
           has_previous: result.data.has_previous,
         }}
       />
+      {isCreateModalOpen ? (
+        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="movement-create-title" title="Create movement" eyebrow="Lifecycle record">
+          <MovementForm
+            compact
+            cancelHref={modalCloseHref}
+            successHref={modalCloseHref}
+            initialValue={createEmptyMovementValue(optionsResult.data.movement_types[0]?.value ?? "transfer", optionsResult.data.lifecycle_event_statuses[0]?.value ?? "draft")}
+            mode="create"
+            options={optionsResult.data}
+          />
+        </HrAdminActionModal>
+      ) : null}
+      {editItem ? (
+        <HrAdminActionModal closeHref={modalCloseHref} labelledBy="movement-edit-title" title={`Edit movement: ${editItem.employee_name}`} eyebrow="Lifecycle record">
+          <MovementForm
+            compact
+            cancelHref={modalCloseHref}
+            successHref={modalCloseHref}
+            initialValue={movementToFormValue(editItem)}
+            itemId={editItem.id}
+            mode="edit"
+            options={optionsResult.data}
+          />
+        </HrAdminActionModal>
+      ) : null}
     </main>
   );
+}
+
+function buildQueryString(params: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === "") return;
+    query.set(key, String(value));
+  });
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : "";
 }

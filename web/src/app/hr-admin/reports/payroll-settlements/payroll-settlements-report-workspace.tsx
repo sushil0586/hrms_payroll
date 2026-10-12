@@ -192,11 +192,11 @@ export function PayrollSettlementsReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Payroll settlements report workspace">
       <div className="report-catalog-workspace payroll-settlements-report" data-testid="payroll-settlements-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Settlements</span><strong>{filteredRows.length}</strong><small>{settlements.length} total packages</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Applied packages</span><strong>{filteredRows.filter((row) => row.approvalState === "Applied").length}</strong><small>Payroll-consumed packages</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Net settlement</span><strong>{formatMoney(totalNet)}</strong><small>Filtered payable value</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Recoveries/taxes</span><strong>{formatMoney(totalDeductions)}</strong><small>Filtered deductions</small></article>
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{filteredRows.length}</strong> Settlements</span>
+          <span><strong>{filteredRows.filter((row) => row.approvalState === "Applied").length}</strong> Applied packages</span>
+          <span><strong>{formatMoney(totalNet)}</strong> Net settlement</span>
+          <span><strong>{formatMoney(totalDeductions)}</strong> Recoveries/taxes</span>
         </div>
 
         <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Payroll settlement filters">

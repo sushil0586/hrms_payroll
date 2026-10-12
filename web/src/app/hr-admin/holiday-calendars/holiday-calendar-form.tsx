@@ -14,6 +14,9 @@ type Props = {
   options: HrAdminAttendanceOperationOptions;
   itemId?: string;
   item?: HrAdminHolidayCalendar;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -31,7 +34,16 @@ function selectOptions(items: Array<{ id: string; name: string }>) {
   ];
 }
 
-export function HolidayCalendarForm({ initialValue, mode, options, itemId, item }: Props) {
+export function HolidayCalendarForm({
+  initialValue,
+  mode,
+  options,
+  itemId,
+  item,
+  cancelHref,
+  successHref = "/hr-admin/holiday-calendars",
+  compact = false,
+}: Props) {
   const router = useRouter();
   const [formValue, setFormValue] = useState(initialValue);
   const [error, setError] = useState("");
@@ -80,23 +92,28 @@ export function HolidayCalendarForm({ initialValue, mode, options, itemId, item 
     }
     setError("");
     setIsSubmitting(true);
-    const response = await fetch(mode === "create" ? "/api/hr-admin/holiday-calendars" : `/api/hr-admin/holiday-calendars/${itemId}`, {
-      method: mode === "create" ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formValue),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(getErrorMessage(payload));
+    try {
+      const response = await fetch(mode === "create" ? "/api/hr-admin/holiday-calendars" : `/api/hr-admin/holiday-calendars/${itemId}`, {
+        method: mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValue),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(getErrorMessage(payload));
+        setIsSubmitting(false);
+        return;
+      }
+      router.push(successHref);
+      router.refresh();
+    } catch {
+      setError("Unable to save holiday calendar. Check your connection and try again.");
       setIsSubmitting(false);
-      return;
     }
-    router.push("/hr-admin/holiday-calendars");
-    router.refresh();
   }
 
   return (
-    <form className="section form-layout-modern" onSubmit={handleSubmit}>
+    <form className={`section form-layout-modern holiday-calendar-form${compact ? " holiday-calendar-form--modal" : ""}`} onSubmit={handleSubmit}>
       <section className="form-shell-card">
         <div className="form-shell-card__header">
           <div>
@@ -167,7 +184,7 @@ export function HolidayCalendarForm({ initialValue, mode, options, itemId, item 
           <span className="muted">Calendar changes save directly back into attendance operations and policy references.</span>
           <div className="form-actions-bar__buttons">
             <button className="button button--primary" disabled={isSubmitting || (mode === "edit" && item?.can_edit_directly === false)} type="submit">{isSubmitting ? "Saving..." : mode === "create" ? "Create holiday calendar" : item && item.can_edit_directly === false ? "Direct edit unavailable" : "Save changes"}</button>
-            <button className="button button--secondary" onClick={() => router.back()} type="button">Cancel</button>
+            <button className="button button--secondary" onClick={() => (cancelHref ? router.push(cancelHref) : router.back())} type="button">Cancel</button>
           </div>
         </div>
       </section>

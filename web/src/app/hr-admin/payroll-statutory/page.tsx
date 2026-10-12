@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminPayrollStatutorySetup } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -850,15 +849,15 @@ export default async function HrAdminPayrollStatutoryPage({ searchParams }: Page
       />
 
       <section className="section section--tight" aria-label="Payroll statutory metrics">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <MetricTile className="metric-tile-soft" label="Active Packs" value={setup.summary.active_pack_count} />
-          <MetricTile className="metric-tile-soft" label="Components" value={setup.summary.active_statutory_component_count} />
-          <MetricTile className="metric-tile-soft" label="Profiles" value={setup.summary.active_employee_profile_count} />
-          <MetricTile className="metric-tile-soft" label="Registrations" value={setup.summary.active_employer_registration_count} />
-          <MetricTile className="metric-tile-soft" label="Due Filings" value={setup.summary.due_filing_calendar_count} />
-          <MetricTile className="metric-tile-soft" label="Declarations" value={setup.summary.declaration_count} />
-          <MetricTile className="metric-tile-soft" label="Locked" value={setup.summary.locked_declaration_count} />
-          <MetricTile className="metric-tile-soft" label="Proofs Verified" value={setup.summary.verified_declaration_item_count} />
+        <div className="attendance-summary-strip payroll-run-summary-strip" aria-label="Payroll statutory summary">
+          <span><strong>{setup.summary.active_pack_count}</strong> active packs</span>
+          <span><strong>{setup.summary.active_statutory_component_count}</strong> components</span>
+          <span><strong>{setup.summary.active_employee_profile_count}</strong> profiles</span>
+          <span><strong>{setup.summary.active_employer_registration_count}</strong> registrations</span>
+          <span><strong>{setup.summary.due_filing_calendar_count}</strong> due filings</span>
+          <span><strong>{setup.summary.declaration_count}</strong> declarations</span>
+          <span><strong>{setup.summary.locked_declaration_count}</strong> locked</span>
+          <span><strong>{setup.summary.verified_declaration_item_count}</strong> proofs verified</span>
         </div>
       </section>
 

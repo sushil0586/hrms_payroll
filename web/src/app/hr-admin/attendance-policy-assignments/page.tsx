@@ -1,16 +1,21 @@
 import Link from "next/link";
 
 import { AttendancePolicyAssignmentGovernancePanel } from "@/app/hr-admin/attendance-policy-assignments/attendance-policy-assignment-governance-panel";
-import { MetricTile } from "@/components/patterns/metric-tile";
+import { AttendancePolicyAssignmentsWorkbench } from "@/app/hr-admin/attendance-policy-assignments/attendance-policy-assignments-workbench";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminAttendancePolicyAssignments } from "@/lib/api";
+import { getHrAdminAttendancePolicyAssignments, getHrAdminPolicyWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
 
 export default async function HrAdminAttendancePolicyAssignmentsPage() {
   const sessionUser = await requireSessionPermission({ permissionKeys: ["attendance.view", "attendance.policies.manage"], fallbackPath: "/hr-admin/policy-assignments" });
   const canManagePolicies = sessionHasPermission(sessionUser, "attendance.policies.manage");
-  const result = await getHrAdminAttendancePolicyAssignments();
+  const [result, optionsResult] = await Promise.all([
+    getHrAdminAttendancePolicyAssignments(),
+    getHrAdminPolicyWorkbenchOptions({
+      include: ["attendance_policies", "legal_entities", "branches", "locations", "departments", "grades", "employment_types"],
+    }),
+  ]);
   const activeCount = result.data.filter((item) => item.is_active).length;
 
   return (
@@ -21,11 +26,6 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
         description="Map attendance behavior to the branches, locations, departments, employment types, or employees that should inherit it."
         actions={
           <>
-            {canManagePolicies ? (
-              <Link className="button button--primary" href="/hr-admin/attendance-policy-assignments/new">
-                Create attendance assignment
-              </Link>
-            ) : null}
             <Link className="button button--secondary" href="/hr-admin/policy-assignments">
               Back to policy assignments
             </Link>
@@ -44,70 +44,12 @@ export default async function HrAdminAttendancePolicyAssignmentsPage() {
         secondaryMetricValue={activeCount}
       />
 
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Assignments" value={result.data.length} trend="Scope links" />
-          <MetricTile label="Active assignments" value={activeCount} trend="Currently applied" />
-          <MetricTile label="Inactive assignments" value={result.data.length - activeCount} trend="Dormant mappings" />
-        </div>
-      </section>
-
-      <section className="section queue-layout">
-        <div className="queue-list">
-          {result.data.map((item) => (
-            <article className="record-card" key={item.id}>
-              <div className="record-card__header">
-                <div className="record-card__title-wrap">
-                  <div className="record-card__title">
-                    <h2>{item.policy_name}</h2>
-                  </div>
-                  <div className="record-card__eyebrow">
-                    <span className={`record-chip${item.is_active ? " record-chip--accent" : ""}`}>
-                      {item.is_active ? "active" : "inactive"}
-                    </span>
-                    <span className="record-chip">Priority {item.priority}</span>
-                  </div>
-                </div>
-                <div className="record-card__actions">
-                  {canManagePolicies ? (
-                    <Link className="button button--secondary" href={`/hr-admin/attendance-policy-assignments/${item.id}/edit`}>
-                      Edit
-                    </Link>
-                  ) : null}
-                </div>
-              </div>
-              <div className="detail-grid">
-                <div className="detail-row">
-                  <span className="detail-label">Scope summary</span>
-                  <span className="detail-value">{item.scope_labels?.length ? item.scope_labels.join(" • ") : "Tenant default scope"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Legal entity</span>
-                  <span className="detail-value">{item.legal_entity || "Any entity"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Branch</span>
-                  <span className="detail-value">{item.branch || "Any branch"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Location</span>
-                  <span className="detail-value">{item.location || "Any location"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Employee override</span>
-                  <span className="detail-value">{item.employee || "No employee override"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Overlap review</span>
-                  <span className="detail-value">
-                    {item.conflict_summary || (item.conflict_count ? `${item.conflict_count} overlapping assignments detected.` : "No overlap summary available.")}
-                  </span>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      <AttendancePolicyAssignmentsWorkbench
+        canManagePolicies={canManagePolicies}
+        items={result.data}
+        options={optionsResult.data}
+        state={result.state === "live" && optionsResult.state === "live" ? "live" : "demo"}
+      />
 
       {canManagePolicies ? (
         <AttendancePolicyAssignmentGovernancePanel />

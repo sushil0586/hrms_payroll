@@ -216,11 +216,11 @@ export function PayrollCloseReadinessReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Payroll close readiness report workspace">
       <div className="report-catalog-workspace payroll-close-readiness-report" data-testid="payroll-close-readiness-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft"><span>Payroll runs</span><strong>{filteredRows.length}</strong><small>{runs.length} total runs</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Ready to close</span><strong>{filteredRows.filter((row) => row.state === "Ready").length}</strong><small>All close gates clear</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Blocked runs</span><strong>{filteredRows.filter((row) => row.state === "Blocked").length}</strong><small>Input or review blockers</small></article>
-          <article className="metric-tile metric-tile-soft"><span>Open blockers</span><strong>{filteredRows.reduce((sum, row) => sum + row.openBlockers + row.run.blocked_count, 0)}</strong><small>Blocking items</small></article>
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{filteredRows.length}</strong> Payroll runs</span>
+          <span><strong>{filteredRows.filter((row) => row.state === "Ready").length}</strong> Ready to close</span>
+          <span><strong>{filteredRows.filter((row) => row.state === "Blocked").length}</strong> Blocked runs</span>
+          <span><strong>{filteredRows.reduce((sum, row) => sum + row.openBlockers + row.run.blocked_count, 0)}</strong> Open blockers</span>
         </div>
 
         <div className="report-catalog-toolbar payroll-register-toolbar" aria-label="Payroll close readiness filters">

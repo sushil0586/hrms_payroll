@@ -86,7 +86,6 @@ function NavEntry({
         <span className="nav-item__glyph" aria-hidden="true">{item.shortLabel}</span>
         <span className="nav-item__content">
           <strong>{item.label}</strong>
-          {item.blurb ? <small>{item.blurb}</small> : null}
           {item.disabledReason ? <small>{item.disabledReason}</small> : null}
         </span>
       </div>
@@ -102,7 +101,6 @@ function NavEntry({
       <span className="nav-item__glyph" aria-hidden="true">{item.shortLabel}</span>
       <span className="nav-item__content">
         <strong>{item.label}</strong>
-        {item.blurb ? <small>{item.blurb}</small> : null}
       </span>
     </Link>
   );
@@ -298,7 +296,7 @@ export function WorkspaceChrome({
           {groups.map((group, index) => {
             const activeInGroup = group.items.some((item) => isActivePath(pathname, item.href));
             return (
-              <details className="nav-group nav-group--collapsible" key={group.title} open={activeInGroup || index === 0}>
+              <details className="nav-group nav-group--collapsible" key={group.title} open={activeInGroup || (workspaceTone !== "hr" && index === 0)}>
                 <summary className="nav-group__summary">
                   <span className="nav-group__title">{group.title}</span>
                   <span className="nav-group__chevron" aria-hidden="true">⌄</span>

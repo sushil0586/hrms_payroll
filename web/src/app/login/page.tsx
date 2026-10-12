@@ -2,8 +2,11 @@ import Link from "next/link";
 
 import { LoginForm } from "@/app/login/login-form";
 import { PageIntro } from "@/components/patterns/page-intro";
+import { API_BASE_URL, DEMO_DATA_ENABLED } from "@/lib/runtime-flags";
 
 export default function LoginPage() {
+  const demoModeWithoutBackend = DEMO_DATA_ENABLED && !API_BASE_URL;
+
   return (
     <main className="shell public-shell public-shell--auth">
       <PageIntro
@@ -35,7 +38,7 @@ export default function LoginPage() {
       </section>
 
       <section className="section auth-entry-layout">
-        <LoginForm />
+        <LoginForm demoModeWithoutBackend={demoModeWithoutBackend} />
 
         <aside className="insight-panel public-auth-panel">
           <div className="insight-panel__header">

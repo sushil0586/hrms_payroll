@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { LeaveBalanceOperations } from "@/app/hr-admin/leave-balances/leave-balance-operations";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminLeaveBalances, getHrAdminLeaveBalanceTransactions, getHrAdminPolicyWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
@@ -83,11 +82,11 @@ export default async function HrAdminLeaveBalancesPage({ searchParams }: PagePro
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Tracked balances" value={balancesResult.data.total_count} trend="Matching employee-policy rows" />
-          <MetricTile label="Encashed units" value={encashedTotal.toFixed(2)} trend="Current page total" />
-          <MetricTile label="Net adjustments" value={adjustmentsTotal.toFixed(2)} trend="Current page total" />
-          <MetricTile label="Pending reviews" value={pendingReviewsCount} trend="Current transaction page" />
+        <div className="attendance-summary-strip" aria-label="Leave balance summary">
+          <span><strong>{balancesResult.data.total_count}</strong> tracked balances</span>
+          <span><strong>{encashedTotal.toFixed(2)}</strong> encashed units</span>
+          <span><strong>{adjustmentsTotal.toFixed(2)}</strong> net adjustments</span>
+          <span><strong>{pendingReviewsCount}</strong> pending reviews</span>
         </div>
       </section>
 

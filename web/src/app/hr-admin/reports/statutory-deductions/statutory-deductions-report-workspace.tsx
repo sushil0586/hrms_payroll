@@ -183,23 +183,23 @@ export function StatutoryDeductionsReportWorkspace({
   return (
     <section className="section section--tight" aria-label="Statutory deduction summary report workspace">
       <div className="report-catalog-workspace statutory-deductions-report" data-testid="statutory-deductions-report">
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <article>
             <span>Deduction rows</span>
             <strong>{filteredRows.length}</strong>
             <small>{rows.length} statutory source rows</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Total amount</span>
             <strong>{formatMoney(totalAmount)}</strong>
             <small>Filtered deductions</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Components</span>
             <strong>{unique(filteredRows.map((row) => row.componentCode)).length}</strong>
             <small>{components.length} configured</small>
           </article>
-          <article className="metric-tile metric-tile-soft">
+          <article>
             <span>Provider routes</span>
             <strong>{unique(filteredRows.map((row) => row.providerRef)).length}</strong>
             <small>Configurable filing paths</small>

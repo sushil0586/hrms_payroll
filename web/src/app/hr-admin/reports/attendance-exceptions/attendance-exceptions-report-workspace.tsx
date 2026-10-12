@@ -205,27 +205,12 @@ export function AttendanceExceptionsReportWorkspace({ items }: { items: Attendan
           </div>
         </div>
 
-        <div className="metric-grid-modern payroll-setup-metrics">
-          <article className="metric-tile metric-tile-soft">
-            <span>Exception rows</span>
-            <strong>{filteredRows.length}</strong>
-            <small>{items.length} total requests</small>
-          </article>
-          <article className="metric-tile metric-tile-soft">
-            <span>Pending review</span>
-            <strong>{filteredRows.filter((item) => item.status === "pending").length}</strong>
-            <small>Awaiting decision</small>
-          </article>
-          <article className="metric-tile metric-tile-soft">
-            <span>Overdue SLA</span>
-            <strong>{filteredRows.filter((item) => item.slaState === "Overdue").length}</strong>
-            <small>Pending 3+ days</small>
-          </article>
-          <article className="metric-tile metric-tile-soft">
-            <span>Payroll impact</span>
-            <strong>{filteredRows.filter((item) => item.payrollImpact !== "No status change").length}</strong>
-            <small>May affect payroll inputs</small>
-          </article>
+        <div className="attendance-summary-strip report-summary-strip" aria-label="Attendance exception summary">
+          <span><strong>{filteredRows.length}</strong> exception rows</span>
+          <span><strong>{items.length}</strong> total requests</span>
+          <span><strong>{filteredRows.filter((item) => item.status === "pending").length}</strong> pending review</span>
+          <span><strong>{filteredRows.filter((item) => item.slaState === "Overdue").length}</strong> overdue SLA</span>
+          <span><strong>{filteredRows.filter((item) => item.payrollImpact !== "No status change").length}</strong> payroll impact</span>
         </div>
 
         <div className="report-filter-panel" aria-label="Attendance exception filters">
@@ -348,7 +333,7 @@ export function AttendanceExceptionsReportWorkspace({ items }: { items: Attendan
                   </td>
                   <td>
                     <div className="report-row-actions">
-                      <Link className="button button--secondary" href={`/hr-admin/attendance-regularizations/${item.id}/review`}>
+                      <Link className="button button--secondary" href={`/hr-admin/attendance-regularizations?reviewRegularization=${item.id}`}>
                         Review
                       </Link>
                       <Link className="button button--ghost" href={`/hr-admin/attendance-regularizations?q=${encodeURIComponent(item.employee_code ?? "")}`}>

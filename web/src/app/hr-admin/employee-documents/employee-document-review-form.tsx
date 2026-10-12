@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { FormSection } from "@/components/patterns/form-section";
+import { WorkspaceFormFooter, WorkspaceStatusBadge } from "@/components/patterns/workspace-standard";
 import type {
   HrAdminDocumentOptions,
   HrAdminEmployeeDocument,
@@ -15,6 +16,9 @@ type Props = {
   initialValue: HrAdminEmployeeDocumentWriteInput;
   options: HrAdminDocumentOptions;
   itemId: string;
+  cancelHref?: string;
+  successHref?: string;
+  compact?: boolean;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -44,11 +48,11 @@ function humanizeStatus(value: string) {
     .join(" ");
 }
 
-function verificationChipClass(status: string) {
-  if (status === "verified") return "record-chip record-chip--success";
-  if (status === "rejected" || status === "expired") return "record-chip record-chip--danger";
-  if (status === "pending") return "record-chip record-chip--warning";
-  return "record-chip";
+function verificationTone(status: string) {
+  if (status === "verified") return "success";
+  if (status === "rejected" || status === "expired") return "danger";
+  if (status === "pending") return "warning";
+  return "neutral";
 }
 
 function decisionEffect(status: string, reuploadRequested: boolean) {
@@ -64,12 +68,18 @@ function decisionEffect(status: string, reuploadRequested: boolean) {
   return "The document remains in the HR verification queue until a reviewer records a final outcome.";
 }
 
-export function EmployeeDocumentReviewForm({ document, initialValue, options, itemId }: Props) {
+export function EmployeeDocumentReviewForm({ document, initialValue, options, itemId, cancelHref, successHref, compact = false }: Props) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [verificationStatus, setVerificationStatus] = useState(initialValue.verification_status);
   const [reuploadRequested, setReuploadRequested] = useState(initialValue.reupload_requested);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setIsHydrated(true), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,12 +114,24 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
       setIsSubmitting(false);
       return;
     }
-    router.push("/hr-admin/employee-documents?review_saved=1");
+    router.push(successHref ?? "/hr-admin/employee-documents?review_saved=1");
     router.refresh();
   }
 
+  function handleCancel() {
+    if (cancelHref) {
+      router.push(cancelHref);
+      return;
+    }
+    router.back();
+  }
+
   return (
-    <form className="section form-layout-modern document-child-form" onSubmit={handleSubmit}>
+    <form
+      className={`section form-layout-modern document-child-form${compact ? " document-child-form--modal" : ""}`}
+      data-hydrated={isHydrated ? "true" : "false"}
+      onSubmit={handleSubmit}
+    >
       <section className="form-shell-card">
         <div className="form-shell-card__intro">
           <h2>Document review and verification</h2>
@@ -124,8 +146,8 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
                 <p>{document.employee_name} ({document.employee_code}) • {document.category_name}</p>
               </div>
               <div className="record-card__actions">
-                <span className={verificationChipClass(document.verification_status)}>{humanizeStatus(document.verification_status)}</span>
-                <span className="record-chip">{humanizeStatus(document.status)}</span>
+                <WorkspaceStatusBadge tone={verificationTone(document.verification_status)}>{humanizeStatus(document.verification_status)}</WorkspaceStatusBadge>
+                <WorkspaceStatusBadge tone="neutral">{humanizeStatus(document.status)}</WorkspaceStatusBadge>
               </div>
             </div>
             <div className="document-review-state">
@@ -183,8 +205,8 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
                     <p>{entry.file_name}</p>
                   </div>
                   <div className="record-card__actions">
-                    <span className={verificationChipClass(entry.verification_status)}>{humanizeStatus(entry.verification_status)}</span>
-                    <span className="record-chip">{humanizeStatus(entry.status)}</span>
+                    <WorkspaceStatusBadge tone={verificationTone(entry.verification_status)}>{humanizeStatus(entry.verification_status)}</WorkspaceStatusBadge>
+                    <WorkspaceStatusBadge tone="neutral">{humanizeStatus(entry.status)}</WorkspaceStatusBadge>
                   </div>
                 </div>
               </article>
@@ -219,17 +241,14 @@ export function EmployeeDocumentReviewForm({ document, initialValue, options, it
           </div>
         ) : null}
 
-        <div className="form-actions-bar">
-          <span className="muted">Saving returns you to the employee document queue.</span>
-          <div className="form-actions-bar__buttons">
-            <button className="button button--secondary" onClick={() => router.back()} type="button">
-              Cancel
-            </button>
-            <button className="button button--primary" disabled={isSubmitting} type="submit">
-              {isSubmitting ? "Saving..." : "Save review"}
-            </button>
-          </div>
-        </div>
+        <WorkspaceFormFooter note="Saving returns you to the employee document queue.">
+          <button className="button button--secondary" onClick={handleCancel} type="button">
+            Cancel
+          </button>
+          <button className="button button--primary" disabled={isSubmitting} type="submit">
+            {isSubmitting ? "Saving..." : "Save review"}
+          </button>
+        </WorkspaceFormFooter>
       </section>
     </form>
   );

@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { LifecycleQueue } from "@/app/hr-admin/lifecycle/lifecycle-queue";
 import { ActionMenu } from "@/components/patterns/action-menu";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminExits, getHrAdminLifecycleOptions, getHrAdminLifecycleQueue, getHrAdminMovements, getHrAdminOnboardings, getHrAdminProbationReviews } from "@/lib/api";
+import { getHrAdminExits, getHrAdminLifecycleOptions, getHrAdminLifecycleQueue, getHrAdminMovements, getHrAdminOnboardings, getHrAdminProbationReview, getHrAdminProbationReviews } from "@/lib/api";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -25,6 +24,8 @@ export default async function HrAdminLifecyclePage({ searchParams }: PageProps) 
   const owner = normalizeParam(currentParams.owner) ?? "";
   const primaryDateFrom = normalizeParam(currentParams.primary_date_from) ?? "";
   const primaryDateTo = normalizeParam(currentParams.primary_date_to) ?? "";
+  const editRecord = normalizeParam(currentParams.editRecord) ?? "";
+  const [editRecordType, editRecordId] = editRecord.split(":");
 
   const [queueResult, optionsResult, onboardingsResult, probationResult, movementsResult, exitsResult] = await Promise.all([
     getHrAdminLifecycleQueue({
@@ -44,6 +45,7 @@ export default async function HrAdminLifecyclePage({ searchParams }: PageProps) 
     getHrAdminMovements({ page: 1, page_size: 1 }),
     getHrAdminExits({ page: 1, page_size: 1 }),
   ]);
+  const editProbationResult = editRecordType === "probation" && editRecordId ? await getHrAdminProbationReview(editRecordId) : null;
   const state =
     queueResult.state === "live" &&
     optionsResult.state === "live" &&
@@ -86,14 +88,6 @@ export default async function HrAdminLifecyclePage({ searchParams }: PageProps) 
           </>
         }
       />
-      <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Onboarding records" value={onboardingsResult.data.total_count} trend="Joiner pipeline" />
-          <MetricTile label="Pending probation decisions" value={probationResult.data.total_count} trend="Decision backlog" />
-          <MetricTile label="Document blockers" value={documentBlockedCount} trend="Current queue page" />
-          <MetricTile label="Upcoming document work" value={documentUpcomingCount} trend="Expiring or future due" />
-        </div>
-      </section>
       <LifecycleQueue
         items={queueResult.data.items}
         state={state}
@@ -118,6 +112,14 @@ export default async function HrAdminLifecyclePage({ searchParams }: PageProps) 
           has_previous: queueResult.data.has_previous,
         }}
         statusOptionsByType={statusOptionsByType}
+        lifecycleOptions={optionsResult.data}
+        editProbationReview={editProbationResult?.data ?? null}
+        summary={{
+          documentBlockedCount,
+          documentUpcomingCount,
+          onboardingCount: onboardingsResult.data.total_count,
+          pendingProbationCount: probationResult.data.total_count,
+        }}
       />
     </main>
   );

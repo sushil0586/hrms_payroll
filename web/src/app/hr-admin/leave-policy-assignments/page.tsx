@@ -1,14 +1,16 @@
 import Link from "next/link";
 
-import { LeavePolicyAssignmentActions } from "@/app/hr-admin/leave-policy-assignments/leave-policy-assignment-actions";
 import { LeavePolicyAssignmentGovernancePanel } from "@/app/hr-admin/leave-policy-assignments/leave-policy-assignment-governance-panel";
 import { LeavePolicyAssignmentImportWorkbench } from "@/app/hr-admin/leave-policy-assignments/leave-policy-assignment-import-workbench";
-import { MetricTile } from "@/components/patterns/metric-tile";
+import { HrAdminActionModal } from "@/components/patterns/hr-admin-action-modal";
 import { PaginationBar } from "@/components/patterns/pagination-bar";
 import { PageIntro } from "@/components/patterns/page-intro";
-import { getHrAdminLeavePolicyAssignments, getHrAdminPolicyWorkbenchOptions } from "@/lib/api";
+import { getHrAdminLeavePolicyAssignment, getHrAdminLeavePolicyAssignments, getHrAdminPolicyWorkbenchOptions } from "@/lib/api";
 import { requireSessionPermission, sessionHasPermission } from "@/lib/workspace-access";
 import { TimeLeaveOperationsStrip } from "../time-leave-operations-strip";
+import { createEmptyLeavePolicyAssignmentValue, leavePolicyAssignmentToFormValue } from "./form-values";
+import { LeavePolicyAssignmentForm } from "./leave-policy-assignment-form";
+import { LeavePolicyAssignmentsTable } from "./leave-policy-assignments-table";
 
 type SearchParamValue = string | string[] | undefined;
 type PageProps = {
@@ -48,11 +50,18 @@ export default async function HrAdminLeavePolicyAssignmentsPage({ searchParams }
     scope: normalizeParam(currentParams.scope) ?? "all",
     risk: normalizeParam(currentParams.risk) ?? "all",
   };
+  const createModal = normalizeParam(currentParams.leaveAssignmentModal) === "create";
+  const editLeaveAssignmentId = normalizeParam(currentParams.editLeaveAssignment);
   const pageSize = Math.min(numberParam(currentParams.page_size, 10), 50);
   const page = numberParam(currentParams.page, 1);
-  const [result, optionsResult] = await Promise.all([
+  const modalInclude = ["leave_policies", "legal_entities", "branches", "departments", "grades", "employment_types"];
+  const include = createModal || editLeaveAssignmentId
+    ? ["employees", "leave_policies", "leave_types", ...modalInclude]
+    : ["employees", "leave_policies", "leave_types"];
+  const [result, optionsResult, editResult] = await Promise.all([
     getHrAdminLeavePolicyAssignments({ q: filters.q, status: filters.status, scope: filters.scope, risk: filters.risk, page, page_size: pageSize }),
-    getHrAdminPolicyWorkbenchOptions({ include: ["employees", "leave_policies", "leave_types"] }),
+    getHrAdminPolicyWorkbenchOptions({ include }),
+    canManagePolicies && editLeaveAssignmentId ? getHrAdminLeavePolicyAssignment(editLeaveAssignmentId) : Promise.resolve(null),
   ]);
   const pageItems = result.data.items;
   const totalCount = result.data.total_count;
@@ -61,6 +70,8 @@ export default async function HrAdminLeavePolicyAssignmentsPage({ searchParams }
   const activeCount = pageItems.filter((item) => item.is_active).length;
   const conflictingCount = pageItems.filter((item) => (item.conflict_count ?? 0) > 0).length;
   const blockingCount = pageItems.filter((item) => item.has_blocking_conflict).length;
+  const closeHref = buildHref(currentParams, { leaveAssignmentModal: undefined, editLeaveAssignment: undefined });
+  const modalTitle = createModal ? "Create leave assignment" : editResult?.data ? "Edit leave assignment" : "";
 
   return (
     <main className="shell shell--time-leave hr-admin-compact-ui">
@@ -71,7 +82,7 @@ export default async function HrAdminLeavePolicyAssignmentsPage({ searchParams }
         actions={
           <>
             {canManagePolicies ? (
-              <Link className="button button--primary" href="/hr-admin/leave-policy-assignments/new">
+              <Link className="button button--primary" href={buildHref(currentParams, { leaveAssignmentModal: "create", editLeaveAssignment: undefined })}>
                 Create leave assignment
               </Link>
             ) : null}
@@ -94,18 +105,24 @@ export default async function HrAdminLeavePolicyAssignmentsPage({ searchParams }
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Assignments" value={totalCount} trend="Matching scope links" />
-          <MetricTile label="Active assignments" value={activeCount} trend="Visible rows" />
-          <MetricTile label="Overlap watch" value={conflictingCount} trend="Visible risk rows" />
-          <MetricTile label="Blocking risks" value={blockingCount} trend="Visible blockers" />
+        <div className="attendance-summary-strip" aria-label="Leave assignment summary">
+          <span><strong>{totalCount}</strong> assignments</span>
+          <span><strong>{activeCount}</strong> active on page</span>
+          <span><strong>{conflictingCount}</strong> overlap watch</span>
+          <span><strong>{blockingCount}</strong> blocking risks</span>
         </div>
       </section>
 
       {canManagePolicies ? (
         <>
-          <LeavePolicyAssignmentGovernancePanel leaveTypes={optionsResult.data.leave_types} />
-          <LeavePolicyAssignmentImportWorkbench assignments={pageItems} employees={optionsResult.data.employees} leavePolicies={optionsResult.data.leave_policies} />
+          <details className="section panel-card-soft">
+            <summary className="bulk-tools-summary">
+              <span><strong>Assignment governance tools</strong><small>Open for resolution preview and policy-scope import.</small></span>
+              <span className="button button--secondary">Open tools</span>
+            </summary>
+            <LeavePolicyAssignmentGovernancePanel leaveTypes={optionsResult.data.leave_types} />
+            <LeavePolicyAssignmentImportWorkbench assignments={pageItems} employees={optionsResult.data.employees} leavePolicies={optionsResult.data.leave_policies} />
+          </details>
         </>
       ) : (
         <section className="section"><div className="notice"><strong>Read-only leave assignment view.</strong><span className="muted">Resolution previews and assignment edits require leave policy management permission.</span></div></section>
@@ -113,6 +130,13 @@ export default async function HrAdminLeavePolicyAssignmentsPage({ searchParams }
 
       <section className="section queue-layout">
         <form className="workspace-data-panel queue-toolbar" method="get" aria-label="Leave assignment filters">
+          <div className="queue-toolbar__header">
+            <div>
+              <h2 className="section-heading-soft">Leave assignment catalog</h2>
+              <p className="section-copy section-copy-soft">Filter assignment scopes, then inspect overlap and precedence in context.</p>
+            </div>
+            <span className="queue-summary-chip"><strong>{pageItems.length}</strong> on this page</span>
+          </div>
           <div className="queue-toolbar__grid">
             <label><span>Search</span><input className="input-control" name="q" type="search" defaultValue={filters.q} placeholder="Policy, leave type, employee, scope" /></label>
             <label><span>Status</span><select className="input-control" name="status" defaultValue={filters.status}><option value="all">All</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
@@ -122,72 +146,7 @@ export default async function HrAdminLeavePolicyAssignmentsPage({ searchParams }
           </div>
           <div className="queue-toolbar__actions"><button className="button button--primary" type="submit">Apply filters</button><Link className="button button--secondary" href="/hr-admin/leave-policy-assignments">Clear</Link><span className="queue-summary-chip"><strong>{totalCount}</strong> matching</span></div>
         </form>
-        <div className="queue-list">
-          {pageItems.map((item) => (
-            <article className="record-card" key={item.id}>
-              <div className="record-card__header">
-                <div className="record-card__title-wrap">
-                  <div className="record-card__title">
-                    <h2>{item.policy_name}</h2>
-                  </div>
-                  <div className="record-card__eyebrow">
-                    <span className={`record-chip${item.is_active ? " record-chip--accent" : ""}`}>
-                      {item.is_active ? "active" : "inactive"}
-                    </span>
-                    <span className="record-chip">Priority {item.priority}</span>
-                    {item.leave_type_name ? <span className="record-chip">{item.leave_type_name}</span> : null}
-                    {(item.conflict_count ?? 0) > 0 ? (
-                      <span className={`record-chip${item.has_blocking_conflict ? " record-chip--danger" : ""}`}>
-                        {item.has_blocking_conflict ? "blocking overlap" : `${item.conflict_count} overlap${item.conflict_count === 1 ? "" : "s"}`}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="record-card__actions">
-                  {canManagePolicies ? (
-                    <>
-                      <Link className="button button--secondary" href={`/hr-admin/leave-policy-assignments/${item.id}/edit`}>
-                        Edit
-                      </Link>
-                      <LeavePolicyAssignmentActions assignmentId={item.id} isActive={item.is_active} policyName={item.policy_name} />
-                    </>
-                  ) : null}
-                </div>
-              </div>
-              <div className="detail-grid">
-                <div className="detail-row">
-                  <span className="detail-label">Legal entity</span>
-                  <span className="detail-value">{item.legal_entity || "Any entity"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Branch</span>
-                  <span className="detail-value">{item.branch || "Any branch"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Department</span>
-                  <span className="detail-value">{item.department || "Any department"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Employee override</span>
-                  <span className="detail-value">{item.employee || "No employee override"}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Resolved scope</span>
-                  <span className="detail-value">{item.scope_labels?.length ? item.scope_labels.join(" • ") : "Global assignment"}</span>
-                </div>
-              </div>
-              {item.conflict_summary ? (
-                <div className="notice">
-                  <strong>{item.has_blocking_conflict ? "Action needed." : "Governance note."}</strong>
-                  <span className="muted">{item.conflict_summary}</span>
-                </div>
-              ) : null}
-            </article>
-          ))}
-          {pageItems.length === 0 ? (
-            <div className="payroll-setup-empty-state"><strong>No leave assignments match these filters.</strong><span>Clear filters or widen the search to review all policy scopes.</span></div>
-          ) : null}
-        </div>
+        <LeavePolicyAssignmentsTable assignments={pageItems} canManagePolicies={canManagePolicies} />
         <PaginationBar
           firstHref={buildHref(currentParams, { page: "1", page_size: String(pageSize) })}
           hasNext={safePage < totalPages}
@@ -200,6 +159,34 @@ export default async function HrAdminLeavePolicyAssignmentsPage({ searchParams }
           totalCount={totalCount}
         />
       </section>
+
+      {canManagePolicies && (createModal || editResult?.data) ? (
+        <HrAdminActionModal
+          closeHref={closeHref}
+          description="Required fields are marked with an asterisk. Existing validation, conflict checks, and save APIs are unchanged."
+          eyebrow="Leave setup"
+          labelledBy="leave-assignment-modal-title"
+          title={modalTitle}
+        >
+          {createModal ? (
+            <LeavePolicyAssignmentForm
+              initialValue={createEmptyLeavePolicyAssignmentValue()}
+              mode="create"
+              options={optionsResult.data}
+              returnPath={closeHref}
+            />
+          ) : editResult?.data ? (
+            <LeavePolicyAssignmentForm
+              initialEmployeeLabel={editResult.data.employee}
+              initialValue={leavePolicyAssignmentToFormValue(editResult.data)}
+              itemId={editResult.data.id}
+              mode="edit"
+              options={optionsResult.data}
+              returnPath={closeHref}
+            />
+          ) : null}
+        </HrAdminActionModal>
+      ) : null}
     </main>
   );
 }

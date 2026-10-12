@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminSaasSlaOperations } from "@/lib/api";
 import { requireWorkspaceAccess } from "@/lib/workspace-access";
@@ -79,13 +78,13 @@ export default async function HrAdminSaasSlaOperationsPage() {
       />
 
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="SLA posture" value={titleCase(data.summary.status)} trend={`${data.summary.blocked_signal_count} blocked signals`} />
-          <MetricTile label="Open incidents" value={data.summary.open_incident_count} trend={`${data.summary.breached_incident_count} breached`} />
-          <MetricTile label="At risk" value={data.summary.at_risk_incident_count} trend="Response or resolution" />
-          <MetricTile label="Notifications" value={data.summary.failed_notification_count} trend="Failed delivery" />
-          <MetricTile label="Provider queue" value={data.summary.stale_provider_job_count} trend="Stale jobs" />
-          <MetricTile label="Remediation SLA" value={data.summary.overdue_remediation_count} trend="Overdue actions" />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{titleCase(data.summary.status)}</strong> SLA posture</span>
+          <span><strong>{data.summary.open_incident_count}</strong> Open incidents</span>
+          <span><strong>{data.summary.at_risk_incident_count}</strong> At risk</span>
+          <span><strong>{data.summary.failed_notification_count}</strong> Notifications</span>
+          <span><strong>{data.summary.stale_provider_job_count}</strong> Provider queue</span>
+          <span><strong>{data.summary.overdue_remediation_count}</strong> Remediation SLA</span>
         </div>
       </section>
 

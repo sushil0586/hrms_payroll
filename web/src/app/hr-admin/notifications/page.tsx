@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { NotificationQueue } from "@/app/hr-admin/notifications/notification-queue";
-import { MetricTile } from "@/components/patterns/metric-tile";
 import { PageIntro } from "@/components/patterns/page-intro";
 import { getHrAdminNotificationOptions, getHrAdminNotifications } from "@/lib/api";
 import { buildNotificationChannelSummaries } from "@/lib/notification-observability";
@@ -66,14 +65,14 @@ export default async function HrAdminNotificationsPage({ searchParams }: PagePro
         title="Notification queue"
       />
       <section className="section">
-        <div className="metric-grid-modern">
-          <MetricTile label="Queue size" trend="Current filtered result" value={result.data.total_count} />
-          <MetricTile label="Visible" trend="This page" value={result.data.items.length} />
-          <MetricTile label="Failed on page" trend="Immediate recovery view" value={failedNotifications} />
-          <MetricTile label="Retry capped" trend="Manual recovery needed" value={retryCappedNotifications} />
-          <MetricTile label="Document notifications" trend="This page" value={documentNotifications} />
-          <MetricTile label="Channels with failures" trend="Current page signal" value={activeFailureChannels} />
-          <MetricTile label="Channels" trend="Available filter options" value={optionsResult.data.notification_channels.length} />
+        <div className="attendance-summary-strip payroll-run-summary-strip">
+          <span><strong>{result.data.total_count}</strong> Queue size</span>
+          <span><strong>{result.data.items.length}</strong> Visible</span>
+          <span><strong>{failedNotifications}</strong> Failed on page</span>
+          <span><strong>{retryCappedNotifications}</strong> Retry capped</span>
+          <span><strong>{documentNotifications}</strong> Document notifications</span>
+          <span><strong>{activeFailureChannels}</strong> Channels with failures</span>
+          <span><strong>{optionsResult.data.notification_channels.length}</strong> Channels</span>
         </div>
       </section>
       <NotificationQueue

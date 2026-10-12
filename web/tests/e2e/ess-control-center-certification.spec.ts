@@ -102,7 +102,7 @@ test.describe("Employee self service control center certification", () => {
     await gotoAuthenticated(page, "/ess/statutory-declarations", employee);
     await expect(page).toHaveURL(/\/ess\/statutory-declarations/);
     await expectPageReady(page, "Statutory Declarations");
-    await expect(page.getByRole("heading", { name: /Start declaration|Update declaration/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Continue declaration|Start declaration|Update declaration/ })).toBeVisible();
 
     await gotoAuthenticated(page, "/ess", employee);
     await expect(page.getByRole("link", { name: "Notifications" }).first()).toHaveAttribute("href", /\/ess\/notifications/);
@@ -150,7 +150,9 @@ test.describe("Employee self service control center certification", () => {
     }
 
     await expect(page.getByRole("heading", { name: "Required documents" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Before sending a file" })).toBeVisible();
+    for (const checklistItem of ["Clear file", "Correct category", "Expiry date", "Re-upload note"]) {
+      await expect(page.getByText(checklistItem, { exact: true })).toBeVisible();
+    }
     await expect(page.getByRole("heading", { name: "Upload required document" })).toHaveCount(0);
     const uploadButton = page.getByRole("button", { name: "Upload document" }).first();
     if (await uploadButton.isEnabled().catch(() => false)) {
@@ -200,14 +202,20 @@ test.describe("Employee self service control center certification", () => {
     await expect(main.getByRole("button", { name: "Apply filters" })).toBeVisible();
     await expect(main.getByRole("link", { name: "Clear filters" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Inbox list" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Notification detail" })).toBeVisible();
+    const reviewNotification = page.getByRole("button", { name: "Review notification" }).first();
+    await expect(reviewNotification).toBeVisible();
+    await reviewNotification.click();
+    const detailDialog = page.getByRole("dialog", { name: /Full review|Notification detail|Review notification/i });
+    await expect(detailDialog).toBeVisible();
+    await detailDialog.getByRole("button", { name: "Close" }).click();
+    await expect(detailDialog).toHaveCount(0);
     await expect(page.locator(".pagination-bar").first()).toBeVisible();
 
     await filterSearch.fill("no-ess-notification-should-match-this");
     await main.getByRole("button", { name: "Apply filters" }).click();
     await expect(page).toHaveURL(/\/ess\/notifications\?.*q=no-ess-notification-should-match-this/);
     await expect(page.getByText("No notifications match the current filters.")).toBeVisible();
-    await main.getByRole("link", { name: "Clear filters" }).click();
+    await main.getByRole("link", { name: "Clear filters" }).first().click();
     await expect(page).toHaveURL(/\/ess\/notifications\/?$/);
     await expect(page.getByRole("heading", { name: "Inbox list" })).toBeVisible();
 

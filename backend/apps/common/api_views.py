@@ -624,6 +624,7 @@ from apps.leave_management.models import (
     LeaveUnit,
 )
 from apps.leave_management.services import (
+    _build_assignment_scope_labels_from_scope,
     _employee_can_review_leave_balance_transaction,
     apply_leave_balance_admin_action,
     build_leave_attendance_collision_snapshot,
@@ -1866,33 +1867,54 @@ def save_hr_admin_leave_policy_assignment(actor, validated_data, *, item=None):
 
     if item.leave_policy_id is None:
         raise serializers.ValidationError({"leave_policy_id": "This field is required."})
-    conflict_check = preview_leave_policy_assignment_conflicts(
-        tenant=tenant,
-        leave_policy=item.leave_policy,
-        scope_data={
-            "legal_entity_id": item.legal_entity_id,
-            "branch_id": item.branch_id,
-            "department_id": item.department_id,
-            "grade_id": item.grade_id,
-            "employment_type_id": item.employment_type_id,
-            "employee_id": item.employee_id,
-        },
-        priority=item.priority,
-        item_id=str(item.id) if item.id else None,
-    )
-    if item.is_active and conflict_check["has_blocking_conflict"]:
-        raise serializers.ValidationError(
-            {
-                "detail": conflict_check["summary"],
-                "conflict_check": conflict_check,
-            }
+    if item.is_active:
+        conflict_check = preview_leave_policy_assignment_conflicts(
+            tenant=tenant,
+            leave_policy=item.leave_policy,
+            scope_data={
+                "legal_entity_id": item.legal_entity_id,
+                "branch_id": item.branch_id,
+                "department_id": item.department_id,
+                "grade_id": item.grade_id,
+                "employment_type_id": item.employment_type_id,
+                "employee_id": item.employee_id,
+            },
+            priority=item.priority,
+            item_id=str(item.id) if item.id else None,
         )
+        if conflict_check["has_blocking_conflict"]:
+            raise serializers.ValidationError(
+                {
+                    "detail": conflict_check["summary"],
+                    "conflict_check": conflict_check,
+                }
+            )
     item.save()
-    ensure_leave_balances_for_policy(item.leave_policy)
+    if item.is_active:
+        ensure_leave_balances_for_policy(item.leave_policy)
     return item
 
 
 def build_hr_admin_leave_assignment_governance_payload(*, tenant, item):
+    if not item.is_active:
+        return {
+            "leave_type_id": str(item.leave_policy.leave_type_id),
+            "leave_type_name": item.leave_policy.leave_type.name,
+            "scope_labels": _build_assignment_scope_labels_from_scope(
+                {
+                    "legal_entity_id": item.legal_entity_id,
+                    "branch_id": item.branch_id,
+                    "department_id": item.department_id,
+                    "grade_id": item.grade_id,
+                    "employment_type_id": item.employment_type_id,
+                    "employee_id": item.employee_id,
+                },
+                tenant=tenant,
+            ),
+            "conflict_count": 0,
+            "has_blocking_conflict": False,
+            "conflict_summary": "Inactive assignments do not influence rollout.",
+        }
     conflict_check = preview_leave_policy_assignment_conflicts(
         tenant=tenant,
         leave_policy=item.leave_policy,
@@ -16059,6 +16081,56 @@ class HrAdminLeaveRequestDetailView(HrAdminContextMixin, APIView):
         if not item:
             return response.Response({"detail": "Leave request not found."}, status=status.HTTP_404_NOT_FOUND)
         return response.Response(ManagerLeaveApprovalItemSerializer(build_hr_admin_leave_request_payload(item)).data)
+
+
+class HrAdminLeaveRequestApproveView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        actor = self.get_employee()
+        if not actor:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(actor.tenant, "leave.requests.approve")
+        leave_request = (
+            LeaveRequest.objects.select_related("employee__reporting_manager", "employee__membership", "leave_policy", "leave_type")
+            .filter(tenant=actor.tenant, id=item_id, status__in=[LeaveRequestStatus.PENDING, LeaveRequestStatus.PARTIALLY_APPROVED])
+            .first()
+        )
+        if not leave_request:
+            return response.Response({"detail": "Leave request not found or not pending approval."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = ManagerDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        leave_request = resolve_leave_request(
+            leave_request=leave_request,
+            actor_employee=actor,
+            approve=True,
+            comment=serializer.validated_data.get("comment", ""),
+        )
+        payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
+        return response.Response(MutationResultSerializer(payload).data)
+
+
+class HrAdminLeaveRequestRejectView(HrAdminContextMixin, APIView):
+    def post(self, request, item_id):
+        actor = self.get_employee()
+        if not actor:
+            return response.Response({"detail": "No active employee context found."}, status=status.HTTP_404_NOT_FOUND)
+        self.require_tenant_permission(actor.tenant, "leave.requests.approve")
+        leave_request = (
+            LeaveRequest.objects.select_related("employee__reporting_manager", "employee__membership", "leave_policy", "leave_type")
+            .filter(tenant=actor.tenant, id=item_id, status__in=[LeaveRequestStatus.PENDING, LeaveRequestStatus.PARTIALLY_APPROVED])
+            .first()
+        )
+        if not leave_request:
+            return response.Response({"detail": "Leave request not found or not pending approval."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = ManagerDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        leave_request = resolve_leave_request(
+            leave_request=leave_request,
+            actor_employee=actor,
+            approve=False,
+            comment=serializer.validated_data.get("comment", ""),
+        )
+        payload = {"id": leave_request.id, "status": leave_request.status, "workflow_reference": leave_request.workflow_reference or ""}
+        return response.Response(MutationResultSerializer(payload).data)
 
 
 class HrAdminLeaveTypeListCreateView(HrAdminContextMixin, APIView):
