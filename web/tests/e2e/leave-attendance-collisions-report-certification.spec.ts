@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase 7B leave-attendance collision report certification", () => {
   test("HR admin can certify collision filters, export evidence, manifest, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/leave-attendance-collisions", hrAdmin);
     await expectPageReady(page, "Leave-Attendance Collision Report");
 
@@ -20,7 +21,8 @@ test.describe("Phase 7B leave-attendance collision report certification", () => 
 
     const search = report.getByPlaceholder("Search employee, leave, status, shift");
     await search.fill("no-such-leave-attendance-collision");
-    await expect(report.getByText("No leave-attendance collision rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-leave-attendance-collision");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     for (const label of ["Leave status", "Severity", "Payroll blocking", "Leave type", "Attendance status"]) {

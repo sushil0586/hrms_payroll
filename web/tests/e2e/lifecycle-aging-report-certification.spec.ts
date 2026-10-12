@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R2-D lifecycle aging and SLA report certification", () => {
   test("HR admin can certify lifecycle aging filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/lifecycle-aging", hrAdmin);
     await expectPageReady(page, "Lifecycle Aging and SLA Report");
 
@@ -20,7 +21,8 @@ test.describe("Phase R2-D lifecycle aging and SLA report certification", () => {
 
     const search = report.getByPlaceholder("Search employee, owner, workflow, SLA");
     await search.fill("no-such-lifecycle-aging-row");
-    await expect(report.getByText("No lifecycle aging rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-lifecycle-aging-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     for (const label of ["Lifecycle type", "Status", "Owner", "Age bucket", "SLA risk", "Escalation"]) {

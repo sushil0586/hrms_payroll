@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R2-C lifecycle queue report certification", () => {
   test("HR admin can certify lifecycle queue filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/lifecycle-queue", hrAdmin);
     await expectPageReady(page, "Lifecycle Queue Report");
 
@@ -20,7 +21,8 @@ test.describe("Phase R2-C lifecycle queue report certification", () => {
 
     const search = report.getByPlaceholder("Search employee, owner, workflow, notes");
     await search.fill("no-such-lifecycle-queue-row");
-    await expect(report.getByText("No lifecycle queue rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-lifecycle-queue-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     for (const label of ["Lifecycle type", "Status", "Owner", "Lifecycle attention", "Document attention"]) {

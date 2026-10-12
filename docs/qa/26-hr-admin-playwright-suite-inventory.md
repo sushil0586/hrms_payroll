@@ -10,7 +10,7 @@ Purpose: classify the HR portal / HR Admin-related Playwright inventory so the r
 | --- | ---: |
 | HR-related Playwright spec files discovered | 213 |
 | HR-related Playwright test declarations discovered | 665 |
-| Current tracker-backed HR Admin functional/live workflow result | 93 passed / 94 total |
+| Current tracker-backed HR Admin functional/live workflow result | 105 passed / 106 total |
 | Current functional/live expected skips | 1 |
 | Current active HR Admin Playwright blockers | 0 |
 
@@ -35,8 +35,8 @@ Phase 0 is the protected checkpoint for expanding HR Admin Playwright coverage. 
 
 | Classification | Spec files | Test declarations | Declared skips | Recommended handling |
 | --- | ---: | ---: | ---: | --- |
-| `verified-working` | 31 | 103 | 10 | Keep in release gate |
-| `candidate-functional` | 98 | 315 | 35 | Review next for Docker functional batch |
+| `verified-working` | 37 | 115 | 10 | Keep in release gate |
+| `candidate-functional` | 92 | 303 | 35 | Review next for Docker functional batch |
 | `candidate-visual` | 31 | 87 | 3 | Repair/shard visual checks as needed |
 | `historical-cross-module` | 53 | 160 | 22 | Defer or supersede after coverage review |
 
@@ -130,6 +130,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | Slice | Specs | Result | Repairs made | Evidence |
 | --- | --- | --- | --- | --- |
 | HR-P2A-1 Attendance reports | `attendance-derivation-exceptions-report-certification.spec.ts`, `attendance-exceptions-report-certification.spec.ts`, `attendance-register-report-certification.spec.ts` | 6 passed / 6 total | Replaced stale `.metric-tile` assertions with shared compact summary metric assertion; made search assertions stable against live seed data; updated drilldown assertions to modal/query-string and permission-aware drawer behavior. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/attendance-derivation-exceptions-report-certification.spec.ts tests/e2e/attendance-exceptions-report-certification.spec.ts tests/e2e/attendance-register-report-certification.spec.ts --workers=1 --reporter=line` -> `6 passed (2.4m)`. |
+| HR-P2A-2 HR core reports | `workforce-report-certification.spec.ts`, `document-compliance-report-certification.spec.ts`, `lifecycle-aging-report-certification.spec.ts`, `lifecycle-queue-report-certification.spec.ts`, `leave-balance-report-certification.spec.ts`, `leave-attendance-collisions-report-certification.spec.ts` | 12 passed / 12 total | Added report-export timeout budget for heavy CSV/manifest/audit flows; replaced seed-dependent empty-state assertions with stable filter-state checks; waited for leave balance destination readiness before overflow assertion. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/workforce-report-certification.spec.ts tests/e2e/document-compliance-report-certification.spec.ts tests/e2e/lifecycle-aging-report-certification.spec.ts tests/e2e/lifecycle-queue-report-certification.spec.ts tests/e2e/leave-balance-report-certification.spec.ts tests/e2e/leave-attendance-collisions-report-certification.spec.ts --workers=1 --reporter=line` -> `12 passed (4.6m)`. |
 
 ## Next Batch Recommendation
 
@@ -159,7 +160,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/configuration-form-flows.spec.ts` | 7 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/deployed-readonly-auth-routing.spec.ts` | 5 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/docs-screenshot-capture.spec.ts` | 6 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/document-compliance-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/document-compliance-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/employee-bank-accounts-certification.spec.ts` | 1 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/employee-directory-certification.spec.ts` | 6 | 1 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/employee-documents-onboarding-certification-flows.spec.ts` | 4 | 1 | `candidate-functional` | `next-batch-review` |
@@ -227,11 +228,11 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/hr-admin-workforce-documents-access-responsive-certification.spec.ts` | 2 | 1 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/import-history-ledger-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/launch-remediation-flows.spec.ts` | 1 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/leave-attendance-collisions-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/leave-attendance-collisions-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/leave-balance-import-flows.spec.ts` | 1 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/leave-balance-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/lifecycle-aging-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/lifecycle-queue-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/leave-balance-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
+| `web/tests/e2e/lifecycle-aging-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
+| `web/tests/e2e/lifecycle-queue-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/lwf-readiness-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/mss-control-center-certification.spec.ts` | 8 | 1 | `candidate-visual` | `repair-or-shard-if-needed` |
 | `web/tests/e2e/mss-rbac-approver-certification.spec.ts` | 5 | 1 | `candidate-functional` | `next-batch-review` |
@@ -355,4 +356,4 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/user-journey-phase5-payroll-close-workflow.spec.ts` | 2 | 0 | `historical-cross-module` | `defer-or-supersede-after-review` |
 | `web/tests/e2e/user-journey-phase6-ess-mss-practical-workflow.spec.ts` | 12 | 7 | `historical-cross-module` | `defer-or-supersede-after-review` |
 | `web/tests/e2e/workflow-trace-flows.spec.ts` | 1 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/workforce-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/workforce-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |

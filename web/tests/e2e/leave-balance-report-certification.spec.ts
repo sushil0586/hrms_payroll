@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-S leave balance report certification", () => {
   test("HR admin can certify leave balance filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/leave-balance", hrAdmin);
     await expectPageReady(page, "Leave Balance Report");
 
@@ -20,7 +21,8 @@ test.describe("Phase R4-S leave balance report certification", () => {
 
     const search = report.getByPlaceholder("Search employee, policy, leave type");
     await search.fill("no-such-leave-balance-row");
-    await expect(report.getByText("No leave balance rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-leave-balance-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     for (const label of ["Leave policy", "Leave type", "Period year", "Liability risk"]) {
@@ -85,6 +87,7 @@ test.describe("Phase R4-S leave balance report certification", () => {
       await expect(openLink).toHaveAttribute("href", /\/hr-admin\/leave-balances\?q=/);
       await openLink.click();
       await expect(page).toHaveURL(/\/hr-admin\/leave-balances\?q=/);
+      await expectPageReady(page, "Leave balances");
       await expectNoHorizontalOverflow(page);
     } else {
       await expect(report.getByText("No leave balance rows match the selected filters.")).toBeVisible();

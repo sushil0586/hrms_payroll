@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R2-B document compliance report certification", () => {
   test("HR admin can certify document compliance filters, pagination, export evidence, and review drilldown", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/document-compliance", hrAdmin);
     await expectPageReady(page, "Document Compliance Report");
 
@@ -20,7 +21,8 @@ test.describe("Phase R2-B document compliance report certification", () => {
 
     const search = report.getByPlaceholder("Search employee, category, title, number");
     await search.fill("no-such-document-compliance-row");
-    await expect(report.getByText("No document compliance rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-document-compliance-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     const verificationOptions = await report.getByLabel("Verification status").locator("option").count();

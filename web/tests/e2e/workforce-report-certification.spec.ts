@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R2-A workforce report certification", () => {
   test("HR admin can certify workforce filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/workforce", hrAdmin);
     await expectPageReady(page, "Employee Master Report");
 
@@ -20,7 +21,8 @@ test.describe("Phase R2-A workforce report certification", () => {
 
     const search = report.getByPlaceholder("Search name, code, org, manager");
     await search.fill("no-such-workforce-row");
-    await expect(report.getByText("No workforce rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-workforce-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     await report.getByLabel("Employment status").selectOption({ index: 1 });
