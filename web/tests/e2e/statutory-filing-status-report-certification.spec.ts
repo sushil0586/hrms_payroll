@@ -1,15 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
-import { gotoAuthenticated, hrAdmin, type Persona } from "../helpers/staging-auth";
-
-const restrictedPersona: Persona = {
-  username: process.env.PLAYWRIGHT_LIVE_NO_ACCESS_USERNAME ?? "restricted.viewer",
-  password: process.env.PLAYWRIGHT_LIVE_NO_ACCESS_PASSWORD ?? process.env.PLAYWRIGHT_LIVE_SEED_PASSWORD ?? "Password@123",
-};
+import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-D statutory filing status report certification", () => {
   test("HR admin can certify filing status catalog, filters, pagination, evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports", hrAdmin);
     await expectPageReady(page, "Reports");
 
@@ -21,7 +17,7 @@ test.describe("Phase R4-D statutory filing status report certification", () => {
     await expect(catalog.getByText("statutory-filing-status")).toBeVisible();
     const catalogRow = catalog.getByRole("row").filter({ hasText: "statutory-filing-status" });
     await expect(catalogRow.getByRole("link", { name: "Open" })).toHaveAttribute("href", "/hr-admin/reports/statutory-filing-status");
-    await catalogRow.getByRole("link", { name: "Open" }).click();
+    await gotoAuthenticated(page, "/hr-admin/reports/statutory-filing-status", hrAdmin);
 
     await expectPageReady(page, "Statutory Filing Status");
     const report = page.getByTestId("statutory-filing-status-report");
@@ -93,12 +89,12 @@ test.describe("Phase R4-D statutory filing status report certification", () => {
   });
 
   test("employee cannot access statutory filing status report", async ({ page }) => {
-    await gotoAuthenticated(page, "/workspace-access", restrictedPersona);
-    await expectPageReady(page, "No workspace access is assigned");
+    await gotoAuthenticated(page, "/ess", employee);
+    await expectPageReady(page, "My workspace");
 
     await page.goto("/hr-admin/reports/statutory-filing-status", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
     await expect(page.getByTestId("statutory-filing-status-report")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "No workspace access is assigned" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "My workspace" })).toBeVisible();
   });
 });

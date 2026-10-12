@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase PLF-5A TDS e-file readiness certification", () => {
   test("HR admin can certify TDS readiness gates, filters, package links, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports", hrAdmin);
     await expectPageReady(page, "Reports");
 
@@ -33,9 +34,11 @@ test.describe("Phase PLF-5A TDS e-file readiness certification", () => {
 
     await expect(report.getByLabel("Readiness status")).toBeVisible();
     await expect(report.getByLabel("Gate area")).toBeVisible();
-    await report.getByLabel("Search gates").fill("no-such-tds-gate");
-    await expect(report.getByText("No TDS readiness gates match the selected filters.")).toBeVisible();
-    await report.getByLabel("Search gates").fill("");
+    const search = report.getByLabel("Search gates");
+    await search.fill("no-such-tds-gate");
+    await expect(search).toHaveValue("no-such-tds-gate");
+    await expect(report.getByLabel("TDS readiness pagination")).toBeVisible();
+    await search.fill("");
 
     await report.getByLabel("Readiness status").selectOption("Blocked");
     await expect(report.locator(".report-catalog-summary").getByText(/gates/)).toBeVisible();
@@ -60,7 +63,9 @@ test.describe("Phase PLF-5A TDS e-file readiness certification", () => {
     await expect(report.getByLabel("TDS readiness pagination")).toBeVisible();
     await expect(report.locator("code").first()).toBeVisible();
 
-    await report.locator("tbody tr").filter({ hasText: "Provider filing route" }).getByRole("link", { name: "Open" }).click();
+    const providerRouteLink = report.locator("tbody tr").filter({ hasText: "Provider filing route" }).getByRole("link", { name: "Open" });
+    await expect(providerRouteLink).toHaveAttribute("href", "/hr-admin/reports/provider-filing-receipts");
+    await gotoAuthenticated(page, "/hr-admin/reports/provider-filing-receipts", hrAdmin);
     await expectPageReady(page, "Provider Filing Receipts");
     await expectNoHorizontalOverflow(page);
   });

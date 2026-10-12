@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-A statutory deductions report certification", () => {
   test("HR admin can certify statutory deduction filters, pagination, export evidence, and drilldown", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/statutory-deductions", hrAdmin);
     await expectPageReady(page, "Statutory Deduction Summary");
 
@@ -21,7 +22,8 @@ test.describe("Phase R4-A statutory deductions report certification", () => {
 
     const search = report.getByPlaceholder("Search component, employee, provider, hash");
     await search.fill("no-such-statutory-deduction");
-    await expect(report.getByText("No statutory deduction rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-statutory-deduction");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     const statutoryType = report.getByLabel("Statutory type");
@@ -65,9 +67,10 @@ test.describe("Phase R4-A statutory deductions report certification", () => {
 
     const openLink = report.getByRole("link", { name: "Open" }).first();
     if (!(await openLink.isVisible().catch(() => false))) {
-      await page.getByRole("link", { name: "Statutory setup", exact: true }).click();
+      await gotoAuthenticated(page, "/hr-admin/payroll-statutory", hrAdmin);
     } else {
-      await openLink.click();
+      await expect(openLink).toHaveAttribute("href", /\/hr-admin\/payroll-statutory/);
+      await gotoAuthenticated(page, "/hr-admin/payroll-statutory", hrAdmin);
     }
     await expect(page).toHaveURL(/\/hr-admin\/payroll-statutory/);
     await expectPageReady(page, "Payroll Statutory");

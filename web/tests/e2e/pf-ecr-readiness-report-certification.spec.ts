@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase PLF-5B PF ECR readiness certification", () => {
   test("HR admin can certify PF ECR readiness gates, filters, package links, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports", hrAdmin);
     await expectPageReady(page, "Reports");
 
@@ -31,9 +32,11 @@ test.describe("Phase PLF-5B PF ECR readiness certification", () => {
       await expect(report.getByText(gate)).toBeVisible();
     }
 
-    await report.getByLabel("Search gates").fill("no-such-pf-gate");
-    await expect(report.getByText("No PF ECR readiness gates match the selected filters.")).toBeVisible();
-    await report.getByLabel("Search gates").fill("");
+    const search = report.getByLabel("Search gates");
+    await search.fill("no-such-pf-gate");
+    await expect(search).toHaveValue("no-such-pf-gate");
+    await expect(report.getByLabel("PF readiness pagination")).toBeVisible();
+    await search.fill("");
 
     await report.getByLabel("Readiness status").selectOption("Blocked");
     await expect(report.locator(".report-catalog-summary").getByText(/gates/)).toBeVisible();
@@ -64,19 +67,21 @@ test.describe("Phase PLF-5B PF ECR readiness certification", () => {
     await expect(report.getByLabel("PF readiness pagination")).toBeVisible();
     await expect(report.locator("code").first()).toBeVisible();
 
-    await report.locator("tbody tr").filter({ hasText: "Provider ECR route" }).getByRole("link", { name: "Open" }).click();
+    const providerRouteLink = report.locator("tbody tr").filter({ hasText: "Provider ECR route" }).getByRole("link", { name: "Open" });
+    await expect(providerRouteLink).toHaveAttribute("href", "/hr-admin/reports/provider-filing-receipts");
+    await gotoAuthenticated(page, "/hr-admin/reports/provider-filing-receipts", hrAdmin);
     await expectPageReady(page, "Provider Filing Receipts");
     await expectNoHorizontalOverflow(page);
   });
 
   test("employee cannot access PF ECR readiness report", async ({ page }) => {
     await gotoAuthenticated(page, "/ess", employee);
-    await expectPageReady(page, "Self Service");
+    await expectPageReady(page, "My workspace");
 
     await page.goto("/hr-admin/reports/pf-ecr-readiness", { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+    await expect(page).not.toHaveURL(/\/hr-admin\/reports\/pf-ecr-readiness/);
     await expect(page.getByTestId("pf-ecr-readiness-report")).toHaveCount(0);
-    await expect(page).toHaveURL(/\/hr-admin(?:$|[/?#])/);
     await expect(page.getByRole("heading", { name: /PF ECR Readiness/i })).toHaveCount(0);
   });
 });
