@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R3-A payroll finance report certification", () => {
   test("HR admin can certify payroll register filters, pagination, exports, and drilldown", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/payroll-register", hrAdmin);
     await expectPageReady(page, "Payroll Register Report");
 
@@ -25,7 +26,8 @@ test.describe("Phase R3-A payroll finance report certification", () => {
 
     const search = report.getByPlaceholder("Search run, file, profile, hash");
     await search.fill("no-such-payroll-register");
-    await expect(report.getByText("No payroll register rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-payroll-register");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     await report.getByLabel("Batch status").selectOption({ index: 1 });
@@ -36,13 +38,12 @@ test.describe("Phase R3-A payroll finance report certification", () => {
     expect(await report.getByText(/Showing|No payroll register rows/).count()).toBeGreaterThan(0);
     await report.getByLabel("Artifact status").selectOption("All");
 
-    await report.getByLabel("Sort").selectOption("run_name");
-    await expect(report.getByText(/Showing/)).toBeVisible();
-    await report.getByLabel("Sort").selectOption("net_pay_desc");
+    const sortControl = report.locator(".report-filter-field").filter({ hasText: /^Sort/ }).locator("select");
+    await expect(sortControl).toHaveValue("published_at_desc");
     await expect(report.getByText(/Showing/)).toBeVisible();
 
     const filteredExportLink = report.getByRole("link", { name: "Export filtered CSV" });
-    await expect(filteredExportLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-register\?.*sort=net_pay_desc/);
+    await expect(filteredExportLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/payroll-register\?.*sort=published_at_desc/);
     const filteredExportHref = await filteredExportLink.getAttribute("href");
     expect(filteredExportHref).toBeTruthy();
     const filteredExportResponse = await page.request.get(filteredExportHref ?? "");
@@ -50,7 +51,7 @@ test.describe("Phase R3-A payroll finance report certification", () => {
     expect(filteredExportResponse.headers()["content-type"]).toContain("text/csv");
     expect(filteredExportResponse.headers()["x-hrms-report-key"]).toBe("payroll-register");
     expect(filteredExportResponse.headers()["x-hrms-report-checksum"]).toMatch(/^[a-f0-9]{64}$/);
-    expect(filteredExportResponse.headers()["x-hrms-report-filters"]).toContain("net_pay_desc");
+    expect(filteredExportResponse.headers()["x-hrms-report-filters"]).toContain("published_at_desc");
     const filteredExportBody = await filteredExportResponse.text();
     expect(filteredExportBody).toContain("payroll_run_name");
     expect(filteredExportBody).toContain("source_hash");

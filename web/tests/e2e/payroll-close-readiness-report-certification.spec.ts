@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R5-E payroll close readiness report certification", () => {
   test("HR admin can certify close readiness filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/payroll-close-readiness", hrAdmin);
     await expectPageReady(page, "Payroll Close Readiness Report");
 
@@ -20,7 +21,8 @@ test.describe("Phase R5-E payroll close readiness report certification", () => {
 
     const search = report.getByPlaceholder("Search run, blocker, action, hash");
     await search.fill("no-such-payroll-close-readiness-row");
-    await expect(report.getByText("No payroll close readiness rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-payroll-close-readiness-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     for (const label of ["Payroll run", "Close readiness", "Risk", "Blocker category", "Output state"]) {

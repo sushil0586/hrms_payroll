@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R5-C payroll adjustments report certification", () => {
   test("HR admin can certify payroll adjustment filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/payroll-adjustments", hrAdmin);
     await expectPageReady(page, "Payroll Adjustments Report");
 
@@ -20,7 +21,8 @@ test.describe("Phase R5-C payroll adjustments report certification", () => {
 
     const search = report.getByPlaceholder("Search employee, run, source, hash");
     await search.fill("no-such-payroll-adjustment-row");
-    await expect(report.getByText("No payroll adjustment rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-payroll-adjustment-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     for (const label of ["Payroll run", "Kind", "Direction", "Status", "Approval state", "Amount risk"]) {

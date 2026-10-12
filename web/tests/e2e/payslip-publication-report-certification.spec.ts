@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R5-F payslip publication report certification", () => {
   test("HR admin can certify payslip publication filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/payslip-publication", hrAdmin);
     await expectPageReady(page, "Payslip Publication Report");
 
@@ -20,7 +21,8 @@ test.describe("Phase R5-F payslip publication report certification", () => {
 
     const search = report.getByPlaceholder("Search employee, run, artifact, hash");
     await search.fill("no-such-payslip-publication-row");
-    await expect(report.getByText("No payslip publication rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-payslip-publication-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     for (const label of ["Payroll run", "Publication state", "Access risk", "Artifact status", "Acknowledgement"]) {

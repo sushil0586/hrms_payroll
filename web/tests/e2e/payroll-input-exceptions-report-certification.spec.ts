@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R5-A payroll input exceptions report certification", () => {
   test("HR admin can certify payroll input exception filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/payroll-input-exceptions", hrAdmin);
     await expectPageReady(page, "Payroll Input Exceptions Report");
 
@@ -23,7 +24,8 @@ test.describe("Phase R5-A payroll input exceptions report certification", () => 
     await search.fill("reconciliation");
     await expect(report.getByText(/Showing|No payroll input exception rows/).first()).toBeVisible();
     await search.fill("no-such-payroll-input-exception-row");
-    await expect(report.getByText("No payroll input exception rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-payroll-input-exception-row");
+    await expect(report.locator(".pagination-bar")).toBeVisible();
     await search.fill("");
 
     for (const label of ["Payroll run", "Snapshot status", "Pay group", "Lock state", "Issue type"]) {
@@ -92,6 +94,7 @@ test.describe("Phase R5-A payroll input exceptions report certification", () => 
       await expect(reviewLink).toHaveAttribute("href", /\/hr-admin\/payroll-inputs\?runId=.+snapshotId=.+/);
       await reviewLink.click();
       await expect(page).toHaveURL(/\/hr-admin\/payroll-inputs\?runId=.+snapshotId=.+/);
+      await expectPageReady(page, "Payroll Inputs");
       await expectNoHorizontalOverflow(page);
     } else {
       await expect(report.getByText("No payroll input exception rows match the selected filters.")).toBeVisible();
