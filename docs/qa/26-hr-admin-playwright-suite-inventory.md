@@ -10,8 +10,8 @@ Purpose: classify the HR portal / HR Admin-related Playwright inventory so the r
 | --- | ---: |
 | HR-related Playwright spec files discovered | 213 |
 | HR-related Playwright test declarations discovered | 665 |
-| Current tracker-backed HR Admin functional/live workflow result | 181 passed / 184 total |
-| Current functional/live expected skips | 3 |
+| Current tracker-backed HR Admin functional/live workflow result | 186 passed / 189 total |
+| Current functional/live expected skips | 7 |
 | Current active HR Admin Playwright blockers | 0 |
 
 Important distinction: the 665 count is the broad repository inventory. The 178 count is the current tracker-backed HR Admin functional/live working set verified against the local Docker web build, API, and Postgres.
@@ -35,8 +35,8 @@ Phase 0 is the protected checkpoint for expanding HR Admin Playwright coverage. 
 
 | Classification | Spec files | Test declarations | Declared skips | Recommended handling |
 | --- | ---: | ---: | ---: | --- |
-| `verified-working` | 73 | 197 | 13 | Keep in release gate |
-| `candidate-functional` | 56 | 221 | 32 | Review next for Docker functional batch |
+| `verified-working` | 76 | 208 | 17 | Keep in release gate |
+| `candidate-functional` | 53 | 210 | 28 | Review next for Docker functional batch |
 | `candidate-visual` | 31 | 87 | 3 | Repair/shard visual checks as needed |
 | `historical-cross-module` | 53 | 160 | 22 | Defer or supersede after coverage review |
 
@@ -136,6 +136,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | HR-P2A-5 Compliance/provider reports | `provider-filing-receipts-report-certification.spec.ts`, `compliance-summary-report-certification.spec.ts`, `compliance-report-hub-certification.spec.ts`, `compliance-report-export-certification.spec.ts`, `compliance-report-manifest-certification.spec.ts`, `compliance-export-audit-history-certification.spec.ts`, `challan-reconciliation-report-certification.spec.ts`, `lwf-readiness-report-certification.spec.ts` | 20 passed / 20 total | Added timeout budget for heavy export and manifest flows; aligned catalog-open checks with verified direct navigation; updated ESS denial checks to the current workspace redirect; replaced old metric/empty-state assertions with shared compact summary and filter-state checks; allowed provider receipt manifest exports to use the current default sort. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/provider-filing-receipts-report-certification.spec.ts tests/e2e/compliance-summary-report-certification.spec.ts tests/e2e/compliance-report-hub-certification.spec.ts tests/e2e/compliance-report-export-certification.spec.ts tests/e2e/compliance-report-manifest-certification.spec.ts tests/e2e/compliance-export-audit-history-certification.spec.ts tests/e2e/challan-reconciliation-report-certification.spec.ts tests/e2e/lwf-readiness-report-certification.spec.ts --workers=1 --reporter=line` -> `20 passed (11.2m)`. |
 | HR-P2B-1 Workforce/lifecycle functional promotion | `employee-directory-certification.spec.ts`, `employee-documents-onboarding-certification-flows.spec.ts`, `employee-fresh-access-visibility-certification-flows.spec.ts`, `employee-probation-audit-role-certification-flows.spec.ts`, `employee-review-movement-exit-certification-flows.spec.ts` | 15 passed / 15 executed, 2 declared expected skips | Promoted current employee master, documents/onboarding, access visibility, probation/audit/role, document review, movement, and exit workflows after Docker browser verification. Repairs covered compact UI selectors, guided employee modal steps, stable form-scoped probation fields, deterministic post-save queue navigation, filter synchronization, direct edit routes for modalized lifecycle flows, and live-data-safe detail/drawer assertions. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/employee-directory-certification.spec.ts tests/e2e/employee-documents-onboarding-certification-flows.spec.ts tests/e2e/employee-fresh-access-visibility-certification-flows.spec.ts tests/e2e/employee-probation-audit-role-certification-flows.spec.ts tests/e2e/employee-review-movement-exit-certification-flows.spec.ts --workers=1 --reporter=line` -> `15 passed (21.8m)`; `pnpm --dir web exec tsc --noEmit` -> passed. |
 | HR-P2C-1 Small functional promotion | `attendance-records-slim-options-qa.spec.ts`, `import-history-ledger-certification.spec.ts`, `leave-balance-import-flows.spec.ts`, `payroll-close-readiness-guard-certification.spec.ts`, `payroll-inputs-flows.spec.ts` | 7 passed / 7 total | Promoted slim attendance options, import history ledger, leave balance import, payroll close-readiness guard, and payroll input snapshot flows after Docker browser verification. Repairs covered compact hidden-filter assertions, reset disabled-state tolerance, collapsed bulk import disclosure opening, longer import timeout, API-backed payroll close setup with period-safe fixture data, and live-data-safe lazy-search assertions. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/attendance-records-slim-options-qa.spec.ts tests/e2e/import-history-ledger-certification.spec.ts tests/e2e/leave-balance-import-flows.spec.ts tests/e2e/payroll-close-readiness-guard-certification.spec.ts tests/e2e/payroll-inputs-flows.spec.ts --workers=1 --reporter=line` -> `7 passed (4.3m)`; `pnpm --dir web exec tsc --noEmit` -> passed. |
+| HR-P2C-2 Payroll review/RBAC promotion | `payroll-lifecycle-rbac-certification.spec.ts`, `payroll-review-exception-decision-certification.spec.ts`, `payroll-warning-calculation-review-trace-certification.spec.ts` | 5 passed / 5 total | Promoted payroll lifecycle RBAC, exception-decision, and warning trace flows after Docker browser verification. Repairs covered required payroll period selection in run setup and deterministic calculationId navigation before opening review. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/payroll-review-exception-decision-certification.spec.ts tests/e2e/payroll-warning-calculation-review-trace-certification.spec.ts tests/e2e/payroll-lifecycle-rbac-certification.spec.ts --workers=1 --reporter=line` -> `5 passed (4.1m)`. |
 
 ## Next Batch Recommendation
 
@@ -253,14 +254,14 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/payroll-handoff-flows.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-input-exceptions-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-inputs-flows.spec.ts` | 3 | 0 | `verified-working` | `keep-release-gate` |
-| `web/tests/e2e/payroll-lifecycle-rbac-certification.spec.ts` | 7 | 4 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/payroll-lifecycle-rbac-certification.spec.ts` | 7 | 4 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-output-artifact-certification.spec.ts` | 4 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-outputs-flows.spec.ts` | 4 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-providers-flows.spec.ts` | 7 | 2 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-readiness-bank-gate-certification.spec.ts` | 1 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-readiness-flows.spec.ts` | 1 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-readiness-negative-gates-certification.spec.ts` | 1 | 0 | `verified-working` | `keep-release-gate` |
-| `web/tests/e2e/payroll-review-exception-decision-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/payroll-review-exception-decision-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-review-exceptions-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-review-flows.spec.ts` | 3 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-rules-flows.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
@@ -269,7 +270,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/payroll-setup-flows.spec.ts` | 4 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-statutory-flows.spec.ts` | 4 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-statutory-rbac-certification.spec.ts` | 6 | 3 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/payroll-warning-calculation-review-trace-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/payroll-warning-calculation-review-trace-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payslip-publication-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/pf-ecr-readiness-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/phase3c3-employee-lifecycle-workforce-e2e.spec.ts` | 3 | 0 | `historical-cross-module` | `defer-or-supersede-after-review` |

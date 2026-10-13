@@ -26,6 +26,15 @@ async function selectOptionContaining(select: Locator, text: string) {
   await select.selectOption(value);
 }
 
+async function selectFirstAvailableOption(select: Locator) {
+  const value = await select.evaluate((element) => {
+    const option = Array.from((element as HTMLSelectElement).options).find((item) => item.value);
+    return option?.value ?? "";
+  });
+  expect(value).toBeTruthy();
+  await select.selectOption(value);
+}
+
 async function selectEmployee(scope: Locator, text: string) {
   await scope.getByPlaceholder("Code, name, or email").fill(text);
   const select = field(scope, "Employee");
@@ -66,6 +75,7 @@ async function createWarningLockedRun(page: Page, payrollOperator: Persona) {
     async () => {
       await field(runForm, "Code").fill(runCode);
       await field(runForm, "Name").fill(`Warning trace ${runCode}`);
+      await selectFirstAvailableOption(field(runForm, "Period"));
       await field(runForm, "Status").selectOption("collecting_inputs");
       await field(runForm, "Input profile ref").fill("tenant.payroll.input.warning_trace.v1");
       await field(runForm, "Snapshot schema ref").fill("tenant.payroll.snapshot.warning_trace.v1");

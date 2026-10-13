@@ -25,6 +25,15 @@ async function selectOptionContaining(select: Locator, text: string) {
   await select.selectOption(value);
 }
 
+async function selectFirstAvailableOption(select: Locator) {
+  const value = await select.evaluate((element) => {
+    const option = Array.from((element as HTMLSelectElement).options).find((item) => item.value);
+    return option?.value ?? "";
+  });
+  expect(value).toBeTruthy();
+  await select.selectOption(value);
+}
+
 async function selectFirstPayrollEmployee(page: Page) {
   const response = await page.request.get("/api/hr-admin/employees/option-search?q=EMP&limit=1");
   expect(response.ok(), await response.text()).toBeTruthy();
@@ -61,6 +70,7 @@ async function createApprovedReadyReview(page: Page, payrollOperator: Persona) {
   const run = await submitAndCapture<{ id: string; code: string }>(page, /\/api\/hr-admin\/payroll-runs$/, "POST", async () => {
     await field(runForm, "Code").fill(runCode);
     await field(runForm, "Name").fill(`Review decision ${runCode}`);
+    await selectFirstAvailableOption(field(runForm, "Period"));
     await field(runForm, "Status").selectOption("collecting_inputs");
     await field(runForm, "Input profile ref").fill("tenant.payroll.input.phase5o.v1");
     await field(runForm, "Snapshot schema ref").fill("tenant.payroll.snapshot.phase5o.v1");
@@ -101,6 +111,8 @@ async function createApprovedReadyReview(page: Page, payrollOperator: Persona) {
   });
   expect(calculation.ok).toBeTruthy();
 
+  await gotoAuthenticated(page, `/hr-admin/payroll-calculations?runId=${run.payload.id}&calculationId=${calculation.payload.calculation.id}`, payrollOperator);
+  await expectPageReady(page, "Payroll Calculations");
   const review = await submitAndCapture<{ review: { id: string } }>(page, new RegExp(`/api/hr-admin/payroll-runs/${run.payload.id}/open-review$`), "POST", async () => {
     await calculationPanel.getByLabel("Review profile ref").fill("tenant.payroll.review.phase5o.v1");
     await calculationPanel.getByRole("button", { name: "Open review" }).click();
