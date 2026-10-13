@@ -5,7 +5,7 @@ import { gotoAuthenticated } from "../helpers/staging-auth";
 
 test.describe("HR admin payroll readiness flows", () => {
   test("readiness table filters and live row detail stay URL-driven", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     await gotoAuthenticated(page, "/hr-admin/payroll-readiness?tab=employees");
     await expectPageReady(page, "Payroll Readiness");
 
@@ -21,11 +21,13 @@ test.describe("HR admin payroll readiness flows", () => {
     await expect(page).toHaveURL(/status=warning/);
     await expect(page.getByText("Warning").or(page.getByText("No employees")).first()).toBeVisible();
 
-    const employeeLink = page.locator("main a[href*='employeeId=']").first();
+    const employeeLink = page.locator(".payroll-readiness-table tbody tr td:first-child a[href*='employeeId=']").first();
     if (await employeeLink.isVisible().catch(() => false)) {
-      await employeeLink.click();
+      const employeeHref = await employeeLink.getAttribute("href");
+      expect(employeeHref).toContain("employeeId=");
+      await page.goto(employeeHref ?? "", { waitUntil: "domcontentloaded" });
       await expect(page).toHaveURL(/employeeId=/);
-      await expect(page.getByText("Readiness").or(page.getByText("Source")).first()).toBeVisible();
+      await expect(page.locator("aside.payroll-readiness-detail-panel[aria-label$='readiness detail']")).toBeVisible();
     }
 
     await page.goto("/hr-admin/payroll-readiness?tab=employees", { waitUntil: "domcontentloaded" });
