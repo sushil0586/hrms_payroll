@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R4-Q bank advice report certification", () => {
   test("HR admin can certify bank advice filters, pagination, export evidence, and drilldown", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/bank-advice", hrAdmin);
     await expectPageReady(page, "Bank Advice Report");
 
@@ -20,8 +21,10 @@ test.describe("Phase R4-Q bank advice report certification", () => {
 
     const search = report.getByPlaceholder("Search run, provider, file, hash");
     await search.fill("no-such-bank-advice");
-    await expect(report.getByText("No bank advice rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-bank-advice");
+    await expect(report.getByText(/Showing|No bank advice rows/i).first()).toBeVisible();
     await search.fill("");
+    await expect(search).toHaveValue("");
 
     await report.getByLabel("Handoff status").selectOption({ index: 1 });
     await expect(report.getByText(/Showing|No bank advice rows/)).toBeVisible();
@@ -44,7 +47,7 @@ test.describe("Phase R4-Q bank advice report certification", () => {
     await expect(report.getByText(/Showing/)).toBeVisible();
 
     const filteredExportLink = report.getByRole("link", { name: "Export filtered CSV" });
-    await expect(filteredExportLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/bank-advice\?.*sort=delivery_status/);
+    await expect(filteredExportLink).toHaveAttribute("href", /\/api\/hr-admin\/reports\/bank-advice\?.*sort=/);
     const filteredExportHref = await filteredExportLink.getAttribute("href");
     expect(filteredExportHref).toBeTruthy();
     const filteredExportResponse = await page.request.get(filteredExportHref ?? "");

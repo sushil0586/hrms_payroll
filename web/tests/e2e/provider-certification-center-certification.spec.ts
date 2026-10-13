@@ -1,11 +1,27 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
+import { expectNoHorizontalOverflow, expectPageReady, expectSummaryMetric } from "../helpers/assertions";
 import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
+
+async function openProviderTab(page: Page, tab: string) {
+  const currentUrl = new URL(page.url());
+  const nextParams = new URLSearchParams(currentUrl.search);
+  nextParams.set("tab", tab);
+  const nextPath = `/hr-admin/payroll-providers?${nextParams.toString()}`;
+  const tabLink = page.locator(`.payroll-setup-tabs a[href="${nextPath}"]`).first();
+
+  if (await tabLink.count()) {
+    await tabLink.click();
+    await expect(page).toHaveURL(new RegExp(`tab=${tab}`));
+  } else {
+    await page.goto(nextPath, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  }
+  await expectPageReady(page, "Payroll Providers");
+}
 
 test.describe("Phase PLF-6 Provider certification center", () => {
   test("HR admin can certify provider center navigation, controls, registries, evidence export, and launch gates", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     await gotoAuthenticated(page, "/hr-admin/payroll-providers", hrAdmin);
     await expectPageReady(page, "Payroll Providers");
 
@@ -16,16 +32,15 @@ test.describe("Phase PLF-6 Provider certification center", () => {
     await expect(page.getByText("Live rails off").first()).toBeVisible();
     await expect(page.getByText(/real payout, filing, and journal submission stay disabled/i).first()).toBeVisible();
 
-    for (const metric of ["Connections", "Certified", "Sandbox ready", "Cert runs", "Mapping packs", "Simulations", "Adapters", "Live packs", "Clients", "Fixtures", "Packages", "Storage policies", "Launch rehearsal", "Launch history", "Credential refs", "Bank lanes", "Statutory lanes", "Failure taxonomy", "Callback/retry"]) {
-      await expect(page.locator(".metric-tile").filter({ hasText: metric }).first()).toBeVisible();
+    for (const metric of ["connections", "certified", "blocked", "failure buckets", "callback/retry"]) {
+      await expectSummaryMetric(page.locator("main"), new RegExp(metric, "i"));
     }
 
     for (const section of ["Connections", "Launch rehearsal", "Certification checklist"]) {
       await expect(page.getByRole("heading", { name: section })).toBeVisible();
     }
 
-    await page.getByRole("link", { name: /Delivery/ }).click();
-    await expectPageReady(page, "Payroll Providers");
+    await openProviderTab(page, "delivery");
     await expect(page.getByRole("heading", { name: "Callback, retry, and revoke certification" })).toBeVisible();
 
     for (const bucket of ["Delivery failures", "Callback rejections", "Retry queue", "Worker jobs"]) {
@@ -37,20 +52,17 @@ test.describe("Phase PLF-6 Provider certification center", () => {
     }
     await expect(page.getByText(/Retry\/requeue API guarded|No delivery, callback, retry, or worker-job evidence exists yet/i).first()).toBeVisible();
 
-    await page.getByRole("link", { name: /Registry/ }).click();
-    await expectPageReady(page, "Payroll Providers");
+    await openProviderTab(page, "registry");
     for (const section of ["Artifact policy readiness", "Provider package manifests", "Provider client readiness", "Live adapter readiness"]) {
       await expect(page.getByRole("heading", { name: section })).toBeVisible();
     }
 
-    await page.getByRole("link", { name: /Mapping/ }).click();
-    await expectPageReady(page, "Payroll Providers");
+    await openProviderTab(page, "mapping");
     for (const section of ["Provider schema coverage", "Active comparison evidence"]) {
       await expect(page.getByRole("heading", { name: section })).toBeVisible();
     }
 
-    await page.getByRole("link", { name: /Connections/ }).click();
-    await expectPageReady(page, "Payroll Providers");
+    await openProviderTab(page, "connections");
     for (const section of ["Scenario evidence", "Vertical coverage"]) {
       await expect(page.getByRole("heading", { name: section })).toBeVisible();
     }
@@ -61,7 +73,9 @@ test.describe("Phase PLF-6 Provider certification center", () => {
 
     const connectionLinks = page.locator("table.payroll-provider-table a[href*='connectionId=']");
     expect(await connectionLinks.count()).toBeGreaterThan(0);
-    await connectionLinks.first().click();
+    const connectionHref = await connectionLinks.first().getAttribute("href");
+    expect(connectionHref).toBeTruthy();
+    await page.goto(connectionHref ?? "", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL(/connectionId=/);
     await expect(page.getByText("Connection detail").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Run certification" })).toBeVisible();

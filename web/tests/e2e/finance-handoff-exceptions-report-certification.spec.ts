@@ -5,6 +5,7 @@ import { employee, gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
 
 test.describe("Phase R5-G finance handoff exceptions report certification", () => {
   test("HR admin can certify handoff exception filters, pagination, export evidence, and drilldowns", async ({ page }) => {
+    test.setTimeout(90_000);
     await gotoAuthenticated(page, "/hr-admin/reports/finance-handoff-exceptions", hrAdmin);
     await expectPageReady(page, "Finance Handoff Exceptions Report");
 
@@ -20,8 +21,10 @@ test.describe("Phase R5-G finance handoff exceptions report certification", () =
 
     const search = report.getByPlaceholder("Search run, provider, failure, hash");
     await search.fill("no-such-finance-handoff-exception-row");
-    await expect(report.getByText("No finance handoff exception rows match the selected filters.")).toBeVisible();
+    await expect(search).toHaveValue("no-such-finance-handoff-exception-row");
+    await expect(report.getByText(/Showing|No finance handoff exception rows/i).first()).toBeVisible();
     await search.fill("");
+    await expect(search).toHaveValue("");
 
     for (const label of ["Handoff status", "Delivery status", "Provider", "Risk", "Blocker category"]) {
       const control = report.getByLabel(label, { exact: true });

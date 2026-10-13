@@ -10,7 +10,7 @@ Purpose: classify the HR portal / HR Admin-related Playwright inventory so the r
 | --- | ---: |
 | HR-related Playwright spec files discovered | 213 |
 | HR-related Playwright test declarations discovered | 665 |
-| Current tracker-backed HR Admin functional/live workflow result | 206 passed / 209 total |
+| Current tracker-backed HR Admin functional/live workflow result | 218 passed / 221 total |
 | Current functional/live expected skips | 10 |
 | Current active HR Admin Playwright blockers | 0 |
 
@@ -35,8 +35,8 @@ Phase 0 is the protected checkpoint for expanding HR Admin Playwright coverage. 
 
 | Classification | Spec files | Test declarations | Declared skips | Recommended handling |
 | --- | ---: | ---: | ---: | --- |
-| `verified-working` | 79 | 231 | 20 | Keep in release gate |
-| `candidate-functional` | 50 | 187 | 25 | Review next for Docker functional batch |
+| `verified-working` | 84 | 243 | 20 | Keep in release gate |
+| `candidate-functional` | 45 | 175 | 25 | Review next for Docker functional batch |
 | `candidate-visual` | 31 | 87 | 3 | Repair/shard visual checks as needed |
 | `historical-cross-module` | 53 | 160 | 22 | Defer or supersede after coverage review |
 
@@ -138,6 +138,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | HR-P2C-1 Small functional promotion | `attendance-records-slim-options-qa.spec.ts`, `import-history-ledger-certification.spec.ts`, `leave-balance-import-flows.spec.ts`, `payroll-close-readiness-guard-certification.spec.ts`, `payroll-inputs-flows.spec.ts` | 7 passed / 7 total | Promoted slim attendance options, import history ledger, leave balance import, payroll close-readiness guard, and payroll input snapshot flows after Docker browser verification. Repairs covered compact hidden-filter assertions, reset disabled-state tolerance, collapsed bulk import disclosure opening, longer import timeout, API-backed payroll close setup with period-safe fixture data, and live-data-safe lazy-search assertions. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/attendance-records-slim-options-qa.spec.ts tests/e2e/import-history-ledger-certification.spec.ts tests/e2e/leave-balance-import-flows.spec.ts tests/e2e/payroll-close-readiness-guard-certification.spec.ts tests/e2e/payroll-inputs-flows.spec.ts --workers=1 --reporter=line` -> `7 passed (4.3m)`; `pnpm --dir web exec tsc --noEmit` -> passed. |
 | HR-P2C-2 Payroll review/RBAC promotion | `payroll-lifecycle-rbac-certification.spec.ts`, `payroll-review-exception-decision-certification.spec.ts`, `payroll-warning-calculation-review-trace-certification.spec.ts` | 5 passed / 5 total | Promoted payroll lifecycle RBAC, exception-decision, and warning trace flows after Docker browser verification. Repairs covered required payroll period selection in run setup and deterministic calculationId navigation before opening review. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/payroll-review-exception-decision-certification.spec.ts tests/e2e/payroll-warning-calculation-review-trace-certification.spec.ts tests/e2e/payroll-lifecycle-rbac-certification.spec.ts --workers=1 --reporter=line` -> `5 passed (4.1m)`. |
 | HR-P2C-3 Payroll statutory/frontend/cycle promotion | `payroll-statutory-rbac-certification.spec.ts`, `hr-admin-payroll-frontend-validation.spec.ts`, `hr-admin-payroll-cycle-phase11-certification.spec.ts` | 20 passed / 20 executed, 3 declared expected skips | Promoted statutory RBAC denials, payroll frontend validation, and payroll cycle phase 11 route/responsive workflows after Docker browser verification. Repairs covered hydration-safe form validation, route/hash-driven action form opening, mutating-only API interception, permission/data-aware provider and output action assertions, and live-data-safe payroll readiness detail checks. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/payroll-statutory-rbac-certification.spec.ts tests/e2e/hr-admin-payroll-frontend-validation.spec.ts tests/e2e/hr-admin-payroll-cycle-phase11-certification.spec.ts --workers=1 --reporter=line` -> `20 passed (23.5m)`. |
+| HR-P2C-4 Payroll reports/provider/time-control promotion | `bank-advice-report-certification.spec.ts`, `finance-handoff-exceptions-report-certification.spec.ts`, `salary-variance-report-certification.spec.ts`, `provider-certification-center-certification.spec.ts`, `time-to-payroll-control-certification.spec.ts` | 12 passed / 12 total | Promoted bank advice, finance handoff exceptions, salary variance, provider certification center, and time-to-payroll control workflows after Docker browser verification. Repairs covered live-data-safe filter assertions, current export sort handling, heavy export timeout budgets, compact provider/time summary assertions, URL/href-driven provider tab, connection, salary, and input-report drilldowns, and direct report workspace readiness checks under full-batch load. | `PLAYWRIGHT_SKIP_WEB_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3200 HRMS_API_BASE_URL=http://127.0.0.1:8012/api/v1 pnpm --dir web exec playwright test tests/e2e/bank-advice-report-certification.spec.ts tests/e2e/finance-handoff-exceptions-report-certification.spec.ts tests/e2e/salary-variance-report-certification.spec.ts tests/e2e/provider-certification-center-certification.spec.ts tests/e2e/time-to-payroll-control-certification.spec.ts --workers=1 --reporter=line` -> `12 passed (7.6m)`. |
 
 ## Next Batch Recommendation
 
@@ -157,7 +158,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/attendance-records-slim-options-qa.spec.ts` | 2 | 1 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/attendance-register-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/authenticated-docs-access.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/bank-advice-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/bank-advice-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/challan-reconciliation-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/compliance-export-audit-history-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/compliance-report-export-certification.spec.ts` | 4 | 0 | `verified-working` | `keep-release-gate` |
@@ -182,7 +183,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/ess-mss-documentation-sync-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/ess-mss-visual-functional-audit.spec.ts` | 5 | 0 | `candidate-visual` | `repair-or-shard-if-needed` |
 | `web/tests/e2e/final-app-audit.spec.ts` | 3 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/finance-handoff-exceptions-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/finance-handoff-exceptions-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/finance-manager-control-center-certification.spec.ts` | 2 | 0 | `candidate-visual` | `repair-or-shard-if-needed` |
 | `web/tests/e2e/four-module-responsive-ux-audit.spec.ts` | 1 | 0 | `candidate-visual` | `repair-or-shard-if-needed` |
 | `web/tests/e2e/generated-letter-flows.spec.ts` | 3 | 0 | `verified-working` | `keep-release-gate` |
@@ -327,7 +328,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/production-storage-governance-flows.spec.ts` | 3 | 0 | `historical-cross-module` | `defer-or-supersede-after-review` |
 | `web/tests/e2e/production-tenant-role-isolation.spec.ts` | 5 | 0 | `historical-cross-module` | `defer-or-supersede-after-review` |
 | `web/tests/e2e/professional-tax-readiness-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
-| `web/tests/e2e/provider-certification-center-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/provider-certification-center-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/provider-filing-receipts-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/public-launch-role-menu-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/release-candidate-cross-workspace-ui-gate.spec.ts` | 3 | 0 | `candidate-functional` | `next-batch-review` |
@@ -340,7 +341,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/saas-resilience-flows.spec.ts` | 1 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/saas-sla-operations-flows.spec.ts` | 1 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/salary-setup-flows.spec.ts` | 5 | 0 | `verified-working` | `keep-release-gate` |
-| `web/tests/e2e/salary-variance-report-certification.spec.ts` | 2 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/salary-variance-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/sidebar-tabs-list-certification.spec.ts` | 1 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/stage-operational-email-workflows.spec.ts` | 6 | 3 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/statutory-deductions-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
@@ -356,7 +357,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/tenant-admin-usability-audit.spec.ts` | 4 | 0 | `candidate-functional` | `next-batch-review` |
 | `web/tests/e2e/tenant-admin-users-roles-phase1-polish.spec.ts` | 3 | 0 | `candidate-visual` | `repair-or-shard-if-needed` |
 | `web/tests/e2e/tier-two-workflow-flows.spec.ts` | 6 | 0 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/time-to-payroll-control-certification.spec.ts` | 3 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/time-to-payroll-control-certification.spec.ts` | 4 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/user-journey-phase1-access-routing.spec.ts` | 10 | 1 | `historical-cross-module` | `defer-or-supersede-after-review` |
 | `web/tests/e2e/user-journey-phase2-workspace-usability.spec.ts` | 1 | 0 | `historical-cross-module` | `defer-or-supersede-after-review` |
 | `web/tests/e2e/user-journey-phase3-hr-admin-operations.spec.ts` | 5 | 2 | `historical-cross-module` | `defer-or-supersede-after-review` |
