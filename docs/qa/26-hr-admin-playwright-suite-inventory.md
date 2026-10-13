@@ -10,7 +10,7 @@ Purpose: classify the HR portal / HR Admin-related Playwright inventory so the r
 | --- | ---: |
 | HR-related Playwright spec files discovered | 213 |
 | HR-related Playwright test declarations discovered | 665 |
-| Current tracker-backed HR Admin functional/live workflow result | 175 passed / 178 total |
+| Current tracker-backed HR Admin functional/live workflow result | 178 passed / 181 total |
 | Current functional/live expected skips | 3 |
 | Current active HR Admin Playwright blockers | 0 |
 
@@ -35,8 +35,8 @@ Phase 0 is the protected checkpoint for expanding HR Admin Playwright coverage. 
 
 | Classification | Spec files | Test declarations | Declared skips | Recommended handling |
 | --- | ---: | ---: | ---: | --- |
-| `verified-working` | 69 | 190 | 13 | Keep in release gate |
-| `candidate-functional` | 60 | 228 | 32 | Review next for Docker functional batch |
+| `verified-working` | 70 | 194 | 13 | Keep in release gate |
+| `candidate-functional` | 59 | 224 | 32 | Review next for Docker functional batch |
 | `candidate-visual` | 31 | 87 | 3 | Repair/shard visual checks as needed |
 | `historical-cross-module` | 53 | 160 | 22 | Defer or supersede after coverage review |
 
@@ -254,7 +254,7 @@ Phase 2A starts with low-risk report/readiness candidates. Each promoted spec mu
 | `web/tests/e2e/payroll-input-exceptions-report-certification.spec.ts` | 2 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-inputs-flows.spec.ts` | 3 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-lifecycle-rbac-certification.spec.ts` | 7 | 4 | `candidate-functional` | `next-batch-review` |
-| `web/tests/e2e/payroll-output-artifact-certification.spec.ts` | 4 | 0 | `candidate-functional` | `next-batch-review` |
+| `web/tests/e2e/payroll-output-artifact-certification.spec.ts` | 4 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-outputs-flows.spec.ts` | 4 | 0 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-providers-flows.spec.ts` | 7 | 2 | `verified-working` | `keep-release-gate` |
 | `web/tests/e2e/payroll-readiness-bank-gate-certification.spec.ts` | 1 | 0 | `candidate-functional` | `next-batch-review` |
