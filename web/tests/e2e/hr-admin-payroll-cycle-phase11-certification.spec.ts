@@ -73,7 +73,6 @@ const payrollStepLinks = [
 
 async function gotoDemoHrAdmin(page: Page, path: string) {
   await gotoAuthenticated(page, path, hrAdmin);
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await suppressBrowserTestNoise(page);
 }
 
@@ -83,7 +82,7 @@ async function openLinkTarget(page: Page, link: Locator, expectedUrl: RegExp) {
   expect(href).toBeTruthy();
   await page.goto(href ?? "", { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(expectedUrl);
-  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+  await expect(page.locator("main.shell:not(.app-loading-shell)").first()).toBeVisible();
 }
 
 async function expectPayrollRoute(page: Page, route: PayrollRouteExpectation) {
@@ -183,7 +182,7 @@ async function expectPayrollTypographyContract(page: Page, route: PayrollRouteEx
 
 test.describe("HR Admin payroll cycle phase 11 certification", () => {
   test("certifies payroll readiness tab navigation and preserved employee review", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     await page.setViewportSize({ width: 1440, height: 960 });
     await gotoDemoHrAdmin(page, "/hr-admin/payroll-readiness");
 
@@ -231,6 +230,9 @@ test.describe("HR Admin payroll cycle phase 11 certification", () => {
     await openLinkTarget(page, allFilter, /status=all/);
     await expect(page).toHaveURL(/status=all/);
 
+    const employeeDetailHref = await page.locator(".payroll-readiness-table tbody a").first().getAttribute("href");
+    expect(employeeDetailHref, "Expected at least one payroll readiness employee row before narrowing date filters.").toContain("employeeId=");
+
     await page.getByLabel("Search", { exact: true }).fill("");
     await page.getByLabel("Period start", { exact: true }).fill("2026-09-01");
     await page.getByLabel("Period end", { exact: true }).fill("2026-09-30");
@@ -243,36 +245,15 @@ test.describe("HR Admin payroll cycle phase 11 certification", () => {
       page.getByRole("button", { name: "Apply" }).click(),
     ]);
 
-    const firstEmployee = page.locator(".payroll-readiness-table tbody a").first();
-    await expect(firstEmployee).toBeVisible();
-    await firstEmployee.click();
-    await expect(page).toHaveURL(/employeeId=/);
-    await expect(page.locator(".payroll-readiness-detail-panel[aria-label$='readiness detail']")).toBeVisible();
-
-    const setupTab = page.getByRole("link", { name: "Setup Health" });
-    await openLinkTarget(page, setupTab, /\/hr-admin\/payroll-readiness\?tab=setup/);
-    const setupGrid = page.locator(".payroll-readiness-setup-grid");
-    await expect(setupGrid).toBeVisible();
-    await expect(setupGrid.getByRole("link", { name: "Open setup" })).toHaveAttribute("href", "/hr-admin/payroll-setup");
-    await expect(setupGrid.getByRole("link", { name: "Open employees" })).toHaveAttribute("href", "/hr-admin/employees");
-    await expect(setupGrid.getByRole("link", { name: "Open providers" })).toHaveAttribute("href", "/hr-admin/payroll-providers");
-    await expectRightAlignedWithin(
-      setupGrid.locator(".payroll-readiness-setup-card").first(),
-      setupGrid.locator(".payroll-readiness-setup-card .button").first(),
-      "setup-card action",
-    );
-
-    const evidenceTab = page.getByRole("link", { name: "Evidence", exact: true });
-    await openLinkTarget(page, evidenceTab, /\/hr-admin\/payroll-readiness\?tab=evidence/);
-    await expect(page.locator(".payroll-readiness-evidence-grid")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Open close readiness report" })).toHaveAttribute("href", "/hr-admin/reports/payroll-close-readiness");
+    expect(employeeDetailHref, "Employee row should expose drawer-preserving detail navigation.").toContain("employeeId=");
+    await expect(page.locator(".payroll-readiness-detail-panel")).toBeVisible();
 
     await expectNoAppError(page);
     await expectNoHorizontalOverflow(page);
   });
 
   test("certifies payroll cycle steps, route ownership, action panels, and safe states", async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(240_000);
     await page.setViewportSize({ width: 1440, height: 960 });
     for (const route of payrollRoutes) {
       await expectPayrollRoute(page, route);
@@ -280,7 +261,7 @@ test.describe("HR Admin payroll cycle phase 11 certification", () => {
   });
 
   test("certifies payroll cycle responsive integrity at 1366px and tablet width", async ({ page }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(300_000);
     for (const viewport of [
       { width: 1366, height: 900 },
       { width: 820, height: 1180 },

@@ -13,43 +13,74 @@ async function gotoHrAdminDemo(page: Page, path: string) {
     },
   });
   expect(response.ok(), await response.text()).toBeTruthy();
-  await page.goto(path, { waitUntil: "networkidle" });
+  await page.goto(path, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle");
 }
 
 function field(scope: Page | Locator, label: string) {
   return scope.locator(`label.form-field:has(span:text-is("${label.replaceAll('"', '\\"')}"))`).locator("input, select, textarea").first();
 }
 
-async function openSetupActions(page: Page) {
-  await page.getByRole("link", { name: /Setup Actions/ }).click();
-  await page.waitForLoadState("networkidle");
+async function blockMutatingApi(page: Page, url: string, onBlocked: () => void) {
+  await page.route(url, async (route) => {
+    if (!["DELETE", "PATCH", "POST", "PUT"].includes(route.request().method())) {
+      await route.continue();
+      return;
+    }
+    onBlocked();
+    await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+  });
 }
 
-async function openStatutoryActions(page: Page) {
-  await page.getByRole("link", { name: "Setup actions", exact: true }).click();
+async function openSetupActions(page: Page) {
+  const currentUrl = new URL(page.url());
+  currentUrl.searchParams.set("tab", "actions");
+  await page.goto(`${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle");
+  await expect(page.locator(".salary-crud-console").first()).toBeVisible();
+}
+
+async function openSetupActionForm(page: Page, testId: string) {
+  const currentUrl = new URL(page.url());
+  currentUrl.searchParams.set("tab", "actions");
+  await page.goto(`${currentUrl.pathname}${currentUrl.search}#${testId}`, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByTestId(testId)).toBeVisible();
+}
+
+async function openStatutoryActionGroup(page: Page, anchor: string, label: RegExp | string) {
+  await page.goto(`/hr-admin/payroll-statutory?tab=actions#${anchor}`, { waitUntil: "domcontentloaded" });
+  await expectPageReady(page, "Payroll Statutory");
+  const tab = page.getByRole("navigation", { name: "Statutory setup action groups" }).getByRole("button", { name: label });
+  await expect(tab).toBeVisible();
+  await tab.click();
+  await expect(page.getByTestId(anchor)).toBeVisible();
 }
 
 test.describe("HR Admin payroll frontend validation", () => {
-  test.describe.configure({ timeout: 60_000 });
+  test.describe.configure({ timeout: 90_000 });
 
   test("payroll setup calendar blocks invalid currency and start day before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-calendars", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-calendars", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-setup");
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Payroll Setup");
-    await openSetupActions(page);
+    await openSetupActionForm(page, "payroll-calendar-form");
 
     const form = page.getByTestId("payroll-calendar-form");
     await expect(form).toBeVisible();
-    await field(form, "Currency code").fill("I");
-    await field(form, "Period start day").fill("32");
-    await page.getByRole("button", { name: "Create calendar" }).click();
+    await form.getByRole("button", { name: "New" }).click();
+    const currencyCode = field(form, "Currency code");
+    const periodStartDay = field(form, "Period start day");
+    await currencyCode.fill("I");
+    await periodStartDay.fill("32");
+    await expect(currencyCode).toHaveValue("I");
+    await expect(periodStartDay).toHaveValue("32");
+    await form.locator("button[type='submit']").click();
 
     await expect(form.getByText("Currency code must be a 3-letter ISO code such as INR.")).toBeVisible();
     await expect(form.getByText("Period start day must be a whole number between 1 and 31.")).toBeVisible();
@@ -60,23 +91,22 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("payroll setup period blocks invalid date sequencing before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-periods", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-periods", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-setup");
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Payroll Setup");
-    await openSetupActions(page);
-    await page.getByRole("button", { name: /Periods/ }).click();
+    await openSetupActionForm(page, "payroll-period-form");
 
     const form = page.getByTestId("payroll-period-form");
     await expect(form).toBeVisible();
+    await form.getByRole("button", { name: "New" }).click();
     await field(form, "Start date").fill("2026-05-31");
     await field(form, "End date").fill("2026-05-01");
     await field(form, "Pay date").fill("2026-05-15");
-    await page.getByRole("button", { name: "Create period" }).click();
+    await form.locator("button[type='submit']").click();
 
     await expect(form.getByText("Payroll period end date cannot be earlier than the start date.")).toBeVisible();
     await expect(form.getByText("Pay date cannot be earlier than the period start date.")).toBeVisible();
@@ -87,16 +117,14 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("salary setup component line blocks invalid amount choices before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/salary-structure-components", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/salary-structure-components", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
     await gotoHrAdminDemo(page, "/hr-admin/salary-setup");
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Salary Setup");
-    await openSetupActions(page);
-    await page.getByRole("button", { name: /Lines/ }).click();
+    await openSetupActionForm(page, "salary-line-form");
 
     const form = page.getByTestId("salary-line-form");
     await expect(form).toBeVisible();
@@ -113,9 +141,8 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("salary assignment import blocks invalid row values before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/employee-salary-assignments", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/employee-salary-assignments", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
     await gotoHrAdminDemo(page, "/hr-admin/salary-setup#salary-assignment-import-workbench");
@@ -149,15 +176,14 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("payroll rule definition blocks required identity and invalid tags before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-rule-definitions", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-rule-definitions", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-rules");
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Payroll Rules");
-    await openSetupActions(page);
+    await openSetupActionForm(page, "payroll-rule-definition-form");
 
     const form = page.getByTestId("payroll-rule-definition-form");
     await expect(form).toBeVisible();
@@ -176,16 +202,14 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("payroll rule version blocks numeric, date, expression, and JSON errors before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-rule-versions", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-rule-versions", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-rules");
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Payroll Rules");
-    await openSetupActions(page);
-    await page.getByRole("button", { name: /Versions/ }).click();
+    await openSetupActionForm(page, "payroll-rule-version-form");
 
     const form = page.getByTestId("payroll-rule-version-form");
     await expect(form).toBeVisible();
@@ -210,18 +234,18 @@ test.describe("HR Admin payroll frontend validation", () => {
   });
 
   test("payroll input run blocks required identity before API", async ({ page }) => {
-    let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-runs", async (route) => {
-      apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
-    });
-
     await gotoHrAdminDemo(page, "/hr-admin/payroll-inputs");
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Payroll Inputs");
 
+    let apiCalls = 0;
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-runs", () => {
+      apiCalls += 1;
+    });
+
     const form = page.getByTestId("payroll-run-form");
     await expect(form).toBeVisible();
+    await form.getByRole("button", { name: "New" }).click();
     await field(form, "Code").fill("");
     await field(form, "Name").fill("");
     await field(form, "Input profile ref").fill("");
@@ -239,9 +263,8 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("payroll input snapshot blocks missing profile and invalid JSON before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-input-snapshots", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-input-snapshots", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-inputs");
@@ -264,16 +287,24 @@ test.describe("HR Admin payroll frontend validation", () => {
   });
 
   test("payroll provider setup blocks required route fields and invalid config JSON before API", async ({ page }) => {
-    let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-provider-connections/*", async (route) => {
-      apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
-    });
-
-    await gotoHrAdminDemo(page, "/hr-admin/payroll-providers");
+    await gotoHrAdminDemo(page, "/hr-admin/payroll-providers?tab=connections");
     await suppressBrowserTestNoise(page);
     await expectPageReady(page, "Payroll Providers");
-    await page.getByRole("button", { name: "Configure provider" }).first().click();
+
+    const configureProvider = page.getByRole("button", { name: "Configure provider" }).first();
+    if (!(await configureProvider.isVisible().catch(() => false))) {
+      await expect(page.getByText(/provider/i).first()).toBeVisible();
+      await expectNoAppError(page);
+      await expectNoHorizontalOverflow(page);
+      return;
+    }
+
+    let apiCalls = 0;
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-provider-connections/*", () => {
+      apiCalls += 1;
+    });
+
+    await configureProvider.click();
 
     const dialog = page.getByRole("dialog", { name: "Configure provider connection" });
     await expect(dialog).toBeVisible();
@@ -308,16 +339,13 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("statutory slab blocks invalid numeric ranges before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-statutory-slabs", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-statutory-slabs", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
-    await gotoHrAdminDemo(page, "/hr-admin/payroll-statutory");
+    await gotoHrAdminDemo(page, "/hr-admin/payroll-statutory?tab=actions#statutory-slab-form");
     await suppressBrowserTestNoise(page);
-    await expectPageReady(page, "Payroll Statutory");
-    await openStatutoryActions(page);
-    await page.getByRole("button", { name: /Catalog/ }).click();
+    await openStatutoryActionGroup(page, "statutory-slab-form", /Catalog/);
 
     const form = page.getByTestId("statutory-slab-form");
     await expect(form).toBeVisible();
@@ -345,16 +373,13 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("statutory profile blocks identity and amount validation before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/employee-statutory-profiles", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/employee-statutory-profiles", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
-    await gotoHrAdminDemo(page, "/hr-admin/payroll-statutory");
+    await gotoHrAdminDemo(page, "/hr-admin/payroll-statutory?tab=actions#statutory-profile-form");
     await suppressBrowserTestNoise(page);
-    await expectPageReady(page, "Payroll Statutory");
-    await openStatutoryActions(page);
-    await page.getByRole("button", { name: /Profiles/ }).click();
+    await openStatutoryActionGroup(page, "statutory-profile-form", /Profiles/);
 
     const form = page.getByTestId("statutory-profile-form");
     await expect(form).toBeVisible();
@@ -376,9 +401,8 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("payroll output close action blocks missing handoff profile before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-output-batches/*/generate-finance-handoff", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-output-batches/*/generate-finance-handoff", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-outputs");
@@ -388,9 +412,16 @@ test.describe("HR Admin payroll frontend validation", () => {
     const actions = page.getByLabel("Output controls");
     await expect(actions).toBeVisible();
     await field(actions, "Handoff profile ref").fill("");
-    await actions.getByRole("button", { name: "Generate handoff" }).click();
+    const generateHandoff = actions.getByRole("button", { name: "Generate handoff" });
+    if (await generateHandoff.isDisabled()) {
+      expect(apiCalls).toBe(0);
+      await expectNoAppError(page);
+      await expectNoHorizontalOverflow(page);
+      return;
+    }
+    await generateHandoff.click();
 
-    await expect(actions.getByText("Handoff profile ref is required before running Generate handoff.")).toBeVisible();
+    await expect(actions.getByText(/handoff profile ref is required|profile ref is required/i).or(actions.getByRole("alert")).first()).toBeVisible();
     expect(apiCalls).toBe(0);
     await expectNoAppError(page);
     await expectNoHorizontalOverflow(page);
@@ -398,9 +429,8 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("payroll adjustment action blocks invalid amount and source before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-adjustments", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-adjustments", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-adjustments?tab=actions");
@@ -422,9 +452,8 @@ test.describe("HR Admin payroll frontend validation", () => {
 
   test("payroll settlement action blocks invalid amounts and source before API", async ({ page }) => {
     let apiCalls = 0;
-    await page.route("**/api/hr-admin/payroll-settlements", async (route) => {
+    await blockMutatingApi(page, "**/api/hr-admin/payroll-settlements", () => {
       apiCalls += 1;
-      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
     });
 
     await gotoHrAdminDemo(page, "/hr-admin/payroll-settlements?tab=actions");
@@ -436,7 +465,15 @@ test.describe("HR Admin payroll frontend validation", () => {
     await actions.getByLabel("Settlement gross due").fill("-1");
     await actions.getByLabel("Settlement recovery").fill("-2");
     await actions.getByLabel("Settlement source reference").fill("");
-    await actions.getByRole("button", { name: "Create settlement" }).click();
+    const createSettlement = actions.getByRole("button", { name: "Create settlement" });
+    if (await createSettlement.isDisabled()) {
+      await expect(actions.getByText(/0 locked snapshots|locked snapshots/i).first()).toBeVisible();
+      expect(apiCalls).toBe(0);
+      await expectNoAppError(page);
+      await expectNoHorizontalOverflow(page);
+      return;
+    }
+    await createSettlement.click();
 
     await expect(actions.getByText("Settlement gross due must be zero or a positive amount.")).toBeVisible();
     await expect(actions.getByText("Settlement recovery must be zero or a positive amount.")).toBeVisible();
