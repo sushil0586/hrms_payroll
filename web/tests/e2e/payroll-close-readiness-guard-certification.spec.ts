@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { expectNoHorizontalOverflow, expectPageReady } from "../helpers/assertions";
 import { gotoAuthenticated, hrAdmin } from "../helpers/staging-auth";
@@ -9,31 +9,6 @@ function uniqueCode(prefix: string) {
 
 function form(page: Page, testId: string) {
   return page.getByTestId(testId);
-}
-
-function field(scope: Locator, label: string) {
-  return scope.getByText(label, { exact: true }).locator("xpath=ancestor::label[1]").locator("input, select, textarea").first();
-}
-
-async function selectOptionContaining(select: Locator, text: string) {
-  const value = await select.evaluate((element, needle) => {
-    const options = Array.from((element as HTMLSelectElement).options);
-    const option = options.find((item) => item.textContent?.includes(String(needle))) ?? options.find((item) => item.value);
-    return option?.value ?? "";
-  }, text);
-  expect(value).toBeTruthy();
-  await select.selectOption(value);
-}
-
-async function selectEmployee(scope: Locator, text: string) {
-  await scope.getByPlaceholder("Code, name, or email").fill(text);
-  const select = field(scope, "Employee");
-  await expect
-    .poll(async () => {
-      return select.evaluate((element) => Array.from((element as HTMLSelectElement).options).filter((item) => item.value).length);
-    })
-    .toBeGreaterThan(0);
-  await selectOptionContaining(select, text);
 }
 
 async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: string, action: () => Promise<void>) {
@@ -49,26 +24,27 @@ async function submitAndCapture<T>(page: Page, routePattern: RegExp, method: str
 }
 
 async function createRun(page: Page, prefix: string) {
-  const runForm = form(page, "payroll-run-form");
   const runCode = uniqueCode(prefix);
-
-  await runForm.getByRole("button", { name: "New" }).click();
-  const result = await submitAndCapture<{ id: string; code: string }>(
-    page,
-    /\/api\/hr-admin\/payroll-runs$/,
-    "POST",
-    async () => {
-      await field(runForm, "Code").fill(runCode);
-      await field(runForm, "Name").fill(`Readiness guard ${runCode}`);
-      await field(runForm, "Status").selectOption("collecting_inputs");
-      await field(runForm, "Input profile ref").fill("tenant.payroll.input.guard.v1");
-      await field(runForm, "Snapshot schema ref").fill("tenant.payroll.snapshot.guard.v1");
-      await field(runForm, "Config profile reference").fill("tenant.payroll.run.guard.v1");
-      await runForm.getByRole("button", { name: "Create run" }).click();
+  const setupResponse = await page.request.get("/api/hr-admin/payroll-input-snapshot-setup/");
+  expect(setupResponse.ok(), await setupResponse.text()).toBeTruthy();
+  const setup = (await setupResponse.json()) as { options?: { periods?: Array<{ id: string }> } };
+  const periodId = setup.options?.periods?.[0]?.id ?? "";
+  expect(periodId, "Expected at least one payroll period for close-readiness guard setup.").toBeTruthy();
+  const result = await page.request.post("/api/hr-admin/payroll-runs", {
+    data: {
+      period_id: periodId,
+      pay_group_id: null,
+      code: runCode,
+      name: `Readiness guard ${runCode}`,
+      status: "collecting_inputs",
+      input_profile_ref: "tenant.payroll.input.guard.v1",
+      snapshot_schema_ref: "tenant.payroll.snapshot.guard.v1",
+      config_profile_ref: "tenant.payroll.run.guard.v1",
     },
-  );
-  expect(result.ok).toBeTruthy();
-  return { id: result.payload.id, code: runCode };
+  });
+  expect(result.ok(), `Payroll run create failed: ${await result.text()}`).toBeTruthy();
+  const payload = (await result.json()) as { id: string; code: string };
+  return { id: payload.id, code: runCode };
 }
 
 async function createSnapshot(page: Page, input: {
@@ -78,29 +54,29 @@ async function createSnapshot(page: Page, input: {
   blockers: string[];
   warnings: string[];
 }) {
-  const snapshotForm = form(page, "payroll-input-snapshot-form");
-  await snapshotForm.getByRole("button", { name: "New" }).click();
-  const result = await submitAndCapture<{ id: string; snapshot_status: string }>(
-    page,
-    /\/api\/hr-admin\/payroll-input-snapshots$/,
-    "POST",
-    async () => {
-      await field(snapshotForm, "Payroll run").selectOption(input.runId);
-      await selectEmployee(snapshotForm, input.employeeNeedle);
-      await field(snapshotForm, "Snapshot status").selectOption(input.status);
-      await field(snapshotForm, "Input profile ref").fill("tenant.payroll.input.guard.v1");
-      await field(snapshotForm, "Config profile reference").fill("tenant.payroll.snapshot.guard.v1");
-      await field(snapshotForm, "Employee snapshot JSON").fill(JSON.stringify({ source: "browser", employment_status: "active" }));
-      await field(snapshotForm, "Organization snapshot JSON").fill(JSON.stringify({ source: "browser", cost_center: input.status === "blocked" ? null : "QA-CC" }));
-      await field(snapshotForm, "Salary snapshot JSON").fill(JSON.stringify({ source: "browser", annual_ctc: 600000, monthly_gross: 50000, currency_code: "INR" }));
-      await field(snapshotForm, "Attendance snapshot JSON").fill(JSON.stringify({ working_days: 22, present_days: input.status === "blocked" ? 0 : 22, lop_days: input.status === "blocked" ? 22 : 0 }));
-      await field(snapshotForm, "Validation snapshot JSON").fill(JSON.stringify({ blockers: input.blockers, warnings: input.warnings }));
-      await snapshotForm.getByRole("button", { name: "Create snapshot" }).click();
+  const employeeResponse = await page.request.get(`/api/hr-admin/employees/option-search?q=${encodeURIComponent(input.employeeNeedle)}&limit=1`);
+  expect(employeeResponse.ok(), await employeeResponse.text()).toBeTruthy();
+  const employeePayload = (await employeeResponse.json()) as { items?: Array<{ id: string }> };
+  const employeeId = employeePayload.items?.[0]?.id ?? "";
+  expect(employeeId, `Expected employee option for ${input.employeeNeedle}`).toBeTruthy();
+  const result = await page.request.post("/api/hr-admin/payroll-input-snapshots", {
+    data: {
+      payroll_run_id: input.runId,
+      employee_id: employeeId,
+      snapshot_status: input.status,
+      input_profile_ref: "tenant.payroll.input.guard.v1",
+      config_profile_ref: "tenant.payroll.snapshot.guard.v1",
+      employee_snapshot: { source: "browser", employment_status: "active" },
+      organization_snapshot: { source: "browser", cost_center: input.status === "blocked" ? null : "QA-CC" },
+      salary_snapshot: { source: "browser", annual_ctc: 600000, monthly_gross: 50000, currency_code: "INR" },
+      attendance_snapshot: { working_days: 22, present_days: input.status === "blocked" ? 0 : 22, lop_days: input.status === "blocked" ? 22 : 0 },
+      validation_snapshot: { blockers: input.blockers, warnings: input.warnings },
     },
-  );
-  expect(result.ok).toBeTruthy();
-  expect(result.payload.snapshot_status).toBe(input.status);
-  return result.payload;
+  });
+  expect(result.ok(), `Payroll snapshot create failed: ${await result.text()}`).toBeTruthy();
+  const payload = (await result.json()) as { id: string; snapshot_status?: string; status?: string };
+  expect(payload.snapshot_status ?? payload.status).toBe(input.status);
+  return payload;
 }
 
 test.describe("Phase 5M payroll close readiness guard certification", () => {

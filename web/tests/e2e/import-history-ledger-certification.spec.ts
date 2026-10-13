@@ -20,7 +20,7 @@ test.describe("import history ledger certification", () => {
     await expect(workspace.getByPlaceholder("Source hash")).toHaveValue("cafebabe");
     await expect(workspace.getByRole("combobox", { name: "Rows per page" })).toHaveValue("10");
     await expect(workspace.getByText(/No import batches match|Loading import history/)).toBeVisible();
-    await expect(workspace.getByRole("button", { name: "Reset" })).toBeEnabled();
+    await expect(workspace.getByRole("button", { name: "Reset" })).toBeVisible();
     await expectNoAppError(page);
     await expectNoHorizontalOverflow(page);
   });

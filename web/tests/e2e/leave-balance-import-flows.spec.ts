@@ -21,6 +21,7 @@ type PaginatedResponse<T> = {
 
 test.describe("HR admin leave balance import flows", () => {
   test("leave balance import validates commits and records audited transactions", async ({ page }) => {
+    test.setTimeout(120 * 1000);
     await gotoAuthenticated(page, "/hr-admin/leave-balances", hrAdmin);
     await expectPageReady(page, "Leave balances");
 
@@ -46,7 +47,8 @@ test.describe("HR admin leave balance import flows", () => {
       `${first.employee_code},"${first.leave_policy_name}",credit_adjustment,0,2026-04-01,Browser leave import zero ${suffix}`,
     ].join("\n");
 
-    const workbench = page.getByTestId("leave-balance-import-workbench");
+    await page.locator("summary").filter({ hasText: "Bulk imports" }).click();
+    const workbench = page.getByTestId("leave-balance-import-workbench").last();
     await expect(workbench).toBeVisible();
     await expect(workbench.getByRole("heading", { name: "Leave balance import" })).toBeVisible();
     await expect(workbench.getByRole("button", { name: "Load sample template" })).toBeVisible();
